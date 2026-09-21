@@ -286,9 +286,22 @@ const NotesStore = (() => {
     if (!res.ok) {
       const err = new Error(data.error || `HTTP ${res.status}`);
       err.status = res.status;
+      err.code = data.code || '';
+      if (err.code === 'session_revoked') notifySessionRevoked(err);
       throw err;
     }
     return data;
+  }
+
+  let sessionRevokedHandler = null;
+
+  function setSessionRevokedHandler(fn) {
+    sessionRevokedHandler = typeof fn === 'function' ? fn : null;
+  }
+
+  function notifySessionRevoked(err) {
+    if (!sessionRevokedHandler) return;
+    try { sessionRevokedHandler(err); } catch (e) { /* ignore */ }
   }
 
   function vaultKdfVersionFromAccount(account) {
@@ -3856,6 +3869,7 @@ const NotesStore = (() => {
     syncLogEntries,
     formatSyncLog,
     api,
+    setSessionRevokedHandler,
     unlock,
     isUnlocked,
     lock,

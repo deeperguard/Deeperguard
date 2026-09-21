@@ -1383,6 +1383,10 @@
         sessionExpiredAlertShown = false;
         return true;
       } catch (err) {
+        if (isSessionRevokedError(err)) {
+          await wipeAfterRemoteSignOut();
+          return false;
+        }
         if (isTotpRequiredError(err)) totpPending = true;
         else if (err && ![401, 403, 404].includes(err.status)) throw err;
         else authenticationExpired = true;
@@ -1404,6 +1408,10 @@
       sessionExpiredAlertShown = false;
       return true;
     } catch (err) {
+      if (isSessionRevokedError(err)) {
+        await wipeAfterRemoteSignOut();
+        return false;
+      }
       if (isTotpRequiredError(err)) totpPending = true;
       else if (authenticationExpired || (err && [401, 403, 404].includes(err.status))) {
         const cached = NotesStore.cachedAccount();
@@ -4330,17 +4338,7 @@
     + 'Your encrypted data stays on the DeeperGuard server and will download again when you sign back in.'
   );
 
-  async function signOutCompletely() {
-    try {
-      await NotesStore.flush();
-    } catch (err) {
-      /* still leave */
-    }
-    try {
-      await NotesStore.api('/api/auth/logout', { method: 'POST', body: '{}' });
-    } catch (err) {
-      /* still leave */
-    }
+  async function clearLocalVaultAndLeave(next = '/login') {
     try {
       NotesStore.lock();
     } catch (err) {
@@ -4373,7 +4371,58 @@
     } catch (err) {
       /* ignore */
     }
-    location.replace('/login');
+    location.replace(next);
+  }
+
+  async function signOutCompletely() {
+    try {
+      await NotesStore.flush();
+    } catch (err) {
+      /* still leave */
+    }
+    try {
+      await NotesStore.api('/api/auth/logout', { method: 'POST', body: '{}' });
+    } catch (err) {
+      /* still leave */
+    }
+    await clearLocalVaultAndLeave('/login');
+  }
+
+  let remoteWipeStarted = false;
+  let remoteWipePromise = null;
+  let remoteRevokeTimer = 0;
+
+  function isSessionRevokedError(err) {
+    return !!(err && (err.code === 'session_revoked' || err.message === 'session revoked'));
+  }
+
+  async function wipeAfterRemoteSignOut() {
+    if (remoteWipeStarted && remoteWipePromise) return remoteWipePromise;
+    remoteWipeStarted = true;
+    try { NotesStore.setCsrf(''); } catch (err) { /* ignore */ }
+    if (typeof NotesVaultSecrets !== 'undefined') {
+      try { NotesVaultSecrets.clearSecrets(); } catch (err) { /* ignore */ }
+      try { NotesVaultSecrets.clearDevicePassword(); } catch (err) { /* ignore */ }
+    }
+    remoteWipePromise = clearLocalVaultAndLeave('/login?reason=signed-out');
+    return remoteWipePromise;
+  }
+
+  async function checkRemoteRevocation() {
+    if (remoteWipeStarted) return;
+    try {
+      await NotesStore.api('/api/account', { timeoutMs: 4000 });
+    } catch (err) {
+      if (isSessionRevokedError(err)) await wipeAfterRemoteSignOut();
+    }
+  }
+
+  function startRemoteRevokeWatch() {
+    if (remoteRevokeTimer) return;
+    checkRemoteRevocation().catch(() => {});
+    remoteRevokeTimer = window.setInterval(() => {
+      checkRemoteRevocation().catch(() => {});
+    }, 10000);
   }
 
   async function requestSignOut() {
@@ -8057,7 +8106,7 @@
     const ok = await confirmAction(
       current
         ? SIGN_OUT_WARNING
-        : `Sign out “${item.device || 'this device'}”? That session will end immediately.`,
+        : `Sign out “${item.device || 'this device'}”? That device will lose access immediately and will delete its local vault copy when it next connects.`,
       {
         title: current ? 'Sign out?' : 'Sign out device?',
         confirmLabel: 'Sign out',
@@ -13426,17 +13475,17 @@
 
   async function handleLockedManualSync() {
     try {
-      const res = await fetch('/api/account', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
-      if ([401, 403, 404].includes(res.status)) {
+      await NotesStore.api('/api/account', { timeoutMs: 4000 });
+    } catch (err) {
+      if (isSessionRevokedError(err)) {
+        await wipeAfterRemoteSignOut();
+        return;
+      }
+      if (err && [401, 403, 404].includes(err.status)) {
         NotesStore.emitSync('pending', 'Sign in to sync');
         promptVaultUnlock('Your session expired. Unlock with your vault password to sign in and sync.');
         return;
       }
-    } catch (err) {
-      // Offline status is handled after unlock; do not mistake it for expiry.
     }
     promptVaultUnlock('Unlock your vault to display your notes and synchronize.');
   }
@@ -13804,6 +13853,10 @@
 
   async function boot() {
     updateSecureContextHint();
+    if (typeof NotesStore.setSessionRevokedHandler === 'function') {
+      NotesStore.setSessionRevokedHandler(() => { wipeAfterRemoteSignOut(); });
+    }
+    startRemoteRevokeWatch();
     if (await checkAppUpdate()) return;
     try {
       const res = await fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' });
