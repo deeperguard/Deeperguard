@@ -355,7 +355,9 @@ def _headers(response):
         response.headers.pop("Pragma", None)
         session.accessed = False
         session.modified = False
-        _drop_set_cookie(response)
+        # Keep the one-time marketing cache-bust cookie on "/".
+        if request.path != "/" or request.cookies.get("dg_sw_fix") == "marketing2":
+            _drop_set_cookie(response)
     elif auth.cacheable_shell(request.path):
         response.headers["Cache-Control"] = "public, max-age=86400, immutable"
         response.headers.pop("Pragma", None)
@@ -1959,7 +1961,19 @@ def index():
         return redirect(_redirect_app_entry(strip_hard=True), code=302)
     if request.scheme != "https" and host not in {"localhost", "127.0.0.1", "::1"}:
         return render_template("https-setup.html", host=_lan_https_host(), build=NOTES_BUILD)
-    return render_template("marketing.html", **_marketing_context())
+    response = make_response(render_template("marketing.html", **_marketing_context()))
+    # One-time drop of HTTP/Cache-API copies of the old notes shell at "/".
+    if request.cookies.get("dg_sw_fix") != "marketing2":
+        response.headers["Clear-Site-Data"] = '"cache"'
+        response.set_cookie(
+            "dg_sw_fix",
+            "marketing2",
+            max_age=60 * 60 * 24 * 365,
+            httponly=True,
+            samesite="Lax",
+            path="/",
+        )
+    return response
 
 
 @app.post(app_entry_path())
