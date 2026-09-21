@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Install certificate — Deeperguard</title>
+  {% include 'partials/auth-head.html' %}
+</head>
+<body class="auth-page">
+  <main class="auth-card">
+    <div class="brand">
+      {% include 'partials/brand-mark.html' %}
+      <h1>Deeperguard</h1>
+      <p>HTTPS needs the Deeperguard certificate on this device</p>
+    </div>
+    <div class="stack">
+      <p class="auth-hint">If Safari shows a certificate warning or the app will not open, install and trust the LAN CA, then open the secure link.</p>
+      <ol class="setup-steps">
+        <li>Tap <strong>Install certificate</strong> and allow the profile download.</li>
+        <li>On iPhone: <strong>Settings → Profile Downloaded → Install</strong>.</li>
+        <li>Then <strong>Settings → General → About → Certificate Trust Settings</strong> and enable <strong>Deeperguard CA</strong>.</li>
+        <li>Return here and open Notes over HTTPS.</li>
+      </ol>
+      <a class="btn primary block" href="/ca.crt">Install certificate</a>
+      <a class="btn subtle block" href="https://{{ host }}/">Open Notes (HTTPS)</a>
+    </div>
+    {% include 'partials/auth-footer.html' %}
+  </main>
+</body>
+</html>

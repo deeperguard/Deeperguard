@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>{% if page == 'terms' %}Terms{% else %}Privacy{% endif %} — Deeperguard</title>
+  {% include 'partials/auth-head.html' %}
+</head>
+<body class="auth-page legal-page">
+  <main class="auth-card legal-card">
+    <div class="brand">
+      {% include 'partials/brand-mark.html' %}
+      <h1>{% if page == 'terms' %}Terms of use{% else %}Privacy policy{% endif %}</h1>
+      <p class="beta-badge">Public beta</p>
+    </div>
+
+    {% if page == 'privacy' %}
+    <section class="legal-section">
+      <h2>Overview</h2>
+      <p>Deeperguard is an encrypted notes service in <strong>public beta</strong>. We use a <strong>zero-knowledge</strong> protocol: your vault password and note content are never sent to our servers in readable form.</p>
+      <h2>Zero-knowledge protocol</h2>
+      <p>Deeperguard is built so the server stores ciphertext only and cannot decrypt your notes, even if compelled or compromised.</p>
+      <ul>
+        <li><strong>Client-side encryption</strong> — Notes and attachments are encrypted in your browser or app before upload (AES-GCM).</li>
+        <li><strong>Vault password stays local</strong> — Your vault password is used only on your device to derive encryption keys. It is never transmitted to us.</li>
+        <li><strong>Zero-knowledge sign-in (SRP)</strong> — Account authentication uses the Secure Remote Password protocol. We store a verifier, not your password.</li>
+        <li><strong>Strict mode</strong> — When enabled (default on this deployment), the server rejects endpoints that would require your vault password.</li>
+      </ul>
+      <p>We can still see account metadata (email, storage used, sync timing) and encrypted blobs. We cannot read note titles, body text, or attachment contents.</p>
+      <h2>What we store</h2>
+      <ul>
+        <li>Your email address and account metadata (sign-in method, 2FA status, storage used).</li>
+        <li>Encrypted ciphertext for notes and attachments.</li>
+        <li><strong>Time warnings</strong> — if you set an email reminder on a note, we store only the note's random identifier and the chosen time so the reminder can be sent. The email contains a link and the time; never the title or contents.</li>
+        <li>Operational logs (sync timing, reminder delivery status, errors) without note content.</li>
+      </ul>
+      <h2>What we do not store</h2>
+      <ul>
+        <li>Your vault password (client-side only; zero-knowledge by design).</li>
+        <li>Your account password in plaintext (SRP verifier only).</li>
+        <li>Readable note content when strict zero-knowledge mode is enabled.</li>
+      </ul>
+      <h2>Third parties</h2>
+      <p>Traffic is proxied through Cloudflare for HTTPS and abuse protection. Cloudflare sees connection metadata (IP, timing) but not decrypted note content.</p>
+      <h2>Your responsibilities</h2>
+      <p>Keep your password safe. Enable 2FA when available. Beta may have bugs — maintain your own backups of important data.</p>
+      <h2>Contact</h2>
+      <p>Questions: use the contact address shown on the registration page operator for this deployment.</p>
+    </section>
+    {% else %}
+    <section class="legal-section">
+      <h2>Beta service</h2>
+      <p>Deeperguard is offered <strong>as-is</strong> during public beta. Features, limits, and availability may change without notice.</p>
+      <h2>Zero-knowledge service</h2>
+      <p>This deployment uses a <strong>zero-knowledge</strong> architecture. You are responsible for your vault password — we cannot recover it or decrypt your data for you. If you lose your password, encrypted content cannot be restored from our servers.</p>
+      <p>By using the service you acknowledge that encryption and key handling occur on your devices, and that we operate sync and account infrastructure on ciphertext and metadata only.</p>
+      <h2>Acceptable use</h2>
+      <ul>
+        <li>No illegal content, malware distribution, or attempts to disrupt the service.</li>
+        <li>No automated abuse of registration or authentication endpoints.</li>
+        <li>Respect the storage quota assigned to your account (default 100&nbsp;MB for new accounts).</li>
+      </ul>
+      <h2>Accounts</h2>
+      <p>We may suspend or delete accounts that violate these terms or threaten service stability. You are responsible for activity under your account.</p>
+      <h2>Data &amp; backups</h2>
+      <p>We do not guarantee recovery of lost passwords or data. Use export/backup features where available.</p>
+      <h2>Changes</h2>
+      <p>These terms may be updated as the beta progresses. Continued use means acceptance of the current version.</p>
+    </section>
+    {% endif %}
+
+    <nav class="legal-nav muted center" aria-label="Site">
+      <a href="/privacy">Privacy</a>
+      <span aria-hidden="true">·</span>
+      <a href="/terms">Terms</a>
+      <span aria-hidden="true">·</span>
+      <a href="/register">Create account</a>
+      <span aria-hidden="true">·</span>
+      <a href="/login">Sign in</a>
+    </nav>
+  </main>
+</body>
+</html>

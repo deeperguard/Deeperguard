@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="color-scheme" content="light dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Notes">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="notes-build" content="{{ build }}">
+  <title>Deeperguard</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png?v={{ build }}">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/icon-192.png?v={{ build }}">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png?v={{ build }}">
+  <link rel="apple-touch-startup-image" href="/static/icons/icon-512.png?v={{ build }}" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+  <link rel="apple-touch-startup-image" href="/static/icons/icon-512.png?v={{ build }}" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+  <link rel="apple-touch-startup-image" href="/static/icons/icon-512.png?v={{ build }}" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ build }}">
+  <script src="/static/js/vaultlock.js?v={{ build }}"></script>
+  <script>
+    (function () {
+      // Apply theme before first paint so Update / reload does not flash dark.
+      try {
+        var prefs = JSON.parse(localStorage.getItem('deeperguard-prefs') || '{}');
+        var theme = 'light';
+        if (prefs.theme === 'dark') theme = 'dark';
+        else if (prefs.theme === 'light') theme = 'light';
+        else if (prefs.theme === 'system' && window.matchMedia) {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+        var themeMeta = document.querySelector('meta[name="theme-color"]');
+        if (themeMeta) themeMeta.setAttribute('content', theme === 'light' ? '#ffffff' : '#0f1419');
+      } catch (e) {}
+    })();
+  </script>
+  <script>
+    (function () {
+      // Always probe /api/health — iOS LAN-only Wi‑Fi may report navigator.onLine=false.
+      // Do NOT auto-reload on a newer server build — show the update banner/chip and wait.
+      var meta = document.querySelector('meta[name="notes-build"]');
+      var localBuild = meta && meta.getAttribute('content');
+      var showUpdateBanner = function (serverBuild) {
+        try { sessionStorage.setItem('notes_pending_update_build', serverBuild); } catch (e) {}
+        var reveal = function () {
+          var dismissed = '';
+          try { dismissed = sessionStorage.getItem('notes_update_dismissed_build') || ''; } catch (e) {}
+          var VL = window.NotesVaultLock;
+          var ui = VL && VL.lockedUpdateUi
+            ? VL.lockedUpdateUi({
+                locked: VL.vaultIsLocked(document.body),
+                stale: true,
+                dismissed: dismissed,
+                serverBuild: serverBuild,
+              })
+            : { revealBanner: false, markStale: false };
+          if (!ui.revealBanner) {
+            var lockHint = document.getElementById('unlock-update-hint');
+            if (lockHint && localBuild && dismissed !== serverBuild) {
+              lockHint.innerHTML = '<strong>Update available</strong> — you\'re on <strong>v' + localBuild + '</strong>, server has <strong>v' + serverBuild + '</strong>. After unlock, use the banner at the top or Settings \u2192 Refresh app cache.';
+              lockHint.hidden = false;
+            }
+            return;
+          }
+          var banner = document.getElementById('app-update-banner');
+          var label = document.getElementById('app-update-banner-text');
+          if (banner) banner.hidden = false;
+          if (label && localBuild) {
+            label.innerHTML = '<strong>Update available</strong> — you\'re on <strong>v' + localBuild + '</strong>, server has <strong>v' + serverBuild + '</strong>. Tap Update now on Wi\u2011Fi.';
+          }
+          if (ui.markStale) {
+            document.body.classList.add('update-available');
+            var ver = document.getElementById('app-version');
+            if (ver && localBuild) {
+              ver.classList.add('stale');
+              ver.textContent = 'v' + localBuild + ' → v' + serverBuild;
+              ver.title = 'Update available';
+            }
+          }
+        };
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', reveal);
+        } else {
+          reveal();
+        }
+      };
+      var probeHealth = function () {
+        fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
+          .then(function (res) { return res.ok ? res.json() : null; })
+          .then(function (data) {
+            if (!data || !data.ok || !data.build || !localBuild) return;
+            if (data.build === localBuild) {
+              try { sessionStorage.removeItem('notes_pending_update_build'); } catch (e) {}
+              return;
+            }
+            showUpdateBanner(data.build);
+          })
+          .catch(function () {});
+      };
+      if (localBuild) probeHealth();
+    })();
+  </script>
+  <script>
+    (function () {
+      try {
+        // Same-tab Safari refetches keep sessionStorage. Force-quit clears it.
+        // Hide the lock screen during silent reload when unlock credentials exist.
+        var prefsBoot = {};
+        try { prefsBoot = JSON.parse(localStorage.getItem('deeperguard-prefs') || '{}') || {}; } catch (e) { prefsBoot = {}; }
+        var lockMode = prefsBoot.lockOnUnfocus === 'immediate' || prefsBoot.lockOnUnfocus === '1min'
+          ? prefsBoot.lockOnUnfocus
+          : (Object.prototype.hasOwnProperty.call(prefsBoot, 'lockOnUnfocus') ? 'never' : '1min');
+        var unfocusedAt = Number(localStorage.getItem('notes_unfocused_at') || sessionStorage.getItem('notes_unfocused_at') || 0);
+        var awayLock = (lockMode === 'immediate' && unfocusedAt > 0)
+          || (lockMode === '1min' && unfocusedAt > 0 && (Date.now() - unfocusedAt >= 60000));
+        if (sessionStorage.getItem('notes_require_unlock_after_update') === '1'
+            || localStorage.getItem('notes_require_unlock_after_update') === '1'
+            || sessionStorage.getItem('notes_require_typed_unlock') === '1'
+            || localStorage.getItem('notes_require_typed_unlock') === '1'
+            || awayLock) {
+          document.documentElement.removeAttribute('data-notes-boot');
+        } else {
+          var remembered = prefsBoot.rememberDevice
+            && (localStorage.getItem('notes_device_password_enc') || localStorage.getItem('notes_device_password'));
+          var salt = localStorage.getItem('notes_kdf_salt') || sessionStorage.getItem('notes_kdf_salt') || '';
+          if ((sessionStorage.getItem('notes_allow_boot_unlock') === '1'
+                && sessionStorage.getItem('notes_boot_password_ready') === '1')
+              || (remembered && salt)) {
+            document.documentElement.setAttribute('data-notes-boot', 'app');
+          } else {
+            document.documentElement.removeAttribute('data-notes-boot');
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body class="locked">
+  <div id="app-update-banner" class="app-update-banner" hidden>
+    <p id="app-update-banner-text"><strong>Update available</strong> — refresh to get the latest Notes build.</p>
+    <div class="offline-setup-actions">
+      <button type="button" id="btn-app-update" class="btn primary sm"><span class="app-update-spinner sm" aria-hidden="true"></span>Update now</button>
+      <button type="button" id="btn-app-update-dismiss" class="btn ghost sm">Not now</button>
+    </div>
+  </div>
+  <div id="app-update-progress" class="app-update-progress" hidden role="alertdialog" aria-live="assertive" aria-busy="true" aria-labelledby="app-update-progress-title">
+    <div class="app-update-progress-card">
+      <span class="app-update-spinner" aria-hidden="true"></span>
+      <p id="app-update-progress-title">Updating Notes…</p>
+      <span>Downloading the new build</span>
+      <button type="button" id="btn-app-update-cancel" class="btn ghost sm">Cancel</button>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var meta = document.querySelector('meta[name="notes-build"]');
+      var localBuild = meta && meta.getAttribute('content');
+      window.__notesShowUpdateProgress = function (on) {
+        var VL = window.NotesVaultLock;
+        if (on && VL && !VL.mayStartAppUpdate({ locked: VL.vaultIsLocked(document.body) })) return false;
+        if (on && window.__notesUpdateInFlight) return false;
+        window.__notesUpdateInFlight = !!on;
+        var overlay = document.getElementById('app-update-progress');
+        if (overlay) {
+          overlay.hidden = !on;
+          if (on) overlay.removeAttribute('hidden');
+        }
+        document.body.classList.toggle('app-updating', !!on);
+        ['btn-app-update', 'btn-sidebar-update', 'btn-refresh-app'].forEach(function (id) {
+          var btn = document.getElementById(id);
+          if (!btn) return;
+          btn.disabled = !!on;
+          if (!btn.dataset.updateLabel) btn.dataset.updateLabel = btn.textContent.replace(/\s+/g, ' ').trim();
+          var spinner = btn.querySelector('.app-update-spinner');
+          var label = on ? 'Updating…' : btn.dataset.updateLabel;
+          btn.textContent = '';
+          if (spinner) btn.appendChild(spinner);
+          btn.appendChild(document.createTextNode(label));
+        });
+        return true;
+      };
+      document.getElementById('btn-app-update-cancel')?.addEventListener('click', function (e) {
+        try { e.preventDefault(); } catch (err) {}
+        try { e.stopPropagation(); } catch (err) {}
+        if (window.__notesShowUpdateProgress) window.__notesShowUpdateProgress(false);
+      });
+      var hardRefresh = function () {
+        var VL = window.NotesVaultLock;
+        if (VL && !VL.mayStartAppUpdate({ locked: VL.vaultIsLocked(document.body) })) return;
+        if (window.__notesShowUpdateProgress) window.__notesShowUpdateProgress(true);
+        // Soft Update only: keep the service worker so Safari can still serve a
+        // shell if the LAN drops mid-reload (no hard refresh flag, no unregister wipe).
+        if (typeof window.notesForceRefreshApp === 'function') {
+          window.notesForceRefreshApp();
+          return;
+        }
+        try { sessionStorage.setItem('notes_user_requested_update', '1'); } catch (e) {}
+        try {
+          sessionStorage.setItem('notes_require_unlock_after_update', '1');
+          try { localStorage.setItem('notes_require_unlock_after_update', '1'); } catch (err) {}
+          sessionStorage.removeItem('notes_unlocked');
+          sessionStorage.removeItem('notes_allow_boot_unlock');
+        } catch (e) {}
+        fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
+          .then(function (res) {
+            if (!res.ok) throw new Error('offline');
+            var appPath = location.pathname || '/app';
+            return fetch(appPath + '?nosync=1', { cache: 'reload', credentials: 'same-origin' });
+          })
+          .then(function (res) {
+            if (!res || !res.ok) throw new Error('download failed');
+            return res.text();
+          })
+          .then(function (pageHtml) {
+            var appPath = location.pathname || '/app';
+            var go = function () { location.replace(appPath + '?t=' + Date.now() + '&nosync=1'); };
+            if (!('caches' in window)) { go(); return; }
+            caches.open('deeperguard-shell').then(function (shell) {
+              var body = new Blob([pageHtml], { type: 'text/html; charset=utf-8' });
+              var response = new Response(body, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+              var dest = appPath && appPath !== '/' ? appPath : '/app';
+              return Promise.all([
+                shell.put(dest, response.clone()),
+                shell.put(new Request(location.origin + dest), response)
+              ]);
+            }).catch(function () {}).then(go);
+          })
+          .catch(function () {
+            if (window.__notesShowUpdateProgress) window.__notesShowUpdateProgress(false);
+            alert('Can\'t reach the notes server. Join home Wi‑Fi or WireGuard, then try Update again. Your current app was kept.');
+          });
+      };
+      window.__notesHardRefresh = hardRefresh;
+      window.__notesSettingsOpenedAt = 0;
+      function settingsEventNode(target) {
+        if (!target) return null;
+        if (target.nodeType === 1) return target;
+        return target.parentElement || null;
+      }
+      function openSettingsShell(event) {
+        if (event) {
+          try { event.preventDefault(); } catch (err) {}
+          try { event.stopPropagation(); } catch (err) {}
+        }
+        var panel = document.getElementById('settings-panel');
+        var backdrop = document.getElementById('settings-backdrop');
+        if (panel) {
+          panel.hidden = false;
+          panel.removeAttribute('hidden');
+        }
+        if (backdrop) {
+          backdrop.hidden = false;
+          backdrop.removeAttribute('hidden');
+        }
+        document.body.classList.add('settings-open');
+        window.__notesSettingsOpenedAt = Date.now();
+        // Defer app init so this same tap cannot dismiss via backdrop.
+        setTimeout(function () {
+          if (typeof window.notesShowSettings === 'function') {
+            try { window.notesShowSettings(); } catch (err) {}
+          }
+        }, 0);
+      }
+      window.__notesOpenSettings = openSettingsShell;
+      function closeSettingsShell(event, force) {
+        if (!force && Date.now() - (window.__notesSettingsOpenedAt || 0) < 500) return;
+        if (event) {
+          try { event.stopPropagation(); } catch (err) {}
+        }
+        var panel = document.getElementById('settings-panel');
+        var backdrop = document.getElementById('settings-backdrop');
+        if (panel) panel.hidden = true;
+        if (backdrop) backdrop.hidden = true;
+        document.body.classList.remove('settings-open');
+      }
+      document.addEventListener('click', function (e) {
+        var node = settingsEventNode(e.target);
+        if (!node || typeof node.closest !== 'function') return;
+        if (node.closest('#btn-settings-head, #btn-settings-nav, #btn-editor-settings')) {
+          openSettingsShell(e);
+          return;
+        }
+        if (node.closest('#btn-send-checklist')) {
+          if (typeof window.notesSendChecklist === 'function') {
+            window.notesSendChecklist(e);
+          }
+          return;
+        }
+        if (node.closest('#btn-sidebar-update, #btn-app-update')) {
+          try { e.preventDefault(); } catch (err) {}
+          try { e.stopPropagation(); } catch (err) {}
+          var VL = window.NotesVaultLock;
+          if (VL && !VL.mayStartAppUpdate({ locked: VL.vaultIsLocked(document.body) })) return;
+          if (window.__notesShowUpdateProgress) window.__notesShowUpdateProgress(true);
+          if (typeof window.notesForceRefreshApp === 'function') {
+            window.notesForceRefreshApp();
+          } else if (window.__notesHardRefresh) {
+            window.__notesHardRefresh();
+          }
+          return;
+        }
+        if (node.closest('#settings-close')) {
+          closeSettingsShell(e, true);
+          return;
+        }
+        if (node.closest('#settings-backdrop')) {
+          closeSettingsShell(e, false);
+          return;
+        }
+        if (node.closest('#app-version.stale')) {
+          try { e.preventDefault(); } catch (err) {}
+          try { e.stopPropagation(); } catch (err) {}
+          var VLver = window.NotesVaultLock;
+          if (VLver && !VLver.mayStartAppUpdate({ locked: VLver.vaultIsLocked(document.body) })) return;
+          if (window.__notesShowUpdateProgress) window.__notesShowUpdateProgress(true);
+          if (typeof window.notesForceRefreshApp === 'function') {
+            window.notesForceRefreshApp();
+          } else if (window.__notesHardRefresh) {
+            window.__notesHardRefresh();
+          }
+        }
+      }, true);
+      var dismissBtn = document.getElementById('btn-app-update-dismiss');
+      if (dismissBtn && !dismissBtn.dataset.bound) {
+        dismissBtn.dataset.bound = '1';
+        dismissBtn.addEventListener('click', function (e) {
+          try { e.preventDefault(); } catch (err) {}
+          try { e.stopPropagation(); } catch (err) {}
+          var banner = document.getElementById('app-update-banner');
+          var side = document.getElementById('sidebar-update');
+          if (banner) banner.hidden = true;
+          if (side) side.hidden = true;
+          document.body.classList.remove('update-available');
+          fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (data) {
+              if (data && data.build) {
+                try { sessionStorage.setItem('notes_update_dismissed_build', data.build); } catch (e) {}
+              }
+            })
+            .catch(function () {});
+        });
+      }
+      if (!localBuild) return;
+      fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (data) {
+          if (!data || !data.ok || !data.build || data.build === localBuild) return;
+          var dismissed = '';
+          try { dismissed = sessionStorage.getItem('notes_update_dismissed_build') || ''; } catch (e) {}
+          if (dismissed === data.build) return;
+          try { sessionStorage.setItem('notes_pending_update_build', data.build); } catch (e) {}
+          var VL = window.NotesVaultLock;
+          var ui = VL && VL.lockedUpdateUi
+            ? VL.lockedUpdateUi({
+                locked: VL.vaultIsLocked(document.body),
+                stale: true,
+                dismissed: dismissed,
+                serverBuild: data.build,
+              })
+            : { revealBanner: false };
+          if (!ui.revealBanner) return;
+          var banner = document.getElementById('app-update-banner');
+          var label = document.getElementById('app-update-banner-text');
+          if (banner) banner.hidden = false;
+          if (label) {
+            label.innerHTML = '<strong>Update available</strong> — you\'re on <strong>v' + localBuild + '</strong>, server has <strong>v' + data.build + '</strong>. Tap Update now on Wi\u2011Fi.';
+          }
+        })
+        .catch(function () {});
+    })();
+  </script>
+  <div id="unlock-screen" class="auth-page">
+    <main class="auth-card">
+      <div class="brand">
+        {% include 'partials/auth-brand.html' %}
+        <h1>Unlock notes</h1>
+        <p id="unlock-email" class="muted">Enter your vault password to decrypt notes on this device</p>
+        {% include 'partials/zk-plain.html' %}
+        <p id="unlock-first-hint" class="auth-hint" hidden>Step 2 of 2 — use the same password you just created (or your phone vault password if you synced from another device).</p>
+        <p class="zk-badge">Encrypted on this device</p>
+        <p id="unlock-secure-hint" class="auth-hint" hidden>iPhone offline requires HTTPS. Install the certificate from <a href="/ca.crt" download>ca.crt</a> or open Settings after your first online login.</p>
+      </div>
+      <form id="unlock-form" class="stack" onsubmit="event.preventDefault(); return false;">
+        <label>Vault password
+          <input id="unlock-password" type="password" name="password" autocomplete="current-password" required>
+        </label>
+        <p id="unlock-error" class="error" hidden></p>
+        <p id="unlock-recovery-hint" class="auth-hint" hidden>Stay signed in, then unlock with the same password that unlocks Notes on your phone — it can differ from the login password. After notes appear, use Settings → Change vault password so both match.</p>
+        <p id="unlock-session-hint" class="auth-hint" hidden>Your sign-in session expired. Unlocking with your vault password will sign you in again and resume sync.</p>
+        <p id="unlock-update-hint" class="auth-hint ocr-stale" hidden aria-live="polite"></p>
+        <p id="unlock-status" class="unlock-status muted" hidden aria-live="polite"></p>
+        <div id="unlock-progress" class="unlock-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Unlock progress">
+          <span id="unlock-progress-bar"></span>
+        </div>
+        <button type="submit" id="unlock-submit" class="btn primary block">Unlock</button>
+        <button type="button" id="unlock-clear-saved" class="btn ghost block">Clear saved password</button>
+        <button type="button" id="unlock-signout" class="btn ghost block"{% if skip_login %} hidden{% endif %}>Sign out</button>
+      </form>
+    </main>
+  </div>
+  <div id="login-progress-overlay" class="login-progress-overlay" hidden aria-live="polite" aria-busy="true">
+    <div class="login-progress-card">
+      <p id="login-progress-status" class="login-progress-status">Opening notes… 0%</p>
+      <div class="login-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Sign-in progress">
+        <span id="login-progress-bar"></span>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var btn = document.getElementById('unlock-submit');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Unlock';
+      }
+      fetch('/api/account', { cache: 'no-store', credentials: 'same-origin' })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (account) {
+          if (!account || !account.email) return;
+          var el = document.getElementById('unlock-email');
+          if (el) el.textContent = account.email;
+          try {
+            localStorage.setItem('notes_email', account.email);
+            if (account.kdf_salt) localStorage.setItem('notes_kdf_salt', account.kdf_salt);
+            if (account.vault_kdf_version) localStorage.setItem('notes_vault_kdf_version', String(account.vault_kdf_version));
+          } catch (e) {}
+        })
+        .catch(function () {
+          try {
+            var email = localStorage.getItem('notes_email');
+            if (email) {
+              var el = document.getElementById('unlock-email');
+              if (el) el.textContent = email;
+            }
+          } catch (err) {}
+        });
+    })();
+  </script>
+  <div id="app" class="app-root" data-csrf="{{ csrf_token }}" data-skip-login="{{ '1' if skip_login else '0' }}" hidden>
+    <nav class="app-tabs" role="tablist" aria-label="App sections">
+      <button type="button" class="app-tab active" id="app-tab-notes" data-app-tab="notes" role="tab" aria-selected="true" aria-controls="notes-shell">Notes</button>
+      <button type="button" class="app-tab" id="app-tab-files" data-app-tab="files" role="tab" aria-selected="false" aria-controls="notes-shell">Files</button>
+      <button type="button" class="app-tab" id="app-tab-2fa" data-app-tab="2fa" role="tab" aria-selected="false" aria-controls="totp-pane">2FA</button>
+    </nav>
+    <div id="app-login-progress" class="app-login-progress" hidden role="status" aria-live="polite">
+      <span id="app-login-status" class="app-login-status"></span>
+      <div class="app-login-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Sign-in progress">
+        <span id="app-login-progress-bar"></span>
+      </div>
+    </div>
+    <div id="notes-shell" class="shell">
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-nav">
+      <header class="sidebar-head">
+        <div class="brand-stack">
+          <div class="brand-inline">
+            {% with size='sm', mark_tag='span' %}{% include 'partials/brand-mark.html' %}{% endwith %}
+            <div class="brand-copy">
+              <div class="brand-title-row">
+                <strong>Notes <span id="app-version" class="app-version">v{{ build }}</span></strong>
+                <span id="list-plan-badge" class="plan-badge plan-badge-sm" hidden aria-label="Subscription plan">Pro</span>
+              </div>
+              <p id="sync-meta" class="sync-meta">Not synced yet</p>
+            </div>
+            <button type="button" id="sync-indicator" class="sync-indicator" data-state="idle" title="Sync now" aria-label="Sync now">
+              <span class="sync-glyph" aria-hidden="true"></span>
+            </button>
+          </div>
+          <p id="vault-stats" class="vault-stats muted"></p>
+          <div class="brand-sync-row desktop-only">
+            <button type="button" id="btn-sync-now" class="btn ghost sm btn-sync-now" data-state="idle" title="Sync notes with the server (Shift-click for full download)" aria-label="Sync now">Sync</button>
+          </div>
+        </div>
+        <div class="sidebar-actions">
+          <button type="button" id="btn-lock-head" class="btn icon vault-lock-btn is-locked" title="Vault locked" aria-label="Vault locked">
+            <svg class="ui-icon lock-closed" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <svg class="ui-icon lock-open" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
+              <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M8 11V7a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button type="button" id="btn-settings-head" class="btn icon" title="Settings" aria-label="Settings" onclick="window.__notesOpenSettings&&window.__notesOpenSettings(event);return false;">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+          <button type="button" id="btn-account-info-head" class="btn icon" title="Account info" aria-label="Account info">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+              <line x1="12" y1="8" x2="12.01" y2="8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+              <path d="M11 12h1v4h1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" id="btn-new" class="btn icon" title="New note" aria-label="New note">+</button>
+        </div>
+        <div id="sync-progress" class="sync-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Sync progress">
+          <span id="sync-progress-bar"></span>
+        </div>
+      </header>
+      <div id="sidebar-update" class="sidebar-update" hidden aria-hidden="true">
+        <div class="sidebar-update-copy">
+          <strong id="sidebar-update-title">Update available</strong>
+          <span id="sidebar-update-text" class="muted">A newer Notes build is on the server.</span>
+        </div>
+        <button type="button" id="btn-sidebar-update" class="btn primary sm"><span class="app-update-spinner sm" aria-hidden="true"></span>Update</button>
+      </div>
+      <div id="network-status-banner" class="network-status-banner" hidden role="status" aria-live="polite">
+        <p id="network-status-text"></p>
+        <button type="button" id="btn-network-retry" class="btn ghost sm">Retry</button>
+      </div>
+      <div id="offline-setup-banner" class="offline-setup-banner" hidden>
+        <p><strong>Offline unlock</strong> — on iPhone, turn on <em>Remember password</em> in Settings → Security so you can unlock without Wi‑Fi after force-quit (the vault still starts locked).</p>
+        <div class="offline-setup-actions">
+          <button type="button" id="btn-offline-setup" class="btn primary sm">Enable in Settings</button>
+          <button type="button" id="btn-offline-setup-dismiss" class="btn ghost sm">Not now</button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <p class="sn-nav-label">Views</p>
+        <label class="filter-select-wrap">
+          <span class="sr-only">Filter</span>
+          <select id="filter-select" class="filter-select" aria-label="Filter notes">
+            <option value="all">All notes</option>
+            <option value="pinned">Starred</option>
+            <option value="untagged">Untagged</option>
+            <option value="documents">Files</option>
+            <option value="archived">Archived</option>
+            <option value="trash">Trash</option>
+          </select>
+        </label>
+        <label class="sort-select-wrap sort-select-wrap--sidebar">
+          <span class="sr-only">Sort</span>
+          <select id="sort-select-sidebar" class="filter-select sort-select" aria-label="Sort notes">
+            <option value="updated">Last updated</option>
+            <option value="created">Date created</option>
+            <option value="title">Title A–Z</option>
+          </select>
+        </label>
+        <nav id="filters" class="filters" aria-label="Note filters">
+          <button type="button" class="filter active" data-filter="all">Notes</button>
+          <button type="button" class="filter" data-filter="documents">Files</button>
+          <button type="button" class="filter" data-filter="pinned">Starred</button>
+          <button type="button" class="filter" data-filter="archived">Archived</button>
+          <button type="button" class="filter" data-filter="trash">Trash</button>
+          <button type="button" class="filter" data-filter="untagged">Untagged</button>
+        </nav>
+      </div>
+      <details class="tag-section" id="tag-section">
+        <summary class="section-label"><span class="sn-tags">Tags</span><span class="sn-folders">Folders</span></summary>
+        <div id="tag-list" class="tag-list"></div>
+        <div id="tag-color-bar" class="tag-color-bar" hidden></div>
+        <div class="tag-composer" id="tag-composer" hidden>
+          <input id="tag-name-input" type="text" maxlength="80" placeholder="Tag name" autocomplete="off">
+          <div class="tag-composer-actions">
+            <button type="button" class="btn ghost sm" id="tag-create-cancel">Cancel</button>
+            <button type="button" class="btn primary sm" id="tag-create-confirm">Create</button>
+          </div>
+        </div>
+        <button type="button" id="btn-new-tag" class="btn ghost sm tag-new-btn">+ New tag</button>
+      </details>
+      <footer class="sidebar-foot">
+        <button type="button" id="btn-settings-nav" class="btn icon" title="Settings" aria-label="Settings">
+          <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+        <button type="button" id="btn-lock-nav" class="btn icon vault-lock-btn is-locked" title="Vault locked" aria-label="Vault locked">
+          <svg class="ui-icon lock-closed" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="ui-icon lock-open" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
+            <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M8 11V7a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button type="button" id="btn-account-info-nav" class="btn icon" title="Account info" aria-label="Account info">
+          <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+            <line x1="12" y1="8" x2="12.01" y2="8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M11 12h1v4h1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </footer>
+      </div>
+      <div class="list-pane list-toolbar">
+      <div class="note-list-head" id="note-list-head" hidden>
+        <div class="note-list-head-copy">
+          <h2 id="note-list-title" class="note-list-title">Notes</h2>
+          <span id="note-list-count" class="note-list-count"></span>
+        </div>
+        <div class="note-list-tools">
+          <button type="button" id="btn-list-scan" class="sn-add" title="Add document" aria-label="Add document">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M12 3v13m0-13l-4 4m4-4l4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+            </svg>
+          </button>
+          <label class="sort-select-wrap sort-select-wrap--list" title="Sort notes" hidden>
+            <span class="sr-only">Sort</span>
+            <select id="sort-select" class="sort-select" aria-label="Sort notes" tabindex="-1">
+              <option value="updated">Last updated</option>
+              <option value="created">Date created</option>
+              <option value="title">Title A–Z</option>
+            </select>
+          </label>
+          <button type="button" id="btn-list-sort" class="btn icon" title="Sort notes" aria-label="Cycle sort order">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/>
+            </svg>
+          </button>
+          <button type="button" id="btn-new-list" class="sn-add" title="New note" aria-label="New note">+</button>
+        </div>
+      </div>
+      <div class="search-wrap">
+        <div class="search-row">
+          <div class="search-field">
+            <svg class="search-leading" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"></circle>
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 16l5 5"></path>
+            </svg>
+            <input id="search" type="text" placeholder="Search notes &amp; scanned text…" autocomplete="off" enterkeyhint="search" inputmode="search" role="searchbox" aria-label="Search notes and scanned documents">
+            <button type="button" id="search-clear" class="search-clear" hidden aria-label="Clear search">×</button>
+          </div>
+          <button type="button" id="search-filter-toggle" class="btn icon search-filter-toggle" title="Search filters" aria-label="Search filters" aria-expanded="false" aria-controls="search-filter-panel">
+            <svg class="search-filter-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M4 6h16v2H4V6zm3 5h10v2H7v-2zm3 5h4v2h-4v-2z"/>
+            </svg>
+            <span id="search-filter-badge" class="search-filter-badge" hidden aria-hidden="true">0</span>
+          </button>
+        </div>
+        <div id="search-filter-backdrop" class="search-filter-backdrop" hidden></div>
+        <section id="search-filter-panel" class="search-filter-panel" hidden aria-label="Search filters">
+          <header class="search-filter-head">
+            <h3>Search filters</h3>
+            <button type="button" id="search-filter-close" class="btn icon" aria-label="Close filters">×</button>
+          </header>
+          <div class="search-filter-body">
+            <fieldset class="search-filter-group">
+              <legend>Match</legend>
+              <label class="search-filter-check">
+                <input type="checkbox" id="search-titles-only">
+                <span>Search titles only</span>
+              </label>
+            </fieldset>
+            <fieldset class="search-filter-group">
+              <legend>Include</legend>
+              <label class="search-filter-check">
+                <input type="checkbox" id="search-include-protected">
+                <span>Protected notes</span>
+              </label>
+              <label class="search-filter-check">
+                <input type="checkbox" id="search-include-archived">
+                <span>Archived notes</span>
+              </label>
+              <label class="search-filter-check">
+                <input type="checkbox" id="search-include-trashed">
+                <span>Trashed notes</span>
+              </label>
+            </fieldset>
+            <fieldset class="search-filter-group">
+              <legend>Tags</legend>
+              <p class="search-filter-hint muted">Notes matching any selected tag appear (combine with search text or use tags alone).</p>
+              <div id="search-filter-tags" class="search-filter-tags"></div>
+            </fieldset>
+          </div>
+          <footer class="search-filter-foot">
+            <button type="button" id="search-filter-clear" class="btn ghost sm">Clear all</button>
+            <button type="button" id="search-filter-apply" class="btn primary sm">Done</button>
+          </footer>
+        </section>
+        <p id="search-meta" class="search-meta muted" hidden></p>
+      </div>
+      <div id="trash-toolbar" class="trash-toolbar" hidden>
+        <p id="trash-toolbar-meta" class="trash-toolbar-meta muted"></p>
+        <button type="button" id="btn-empty-trash-list" class="btn danger sm">Empty trash</button>
+      </div>
+      <div id="note-list" class="note-list"></div>
+      </div>
+    </aside>
+
+    <main id="editor-pane" class="editor-pane">
+      <div id="empty-state" class="empty-state">
+        <div class="empty-state-card">
+          <h2 id="empty-state-title">Scan, search, find</h2>
+          <p id="empty-state-message">Scan a receipt or document — we read the text on your device so you can search it later. Everything stays encrypted before sync.</p>
+          <div class="empty-state-actions">
+            <button type="button" id="btn-empty-scan" class="btn primary">Scan document</button>
+            <button type="button" id="btn-empty-new" class="btn">New note</button>
+            <button type="button" id="btn-empty-sync" class="btn">Sync notes</button>
+            <button type="button" id="btn-empty-dismiss" class="btn ghost">Dismiss</button>
+            <button type="button" id="btn-empty-relock" class="btn primary" hidden>Try another password</button>
+          </div>
+        </div>
+      </div>
+      <article id="editor" class="editor" hidden>
+        <header class="editor-head">
+          <button type="button" id="btn-back" class="btn icon mobile-only" aria-label="Back">←</button>
+          <div class="editor-head-main">
+            <input id="note-title" class="title-input" placeholder="Title">
+            <div id="tag-bar-shell" class="tag-bar-shell is-collapsed">
+              <button type="button" id="tag-bar-toggle" class="tag-bar-toggle" aria-expanded="false" aria-controls="tag-bar">
+                <span class="tag-bar-toggle-label">Tags</span>
+                <span id="tag-bar-toggle-summary" class="tag-bar-toggle-summary muted"></span>
+                <span class="tag-bar-toggle-chevron" aria-hidden="true">▾</span>
+              </button>
+              <div id="tag-bar" class="tag-bar"></div>
+            </div>
+          </div>
+          <div class="editor-actions">
+            <div class="editor-actions-group editor-actions-primary">
+            <button type="button" id="btn-preview" class="btn ghost sm mode-toggle toolbar-primary" title="Switch edit mode">Edit</button>
+            <button type="button" id="btn-find" class="btn icon mobile-only toolbar-primary find-btn" title="Find in note" aria-label="Find in note">
+              <svg class="find-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="10.5" cy="10.5" r="6.75" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M16.2 16.2 21 21"/>
+              </svg>
+            </button>
+            <button type="button" id="btn-prevent-edit" class="btn icon edit-lock-btn is-unlocked toolbar-primary" title="Lock editing" aria-label="Lock editing" aria-pressed="false">
+              <svg class="edit-lock-icon edit-lock-open" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M7 11V7a5 5 0 0 1 10 0"/>
+              </svg>
+              <svg class="edit-lock-icon edit-lock-closed" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </button>
+            <select id="note-editor-type" class="editor-select toolbar-primary" title="Note type">
+              <option value="plain">Plain text</option>
+              <option value="checklist">Checklist</option>
+              <option value="super">Super checklist</option>
+              <option value="markdown">Markdown</option>
+              <option value="superscript">Superscript</option>
+              <option value="code">Code</option>
+            </select>
+            <button type="button" id="btn-note-info" class="btn ghost sm toolbar-primary note-more-btn" title="Note actions and info" aria-label="Note actions and info">
+              <span class="note-more-label mobile-only">More</span>
+              <span class="note-more-icon desktop-only" aria-hidden="true">
+                <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+                  <line x1="12" y1="8" x2="12.01" y2="8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                  <path d="M11 12h1v4h1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </button>
+            <button type="button" id="btn-ai-chat" class="btn ghost sm toolbar-primary" title="Ask AI about this note (sends this note's text to Ollama)">Ask AI</button>
+            </div>
+            <span class="editor-tools-divider toolbar-secondary" aria-hidden="true"></span>
+            <div class="editor-actions-group editor-actions-secondary">
+            <button type="button" id="btn-star" class="btn icon toolbar-secondary" title="Star" aria-label="Star">
+              <svg class="ui-icon icon-star-outline" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              <svg class="ui-icon icon-star-filled" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
+                <polygon fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </button>
+            <button type="button" id="btn-pin" class="btn icon toolbar-secondary" title="Pin" aria-label="Pin">
+              <svg class="ui-icon icon-pin-outline" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
+              </svg>
+              <svg class="ui-icon icon-pin-filled" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
+                <path fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
+              </svg>
+            </button>
+            <button type="button" id="btn-share" class="btn icon toolbar-secondary" title="Share" aria-label="Share">
+              <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="16 6 12 2 8 6"/>
+                <line x1="12" y1="2" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button type="button" id="btn-archive" class="btn icon toolbar-secondary" title="Archive" aria-label="Archive">
+              <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" fill="none" stroke="currentColor" stroke-width="2"/>
+                <line x1="10" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button type="button" id="btn-duplicate" class="btn icon toolbar-secondary" title="Duplicate" aria-label="Duplicate">
+              <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="9" y="9" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button type="button" id="btn-trash" class="btn icon toolbar-secondary" title="Trash" aria-label="Trash">
+              <svg class="ui-icon icon-trash" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="3 6 5 6 21 6"/>
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <line x1="14" y1="11" x2="14" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <svg class="ui-icon icon-restore" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
+                <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="9 14 4 9 9 4"/>
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+              </svg>
+            </button>
+            <button type="button" id="btn-delete-forever" class="btn ghost sm toolbar-secondary" hidden>Delete forever</button>
+            <button type="button" id="btn-editor-settings" class="btn ghost sm mobile-only toolbar-desktop" title="Settings" aria-label="Settings">Settings</button>
+            <button type="button" id="btn-ocr-text" class="btn ghost sm doc-only-control toolbar-desktop" hidden>OCR text</button>
+            </div>
+          </div>
+        </header>
+        <div id="tag-suggest" class="tag-suggest" hidden>
+          <span>Suggested tag: <strong id="tag-suggest-name"></strong></span>
+          <span class="tag-suggest-actions">
+            <button type="button" class="btn primary sm" id="tag-suggest-apply">Apply</button>
+            <button type="button" class="btn ghost sm" id="tag-suggest-dismiss">Dismiss</button>
+          </span>
+        </div>
+        <div id="md-toolbar" class="md-toolbar">
+          <button type="button" class="btn ghost sm" data-md="bold" title="Bold">B</button>
+          <button type="button" class="btn ghost sm" data-md="italic" title="Italic">I</button>
+          <button type="button" class="btn ghost sm" data-md="heading" title="Heading">H</button>
+          <button type="button" class="btn ghost sm" data-md="check" title="Checklist">☑</button>
+          <button type="button" class="btn ghost sm" data-md="link" title="Link">Link</button>
+          <button type="button" class="btn ghost sm" data-md="sup" title="Superscript">x²</button>
+          <button type="button" class="btn ghost sm" data-md="code" title="Code">`</button>
+        </div>
+        <div id="find-bar" class="find-bar" hidden>
+          <div class="find-bar-row find-bar-search">
+            <input id="find-input" type="text" placeholder="Find in note…" autocomplete="off" enterkeyhint="search" role="searchbox" aria-label="Find in note">
+            <div class="find-bar-nav">
+              <button type="button" class="btn ghost sm find-case-toggle" id="find-case-toggle" title="Match case" aria-label="Match case" aria-pressed="false">Aa</button>
+              <span id="find-count" class="find-count muted">0/0</span>
+              <button type="button" class="btn ghost sm" id="find-prev" aria-label="Previous match">↑</button>
+              <button type="button" class="btn ghost sm" id="find-next" aria-label="Next match">↓</button>
+            </div>
+            <button type="button" class="btn icon find-close" id="find-close" aria-label="Close find">×</button>
+          </div>
+          <p id="find-doc-status" class="find-doc-status" hidden aria-live="polite"></p>
+        </div>
+        <div id="note-body-wrap" class="note-body-wrap">
+          <pre id="note-body-highlights" class="note-body-highlights" aria-hidden="true"></pre>
+          <textarea id="note-body" class="note-body" placeholder="Write…"></textarea>
+        </div>
+        <div id="note-lock-gate" class="note-lock-gate" hidden>
+          <p>This note is protected.</p>
+          <label>Account password
+            <input id="note-lock-password" type="password" autocomplete="current-password">
+          </label>
+          <p id="note-lock-error" class="error" hidden>Wrong password.</p>
+          <button type="button" id="note-lock-unlock" class="btn primary">Unlock note</button>
+        </div>
+        <div id="doc-inline" class="doc-inline" hidden></div>
+        <p id="note-readonly-banner" class="note-readonly-banner" hidden>Editing is disabled for this note.</p>
+        <div id="checklist" class="checklist" hidden></div>
+        <div id="preview" class="preview" hidden tabindex="-1"></div>
+        <footer class="editor-foot">
+          <span id="save-status" class="muted">Saved</span>
+          <span id="note-meta" class="muted"></span>
+        </footer>
+        <section class="attachments">
+          <h3 class="section-label">Attachments</h3>
+          <div id="attachment-list" class="attachment-list"></div>
+          <label class="file-label btn sm" id="attachment-add-label">Add file
+            <input id="attachment-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,application/pdf,text/plain" multiple>
+          </label>
+        </section>
+        <section class="history">
+          <h3 class="section-label">Version history</h3>
+          <div id="history-list" class="history-list"></div>
+        </section>
+      </article>
+    </main>
+    </div>
+    <section id="totp-pane" class="totp-pane" hidden>
+      <header class="totp-head">
+        <div class="totp-head-copy">
+          <strong>2FA</strong>
+          <p id="totp-source-meta" class="muted">Authenticator codes stored in the vault</p>
+        </div>
+        <div class="totp-head-actions">
+          <button type="button" id="btn-totp-add" class="btn icon" title="Add account" aria-label="Add account">+</button>
+          <button type="button" id="btn-totp-lock" class="btn icon" title="Lock vault" aria-label="Lock vault">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button type="button" id="btn-totp-settings" class="btn icon" title="Settings" aria-label="Settings">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+      <div class="totp-toolbar">
+        <div class="search-wrap">
+          <div class="search-row">
+            <div class="search-field">
+              <svg class="search-leading" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"></circle>
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 16l5 5"></path>
+              </svg>
+              <input id="totp-search" type="search" placeholder="Search..." autocomplete="off" enterkeyhint="search" aria-label="Search accounts">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="totp-list" class="totp-list"></div>
+      <p id="totp-empty" class="totp-empty muted" hidden></p>
+    </section>
+    <div class="fab-stack mobile-only">
+      <button type="button" id="fab-scan" class="fab fab-secondary" title="Scan document" aria-label="Scan document">
+        <svg class="ui-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M12 3v13m0-13l-4 4m4-4l4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+        </svg>
+      </button>
+      <button type="button" id="fab-add" class="fab" aria-label="New note">+</button>
+    </div>
+  </div>
+
+  <div id="settings-backdrop" class="settings-backdrop" hidden></div>
+  <aside id="settings-panel" class="settings-panel" hidden>
+    <header class="settings-head">
+      <h2>Settings</h2>
+      <button type="button" class="btn icon" id="settings-close" aria-label="Close settings">×</button>
+    </header>
+    <div class="settings-body">
+      <section class="settings-group">
+        <h3>Account</h3>
+        <div class="settings-card">
+          <div class="plan-summary">
+            <div class="plan-summary-head">
+              <span id="account-plan-badge" class="plan-badge plan-badge-pro">Pro</span>
+              <p id="account-plan-price" class="plan-price muted">Free during public beta</p>
+            </div>
+            <p id="account-plan-tagline" class="settings-hint">Backups, security extras, and room to grow</p>
+            <p id="account-plan-storage" class="settings-hint"></p>
+          </div>
+          <p id="account-email" class="settings-account"></p>
+          <p id="privacy-status" class="settings-hint settings-privacy-status">Checking privacy status…</p>
+          <details class="plan-compare" id="plan-compare">
+            <summary>Compare Basic &amp; Pro</summary>
+            <div id="plan-compare-body" class="plan-compare-grid"></div>
+            <p id="plan-pricing-note" class="settings-hint plan-pricing-note"></p>
+          </details>
+          <div class="settings-actions">
+            <button type="button" id="btn-open-admin" class="btn" hidden>Open admin dashboard</button>
+            <button type="button" id="btn-refresh-app" class="btn"><span class="app-update-spinner sm" aria-hidden="true"></span>Refresh app cache</button>
+            <button type="button" id="btn-logout" class="btn danger"{% if skip_login %} hidden{% endif %}>Sign out</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-group">
+        <h3>Appearance</h3>
+        <div class="settings-card">
+          <div class="theme-toggle" role="radiogroup" aria-label="Theme">
+            <button type="button" class="theme-opt" data-theme-opt="dark">Dark</button>
+            <button type="button" class="theme-opt" data-theme-opt="light">Light</button>
+            <button type="button" class="theme-opt" data-theme-opt="system">Auto</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-group">
+        <h3>Notes</h3>
+        <div class="settings-card">
+          <label class="settings-row">Font size
+            <input id="pref-font-size" type="range" min="13" max="22" value="16">
+          </label>
+          <label class="settings-row checkbox"><span>Compact note list</span><input id="pref-compact" type="checkbox"></label>
+          <label class="settings-row checkbox"><span>Hide list previews</span><input id="pref-hide-previews" type="checkbox"></label>
+          <p class="settings-hint">On iPhone, PDF note-list thumbnails are generated on this device and cached locally.</p>
+          <label class="settings-row checkbox"><span>Monospace editor</span><input id="pref-mono" type="checkbox"></label>
+          <label class="settings-row checkbox"><span>Spellcheck</span><input id="pref-spellcheck" type="checkbox" checked></label>
+          <label class="settings-row checkbox"><span>Open notes in preview (documents &amp; markdown)</span><input id="pref-auto-preview" type="checkbox"></label>
+          <p class="settings-hint">When off, existing notes open ready to edit. New scans still open on the document preview.</p>
+          <p class="settings-hint">Previews, font, editor and lock settings follow your account: change them here and every signed-in device picks them up on the next sync. Note list sort is in the list header (or under Views on phone).</p>
+        </div>
+      </section>
+
+      <section class="settings-group">
+        <h3>Storage on this device</h3>
+        <div class="settings-card">
+          <label class="settings-row checkbox"><span>Download files only when a note is opened</span><input id="pref-light-vault" type="checkbox"></label>
+          <p class="settings-hint">Notes, tags and scanned text always sync. With this on, photos and PDFs stay on the server until you open their note — then they are kept on this device for offline use. Applies to this device only.</p>
+          <p id="local-files-summary" class="settings-hint"></p>
+          <div class="settings-actions">
+            <button type="button" id="btn-purge-local-files" class="btn">Remove downloaded files from this device</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-group">
+        <h3>AI chat (optional)</h3>
+        <div class="settings-card">
+          <p class="settings-hint ai-chat-warning"><strong>Less private.</strong> Chat sends the text of the note you have open (and, if enabled, its scanned text) from this browser to the Ollama server below. That text leaves the end-to-end encrypted vault. Nothing else is sent: no other notes, tags, file names, e-mail address or passwords. With your own Ollama server the browser talks to it directly. With Ollama Cloud the Deeperguard server relays the request to ollama.com (browsers cannot call it directly); the relay forwards and forgets, it stores neither your key, the prompt nor the answer. Ollama Cloud states it processes prompts transiently and never logs or trains on them. Do not use it on notes you would not paste into a chatbot.</p>
+          <label class="settings-row stacked">Ollama server
+            <input id="ai-chat-host" type="url" autocomplete="off" spellcheck="false" placeholder="https://ollama.com">
+          </label>
+          <p class="settings-hint">Leave empty for Ollama Cloud. For your own server enter its URL (it must be reachable over HTTPS from this browser and allow this origin via <code>OLLAMA_ORIGINS</code>).</p>
+          <label class="settings-row stacked">Ollama API key
+            <input id="ai-chat-key" type="password" autocomplete="off" spellcheck="false" placeholder="Required for Ollama Cloud">
+          </label>
+          <p class="settings-hint">Create a key at <a href="https://ollama.com/settings/keys" target="_blank" rel="noopener noreferrer">ollama.com/settings/keys</a>. It is stored inside your encrypted vault and synced to your other devices; it is never saved unencrypted on this device.</p>
+          <label class="settings-row stacked">Model
+            <input id="ai-chat-model" list="ai-chat-models" autocomplete="off" spellcheck="false" placeholder="gpt-oss:120b">
+            <datalist id="ai-chat-models"></datalist>
+          </label>
+          <p class="settings-hint">Default is the cloud model <code>gpt-oss:120b</code>. Any model from <a href="https://ollama.com/search?c=cloud" target="_blank" rel="noopener noreferrer">ollama.com's cloud library</a> works; on your own server use a model you have pulled.</p>
+          <label class="settings-row checkbox"><span>Include scanned document text</span><input id="ai-chat-include-ocr" type="checkbox" checked></label>
+          <div class="settings-actions">
+            <button type="button" id="ai-chat-save" class="btn primary">Save</button>
+            <button type="button" id="ai-chat-test" class="btn">Test connection</button>
+            <button type="button" id="ai-chat-remove" class="btn danger">Remove key</button>
+          </div>
+          <p id="ai-chat-status" class="settings-hint" hidden></p>
+        </div>
+      </section>
+
+      <section class="settings-group">
+        <h3>Privacy &amp; security</h3>
+        <div class="settings-card">
+          <p class="settings-hint">Notes are encrypted on this device before sync. Your vault password never leaves this device. Account sign-in uses zero-knowledge SRP — the server stores only a proof, not your password.</p>
+          <p class="settings-hint">Self-hosting? See the <a href="/self-host">self-host guide</a>.</p>
+          <p class="settings-hint">Use <a href="https://www.deeperguard.com/">https://www.deeperguard.com/</a> on iPhone. Passkeys require that hostname.</p>
+          <label class="settings-row">Lock after idle
+            <select id="pref-auto-lock">
+              <option value="0">Never</option>
+              <option value="5">5 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+            </select>
+          </label>
+          <label class="settings-row">Lock when leaving the app
+            <select id="pref-lock-on-unfocus">
+              <option value="never">Never</option>
+              <option value="immediate">Immediately</option>
+              <option value="1min">After 1 minute</option>
+            </select>
+          </label>
+          <label class="settings-row checkbox"><span>Remember password on this device</span><input id="pref-remember-device" type="checkbox"></label>
+          <p class="settings-hint">Stores your vault password on this trusted device for offline unlock. Disable on shared devices.</p>
+          <p id="totp-status" class="settings-hint" hidden></p>
+          <div id="passkey-settings" class="settings-nested stack" data-plan-feature="passkeys">
+            <p class="settings-hint">Passkeys sign you into your account without typing your password. Vault unlock still requires your master password locally.</p>
+            <div id="passkey-list"></div>
+            <div class="settings-actions">
+              <button type="button" id="btn-add-passkey" class="btn">Add passkey</button>
+            </div>
+          </div>
+          <div id="password-change" class="settings-nested stack">
+            <label class="settings-row stacked">Current vault password
+              <input id="password-change-current" type="password" autocomplete="current-password">
+            </label>
+            <label class="settings-row stacked">New vault password
+              <span class="password-field-wrap">
+                <input id="password-change-new" type="password" autocomplete="new-password">
+                <button type="button" class="password-toggle btn ghost sm" data-target="password-change-new" aria-label="Show password">Show</button>
+              </span>
+            </label>
+            <label class="settings-row stacked">Confirm new password
+              <span class="password-field-wrap">
+                <input id="password-change-confirm" type="password" autocomplete="new-password">
+                <button type="button" class="password-toggle btn ghost sm" data-target="password-change-confirm" aria-label="Show password">Show</button>
+              </span>
+            </label>
+            <p id="password-change-error" class="settings-hint error" hidden></p>
+            <button type="button" id="btn-change-password" class="btn primary">Change vault password</button>
+            <p class="settings-hint">Re-encrypts every note on this device. Other devices need the new password to sync.</p>
+          </div>
+          <div class="settings-actions">
+            <button type="button" id="btn-lock-now" class="btn">Lock vault now</button>
+          </div>
+          <div class="settings-actions" data-plan-feature="account_2fa">
+            <button type="button" id="btn-setup-totp" class="btn">Set up 2FA</button>
+            <button type="button" id="btn-disable-totp" class="btn danger" hidden>Disable 2FA</button>
+          </div>
+          <div id="totp-setup" class="settings-nested stack" hidden>
+            <img id="totp-qr" alt="TOTP QR code" class="qr">
+            <p class="hint">Scan with Authy, 1Password, or Apple Passwords.</p>
+            <label>Verification code
+              <input id="totp-enable-code" inputmode="numeric" maxlength="6">
+            </label>
+            <button type="button" id="btn-enable-totp" class="btn primary">Enable 2FA</button>
+          </div>
+          <div id="totp-disable" class="settings-nested stack" hidden>
+            <label id="totp-disable-password-wrap" class="settings-row stacked">Account password
+              <input id="totp-disable-password" type="password" autocomplete="current-password">
+            </label>
+            <p id="totp-disable-srp-hint" class="settings-hint" hidden>Signed in with zero-knowledge login — only your authenticator code is required.</p>
+            <label>Authenticator code
+              <input id="totp-disable-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+            </label>
+            <button type="button" id="btn-confirm-disable-totp" class="btn danger">Confirm disable 2FA</button>
+          </div>
+          <details class="settings-advanced">
+            <summary>Advanced</summary>
+            <div class="settings-nested stack">
+              <div class="settings-actions">
+                <button type="button" id="btn-show-vault-password" class="btn ghost sm" hidden>Show saved vault password</button>
+              </div>
+              <p id="vault-password-reveal" class="settings-hint" hidden></p>
+              <div id="attachment-repair" class="settings-nested stack">
+                <label class="settings-row stacked">Previous vault password (for repair)
+                  <span class="password-field-wrap">
+                    <input id="attachment-repair-password" type="password" autocomplete="current-password">
+                    <button type="button" class="password-toggle btn ghost sm" data-target="attachment-repair-password" aria-label="Show password">Show</button>
+                  </span>
+                </label>
+                <p id="attachment-repair-error" class="settings-hint error" hidden></p>
+                <button type="button" id="btn-repair-attachments" class="btn">Repair documents</button>
+              </div>
+              <p class="settings-hint">Re-OCR documents on this device (zero-knowledge). Regenerates PDF list thumbnails on iPhone.</p>
+              <div class="settings-actions">
+                <button type="button" id="btn-reindex-docs" class="btn">Reindex documents</button>
+                <button type="button" id="btn-reload-notes" class="btn">Reload notes from server</button>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="settings-group" data-plan-feature="email_backup">
+        <h3>Backup &amp; import</h3>
+        <div class="settings-card">
+          <label class="settings-row stacked">Backup email
+            <input id="backup-email" type="email">
+          </label>
+          <label class="settings-row checkbox"><span>Daily encrypted email backup</span><input id="backup-enabled" type="checkbox"></label>
+          <div class="settings-actions">
+            <button type="button" id="btn-save-backup" class="btn">Save backup settings</button>
+            <button type="button" id="btn-backup-now" class="btn">Email backup now</button>
+            <button type="button" id="btn-download-backup" class="btn">Download encrypted vault</button>
+            <button type="button" id="btn-export-note" class="btn">Export current note</button>
+            <label class="file-label btn">Import Standard Notes or Deeperguard backup
+              <input id="import-file" type="file" accept=".txt,.json,.enc.json,.gz,.json.gz,.enc.json.gz,.zip,text/plain,application/json,application/gzip,application/zip" hidden>
+            </label>
+          </div>
+          <p class="settings-hint">Encrypted backups only. Standard Notes decrypted exports can be imported from zip or .txt.</p>
+        </div>
+        <div class="settings-card" data-plan-feature="pcloud_backup">
+          <h4 class="settings-subtitle">pCloud backup</h4>
+          <label class="settings-row stacked">pCloud email / username
+            <input id="pcloud-username" type="email" autocomplete="username">
+          </label>
+          <label class="settings-row stacked">pCloud password
+            <input id="pcloud-password" type="password" autocomplete="current-password" placeholder="Leave blank to keep current password">
+          </label>
+          <label class="settings-row stacked">rclone OAuth token (if 2FA is on)
+            <textarea id="pcloud-rclone-token" rows="3" spellcheck="false" placeholder="Paste JSON from: rclone authorize pcloud"></textarea>
+          </label>
+          <label class="settings-row stacked">Remote folder
+            <input id="pcloud-remote-path" type="text" placeholder="Deeperguard/backups">
+          </label>
+          <label class="settings-row stacked">pCloud region
+            <select id="pcloud-region">
+              <option value="eu">EU (ewebdav.pcloud.com)</option>
+              <option value="us">US (webdav.pcloud.com)</option>
+            </select>
+          </label>
+          <label class="settings-row checkbox"><span>Daily encrypted pCloud sync</span><input id="pcloud-enabled" type="checkbox"></label>
+          <p id="pcloud-status" class="settings-hint"></p>
+          <div class="settings-actions">
+            <button type="button" id="btn-save-pcloud" class="btn">Save pCloud settings</button>
+            <button type="button" id="btn-pcloud-sync" class="btn">Sync to pCloud now</button>
+          </div>
+          <p class="settings-hint">Uploads encrypted vault backups via rclone. Password + WebDAV works when pCloud two-factor authentication is off. If 2FA is enabled, run <code>rclone authorize pcloud</code> on your computer (EU: add <code>--pcloud-hostname eapi.pcloud.com</code>) and paste the token here. Credentials stay in <code>keys/</code>, not the database.</p>
+        </div>
+      </section>
+
+      <section class="settings-group">
+        <h3>Danger zone</h3>
+        <div class="settings-card">
+          <div class="settings-actions">
+            <button type="button" id="btn-empty-trash" class="btn danger">Empty trash</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <div id="ai-chat-backdrop" class="settings-backdrop" hidden></div>
+  <aside id="ai-chat-panel" class="settings-panel ai-chat-panel" hidden aria-label="Ask AI about this note">
+    <header class="settings-head">
+      <h2>Ask AI about this note</h2>
+      <button type="button" class="btn icon" id="ai-chat-close" aria-label="Close">×</button>
+    </header>
+    <div class="settings-body ai-chat-body">
+      <p class="settings-hint ai-chat-warning"><strong>Less private:</strong> your question and this note's text (title, body, scanned text) go to the Ollama server you configured (Ollama Cloud requests are relayed, unstored, by the Deeperguard server). Nothing else from your vault is sent.</p>
+      <div id="ai-chat-setup" class="settings-card" hidden>
+        <p class="settings-hint">Add your own Ollama API key (or your own Ollama server) to chat with your notes.</p>
+        <div class="settings-actions">
+          <button type="button" id="ai-chat-open-settings" class="btn primary">Open settings</button>
+        </div>
+      </div>
+      <div id="ai-chat-messages" class="ai-chat-messages" aria-live="polite"></div>
+      <form id="ai-chat-form" class="ai-chat-form" hidden>
+        <textarea id="ai-chat-input" rows="2" placeholder="Ask about this note…" autocomplete="off"></textarea>
+        <div class="ai-chat-form-actions">
+          <span id="ai-chat-meta" class="ai-chat-meta"></span>
+          <span class="ai-chat-form-buttons">
+            <button type="button" id="ai-chat-clear-history" class="btn ghost sm">Clear</button>
+            <button type="submit" id="ai-chat-send" class="btn primary sm">Send</button>
+          </span>
+        </div>
+      </form>
+    </div>
+  </aside>
+  <div id="note-options-backdrop" class="settings-backdrop" hidden></div>
+  <div id="note-options" class="note-options" hidden>
+    <div class="note-options-handle"></div>
+    <header class="note-options-head">
+      <h2>Note</h2>
+      <button type="button" class="btn ghost sm" id="note-options-close">Done</button>
+    </header>
+    <section class="note-info" id="note-info">
+      <div class="note-info-actions note-info-actions-top mobile-only">
+        <div class="note-info-quick">
+          <button type="button" id="note-info-star" class="btn ghost sm">Star</button>
+          <button type="button" id="note-info-pin" class="btn ghost sm">Pin</button>
+          <button type="button" id="note-info-share" class="btn ghost sm">Share</button>
+          <button type="button" id="note-info-archive" class="btn ghost sm">Archive</button>
+          <button type="button" id="note-info-duplicate" class="btn ghost sm">Duplicate</button>
+          <button type="button" id="note-info-trash" class="btn ghost sm">Trash</button>
+        </div>
+      </div>
+      <dl class="note-info-grid">
+        <div><dt>Created</dt><dd id="note-info-created">—</dd></div>
+        <div><dt>Updated</dt><dd id="note-info-updated">—</dd></div>
+        <div><dt>Words</dt><dd id="note-info-words">—</dd></div>
+        <div><dt>Attachments</dt><dd id="note-info-attachments">—</dd></div>
+        <div><dt>Editor</dt><dd id="note-info-editor">—</dd></div>
+        <div><dt>Protection</dt><dd id="note-info-locked">—</dd></div>
+        <div class="note-info-wide"><dt>Tags</dt><dd id="note-info-tags">—</dd></div>
+        <div class="note-info-wide"><dt>ID</dt><dd id="note-info-id" class="note-info-id"><code id="note-info-id-text"></code> <button type="button" class="btn ghost sm" id="note-info-copy">Copy</button></dd></div>
+        <div class="note-info-wide note-warn-row">
+          <dt>Time warning</dt>
+          <dd>
+            <div class="note-warn-controls">
+              <label class="note-warn-field is-empty" id="note-warn-field">
+                <input type="datetime-local" id="note-warn-at" step="60" aria-label="Warning date and time">
+                <span class="note-warn-placeholder" aria-hidden="true">Pick a date and time</span>
+              </label>
+              <span class="note-warn-buttons">
+                <button type="button" id="note-warn-save" class="btn primary sm">Save</button>
+                <button type="button" id="note-warn-clear" class="btn ghost sm">Clear</button>
+              </span>
+            </div>
+            <p class="note-warn-hint" id="note-warn-hint">Email a link to this note at the chosen time.</p>
+          </dd>
+        </div>
+      </dl>
+      <div class="note-info-actions note-info-actions-bottom">
+        <button type="button" id="note-info-share-bottom" class="btn ghost sm desktop-only">Share note</button>
+        <button type="button" id="note-info-protect" class="btn ghost sm note-info-protect-btn">
+          <span class="note-info-protect-icon" aria-hidden="true">
+            <svg class="lock-closed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" hidden>
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <svg class="lock-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0"/>
+            </svg>
+          </span>
+          <span id="note-info-protect-text">Protect note</span>
+        </button>
+      </div>
+    </section>
+  </div>
+  <!-- File pickers live outside .sidebar so mobile editor-open (pointer-events:none) cannot block iOS/Safari. -->
+  <input id="scan-camera" class="sr-file" type="file" accept="image/*" capture="environment">
+  <input id="scan-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,application/pdf,text/plain" multiple>
+  <div id="scan-backdrop" class="scan-backdrop" hidden></div>
+  <div id="scan-dialog" class="scan-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="scan-dialog-title">
+    <div class="scan-dialog-handle" aria-hidden="true"></div>
+    <header class="scan-dialog-head">
+      <h2 id="scan-dialog-title">Add document</h2>
+    </header>
+    <div class="scan-dialog-body">
+      <p class="scan-dialog-lead muted">Take photos or choose a file. Up to 6 pages become one PDF.</p>
+      <div id="scan-empty" class="scan-empty">
+        <p class="scan-empty-title">No pages yet</p>
+        <p class="scan-empty-hint muted">Add a photo, scan pages, or pick a PDF or text file.</p>
+      </div>
+      <div id="scan-pages" class="scan-pages" hidden></div>
+      <p id="scan-file-label" class="scan-status muted" hidden></p>
+      <div class="scan-add-actions">
+        <button type="button" class="btn scan-add-btn" id="scan-take-photo">Take photo</button>
+        <label for="scan-input" class="btn ghost scan-add-btn" id="scan-choose-file">Choose file</label>
+      </div>
+      <label class="scan-name-field">Document name
+        <input id="scan-name" type="text" maxlength="120" required autocomplete="off" autocapitalize="words" enterkeyhint="done" placeholder="e.g. Passport, June invoice">
+      </label>
+      <p id="scan-name-error" class="error" hidden>Enter a name for this document.</p>
+    </div>
+    <footer class="scan-dialog-foot">
+      <button type="button" class="btn ghost" id="scan-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="scan-confirm">Save</button>
+    </footer>
+  </div>
+  <input id="totp-qr-input" class="sr-file" type="file" accept="image/*" capture="environment">
+  <div id="totp-add-backdrop" class="scan-backdrop" hidden></div>
+  <div id="totp-add-dialog" class="scan-dialog totp-add-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="totp-add-title">
+    <div class="scan-dialog-handle" aria-hidden="true"></div>
+    <header class="scan-dialog-head">
+      <h2 id="totp-add-title">Add 2FA account</h2>
+    </header>
+    <div class="scan-dialog-body">
+      <p class="scan-dialog-lead muted">Scan a QR code or type the account and secret. Secrets stay in the vault and are never shown in the list.</p>
+      <video id="totp-qr-video" class="totp-qr-video" playsinline muted hidden></video>
+      <canvas id="totp-qr-canvas" class="sr-file" hidden></canvas>
+      <p id="totp-qr-status" class="scan-status muted" hidden></p>
+      <div class="scan-add-actions">
+        <button type="button" class="btn scan-add-btn" id="btn-totp-scan-qr">Scan QR</button>
+        <button type="button" class="btn ghost scan-add-btn" id="btn-totp-pick-qr">Choose photo</button>
+      </div>
+      <label class="scan-name-field">Issuer
+        <input id="totp-add-issuer" type="text" maxlength="120" autocomplete="off" autocapitalize="words" placeholder="Amazon">
+      </label>
+      <label class="scan-name-field">Account
+        <input id="totp-add-account" type="text" maxlength="160" autocomplete="username" placeholder="you@example.com">
+      </label>
+      <label class="scan-name-field">Secret or otpauth URL
+        <input id="totp-add-secret" type="text" maxlength="512" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="JBSW Y3DP EHPK 3PXP">
+      </label>
+      <p id="totp-add-error" class="error" hidden>Enter a valid authenticator secret.</p>
+    </div>
+    <footer class="scan-dialog-foot">
+      <button type="button" class="btn ghost" id="totp-add-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="totp-add-save">Add</button>
+    </footer>
+  </div>
+  <div id="doc-backdrop" class="settings-backdrop" hidden></div>
+  <div id="confirm-backdrop" class="settings-backdrop" hidden></div>
+  <div id="account-info-backdrop" class="settings-backdrop" hidden></div>
+  <div id="account-info-dialog" class="confirm-dialog account-info-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="account-info-title">
+    <h2 id="account-info-title">Account info</h2>
+    <dl id="account-info-body" class="account-info-body">
+      <div class="account-info-row"><dt>Email</dt><dd id="account-info-email">—</dd></div>
+      <div class="account-info-row"><dt>Plan</dt><dd id="account-info-plan">—</dd></div>
+      <div class="account-info-row"><dt>Storage</dt><dd id="account-info-storage">—</dd></div>
+      <div class="account-info-row"><dt>Notes</dt><dd id="account-info-notes">—</dd></div>
+      <div class="account-info-row"><dt>Attachments</dt><dd id="account-info-attachments">—</dd></div>
+      <div class="account-info-row"><dt>Tags</dt><dd id="account-info-tags">—</dd></div>
+      <div class="account-info-row"><dt>Two-factor</dt><dd id="account-info-2fa">—</dd></div>
+      <div class="account-info-row"><dt>Passkeys</dt><dd id="account-info-passkeys">—</dd></div>
+    </dl>
+    <p id="account-info-error" class="error account-info-error" hidden></p>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn primary" id="account-info-close">OK</button>
+    </div>
+  </div>
+  <div id="hero-guide-backdrop" class="settings-backdrop" hidden></div>
+  <div id="hero-guide-dialog" class="confirm-dialog hero-guide-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="hero-guide-title">
+    <h2 id="hero-guide-title">Scan → search → find</h2>
+    <ol class="hero-guide-steps">
+      <li><strong>Scan</strong> a receipt, invoice, or PDF — tap the ⇪ button at the bottom of the screen.</li>
+      <li><strong>Wait</strong> for “Searchable” — text is read on your device (look for <em>Indexing…</em> in the list).</li>
+      <li><strong>Search</strong> any word from the document — open the hit to jump to the page.</li>
+    </ol>
+    <p class="muted hero-guide-note">Everything is encrypted before it leaves this device.</p>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn ghost" id="hero-guide-scan">Scan now</button>
+      <button type="button" class="btn primary" id="hero-guide-close">Got it</button>
+    </div>
+  </div>
+  <div id="confirm-dialog" class="confirm-dialog" hidden role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+    <h2 id="confirm-title">Confirm</h2>
+    <p id="confirm-message"></p>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn ghost" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="confirm-ok">Confirm</button>
+    </div>
+  </div>
+  <div id="doc-viewer" class="doc-viewer" hidden>
+    <header class="doc-viewer-head">
+      <button type="button" class="btn icon" id="doc-close" aria-label="Close preview">×</button>
+      <h2 id="doc-title" class="doc-title">Document</h2>
+      <div class="doc-viewer-tools">
+        <div id="doc-gallery-nav" class="doc-gallery-nav" hidden aria-label="Attachment navigation">
+          <button type="button" class="btn ghost sm" id="doc-gallery-prev" aria-label="Previous item">‹</button>
+          <button type="button" class="btn ghost sm doc-gallery-count" id="doc-gallery-count" aria-label="Item position">1 / 1</button>
+          <button type="button" class="btn ghost sm" id="doc-gallery-next" aria-label="Next item">›</button>
+        </div>
+        <div class="doc-zoom-controls" aria-label="Preview zoom controls">
+          <button type="button" class="btn ghost sm" id="doc-zoom-out" aria-label="Zoom out">−</button>
+          <button type="button" class="btn ghost sm" id="doc-zoom-reset" aria-label="Reset zoom">100%</button>
+          <button type="button" class="btn ghost sm" id="doc-zoom-in" aria-label="Zoom in">+</button>
+        </div>
+        <button type="button" class="btn ghost sm" id="doc-share">Share</button>
+        <button type="button" class="btn ghost sm" id="doc-download">Download</button>
+      </div>
+    </header>
+    <div id="doc-viewer-find-slot" class="doc-viewer-find-slot"></div>
+    <div id="doc-stage" class="doc-stage"></div>
+    <button type="button" id="doc-immersive-share" class="doc-immersive-share" hidden aria-label="Share">
+      <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+        <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="16 6 12 2 8 6"/>
+        <line x1="12" y1="2" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <button type="button" id="doc-immersive-close" class="doc-immersive-close" hidden aria-label="Close preview">×</button>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <script src="/static/js/vendor/noble-crypto.js?v={{ build }}"></script>
+  <script src="/static/js/vendor/noble-argon2.js?v={{ build }}"></script>
+  <script src="/static/js/crypto.js?v={{ build }}"></script>
+  <script src="/static/js/sanitize.js?v={{ build }}"></script>
+  <script src="/static/js/webauthn-client.js?v={{ build }}"></script>
+  <script src="/static/js/passkeys.js?v={{ build }}"></script>
+  <script src="/static/js/vault-secrets.js?v={{ build }}"></script>
+  <script src="/static/js/srp-auth.js?v={{ build }}"></script>
+  <script src="/static/js/idb.js?v={{ build }}"></script>
+  <script src="/static/js/snimport.js?v={{ build }}"></script>
+  <script src="/static/js/store.js?v={{ build }}"></script>
+  <script src="/static/js/vendor/jsQR.js?v={{ build }}"></script>
+  <script src="/static/js/totp.js?v={{ build }}"></script>
+  <script src="/static/js/search.js?v={{ build }}"></script>
+  <script src="/static/js/markdown.js?v={{ build }}"></script>
+  <script src="/static/js/superscript.js?v={{ build }}"></script>
+  <script src="/static/js/checklist.js?v={{ build }}"></script>
+  <script src="/static/js/tagsuggest.js?v={{ build }}"></script>
+  <script src="/static/js/vendor/pdfjs/pdf.min.js?v=8"></script>
+  <script src="/static/js/preview.js?v={{ build }}"></script>
+  <script src="/static/js/client-ocr-engine.js?v={{ build }}"></script>
+  <script src="/static/js/ocr.js?v={{ build }}"></script>
+  <script src="/static/js/ocr-quality.js?v={{ build }}"></script>
+  <script src="/static/js/swipe.js?v={{ build }}"></script>
+  <script src="/static/js/ios-tune.js?v={{ build }}"></script>
+  <script src="/static/js/vaultlock.js?v={{ build }}"></script>
+  <script src="/static/js/ai-chat.js?v={{ build }}"></script>
+  <script src="/static/js/app.js?v={{ build }}"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+venv/
+.venv/
+data/
+keys/
+config/deeperguard.env
+__pycache__/
+*.py[cod]
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+*.egg-info/
+.pytest_cache/
+.mypy_cache/

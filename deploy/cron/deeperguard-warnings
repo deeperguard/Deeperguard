@@ -1,0 +1,1 @@
+*/5 * * * * root flock -n /opt/deeperguard/data/warning-cron.lock /opt/deeperguard/venv/bin/python /opt/deeperguard/app/warning_cron.py >> /var/log/deeperguard-warnings.log 2>&1

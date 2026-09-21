@@ -1,0 +1,15 @@
+[Unit]
+Description=Deeperguard OCR worker (isolated)
+After=network.target deeperguard.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/deeperguard/app
+Environment=PYTHONPATH=/opt/deeperguard/app
+EnvironmentFile=-/opt/deeperguard/config/deeperguard.env
+ExecStart=/opt/deeperguard/venv/bin/gunicorn --bind 127.0.0.1:8081 --workers 1 --threads 2 --timeout 600 ocr_service:app
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

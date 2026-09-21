@@ -1,0 +1,11 @@
+/opt/deeperguard/data/sync.log
+/opt/deeperguard/data/device-reports/*.txt
+{
+    rotate 5
+    size 5M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}

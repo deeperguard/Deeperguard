@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Admin — Deeperguard</title>
+  {% include 'partials/auth-head.html' %}
+</head>
+<body class="auth-page admin-page">
+  <main class="admin-shell">
+    <header class="admin-header">
+      <div class="admin-header-brand">
+        {% with size='sm' %}{% include 'partials/brand-mark.html' %}{% endwith %}
+        <div>
+          <h1>Admin dashboard</h1>
+          <p class="muted">Signed in as {{ email }}</p>
+        </div>
+      </div>
+      <div class="admin-header-actions">
+        <a class="btn subtle" href="/app">Open app</a>
+        <button type="button" class="btn subtle" id="admin-refresh">Refresh</button>
+      </div>
+    </header>
+
+    <section class="admin-summary" id="admin-summary" aria-label="Overview">
+      <div class="admin-stat"><span class="label">Users</span><strong id="stat-users">—</strong></div>
+      <div class="admin-stat"><span class="label">Total storage</span><strong id="stat-storage">—</strong></div>
+    </section>
+
+    <section class="admin-server" id="admin-server" aria-label="Server">
+      <h2 class="admin-section-title">Server</h2>
+      <div class="admin-summary">
+        <div class="admin-stat"><span class="label">Build</span><strong id="stat-build">—</strong></div>
+        <div class="admin-stat"><span class="label">Free disk</span><strong id="stat-disk-free">—</strong></div>
+        <div class="admin-stat"><span class="label">Disk total</span><strong id="stat-disk-total">—</strong></div>
+        <div class="admin-stat"><span class="label">Database</span><strong id="stat-db-size">—</strong></div>
+        <div class="admin-stat"><span class="label">Search index</span><strong id="stat-ocr-total">—</strong></div>
+      </div>
+      <p id="admin-server-updated" class="muted admin-server-updated" hidden></p>
+    </section>
+
+    <section class="admin-ops" id="admin-ops" aria-label="Operations">
+      <h2 class="admin-section-title">Operations</h2>
+      <dl class="admin-ops-grid">
+        <dt>Health</dt><dd id="ops-health">—</dd>
+        <dt>Registration</dt><dd id="ops-registration">—</dd>
+        <dt>SMTP</dt><dd id="ops-smtp">—</dd>
+        <dt>OCR mode</dt><dd id="ops-ocr">—</dd>
+        <dt>Backups</dt><dd id="ops-backups">—</dd>
+      </dl>
+      <p class="muted"><a href="/self-host">Self-host guide</a> · <a href="/api/health" target="_blank" rel="noopener">Health JSON</a></p>
+    </section>
+
+    <p id="admin-error" class="error" hidden></p>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table" id="admin-users-table">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Plan</th>
+            <th>Storage</th>
+            <th>Quota (MB)</th>
+            <th>Items</th>
+            <th class="admin-col-compact">2FA</th>
+            <th class="admin-col-compact">Keys</th>
+            <th class="admin-col-compact">Admin</th>
+            <th class="admin-col-date">Created</th>
+            <th class="admin-col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="admin-users-body">
+          <tr><td colspan="10" class="muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    {% include 'partials/auth-footer.html' %}
+  </main>
+  <script src="/static/js/admin.js?v={{ build }}"></script>
+</body>
+</html>

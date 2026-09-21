@@ -1,0 +1,16 @@
+[Unit]
+Description=Deeperguard HTTPS (LAN certificate)
+After=network.target deeperguard.service
+Requires=deeperguard.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/deeperguard/app
+Environment=PYTHONPATH=/opt/deeperguard/app
+EnvironmentFile=-/opt/deeperguard/config/deeperguard.env
+ExecStart=/opt/deeperguard/venv/bin/gunicorn --bind 0.0.0.0:443 --workers 1 --threads 4 --timeout 600 --certfile /opt/deeperguard/keys/tls/server.crt --keyfile /opt/deeperguard/keys/tls/server.key app:app
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Admin — Deeperguard</title>
+  {% include 'partials/auth-head.html' %}
+</head>
+<body class="auth-page">
+  <main class="auth-card">
+    <div class="brand">
+      {% include 'partials/brand-mark.html' %}
+      <h1>Admin access required</h1>
+      <p class="muted">Sign in with an administrator account to open the dashboard.</p>
+    </div>
+    <p class="center"><a class="btn primary block" href="/login">Sign in</a></p>
+    {% include 'partials/auth-footer.html' %}
+  </main>
+</body>
+</html>

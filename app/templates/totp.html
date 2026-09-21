@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Two-factor authentication — Deeperguard</title>
+  {% include 'partials/auth-head.html' %}
+</head>
+<body class="auth-page">
+  <main class="auth-card">
+    <div class="brand">
+      {% include 'partials/auth-brand.html' %}
+      <h1>Authenticator code</h1>
+      <p>Enter the 6-digit code from your authenticator app</p>
+      {% include 'partials/zk-plain.html' %}
+    </div>
+    <form id="totp-form" class="stack" data-csrf="{{ csrf_token }}" onsubmit="event.preventDefault(); return false;">
+      <label>Code
+        <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required class="totp-code-input">
+      </label>
+      <p id="totp-error" class="error" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
+      <button type="submit" class="btn primary block">Verify</button>
+    </form>
+    {% include 'partials/auth-footer.html' %}
+  </main>
+  <script src="/static/js/totp-page.js?v={{ build }}"></script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+0 3 * * * root /opt/deeperguard/venv/bin/python /opt/deeperguard/app/backup_cron.py >> /var/log/deeperguard-backup.log 2>&1

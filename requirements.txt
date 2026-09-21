@@ -1,0 +1,10 @@
+Flask>=3.0
+Werkzeug>=3.0
+gunicorn>=22.0
+argon2-cffi>=23.1
+cryptography>=42.0
+pyotp>=2.9
+webauthn>=2.5
+qrcode>=7.4
+Pillow>=10.0
+pillow-heif>=0.16

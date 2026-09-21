@@ -1,0 +1,380 @@
+const NotesSearch = (() => {
+  const searchBlobs = new Map();
+
+  function normalize(text) {
+    return (text || '').toLowerCase().trim();
+  }
+
+  function buildSearchBlob(note, tagMap) {
+    if (!note || !note.content || note.content.type !== 'note') return '';
+    // Locked notes stay findable by title only — body/OCR/filenames must not leak.
+    if (note.content.locked) return normalize(note.content.title || '');
+    const parts = [
+      note.content.title || '',
+      note.content.content || '',
+      note.content.ocr_text || '',
+      note.content.attachment_names || '',
+    ];
+    for (const tagId of note.content.tags || []) {
+      const tag = tagMap.get(tagId);
+      if (tag) parts.push(tag.content.title || '');
+    }
+    return normalize(parts.join('\n'));
+  }
+
+  function indexNote(note, tagMap) {
+    if (!note || note.deleted) {
+      searchBlobs.delete(note?.uuid);
+      return;
+    }
+    if (note.content?.type !== 'note') return;
+    searchBlobs.set(note.uuid, buildSearchBlob(note, tagMap));
+  }
+
+  function indexNotes(notes, tagMap) {
+    searchBlobs.clear();
+    for (const note of notes) indexNote(note, tagMap);
+  }
+
+  function removeFromIndex(uuid) {
+    searchBlobs.delete(uuid);
+  }
+
+  function indexedMatch(uuid, query) {
+    const blob = searchBlobs.get(uuid);
+    if (!blob) return null;
+    const q = normalize(query);
+    if (!q) return true;
+    return blob.includes(q);
+  }
+
+  function snippetAround(text, query, width = 42) {
+    const source = String(text || '').replace(/\s+/g, ' ').trim();
+    const q = normalize(query);
+    const at = normalize(source).indexOf(q);
+    if (at < 0) return '';
+    const start = Math.max(0, at - width);
+    const end = Math.min(source.length, at + query.length + width);
+    return `${start ? '…' : ''}${source.slice(start, end)}${end < source.length ? '…' : ''}`;
+  }
+
+  function matchesNoteOrFileName(note, query, { includeFileNames = true } = {}) {
+    const q = normalize(query);
+    if (!q) return false;
+    const title = note.content?.title || '';
+    if (normalize(title).includes(q)) return true;
+    if (!includeFileNames || note.content?.locked) return false;
+    const files = note.content?.attachment_names || '';
+    return normalize(files).includes(q);
+  }
+
+  function describeMatch(note, query, tagMap, { titlesOnly = false } = {}) {
+    if (!query) return null;
+    const q = normalize(query);
+    const title = note.content.title || '';
+    if (normalize(title).includes(q)) return { field: 'title', label: 'Title', snippet: title };
+    const files = note.content.attachment_names || '';
+    if (!note.content?.locked && normalize(files).includes(q)) {
+      return { field: 'file', label: 'Filename', snippet: snippetAround(files, query, 56) || files };
+    }
+    if (titlesOnly || note.content?.locked) return null;
+    const body = note.content.content || '';
+    if (normalize(body).includes(q)) return { field: 'body', label: 'Note', snippet: snippetAround(body, query) };
+    const ocr = note.content.ocr_text || '';
+    if (normalize(ocr).includes(q)) return { field: 'ocr', label: 'Scanned document', snippet: snippetAround(ocr, query) };
+    for (const tagId of note.content.tags || []) {
+      const tag = tagMap.get(tagId);
+      if (tag && normalize(tag.content.title).includes(q)) {
+        return { field: 'tag', label: 'Tag', snippet: tag.content.title };
+      }
+    }
+    return null;
+  }
+
+  function matches(note, query, tagMap, options = {}) {
+    if (!query) return true;
+    if (options.titlesOnly) {
+      return matchesNoteOrFileName(note, query, { includeFileNames: true });
+    }
+    if (note.content?.locked) {
+      return matchesNoteOrFileName(note, query, { includeFileNames: false });
+    }
+    const indexed = indexedMatch(note.uuid, query);
+    if (indexed === true) return true;
+    if (describeMatch(note, query, tagMap, options)) return true;
+    return false;
+  }
+
+  function parseNoteTime(raw) {
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      return raw > 1e12 ? raw : raw * 1000;
+    }
+    const text = String(raw || '').trim();
+    if (/^\d+(\.\d+)?$/.test(text)) {
+      const num = Number(text);
+      return num > 1e12 ? num : num * 1000;
+    }
+    const parsed = Date.parse(text);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+
+  /** Last modified time (ms), newest-first lists — prefers content.updated_at, then sync row updated_at. */
+  function updatedStamp(note) {
+    const edited = parseNoteTime(note?.content?.updated_at);
+    const item = parseNoteTime(note?.updated_at);
+    const best = Math.max(edited, item);
+    if (best > 0) return best;
+    return parseNoteTime(note?.content?.created_at);
+  }
+
+  /** Creation time (ms) for sort-by-created. */
+  function createdStamp(note) {
+    const created = parseNoteTime(note?.content?.created_at);
+    if (created > 0) return created;
+    return updatedStamp(note);
+  }
+
+  function editedStamp(note) {
+    return updatedStamp(note);
+  }
+
+  function compareNotesForSort(a, b, sort) {
+    if (a.content.pinned !== b.content.pinned) return a.content.pinned ? -1 : 1;
+    if (a.content.starred !== b.content.starred) return a.content.starred ? -1 : 1;
+    if (sort === 'title') {
+      return (a.content.title || '').localeCompare(b.content.title || '');
+    }
+    if (sort === 'created') {
+      return createdStamp(b) - createdStamp(a);
+    }
+    return updatedStamp(b) - updatedStamp(a);
+  }
+
+  function listUsesDateSections(sort) {
+    return sort === 'updated' || sort === 'created';
+  }
+
+  function defaultSearchOptions(raw = {}) {
+    return {
+      titlesOnly: !!raw.titlesOnly,
+      includeArchived: !!raw.includeArchived,
+      includeTrashed: !!raw.includeTrashed,
+      includeProtected: !!raw.includeProtected,
+      tagIds: Array.isArray(raw.tagIds) ? raw.tagIds.filter(Boolean) : [],
+    };
+  }
+
+  function searchContextActive(query, opts) {
+    return !!String(query || '').trim()
+      || opts.titlesOnly
+      || opts.includeArchived
+      || opts.includeTrashed
+      || opts.includeProtected
+      || opts.tagIds.length > 0;
+  }
+
+  function countActiveSearchFilters(opts) {
+    let count = 0;
+    if (opts.titlesOnly) count += 1;
+    if (opts.includeArchived) count += 1;
+    if (opts.includeTrashed) count += 1;
+    if (opts.includeProtected) count += 1;
+    if (opts.tagIds.length) count += opts.tagIds.length;
+    return count;
+  }
+
+  function noteIsProtected(content) {
+    return !!(content?.locked || content?.prevent_edit);
+  }
+
+  function filterNotes(notes, { query, filter, tagId, tagMap, sort, searchOptions = {} }) {
+    const opts = defaultSearchOptions(searchOptions);
+    const q = String(query || '').trim();
+    const context = searchContextActive(q, opts);
+
+    return notes
+      .filter((n) => {
+        const c = n.content;
+
+        if (c.trashed) {
+          if (filter === 'trash') {
+            /* keep */
+          } else if (context && opts.includeTrashed) {
+            /* keep trashed notes in other views while filtering */
+          } else {
+            return false;
+          }
+        } else if (filter === 'trash') {
+          return false;
+        }
+
+        if (c.archived) {
+          if (filter === 'archived') {
+            /* keep */
+          } else if (context && opts.includeArchived) {
+            /* keep archived notes in other views while filtering */
+          } else if (filter === 'all' || filter === 'pinned' || filter === 'untagged' || filter === 'documents') {
+            return false;
+          }
+        } else if (filter === 'archived') {
+          return false;
+        }
+
+        if (filter === 'pinned' && !c.pinned && !c.starred) return false;
+        if (filter === 'all' && !context && (c.archived || c.trashed)) return false;
+        if (filter === 'untagged') {
+          if (c.archived || c.trashed) return false;
+          if ((c.tags || []).length) return false;
+        }
+        if (filter === 'documents') {
+          if (c.archived || c.trashed) return false;
+          // Files view is stored attachments only — not OCR text or note bodies.
+          if (!(c.attachments || []).length) return false;
+        }
+
+        if (tagId && tagId !== '__untagged__' && !(c.tags || []).includes(tagId)) return false;
+        if (opts.tagIds.length) {
+          const noteTags = c.tags || [];
+          if (!opts.tagIds.some((id) => noteTags.includes(id))) return false;
+        }
+
+        if (context && !opts.includeProtected && noteIsProtected(c)) {
+          if (!q) return false;
+          const includeFiles = !c.locked;
+          return matchesNoteOrFileName(n, q, { includeFileNames: includeFiles });
+        }
+
+        return matches(n, q, tagMap, { titlesOnly: opts.titlesOnly });
+      })
+      .sort((a, b) => compareNotesForSort(a, b, sort));
+  }
+
+  function sameNoteContent(prev, next) {
+    if (!prev || !next) return false;
+    const title = (value) => String(value || '').trim() || 'Untitled';
+    return title(prev.title) === title(next.title)
+      && String(prev.content || '') === String(next.content || '')
+      && String(prev.editor || 'plain') === String(next.editor || 'plain')
+      && !!prev.prevent_edit === !!next.prevent_edit
+      && !!prev.locked === !!next.locked;
+  }
+
+  function escapeHtml(text) {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function highlightPlain(text, query, { caseSensitive = false } = {}) {
+    const source = String(text ?? '');
+    const ranges = findMatches(source, query, { caseSensitive });
+    if (!ranges.length) return escapeHtml(source);
+    let html = '';
+    let last = 0;
+    for (const { start, end } of ranges) {
+      html += escapeHtml(source.slice(last, start));
+      html += `<mark class="search-hit">${escapeHtml(source.slice(start, end))}</mark>`;
+      last = end;
+    }
+    return html + escapeHtml(source.slice(last));
+  }
+
+  function applyHighlights(root, query, { caseSensitive = false } = {}) {
+    if (!root || !String(query || '').trim()) return 0;
+    const needle = String(query).trim();
+    const find = caseSensitive ? needle : needle.toLowerCase();
+    const doc = root.ownerDocument;
+    if (!doc || typeof doc.createTreeWalker !== 'function') return 0;
+    const walker = doc.createTreeWalker(root, 4);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    let count = 0;
+    for (const node of nodes) {
+      if (node.parentElement && node.parentElement.closest('mark.search-hit')) continue;
+      const text = node.nodeValue || '';
+      const hay = caseSensitive ? text : text.toLowerCase();
+      let from = 0;
+      let last = 0;
+      const parts = [];
+      while (from <= hay.length - find.length) {
+        const at = hay.indexOf(find, from);
+        if (at < 0) break;
+        if (at > last) parts.push(doc.createTextNode(text.slice(last, at)));
+        const mark = doc.createElement('mark');
+        mark.className = 'search-hit';
+        mark.textContent = text.slice(at, at + needle.length);
+        parts.push(mark);
+        last = at + needle.length;
+        from = last;
+        count += 1;
+      }
+      if (!parts.length) continue;
+      if (last < text.length) parts.push(doc.createTextNode(text.slice(last)));
+      const frag = doc.createDocumentFragment();
+      parts.forEach((part) => frag.appendChild(part));
+      node.parentNode.replaceChild(frag, node);
+    }
+    return count;
+  }
+
+  function findMatches(text, query, { caseSensitive = false } = {}) {
+    const source = String(text || '');
+    const needle = String(query || '');
+    if (!needle) return [];
+    const hay = caseSensitive ? source : source.toLowerCase();
+    const find = caseSensitive ? needle : needle.toLowerCase();
+    const out = [];
+    let from = 0;
+    while (from <= hay.length - find.length) {
+      const at = hay.indexOf(find, from);
+      if (at < 0) break;
+      out.push({ start: at, end: at + needle.length });
+      from = at + Math.max(needle.length, 1);
+    }
+    return out;
+  }
+
+  function replaceAll(text, query, replacement, { caseSensitive = false } = {}) {
+    const source = String(text || '');
+    const needle = String(query || '');
+    if (!needle) return source;
+    const matches = findMatches(source, needle, { caseSensitive });
+    if (!matches.length) return source;
+    let out = '';
+    let last = 0;
+    for (const { start, end } of matches) {
+      out += source.slice(last, start);
+      out += replacement;
+      last = end;
+    }
+    return out + source.slice(last);
+  }
+
+  return {
+    filterNotes,
+    findMatches,
+    replaceAll,
+    describeMatch,
+    matchesNoteOrFileName,
+    snippetAround,
+    sameNoteContent,
+    highlightPlain,
+    applyHighlights,
+    defaultSearchOptions,
+    countActiveSearchFilters,
+    searchContextActive,
+    noteIsProtected,
+    indexNote,
+    indexNotes,
+    removeFromIndex,
+    buildSearchBlob,
+    parseNoteTime,
+    updatedStamp,
+    createdStamp,
+    compareNotesForSort,
+    listUsesDateSections,
+  };
+})();
+if (typeof window !== 'undefined') window.NotesSearch = NotesSearch;
+if (typeof module !== 'undefined' && module.exports) module.exports = NotesSearch;
