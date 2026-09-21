@@ -5480,13 +5480,20 @@
     } else if (!useDateSections) {
       sections.push({ label: '', items: notes });
     } else {
-      const showPinnedSection = sortMode === 'updated' && currentFilter === 'all' && !currentTag && !query;
-      const pinned = showPinnedSection
-        ? notes.filter((n) => n.content.pinned || n.content.starred)
-        : [];
-      const rest = showPinnedSection
-        ? notes.filter((n) => !n.content.pinned && !n.content.starred)
-        : notes;
+      // Date buckets would otherwise scatter pinned notes by last-updated /
+      // created day. Always keep them in a Pinned block at the top, including
+      // tag filters and sort-by-created. Skip only when the view is already
+      // the starred/pinned filter (every row would be in that block).
+      const hoistPinned = currentFilter !== 'pinned';
+      const splitPinned = typeof NotesSearch.partitionPinnedNotes === 'function'
+        ? NotesSearch.partitionPinnedNotes
+        : (list) => ({
+          pinned: list.filter((n) => n.content.pinned || n.content.starred),
+          rest: list.filter((n) => !n.content.pinned && !n.content.starred),
+        });
+      const { pinned, rest } = hoistPinned
+        ? splitPinned(notes)
+        : { pinned: [], rest: notes };
       if (pinned.length) sections.push({ label: 'Pinned', items: pinned });
       const grouped = new Map();
       rest.forEach((note) => {

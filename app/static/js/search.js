@@ -138,9 +138,25 @@ const NotesSearch = (() => {
     return updatedStamp(note);
   }
 
+  function noteIsPinned(note) {
+    const c = note?.content || {};
+    return !!(c.pinned || c.starred);
+  }
+
+  function partitionPinnedNotes(notes) {
+    const pinned = [];
+    const rest = [];
+    for (const note of notes || []) {
+      if (noteIsPinned(note)) pinned.push(note);
+      else rest.push(note);
+    }
+    return { pinned, rest };
+  }
+
   function compareNotesForSort(a, b, sort) {
-    if (a.content.pinned !== b.content.pinned) return a.content.pinned ? -1 : 1;
-    if (a.content.starred !== b.content.starred) return a.content.starred ? -1 : 1;
+    const aPinned = noteIsPinned(a);
+    const bPinned = noteIsPinned(b);
+    if (aPinned !== bPinned) return aPinned ? -1 : 1;
     if (sort === 'title') {
       return (a.content.title || '').localeCompare(b.content.title || '');
     }
@@ -220,7 +236,7 @@ const NotesSearch = (() => {
           return false;
         }
 
-        if (filter === 'pinned' && !c.pinned && !c.starred) return false;
+        if (filter === 'pinned' && !noteIsPinned(n)) return false;
         if (filter === 'all' && !context && (c.archived || c.trashed)) return false;
         if (filter === 'untagged') {
           if (c.archived || c.trashed) return false;
@@ -372,6 +388,8 @@ const NotesSearch = (() => {
     parseNoteTime,
     updatedStamp,
     createdStamp,
+    noteIsPinned,
+    partitionPinnedNotes,
     compareNotesForSort,
     listUsesDateSections,
   };
