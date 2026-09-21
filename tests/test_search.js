@@ -11,6 +11,9 @@ const {
   noteIsProtected,
   indexNote,
   buildSearchBlob,
+  noteIsPinned,
+  partitionPinnedNotes,
+  compareNotesForSort,
 } = require('../app/static/js/search.js');
 
 function note(overrides) {
@@ -282,5 +285,69 @@ const byUpdated = filterNotes([editedOld, createdNew], { filter: 'all', tagMap, 
 assert.deepStrictEqual(byUpdated.map((n) => n.uuid), ['edited-old', 'created-new']);
 const byCreated = filterNotes([editedOld, createdNew], { filter: 'all', tagMap, sort: 'created' });
 assert.deepStrictEqual(byCreated.map((n) => n.uuid), ['created-new', 'edited-old']);
+
+const olderPinned = note({
+  uuid: 'older-pinned',
+  title: 'Zebra pinned',
+  pinned: true,
+  created_at: '2019-01-01T00:00:00.000Z',
+  updated_at: '2019-01-02T00:00:00.000Z',
+});
+const newerStarred = note({
+  uuid: 'newer-starred',
+  title: 'Alpha starred',
+  starred: true,
+  created_at: '2026-06-01T00:00:00.000Z',
+  updated_at: '2026-06-02T00:00:00.000Z',
+});
+assert.strictEqual(noteIsPinned(olderPinned), true);
+assert.strictEqual(noteIsPinned(newerStarred), true);
+assert.strictEqual(noteIsPinned(loose), false);
+
+const pinnedFirstUpdated = filterNotes(
+  [loose, olderPinned, newerStarred, editedOld],
+  { filter: 'all', tagMap, sort: 'updated' },
+);
+assert.deepStrictEqual(pinnedFirstUpdated.map((n) => n.uuid), [
+  'newer-starred',
+  'older-pinned',
+  'edited-old',
+  'loose',
+]);
+
+const pinnedFirstCreated = filterNotes(
+  [loose, olderPinned, newerStarred, createdNew],
+  { filter: 'all', tagMap, sort: 'created' },
+);
+assert.deepStrictEqual(pinnedFirstCreated.map((n) => n.uuid), [
+  'newer-starred',
+  'older-pinned',
+  'created-new',
+  'loose',
+]);
+
+const pinnedFirstTitle = filterNotes(
+  [loose, olderPinned, newerStarred],
+  { filter: 'all', tagMap, sort: 'title' },
+);
+assert.deepStrictEqual(pinnedFirstTitle.map((n) => n.uuid), [
+  'newer-starred',
+  'older-pinned',
+  'loose',
+]);
+assert.ok(compareNotesForSort(olderPinned, loose, 'updated') < 0);
+
+const split = partitionPinnedNotes([loose, olderPinned, newerStarred, editedOld]);
+assert.deepStrictEqual(split.pinned.map((n) => n.uuid).sort(), ['newer-starred', 'older-pinned']);
+assert.deepStrictEqual(split.rest.map((n) => n.uuid).sort(), ['edited-old', 'loose']);
+
+const taggedPinned = filterNotes(
+  [
+    note({ uuid: 'tag-pin', title: 'Pinned tagged', pinned: true, tags: ['tag-work'], updated_at: '2018-01-01T00:00:00.000Z' }),
+    note({ uuid: 'tag-new', title: 'Fresh tagged', tags: ['tag-work'], updated_at: '2026-08-01T00:00:00.000Z' }),
+  ],
+  { filter: 'all', tagId: 'tag-work', tagMap, sort: 'updated' },
+);
+assert.deepStrictEqual(taggedPinned.map((n) => n.uuid), ['tag-pin', 'tag-new']);
 
 console.log('ok');
