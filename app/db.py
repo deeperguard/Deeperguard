@@ -214,6 +214,7 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             last_seen_at REAL NOT NULL,
             last_login_at REAL NOT NULL,
             revoked_at REAL NOT NULL DEFAULT 0,
+            revoke_reason TEXT NOT NULL DEFAULT '',
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_user_sessions_user
@@ -223,6 +224,8 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
     session_cols = {row[1] for row in conn.execute("PRAGMA table_info(user_sessions)").fetchall()}
     if session_cols and "device_id" not in session_cols:
         conn.execute("ALTER TABLE user_sessions ADD COLUMN device_id TEXT NOT NULL DEFAULT ''")
+    if session_cols and "revoke_reason" not in session_cols:
+        conn.execute("ALTER TABLE user_sessions ADD COLUMN revoke_reason TEXT NOT NULL DEFAULT ''")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_user_sessions_device ON user_sessions(user_id, device_id, revoked_at)"
     )
@@ -544,7 +547,7 @@ def revoke_duplicate_sessions(
             conn.execute(
                 """
                 UPDATE user_sessions
-                SET revoked_at = ?
+                SET revoked_at = ?, revoke_reason = 'duplicate'
                 WHERE user_id = ? AND id != ? AND revoked_at = 0 AND device_id = ?
                 """,
                 (ts, uid, keep_id, device_id),
@@ -553,7 +556,7 @@ def revoke_duplicate_sessions(
             conn.execute(
                 """
                 UPDATE user_sessions
-                SET revoked_at = ?
+                SET revoked_at = ?, revoke_reason = 'duplicate'
                 WHERE user_id = ? AND id != ? AND revoked_at = 0
                   AND ip = ? AND device_label = ? AND device_id = ''
                 """,
@@ -646,6 +649,21 @@ def get_session_by_token(token: str) -> sqlite3.Row | None:
     ).fetchone()
 
 
+def get_latest_session_for_device(device_id: str) -> sqlite3.Row | None:
+    device_id = normalize_device_id(device_id)
+    if not device_id:
+        return None
+    return connection().execute(
+        """
+        SELECT * FROM user_sessions
+        WHERE device_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (device_id,),
+    ).fetchone()
+
+
 def get_user_session(session_id: int, user_id: int) -> sqlite3.Row | None:
     return connection().execute(
         "SELECT * FROM user_sessions WHERE id = ? AND user_id = ?",
@@ -687,30 +705,32 @@ def touch_user_session(
             )
 
 
-def revoke_user_session(session_id: int, user_id: int) -> bool:
+def revoke_user_session(session_id: int, user_id: int, *, reason: str = "user") -> bool:
+    reason = str(reason or "user")[:32]
     with tx() as conn:
         cur = conn.execute(
             """
             UPDATE user_sessions
-            SET revoked_at = ?
+            SET revoked_at = ?, revoke_reason = ?
             WHERE id = ? AND user_id = ? AND revoked_at = 0
             """,
-            (now(), int(session_id), int(user_id)),
+            (now(), reason, int(session_id), int(user_id)),
         )
         return int(cur.rowcount or 0) > 0
 
 
-def revoke_session_by_token(token: str) -> bool:
+def revoke_session_by_token(token: str, *, reason: str = "logout") -> bool:
     if not token:
         return False
+    reason = str(reason or "logout")[:32]
     with tx() as conn:
         cur = conn.execute(
             """
             UPDATE user_sessions
-            SET revoked_at = ?
+            SET revoked_at = ?, revoke_reason = ?
             WHERE token_hash = ? AND revoked_at = 0
             """,
-            (now(), _session_token_hash(token)),
+            (now(), reason, _session_token_hash(token)),
         )
         return int(cur.rowcount or 0) > 0
 
@@ -736,7 +756,7 @@ def collapse_duplicate_sessions(user_id: int) -> None:
         if not duplicate and not device_id and fp[0] and fp[1] and fp in seen_fp:
             duplicate = True
         if duplicate:
-            revoke_user_session(int(row["id"]), int(user_id))
+            revoke_user_session(int(row["id"]), int(user_id), reason="duplicate")
             continue
         if device_id:
             seen_device.add(device_id)
@@ -749,7 +769,7 @@ def prune_user_sessions(user_id: int, *, older_than: float) -> None:
         conn.execute(
             """
             UPDATE user_sessions
-            SET revoked_at = ?
+            SET revoked_at = ?, revoke_reason = 'prune'
             WHERE user_id = ? AND revoked_at = 0 AND last_seen_at < ?
             """,
             (now(), int(user_id), float(older_than)),

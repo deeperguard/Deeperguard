@@ -578,6 +578,99 @@ class NotesAppTests(unittest.TestCase):
         self.assertTrue(gone.get_json()["current"])
         self.assertEqual(self.client.get("/api/sessions").status_code, 401)
 
+    def test_remote_sign_out_tells_device_to_wipe(self):
+        import secrets
+        import time
+
+        import db as notes_db
+        from config import SESSION_SECONDS
+
+        email = "wipe.remote@home.local"
+        self._register_user(email, "wipe-secure-pass")
+        user = notes_db.get_user_by_email(email)
+        uid = int(user["id"])
+        token = notes_db.create_user_session(
+            uid,
+            device_label="iPhone · Safari",
+            ip="203.0.113.22",
+            ip_location="Vienna, AT",
+            device_id="iphone-wipe-device-1",
+        )
+        other = self.app_mod.app.test_client()
+        with other.session_transaction() as sess:
+            sess["uid"] = uid
+            sess["authed"] = True
+            sess["exp"] = time.time() + SESSION_SECONDS
+            sess["csrf"] = secrets.token_urlsafe(32)
+            sess["totp_ok"] = True
+            sess["sid"] = token
+
+        listed = self.client.get("/api/sessions")
+        self.assertEqual(listed.status_code, 200)
+        other_row = next(item for item in listed.get_json()["sessions"] if not item["current"])
+        revoked = self.client.delete(
+            f"/api/sessions/{other_row['id']}",
+            headers={"X-CSRF-Token": self._csrf()},
+        )
+        self.assertEqual(revoked.status_code, 200)
+        self.assertFalse(revoked.get_json()["current"])
+        stored = notes_db.get_user_session(int(other_row["id"]), uid)
+        self.assertGreater(float(stored["revoked_at"] or 0), 0)
+        self.assertEqual(str(stored["revoke_reason"] or ""), "user")
+
+        wiped = other.get("/api/account")
+        self.assertEqual(wiped.status_code, 401)
+        self.assertEqual(wiped.get_json()["code"], "session_revoked")
+        self.assertEqual(wiped.get_json()["error"], "session revoked")
+
+        after_cookie = other.get("/api/account")
+        self.assertEqual(after_cookie.status_code, 401)
+        self.assertNotEqual(after_cookie.get_json().get("code"), "session_revoked")
+
+        by_device = other.get("/api/account", headers={"X-Device-Id": "iphone-wipe-device-1"})
+        self.assertEqual(by_device.status_code, 401)
+        self.assertEqual(by_device.get_json()["code"], "session_revoked")
+
+        self.assertEqual(self.client.get("/api/account").status_code, 200)
+
+        notes_db.create_user_session(
+            uid,
+            device_label="iPhone · Safari",
+            ip="203.0.113.22",
+            device_id="iphone-wipe-device-1",
+        )
+        signed_in = other.get("/api/account", headers={"X-Device-Id": "iphone-wipe-device-1"})
+        self.assertEqual(signed_in.status_code, 401)
+        self.assertNotEqual(signed_in.get_json().get("code"), "session_revoked")
+
+        stale_token = notes_db.create_user_session(
+            uid,
+            device_label="iPad · Safari",
+            ip="203.0.113.30",
+            device_id="ipad-prune-device-1",
+        )
+        stale = notes_db.get_session_by_token(stale_token)
+        with notes_db.tx() as conn:
+            conn.execute(
+                "UPDATE user_sessions SET last_seen_at = 1 WHERE id = ?",
+                (int(stale["id"]),),
+            )
+        notes_db.prune_user_sessions(uid, older_than=time.time() - 10)
+        pruned = notes_db.get_user_session(int(stale["id"]), uid)
+        self.assertGreater(float(pruned["revoked_at"] or 0), 0)
+        self.assertEqual(str(pruned["revoke_reason"] or ""), "prune")
+        prune_client = self.app_mod.app.test_client()
+        with prune_client.session_transaction() as sess:
+            sess["uid"] = uid
+            sess["authed"] = True
+            sess["exp"] = time.time() + SESSION_SECONDS
+            sess["csrf"] = secrets.token_urlsafe(32)
+            sess["totp_ok"] = True
+            sess["sid"] = stale_token
+        expired = prune_client.get("/api/account")
+        self.assertEqual(expired.status_code, 401)
+        self.assertNotEqual(expired.get_json().get("code"), "session_revoked")
+
     def test_duplicate_iphone_sessions_collapse(self):
         import db as notes_db
 
@@ -3626,6 +3719,12 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("async function clearDeviceData()", store_js)
         self.assertIn("NotesIDB.clearAll", store_js)
         self.assertIn("async function clearAll()", idb_js)
+        self.assertIn("async function wipeAfterRemoteSignOut()", app_js)
+        self.assertIn("session_revoked", app_js)
+        self.assertIn("delete its local vault copy", app_js)
+        self.assertIn("startRemoteRevokeWatch()", app_js)
+        self.assertIn("setSessionRevokedHandler", store_js)
+        self.assertIn("err.code = data.code", store_js)
 
     def test_expired_account_session_prompts_sign_in_without_clearing_notes(self):
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
@@ -3650,6 +3749,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("NotesStore.setCsrf('')", session_fn)
         self.assertIn("NotesStore.emitSync('pending', 'Sign in to sync')", session_fn)
         self.assertIn("showSessionExpiredAlert();", session_fn)
+        self.assertIn("isSessionRevokedError(err)", session_fn)
+        self.assertIn("wipeAfterRemoteSignOut()", session_fn)
+        self.assertNotIn("signOutCompletely", session_fn)
 
         finish_fn = app_js[
             app_js.find("async function finishUnlocked"):
@@ -3662,10 +3764,11 @@ class NotesAppTests(unittest.TestCase):
             app_js.find("async function handleLockedManualSync()"):
             app_js.find("function syncNow(")
         ]
-        self.assertIn("fetch('/api/account'", locked_sync_fn)
-        self.assertIn("[401, 403, 404].includes(res.status)", locked_sync_fn)
+        self.assertIn("NotesStore.api('/api/account'", locked_sync_fn)
+        self.assertIn("[401, 403, 404].includes(err.status)", locked_sync_fn)
         self.assertIn("promptVaultUnlock(", locked_sync_fn)
         self.assertIn("session expired", locked_sync_fn.lower())
+        self.assertIn("wipeAfterRemoteSignOut()", locked_sync_fn)
         self.assertNotIn("showSessionExpiredAlert();", locked_sync_fn)
         self.assertIn("isUnlockScreenVisible()", alert_fn)
         self.assertIn("unlock-session-hint", (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8"))

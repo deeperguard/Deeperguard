@@ -128,6 +128,17 @@ async function signInWithPassword(email, password) {
 
 const loginForm = document.getElementById('login-form');
 if (loginForm) {
+  try {
+    const reason = new URLSearchParams(location.search).get('reason') || '';
+    if (reason === 'signed-out') {
+      showError(
+        'login-error',
+        'This device was signed out remotely. Local vault data on this device was deleted. Sign in again to download your notes.',
+      );
+    }
+  } catch (err) {
+    /* ignore */
+  }
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     showError('login-error', '');

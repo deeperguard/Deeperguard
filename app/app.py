@@ -392,9 +392,16 @@ def _gate():
                 return jsonify({"error": "cross-origin request denied"}), 403
         return None
     if not auth.authenticated():
+        wipe = auth.session_requires_wipe()
+        if wipe:
+            auth.logout()
         if auth.bootstrap_path(request.path, request.method):
+            if wipe:
+                return jsonify({"error": "session revoked", "code": "session_revoked"}), 401
             return None
         if request.path.startswith("/api/"):
+            if wipe:
+                return jsonify({"error": "session revoked", "code": "session_revoked"}), 401
             return jsonify({"error": "login required"}), 401
         return redirect(url_for("login", **_deep_link_args()))
     uid = auth.current_user_id()

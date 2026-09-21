@@ -16,6 +16,7 @@ from config import SESSION_SECONDS, skip_login
 from db import (
     create_user_session,
     get_first_user,
+    get_latest_session_for_device,
     get_session_by_token,
     get_user_by_id,
     revoke_session_by_token,
@@ -243,6 +244,25 @@ def authenticated() -> bool:
         return int(row["user_id"]) == int(session.get(SESSION_USER) or 0)
     except (TypeError, ValueError):
         return False
+
+
+def _session_row_requires_wipe(row) -> bool:
+    if not row or not row["revoked_at"]:
+        return False
+    return str(row["revoke_reason"] or "") == "user"
+
+
+def session_requires_wipe() -> bool:
+    """True when this device was remotely signed out and must drop local vault data."""
+    token = current_session_token()
+    if token:
+        row = get_session_by_token(token)
+        if _session_row_requires_wipe(row):
+            return True
+    device_id = request_device_id()
+    if not device_id:
+        return False
+    return _session_row_requires_wipe(get_latest_session_for_device(device_id))
 
 
 def slide_session() -> None:
