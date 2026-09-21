@@ -1185,6 +1185,17 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("max-height: calc(100dvh - 12.5rem)", mobile)
         self.assertIn("overflow-y: auto", mobile)
 
+    def test_desktop_folder_section_scrolls(self):
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        desktop = css.split("@media (min-width: 861px)")[-1]
+        self.assertIn("grid-template-rows: minmax(0, 1fr)", desktop)
+        self.assertIn(".sidebar-nav .tag-section[open]", desktop)
+        self.assertIn(".sidebar-nav .tag-list", desktop)
+        nav_list = desktop[desktop.index(".sidebar-nav .tag-list"):]
+        self.assertIn("overflow-y: auto", nav_list[:400])
+        self.assertIn("min-height: 0", nav_list[:400])
+        self.assertNotIn("max-height: 28vh", desktop)
+
     def test_client_vaultlock(self):
         self._run_node_script("test_vaultlock.js")
 
