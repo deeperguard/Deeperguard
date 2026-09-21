@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Sync deeperguard code to the LXC and restart the service.
+# Sync deeperguard code to Vienna (or NOTES_HOST) and restart the service.
 set -euo pipefail
-HOST="${NOTES_HOST:-www.deeperguard.com}"
+# Production is the Vienna VPS behind Cloudflare. Do not git pull on that host.
+HOST="${NOTES_HOST:-62.83.35.198}"
 REMOTE="${NOTES_REMOTE_DIR:-/opt/deeperguard}"
 LAN_CIDR="${NOTES_LAN_CIDR:-192.168.178.0/24}"
 VPN_CIDR="${NOTES_VPN_CIDR:-10.0.0.0/24}"
 VPN_GATEWAY="${NOTES_VPN_GATEWAY:-192.168.178.77}"
 DEPLOY_SSH_HOST="${NOTES_DEPLOY_SSH_HOST:-192.168.178.174}"
+ENABLE_LAN_TLS="${NOTES_ENABLE_LAN_TLS:-0}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12)
 
@@ -42,17 +44,20 @@ if [[ -n "${build_id}" && -f /opt/deeperguard/config/deeperguard.env ]]; then
   fi
 fi
 if [[ ! -x venv/bin/python ]]; then
-  NOTES_LAN_CIDR='${LAN_CIDR}' NOTES_VPN_CIDR='${VPN_CIDR}' NOTES_VPN_GATEWAY='${VPN_GATEWAY}' NOTES_DEPLOY_SSH_HOST='${DEPLOY_SSH_HOST}' NOTES_HOST='${HOST}' bash deploy/bootstrap.sh
+  NOTES_ENABLE_LAN_TLS='${ENABLE_LAN_TLS}' NOTES_LAN_CIDR='${LAN_CIDR}' NOTES_VPN_CIDR='${VPN_CIDR}' NOTES_VPN_GATEWAY='${VPN_GATEWAY}' NOTES_DEPLOY_SSH_HOST='${DEPLOY_SSH_HOST}' NOTES_HOST='${HOST}' bash deploy/bootstrap.sh
 else
   venv/bin/pip install -q -r requirements.txt
-  bash deploy/install-services.sh
+  NOTES_ENABLE_LAN_TLS='${ENABLE_LAN_TLS}' bash deploy/install-services.sh
+fi
+if [[ '${ENABLE_LAN_TLS}' != "1" ]]; then
+  systemctl disable --now deeperguard-tls || true
 fi
 systemctl is-active deeperguard
 systemctl is-active deeperguard-tls || true
 systemctl is-active deeperguard-ocr || true
 REMOTE
 rm -f /tmp/deeperguard-deploy.tar.gz
-echo "Open http://${HOST}/  (HTTPS: https://${HOST}/ after installing http://${HOST}/ca.crt )"
+echo "Deployed to ${HOST}. Public site: https://www.deeperguard.com/  App: https://www.deeperguard.com/app"
 if [[ "${NOTES_VERIFY_PUBLIC:-0}" == "1" ]]; then
   NOTES_LAN_HOST="${NOTES_LAN_HOST:-${HOST}}" NOTES_HOST="${NOTES_PUBLIC_HOST:-www.deeperguard.com}" \
     bash "${SRC}/deploy/verify-production-origin.sh" || true

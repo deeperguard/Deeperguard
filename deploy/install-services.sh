@@ -48,7 +48,7 @@ printf '0 %s * * * root /opt/deeperguard/venv/bin/python /opt/deeperguard/app/ba
 chmod 644 /etc/cron.d/deeperguard-backup
 install -m 644 "$ROOT/deploy/cron/deeperguard-warnings" /etc/cron.d/deeperguard-warnings
 
-bash "$ROOT/deploy/generate-tls.sh"
+ENABLE_LAN_TLS="${NOTES_ENABLE_LAN_TLS:-0}"
 
 install -m 644 "$ROOT/deploy/systemd/deeperguard.service" /etc/systemd/system/deeperguard.service
 install -m 644 "$ROOT/deploy/systemd/deeperguard-tls.service" /etc/systemd/system/deeperguard-tls.service
@@ -59,18 +59,28 @@ if [[ -f "$ROOT/deploy/logrotate/deeperguard" ]]; then
   install -m 644 "$ROOT/deploy/logrotate/deeperguard" /etc/logrotate.d/deeperguard
 fi
 systemctl daemon-reload
-systemctl enable deeperguard.service deeperguard-tls.service
+systemctl enable deeperguard.service
 if [[ -f /etc/systemd/system/deeperguard-ocr.service ]]; then
   systemctl enable deeperguard-ocr.service || true
 fi
+
+if [[ "${ENABLE_LAN_TLS}" == "1" ]]; then
+  bash "$ROOT/deploy/generate-tls.sh"
+  systemctl enable deeperguard-tls.service
+else
+  systemctl disable --now deeperguard-tls.service || true
+fi
+
 systemctl restart deeperguard.service
-if [[ -s "$KEYS/tls/server.crt" && -s "$KEYS/tls/server.key" ]]; then
+if [[ "${ENABLE_LAN_TLS}" == "1" && -s "$KEYS/tls/server.crt" && -s "$KEYS/tls/server.key" ]]; then
   systemctl restart deeperguard-tls.service
 fi
 if [[ -f /etc/systemd/system/deeperguard-ocr.service ]]; then
   systemctl restart deeperguard-ocr.service
 fi
-LAN_CIDR="${NOTES_LAN_CIDR:-192.168.1.0/24}"
-VPN_CIDR="${NOTES_VPN_CIDR:-10.0.0.0/24}"
-ufw allow from "${LAN_CIDR}" to any port 443 proto tcp || true
-ufw allow from "${VPN_CIDR}" to any port 443 proto tcp || true
+if [[ "${ENABLE_LAN_TLS}" == "1" ]]; then
+  LAN_CIDR="${NOTES_LAN_CIDR:-192.168.1.0/24}"
+  VPN_CIDR="${NOTES_VPN_CIDR:-10.0.0.0/24}"
+  ufw allow from "${LAN_CIDR}" to any port 443 proto tcp || true
+  ufw allow from "${VPN_CIDR}" to any port 443 proto tcp || true
+fi

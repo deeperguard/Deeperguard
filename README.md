@@ -43,12 +43,32 @@ See **[deploy/PRODUCTION.md](deploy/PRODUCTION.md)** for the full WAN checklist.
 - **Offline PWA** — encrypted vault in IndexedDB; iOS-friendly layout and swipe-to-trash
 - **Admin dashboard** — per-user quotas and storage overview
 
-## Quick start (development)
+## Upgrade loop
+
+Work in this Mac clone. **GitHub is the source of truth.** Production is the **Vienna VPS** (`62.83.35.198`, SSH host `netcup`). Do **not** `git pull` on Vienna, and do **not** develop on LXC 145.
 
 ```bash
-git clone https://github.com/deeperguard/deeperguard.git
+# 1. edit here, then commit
+git push origin main
+
+# 2. ship code only (data and keys stay on Vienna)
+bash deploy/deploy-deeperguard.sh
+```
+
+The deploy script SSHes to Vienna, unpacks `app/`, `deploy/`, and tests, writes `VERSION`, and restarts gunicorn on `127.0.0.1:80` behind Cloudflare. LAN TLS stays off.
+
+- Marketing: https://www.deeperguard.com/
+- Notes app: https://www.deeperguard.com/app
+- Pool (separate tunnel on knots): https://pool.deeperguard.com/
+
+## Quick start (local development)
+
+Needs Python 3.11+. On this Mac use `python3.12`.
+
+```bash
+git clone https://github.com/deeperguard/Deeperguard.git
 cd deeperguard
-python3 -m venv venv
+python3.12 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 bash deploy/fetch-ocr-assets.sh
 export NOTES_ROOT="$(pwd)" NOTES_DATA="$(pwd)/data" NOTES_KEYS="$(pwd)/keys"
@@ -59,26 +79,11 @@ cp deploy/deeperguard.env.example config/deeperguard.env
 
 Open `http://127.0.0.1:8080/` and create an account.
 
-## Production deploy
+## Other install paths
 
-Deeperguard ships with scripts for **Proxmox LXC** on Debian, but any Linux host with Python 3.11+ works.
+Scripts for a **Proxmox LXC** or a fresh Linux host are still in `deploy/`. Those are optional; live production is Vienna.
 
-### Option A — Proxmox LXC (automated)
-
-```bash
-export PVE_HOST=192.168.1.10          # your Proxmox host
-export NOTES_IP=192.168.1.100         # container IP
-export NOTES_HOST=192.168.1.100       # deploy target
-bash deploy/create-deeperguard-lxc.sh
-bash deploy/deploy-deeperguard.sh
-```
-
-### Option B — existing Linux server
-
-1. Copy the repo to `/opt/deeperguard`
-2. `bash deploy/bootstrap.sh`
-3. Copy `deploy/deeperguard.env.example` → `/opt/deeperguard/config/deeperguard.env`
-4. `bash deploy/generate-tls.sh` (LAN homelab CA) or put HTTPS behind Caddy / Cloudflare
+LAN-only TLS (`0.0.0.0:443`) is opt-in: `NOTES_ENABLE_LAN_TLS=1`. Leave it unset for Cloudflare.
 
 See **[deploy/PRODUCTION.md](deploy/PRODUCTION.md)** for WAN exposure (Cloudflare Tunnel, rate limits, cookies).
 

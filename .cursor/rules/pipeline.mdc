@@ -1,0 +1,19 @@
+---
+description: DeeperGuard develop → GitHub → Vienna deploy pipeline
+alwaysApply: true
+---
+
+# Pipeline
+
+- **Develop** in this Mac clone only (`~/Projects/deeperguard`).
+- **Source of truth** is GitHub `deeperguard/Deeperguard`.
+- **Production** is the Vienna VPS (`62.83.35.198`, SSH host `netcup`), `/opt/deeperguard` behind Cloudflare.
+
+Do **not** `git pull` or edit on Vienna. Do **not** develop on LXC 145 (stopped leftover). Do **not** treat LXC 112 as www origin.
+
+```bash
+git push origin main
+bash deploy/deploy-deeperguard.sh
+```
+
+Default deploy target is Vienna. Gunicorn must stay on `127.0.0.1:80`. Leave LAN TLS off (`NOTES_ENABLE_LAN_TLS=0`). Never commit `config/deeperguard.env`, `keys/`, `data/`, or API tokens.

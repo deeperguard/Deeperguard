@@ -120,8 +120,21 @@ For production WAN, add **fail2ban** or Cloudflare rate rules on `/api/auth/*`.
 - [ ] Registration policy decided (`NOTES_ALLOW_REGISTER`)
 - [ ] Backups: SMTP and/or pCloud tested
 - [ ] Firewall: no unnecessary open ports (prefer tunnel)
-- [ ] Monitoring on CT 143 (disk, gunicorn, `journalctl -u deeperguard-tls`)
+- [ ] Monitoring on Vienna (disk, gunicorn, `journalctl -u deeperguard` / `cloudflared`)
 - [ ] Privacy policy / terms if offering free accounts to others
+
+## Deploy from this repo (Vienna)
+
+Production origin is the Vienna VPS (`62.83.35.198` / SSH `netcup`), not a homelab LXC.
+
+```bash
+# from ~/Projects/deeperguard after git push
+bash deploy/deploy-deeperguard.sh
+```
+
+Defaults: `NOTES_HOST=62.83.35.198`, `NOTES_ENABLE_LAN_TLS=0`. Gunicorn stays on `127.0.0.1:80`. The www tunnel is `homelab-notes`. `pool.deeperguard.com` uses the separate `deeperguard-pool` tunnel on knots.
+
+Never `git pull` on Vienna. Never commit `config/deeperguard.env`, `keys/`, or `data/`.
 
 ## Cloudflare Tunnel (deeperguard.com)
 
