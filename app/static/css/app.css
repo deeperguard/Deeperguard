@@ -25,7 +25,11 @@
   --doc-surface: #111318;
   --doc-viewer-bg: #0b0d10;
   --doc-page-bg: #ffffff;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --note-title-size: 16px;
+  --note-title-weight: 600;
+  --note-body-size: 16px;
+  font-family: var(--font);
 }
 
 :root[data-theme="light"],
@@ -407,7 +411,12 @@ body {
 }
 body.auth-page { overflow: auto; -webkit-overflow-scrolling: touch; }
 a { color: var(--accent); text-decoration: none; }
-input, textarea, button, select { font: inherit; color: inherit; }
+html, body { font-family: var(--font); }
+input, textarea, button, select {
+  font: inherit;
+  font-family: var(--font);
+  color: inherit;
+}
 input, textarea, select {
   width: 100%;
   background: var(--bg-elevated);
@@ -2165,11 +2174,21 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   overflow: hidden;
 }
 .note-item-copy { min-width: 0; flex: 1; }
-.note-item h3 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; color: var(--text); }
+.note-item h3 {
+  margin: 0;
+  font-family: var(--font);
+  font-size: var(--note-title-size);
+  font-weight: var(--note-title-weight);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  font-optical-sizing: none;
+  color: var(--text);
+}
 .note-item p,
 .note-preview {
   margin: 4px 0 0;
   color: var(--muted);
+  font-family: var(--font);
   font-size: 13px;
   line-height: 1.45;
   display: -webkit-box;
@@ -2835,11 +2854,13 @@ body.scan-dialog-open {
   flex: 1;
   border: 0;
   background: transparent;
-  font-size: 17px;
-  font-weight: 600;
+  font-family: var(--font);
+  font-size: var(--note-title-size);
+  font-weight: var(--note-title-weight);
   padding: 8px 4px;
   line-height: 1.3;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  font-optical-sizing: none;
 }
 .tag-bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 4px; }
 .tag-bar-shell.is-collapsed .tag-bar { display: none; }
@@ -2921,8 +2942,15 @@ body.scan-dialog-open {
   background: transparent;
   padding: 14px 18px;
   min-height: 0;
+  font-family: var(--font);
+  font-size: var(--note-body-size);
+  font-optical-sizing: none;
 }
 .preview { overflow: auto; }
+.preview h1, .preview h2, .preview h3,
+.preview p, .preview li {
+  font-family: inherit;
+}
 .preview h1, .preview h2, .preview h3 { margin-top: 1.2em; }
 .preview sup { font-size: 0.75em; vertical-align: super; line-height: 0; }
 .preview a {
@@ -4351,7 +4379,7 @@ body.doc-preview-open .fab-stack,
     min-width: 0;
   }
   .editor-head .editor-actions { grid-area: actions; }
-  .title-input { min-width: 0; font-size: 16px; padding: 2px 0; }
+  .title-input { min-width: 0; font-size: var(--note-title-size); padding: 2px 0; }
   .tag-bar-toggle {
     width: 100%;
     margin: 0;
@@ -4572,7 +4600,7 @@ body.doc-preview-open .fab-stack,
     padding: 14px 16px;
     min-height: 0;
   }
-  .note-item h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .note-item h3 { margin: 0; font-size: var(--note-title-size); font-weight: var(--note-title-weight); }
   .note-list-thumb {
     width: 36px;
     height: 36px;
@@ -4937,9 +4965,9 @@ body.doc-preview-open .fab-stack,
     box-shadow: inset 3px 0 0 var(--accent);
   }
   .editor-pane .title-input {
-    font-size: 22px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-size: var(--note-title-size);
+    font-weight: var(--note-title-weight);
+    letter-spacing: -0.01em;
   }
   .tag-section summary.section-label,
   .filter-section summary.section-label { cursor: pointer; }
@@ -4991,8 +5019,8 @@ body.doc-preview-open .fab-stack,
     min-height: auto;
   }
   .note-item h3 {
-    font-size: 15px;
-    font-weight: 600;
+    font-size: var(--note-title-size);
+    font-weight: var(--note-title-weight);
     margin-bottom: 0;
   }
   .note-item-meta {
@@ -5026,9 +5054,9 @@ body.doc-preview-open .fab-stack,
     display: block;
     width: 100%;
     box-sizing: border-box;
-    font-size: 22px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-size: var(--note-title-size);
+    font-weight: var(--note-title-weight);
+    letter-spacing: -0.01em;
     padding: 4px 0 6px;
     line-height: 1.25;
     min-height: 36px;
