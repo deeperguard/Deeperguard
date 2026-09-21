@@ -137,6 +137,7 @@
     lightVault: false,
     aiChat: null,
     tagsCollapsed: true,
+    viewsCollapsed: false,
     searchFilters: {
       titlesOnly: false,
       includeArchived: false,
@@ -203,7 +204,7 @@
   // Vault-only prefs never touch localStorage (they hold secrets such as API keys).
   const VAULT_ONLY_PREF_KEYS = ['aiChat'];
   // Device-only prefs (storage/offline behaviour differs per device).
-  const DEVICE_PREF_KEYS = ['rememberDevice', 'lightVault', 'tagsCollapsed', 'searchFilters'];
+  const DEVICE_PREF_KEYS = ['rememberDevice', 'lightVault', 'tagsCollapsed', 'viewsCollapsed', 'searchFilters'];
   let globalPrefsAppliedAt = 0;
 
   function localPrefsJson() {
@@ -326,6 +327,16 @@
     section.open = !prefs.tagsCollapsed;
   }
 
+  function applyFilterSection() {
+    const section = document.getElementById('filter-section');
+    if (!section) return;
+    if (!isDesktopLayout()) {
+      section.open = true;
+      return;
+    }
+    section.open = !prefs.viewsCollapsed;
+  }
+
   function applyPrefs() {
     applyTheme();
     ui.body.style.fontSize = `${prefs.fontSize}px`;
@@ -335,6 +346,7 @@
     ui.noteList.classList.toggle('compact', !!prefs.compactList);
     ui.noteList.classList.toggle('hide-previews', !!prefs.hidePreviews);
     applyTagSection();
+    applyFilterSection();
     bumpIdle();
   }
   applyTheme();
@@ -11223,8 +11235,17 @@
       localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs));
     });
   }
+  const filterSection = document.getElementById('filter-section');
+  if (filterSection) {
+    filterSection.addEventListener('toggle', () => {
+      if (!isDesktopLayout()) return;
+      prefs.viewsCollapsed = !filterSection.open;
+      localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs));
+    });
+  }
   window.addEventListener('resize', () => {
     applyTagSection();
+    applyFilterSection();
     if (currentId) syncTagBarShell(NotesStore.get(currentId));
     layoutFindBarOverDocViewer();
   });
