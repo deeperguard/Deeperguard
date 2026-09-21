@@ -386,6 +386,9 @@ def _gate():
     if skipped and request.path in {"/login", "/register", "/totp"}:
         return redirect(url_for("notes_app", **_deep_link_args()))
     if auth.public_path(request.path):
+        if request.path.startswith("/api/") and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            if not auth.request_is_same_origin():
+                return jsonify({"error": "cross-origin request denied"}), 403
         return None
     if not auth.authenticated():
         if auth.bootstrap_path(request.path, request.method):
@@ -850,6 +853,8 @@ def api_auth_vault_recovery():
         uid = auth.current_user_id()
         if not uid:
             return jsonify({"error": "sign in required"}), 401
+        if not auth.csrf_ok():
+            return jsonify({"error": "invalid CSRF token"}), 400
         user = db.get_user_by_email(email)
         if not user or int(user["id"]) != int(uid):
             return jsonify({"error": "invalid credentials"}), 401
@@ -1073,6 +1078,9 @@ def totp_page():
 
 @app.post("/api/totp/verify")
 def api_totp_verify():
+    uid = auth.current_user_id()
+    if uid and _auth_rate_limited("totp-verify", str(uid)):
+        return jsonify({"error": "too many attempts"}), 429
     body = request.get_json(silent=True) or {}
     code = str(body.get("code") or "")
     if not auth.verify_totp_for_current_user(code):

@@ -24,6 +24,7 @@ SESSION_SRP_EMAIL = "srp_email"
 
 
 def client_ip() -> str:
+    remote = str(request.remote_addr or "").strip()
     hops = 0
     try:
         from config import trust_proxy_hops
@@ -31,14 +32,15 @@ def client_ip() -> str:
         hops = trust_proxy_hops()
     except Exception:
         hops = 0
-    if hops > 0:
+    # Only honor X-Forwarded-For from a local reverse proxy (cloudflared).
+    if hops > 0 and remote in {"127.0.0.1", "::1"}:
         forwarded = str(request.headers.get("X-Forwarded-For") or "").strip()
         if forwarded:
             parts = [part.strip() for part in forwarded.split(",") if part.strip()]
             if parts:
                 idx = max(0, len(parts) - hops)
                 return parts[idx]
-    return str(request.remote_addr or "").strip()
+    return remote
 
 
 def client_allowed() -> bool:
@@ -115,6 +117,14 @@ def slide_session() -> None:
 def ensure_skip_login_session() -> bool:
     if not skip_login():
         return False
+    try:
+        from config import cidr_gate_enabled
+
+        # Never auto-login the first user on a public (CIDR-open) host.
+        if not cidr_gate_enabled():
+            return False
+    except Exception:
+        return False
     if authenticated():
         return True
     user = get_first_user()
@@ -183,21 +193,36 @@ def csrf_ok() -> bool:
     return bool(supplied) and hmac.compare_digest(str(expected), str(supplied))
 
 
+def _canonical_site_hosts() -> set[str]:
+    """www + apex of the public notes host only — not pool.* or other siblings."""
+    from config import normalize_host, webauthn_default_rp_id, webauthn_preferred_host
+
+    hosts: set[str] = set()
+    public = normalize_host(os.environ.get("NOTES_PUBLIC_HOST", "") or webauthn_preferred_host())
+    rp_id = webauthn_default_rp_id()
+    for raw in (public, rp_id):
+        host = normalize_host(raw)
+        if not host:
+            continue
+        hosts.add(host)
+        if host.startswith("www."):
+            hosts.add(host[4:])
+        else:
+            hosts.add(f"www.{host}")
+    return hosts
+
+
 def _hosts_match(h1: str, h2: str) -> bool:
     if not h1 or not h2:
         return False
-    if h1 == h2:
-        return True
-    from config import normalize_host, passkey_host_ok, webauthn_default_rp_id
+    from config import normalize_host
 
     n1 = normalize_host(h1)
     n2 = normalize_host(h2)
     if n1 == n2:
         return True
-    rp_id = webauthn_default_rp_id()
-    if rp_id and passkey_host_ok(n1) and passkey_host_ok(n2):
-        return True
-    return False
+    allowed = _canonical_site_hosts()
+    return bool(n1 and n2 and n1 in allowed and n2 in allowed)
 
 
 def request_is_same_origin() -> bool:
@@ -218,6 +243,7 @@ def request_is_same_origin() -> bool:
         req_host = (request.host or "").split(":", 1)[0].strip("[]").lower()
 
     origin = (request.headers.get("Origin") or "").strip()
+    origin_host = ""
     if origin:
         if origin.lower() == "null":
             return False
@@ -231,6 +257,7 @@ def request_is_same_origin() -> bool:
             return False
 
     referer = (request.headers.get("Referer") or "").strip()
+    referer_host = ""
     if referer:
         try:
             from urllib.parse import urlparse
@@ -240,6 +267,11 @@ def request_is_same_origin() -> bool:
             return False
         if not _hosts_match(referer_host, req_host):
             return False
+
+    # same-site includes sibling subdomains (pool.deeperguard.com). Require an
+    # Origin/Referer that matches the notes host — do not accept same-site alone.
+    if sec_site == "same-site" and not origin_host and not referer_host:
+        return False
 
     return True
 
@@ -293,7 +325,7 @@ def pop_srp_state(email: str) -> dict | None:
 
 def auth_exempt_path(path: str) -> bool:
     base = path.split("?", 1)[0]
-    return public_path(base) or base in {"/api/totp/verify", "/api/account/unlock", "/api/sync/pull"}
+    return public_path(base) or base in {"/api/account/unlock", "/api/sync/pull"}
 
 
 def security_headers() -> dict[str, str]:

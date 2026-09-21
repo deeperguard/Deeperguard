@@ -1147,21 +1147,20 @@ const NotesStore = (() => {
   }
 
   // Password / edit protection from another device must apply even when this copy
-  // has newer body edits or is still marked dirty for push.
+  // has newer body edits or is still marked dirty for push. Only *add* lock /
+  // read-only from remote — an older unlocked server row must not strip them.
   function mergeCrossDeviceProtection(localContent, remoteContent) {
     if (!localContent || localContent.type !== 'note' || !remoteContent || remoteContent.type !== 'note') {
       return { changed: false, content: localContent };
     }
     const merged = { ...localContent };
     let changed = false;
-    const nextLocked = !!remoteContent.locked;
-    const nextPrevent = !!remoteContent.prevent_edit;
-    if (nextLocked !== !!merged.locked) {
-      merged.locked = nextLocked;
+    if (remoteContent.locked && !merged.locked) {
+      merged.locked = true;
       changed = true;
     }
-    if (nextPrevent !== !!merged.prevent_edit) {
-      merged.prevent_edit = nextPrevent;
+    if (remoteContent.prevent_edit && !merged.prevent_edit) {
+      merged.prevent_edit = true;
       changed = true;
     }
     return { changed, content: merged };

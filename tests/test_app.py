@@ -32,6 +32,7 @@ class NotesAppTests(unittest.TestCase):
         os.environ.pop("NOTES_ADMIN_EMAILS", None)
         os.environ.pop("NOTES_DEFAULT_USER_QUOTA_MB", None)
         os.environ.pop("NOTES_DEFAULT_PLAN", None)
+        os.environ.pop("NOTES_DISABLE_CIDR_GATE", None)
         (root / "keys").mkdir(parents=True)
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
 
@@ -2254,6 +2255,17 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(account.get_json()["email"], "skip@home.local")
         self.assertTrue(account.get_json()["csrf"])
         self.assertFalse(account.headers.get("Clear-Site-Data"))
+
+    def test_skip_login_ignored_when_cidr_gate_disabled(self):
+        self._register_user("skip-wan@home.local", "skip-secure-pass")
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        os.environ["NOTES_SKIP_LOGIN"] = "1"
+        os.environ["NOTES_DISABLE_CIDR_GATE"] = "1"
+        import auth
+        self.assertFalse(auth.ensure_skip_login_session())
+        account = self.client.get("/api/account")
+        self.assertEqual(account.status_code, 401)
         sw = self.client.get("/sw.js")
         self.assertEqual(sw.status_code, 200)
         self.assertIn(b"deeperguard-offline", sw.data)
@@ -2645,12 +2657,13 @@ class NotesAppTests(unittest.TestCase):
 
         from config import SESSION_SECONDS
 
+        sess_csrf = secrets.token_urlsafe(32)
         with self.client.session_transaction() as sess:
             sess["uid"] = int(user_id)
             sess["authed"] = True
             sess["exp"] = time.time() + SESSION_SECONDS
             sess["totp_ok"] = True
-            sess["csrf"] = secrets.token_urlsafe(32)
+            sess["csrf"] = sess_csrf
         recovered = self.client.post(
             "/api/auth/vault-recovery",
             json={
@@ -2658,11 +2671,23 @@ class NotesAppTests(unittest.TestCase):
                 "srp_salt": new_salt,
                 "srp_verifier": new_verifier,
             },
+            headers={"X-CSRF-Token": sess_csrf},
         )
         self.assertEqual(recovered.status_code, 200, recovered.get_json())
         self.assertTrue(recovered.get_json().get("vault_recovered"))
         login = self._srp_login(email, password, new_salt)
         self.assertEqual(login.status_code, 200)
+
+        denied = self.client.post(
+            "/api/auth/vault-recovery",
+            json={
+                "email": email,
+                "srp_salt": new_salt,
+                "srp_verifier": new_verifier,
+            },
+        )
+        self.assertEqual(denied.status_code, 400)
+        self.assertEqual(denied.get_json()["error"], "invalid CSRF token")
 
     def test_verify_vault_disabled_in_strict_zk(self):
         res = self.client.post(
@@ -3379,7 +3404,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("missingTotpAfterSync", store_js)
         self.assertIn("countTotpItems", store_js)
         self.assertIn("ensureTotpAccountsFromServer", app_js)
-        self.assertIn("const nextLocked = !!remoteContent.locked", store_js)
+        self.assertIn("if (remoteContent.locked && !merged.locked)", store_js)
+        self.assertIn("if (remoteContent.prevent_edit && !merged.prevent_edit)", store_js)
 
     def test_checklist_entry_note_type_menu_and_collapsed_tags(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
@@ -3676,9 +3702,15 @@ class NotesAppTests(unittest.TestCase):
         with self.app_mod.app.test_request_context("/", headers={"Host": "notes.deeperguard.com", "Origin": "https://notes.deeperguard.com"}):
             self.assertTrue(auth.request_is_same_origin())
 
-        # Origin header matching parent domain / subdomain
-        with self.app_mod.app.test_request_context("/", headers={"Host": "www.deeperguard.com", "Origin": "https://notes.deeperguard.com"}):
+        # www and apex of the public host are the same site
+        with self.app_mod.app.test_request_context("/", headers={"Host": "www.deeperguard.com", "Origin": "https://deeperguard.com"}):
             self.assertTrue(auth.request_is_same_origin())
+
+        # Sibling subdomains (pool, arbitrary CF host) are not the notes origin
+        with self.app_mod.app.test_request_context("/", headers={"Host": "www.deeperguard.com", "Origin": "https://notes.deeperguard.com"}):
+            self.assertFalse(auth.request_is_same_origin())
+        with self.app_mod.app.test_request_context("/", headers={"Host": "www.deeperguard.com", "Origin": "https://pool.deeperguard.com"}):
+            self.assertFalse(auth.request_is_same_origin())
 
         # Malicious cross-origin
         with self.app_mod.app.test_request_context("/", headers={"Host": "notes.deeperguard.com", "Origin": "https://evil.com"}):
