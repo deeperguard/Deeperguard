@@ -956,6 +956,7 @@ def api_list_sessions():
     if not uid:
         return jsonify({"error": "login required"}), 401
     db.prune_user_sessions(uid, older_than=time.time() - SESSION_SECONDS)
+    db.collapse_duplicate_sessions(uid)
     token = auth.current_session_token()
     rows = db.list_user_sessions(uid, active_since=time.time() - SESSION_SECONDS)
     return jsonify({"sessions": [_public_session(row, current_token=token) for row in rows]})

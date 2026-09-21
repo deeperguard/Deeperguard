@@ -132,6 +132,14 @@
     } catch (err) {
       /* private mode / missing sessionStorage */
     }
+    try {
+      const device = (global.NotesStore && NotesStore.deviceId)
+        ? NotesStore.deviceId()
+        : (localStorage.getItem('notes_device_id') || '');
+      if (device) headers['X-Device-Id'] = device;
+    } catch (err) {
+      /* ignore */
+    }
     const res = await fetch(path, {
       method: 'POST',
       headers,

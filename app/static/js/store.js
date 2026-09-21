@@ -224,6 +224,21 @@ const NotesStore = (() => {
     });
   }
 
+  function deviceId() {
+    try {
+      const key = 'notes_device_id';
+      let id = localStorage.getItem(key) || '';
+      if (!/^[A-Za-z0-9._-]{8,80}$/.test(id)) {
+        id = (crypto.randomUUID && crypto.randomUUID())
+          || `d${Date.now()}${Math.random().toString(36).slice(2, 10)}`;
+        localStorage.setItem(key, id);
+      }
+      return id;
+    } catch (err) {
+      return '';
+    }
+  }
+
   function csrf() {
     if (state.csrf) return state.csrf;
     try {
@@ -252,6 +267,8 @@ const NotesStore = (() => {
     }
     const token = state.csrf || csrf();
     if (token) headers['X-CSRF-Token'] = token;
+    const device = deviceId();
+    if (device) headers['X-Device-Id'] = device;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), options.timeoutMs || 8000);
     let res;
@@ -3827,6 +3844,7 @@ const NotesStore = (() => {
 
   return {
     csrf,
+    deviceId,
     setCsrf,
     setSaveStatusCallback,
     setSyncStatusCallback,
