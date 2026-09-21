@@ -26,6 +26,7 @@ from flask.sessions import SecureCookieSessionInterface
 from datetime import timedelta
 
 from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, normalize_host, ocr_ephemeral, pcloud_password_set, pcloud_token_set, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, webauthn_preferred_host, user_is_admin
+from uploads import ensure_user_upload_dir, user_upload_dir
 import promo as notes_promo
 from backup_mail import send_user_backup
 from mailer import send_contact_email
@@ -397,11 +398,18 @@ def _gate():
             return jsonify({"error": "login required"}), 401
         return redirect(url_for("login", **_deep_link_args()))
     uid = auth.current_user_id()
-    if uid and not db.get_user_by_id(uid):
+    user = db.get_user_by_id(uid) if uid else None
+    if uid and not user:
         auth.logout()
         if request.path.startswith("/api/"):
             return jsonify({"error": "login required"}), 401
         return redirect(url_for("login", **_deep_link_args()))
+    if user:
+        auth.ensure_device_session()
+        try:
+            ensure_user_upload_dir(str(user["email"]))
+        except OSError:
+            pass
     if not skipped and auth.needs_totp() and request.path not in {
         "/totp",
         "/api/totp/verify",
@@ -553,16 +561,15 @@ def api_server_info():
     })
 
 
-def _device_reports_dir() -> Path:
-    path = DATA_DIR / "device-reports"
+def _device_reports_dir(email: str) -> Path:
+    path = user_upload_dir(email) / "device-reports"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def _rotate_device_reports(reports_dir: Path, user_id: int) -> None:
-    pattern = f"user-{int(user_id)}-*.txt"
+def _rotate_device_reports(reports_dir: Path) -> None:
     files = sorted(
-        (p for p in reports_dir.glob(pattern) if p.name != f"user-{int(user_id)}-latest.txt"),
+        (p for p in reports_dir.glob("*.txt") if p.name != "latest.txt"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -601,7 +608,8 @@ def _sync_log_line(line: str) -> None:
 @app.post("/api/device-report")
 def api_device_report():
     uid = auth.current_user_id()
-    if not uid:
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
         return jsonify({"error": "not found"}), 404
     body = request.get_json(silent=True) or {}
     report = str(body.get("report") or "").strip()
@@ -609,14 +617,14 @@ def api_device_report():
         return jsonify({"error": "report required"}), 400
     if len(report) > DEVICE_REPORT_MAX:
         report = report[:DEVICE_REPORT_MAX]
-    reports_dir = _device_reports_dir()
+    reports_dir = _device_reports_dir(str(user["email"]))
     stamp = int(time.time())
-    (reports_dir / f"user-{uid}-{stamp}.txt").write_text(report, encoding="utf-8")
-    (reports_dir / f"user-{uid}-latest.txt").write_text(report, encoding="utf-8")
+    (reports_dir / f"{stamp}.txt").write_text(report, encoding="utf-8")
     (reports_dir / "latest.txt").write_text(report, encoding="utf-8")
-    _rotate_device_reports(reports_dir, uid)
+    _rotate_device_reports(reports_dir)
     meta = {
         "user_id": uid,
+        "email": str(user["email"]),
         "build": NOTES_BUILD,
         "received_at": stamp,
         "bytes": len(report.encode("utf-8")),
@@ -925,6 +933,52 @@ def api_login():
 def api_logout():
     auth.logout()
     return jsonify({"ok": True})
+
+
+def _public_session(row, *, current_token: str) -> dict:
+    token_match = False
+    if current_token:
+        stored = db.get_session_by_token(current_token)
+        token_match = bool(stored and int(stored["id"]) == int(row["id"]))
+    return {
+        "id": int(row["id"]),
+        "device": str(row["device_label"] or "Unknown device"),
+        "ip": str(row["ip"] or ""),
+        "ip_location": str(row["ip_location"] or "Unknown"),
+        "last_login_at": float(row["last_login_at"] or 0),
+        "current": token_match,
+    }
+
+
+@app.get("/api/sessions")
+def api_list_sessions():
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "login required"}), 401
+    db.prune_user_sessions(uid, older_than=time.time() - SESSION_SECONDS)
+    token = auth.current_session_token()
+    rows = db.list_user_sessions(uid, active_since=time.time() - SESSION_SECONDS)
+    return jsonify({"sessions": [_public_session(row, current_token=token) for row in rows]})
+
+
+@app.delete("/api/sessions/<int:session_id>")
+def api_revoke_session(session_id: int):
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "login required"}), 401
+    row = db.get_user_session(session_id, uid)
+    if not row or row["revoked_at"]:
+        return jsonify({"error": "not found"}), 404
+    current = False
+    token = auth.current_session_token()
+    if token:
+        stored = db.get_session_by_token(token)
+        current = bool(stored and int(stored["id"]) == int(row["id"]))
+    if not db.revoke_user_session(session_id, uid):
+        return jsonify({"error": "not found"}), 404
+    if current:
+        auth.logout()
+    return jsonify({"ok": True, "current": current})
 
 
 @app.post("/api/auth/webauthn/register/options")

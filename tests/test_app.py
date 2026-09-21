@@ -517,8 +517,66 @@ class NotesAppTests(unittest.TestCase):
         )
         self.assertEqual(res.status_code, 200)
         self.assertTrue(res.get_json()["ok"])
-        latest = (DATA_DIR / "device-reports" / "latest.txt").read_text(encoding="utf-8")
+        from uploads import user_upload_dir
+
+        latest = (user_upload_dir("device@home.local") / "device-reports" / "latest.txt").read_text(encoding="utf-8")
         self.assertIn("Photo OCR search — PASS", latest)
+        self.assertFalse((DATA_DIR / "device-reports" / "latest.txt").exists())
+
+    def test_user_upload_dir_and_device_sessions(self):
+        import db as notes_db
+        from uploads import email_fs_name, user_upload_dir
+
+        email = "vault.user@home.local"
+        self._register_user(email, "device-secure-pass")
+        upload = user_upload_dir(email)
+        self.assertTrue(upload.is_dir())
+        self.assertEqual(upload.name, email_fs_name(email))
+        self.assertTrue((upload / "device-reports").is_dir())
+        self.assertTrue((upload / "ocr").is_dir())
+
+        listed = self.client.get("/api/sessions")
+        self.assertEqual(listed.status_code, 200)
+        sessions = listed.get_json()["sessions"]
+        self.assertEqual(len(sessions), 1)
+        self.assertTrue(sessions[0]["current"])
+        self.assertEqual(sessions[0]["ip_location"], "Local network")
+        self.assertGreater(sessions[0]["last_login_at"], 0)
+        self.assertTrue(sessions[0]["device"])
+
+        user = notes_db.get_user_by_email(email)
+        notes_db.create_user_session(
+            int(user["id"]),
+            device_label="iPhone · Safari",
+            ip="203.0.113.10",
+            ip_location="Vienna, AT",
+        )
+        listed = self.client.get("/api/sessions")
+        rows = listed.get_json()["sessions"]
+        self.assertEqual(len(rows), 2)
+        other = next(item for item in rows if not item["current"])
+        self.assertEqual(other["device"], "iPhone · Safari")
+        self.assertEqual(other["ip"], "203.0.113.10")
+        self.assertEqual(other["ip_location"], "Vienna, AT")
+
+        revoked = self.client.delete(
+            f"/api/sessions/{other['id']}",
+            headers={"X-CSRF-Token": self._csrf()},
+        )
+        self.assertEqual(revoked.status_code, 200)
+        self.assertFalse(revoked.get_json()["current"])
+        left = self.client.get("/api/sessions").get_json()["sessions"]
+        self.assertEqual(len(left), 1)
+        self.assertTrue(left[0]["current"])
+
+        current_id = left[0]["id"]
+        gone = self.client.delete(
+            f"/api/sessions/{current_id}",
+            headers={"X-CSRF-Token": self._csrf()},
+        )
+        self.assertEqual(gone.status_code, 200)
+        self.assertTrue(gone.get_json()["current"])
+        self.assertEqual(self.client.get("/api/sessions").status_code, 401)
 
     def test_live_http_shell_shows_certificate_setup(self):
         insecure = self.client.get(
@@ -1507,9 +1565,9 @@ class NotesAppTests(unittest.TestCase):
         listed = self.client.get("/api/ocr/index").get_json()
         self.assertEqual(listed["count"], 0)
         import db
-        from config import DATA_DIR
+        import ocr_index
         user = db.get_user_by_email("store@home.local")
-        file_path = DATA_DIR / "ocr" / str(user["id"]) / att_id / "file"
+        file_path = ocr_index.ocr_root(int(user["id"])) / att_id / "file"
         self.assertTrue(file_path.is_file())
         self.assertFalse((file_path.parent / "meta.json").is_file())
         deleted = self.client.delete(
@@ -2196,6 +2254,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("deriveVaultKey", (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8"))
         self.assertIn("if (String(converted || '').trim()) editorMode = 'preview'", app_js)
         self.assertLess(html.index('id="settings-panel"'), html.index('id="btn-logout"'))
+        self.assertIn('id="signed-in-devices"', html)
+        self.assertIn("function loadSignedInDevices()", app_js)
+        self.assertIn("/api/sessions", app_js)
         self.assertIn("padding-bottom: calc(72px + var(--safe-bottom))", css)
         self.assertIn("padding: 8px 16px 4px", css)
         self.assertIn(".tag-section:not([open]) > :not(summary)", css)

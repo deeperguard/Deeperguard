@@ -1,7 +1,9 @@
 """SQLite persistence for accounts and encrypted sync items."""
 from __future__ import annotations
 
+import hashlib
 import os
+import secrets
 import sqlite3
 import threading
 import time
@@ -197,6 +199,23 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             created_at REAL NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            device_label TEXT NOT NULL DEFAULT '',
+            user_agent TEXT NOT NULL DEFAULT '',
+            ip TEXT NOT NULL DEFAULT '',
+            ip_location TEXT NOT NULL DEFAULT '',
+            created_at REAL NOT NULL,
+            last_seen_at REAL NOT NULL,
+            last_login_at REAL NOT NULL,
+            revoked_at REAL NOT NULL DEFAULT 0,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_user
+            ON user_sessions(user_id, revoked_at, last_login_at);
         """
     )
     item_cols = {row[1] for row in conn.execute("PRAGMA table_info(items)").fetchall()}
@@ -237,7 +256,9 @@ def create_user(email: str, password_hash: str, kdf_salt: str, kdf_iterations: i
             """,
             (email.strip().lower(), password_hash, kdf_salt, int(kdf_iterations), ts, ts),
         )
-        return int(cur.lastrowid)
+        user_id = int(cur.lastrowid)
+    _ensure_upload_dir(email)
+    return user_id
 
 
 def create_user_srp(
@@ -285,7 +306,18 @@ def create_user_srp(
                 ts,
             ),
         )
-        return int(cur.lastrowid)
+        user_id = int(cur.lastrowid)
+    _ensure_upload_dir(email)
+    return user_id
+
+
+def _ensure_upload_dir(email: str) -> None:
+    try:
+        from uploads import ensure_user_upload_dir
+
+        ensure_user_upload_dir(email)
+    except OSError:
+        pass
 
 
 def user_auth_method(user) -> str:
@@ -436,6 +468,135 @@ def get_user_by_email(email: str) -> sqlite3.Row | None:
 
 def get_user_by_id(user_id: int) -> sqlite3.Row | None:
     return connection().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+
+def _session_token_hash(token: str) -> str:
+    return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
+
+
+def create_user_session(
+    user_id: int,
+    *,
+    device_label: str = "",
+    user_agent: str = "",
+    ip: str = "",
+    ip_location: str = "",
+    token: str | None = None,
+) -> str:
+    raw = token or secrets.token_urlsafe(32)
+    ts = now()
+    with tx() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_sessions (
+                user_id, token_hash, device_label, user_agent, ip, ip_location,
+                created_at, last_seen_at, last_login_at, revoked_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """,
+            (
+                int(user_id),
+                _session_token_hash(raw),
+                str(device_label or "")[:80],
+                str(user_agent or "")[:300],
+                str(ip or "")[:80],
+                str(ip_location or "")[:120],
+                ts,
+                ts,
+                ts,
+            ),
+        )
+    return raw
+
+
+def get_session_by_token(token: str) -> sqlite3.Row | None:
+    if not token:
+        return None
+    return connection().execute(
+        "SELECT * FROM user_sessions WHERE token_hash = ?",
+        (_session_token_hash(token),),
+    ).fetchone()
+
+
+def get_user_session(session_id: int, user_id: int) -> sqlite3.Row | None:
+    return connection().execute(
+        "SELECT * FROM user_sessions WHERE id = ? AND user_id = ?",
+        (int(session_id), int(user_id)),
+    ).fetchone()
+
+
+def list_user_sessions(user_id: int, *, active_since: float = 0.0) -> list[sqlite3.Row]:
+    return connection().execute(
+        """
+        SELECT * FROM user_sessions
+        WHERE user_id = ? AND revoked_at = 0 AND last_seen_at >= ?
+        ORDER BY last_login_at DESC, id DESC
+        """,
+        (int(user_id), float(active_since)),
+    ).fetchall()
+
+
+def touch_user_session(
+    session_id: int,
+    *,
+    ip: str = "",
+    ip_location: str = "",
+) -> None:
+    with tx() as conn:
+        if ip:
+            conn.execute(
+                """
+                UPDATE user_sessions
+                SET last_seen_at = ?, ip = ?, ip_location = ?
+                WHERE id = ? AND revoked_at = 0
+                """,
+                (now(), str(ip)[:80], str(ip_location or "")[:120], int(session_id)),
+            )
+        else:
+            conn.execute(
+                "UPDATE user_sessions SET last_seen_at = ? WHERE id = ? AND revoked_at = 0",
+                (now(), int(session_id)),
+            )
+
+
+def revoke_user_session(session_id: int, user_id: int) -> bool:
+    with tx() as conn:
+        cur = conn.execute(
+            """
+            UPDATE user_sessions
+            SET revoked_at = ?
+            WHERE id = ? AND user_id = ? AND revoked_at = 0
+            """,
+            (now(), int(session_id), int(user_id)),
+        )
+        return int(cur.rowcount or 0) > 0
+
+
+def revoke_session_by_token(token: str) -> bool:
+    if not token:
+        return False
+    with tx() as conn:
+        cur = conn.execute(
+            """
+            UPDATE user_sessions
+            SET revoked_at = ?
+            WHERE token_hash = ? AND revoked_at = 0
+            """,
+            (now(), _session_token_hash(token)),
+        )
+        return int(cur.rowcount or 0) > 0
+
+
+def prune_user_sessions(user_id: int, *, older_than: float) -> None:
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE user_sessions
+            SET revoked_at = ?
+            WHERE user_id = ? AND revoked_at = 0 AND last_seen_at < ?
+            """,
+            (now(), int(user_id), float(older_than)),
+        )
 
 
 def get_first_user() -> sqlite3.Row | None:
@@ -904,13 +1065,22 @@ def purge_user_data(user_id: int) -> bool:
     import shutil
 
     uid = int(user_id)
-    if not get_user_by_id(uid):
+    user = get_user_by_id(uid)
+    if not user:
         return False
+    email = str(user["email"] or "")
     if not delete_user(uid):
         return False
     ocr_dir = DATA_DIR / "ocr" / str(uid)
     if ocr_dir.is_dir():
         shutil.rmtree(ocr_dir, ignore_errors=True)
+    if email:
+        try:
+            from uploads import remove_user_upload_dir
+
+            remove_user_upload_dir(email)
+        except OSError:
+            pass
     cache_file = DATA_DIR / "server-info-cache" / f"user-{uid}.json"
     try:
         cache_file.unlink(missing_ok=True)
