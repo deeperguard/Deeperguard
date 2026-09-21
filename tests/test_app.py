@@ -1189,12 +1189,29 @@ class NotesAppTests(unittest.TestCase):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         desktop = css.split("@media (min-width: 861px)")[-1]
         self.assertIn("grid-template-rows: minmax(0, 1fr)", desktop)
+        self.assertIn(".sidebar-nav {\n    grid-column: 1;", desktop)
+        self.assertIn("overflow-y: auto;\n    -webkit-overflow-scrolling: touch;", desktop)
+        self.assertIn(".filter-section", desktop)
         self.assertIn(".sidebar-nav .tag-section[open]", desktop)
-        self.assertIn(".sidebar-nav .tag-list", desktop)
-        nav_list = desktop[desktop.index(".sidebar-nav .tag-list"):]
-        self.assertIn("overflow-y: auto", nav_list[:400])
-        self.assertIn("min-height: 0", nav_list[:400])
         self.assertNotIn("max-height: 28vh", desktop)
+        self.assertIn("min-height: 4.5rem", desktop)
+        self.assertIn(".sn-tags { display: block; }", desktop)
+        self.assertIn(".sn-folders { display: none; }", desktop)
+
+    def test_views_section_collapses_and_tags_label(self):
+        html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        self.assertIn('id="filter-section"', html)
+        self.assertIn('id="filters"', html)
+        self.assertIn('class="sn-tags">Tags</span>', html)
+        self.assertNotIn("Folders", html)
+        self.assertIn("function applyFilterSection()", js)
+        self.assertIn("viewsCollapsed: false", js)
+        self.assertIn("tagsCollapsed: true", js)
+        self.assertIn("prefs.listChromeDense !== 2", js)
+        self.assertIn(".filter-section { display: none; }", mobile)
 
     def test_client_vaultlock(self):
         self._run_node_script("test_vaultlock.js")
@@ -2132,6 +2149,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("notesSendChecklist", app_js)
         self.assertIn("notesSendChecklist", html)
         self.assertIn("tagsCollapsed: true", app_js)
+        self.assertIn("viewsCollapsed: false", app_js)
+        self.assertIn('id="filter-section"', html)
         self.assertIn("update-available", app_js)
         self.assertIn("Never auto-reload", app_js)
         self.assertIn("showAppUpdateModal", app_js)

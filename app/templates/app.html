@@ -525,7 +525,17 @@
         </div>
       </div>
       <div class="filter-bar">
-        <p class="sn-nav-label">Views</p>
+        <details class="filter-section" id="filter-section" open>
+          <summary class="section-label sn-nav-label">Views</summary>
+          <nav id="filters" class="filters" aria-label="Note filters">
+            <button type="button" class="filter active" data-filter="all">Notes</button>
+            <button type="button" class="filter" data-filter="documents">Files</button>
+            <button type="button" class="filter" data-filter="pinned">Starred</button>
+            <button type="button" class="filter" data-filter="archived">Archived</button>
+            <button type="button" class="filter" data-filter="trash">Trash</button>
+            <button type="button" class="filter" data-filter="untagged">Untagged</button>
+          </nav>
+        </details>
         <label class="filter-select-wrap">
           <span class="sr-only">Filter</span>
           <select id="filter-select" class="filter-select" aria-label="Filter notes">
@@ -545,17 +555,9 @@
             <option value="title">Title A–Z</option>
           </select>
         </label>
-        <nav id="filters" class="filters" aria-label="Note filters">
-          <button type="button" class="filter active" data-filter="all">Notes</button>
-          <button type="button" class="filter" data-filter="documents">Files</button>
-          <button type="button" class="filter" data-filter="pinned">Starred</button>
-          <button type="button" class="filter" data-filter="archived">Archived</button>
-          <button type="button" class="filter" data-filter="trash">Trash</button>
-          <button type="button" class="filter" data-filter="untagged">Untagged</button>
-        </nav>
       </div>
       <details class="tag-section" id="tag-section">
-        <summary class="section-label"><span class="sn-tags">Tags</span><span class="sn-folders">Folders</span></summary>
+        <summary class="section-label"><span class="sn-tags">Tags</span></summary>
         <div id="tag-list" class="tag-list"></div>
         <div id="tag-color-bar" class="tag-color-bar" hidden></div>
         <div class="tag-composer" id="tag-composer" hidden>

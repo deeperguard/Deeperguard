@@ -1781,19 +1781,23 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 }
 .attachment-main .ocr-retry { margin-top: 6px; }
 .attachment-item-actions .ocr-retry { margin-top: 0; }
-.tag-section summary.section-label {
+.tag-section summary.section-label,
+.filter-section summary.section-label {
   list-style: none;
   cursor: pointer;
   user-select: none;
 }
-.tag-section summary.section-label::-webkit-details-marker { display: none; }
-.tag-section summary.section-label::after {
+.tag-section summary.section-label::-webkit-details-marker,
+.filter-section summary.section-label::-webkit-details-marker { display: none; }
+.tag-section summary.section-label::after,
+.filter-section summary.section-label::after {
   content: '▾';
   float: right;
   opacity: 0.55;
   font-size: 12px;
 }
-.tag-section:not([open]) summary.section-label::after { content: '▸'; }
+.tag-section:not([open]) summary.section-label::after,
+.filter-section:not([open]) summary.section-label::after { content: '▸'; }
 .tag-section #btn-new-tag,
 .tag-section .tag-new-btn {
   margin: 8px 0 0;
@@ -4472,6 +4476,7 @@ body.doc-preview-open .fab-stack,
   }
   .filters { display: none; }
   .sort-select-wrap--list { display: none; }
+  .filter-section { display: none; }
   .tag-section {
     padding: 0 14px;
     max-height: none;
@@ -4602,7 +4607,9 @@ body.doc-preview-open .fab-stack,
     background: var(--sn-nav-bg);
     color: var(--sn-nav-text);
     border-right: 1px solid var(--border);
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .list-pane {
     grid-column: 2;
@@ -4638,8 +4645,8 @@ body.doc-preview-open .fab-stack,
     min-height: 15px;
   }
   .sn-nav-label,
-  .sn-folders { display: block; }
-  .sn-tags { display: none; }
+  .sn-tags { display: block; }
+  .sn-folders { display: none; }
   .sn-nav-label {
     margin: 0 14px 6px;
     font-size: 11px;
@@ -4647,6 +4654,18 @@ body.doc-preview-open .fab-stack,
     letter-spacing: .06em;
     text-transform: uppercase;
     color: var(--sn-nav-muted);
+  }
+  .filter-section {
+    display: block;
+    flex-shrink: 0;
+  }
+  .filter-section > summary.sn-nav-label {
+    display: block;
+    margin: 0 8px 6px;
+    padding: 4px 6px;
+  }
+  .filter-section:not([open]) > :not(summary) {
+    display: none !important;
   }
   .filter-select-wrap,
   .sort-select-wrap--sidebar { display: none; }
@@ -4690,10 +4709,11 @@ body.doc-preview-open .fab-stack,
     background: rgba(255,255,255,0.15);
   }
   .tag-section {
-    flex: 1;
-    min-height: 0;
+    flex: 1 0 auto;
+    min-height: 4.5rem;
     padding: 0 8px 8px;
     color: var(--sn-nav-text);
+    overflow: visible;
   }
   .tag-section .section-label {
     color: var(--sn-nav-muted);
@@ -4704,12 +4724,7 @@ body.doc-preview-open .fab-stack,
     flex-direction: column;
     flex-wrap: nowrap;
     gap: 1px;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
+    overflow: visible;
   }
   .sidebar-nav .tag-row {
     display: block;
@@ -4750,11 +4765,10 @@ body.doc-preview-open .fab-stack,
   }
   .sidebar-nav .tag-section[open] {
     max-height: none;
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    flex: 1 0 auto;
+    min-height: 4.5rem;
+    display: block;
+    overflow: visible;
   }
   .sidebar-nav .tag-count { color: var(--sn-nav-muted); }
   .tag-new-btn { color: var(--sn-nav-text); border-color: var(--border); }
@@ -4765,6 +4779,9 @@ body.doc-preview-open .fab-stack,
     padding: 10px 12px;
     border-top: 1px solid var(--border);
     background: var(--sn-nav-bg);
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
   }
   .sidebar-foot .btn {
     border-color: var(--border);
@@ -4887,21 +4904,16 @@ body.doc-preview-open .fab-stack,
     font-weight: 600;
     letter-spacing: -0.02em;
   }
-  .tag-section summary.section-label { cursor: pointer; }
+  .tag-section summary.section-label,
+  .filter-section summary.section-label { cursor: pointer; }
   .tag-section[open] {
     max-height: none;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
+    display: block;
+    min-height: 4.5rem;
+    overflow: visible;
   }
   .tag-section[open] .tag-list {
-    overflow-x: hidden;
-    overflow-y: auto;
-    flex: 1 1 auto;
-    min-height: 0;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
+    overflow: visible;
   }
   .tag-section:not([open]) { max-height: none; }
 
