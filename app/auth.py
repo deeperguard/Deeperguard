@@ -3,14 +3,24 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
+import json
 import os
 import secrets
 import time
+import urllib.error
+import urllib.request
 
 from flask import request, session
 
 from config import SESSION_SECONDS, skip_login
-from db import get_first_user, get_user_by_id
+from db import (
+    create_user_session,
+    get_first_user,
+    get_session_by_token,
+    get_user_by_id,
+    revoke_session_by_token,
+    touch_user_session,
+)
 from passwords import verify_password
 from totp import verify as totp_verify
 
@@ -21,6 +31,9 @@ SESSION_CSRF = "csrf"
 SESSION_TOTP = "totp_ok"
 SESSION_SRP = "srp_state"
 SESSION_SRP_EMAIL = "srp_email"
+SESSION_SID = "sid"
+
+_GEO_CACHE: dict[str, str] = {}
 
 
 def client_ip() -> str:
@@ -41,6 +54,113 @@ def client_ip() -> str:
                 idx = max(0, len(parts) - hops)
                 return parts[idx]
     return remote
+
+
+def device_label(user_agent: str = "") -> str:
+    ua = user_agent or str(request.headers.get("User-Agent") or "")
+    if "iPhone" in ua:
+        device = "iPhone"
+    elif "iPad" in ua:
+        device = "iPad"
+    elif "Android" in ua:
+        device = "Android"
+    elif "Mac OS X" in ua or "Macintosh" in ua:
+        device = "Mac"
+    elif "Windows" in ua:
+        device = "Windows"
+    elif "Linux" in ua:
+        device = "Linux"
+    else:
+        device = "Unknown device"
+    if "Edg/" in ua or "Edge/" in ua:
+        browser = "Edge"
+    elif "CriOS/" in ua or ("Chrome/" in ua and "Chromium" not in ua):
+        browser = "Chrome"
+    elif "FxiOS/" in ua or "Firefox/" in ua:
+        browser = "Firefox"
+    elif "Safari/" in ua and "Chrome" not in ua and "CriOS" not in ua:
+        browser = "Safari"
+    else:
+        browser = "Browser"
+    return f"{device} · {browser}"
+
+
+def ip_location(ip: str = "") -> str:
+    addr = (ip or client_ip() or "").strip()
+    try:
+        parsed = ipaddress.ip_address(addr)
+        if parsed.is_private or parsed.is_loopback or parsed.is_link_local:
+            return "Local network"
+    except ValueError:
+        return "Unknown"
+    city = str(request.headers.get("CF-IPCity") or "").strip()
+    country = str(request.headers.get("CF-IPCountry") or "").strip().upper()
+    if country in {"", "XX", "T1"}:
+        country = ""
+    if city and country:
+        return f"{city}, {country}"
+    if country:
+        return country
+    if city:
+        return city
+    return _lookup_ip_location(addr)
+
+
+def _lookup_ip_location(ip: str) -> str:
+    if ip in _GEO_CACHE:
+        return _GEO_CACHE[ip]
+    if os.environ.get("NOTES_GEOIP", "1") != "1":
+        return "Unknown"
+    loc = "Unknown"
+    try:
+        url = f"http://ip-api.com/json/{ip}?fields=status,country,city"
+        with urllib.request.urlopen(url, timeout=1.2) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+        if isinstance(data, dict) and data.get("status") == "success":
+            parts = [str(data.get("city") or "").strip(), str(data.get("country") or "").strip()]
+            loc = ", ".join(part for part in parts if part) or "Unknown"
+    except (OSError, urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
+        loc = "Unknown"
+    _GEO_CACHE[ip] = loc
+    return loc
+
+
+def current_session_token() -> str:
+    return str(session.get(SESSION_SID) or "")
+
+
+def _record_device_session(user_id: int) -> str:
+    ip = client_ip()
+    ua = str(request.headers.get("User-Agent") or "")
+    return create_user_session(
+        int(user_id),
+        device_label=device_label(ua),
+        user_agent=ua,
+        ip=ip,
+        ip_location=ip_location(ip),
+    )
+
+
+def ensure_device_session() -> None:
+    if not session.get(SESSION_AUTH):
+        return
+    try:
+        uid = int(session.get(SESSION_USER))
+    except (TypeError, ValueError):
+        return
+    token = current_session_token()
+    if token:
+        row = get_session_by_token(token)
+        if row and not row["revoked_at"] and int(row["user_id"]) == uid:
+            ip = client_ip()
+            touch_user_session(int(row["id"]), ip=ip, ip_location=ip_location(ip))
+            return
+        session.pop(SESSION_SID, None)
+    try:
+        session[SESSION_SID] = _record_device_session(uid)
+        session.modified = True
+    except Exception:
+        pass
 
 
 def client_allowed() -> bool:
@@ -73,6 +193,9 @@ def client_allowed() -> bool:
 
 
 def login_user(user_id: int, *, totp_ok: bool) -> None:
+    old = current_session_token()
+    if old:
+        revoke_session_by_token(old)
     session.clear()
     session.permanent = True
     session[SESSION_USER] = int(user_id)
@@ -80,9 +203,13 @@ def login_user(user_id: int, *, totp_ok: bool) -> None:
     session[SESSION_EXP] = time.time() + SESSION_SECONDS
     session[SESSION_CSRF] = secrets.token_urlsafe(32)
     session[SESSION_TOTP] = bool(totp_ok)
+    session[SESSION_SID] = _record_device_session(int(user_id))
 
 
 def logout() -> None:
+    token = current_session_token()
+    if token:
+        revoke_session_by_token(token)
     session.clear()
 
 
@@ -99,7 +226,18 @@ def current_user_id() -> int | None:
 def authenticated() -> bool:
     if not session.get(SESSION_AUTH):
         return False
-    return float(session.get(SESSION_EXP) or 0) >= time.time()
+    if float(session.get(SESSION_EXP) or 0) < time.time():
+        return False
+    token = current_session_token()
+    if not token:
+        return True
+    row = get_session_by_token(token)
+    if not row or row["revoked_at"]:
+        return False
+    try:
+        return int(row["user_id"]) == int(session.get(SESSION_USER) or 0)
+    except (TypeError, ValueError):
+        return False
 
 
 def slide_session() -> None:
@@ -112,6 +250,7 @@ def slide_session() -> None:
         session.permanent = True
         session[SESSION_EXP] = now + SESSION_SECONDS
         session.modified = True
+    ensure_device_session()
 
 
 def ensure_skip_login_session() -> bool:

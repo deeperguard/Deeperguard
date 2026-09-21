@@ -7959,6 +7959,96 @@
     reveal.textContent = '';
   }
 
+  function formatDeviceLogin(ts) {
+    const value = Number(ts || 0) * 1000;
+    if (!value) return 'Unknown';
+    try {
+      return new Date(value).toLocaleString();
+    } catch (err) {
+      return 'Unknown';
+    }
+  }
+
+  function renderSignedInDevices(sessions) {
+    const el = document.getElementById('signed-in-devices');
+    if (!el) return;
+    const rows = Array.isArray(sessions) ? sessions : [];
+    if (!rows.length) {
+      el.innerHTML = '<p class="settings-hint">No signed-in devices.</p>';
+      return;
+    }
+    el.replaceChildren(...rows.map((item) => {
+      const row = document.createElement('article');
+      row.className = 'device-row';
+      row.setAttribute('role', 'listitem');
+      const head = document.createElement('div');
+      head.className = 'device-row-head';
+      const name = document.createElement('span');
+      name.className = 'device-row-name';
+      name.textContent = item.device || 'Unknown device';
+      head.appendChild(name);
+      if (item.current) {
+        const badge = document.createElement('span');
+        badge.className = 'device-current';
+        badge.textContent = 'This device';
+        head.appendChild(badge);
+      }
+      const meta = document.createElement('p');
+      meta.className = 'device-meta';
+      const parts = [
+        `Last login ${formatDeviceLogin(item.last_login_at)}`,
+        item.ip ? `IP ${item.ip}` : '',
+        item.ip_location || '',
+      ].filter(Boolean);
+      meta.textContent = parts.join(' · ');
+      row.appendChild(head);
+      row.appendChild(meta);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = item.current ? 'btn danger sm' : 'btn ghost sm';
+      btn.textContent = item.current ? 'Sign out this device' : 'Sign out';
+      btn.addEventListener('click', () => {
+        revokeSignedInDevice(item).catch((err) => toast(err.message || 'Could not sign out device', true));
+      });
+      row.appendChild(btn);
+      return row;
+    }));
+  }
+
+  async function loadSignedInDevices() {
+    const el = document.getElementById('signed-in-devices');
+    if (!el) return;
+    try {
+      const data = await NotesStore.api('/api/sessions');
+      renderSignedInDevices(data.sessions || []);
+    } catch (err) {
+      el.innerHTML = '<p class="settings-hint">Could not load signed-in devices.</p>';
+    }
+  }
+
+  async function revokeSignedInDevice(item) {
+    const current = !!item.current;
+    const ok = await confirmAction(
+      current
+        ? SIGN_OUT_WARNING
+        : `Sign out “${item.device || 'this device'}”? That session will end immediately.`,
+      {
+        title: current ? 'Sign out?' : 'Sign out device?',
+        confirmLabel: 'Sign out',
+        cancelLabel: 'Cancel',
+        danger: true,
+      },
+    );
+    if (!ok) return;
+    const data = await NotesStore.api(`/api/sessions/${item.id}`, { method: 'DELETE' });
+    if (data.current) {
+      await signOutCompletely();
+      return;
+    }
+    toast('Device signed out');
+    await loadSignedInDevices();
+  }
+
   async function initSettings() {
     let account;
     try {
@@ -7969,6 +8059,7 @@
     ui.accountEmail.textContent = account.email || 'Offline on this device';
     renderPlanUi(account);
     refreshSettingsDiagnostics().catch(() => {});
+    loadSignedInDevices().catch(() => {});
     if (account.backup_email !== undefined || account.backup_enabled !== undefined) {
       document.getElementById('backup-email').value = account.backup_email || account.email || '';
       document.getElementById('backup-enabled').checked = !!account.backup_enabled;
@@ -9112,6 +9203,7 @@
       refreshBtn.removeAttribute('disabled');
     }
     refreshSettingsDiagnostics().catch(() => {});
+    loadSignedInDevices().catch(() => {});
   }
 
   function closeSettings(force = false) {

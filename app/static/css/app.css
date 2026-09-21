@@ -3672,6 +3672,43 @@ html[data-theme="light"] .doc-search-hit {
   border-radius: 14px;
   overflow: hidden;
 }
+.device-list {
+  display: grid;
+  gap: 0;
+}
+.device-row {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+}
+.device-row:first-child { border-top: 0; }
+.device-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.device-row-name {
+  font-size: 15px;
+  font-weight: 600;
+  min-width: 0;
+}
+.device-current {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.device-meta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.device-row .btn { justify-self: start; margin-top: 6px; }
 .settings-row {
   display: flex;
   align-items: center;
