@@ -339,6 +339,7 @@
 
   function applyPrefs() {
     applyTheme();
+    document.documentElement.style.setProperty('--note-body-size', `${prefs.fontSize}px`);
     ui.body.style.fontSize = `${prefs.fontSize}px`;
     ui.body.classList.toggle('mono', !!prefs.monospace);
     document.getElementById('note-body-highlights')?.classList.toggle('mono', !!prefs.monospace);
