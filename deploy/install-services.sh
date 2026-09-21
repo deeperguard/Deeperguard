@@ -49,6 +49,10 @@ chmod 644 /etc/cron.d/deeperguard-backup
 install -m 644 "$ROOT/deploy/cron/deeperguard-warnings" /etc/cron.d/deeperguard-warnings
 
 ENABLE_LAN_TLS="${NOTES_ENABLE_LAN_TLS:-0}"
+if [[ "${ENABLE_LAN_TLS}" == "1" && -f "$CFG/deeperguard.env" ]] && grep -qE '^NOTES_DISABLE_CIDR_GATE=1' "$CFG/deeperguard.env"; then
+  echo "Refusing LAN TLS while NOTES_DISABLE_CIDR_GATE=1 (Cloudflare-only host)." >&2
+  ENABLE_LAN_TLS=0
+fi
 
 install -m 644 "$ROOT/deploy/systemd/deeperguard.service" /etc/systemd/system/deeperguard.service
 install -m 644 "$ROOT/deploy/systemd/deeperguard-tls.service" /etc/systemd/system/deeperguard-tls.service

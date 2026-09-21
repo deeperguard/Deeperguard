@@ -125,9 +125,16 @@
   }
 
   async function postJson(path, body) {
+    const headers = { 'Content-Type': 'application/json' };
+    try {
+      const csrf = sessionStorage.getItem('notes_csrf') || '';
+      if (csrf) headers['X-CSRF-Token'] = csrf;
+    } catch (err) {
+      /* private mode / missing sessionStorage */
+    }
     const res = await fetch(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'same-origin',
       body: JSON.stringify(body),
     });

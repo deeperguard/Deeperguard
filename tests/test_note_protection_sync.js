@@ -67,13 +67,20 @@ assert.strictEqual(alreadyLocked.changed, false);
 
 const unlockedRemote = { ...base, locked: false };
 const cleared = mergeCrossDeviceProtection({ ...base, locked: true }, unlockedRemote);
-assert.strictEqual(cleared.changed, true);
-assert.strictEqual(cleared.content.locked, false);
+assert.strictEqual(cleared.changed, false);
+assert.strictEqual(cleared.content.locked, true);
 
 const editLockedRemote = { ...base, prevent_edit: true };
 const mergedEdit = mergeCrossDeviceProtection(base, editLockedRemote);
 assert.strictEqual(mergedEdit.changed, true);
 assert.strictEqual(mergedEdit.content.prevent_edit, true);
+
+const keepEditLock = mergeCrossDeviceProtection(
+  { ...base, prevent_edit: true },
+  { ...base, prevent_edit: false },
+);
+assert.strictEqual(keepEditLock.changed, false);
+assert.strictEqual(keepEditLock.content.prevent_edit, true);
 
 const tagLocal = { type: 'tag', title: 'Work' };
 assert.strictEqual(mergeCrossDeviceProtection(tagLocal, lockedRemote).changed, false);
