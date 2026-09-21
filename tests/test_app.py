@@ -578,6 +578,46 @@ class NotesAppTests(unittest.TestCase):
         self.assertTrue(gone.get_json()["current"])
         self.assertEqual(self.client.get("/api/sessions").status_code, 401)
 
+    def test_duplicate_iphone_sessions_collapse(self):
+        import db as notes_db
+
+        email = "iphone.dup@home.local"
+        self._register_user(email, "device-secure-pass")
+        user = notes_db.get_user_by_email(email)
+        uid = int(user["id"])
+        notes_db.create_user_session(
+            uid,
+            device_label="iPhone · Safari",
+            ip="203.0.113.10",
+            ip_location="Vienna, AT",
+            device_id="iphone-safari-1",
+        )
+        notes_db.create_user_session(
+            uid,
+            device_label="iPhone · Safari",
+            ip="203.0.113.10",
+            ip_location="Vienna, AT",
+            device_id="iphone-safari-1",
+        )
+        ts = notes_db.now()
+        with notes_db.tx() as conn:
+            for idx in range(2):
+                conn.execute(
+                    """
+                    INSERT INTO user_sessions (
+                        user_id, token_hash, device_id, device_label, user_agent, ip, ip_location,
+                        created_at, last_seen_at, last_login_at, revoked_at
+                    )
+                    VALUES (?, ?, '', 'iPhone · Safari', 'Safari', '203.0.113.10', 'Vienna, AT', ?, ?, ?, 0)
+                    """,
+                    (uid, f"orphan-hash-{idx}", ts, ts, ts),
+                )
+        listed = self.client.get("/api/sessions")
+        self.assertEqual(listed.status_code, 200)
+        iphones = [row for row in listed.get_json()["sessions"] if row["device"] == "iPhone · Safari"]
+        self.assertEqual(len(iphones), 1)
+        self.assertEqual(iphones[0]["ip"], "203.0.113.10")
+
     def test_live_http_shell_shows_certificate_setup(self):
         insecure = self.client.get(
             "/?from=http",
@@ -2256,7 +2296,10 @@ class NotesAppTests(unittest.TestCase):
         self.assertLess(html.index('id="settings-panel"'), html.index('id="btn-logout"'))
         self.assertIn('id="signed-in-devices"', html)
         self.assertIn("function loadSignedInDevices()", app_js)
+        self.assertIn("function startSignedInDevicesRefresh()", app_js)
+        self.assertIn("10000", app_js[app_js.index("function startSignedInDevicesRefresh"):app_js.index("async function loadSignedInDevices")])
         self.assertIn("/api/sessions", app_js)
+        self.assertIn("X-Device-Id", (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8"))
         self.assertIn("padding-bottom: calc(72px + var(--safe-bottom))", css)
         self.assertIn("padding: 8px 16px 4px", css)
         self.assertIn(".tag-section:not([open]) > :not(summary)", css)

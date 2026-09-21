@@ -129,7 +129,13 @@ def current_session_token() -> str:
     return str(session.get(SESSION_SID) or "")
 
 
-def _record_device_session(user_id: int) -> str:
+def request_device_id() -> str:
+    from db import normalize_device_id
+
+    return normalize_device_id(str(request.headers.get("X-Device-Id") or ""))
+
+
+def _record_device_session(user_id: int, *, login: bool = True) -> str:
     ip = client_ip()
     ua = str(request.headers.get("User-Agent") or "")
     return create_user_session(
@@ -138,6 +144,8 @@ def _record_device_session(user_id: int) -> str:
         user_agent=ua,
         ip=ip,
         ip_location=ip_location(ip),
+        device_id=request_device_id(),
+        login=login,
     )
 
 
@@ -157,7 +165,7 @@ def ensure_device_session() -> None:
             return
         session.pop(SESSION_SID, None)
     try:
-        session[SESSION_SID] = _record_device_session(uid)
+        session[SESSION_SID] = _record_device_session(uid, login=False)
         session.modified = True
     except Exception:
         pass
@@ -193,9 +201,6 @@ def client_allowed() -> bool:
 
 
 def login_user(user_id: int, *, totp_ok: bool) -> None:
-    old = current_session_token()
-    if old:
-        revoke_session_by_token(old)
     session.clear()
     session.permanent = True
     session[SESSION_USER] = int(user_id)

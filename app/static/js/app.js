@@ -7973,6 +7973,9 @@
     const el = document.getElementById('signed-in-devices');
     if (!el) return;
     const rows = Array.isArray(sessions) ? sessions : [];
+    const next = JSON.stringify(rows);
+    if (next === lastSignedInDevicesJson && el.children.length) return;
+    lastSignedInDevicesJson = next;
     if (!rows.length) {
       el.innerHTML = '<p class="settings-hint">No signed-in devices.</p>';
       return;
@@ -8015,6 +8018,28 @@
     }));
   }
 
+  let signedInDevicesTimer = 0;
+  let lastSignedInDevicesJson = '';
+
+  function stopSignedInDevicesRefresh() {
+    if (signedInDevicesTimer) {
+      window.clearInterval(signedInDevicesTimer);
+      signedInDevicesTimer = 0;
+    }
+  }
+
+  function startSignedInDevicesRefresh() {
+    stopSignedInDevicesRefresh();
+    loadSignedInDevices().catch(() => {});
+    signedInDevicesTimer = window.setInterval(() => {
+      if (!document.body.classList.contains('settings-open')) {
+        stopSignedInDevicesRefresh();
+        return;
+      }
+      loadSignedInDevices().catch(() => {});
+    }, 10000);
+  }
+
   async function loadSignedInDevices() {
     const el = document.getElementById('signed-in-devices');
     if (!el) return;
@@ -8022,6 +8047,7 @@
       const data = await NotesStore.api('/api/sessions');
       renderSignedInDevices(data.sessions || []);
     } catch (err) {
+      lastSignedInDevicesJson = '';
       el.innerHTML = '<p class="settings-hint">Could not load signed-in devices.</p>';
     }
   }
@@ -8059,7 +8085,7 @@
     ui.accountEmail.textContent = account.email || 'Offline on this device';
     renderPlanUi(account);
     refreshSettingsDiagnostics().catch(() => {});
-    loadSignedInDevices().catch(() => {});
+    startSignedInDevicesRefresh();
     if (account.backup_email !== undefined || account.backup_enabled !== undefined) {
       document.getElementById('backup-email').value = account.backup_email || account.email || '';
       document.getElementById('backup-enabled').checked = !!account.backup_enabled;
@@ -9203,7 +9229,7 @@
       refreshBtn.removeAttribute('disabled');
     }
     refreshSettingsDiagnostics().catch(() => {});
-    loadSignedInDevices().catch(() => {});
+    startSignedInDevicesRefresh();
   }
 
   function closeSettings(force = false) {
@@ -9211,6 +9237,8 @@
     if (ui.settings) ui.settings.hidden = true;
     if (ui.settingsBackdrop) ui.settingsBackdrop.hidden = true;
     document.body.classList.remove('settings-open');
+    stopSignedInDevicesRefresh();
+    lastSignedInDevicesJson = '';
   }
 
   function renderVaultStats() {

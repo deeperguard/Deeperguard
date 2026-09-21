@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -204,6 +205,7 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             token_hash TEXT NOT NULL UNIQUE,
+            device_id TEXT NOT NULL DEFAULT '',
             device_label TEXT NOT NULL DEFAULT '',
             user_agent TEXT NOT NULL DEFAULT '',
             ip TEXT NOT NULL DEFAULT '',
@@ -217,6 +219,12 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         CREATE INDEX IF NOT EXISTS idx_user_sessions_user
             ON user_sessions(user_id, revoked_at, last_login_at);
         """
+    )
+    session_cols = {row[1] for row in conn.execute("PRAGMA table_info(user_sessions)").fetchall()}
+    if session_cols and "device_id" not in session_cols:
+        conn.execute("ALTER TABLE user_sessions ADD COLUMN device_id TEXT NOT NULL DEFAULT ''")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_sessions_device ON user_sessions(user_id, device_id, revoked_at)"
     )
     item_cols = {row[1] for row in conn.execute("PRAGMA table_info(items)").fetchall()}
     if "blob_ciphertext" not in item_cols:
@@ -474,6 +482,85 @@ def _session_token_hash(token: str) -> str:
     return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
 
 
+_DEVICE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{8,80}$")
+
+
+def normalize_device_id(raw: str) -> str:
+    value = str(raw or "").strip()
+    return value if _DEVICE_ID_RE.match(value) else ""
+
+
+def find_reusable_session(
+    user_id: int,
+    *,
+    device_id: str = "",
+    ip: str = "",
+    device_label: str = "",
+) -> sqlite3.Row | None:
+    uid = int(user_id)
+    device_id = normalize_device_id(device_id)
+    ip = str(ip or "")[:80]
+    device_label = str(device_label or "")[:80]
+    if device_id:
+        row = connection().execute(
+            """
+            SELECT * FROM user_sessions
+            WHERE user_id = ? AND revoked_at = 0 AND device_id = ?
+            ORDER BY last_seen_at DESC, id DESC
+            LIMIT 1
+            """,
+            (uid, device_id),
+        ).fetchone()
+        if row:
+            return row
+    if ip and device_label:
+        return connection().execute(
+            """
+            SELECT * FROM user_sessions
+            WHERE user_id = ? AND revoked_at = 0 AND ip = ? AND device_label = ?
+              AND (device_id = '' OR device_id = ?)
+            ORDER BY last_seen_at DESC, id DESC
+            LIMIT 1
+            """,
+            (uid, ip, device_label, device_id),
+        ).fetchone()
+    return None
+
+
+def revoke_duplicate_sessions(
+    user_id: int,
+    keep_id: int,
+    *,
+    device_id: str = "",
+    ip: str = "",
+    device_label: str = "",
+) -> None:
+    uid = int(user_id)
+    keep_id = int(keep_id)
+    device_id = normalize_device_id(device_id)
+    ts = now()
+    with tx() as conn:
+        if device_id:
+            conn.execute(
+                """
+                UPDATE user_sessions
+                SET revoked_at = ?
+                WHERE user_id = ? AND id != ? AND revoked_at = 0 AND device_id = ?
+                """,
+                (ts, uid, keep_id, device_id),
+            )
+        if ip and device_label:
+            conn.execute(
+                """
+                UPDATE user_sessions
+                SET revoked_at = ?
+                WHERE user_id = ? AND id != ? AND revoked_at = 0
+                  AND ip = ? AND device_label = ? AND device_id = ''
+                """,
+                (ts, uid, keep_id, str(ip)[:80], str(device_label)[:80]),
+            )
+
+
 def create_user_session(
     user_id: int,
     *,
@@ -481,31 +568,72 @@ def create_user_session(
     user_agent: str = "",
     ip: str = "",
     ip_location: str = "",
+    device_id: str = "",
     token: str | None = None,
+    login: bool = True,
 ) -> str:
     raw = token or secrets.token_urlsafe(32)
     ts = now()
+    uid = int(user_id)
+    device_id = normalize_device_id(device_id)
+    device_label = str(device_label or "")[:80]
+    user_agent = str(user_agent or "")[:300]
+    ip = str(ip or "")[:80]
+    ip_location = str(ip_location or "")[:120]
+    existing = find_reusable_session(
+        uid, device_id=device_id, ip=ip, device_label=device_label
+    )
     with tx() as conn:
-        conn.execute(
-            """
-            INSERT INTO user_sessions (
-                user_id, token_hash, device_label, user_agent, ip, ip_location,
-                created_at, last_seen_at, last_login_at, revoked_at
+        if existing:
+            login_at = ts if login else float(existing["last_login_at"] or ts)
+            conn.execute(
+                """
+                UPDATE user_sessions
+                SET token_hash = ?, device_id = CASE WHEN ? = '' THEN device_id ELSE ? END,
+                    device_label = ?, user_agent = ?, ip = ?, ip_location = ?,
+                    last_seen_at = ?, last_login_at = ?
+                WHERE id = ?
+                """,
+                (
+                    _session_token_hash(raw),
+                    device_id,
+                    device_id,
+                    device_label or str(existing["device_label"] or ""),
+                    user_agent or str(existing["user_agent"] or ""),
+                    ip or str(existing["ip"] or ""),
+                    ip_location or str(existing["ip_location"] or ""),
+                    ts,
+                    login_at,
+                    int(existing["id"]),
+                ),
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-            """,
-            (
-                int(user_id),
-                _session_token_hash(raw),
-                str(device_label or "")[:80],
-                str(user_agent or "")[:300],
-                str(ip or "")[:80],
-                str(ip_location or "")[:120],
-                ts,
-                ts,
-                ts,
-            ),
-        )
+            keep_id = int(existing["id"])
+        else:
+            conn.execute(
+                """
+                INSERT INTO user_sessions (
+                    user_id, token_hash, device_id, device_label, user_agent, ip, ip_location,
+                    created_at, last_seen_at, last_login_at, revoked_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                (
+                    uid,
+                    _session_token_hash(raw),
+                    device_id,
+                    device_label,
+                    user_agent,
+                    ip,
+                    ip_location,
+                    ts,
+                    ts,
+                    ts,
+                ),
+            )
+            keep_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+    revoke_duplicate_sessions(
+        uid, keep_id, device_id=device_id, ip=ip, device_label=device_label
+    )
     return raw
 
 
@@ -585,6 +713,35 @@ def revoke_session_by_token(token: str) -> bool:
             (now(), _session_token_hash(token)),
         )
         return int(cur.rowcount or 0) > 0
+
+
+def collapse_duplicate_sessions(user_id: int) -> None:
+    rows = connection().execute(
+        """
+        SELECT id, device_id, ip, device_label
+        FROM user_sessions
+        WHERE user_id = ? AND revoked_at = 0
+        ORDER BY last_seen_at DESC, id DESC
+        """,
+        (int(user_id),),
+    ).fetchall()
+    with_id = [row for row in rows if str(row["device_id"] or "")]
+    without_id = [row for row in rows if not str(row["device_id"] or "")]
+    seen_device: set[str] = set()
+    seen_fp: set[tuple[str, str]] = set()
+    for row in with_id + without_id:
+        device_id = str(row["device_id"] or "")
+        fp = (str(row["ip"] or ""), str(row["device_label"] or ""))
+        duplicate = bool(device_id and device_id in seen_device)
+        if not duplicate and not device_id and fp[0] and fp[1] and fp in seen_fp:
+            duplicate = True
+        if duplicate:
+            revoke_user_session(int(row["id"]), int(user_id))
+            continue
+        if device_id:
+            seen_device.add(device_id)
+        if fp[0] and fp[1]:
+            seen_fp.add(fp)
 
 
 def prune_user_sessions(user_id: int, *, older_than: float) -> None:
