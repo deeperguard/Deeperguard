@@ -2397,6 +2397,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("--note-title-size", app_js)
         self.assertIn("--note-preview-size", css)
         self.assertIn(".note-item h3,\n.title-input", css)
+        self.assertIn("--shadow-sm:", css)
+        self.assertIn(".list-pane .note-row {", css)
         self.assertIn('id="signed-in-devices"', html)
         self.assertIn("function loadSignedInDevices()", app_js)
         self.assertIn("function startSignedInDevicesRefresh()", app_js)

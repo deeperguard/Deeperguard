@@ -34,6 +34,12 @@
   --note-body-line: 1.55;
   --note-preview-size: calc(var(--note-body-size) * 0.8125);
   --note-meta-size: calc(var(--note-body-size) * 0.75);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
   font-family: var(--font);
 }
 
@@ -56,6 +62,8 @@ html[data-theme="light"] {
   --doc-surface: #f8fafc;
   --doc-viewer-bg: #f1f5f9;
   --doc-page-bg: #ffffff;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
 * { box-sizing: border-box; }
@@ -103,14 +111,14 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 .app-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
-  padding: 8px 12px 6px;
-  padding-top: calc(8px + var(--safe-top));
+  padding: 6px 12px 8px;
+  padding-top: calc(6px + var(--safe-top));
   padding-left: calc(12px + var(--safe-left));
   padding-right: calc(12px + var(--safe-right));
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elevated);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 94%, var(--bg));
 }
 .app-tab {
   appearance: none;
@@ -126,10 +134,16 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   min-height: 36px;
   border-radius: 999px;
   cursor: pointer;
+  transition: background 0.18s var(--ease-out), color 0.18s ease, box-shadow 0.18s ease;
+}
+.app-tab:not(.active):hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 .app-tab.active {
   color: var(--text);
   background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .totp-pane {
   flex: 1;
@@ -439,11 +453,15 @@ textarea { resize: vertical; min-height: 240px; line-height: 1.55; }
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 10px 14px;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover:not(:disabled) {
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 35%, transparent);
+}
 .btn.ghost { background: transparent; }
 .btn.subtle {
   background: transparent;
@@ -1364,11 +1382,15 @@ html[data-theme="light"] .zk-badge {
   align-items: stretch;
   gap: 0;
   background: var(--sn-search);
+  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
   border-radius: 999px;
   padding: 0 2px 0 0;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 .search-row:focus-within {
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .search-filter-toggle {
   position: relative;
@@ -1896,6 +1918,16 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   padding: 0 0 8px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.note-list::-webkit-scrollbar {
+  width: 8px;
+}
+.note-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 .note-list-count {
   font-size: 12px;
@@ -1908,6 +1940,8 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   z-index: 2;
   margin: 0;
   padding: 10px 14px 6px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
@@ -2567,9 +2601,10 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
 .empty-state-card {
   width: min(420px, 100%);
   padding: 28px 24px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  box-shadow: var(--shadow-md);
   display: grid;
   gap: 12px;
   justify-items: center;
@@ -4951,26 +4986,67 @@ body.doc-preview-open .fab-stack,
   .list-pane .note-list {
     background: var(--sn-list-bg);
   }
+  .list-pane .note-row {
+    padding: 0 8px;
+  }
   .list-pane .note-item {
     background: transparent;
+    border-bottom: 0;
+    border-radius: var(--radius-md);
+    margin-bottom: 2px;
+    transition: background 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), border-color 0.15s ease;
+  }
+  .list-pane .note-item:hover:not(.active) {
+    background: color-mix(in srgb, var(--sn-editor-bg) 50%, var(--sn-list-bg));
+  }
+  .list-pane .note-item.active::before,
+  .list-pane .note-row.active .note-item::before {
+    top: 8px;
+    bottom: 8px;
   }
   .list-pane .note-item.active,
   .list-pane .note-row.active .note-item {
-    background: #fff;
-    box-shadow: inset 3px 0 0 var(--accent);
+    background: var(--sn-editor-bg);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    box-shadow: var(--shadow-sm);
   }
   html[data-theme="dark"] .list-pane .note-item.active,
   html[data-theme="dark"] .list-pane .note-row.active .note-item {
-    background: color-mix(in srgb, var(--accent) 12%, var(--bg-hover));
-    box-shadow: inset 3px 0 0 var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--sn-list-bg));
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
   }
   .list-pane .note-row.is-protected.active .note-item {
-    background: #fff;
-    box-shadow: inset 3px 0 0 var(--accent);
+    background: var(--sn-editor-bg);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    box-shadow: var(--shadow-sm);
   }
   html[data-theme="dark"] .list-pane .note-row.is-protected.active .note-item {
-    background: color-mix(in srgb, var(--accent) 14%, var(--bg-hover));
-    box-shadow: inset 3px 0 0 var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--sn-list-bg));
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+  }
+  .list-pane .search-row {
+    background: var(--sn-editor-bg);
+  }
+  .list-pane .note-section-label {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    background: color-mix(in srgb, var(--sn-list-bg) 88%, transparent);
+  }
+  .editor-pane .editor:not(.doc-preview-active) .editor-head,
+  .editor-pane .editor:not(.doc-preview-active) .note-body-wrap,
+  .editor-pane .editor:not(.doc-preview-active) .editor-foot,
+  .editor-pane .editor:not(.doc-preview-active) .attachments,
+  .editor-pane .editor:not(.doc-preview-active) .history {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: min(920px, 100%);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .editor-pane .editor-head {
+    border-bottom-color: color-mix(in srgb, var(--border) 75%, transparent);
   }
   .tag-section summary.section-label,
   .filter-section summary.section-label { cursor: pointer; }
