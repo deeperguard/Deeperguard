@@ -5186,13 +5186,15 @@
   }
 
   function activeListNoteId() {
-    return currentId || listSelectionId || '';
+    return listSelectionId || currentId || '';
   }
 
   function markActiveNoteRow() {
     const selected = activeListNoteId();
-    ui.noteList.querySelectorAll('.note-row').forEach((row) => {
-      const on = row.dataset.id === selected;
+    const list = ui.noteList;
+    if (!list) return;
+    list.querySelectorAll('.note-row').forEach((row) => {
+      const on = !!selected && row.dataset.id === selected;
       row.classList.toggle('active', on);
       row.querySelector('.note-item')?.classList.toggle('active', on);
     });
@@ -8015,6 +8017,9 @@
     flushSave();
     currentId = id;
     listSelectionId = id;
+    // Paint the row while the list is still on screen. On iPhone the list
+    // slides away with editor-open, and iOS keeps that layer's old highlight.
+    markActiveNoteRow();
     rememberOpen(id);
     ui.empty.hidden = true;
     ui.editor.hidden = false;
@@ -11341,7 +11346,9 @@
     ui.editor.hidden = true;
     updateEmptyStateVisibility();
     closeDocPreview();
+    markActiveNoteRow();
     renderNotes();
+    requestAnimationFrame(() => markActiveNoteRow());
     // Never history.back() here — on iOS that restores bfcache and fires pageshow,
     // which re-runs foreground sync and feels like a full app reload.
     if (!fromPopstate) {
@@ -12353,7 +12360,11 @@
         closeOpened();
         return;
       }
-      if (next.dataset.id) openNote(next.dataset.id);
+      if (next.dataset.id) {
+        listSelectionId = next.dataset.id;
+        markActiveNoteRow();
+        openNote(next.dataset.id);
+      }
     });
   }
 

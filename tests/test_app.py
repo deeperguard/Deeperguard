@@ -3867,6 +3867,7 @@ class NotesAppTests(unittest.TestCase):
 
         open_fn = app_js[app_js.find("function openNote(id, { skipGate = false } = {})"):app_js.find("function updateActionButtons(note)")]
         self.assertIn("listSelectionId = id", open_fn)
+        self.assertLess(open_fn.find("markActiveNoteRow()"), open_fn.find("classList.add('editor-open')"))
         self.assertIn("ui.body.value = gated ? '' : body", open_fn)
         self.assertIn("if (!gated && NotesStore.lightVaultEnabled", open_fn)
         self.assertIn("if (!gated) pullNoteOcrFromServer(id)", open_fn)
