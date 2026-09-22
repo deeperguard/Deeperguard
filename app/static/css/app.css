@@ -2031,7 +2031,11 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 }
 .note-row.swiping .note-item { transition: none; }
 .note-row.open .note-item { transform: translateX(calc(-1 * var(--swipe-delete))); }
-.note-item:hover, .note-item.active, .note-row.active .note-item { background: var(--bg-hover); }
+.note-item:hover { background: var(--bg-hover); }
+.note-item.active,
+.note-row.active .note-item {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-elevated));
+}
 .note-item-top {
   display: contents;
 }
@@ -2157,7 +2161,7 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
 .note-row.is-protected:hover .note-item,
 .note-row.is-protected .note-item:hover,
 .note-row.is-protected.active .note-item {
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-hover));
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated));
 }
 .note-kind,
 .note-kind-icon {
@@ -3048,9 +3052,14 @@ body.scan-dialog-open {
 .preview sup { font-size: 0.75em; vertical-align: super; line-height: 0; }
 .preview a {
   color: var(--accent, #4f8cff);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
   word-break: break-word;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-size: 100% 1.5px;
+  background-position: 0 calc(100% - 1px);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 .preview pre {
   background: var(--bg-elevated);
@@ -4730,6 +4739,13 @@ body.doc-preview-open .fab-stack,
   .note-item {
     padding: 14px 16px;
     min-height: 0;
+  }
+  .note-item.active,
+  .note-row.active .note-item {
+    background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated));
+  }
+  .note-row.is-protected.active .note-item {
+    background: color-mix(in srgb, var(--accent) 22%, var(--bg-elevated));
   }
   .note-item h3 { margin: 0; }
   .note-list-thumb {

@@ -3861,8 +3861,12 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("Unlock this protected note first", app_js)
         self.assertIn(".note-lock-badge", css)
         self.assertIn(".note-preview-locked", css)
+        preview_link = css[css.find(".preview a {"):css.find(".preview a {") + 420]
+        self.assertIn("box-decoration-break: clone", preview_link)
+        self.assertIn("background-size: 100% 1.5px", preview_link)
 
         open_fn = app_js[app_js.find("function openNote(id, { skipGate = false } = {})"):app_js.find("function updateActionButtons(note)")]
+        self.assertIn("listSelectionId = id", open_fn)
         self.assertIn("ui.body.value = gated ? '' : body", open_fn)
         self.assertIn("if (!gated && NotesStore.lightVaultEnabled", open_fn)
         self.assertIn("if (!gated) pullNoteOcrFromServer(id)", open_fn)
@@ -3876,6 +3880,8 @@ class NotesAppTests(unittest.TestCase):
         forget_at = close_fn.find("unlockedNotes.delete(closingId)")
         self.assertGreaterEqual(flush_at, 0)
         self.assertGreater(forget_at, flush_at)
+        self.assertNotIn("listSelectionId = null", close_fn)
+        self.assertIn("function activeListNoteId()", app_js)
 
         chrome_fn = app_js[app_js.find("function setEditorChrome(gated)"):app_js.find("function highlightPreview()")]
         self.assertIn("ui.body.value = ''", chrome_fn)

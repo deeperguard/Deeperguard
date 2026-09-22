@@ -546,6 +546,7 @@
   const TAG_COLORS = ['#4f8cff', '#7c5cff', '#2ec4b6', '#ff9f1c', '#e71d36', '#8b98a5', '#f4d35e', '#ee964b'];
 
   let currentId = null;
+  let listSelectionId = null;
   let currentFilter = 'all';
   let filterBeforeFiles = 'all';
   let currentTag = null;
@@ -2255,6 +2256,7 @@
     closeDocPreview();
     ui.shell.classList.remove('editor-open');
     currentId = null;
+    listSelectionId = null;
     if (ui.editor) ui.editor.hidden = true;
     lastNotesRenderKey = '';
     if (ui.noteList) ui.noteList.replaceChildren();
@@ -5180,12 +5182,17 @@
     const sf = searchFilterOptions();
     const sfKey = `${sf.titlesOnly ? 1 : 0}:${sf.includeArchived ? 1 : 0}:${sf.includeTrashed ? 1 : 0}:${sf.includeProtected ? 1 : 0}:${sf.tagIds.join(',')}`;
     const ids = notes.map((n) => `${n.uuid}:${n.content.updated_at || ''}:${(n.content.ocr_text || '').length}:${n.content.title || ''}:${n.content.pinned ? 1 : 0}:${n.content.starred ? 1 : 0}:${n.content.warn_at || ''}:${n.content.locked ? 1 : 0}:${n.content.prevent_edit ? 1 : 0}`).join('|');
-    return `${currentFilter}:${currentTag || ''}:${query}:${sfKey}:${prefs.sort}:${currentId}:${ids}`;
+    return `${currentFilter}:${currentTag || ''}:${query}:${sfKey}:${prefs.sort}:${activeListNoteId()}:${ids}`;
+  }
+
+  function activeListNoteId() {
+    return currentId || listSelectionId || '';
   }
 
   function markActiveNoteRow() {
+    const selected = activeListNoteId();
     ui.noteList.querySelectorAll('.note-row').forEach((row) => {
-      const on = row.dataset.id === currentId;
+      const on = row.dataset.id === selected;
       row.classList.toggle('active', on);
       row.querySelector('.note-item')?.classList.toggle('active', on);
     });
@@ -5359,7 +5366,7 @@
     const isProtected = !!note.content?.locked;
     const isLocked = isProtected && !unlockedNotes.has(note.uuid);
     const lockBadgeHtml = noteLockBadgeHtml(note);
-    const active = note.uuid === currentId ? 'active' : '';
+    const active = note.uuid === activeListNoteId() ? 'active' : '';
     const protectedClass = isProtected ? 'is-protected' : '';
     const name = att.content.filename || att.content.original_filename || 'Untitled file';
     const kind = NotesPreview.kindFromMeta(att.content.mime, name);
@@ -5400,7 +5407,7 @@
     const isProtected = !!n.content?.locked;
     const isLocked = isProtected && !unlockedNotes.has(n.uuid);
     const lockBadgeHtml = noteLockBadgeHtml(n);
-    const active = n.uuid === currentId ? 'active' : '';
+    const active = n.uuid === activeListNoteId() ? 'active' : '';
     const protectedClass = isProtected ? 'is-protected' : '';
     const atts = isLocked ? [] : NotesStore.listAttachments(n.uuid);
     const match = query && !isLocked ? NotesSearch.describeMatch(n, query, tagMap()) : null;
@@ -8007,6 +8014,7 @@
     const syncing = vaultPullActive;
     flushSave();
     currentId = id;
+    listSelectionId = id;
     rememberOpen(id);
     ui.empty.hidden = true;
     ui.editor.hidden = false;
@@ -12214,6 +12222,7 @@
       ui.editor.hidden = true;
       updateEmptyStateVisibility();
     }
+    if (id === listSelectionId) listSelectionId = null;
     cancelNoteReminder(id);
     NotesStore.remove(id);
     if (sessionStorage.getItem('notes_open_id') === id) rememberOpen(null);
