@@ -2355,26 +2355,73 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   background: var(--border);
   flex-shrink: 0;
 }
-.superscript-links-bar {
-  flex-shrink: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elevated);
+.note-body-links {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 14px 18px;
+  border: 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: var(--font);
+  font-size: var(--note-body-size);
+  line-height: var(--note-body-line);
+  font-optical-sizing: none;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  color: transparent;
 }
-.superscript-links-bar .links-bar-label {
-  font-size: 12px;
-  color: var(--muted);
-  margin-right: 2px;
-}
-.superscript-links-bar a {
-  font-size: 13px;
-  color: var(--accent);
+.note-body-links a.edit-link {
+  pointer-events: auto;
+  color: transparent;
   text-decoration: underline;
-  word-break: break-all;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.note-body-wrap.edit-links-active .note-body {
+  position: relative;
+  z-index: 1;
+}
+.check-text-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.check-text-links {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 8px 4px;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: transparent;
+}
+.check-text-wrap .check-text {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  background: transparent;
+}
+.check-text-links a.edit-link {
+  pointer-events: auto;
+  color: transparent;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 .find-bar {
   display: flex;
@@ -2469,6 +2516,7 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
 .note-body-highlights {
   position: absolute;
   inset: 0;
+  z-index: 3;
   margin: 0;
   padding: 14px 18px;
   border: 0;
@@ -2481,6 +2529,9 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   font: inherit;
   line-height: inherit;
   letter-spacing: inherit;
+}
+.note-body-wrap.mono .note-body-links {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .note-body-highlights mark.search-hit {
   color: transparent;

@@ -435,6 +435,37 @@
       .join('<br>\n');
   }
 
+  function collectLinkRanges(text) {
+    const src = String(text || '');
+    const ranges = [];
+    const overlaps = (start, end) => ranges.some((r) => start < r.end && end > r.start);
+    const addRange = (start, end, href) => {
+      const raw = trimUrl(href);
+      const safe = safeHref(raw) || (String(raw).startsWith('mailto:') ? raw : '');
+      if (!safe || overlaps(start, end)) return;
+      ranges.push({ start, end, href: safe });
+    };
+    let cursor = 0;
+    while (cursor < src.length) {
+      const token = nextInlineToken(src, cursor);
+      if (!token || token.start > cursor) {
+        if (!token) break;
+        cursor = token.start;
+        continue;
+      }
+      addRange(token.start, token.end, token.href);
+      cursor = token.end;
+    }
+    let lineStart = 0;
+    src.split('\n').forEach((line) => {
+      findHttpUrls(line).forEach((item) => addRange(lineStart + item.start, lineStart + item.end, item.url));
+      findWwwUrls(line).forEach((item) => addRange(lineStart + item.start, lineStart + item.end, `https://${item.url}`));
+      lineStart += line.length + 1;
+    });
+    ranges.sort((a, b) => a.start - b.start);
+    return ranges.filter((r, i, arr) => !i || r.start >= arr[i - 1].end);
+  }
+
   function extractLinks(text) {
     const links = [];
     const seen = new Set();
@@ -496,6 +527,7 @@
     render,
     renderEditMirror,
     extractLinks,
+    collectLinkRanges,
     convertTo,
     convertFrom,
     normalizeContent,

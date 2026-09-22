@@ -832,7 +832,6 @@
           <button type="button" class="btn ghost sm" data-md="sup" title="Superscript">x²</button>
           <button type="button" class="btn ghost sm" data-md="code" title="Code">`</button>
         </div>
-        <div id="superscript-links-bar" class="superscript-links-bar" hidden></div>
         <div id="find-bar" class="find-bar" hidden>
           <div class="find-bar-row find-bar-search">
             <input id="find-input" type="text" placeholder="Find in note…" autocomplete="off" enterkeyhint="search" role="searchbox" aria-label="Find in note">
@@ -848,6 +847,7 @@
         </div>
         <div id="note-body-wrap" class="note-body-wrap">
           <pre id="note-body-highlights" class="note-body-highlights" aria-hidden="true"></pre>
+          <pre id="note-body-links" class="note-body-links" aria-hidden="true"></pre>
           <textarea id="note-body" class="note-body" placeholder="Write…"></textarea>
         </div>
         <div id="note-lock-gate" class="note-lock-gate" hidden>
@@ -1439,6 +1439,7 @@
   <script src="/static/js/search.js?v={{ build }}"></script>
   <script src="/static/js/markdown.js?v={{ build }}"></script>
   <script src="/static/js/superscript.js?v={{ build }}"></script>
+  <script src="/static/js/link-overlay.js?v={{ build }}"></script>
   <script src="/static/js/checklist.js?v={{ build }}"></script>
   <script src="/static/js/tagsuggest.js?v={{ build }}"></script>
   <script src="/static/js/vendor/pdfjs/pdf.min.js?v=8"></script>

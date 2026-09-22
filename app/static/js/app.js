@@ -349,6 +349,7 @@
     ui.body.style.fontSize = `${prefs.fontSize}px`;
     ui.body.classList.toggle('mono', !!prefs.monospace);
     document.getElementById('note-body-highlights')?.classList.toggle('mono', !!prefs.monospace);
+    document.getElementById('note-body-wrap')?.classList.toggle('mono', !!prefs.monospace);
     ui.body.spellcheck = !!prefs.spellcheck;
     ui.noteList.classList.toggle('compact', !!prefs.compactList);
     ui.noteList.classList.toggle('hide-previews', !!prefs.hidePreviews);
@@ -954,7 +955,7 @@
     if (ui.title) ui.title.value = snap.title;
     if (ui.body) ui.body.value = snap.body;
     scheduleSave();
-    syncSuperscriptLinksBar();
+    syncEditLinkOverlay();
     const note = currentId ? NotesStore.get(currentId) : null;
     const type = note?.content?.editor || ui.editorType?.value || 'plain';
     if (isChecklistEditor(type)) {
@@ -1028,46 +1029,56 @@
     }
   }
 
-  function superscriptLinksBarActive() {
-    if (!currentId || !ui.body || ui.body.hidden) return false;
-    const note = NotesStore.get(currentId);
-    if (!note || note.content?.prevent_edit) return false;
-    const type = note.content?.editor || ui.editorType?.value || 'plain';
-    return type === 'superscript' && editorMode === 'edit';
+  function editLinkOverlayActive() {
+    if (!ui.body || ui.body.hidden || noteEditingLocked()) return false;
+    return editorMode === 'edit';
   }
 
-  function syncSuperscriptLinksBar() {
-    const bar = document.getElementById('superscript-links-bar');
-    if (!bar) return;
-    const active = superscriptLinksBarActive();
-    if (!active || !window.NotesSuperscript?.extractLinks) {
-      bar.hidden = true;
-      bar.innerHTML = '';
-      return;
-    }
-    const links = NotesSuperscript.extractLinks(ui.body.value);
-    if (!links.length) {
-      bar.hidden = true;
-      bar.innerHTML = '';
-      return;
-    }
-    bar.hidden = false;
-    bar.innerHTML = '<span class="links-bar-label">Links</span>'
-      + links.map((link) => {
-        const href = escapeAttr(link.href);
-        const label = escapeHtml(link.label === link.href ? link.href : link.label);
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-      }).join('');
+  function syncEditLinkScroll() {
+    const layer = document.getElementById('note-body-links');
+    if (!layer || !ui.body) return;
+    layer.scrollTop = ui.body.scrollTop;
+    layer.scrollLeft = ui.body.scrollLeft;
   }
 
-  function bindSuperscriptLinksBar() {
-    const bar = document.getElementById('superscript-links-bar');
-    if (!bar || bar._linksBound) return;
-    bar._linksBound = true;
-    bar.addEventListener('click', (event) => {
-      const anchor = event.target?.closest?.('a[href]');
-      if (!anchor || !bar.contains(anchor)) return;
+  function syncChecklistLinkOverlays(root) {
+    if (!root || !window.NotesLinkOverlay?.renderHtml) return;
+    root.querySelectorAll('.check-text-wrap').forEach((wrap) => {
+      const input = wrap.querySelector('.check-text');
+      const layer = wrap.querySelector('.check-text-links');
+      if (!input || !layer) return;
+      layer.innerHTML = NotesLinkOverlay.renderHtml(input.value);
+    });
+  }
+
+  function syncEditLinkOverlay() {
+    const wrap = document.getElementById('note-body-wrap');
+    const layer = document.getElementById('note-body-links');
+    const note = currentId ? NotesStore.get(currentId) : null;
+    const type = note?.content?.editor || ui.editorType?.value || 'plain';
+    const checklistOn = isChecklistEditor(type);
+    if (checklistOn && ui.checklist) {
+      syncChecklistLinkOverlays(ui.checklist);
+    }
+    if (!wrap || !layer || !ui.body) return;
+    const active = editLinkOverlayActive() && !checklistOn && window.NotesLinkOverlay?.renderHtml;
+    wrap.classList.toggle('edit-links-active', active);
+    if (!active) {
+      layer.innerHTML = '';
+      return;
+    }
+    layer.innerHTML = NotesLinkOverlay.renderHtml(ui.body.value);
+    syncEditLinkScroll();
+  }
+
+  function bindEditLinkOverlays() {
+    if (document.body._editLinksBound) return;
+    document.body._editLinksBound = true;
+    document.body.addEventListener('click', (event) => {
+      const anchor = event.target?.closest?.('a.edit-link[href]');
+      if (!anchor) return;
       event.preventDefault();
+      event.stopPropagation();
       openExternalLink(anchor.getAttribute('href') || '');
     });
   }
@@ -7705,7 +7716,7 @@
     if (ocrBtn) ocrBtn.hidden = !hasDocs;
     if (!currentId) {
       if (previewBtn) previewBtn.hidden = true;
-      syncSuperscriptLinksBar();
+      syncEditLinkOverlay();
       return;
     }
     const note = NotesStore.get(currentId);
@@ -7722,7 +7733,7 @@
       if (!vaultPullActive) renderDocInline(currentId);
       syncEditorBodyWrap();
       if (previewBtn) previewBtn.hidden = false;
-      syncSuperscriptLinksBar();
+      syncEditLinkOverlay();
       if (note) syncTagBarShell(note);
       return;
     }
@@ -7742,7 +7753,7 @@
       syncEditorBodyWrap();
       syncEditorDocPreviewLayout();
       if (previewBtn) previewBtn.hidden = false;
-      syncSuperscriptLinksBar();
+      syncEditLinkOverlay();
       if (note) syncTagBarShell(note);
       return;
     }
@@ -7775,7 +7786,7 @@
     }
     applyReadOnly(!!note?.content?.prevent_edit);
     syncEditorDocPreviewLayout();
-    syncSuperscriptLinksBar();
+    syncEditLinkOverlay();
     if (note) {
       syncClearCheckedButton(note);
       syncTagBarShell(note);
@@ -7828,7 +7839,10 @@
     ui.checklist.innerHTML = rows.map((row) => `
       <div class="check-row" data-check-id="${escapeAttr(row.id)}" style="--indent:${row.indent || 0}">
         <button type="button" class="check-box" data-check-toggle="${escapeAttr(row.id)}" aria-checked="${row.done}">${row.done ? '☑' : '☐'}</button>
-        <input class="check-text" data-check-text="${escapeAttr(row.id)}" value="${escapeAttr(row.text)}" placeholder="List item" ${note.content.prevent_edit ? 'readonly' : ''}>
+        <div class="check-text-wrap">
+          <div class="check-text-links" aria-hidden="true"></div>
+          <input class="check-text" data-check-text="${escapeAttr(row.id)}" value="${escapeAttr(row.text)}" placeholder="List item" ${note.content.prevent_edit ? 'readonly' : ''}>
+        </div>
         ${nested ? `<button type="button" class="btn ghost sm check-indent" data-check-indent="${escapeAttr(row.id)}" aria-label="Indent">⇥</button>` : ''}
       </div>`).join('') + (note.content.prevent_edit ? '' : '<button type="button" class="btn ghost sm check-add" id="check-add">Add item</button>');
     ui.checklist.querySelectorAll('[data-check-toggle]').forEach((btn) => {
@@ -7844,6 +7858,7 @@
       });
       input.addEventListener('input', () => {
         if (note.content.prevent_edit) return;
+        syncChecklistLinkOverlays(input.closest('.checklist'));
         commit(NotesChecklist.setText(rows, input.dataset.checkText, input.value), { rerender: false });
       });
       input.addEventListener('keydown', (event) => {
@@ -7868,6 +7883,7 @@
     if (add) add.addEventListener('click', () => {
       addItem(rows[rows.length - 1]?.id);
     });
+    syncChecklistLinkOverlays(ui.checklist);
     syncClearCheckedButton(note);
   }
 
@@ -11028,6 +11044,7 @@
     if (!layer || !ui.body) return;
     layer.scrollTop = ui.body.scrollTop;
     layer.scrollLeft = ui.body.scrollLeft;
+    syncEditLinkScroll();
   }
 
   function highlightFindPreview() {
@@ -11478,7 +11495,7 @@
   document.getElementById('doc-backdrop').addEventListener('click', closeDocPreview);
   bindInlinePreviewGestures();
   bindPreviewExternalLinks();
-  bindSuperscriptLinksBar();
+  bindEditLinkOverlays();
   document.getElementById('btn-undo')?.addEventListener('click', () => undoEdit());
   document.getElementById('btn-redo')?.addEventListener('click', () => redoEdit());
   document.getElementById('tag-bar-toggle')?.addEventListener('click', () => {
@@ -11771,7 +11788,7 @@
     if (note?.content?.prevent_edit) return;
     if (note?.content?.locked && !unlockedNotes.has(currentId)) return;
     scheduleSave();
-    syncSuperscriptLinksBar();
+    syncEditLinkOverlay();
     syncUndoButtons();
     if (!document.getElementById('find-bar')?.hidden) {
       const query = document.getElementById('find-input')?.value?.trim() || '';
@@ -12077,6 +12094,7 @@
     NotesStore.upsert(currentId, { ...note.content });
     ui.editorType.value = nextEditor;
     ui.body.classList.toggle('mono', note.content.editor === 'code' || prefs.monospace);
+    document.getElementById('note-body-wrap')?.classList.toggle('mono', note.content.editor === 'code' || prefs.monospace);
     applyEditorMode();
   }
 

@@ -1161,11 +1161,13 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b'id="doc-zoom-out"', res.data)
         self.assertIn(b'id="doc-zoom-reset"', res.data)
         self.assertIn(b"Super checklist", res.data)
-        self.assertIn(b'id="superscript-links-bar"', res.data)
+        self.assertIn(b'id="note-body-links"', res.data)
         self.assertIn(b'id="btn-undo"', res.data)
-        self.assertIn("syncSuperscriptLinksBar", app_js)
+        self.assertIn("syncEditLinkOverlay", app_js)
         self.assertIn("function undoEdit", app_js)
-        self.assertIn("extractLinks", (APP_DIR / "static" / "js" / "superscript.js").read_text(encoding="utf-8"))
+        self.assertIn(b"link-overlay.js?v=", res.data)
+        self.assertIn("collectLinkRanges", (APP_DIR / "static" / "js" / "superscript.js").read_text(encoding="utf-8"))
+        self.assertIn("check-text-wrap", (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8"))
         self.assertIn("previewBtn.hidden = checklistOn || !hasDocs", app_js)
         # Update must not navigate to ?hard=1 (Safari crash-looped on cellular).
         self.assertNotIn(b"&hard=1", res.data)
@@ -1612,6 +1614,9 @@ class NotesAppTests(unittest.TestCase):
 
     def test_client_checklist(self):
         self._run_node_script("test_checklist.js")
+
+    def test_client_link_overlay(self):
+        self._run_node_script("test_link_overlay.js")
 
     def test_ocr_text_file(self):
         os.environ["NOTES_SERVER_OCR"] = "1"
