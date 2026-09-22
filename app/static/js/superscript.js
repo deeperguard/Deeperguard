@@ -428,6 +428,13 @@
       .join('\n');
   }
 
+  function renderEditMirror(text) {
+    return String(text || '')
+      .split('\n')
+      .map((line) => renderInline(line))
+      .join('<br>\n');
+  }
+
   function render(md) {
     const source = normalizeContent(md);
     const fences = [];
@@ -457,6 +464,7 @@
 
   const api = {
     render,
+    renderEditMirror,
     convertTo,
     convertFrom,
     normalizeContent,

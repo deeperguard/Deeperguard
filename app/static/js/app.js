@@ -887,7 +887,69 @@
     ui.preview._externalLinksBound = true;
     ui.preview.addEventListener('click', (event) => {
       const link = event.target?.closest?.('a[href]');
-      if (!link || !ui.preview.contains(link)) return;
+      if (link && ui.preview.contains(link)) {
+        const href = link.getAttribute('href') || '';
+        if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
+          event.preventDefault();
+          event.stopPropagation();
+          openExternalLink(href);
+        }
+        return;
+      }
+      if (noteEditingLocked()) {
+        event.preventDefault();
+        return;
+      }
+      if (!ui.preview.hidden && !noteHasDocs(currentId)) {
+        editorMode = 'edit';
+        applyEditorMode();
+        ui.body?.focus();
+      }
+    });
+  }
+
+  function superscriptEditMirrorActive() {
+    if (!currentId || !ui.body || ui.body.hidden) return false;
+    const note = NotesStore.get(currentId);
+    if (!note || note.content?.prevent_edit) return false;
+    const type = note.content?.editor || ui.editorType?.value || 'plain';
+    return type === 'superscript' && editorMode === 'edit';
+  }
+
+  function syncBodyMirrorScroll() {
+    const mirror = document.getElementById('note-body-mirror');
+    if (!mirror || !ui.body) return;
+    mirror.scrollTop = ui.body.scrollTop;
+    mirror.scrollLeft = ui.body.scrollLeft;
+  }
+
+  function syncSuperscriptEditMirror() {
+    const wrap = document.getElementById('note-body-wrap');
+    const mirror = document.getElementById('note-body-mirror');
+    if (!wrap || !mirror || !ui.body) return;
+    const active = superscriptEditMirrorActive();
+    wrap.classList.toggle('superscript-editing', active);
+    if (!active) {
+      mirror.hidden = true;
+      mirror.innerHTML = '';
+      return;
+    }
+    mirror.hidden = false;
+    if (window.NotesSuperscript?.renderEditMirror) {
+      mirror.innerHTML = NotesSuperscript.renderEditMirror(ui.body.value);
+    } else {
+      mirror.textContent = ui.body.value;
+    }
+    syncBodyMirrorScroll();
+  }
+
+  function bindBodyMirrorLinks() {
+    const mirror = document.getElementById('note-body-mirror');
+    if (!mirror || mirror._linksBound) return;
+    mirror._linksBound = true;
+    mirror.addEventListener('click', (event) => {
+      const link = event.target?.closest?.('a[href]');
+      if (!link || !mirror.contains(link)) return;
       const href = link.getAttribute('href') || '';
       if (!/^https?:\/\//i.test(href) && !/^mailto:/i.test(href)) return;
       event.preventDefault();
@@ -1593,11 +1655,6 @@
     const type = note.content.editor || 'plain';
     if (isChecklistEditor(type)) return 'edit';
     if (note.content.prevent_edit) return 'preview';
-    if (type === 'superscript') {
-      const body = String(note.content.content || '').trim();
-      if (body) return 'preview';
-    }
-    if (isRichTextEditor(type) && prefs.autoPreview) return 'preview';
     return 'edit';
   }
 
@@ -7532,8 +7589,11 @@
     const toolbar = document.getElementById('md-toolbar');
     const hasDocs = noteHasDocs(currentId);
     if (ocrBtn) ocrBtn.hidden = !hasDocs;
-    if (previewBtn) previewBtn.hidden = false;
-    if (!currentId) return;
+    if (!currentId) {
+      if (previewBtn) previewBtn.hidden = true;
+      syncSuperscriptEditMirror();
+      return;
+    }
     const note = NotesStore.get(currentId);
     const gated = !!note?.content?.locked && !unlockedNotes.has(currentId);
     if (gated) return;
@@ -7547,6 +7607,8 @@
       previewOn = false;
       if (!vaultPullActive) renderDocInline(currentId);
       syncEditorBodyWrap();
+      if (previewBtn) previewBtn.hidden = false;
+      syncSuperscriptEditMirror();
       if (note) syncTagBarShell(note);
       return;
     }
@@ -7565,6 +7627,8 @@
       previewOn = false;
       syncEditorBodyWrap();
       syncEditorDocPreviewLayout();
+      if (previewBtn) previewBtn.hidden = false;
+      syncSuperscriptEditMirror();
       if (note) syncTagBarShell(note);
       return;
     }
@@ -7583,13 +7647,12 @@
     }
     if (ui.docInline) ui.docInline.hidden = true;
     if (previewBtn) {
+      previewBtn.hidden = checklistOn || !hasDocs;
       if (hasDocs && editorMode === 'edit') previewBtn.textContent = 'Document';
-      else if (noteEditingLocked()) previewBtn.textContent = 'Preview';
-      else previewBtn.textContent = previewOn && !checklistOn ? 'Edit' : 'Preview';
-      previewBtn.disabled = !!noteEditingLocked() && previewOn;
+      else if (hasDocs) previewBtn.textContent = 'Edit';
+      previewBtn.disabled = false;
     }
     if (ocrBtn) ocrBtn.textContent = 'OCR text';
-    if (previewBtn) previewBtn.hidden = checklistOn;
     if (checklistOn) renderChecklist(note);
     else if (previewOn) refreshPreview();
     if (docSearchActive()) {
@@ -7598,6 +7661,7 @@
     }
     applyReadOnly(!!note?.content?.prevent_edit);
     syncEditorDocPreviewLayout();
+    syncSuperscriptEditMirror();
     if (note) {
       syncClearCheckedButton(note);
       syncTagBarShell(note);
@@ -9613,7 +9677,7 @@
     if (!note.content.prevent_edit) flushSave();
     note.content.prevent_edit = !note.content.prevent_edit;
     NotesStore.upsert(currentId, { ...note.content });
-    if (note.content.prevent_edit) editorMode = 'preview';
+    editorMode = note.content.prevent_edit ? 'preview' : 'edit';
     applyReadOnly(note.content.prevent_edit);
     applyEditorMode();
     updateActionButtons(note);
@@ -10842,6 +10906,7 @@
     if (!layer || !ui.body) return;
     layer.scrollTop = ui.body.scrollTop;
     layer.scrollLeft = ui.body.scrollLeft;
+    syncBodyMirrorScroll();
   }
 
   function highlightFindPreview() {
@@ -11290,6 +11355,7 @@
   document.getElementById('doc-backdrop').addEventListener('click', closeDocPreview);
   bindInlinePreviewGestures();
   bindPreviewExternalLinks();
+  bindBodyMirrorLinks();
   document.getElementById('tag-bar-toggle')?.addEventListener('click', () => {
     const note = currentId ? NotesStore.get(currentId) : null;
     if (!tagBarExpanded) {
@@ -11569,12 +11635,27 @@
     if (note?.content?.prevent_edit) return;
     if (note?.content?.locked && !unlockedNotes.has(currentId)) return;
     scheduleSave();
+    syncSuperscriptEditMirror();
     if (!document.getElementById('find-bar')?.hidden) {
       const query = document.getElementById('find-input')?.value?.trim() || '';
       if (query) syncFindHighlights(query);
     }
   });
   ui.body.addEventListener('scroll', syncFindHighlightScroll);
+
+  document.getElementById('note-body-wrap')?.addEventListener('click', (event) => {
+    if (noteEditingLocked()) return;
+    if (event.target?.closest?.('a[href]')) return;
+    if (ui.body?.hidden) {
+      if (!ui.preview?.hidden && !noteHasDocs(currentId)) {
+        editorMode = 'edit';
+        applyEditorMode();
+      }
+    }
+    if (!ui.body?.hidden && event.target !== ui.body) {
+      ui.body.focus();
+    }
+  });
 
   document.getElementById('btn-ocr-text').addEventListener('click', () => {
     if (noteHasDocs(currentId)) {
@@ -11849,7 +11930,6 @@
         const converted = NotesSuperscript.convertTo(ui.body.value, prevEditor);
         ui.body.value = converted;
         note.content.content = converted;
-        if (String(converted || '').trim()) editorMode = 'preview';
       } else if (prevEditor === 'superscript' && nextEditor === 'plain') {
         const stripped = NotesSuperscript.convertFrom(ui.body.value);
         ui.body.value = stripped;

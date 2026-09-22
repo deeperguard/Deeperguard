@@ -1,6 +1,7 @@
 const assert = require('assert');
 const {
   render,
+  renderEditMirror,
   convertTo,
   convertFrom,
   normalizeContent,
@@ -90,6 +91,10 @@ assert.match(ampHtml, /href="https:\/\/www\.booking\.com\/hotel\/nl\/test\.html\
 const angleGoogle = render('<https://Www.google.com>');
 assert.match(angleGoogle, /<a href="https:\/\/Www\.google\.com"/);
 assert.doesNotMatch(angleGoogle, /&lt;&lt;/);
+
+const mirror = renderEditMirror('See [Docs](https://example.com) and <https://open.example.org>');
+assert.match(mirror, /<a href="https:\/\/example\.com"/);
+assert.match(mirror, /<a href="https:\/\/open\.example\.org"/);
 
 const repairedDouble = normalizeContent('<<https://Www.google.com>>');
 assert.strictEqual(repairedDouble, '<https://Www.google.com>');
