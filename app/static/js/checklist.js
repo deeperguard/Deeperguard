@@ -59,6 +59,11 @@ const NotesChecklist = (() => {
     return next.length ? next : [{ id: 'c-0', text: '', done: false, indent: 0 }];
   }
 
+  function removeDone(rows) {
+    const next = (rows || []).filter((row) => !row.done);
+    return next.length ? next : [{ id: `c-${Date.now()}`, text: '', done: false, indent: 0 }];
+  }
+
   function bumpIndent(rows, id, delta) {
     return (rows || []).map((row) => {
       if (row.id !== id) return row;
@@ -66,7 +71,7 @@ const NotesChecklist = (() => {
     });
   }
 
-  const api = { parse, serialize, toggle, setText, addRow, removeRow, bumpIndent };
+  const api = { parse, serialize, toggle, setText, addRow, removeRow, removeDone, bumpIndent };
   if (typeof window !== 'undefined') window.NotesChecklist = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   return api;

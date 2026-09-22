@@ -7643,7 +7643,12 @@
       const added = next[insertIndex];
       commit(next, { keepFocus: added?.id, focusIndex: insertIndex });
     };
-    ui.checklist.innerHTML = rows.map((row) => `
+    const hasDone = rows.some((row) => row.done);
+    const clearDoneBtn = !note.content.prevent_edit && hasDone
+      ? '<button type="button" class="btn ghost sm check-clear-done" id="check-clear-done">Clear checked</button>'
+      : '';
+    ui.checklist.innerHTML = (clearDoneBtn ? `<div class="checklist-actions">${clearDoneBtn}</div>` : '')
+      + rows.map((row) => `
       <div class="check-row" data-check-id="${escapeAttr(row.id)}" style="--indent:${row.indent || 0}">
         <button type="button" class="check-box" data-check-toggle="${escapeAttr(row.id)}" aria-checked="${row.done}">${row.done ? '☑' : '☐'}</button>
         <input class="check-text" data-check-text="${escapeAttr(row.id)}" value="${escapeAttr(row.text)}" placeholder="List item" ${note.content.prevent_edit ? 'readonly' : ''}>
@@ -7680,6 +7685,11 @@
     const add = document.getElementById('check-add');
     if (add) add.addEventListener('click', () => {
       addItem(rows[rows.length - 1]?.id);
+    });
+    const clearDone = document.getElementById('check-clear-done');
+    if (clearDone) clearDone.addEventListener('click', () => {
+      if (note.content.prevent_edit) return;
+      commit(NotesChecklist.removeDone(rows));
     });
   }
 

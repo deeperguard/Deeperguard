@@ -4044,6 +4044,14 @@ html[data-theme="light"] {
 .check-text:focus { outline: none; background: var(--bg-hover); }
 .checklist.readonly .check-box,
 .checklist.readonly .check-indent { pointer-events: none; opacity: .55; }
+.checklist-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 6px;
+  padding: 0 4px 0 36px;
+}
+.check-clear-done { color: var(--muted); }
+.check-clear-done:hover { color: var(--text); }
 .check-add { margin: 8px 0 0 36px; }
 .note-options {
   position: fixed;

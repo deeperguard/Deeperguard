@@ -30,4 +30,16 @@ assert.equal(addedToEnd[3].text, 'Last item');
 const indented = NotesChecklist.bumpIndent(rows, rows[0].id, 1);
 assert.equal(indented[0].indent, 1);
 
+const cleared = NotesChecklist.removeDone(rows);
+assert.equal(cleared.length, 2);
+assert.equal(cleared[0].text, 'Milk');
+assert.equal(cleared[1].text, 'Nested');
+assert.equal(cleared.every((row) => !row.done), true);
+
+const allDone = NotesChecklist.parse('- [x] A\n- [x] B');
+const emptyAfterClear = NotesChecklist.removeDone(allDone);
+assert.equal(emptyAfterClear.length, 1);
+assert.equal(emptyAfterClear[0].done, false);
+assert.equal(emptyAfterClear[0].text, '');
+
 console.log('ok');
