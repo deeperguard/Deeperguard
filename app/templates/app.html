@@ -721,6 +721,8 @@
           <div class="editor-actions">
             <div class="editor-actions-group editor-actions-primary">
             <button type="button" id="btn-preview" class="btn ghost sm mode-toggle toolbar-primary" title="Switch edit mode">Edit</button>
+            <button type="button" id="btn-undo" class="btn ghost sm toolbar-primary" title="Undo (⌘Z)" disabled>Undo</button>
+            <button type="button" id="btn-redo" class="btn ghost sm toolbar-primary" title="Redo (⇧⌘Z)" disabled>Redo</button>
             <button type="button" id="btn-find" class="btn icon mobile-only toolbar-primary find-btn" title="Find in note" aria-label="Find in note">
               <svg class="find-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <circle cx="10.5" cy="10.5" r="6.75" fill="none" stroke="currentColor" stroke-width="2.5"/>
@@ -830,6 +832,7 @@
           <button type="button" class="btn ghost sm" data-md="sup" title="Superscript">x²</button>
           <button type="button" class="btn ghost sm" data-md="code" title="Code">`</button>
         </div>
+        <div id="superscript-links-bar" class="superscript-links-bar" hidden></div>
         <div id="find-bar" class="find-bar" hidden>
           <div class="find-bar-row find-bar-search">
             <input id="find-input" type="text" placeholder="Find in note…" autocomplete="off" enterkeyhint="search" role="searchbox" aria-label="Find in note">
@@ -845,7 +848,6 @@
         </div>
         <div id="note-body-wrap" class="note-body-wrap">
           <pre id="note-body-highlights" class="note-body-highlights" aria-hidden="true"></pre>
-          <div id="note-body-mirror" class="note-body-mirror" aria-hidden="true" hidden></div>
           <textarea id="note-body" class="note-body" placeholder="Write…"></textarea>
         </div>
         <div id="note-lock-gate" class="note-lock-gate" hidden>

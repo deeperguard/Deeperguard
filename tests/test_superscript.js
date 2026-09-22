@@ -2,6 +2,7 @@ const assert = require('assert');
 const {
   render,
   renderEditMirror,
+  extractLinks,
   convertTo,
   convertFrom,
   normalizeContent,
@@ -95,6 +96,11 @@ assert.doesNotMatch(angleGoogle, /&lt;&lt;/);
 const mirror = renderEditMirror('See [Docs](https://example.com) and <https://open.example.org>');
 assert.match(mirror, /<a href="https:\/\/example\.com"/);
 assert.match(mirror, /<a href="https:\/\/open\.example\.org"/);
+
+const links = extractLinks('See [Docs](https://example.com) and <https://open.example.org>');
+assert.ok(links.length >= 2);
+assert.ok(links.some((link) => link.href === 'https://example.com'));
+assert.ok(links.some((link) => link.href === 'https://open.example.org'));
 
 const repairedDouble = normalizeContent('<<https://Www.google.com>>');
 assert.strictEqual(repairedDouble, '<https://Www.google.com>');

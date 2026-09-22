@@ -908,7 +908,127 @@
     });
   }
 
-  function superscriptEditMirrorActive() {
+  const noteUndoStacks = new Map();
+  const noteRedoStacks = new Map();
+  const NOTE_UNDO_MAX = 120;
+
+  function captureEditorSnapshot() {
+    const body = ui.body || {};
+    return {
+      title: ui.title?.value ?? '',
+      body: body.value ?? '',
+      selStart: typeof body.selectionStart === 'number' ? body.selectionStart : 0,
+      selEnd: typeof body.selectionEnd === 'number' ? body.selectionEnd : 0,
+    };
+  }
+
+  function snapshotsEqual(a, b) {
+    return a && b && a.title === b.title && a.body === b.body;
+  }
+
+  function resetNoteUndoStack(noteId) {
+    if (!noteId) return;
+    noteUndoStacks.set(noteId, []);
+    noteRedoStacks.set(noteId, []);
+    syncUndoButtons();
+  }
+
+  function pushUndoSnapshot() {
+    if (!currentId || noteEditingLocked()) return;
+    const snap = captureEditorSnapshot();
+    let stack = noteUndoStacks.get(currentId);
+    if (!stack) {
+      stack = [];
+      noteUndoStacks.set(currentId, stack);
+    }
+    const last = stack[stack.length - 1];
+    if (last && snapshotsEqual(last, snap)) return;
+    stack.push(snap);
+    if (stack.length > NOTE_UNDO_MAX) stack.shift();
+    noteRedoStacks.set(currentId, []);
+    syncUndoButtons();
+  }
+
+  function applyEditorSnapshot(snap) {
+    if (!snap) return;
+    if (ui.title) ui.title.value = snap.title;
+    if (ui.body) ui.body.value = snap.body;
+    scheduleSave();
+    syncSuperscriptLinksBar();
+    const note = currentId ? NotesStore.get(currentId) : null;
+    const type = note?.content?.editor || ui.editorType?.value || 'plain';
+    if (isChecklistEditor(type)) {
+      renderChecklist(note ? { ...note, content: { ...note.content, content: snap.body } } : { content: { content: snap.body, editor: type } });
+    }
+    if (ui.body && typeof ui.body.setSelectionRange === 'function') {
+      try {
+        const len = ui.body.value.length;
+        const start = Math.max(0, Math.min(snap.selStart, len));
+        const end = Math.max(start, Math.min(snap.selEnd, len));
+        ui.body.setSelectionRange(start, end);
+      } catch (err) {
+        /* ignore */
+      }
+    }
+    syncUndoButtons();
+  }
+
+  function undoEdit() {
+    if (!currentId || noteEditingLocked()) return;
+    const stack = noteUndoStacks.get(currentId) || [];
+    if (!stack.length) return;
+    const prev = stack.pop();
+    noteUndoStacks.set(currentId, stack);
+    const redo = noteRedoStacks.get(currentId) || [];
+    redo.push(captureEditorSnapshot());
+    noteRedoStacks.set(currentId, redo);
+    applyEditorSnapshot(prev);
+  }
+
+  function redoEdit() {
+    if (!currentId || noteEditingLocked()) return;
+    const redo = noteRedoStacks.get(currentId) || [];
+    if (!redo.length) return;
+    const next = redo.pop();
+    noteRedoStacks.set(currentId, redo);
+    const stack = noteUndoStacks.get(currentId) || [];
+    stack.push(captureEditorSnapshot());
+    noteUndoStacks.set(currentId, stack);
+    applyEditorSnapshot(next);
+  }
+
+  function syncUndoButtons() {
+    const undoBtn = document.getElementById('btn-undo');
+    const redoBtn = document.getElementById('btn-redo');
+    const stack = currentId ? (noteUndoStacks.get(currentId) || []) : [];
+    const redo = currentId ? (noteRedoStacks.get(currentId) || []) : [];
+    const locked = noteEditingLocked();
+    if (undoBtn) undoBtn.disabled = locked || !stack.length;
+    if (redoBtn) redoBtn.disabled = locked || !redo.length;
+  }
+
+  function handleEditorUndoShortcut(event) {
+    if (noteEditingLocked()) return;
+    const mod = event.metaKey || event.ctrlKey;
+    if (!mod || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (key === 'z' && !event.shiftKey) {
+      event.preventDefault();
+      undoEdit();
+      return;
+    }
+    if (key === 'z' && event.shiftKey) {
+      event.preventDefault();
+      redoEdit();
+      return;
+    }
+    if (key === 'y') {
+      event.preventDefault();
+      redoEdit();
+    }
+  }
+
+  function superscriptLinksBarActive() {
     if (!currentId || !ui.body || ui.body.hidden) return false;
     const note = NotesStore.get(currentId);
     if (!note || note.content?.prevent_edit) return false;
@@ -916,45 +1036,39 @@
     return type === 'superscript' && editorMode === 'edit';
   }
 
-  function syncBodyMirrorScroll() {
-    const mirror = document.getElementById('note-body-mirror');
-    if (!mirror || !ui.body) return;
-    mirror.scrollTop = ui.body.scrollTop;
-    mirror.scrollLeft = ui.body.scrollLeft;
-  }
-
-  function syncSuperscriptEditMirror() {
-    const wrap = document.getElementById('note-body-wrap');
-    const mirror = document.getElementById('note-body-mirror');
-    if (!wrap || !mirror || !ui.body) return;
-    const active = superscriptEditMirrorActive();
-    wrap.classList.toggle('superscript-editing', active);
-    if (!active) {
-      mirror.hidden = true;
-      mirror.innerHTML = '';
+  function syncSuperscriptLinksBar() {
+    const bar = document.getElementById('superscript-links-bar');
+    if (!bar) return;
+    const active = superscriptLinksBarActive();
+    if (!active || !window.NotesSuperscript?.extractLinks) {
+      bar.hidden = true;
+      bar.innerHTML = '';
       return;
     }
-    mirror.hidden = false;
-    if (window.NotesSuperscript?.renderEditMirror) {
-      mirror.innerHTML = NotesSuperscript.renderEditMirror(ui.body.value);
-    } else {
-      mirror.textContent = ui.body.value;
+    const links = NotesSuperscript.extractLinks(ui.body.value);
+    if (!links.length) {
+      bar.hidden = true;
+      bar.innerHTML = '';
+      return;
     }
-    syncBodyMirrorScroll();
+    bar.hidden = false;
+    bar.innerHTML = '<span class="links-bar-label">Links</span>'
+      + links.map((link) => {
+        const href = escapeAttr(link.href);
+        const label = escapeHtml(link.label === link.href ? link.href : link.label);
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+      }).join('');
   }
 
-  function bindBodyMirrorLinks() {
-    const mirror = document.getElementById('note-body-mirror');
-    if (!mirror || mirror._linksBound) return;
-    mirror._linksBound = true;
-    mirror.addEventListener('click', (event) => {
-      const link = event.target?.closest?.('a[href]');
-      if (!link || !mirror.contains(link)) return;
-      const href = link.getAttribute('href') || '';
-      if (!/^https?:\/\//i.test(href) && !/^mailto:/i.test(href)) return;
+  function bindSuperscriptLinksBar() {
+    const bar = document.getElementById('superscript-links-bar');
+    if (!bar || bar._linksBound) return;
+    bar._linksBound = true;
+    bar.addEventListener('click', (event) => {
+      const anchor = event.target?.closest?.('a[href]');
+      if (!anchor || !bar.contains(anchor)) return;
       event.preventDefault();
-      event.stopPropagation();
-      openExternalLink(href);
+      openExternalLink(anchor.getAttribute('href') || '');
     });
   }
 
@@ -7591,7 +7705,7 @@
     if (ocrBtn) ocrBtn.hidden = !hasDocs;
     if (!currentId) {
       if (previewBtn) previewBtn.hidden = true;
-      syncSuperscriptEditMirror();
+      syncSuperscriptLinksBar();
       return;
     }
     const note = NotesStore.get(currentId);
@@ -7608,7 +7722,7 @@
       if (!vaultPullActive) renderDocInline(currentId);
       syncEditorBodyWrap();
       if (previewBtn) previewBtn.hidden = false;
-      syncSuperscriptEditMirror();
+      syncSuperscriptLinksBar();
       if (note) syncTagBarShell(note);
       return;
     }
@@ -7628,7 +7742,7 @@
       syncEditorBodyWrap();
       syncEditorDocPreviewLayout();
       if (previewBtn) previewBtn.hidden = false;
-      syncSuperscriptEditMirror();
+      syncSuperscriptLinksBar();
       if (note) syncTagBarShell(note);
       return;
     }
@@ -7661,7 +7775,7 @@
     }
     applyReadOnly(!!note?.content?.prevent_edit);
     syncEditorDocPreviewLayout();
-    syncSuperscriptEditMirror();
+    syncSuperscriptLinksBar();
     if (note) {
       syncClearCheckedButton(note);
       syncTagBarShell(note);
@@ -7703,7 +7817,8 @@
       rows = next;
       writeChecklist(next, nested, opts);
     };
-    const addItem = (afterId, initialText = '') => {
+    const addItem = (afterId, initialText = '', { skipUndo = false } = {}) => {
+      if (!skipUndo) pushUndoSnapshot();
       const at = afterId ? rows.findIndex((row) => row.id === afterId) : -1;
       const insertIndex = at >= 0 ? at + 1 : rows.length;
       const next = NotesChecklist.addRow(rows, afterId, { nested, text: initialText });
@@ -7719,10 +7834,14 @@
     ui.checklist.querySelectorAll('[data-check-toggle]').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (note.content.prevent_edit) return;
+        pushUndoSnapshot();
         commit(NotesChecklist.toggle(rows, btn.dataset.checkToggle));
       });
     });
     ui.checklist.querySelectorAll('[data-check-text]').forEach((input) => {
+      input.addEventListener('beforeinput', () => {
+        if (!note.content.prevent_edit) pushUndoSnapshot();
+      });
       input.addEventListener('input', () => {
         if (note.content.prevent_edit) return;
         commit(NotesChecklist.setText(rows, input.dataset.checkText, input.value), { rerender: false });
@@ -7735,12 +7854,13 @@
         const head = currentVal.slice(0, pos);
         const tail = currentVal.slice(pos).trimStart();
         rows = NotesChecklist.setText(rows, input.dataset.checkText, head);
-        addItem(input.dataset.checkText, tail);
+        addItem(input.dataset.checkText, tail, { skipUndo: true });
       });
     });
     ui.checklist.querySelectorAll('[data-check-indent]').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (note.content.prevent_edit) return;
+        pushUndoSnapshot();
         commit(NotesChecklist.bumpIndent(rows, btn.dataset.checkIndent, 1));
       });
     });
@@ -7803,7 +7923,7 @@
     if (actions) actions.hidden = !!gated;
     if (tagShell) tagShell.hidden = !!gated;
     if (ui.editorType) ui.editorType.hidden = !!gated;
-    ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
+    ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.hidden = !!gated;
     });
@@ -7880,6 +8000,7 @@
       }
     }
     ui.body.value = gated ? '' : body;
+    resetNoteUndoStack(id);
     ui.editorType.value = note.content.editor || 'plain';
     editorMode = initialEditorMode(id);
     previewOn = editorMode !== 'edit';
@@ -8000,11 +8121,12 @@
     document.getElementById('btn-delete-forever').hidden = !note.content.trashed;
     syncClearCheckedButton(note);
     if (note && note.content?.locked && !unlockedNotes.has(note.uuid)) {
-      ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
+      ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.hidden = true;
       });
     }
+    syncUndoButtons();
     syncNoteInfoActions(note);
   }
 
@@ -10906,7 +11028,6 @@
     if (!layer || !ui.body) return;
     layer.scrollTop = ui.body.scrollTop;
     layer.scrollLeft = ui.body.scrollLeft;
-    syncBodyMirrorScroll();
   }
 
   function highlightFindPreview() {
@@ -11106,6 +11227,7 @@
   }
 
   function wrapSelection(before, after = before, placeholder = 'text') {
+    pushUndoSnapshot();
     const ta = ui.body;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
@@ -11117,6 +11239,7 @@
   }
 
   function prefixLine(prefix) {
+    pushUndoSnapshot();
     const ta = ui.body;
     const start = ta.selectionStart;
     const lineStart = ta.value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
@@ -11355,7 +11478,9 @@
   document.getElementById('doc-backdrop').addEventListener('click', closeDocPreview);
   bindInlinePreviewGestures();
   bindPreviewExternalLinks();
-  bindBodyMirrorLinks();
+  bindSuperscriptLinksBar();
+  document.getElementById('btn-undo')?.addEventListener('click', () => undoEdit());
+  document.getElementById('btn-redo')?.addEventListener('click', () => redoEdit());
   document.getElementById('tag-bar-toggle')?.addEventListener('click', () => {
     const note = currentId ? NotesStore.get(currentId) : null;
     if (!tagBarExpanded) {
@@ -11624,6 +11749,17 @@
     });
   }
 
+  ui.title.addEventListener('beforeinput', () => {
+    if (noteEditingLocked()) return;
+    pushUndoSnapshot();
+  });
+  ui.body.addEventListener('beforeinput', (event) => {
+    if (noteEditingLocked()) return;
+    if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') return;
+    pushUndoSnapshot();
+  });
+  ui.title.addEventListener('keydown', handleEditorUndoShortcut);
+  ui.body.addEventListener('keydown', handleEditorUndoShortcut);
   ui.title.addEventListener('input', () => {
     const note = NotesStore.get(currentId);
     if (note?.content?.prevent_edit) return;
@@ -11635,7 +11771,8 @@
     if (note?.content?.prevent_edit) return;
     if (note?.content?.locked && !unlockedNotes.has(currentId)) return;
     scheduleSave();
-    syncSuperscriptEditMirror();
+    syncSuperscriptLinksBar();
+    syncUndoButtons();
     if (!document.getElementById('find-bar')?.hidden) {
       const query = document.getElementById('find-input')?.value?.trim() || '';
       if (query) syncFindHighlights(query);
@@ -12222,6 +12359,7 @@
     const nested = type === 'super';
     const rows = NotesChecklist.parse(note.content?.content || ui.body?.value || '', { nested });
     if (!rows.some((row) => row.done)) return;
+    pushUndoSnapshot();
     writeChecklist(NotesChecklist.removeDone(rows), nested);
   });
 

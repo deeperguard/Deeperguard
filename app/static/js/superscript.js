@@ -435,6 +435,36 @@
       .join('<br>\n');
   }
 
+  function extractLinks(text) {
+    const links = [];
+    const seen = new Set();
+    const add = (href, label) => {
+      const raw = trimUrl(href);
+      const safe = safeHref(raw) || (String(raw).startsWith('mailto:') ? raw : '');
+      if (!safe || seen.has(safe)) return;
+      seen.add(safe);
+      const name = String(label || safe).trim() || safe;
+      links.push({ href: safe, label: name });
+    };
+    const src = String(text || '');
+    let cursor = 0;
+    while (cursor < src.length) {
+      const token = nextInlineToken(src, cursor);
+      if (!token || token.start > cursor) {
+        if (!token) break;
+        cursor = token.start;
+        continue;
+      }
+      add(token.href, token.label);
+      cursor = token.end;
+    }
+    src.split('\n').forEach((line) => {
+      findHttpUrls(line).forEach((item) => add(item.url, item.url));
+      findWwwUrls(line).forEach((item) => add(`https://${item.url}`, item.url));
+    });
+    return links;
+  }
+
   function render(md) {
     const source = normalizeContent(md);
     const fences = [];
@@ -465,6 +495,7 @@
   const api = {
     render,
     renderEditMirror,
+    extractLinks,
     convertTo,
     convertFrom,
     normalizeContent,

@@ -2348,6 +2348,34 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   padding: 6px 14px;
 }
+.md-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+.superscript-links-bar {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.superscript-links-bar .links-bar-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.superscript-links-bar a {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: underline;
+  word-break: break-all;
+}
 .find-bar {
   display: flex;
   flex-direction: column;
@@ -2462,40 +2490,6 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
 .note-body-highlights mark.search-hit-current {
   background: color-mix(in srgb, #e10600 38%, transparent);
   box-shadow: inset 0 -2px 0 #e10600;
-}
-.note-body-mirror {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  margin: 0;
-  padding: 14px 18px;
-  border: 0;
-  overflow: hidden;
-  pointer-events: none;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  font-family: var(--font);
-  font-size: var(--note-body-size);
-  line-height: var(--note-body-line);
-  font-optical-sizing: none;
-  font-synthesis: none;
-  -webkit-font-smoothing: antialiased;
-  color: var(--text);
-}
-.note-body-mirror a {
-  color: var(--accent);
-  text-decoration: underline;
-  pointer-events: auto;
-  cursor: pointer;
-}
-.note-body-wrap.superscript-editing .note-body {
-  color: transparent;
-  caret-color: var(--text);
-  background: transparent;
-}
-.note-body-wrap.superscript-editing .note-body::selection {
-  color: transparent;
-  background: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 .note-readonly .preview {
   cursor: default;

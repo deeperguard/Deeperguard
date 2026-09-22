@@ -1161,14 +1161,12 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b'id="doc-zoom-out"', res.data)
         self.assertIn(b'id="doc-zoom-reset"', res.data)
         self.assertIn(b"Super checklist", res.data)
-        self.assertIn(b'id="note-body-mirror"', res.data)
-        self.assertIn("syncSuperscriptEditMirror", app_js)
+        self.assertIn(b'id="superscript-links-bar"', res.data)
+        self.assertIn(b'id="btn-undo"', res.data)
+        self.assertIn("syncSuperscriptLinksBar", app_js)
+        self.assertIn("function undoEdit", app_js)
+        self.assertIn("extractLinks", (APP_DIR / "static" / "js" / "superscript.js").read_text(encoding="utf-8"))
         self.assertIn("previewBtn.hidden = checklistOn || !hasDocs", app_js)
-        initial_mode_fn = app_js[
-            app_js.find("function initialEditorMode"):app_js.find("let renderNotesFrame")
-        ]
-        self.assertNotIn("prefs.autoPreview", initial_mode_fn)
-        self.assertNotIn("if (body) return 'preview'", initial_mode_fn)
         # Update must not navigate to ?hard=1 (Safari crash-looped on cellular).
         self.assertNotIn(b"&hard=1", res.data)
         hard = self.client.get("/app?hard=1&nosync=1", follow_redirects=False)
