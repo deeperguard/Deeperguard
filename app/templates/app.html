@@ -845,11 +845,12 @@
           </div>
           <p id="find-doc-status" class="find-doc-status" hidden aria-live="polite"></p>
         </div>
-        <div id="preview" class="preview" hidden tabindex="-1"></div>
         <div id="note-body-wrap" class="note-body-wrap">
+          <pre id="note-body-links" class="note-body-links" aria-hidden="true"></pre>
           <pre id="note-body-highlights" class="note-body-highlights" aria-hidden="true"></pre>
           <textarea id="note-body" class="note-body" placeholder="Write…"></textarea>
         </div>
+        <div id="preview" class="preview" hidden tabindex="-1"></div>
         <div id="note-lock-gate" class="note-lock-gate" hidden>
           <p>This note is protected.</p>
           <label>Account password
@@ -1438,6 +1439,7 @@
   <script src="/static/js/search.js?v={{ build }}"></script>
   <script src="/static/js/markdown.js?v={{ build }}"></script>
   <script src="/static/js/superscript.js?v={{ build }}"></script>
+  <script src="/static/js/link-overlay.js?v={{ build }}"></script>
   <script src="/static/js/checklist.js?v={{ build }}"></script>
   <script src="/static/js/tagsuggest.js?v={{ build }}"></script>
   <script src="/static/js/vendor/pdfjs/pdf.min.js?v=8"></script>

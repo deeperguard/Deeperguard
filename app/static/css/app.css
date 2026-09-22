@@ -3002,30 +3002,43 @@ body.scan-dialog-open {
   -webkit-font-smoothing: antialiased;
 }
 .preview { overflow: auto; white-space: normal; }
-.editor.rich-live-edit {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+.note-body-links {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 14px 18px;
+  border: 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  font-family: var(--font);
+  font-size: var(--note-body-size);
+  line-height: var(--note-body-line);
+  letter-spacing: normal;
+  font-optical-sizing: none;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  color: transparent;
 }
-.editor.rich-live-edit #preview {
-  flex: 0 1 auto;
-  max-height: min(44vh, 360px);
-  min-height: 72px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+.note-body-links a.edit-link {
+  pointer-events: auto;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  text-decoration: none;
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-repeat: no-repeat;
+  background-size: 100% 1.5px;
+  background-position: 0 calc(100% - 1px);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  cursor: pointer;
 }
-.editor.rich-live-edit #preview:empty::before {
-  content: '';
-  display: block;
-  min-height: 1px;
-}
-.editor.rich-live-edit #note-body-wrap {
-  flex: 1 1 auto;
-  min-height: 120px;
-}
-.editor.rich-live-edit .note-body {
-  -webkit-text-decoration-skip: ink;
-  text-decoration-skip-ink: auto;
+.note-body-wrap.edit-links-active .note-body {
+  position: relative;
+  z-index: 1;
 }
 .preview h1, .preview h2, .preview h3,
 .preview p, .preview li {
@@ -4070,13 +4083,50 @@ html[data-theme="light"] {
   font-size: 20px;
   cursor: pointer;
 }
-.check-text {
+.check-text-wrap {
+  position: relative;
   flex: 1;
+  min-width: 0;
+}
+.check-text-links {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 8px 4px;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: transparent;
+}
+.check-text {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  width: 100%;
   min-width: 0;
   border: 0;
   background: transparent;
   padding: 8px 4px;
   border-radius: 8px;
+}
+.check-text-links a.edit-link {
+  pointer-events: auto;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  text-decoration: none;
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-repeat: no-repeat;
+  background-size: 100% 1.5px;
+  background-position: 0 calc(100% - 1px);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  cursor: pointer;
 }
 .check-text:focus { outline: none; background: var(--bg-hover); }
 .checklist.readonly .check-box,
@@ -4310,6 +4360,7 @@ html[data-theme="light"] {
 .mobile-only { display: none; }
 .desktop-only { display: inline-flex; }
 .note-body.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.note-body-wrap.mono .note-body-links { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .note-list.compact .note-item { padding: 10px 14px; }
 .note-list.hide-previews .note-item p,
 .note-list.hide-previews .note-preview,
@@ -4426,14 +4477,6 @@ body.doc-preview-open .fab-stack,
     min-height: 45vh;
     height: auto;
     overflow: auto;
-  }
-  .editor.rich-live-edit #preview {
-    min-height: 72px;
-    max-height: min(40vh, 320px);
-    flex: 0 0 auto;
-  }
-  .editor.rich-live-edit .note-body {
-    min-height: 32vh;
   }
   .editor-foot,
   .attachments,
