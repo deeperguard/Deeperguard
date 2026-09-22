@@ -385,14 +385,35 @@
     return picks[0] || null;
   }
 
-  function renderInline(text) {
+  function renderInlinePlainSegment(segment) {
     let out = '';
     let cursor = 0;
-    while (cursor < text.length) {
-      const token = nextInlineToken(text, cursor);
+    const src = String(segment || '');
+    while (cursor < src.length) {
+      const token = nextInlineToken(src, cursor);
       if (!token || token.start > cursor) {
-        const end = token ? token.start : text.length;
-        out += escapeHtml(text.slice(cursor, end));
+        const end = token ? token.start : src.length;
+        const chunk = src.slice(cursor, end);
+        let subCursor = 0;
+        const urls = [
+          ...findHttpUrls(chunk),
+          ...findWwwUrls(chunk).map((item) => ({ start: item.start, end: item.end, href: `https://${item.url}` })),
+        ].sort((a, b) => a.start - b.start);
+        urls.forEach((item) => {
+          if (item.start < subCursor) return;
+          out += escapeHtml(chunk.slice(subCursor, item.start));
+          const href = item.href || item.url;
+          const safe = safeHref(trimUrl(href));
+          const raw = chunk.slice(item.start, item.end);
+          if (safe) {
+            const attr = safe.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+            out += `<a href="${attr}" target="_blank" rel="noopener noreferrer">${escapeHtml(raw)}</a>`;
+          } else {
+            out += escapeHtml(raw);
+          }
+          subCursor = item.end;
+        });
+        out += escapeHtml(chunk.slice(subCursor));
         cursor = end;
         if (!token) break;
         continue;
@@ -400,7 +421,7 @@
       const href = trimUrl(token.href);
       const safe = safeHref(href) || (href.startsWith('mailto:') ? href : '');
       if (!safe) {
-        out += escapeHtml(text.slice(token.start, token.end));
+        out += escapeHtml(src.slice(token.start, token.end));
       } else {
         const attr = safe.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
         out += `<a href="${attr}" target="_blank" rel="noopener noreferrer">${escapeHtml(token.label || safe)}</a>`;
@@ -408,6 +429,10 @@
       cursor = token.end;
     }
     return out;
+  }
+
+  function renderInline(text) {
+    return renderInlinePlainSegment(text);
   }
 
   function toggleTaskAt(md, index) {
@@ -519,8 +544,12 @@
     html = html.replace(/^\s*[-*] (.*)$/gm, '<li>$1</li>');
     html = html.replace(/(<li[\s\S]*?<\/li>\n?)+/g, (block) => `<ul>${block}</ul>`);
     html = html.replace(/@@FENCE(\d+)@@/g, (_, i) => `<pre><code>${escapeHtml(fences[Number(i)])}</code></pre>`);
-    html = html.replace(/\n\n/g, '</p><p>');
-    return `<p>${html}</p>`;
+    const blocks = html.split(/\n\n+/);
+    const paragraphs = blocks
+      .map((block) => block.replace(/\n/g, '<br>').trim())
+      .filter(Boolean)
+      .map((block) => `<p>${block}</p>`);
+    return paragraphs.length ? paragraphs.join('') : '<p></p>';
   }
 
   const api = {

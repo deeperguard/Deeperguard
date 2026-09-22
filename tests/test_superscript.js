@@ -105,4 +105,12 @@ assert.ok(links.some((link) => link.href === 'https://open.example.org'));
 const repairedDouble = normalizeContent('<<https://Www.google.com>>');
 assert.strictEqual(repairedDouble, '<https://Www.google.com>');
 
+const lineBreaks = render('first line\nsecond line');
+assert.match(lineBreaks, /<br>/);
+assert.match(lineBreaks, /first line/);
+assert.match(lineBreaks, /second line/);
+
+const bareUrl = render('Cursor web\nhttps://cursor.com/agents');
+assert.match(bareUrl, /<a href="https:\/\/cursor\.com\/agents"[^>]*>https:\/\/cursor\.com\/agents<\/a>/);
+
 console.log('ok');

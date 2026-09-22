@@ -860,6 +860,17 @@
     return type === 'markdown' || type === 'superscript';
   }
 
+  function noteUsesRenderedBody(type) {
+    return type === 'plain' || type === 'markdown' || type === 'superscript';
+  }
+
+  function richLiveEditActive(type) {
+    if (!type || isChecklistEditor(type) || type === 'code') return false;
+    if (noteEditingLocked()) return false;
+    if (editorMode !== 'edit') return false;
+    return noteUsesRenderedBody(type);
+  }
+
   function renderNoteBodyPreview(text, editor) {
     if (window.NotesSuperscript && (editor === 'superscript' || editor === 'markdown' || editor === 'plain')) {
       return NotesSuperscript.render(text);
@@ -955,9 +966,9 @@
     if (ui.title) ui.title.value = snap.title;
     if (ui.body) ui.body.value = snap.body;
     scheduleSave();
-    syncEditLinkOverlay();
     const note = currentId ? NotesStore.get(currentId) : null;
     const type = note?.content?.editor || ui.editorType?.value || 'plain';
+    if (richLiveEditActive(type)) refreshPreview();
     if (isChecklistEditor(type)) {
       renderChecklist(note ? { ...note, content: { ...note.content, content: snap.body } } : { content: { content: snap.body, editor: type } });
     }
@@ -1027,60 +1038,6 @@
       event.preventDefault();
       redoEdit();
     }
-  }
-
-  function editLinkOverlayActive() {
-    if (!ui.body || ui.body.hidden || noteEditingLocked()) return false;
-    return editorMode === 'edit';
-  }
-
-  function syncEditLinkScroll() {
-    const layer = document.getElementById('note-body-links');
-    if (!layer || !ui.body) return;
-    layer.scrollTop = ui.body.scrollTop;
-    layer.scrollLeft = ui.body.scrollLeft;
-  }
-
-  function syncChecklistLinkOverlays(root) {
-    if (!root || !window.NotesLinkOverlay?.renderHtml) return;
-    root.querySelectorAll('.check-text-wrap').forEach((wrap) => {
-      const input = wrap.querySelector('.check-text');
-      const layer = wrap.querySelector('.check-text-links');
-      if (!input || !layer) return;
-      layer.innerHTML = NotesLinkOverlay.renderHtml(input.value);
-    });
-  }
-
-  function syncEditLinkOverlay() {
-    const wrap = document.getElementById('note-body-wrap');
-    const layer = document.getElementById('note-body-links');
-    const note = currentId ? NotesStore.get(currentId) : null;
-    const type = note?.content?.editor || ui.editorType?.value || 'plain';
-    const checklistOn = isChecklistEditor(type);
-    if (checklistOn && ui.checklist) {
-      syncChecklistLinkOverlays(ui.checklist);
-    }
-    if (!wrap || !layer || !ui.body) return;
-    const active = editLinkOverlayActive() && !checklistOn && window.NotesLinkOverlay?.renderHtml;
-    wrap.classList.toggle('edit-links-active', active);
-    if (!active) {
-      layer.innerHTML = '';
-      return;
-    }
-    layer.innerHTML = NotesLinkOverlay.renderHtml(ui.body.value);
-    syncEditLinkScroll();
-  }
-
-  function bindEditLinkOverlays() {
-    if (document.body._editLinksBound) return;
-    document.body._editLinksBound = true;
-    document.body.addEventListener('click', (event) => {
-      const anchor = event.target?.closest?.('a.edit-link[href]');
-      if (!anchor) return;
-      event.preventDefault();
-      event.stopPropagation();
-      openExternalLink(anchor.getAttribute('href') || '');
-    });
   }
 
   function togglePreviewTaskAt(text, editor, index) {
@@ -7716,7 +7673,6 @@
     if (ocrBtn) ocrBtn.hidden = !hasDocs;
     if (!currentId) {
       if (previewBtn) previewBtn.hidden = true;
-      syncEditLinkOverlay();
       return;
     }
     const note = NotesStore.get(currentId);
@@ -7733,7 +7689,6 @@
       if (!vaultPullActive) renderDocInline(currentId);
       syncEditorBodyWrap();
       if (previewBtn) previewBtn.hidden = false;
-      syncEditLinkOverlay();
       if (note) syncTagBarShell(note);
       return;
     }
@@ -7753,15 +7708,26 @@
       syncEditorBodyWrap();
       syncEditorDocPreviewLayout();
       if (previewBtn) previewBtn.hidden = false;
-      syncEditLinkOverlay();
       if (note) syncTagBarShell(note);
       return;
     }
     const type = note?.content?.editor || ui.editorType.value || 'plain';
     const checklistOn = isChecklistEditor(type);
-    previewOn = editorMode !== 'edit';
-    ui.preview.hidden = !previewOn || checklistOn;
-    ui.body.hidden = previewOn || checklistOn;
+    const editingLocked = !!note?.content?.prevent_edit;
+    if (editingLocked) editorMode = 'preview';
+    const richLive = richLiveEditActive(type);
+    ui.editor?.classList.toggle('rich-live-edit', richLive);
+    if (richLive) {
+      previewOn = false;
+      ui.preview.hidden = false;
+      ui.body.hidden = false;
+      refreshPreview();
+    } else {
+      previewOn = editingLocked || editorMode !== 'edit';
+      ui.preview.hidden = !previewOn || checklistOn;
+      ui.body.hidden = previewOn || checklistOn;
+      if (previewOn && !checklistOn) refreshPreview();
+    }
     syncEditorBodyWrap();
     if (ui.checklist) ui.checklist.hidden = !checklistOn;
     if (toolbar) toolbar.hidden = previewOn || checklistOn || type === 'plain';
@@ -7779,14 +7745,12 @@
     }
     if (ocrBtn) ocrBtn.textContent = 'OCR text';
     if (checklistOn) renderChecklist(note);
-    else if (previewOn) refreshPreview();
     if (docSearchActive()) {
       ui.docInline.hidden = false;
       renderDocInline(currentId);
     }
     applyReadOnly(!!note?.content?.prevent_edit);
     syncEditorDocPreviewLayout();
-    syncEditLinkOverlay();
     if (note) {
       syncClearCheckedButton(note);
       syncTagBarShell(note);
@@ -7839,10 +7803,7 @@
     ui.checklist.innerHTML = rows.map((row) => `
       <div class="check-row" data-check-id="${escapeAttr(row.id)}" style="--indent:${row.indent || 0}">
         <button type="button" class="check-box" data-check-toggle="${escapeAttr(row.id)}" aria-checked="${row.done}">${row.done ? '☑' : '☐'}</button>
-        <div class="check-text-wrap">
-          <div class="check-text-links" aria-hidden="true"></div>
-          <input class="check-text" data-check-text="${escapeAttr(row.id)}" value="${escapeAttr(row.text)}" placeholder="List item" ${note.content.prevent_edit ? 'readonly' : ''}>
-        </div>
+        <input class="check-text" data-check-text="${escapeAttr(row.id)}" value="${escapeAttr(row.text)}" placeholder="List item" ${note.content.prevent_edit ? 'readonly' : ''}>
         ${nested ? `<button type="button" class="btn ghost sm check-indent" data-check-indent="${escapeAttr(row.id)}" aria-label="Indent">⇥</button>` : ''}
       </div>`).join('') + (note.content.prevent_edit ? '' : '<button type="button" class="btn ghost sm check-add" id="check-add">Add item</button>');
     ui.checklist.querySelectorAll('[data-check-toggle]').forEach((btn) => {
@@ -7858,7 +7819,6 @@
       });
       input.addEventListener('input', () => {
         if (note.content.prevent_edit) return;
-        syncChecklistLinkOverlays(input.closest('.checklist'));
         commit(NotesChecklist.setText(rows, input.dataset.checkText, input.value), { rerender: false });
       });
       input.addEventListener('keydown', (event) => {
@@ -7883,7 +7843,6 @@
     if (add) add.addEventListener('click', () => {
       addItem(rows[rows.length - 1]?.id);
     });
-    syncChecklistLinkOverlays(ui.checklist);
     syncClearCheckedButton(note);
   }
 
@@ -11044,7 +11003,6 @@
     if (!layer || !ui.body) return;
     layer.scrollTop = ui.body.scrollTop;
     layer.scrollLeft = ui.body.scrollLeft;
-    syncEditLinkScroll();
   }
 
   function highlightFindPreview() {
@@ -11495,7 +11453,6 @@
   document.getElementById('doc-backdrop').addEventListener('click', closeDocPreview);
   bindInlinePreviewGestures();
   bindPreviewExternalLinks();
-  bindEditLinkOverlays();
   document.getElementById('btn-undo')?.addEventListener('click', () => undoEdit());
   document.getElementById('btn-redo')?.addEventListener('click', () => redoEdit());
   document.getElementById('tag-bar-toggle')?.addEventListener('click', () => {
@@ -11788,7 +11745,8 @@
     if (note?.content?.prevent_edit) return;
     if (note?.content?.locked && !unlockedNotes.has(currentId)) return;
     scheduleSave();
-    syncEditLinkOverlay();
+    const type = note?.content?.editor || ui.editorType?.value || 'plain';
+    if (richLiveEditActive(type)) refreshPreview();
     syncUndoButtons();
     if (!document.getElementById('find-bar')?.hidden) {
       const query = document.getElementById('find-input')?.value?.trim() || '';
