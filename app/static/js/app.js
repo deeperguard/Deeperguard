@@ -337,9 +337,15 @@
     section.open = !prefs.viewsCollapsed;
   }
 
+  function applyNoteTypographyVars() {
+    const px = Number(prefs.fontSize) || 16;
+    document.documentElement.style.setProperty('--note-body-size', `${px}px`);
+    document.documentElement.style.setProperty('--note-title-size', `${px}px`);
+  }
+
   function applyPrefs() {
     applyTheme();
-    document.documentElement.style.setProperty('--note-body-size', `${prefs.fontSize}px`);
+    applyNoteTypographyVars();
     ui.body.style.fontSize = `${prefs.fontSize}px`;
     ui.body.classList.toggle('mono', !!prefs.monospace);
     document.getElementById('note-body-highlights')?.classList.toggle('mono', !!prefs.monospace);
