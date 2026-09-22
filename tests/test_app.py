@@ -3658,8 +3658,10 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("commit(next, { keepFocus: added?.id, focusIndex: insertIndex });", checklist_fn)
         self.assertIn("addItem(input.dataset.checkText", checklist_fn)
         self.assertIn("addItem(rows[rows.length - 1]?.id);", checklist_fn)
-        self.assertIn("check-clear-done", checklist_fn)
-        self.assertIn("NotesChecklist.removeDone(rows)", checklist_fn)
+        self.assertIn("syncClearCheckedButton(note)", checklist_fn)
+        self.assertIn('id="btn-clear-checked"', html)
+        self.assertIn("btn-clear-checked", app_js)
+        self.assertIn("NotesChecklist.removeDone(rows)", app_js)
 
         write_fn = app_js[
             app_js.find("function writeChecklist("):

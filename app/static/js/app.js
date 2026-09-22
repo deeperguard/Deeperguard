@@ -7598,7 +7598,10 @@
     }
     applyReadOnly(!!note?.content?.prevent_edit);
     syncEditorDocPreviewLayout();
-    if (note) syncTagBarShell(note);
+    if (note) {
+      syncClearCheckedButton(note);
+      syncTagBarShell(note);
+    }
   }
 
   function applyReadOnly(on) {
@@ -7643,12 +7646,7 @@
       const added = next[insertIndex];
       commit(next, { keepFocus: added?.id, focusIndex: insertIndex });
     };
-    const hasDone = rows.some((row) => row.done);
-    const clearDoneBtn = !note.content.prevent_edit && hasDone
-      ? '<button type="button" class="btn ghost sm check-clear-done" id="check-clear-done">Clear checked</button>'
-      : '';
-    ui.checklist.innerHTML = (clearDoneBtn ? `<div class="checklist-actions">${clearDoneBtn}</div>` : '')
-      + rows.map((row) => `
+    ui.checklist.innerHTML = rows.map((row) => `
       <div class="check-row" data-check-id="${escapeAttr(row.id)}" style="--indent:${row.indent || 0}">
         <button type="button" class="check-box" data-check-toggle="${escapeAttr(row.id)}" aria-checked="${row.done}">${row.done ? '☑' : '☐'}</button>
         <input class="check-text" data-check-text="${escapeAttr(row.id)}" value="${escapeAttr(row.text)}" placeholder="List item" ${note.content.prevent_edit ? 'readonly' : ''}>
@@ -7686,17 +7684,32 @@
     if (add) add.addEventListener('click', () => {
       addItem(rows[rows.length - 1]?.id);
     });
-    const clearDone = document.getElementById('check-clear-done');
-    if (clearDone) clearDone.addEventListener('click', () => {
-      if (note.content.prevent_edit) return;
-      commit(NotesChecklist.removeDone(rows));
-    });
+    syncClearCheckedButton(note);
+  }
+
+  function syncClearCheckedButton(note) {
+    const btn = document.getElementById('btn-clear-checked');
+    if (!btn) return;
+    if (!note) {
+      btn.hidden = true;
+      return;
+    }
+    const type = note.content?.editor || ui.editorType?.value || 'plain';
+    if (!isChecklistEditor(type) || note.content?.prevent_edit) {
+      btn.hidden = true;
+      return;
+    }
+    const nested = type === 'super';
+    const rows = window.NotesChecklist?.parse(note.content?.content || ui.body?.value || '', { nested }) || [];
+    btn.hidden = !rows.some((row) => row.done);
   }
 
   function writeChecklist(rows, nested, { keepFocus, focusIndex, rerender = true } = {}) {
     const text = NotesChecklist.serialize(rows, { nested });
     ui.body.value = text;
     scheduleSave();
+    const live = currentId ? NotesStore.get(currentId) : null;
+    syncClearCheckedButton(live ? { content: { ...(live.content || {}), content: text, editor: nested ? 'super' : 'checklist' } } : null);
     if (!rerender) return;
     const note = NotesStore.get(currentId) || { content: { content: text, editor: nested ? 'super' : 'checklist' } };
     renderChecklist({ content: { ...(note.content || {}), content: text, editor: nested ? 'super' : 'checklist' } });
@@ -7726,7 +7739,7 @@
     if (actions) actions.hidden = !!gated;
     if (tagShell) tagShell.hidden = !!gated;
     if (ui.editorType) ui.editorType.hidden = !!gated;
-    ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
+    ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.hidden = !!gated;
     });
@@ -7921,8 +7934,9 @@
       }
     }
     document.getElementById('btn-delete-forever').hidden = !note.content.trashed;
+    syncClearCheckedButton(note);
     if (note && note.content?.locked && !unlockedNotes.has(note.uuid)) {
-      ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
+      ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.hidden = true;
       });
@@ -12117,6 +12131,18 @@
       return;
     }
     deleteNoteForever(currentId);
+  });
+
+  document.getElementById('btn-clear-checked')?.addEventListener('click', () => {
+    if (!currentId || !window.NotesChecklist) return;
+    const note = NotesStore.get(currentId);
+    if (!note || note.content?.prevent_edit) return;
+    const type = note.content?.editor || ui.editorType?.value || 'plain';
+    if (!isChecklistEditor(type)) return;
+    const nested = type === 'super';
+    const rows = NotesChecklist.parse(note.content?.content || ui.body?.value || '', { nested });
+    if (!rows.some((row) => row.done)) return;
+    writeChecklist(NotesChecklist.removeDone(rows), nested);
   });
 
   async function ingestAttachmentFiles(files, { sourceRemoval = null } = {}) {
