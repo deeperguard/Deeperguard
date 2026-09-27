@@ -1852,19 +1852,42 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 }
 .tag-section .tag-new-btn:hover { color: var(--text); border-color: var(--accent); }
 .scan-save-as {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 14px;
-  margin: 2px 0 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0;
 }
 .scan-save-as[hidden] { display: none !important; }
-.scan-save-as-label { font-size: 13px; color: var(--muted); }
-.scan-save-choice {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.scan-save-as-label {
+  grid-column: 1 / -1;
   font-size: 14px;
+  font-weight: 500;
+}
+.scan-save-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: var(--touch);
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.scan-save-choice input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 18px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  accent-color: var(--accent);
 }
 .folder-list { display: flex; flex-direction: column; gap: 2px; }
 .folder-block.active > .folder-head { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 8px; }
