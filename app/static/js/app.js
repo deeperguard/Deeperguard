@@ -7658,33 +7658,44 @@
 
   function renderHistory(note) {
     if (!ui.historyList) return;
-    const revisions = Array.isArray(note?.content?.revisions) ? note.content.revisions : [];
-    if (!revisions.length) {
-      ui.historyList.innerHTML = '<p class="muted">No previous versions yet.</p>';
-      return;
-    }
-    ui.historyList.innerHTML = revisions
-      .map((rev, idx) => {
-        const when = new Date(rev.at).toLocaleString();
-        return `<div class="history-item">
+    try {
+      const revisions = typeof NotesHistory !== 'undefined'
+        ? NotesHistory.revisionRows(note)
+        : [];
+      if (!revisions.length) {
+        ui.historyList.innerHTML = '<p class="muted">No previous versions yet.</p>';
+        return;
+      }
+      ui.historyList.innerHTML = revisions
+        .map((rev, idx) => {
+          const whenAt = typeof NotesHistory !== 'undefined' ? NotesHistory.revisionTimestamp(rev) : 0;
+          const when = whenAt ? new Date(whenAt).toLocaleString() : '';
+          return `<div class="history-item">
           <span><strong>${escapeHtml(rev.title || 'Untitled')}</strong><br><span class="muted">${when}</span></span>
           <button class="btn ghost sm" data-rev="${idx}">Restore</button>
         </div>`;
-      })
-      .join('');
-    ui.historyList.querySelectorAll('[data-rev]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const rev = revisions[Number(btn.dataset.rev)];
-        if (!rev) return;
-        const ok = await confirmAction(
-          'Restore this version? Current text will be saved to history.',
-          { title: 'Restore version', confirmLabel: 'Restore' },
-        );
-        if (!ok) return;
-        NotesStore.restoreRevision(currentId, rev);
-        openNote(currentId);
+        })
+        .join('');
+      ui.historyList.querySelectorAll('[data-rev]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const rev = revisions[Number(btn.dataset.rev)];
+          if (!rev) return;
+          const ok = await confirmAction(
+            'Restore this version? Current text will be saved to history.',
+            { title: 'Restore version', confirmLabel: 'Restore' },
+          );
+          if (!ok) return;
+          // Save the open editor first so that text is the history snapshot.
+          // Opening afterward must not flush it back over the restored version.
+          flushSave();
+          NotesStore.restoreRevision(currentId, rev);
+          openNote(currentId, { skipFlush: true });
+        });
       });
-    });
+    } catch (err) {
+      console.warn('history render failed', err);
+      ui.historyList.innerHTML = '<p class="muted">No previous versions yet.</p>';
+    }
   }
 
   function noteHasDocs(noteId) {
@@ -8008,7 +8019,7 @@
     bindPreviewTaskToggles();
   }
 
-  function openNote(id, { skipGate = false } = {}) {
+  function openNote(id, { skipGate = false, skipFlush = false } = {}) {
     const note = NotesStore.get(id);
     if (!note) return;
     if (currentId && currentId !== id) {
@@ -8017,7 +8028,14 @@
     const gated = !!note.content.locked && !unlockedNotes.has(id) && !skipGate;
     const alreadyEditing = !!currentId && ui.editor && !ui.editor.hidden;
     const syncing = vaultPullActive;
-    flushSave();
+    const flushFirst = typeof NotesHistory !== 'undefined'
+      ? NotesHistory.shouldFlushOnOpen(skipFlush)
+      : !skipFlush;
+    if (flushFirst) flushSave();
+    else {
+      clearTimeout(saveDebounce);
+      saveDebounce = null;
+    }
     currentId = id;
     listSelectionId = id;
     // Paint the row while the list is still on screen. On iPhone the list

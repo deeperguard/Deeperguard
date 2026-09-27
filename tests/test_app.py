@@ -1625,6 +1625,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_link_overlay(self):
         self._run_node_script("test_link_overlay.js")
 
+    def test_client_note_history(self):
+        self._run_node_script("test_note_history.js")
+
     def test_ocr_text_file(self):
         os.environ["NOTES_SERVER_OCR"] = "1"
         self._register_user("ocr@home.local", "ocr-secure-pass")
@@ -3718,7 +3721,7 @@ class NotesAppTests(unittest.TestCase):
         ]
         self.assertIn("return false;", default_tags_fn)
         open_note_fn = app_js[
-            app_js.find("function openNote(id, { skipGate = false } = {})"):
+            app_js.find("function openNote(id, { skipGate = false, skipFlush = false } = {})"):
             app_js.find("function updateActionButtons(note)")
         ]
         self.assertIn("if (tagBarNoteId !== id || !alreadyEditing)", open_note_fn)
@@ -3874,12 +3877,12 @@ class NotesAppTests(unittest.TestCase):
         preview_link = css[css.find(".preview a {"):css.find(".preview a {") + 420]
         self.assertIn("box-decoration-break: clone", preview_link)
         self.assertIn("background-size: 100% 1.5px", preview_link)
+        history_css = css[css.find(".history {"):css.find(".history {") + 280]
+        self.assertIn("max-height: min(32vh, 15rem)", history_css)
+        self.assertIn("overflow-y: auto", css[css.find(".history-list {"):css.find(".history-list {") + 220])
+        self.assertNotIn("z-index: 2", css[css.find("Note text keeps the flexible area"):css.find("Note text keeps the flexible area") + 900])
 
-        history_fn = app_js[app_js.find("function renderHistory(note)"):app_js.find("function noteHasDocs(noteId)")]
-        self.assertIn("const revisions = Array.isArray(note?.content?.revisions)", history_fn)
-        self.assertNotIn("if (!revisions.length)", history_fn[:history_fn.find("const revisions")])
-
-        open_fn = app_js[app_js.find("function openNote(id, { skipGate = false } = {})"):app_js.find("function updateActionButtons(note)")]
+        open_fn = app_js[app_js.find("function openNote(id, { skipGate = false, skipFlush = false } = {})"):app_js.find("function updateActionButtons(note)")]
         self.assertIn("listSelectionId = id", open_fn)
         self.assertLess(open_fn.find("markActiveNoteRow()"), open_fn.find("classList.add('editor-open')"))
         self.assertIn("ui.body.value = gated ? '' : body", open_fn)

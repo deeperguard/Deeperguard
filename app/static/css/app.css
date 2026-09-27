@@ -2877,7 +2877,7 @@ body.scan-dialog-open {
   font-size: 16px;
   line-height: 1;
 }
-.editor { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.editor { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .editor-head {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 14px;
@@ -2992,12 +2992,12 @@ body.scan-dialog-open {
   line-height: 1;
 }
 .note-body, .preview {
-  flex: 1;
+  flex: 1 1 auto;
   border: 0;
   border-radius: 0;
   background: transparent;
   padding: 14px 18px;
-  min-height: 0;
+  min-height: min(28vh, 12rem);
   font-family: var(--font);
   font-size: var(--note-body-size);
   line-height: var(--note-body-line);
@@ -3075,6 +3075,17 @@ body.scan-dialog-open {
 }
 .editor-foot .error { color: var(--danger); }
 .attachments, .history { padding: 8px 14px 14px; border-top: 1px solid var(--border); }
+.history {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(32vh, 15rem);
+  overflow: hidden;
+  position: static;
+  z-index: auto;
+}
+.history > .section-label { flex: 0 0 auto; }
 .section-label-btn {
   border: 0;
   background: transparent;
@@ -3090,6 +3101,13 @@ body.scan-dialog-open {
   text-underline-offset: 3px;
 }
 .attachment-list, .history-list { display: grid; gap: 8px; margin-bottom: 10px; }
+.history-list {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
 .attachment-item, .history-item {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 10px 12px; border-radius: 10px; background: var(--bg-hover);
@@ -4471,29 +4489,38 @@ body.doc-preview-open .fab-stack,
     padding-right: var(--safe-right);
   }
   .editor {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Note text keeps the flexible area. History scrolls inside its own cap
+     so a long version list cannot paint over the note. */
+  .note-body-wrap,
+  .editor > #preview:not([hidden]),
+  .editor > #checklist:not([hidden]) {
+    flex: 1 1 auto;
+    min-height: min(28vh, 12rem);
     overflow: auto;
     -webkit-overflow-scrolling: touch;
   }
-  /* Keep the body/preview in normal flow so a tall tag bar cannot collapse
-     the wrap to 0 and let Saved / Attachments / History paint over the text. */
-  .note-body-wrap {
-    flex: 1 1 auto;
-    min-height: 45vh;
-    overflow: visible;
-  }
   .note-body, .preview {
-    flex: 0 0 auto;
-    min-height: 45vh;
+    flex: 1 1 auto;
+    min-height: 0;
     height: auto;
     overflow: auto;
   }
   .editor-foot,
-  .attachments,
-  .history,
-  .checklist {
+  .attachments {
     flex-shrink: 0;
-    position: relative;
-    z-index: 2;
+    position: static;
+    z-index: auto;
+    background: transparent;
+  }
+  .history {
+    flex: 0 1 auto;
+    max-height: min(32vh, 15rem);
+    position: static;
+    z-index: auto;
     background: var(--bg);
   }
   .tag-bar-shell.is-collapsed + .tag-suggest { margin-top: 0; }
