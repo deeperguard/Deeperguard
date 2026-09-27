@@ -2270,6 +2270,9 @@ class NotesAppTests(unittest.TestCase):
         batch_fn = app_js[app_js.find("async function ingestDocumentBatch"):app_js.find("function canOcrAttachment")]
         self.assertEqual(batch_fn.count("createNote({ silent: true, title })"), 1)
         self.assertIn("createIfNeeded: false", batch_fn)
+        self.assertIn("ocrPending", app_js)
+        self.assertIn("ocr_method === 'pending'", app_js)
+        self.assertIn("memoryConstrained", (APP_DIR / "static" / "js" / "client-ocr-engine.js").read_text(encoding="utf-8"))
         self.assertNotIn('"-l", str(MAX_PDF_PAGES)', (APP_DIR / "ocr.py").read_text(encoding="utf-8"))
         self.assertIn("Number.POSITIVE_INFINITY", (APP_DIR / "static" / "js" / "client-ocr-engine.js").read_text(encoding="utf-8"))
         self.assertIn("Number(item.content.ocr_index) !== current", app_js)

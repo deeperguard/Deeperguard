@@ -22,6 +22,53 @@ const NotesClientOcr = (() => {
   let workerRef = null;
   let pdfWorkerBlobUrl = '';
 
+  // iOS and installed PWAs are killed (the app looks like it reloaded) when OCR
+  // and a full-page preview both keep large canvases alive.
+  function memoryConstrained() {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    const ios = /iPad|iPhone|iPod/.test(ua)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    let standalone = false;
+    try {
+      standalone = navigator.standalone === true
+        || (typeof matchMedia === 'function' && matchMedia('(display-mode: standalone)').matches);
+    } catch (err) {
+      standalone = false;
+    }
+    return ios || standalone;
+  }
+
+  function maxOcrPixels() {
+    return memoryConstrained() ? 1200000 : 3500000;
+  }
+
+  function releaseCanvas(canvas) {
+    if (!canvas) return;
+    try {
+      canvas.width = 1;
+      canvas.height = 1;
+    } catch (err) {
+      /* ignore */
+    }
+  }
+
+  function yieldToUi() {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  function downscaleCanvas(source, maxPixels) {
+    const pixels = Math.max(1, source.width * source.height);
+    if (pixels <= maxPixels) return source;
+    const scale = Math.sqrt(maxPixels / pixels);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.floor(source.width * scale));
+    canvas.height = Math.max(1, Math.floor(source.height * scale));
+    canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+    if (canvas !== source) releaseCanvas(source);
+    return canvas;
+  }
+
   function clean(text) {
     return String(text || '')
       .replace(/\r\n/g, '\n')
@@ -293,28 +340,36 @@ const NotesClientOcr = (() => {
   async function recognizeCanvas(canvas, { page = 0, psm = 3, enhanced = false } = {}) {
     const worker = await ensureWorker();
     const input = enhanced ? enhanceCanvas(canvas) : canvas;
-    if (typeof worker.setParameters === 'function') {
-      await worker.setParameters({
-        tessedit_pageseg_mode: String(psm),
-        preserve_interword_spaces: '1',
-      });
+    try {
+      if (typeof worker.setParameters === 'function') {
+        await worker.setParameters({
+          tessedit_pageseg_mode: String(psm),
+          preserve_interword_spaces: '1',
+        });
+      }
+      const result = await worker.recognize(input);
+      const data = result?.data || {};
+      const text = clean(data.text || '');
+      const words = Array.isArray(data.words) ? data.words : [];
+      const boxes = wordsToBoxes(words, input.width, input.height, page);
+      return { text, boxes };
+    } finally {
+      if (input !== canvas) releaseCanvas(input);
     }
-    const result = await worker.recognize(input);
-    const data = result?.data || {};
-    const text = clean(data.text || '');
-    const words = Array.isArray(data.words) ? data.words : [];
-    const boxes = wordsToBoxes(words, input.width, input.height, page);
-    return { text, boxes };
   }
 
   async function ocrImageCanvas(canvas, page = 0) {
-    const attempts = [
-      { psm: 3, enhanced: true },
-      { psm: 6, enhanced: true },
-      { psm: 4, enhanced: true },
-      { psm: 11, enhanced: true },
-      { psm: 3, enhanced: false },
-    ];
+    // One pass on a phone. Five enhanced passes allocate another full canvas
+    // each time and are what gets the PWA jetsam-killed mid-index.
+    const attempts = memoryConstrained()
+      ? [{ psm: 6, enhanced: false }]
+      : [
+        { psm: 3, enhanced: true },
+        { psm: 6, enhanced: true },
+        { psm: 4, enhanced: true },
+        { psm: 11, enhanced: true },
+        { psm: 3, enhanced: false },
+      ];
     let best = { text: '', boxes: [] };
     for (const attempt of attempts) {
       const result = await recognizeCanvas(canvas, { page, ...attempt });
@@ -362,16 +417,27 @@ const NotesClientOcr = (() => {
         if (box && boxes.length < MAX_BOXES) boxes.push(box);
       }
       if (pageText.length) parts.push(clean(pageText.join(' ')));
+      if (typeof page.cleanup === 'function') page.cleanup();
+      if (pageNum % 2 === 0) await yieldToUi();
     }
     return { text: clean(parts.join('\n\n')), boxes };
+  }
+
+  function rasterScaleFor(page) {
+    const base = page.getViewport({ scale: 1 });
+    let scale = memoryConstrained() ? 1.05 : 1.5;
+    const raw = base.width * scale * base.height * scale;
+    const cap = maxOcrPixels();
+    if (raw > cap) scale *= Math.sqrt(cap / raw);
+    return Math.max(0.35, scale);
   }
 
   async function rasterizePdfPage(page, scale = 1.5) {
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    canvas.width = Math.max(1, Math.floor(viewport.width));
+    canvas.height = Math.max(1, Math.floor(viewport.height));
+    await page.render({ canvasContext: canvas.getContext('2d', { alpha: false }), viewport }).promise;
     return canvas;
   }
 
@@ -381,10 +447,16 @@ const NotesClientOcr = (() => {
     const boxes = [];
     for (let pageNum = startPage + 1; pageNum <= pages; pageNum += 1) {
       const page = await doc.getPage(pageNum);
-      const canvas = await rasterizePdfPage(page, 1.5);
-      const result = await ocrImageCanvas(canvas, pageNum - 1);
-      if (result.text) texts.push(result.text);
-      if (boxes.length < MAX_BOXES) boxes.push(...result.boxes.slice(0, MAX_BOXES - boxes.length));
+      const canvas = await rasterizePdfPage(page, rasterScaleFor(page));
+      try {
+        const result = await ocrImageCanvas(canvas, pageNum - 1);
+        if (result.text) texts.push(result.text);
+        if (boxes.length < MAX_BOXES) boxes.push(...result.boxes.slice(0, MAX_BOXES - boxes.length));
+      } finally {
+        releaseCanvas(canvas);
+        if (typeof page.cleanup === 'function') page.cleanup();
+      }
+      await yieldToUi();
     }
     return { text: clean(texts.join('\n\n')), boxes: boxes.slice(0, MAX_BOXES), method: 'tesseract' };
   }
@@ -400,34 +472,43 @@ const NotesClientOcr = (() => {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const pdfjs = await ensurePdf();
     const doc = await pdfjs.getDocument({ data: bytes, useWorkerFetch: false }).promise;
-    const digital = await extractPdfDigital(doc);
-    if (digitalPdfReady(digital)) {
+    try {
+      const digital = await extractPdfDigital(doc);
+      if (digitalPdfReady(digital)) {
+        return {
+          text: digital.text,
+          method: 'pdftext',
+          boxes: digital.boxes.slice(0, MAX_BOXES),
+          ocr_quality: 'ok',
+        };
+      }
+      const raster = await extractPdfRaster(doc);
+      const parts = [];
+      if (digital.text) parts.push(digital.text);
+      if (raster.text && (!digital.text || !digital.text.includes(raster.text))) parts.push(raster.text);
+      const mergedBoxes = raster.boxes.length ? raster.boxes : digital.boxes;
+      const text = clean(parts.join('\n\n')) || digital.text;
+      const method = raster.boxes.length ? 'tesseract' : 'pdftext';
       return {
-        text: digital.text,
-        method: 'pdftext',
-        boxes: digital.boxes.slice(0, MAX_BOXES),
-        ocr_quality: 'ok',
+        text,
+        method,
+        boxes: mergedBoxes.slice(0, MAX_BOXES),
+        ocr_quality: weakOcrResult(text, mergedBoxes) ? 'weak' : 'ok',
       };
+    } finally {
+      try { await doc.destroy(); } catch (err) { /* drop the pdf.js copy */ }
     }
-    const raster = await extractPdfRaster(doc);
-    const parts = [];
-    if (digital.text) parts.push(digital.text);
-    if (raster.text && (!digital.text || !digital.text.includes(raster.text))) parts.push(raster.text);
-    const mergedBoxes = raster.boxes.length ? raster.boxes : digital.boxes;
-    const text = clean(parts.join('\n\n')) || digital.text;
-    const method = raster.boxes.length ? 'tesseract' : 'pdftext';
-    return {
-      text,
-      method,
-      boxes: mergedBoxes.slice(0, MAX_BOXES),
-      ocr_quality: weakOcrResult(text, mergedBoxes) ? 'weak' : 'ok',
-    };
   }
 
   async function extractImage(file) {
-    const { canvas } = await decodeImageFile(file);
-    const result = await ocrImageCanvas(canvas, 0);
-    return result;
+    const decoded = await decodeImageFile(file);
+    const canvas = downscaleCanvas(decoded.canvas, maxOcrPixels());
+    try {
+      return await ocrImageCanvas(canvas, 0);
+    } finally {
+      releaseCanvas(canvas);
+      if (decoded.canvas !== canvas) releaseCanvas(decoded.canvas);
+    }
   }
 
   async function fitPreviewJpeg(canvas) {
@@ -444,8 +525,14 @@ const NotesClientOcr = (() => {
   async function pdfFirstPageCanvas(bytes) {
     const pdfjs = await ensurePdf();
     const doc = await pdfjs.getDocument({ data: bytes, useWorkerFetch: false }).promise;
-    const page = await doc.getPage(1);
-    return rasterizePdfPage(page, 96 / 72);
+    try {
+      const page = await doc.getPage(1);
+      const canvas = await rasterizePdfPage(page, Math.min(96 / 72, rasterScaleFor(page)));
+      if (typeof page.cleanup === 'function') page.cleanup();
+      return canvas;
+    } finally {
+      try { await doc.destroy(); } catch (err) { /* drop the pdf.js copy */ }
+    }
   }
 
   async function renderListPreview(file) {
@@ -455,11 +542,19 @@ const NotesClientOcr = (() => {
     if (kind === 'pdf') {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const canvas = await pdfFirstPageCanvas(bytes);
-      return fitPreviewJpeg(canvas);
+      try {
+        return await fitPreviewJpeg(canvas);
+      } finally {
+        releaseCanvas(canvas);
+      }
     }
     if (kind === 'image') {
       const { canvas } = await decodeImageFile(file);
-      return fitPreviewJpeg(canvas);
+      try {
+        return await fitPreviewJpeg(canvas);
+      } finally {
+        releaseCanvas(canvas);
+      }
     }
     return null;
   }

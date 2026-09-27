@@ -603,11 +603,26 @@
     return [...ids];
   }
 
+  const OCR_PENDING_STALE_MS = 20 * 60 * 1000;
+
+  function ocrPendingStale(att) {
+    const ms = Date.parse(att?.content?.updated_at || '');
+    if (!Number.isFinite(ms)) return false;
+    return Date.now() - ms > OCR_PENDING_STALE_MS;
+  }
+
+  function heavyPreviewDeferred(attId) {
+    if (!attId || (!IS_IOS && !isStandalonePwa())) return false;
+    return ocrQueued.has(attId) || ocrInFlight.has(attId);
+  }
+
   function attachmentOcrBusy(att) {
     const attId = att?.uuid;
     if (!attId) return false;
     if (ocrWaitingServer.has(attId) || ocrInFlight.has(attId) || ocrQueued.has(attId)) return true;
-    return !att.content?.ocr_method;
+    const method = att.content?.ocr_method || '';
+    if (method === 'pending') return !ocrPendingStale(att);
+    return !method;
   }
 
   function attachmentOcrSpinnerHtml() {
@@ -6192,6 +6207,7 @@
       return false;
     }
     const method = att?.content?.ocr_method || '';
+    if (method === 'pending' && !ocrPendingStale(att)) return false;
     return !!method;
   }
 
@@ -6210,6 +6226,12 @@
       };
     }
     const method = att?.content?.ocr_method || '';
+    if (method === 'pending' && !ocrPendingStale(att)) {
+      return {
+        html: '<p class="ocr-text">Indexing…</p>',
+        retry: false,
+      };
+    }
     if (!method) {
       return {
         html: '<p class="ocr-text">Reading text on this device…</p>',
@@ -6440,6 +6462,7 @@
 
   function queueListPreviewBackfill(attId, { force = false } = {}) {
     if (!attId || listPreviewBackfill.has(attId)) return;
+    if (heavyPreviewDeferred(attId)) return;
     if (!force && listPreviewBackfillFailed.has(attId)) return;
     const att = NotesStore.get(attId);
     if (!att || att.content?.preview_enc) return;
@@ -6561,6 +6584,10 @@
       if (forList && await paintListThumbFromPreviewEnc(id, stage)) {
         return;
       }
+      if (heavyPreviewDeferred(id) && attachmentKind(NotesStore.get(id)) === 'pdf') {
+        paintIosPdfPlaceholder(stage, NotesStore.get(id)?.content?.filename, { compact: !!forList, state: 'loading' });
+        return;
+      }
       if (forList && NotesStore.lightVaultEnabled?.() && !(await NotesStore.hasLocalAttachmentBytes(id))) {
         // Light vault: never download a file just to draw a list thumbnail.
         paintListThumbFallback(stage, listThumbKindMeta(NotesStore.get(noteId), NotesStore.get(id)));
@@ -6621,6 +6648,11 @@
 
   async function hydrateInlineDoc(noteId, id, stage) {
     if (!stage) return;
+    if (heavyPreviewDeferred(id)) {
+      clearDocStageLoading(stage);
+      stage.innerHTML = '<p class="doc-ocr-wait">Indexing… preview opens when reading finishes.</p>';
+      return;
+    }
     showDocStageLoading(stage);
     try {
       const entry = await cachedPreview(id);
@@ -6681,11 +6713,13 @@
 
   function attachmentOcrSettled(item) {
     const method = item?.content?.ocr_method || '';
-    if (!method) return false;
+    if (!method || method === 'pending') return false;
     const current = Number(NotesStore.OCR_INDEX || 0);
     if (!current || Number(item.content.ocr_index) !== current) return false;
-    if (method === 'text' || method === 'failed') return true;
-    return Array.isArray(item.content.ocr_boxes);
+    if (method === 'text' || method === 'failed' || method === 'none') return true;
+    // Text synced from the device that indexed the file is enough. Missing
+    // highlight boxes must not make every other device read the file again.
+    return !!String(item.content.ocr_text || '').trim() || Array.isArray(item.content.ocr_boxes);
   }
 
   const boxFetch = new Set();
@@ -6725,8 +6759,23 @@
     const pending = ocrInFlight.get(attId);
     if (pending) return pending;
     const work = (async () => {
+      const already = NotesStore.get(attId);
+      if (!force && attachmentOcrSettled(already)) {
+        return {
+          text: String(already.content.ocr_text || ''),
+          method: already.content.ocr_method,
+          boxes: attachmentSearchBoxes(attId),
+        };
+      }
       const ocr = await NotesOcr.extractFromFile(file, onProgress, attId);
       const live = NotesStore.get(attId);
+      if (!force && attachmentOcrSettled(live)) {
+        return {
+          text: String(live.content.ocr_text || ''),
+          method: live.content.ocr_method,
+          boxes: attachmentSearchBoxes(attId),
+        };
+      }
       const oldText = String(live?.content?.ocr_text || '');
       const rawText = String(ocr.text || oldText || '').trim();
       const boxes = Array.isArray(ocr.boxes) ? ocr.boxes : [];
@@ -6828,6 +6877,11 @@
 
   async function paintDocumentSearch(attId, stage, entry, query) {
     if (!stage || !entry) return;
+    if (heavyPreviewDeferred(attId)) {
+      clearDocStageLoading(stage);
+      stage.innerHTML = '<p class="doc-ocr-wait">Indexing… preview opens when reading finishes.</p>';
+      return;
+    }
     clearDocStageLoading(stage);
     const paintToken = ++docPaintToken;
     const needle = String(query || '').trim();
@@ -10465,7 +10519,12 @@
       attId = await NotesStore.addAttachment(id, storeFile, {
         displayName: displayName || namedDocument(docName, storeFile.name),
         sourceSha256,
+        ocrPending: canOcrAttachment({ content: { mime: storeFile.type, filename: storeFile.name } }),
       });
+      if (canOcrAttachment({ content: { mime: storeFile.type, filename: storeFile.name } })) {
+        // Queue before the preview paints so a phone does not decode the PDF twice.
+        enqueueOcrJob({ attId, noteId: id, file: storeFile, suggestTags: true });
+      }
       editorMode = 'preview';
       if (currentId === id) {
         renderAttachments(id);
@@ -10488,7 +10547,6 @@
     } finally {
       ingestBusy = false;
     }
-    enqueueOcrJob({ attId, noteId: id, file: storeFile, suggestTags: true });
     if (!quiet) toast('Document saved — reading text in the background');
     return true;
   }
@@ -10585,8 +10643,10 @@
   function attachmentNeedsOcrRetry(att) {
     if (!att || !canOcrAttachment(att)) return false;
     const method = att.content?.ocr_method || '';
-    if (!method || method === 'failed') return true;
-    if (method === 'none') return false;
+    if (method === 'pending') return ocrPendingStale(att);
+    if (method === 'none' || method === 'failed') return false;
+    if (attachmentOcrSettled(att)) return false;
+    if (!method) return true;
     const current = Number(NotesStore.OCR_INDEX || 0);
     if (current && Number(att.content.ocr_index) !== current) return true;
     const mime = att.content.mime || '';
@@ -10666,7 +10726,7 @@
     }
   }
 
-  async function queueLocalOcrForAttachments(atts, { force = true } = {}) {
+  async function queueLocalOcrForAttachments(atts, { force = true, reindex = false } = {}) {
     let queued = 0;
     for (const att of atts || []) {
       if (!att?.uuid || ocrQueued.has(att.uuid) || !canOcrAttachment(att)) continue;
@@ -10683,6 +10743,7 @@
           noteId: att.content.note_id,
           file,
           force,
+          reindex: !!reindex,
         });
         queued += 1;
       } catch (err) {
@@ -10728,7 +10789,7 @@
   async function ensureOpenedAttachmentIndexed(attId, entry) {
     if (!attId || !entry) return true;
     const item = NotesStore.get(attId);
-    if (item && attachmentOcrSettled(item)) {
+    if (item && (attachmentOcrSettled(item) || (item.content?.ocr_method === 'pending' && !ocrPendingStale(item)))) {
       serverOcrKnown.add(attId);
       return true;
     }
@@ -10772,7 +10833,7 @@
     }
     toast('Reindexing documents on this device…');
     const atts = NotesStore.listAttachments().filter(canOcrAttachment);
-    const queued = await queueLocalOcrForAttachments(atts, { force: true });
+    const queued = await queueLocalOcrForAttachments(atts, { force: true, reindex: true });
     refreshAllNoteSearchIndexes();
     resumePendingListPreviews().catch(() => {});
     toast(queued
@@ -10787,8 +10848,8 @@
     while (ocrQueue.length) {
       const job = ocrQueue.shift();
       const existing = NotesStore.get(job.attId);
-      const refresh = !!existing?.content?.ocr_method;
-      if (!job.force && existing && existing.content.ocr_method && !attachmentNeedsBoxes(existing)) {
+      const refresh = !!existing?.content?.ocr_method && existing.content.ocr_method !== 'pending';
+      if (existing && attachmentOcrSettled(existing) && !job.reindex) {
         ocrQueued.delete(job.attId);
         continue;
       }
@@ -14102,18 +14163,17 @@
     }
     // Coming back to the app must always check the server — the "synced
     // recently" throttle made the iOS PWA show stale notes after switching devices.
-    syncNow({ quiet: true, force: true });
+    // Indexing waits until that sync lands so a file already read on another
+    // device is not read again here (that second pass was crashing the PWA).
+    const synced = syncNow({ quiet: true, force: true });
     scheduleChangePoll();
-    ensureServerSession()
-      .then(() => {
-        if (IS_IOS) runPostUnlockHeavyWork();
-        else resumePendingOcr();
-      })
-      .catch(() => {
-        if (IS_IOS) runPostUnlockHeavyWork();
-        else resumePendingOcr();
-      });
-    if (currentId) pullNoteOcrFromServer(currentId).catch(() => {});
+    ensureServerSession().catch(() => {});
+    Promise.resolve(synced).finally(() => {
+      if (iosTune()?.isTypingInField?.()) return;
+      if (IS_IOS) runPostUnlockHeavyWork();
+      else resumePendingOcr();
+      if (currentId) pullNoteOcrFromServer(currentId).catch(() => {});
+    });
   }
 
   document.addEventListener('click', (event) => {

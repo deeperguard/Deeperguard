@@ -2041,6 +2041,23 @@ const NotesStore = (() => {
                 applied = true;
                 protectionMerged = true;
               }
+            } else if (
+              local?.content?.type === 'attachment'
+              && remote.content?.type === 'attachment'
+              && attachmentIndexReady(remote.content)
+              && !attachmentIndexReady(local.content)
+            ) {
+              // This device may have touched the file while another device
+              // finished indexing. Keep the synced text so we do not OCR again.
+              const content = { ...local.content };
+              adoptRemoteOcr(content, remote.content);
+              const next = { ...local, content };
+              state.items.set(row.item_uuid, next);
+              await persistLocal(row.item_uuid, next);
+              const light = strippedAttachmentContent(next.content);
+              if (light) next.content = light;
+              if (content.note_id) refreshNoteSearchText(content.note_id);
+              applied = true;
             }
           } else {
             const prevLocked = !!local?.content?.locked;
@@ -2057,6 +2074,9 @@ const NotesStore = (() => {
             // Keep pulled photo/PDF bytes out of memory (iOS tab stability).
             const light = strippedAttachmentContent(remote.content);
             if (light) remote.content = light;
+            if (remote.content?.type === 'attachment' && remote.content.note_id) {
+              refreshNoteSearchText(remote.content.note_id);
+            }
             applied = true;
           }
           if (applied && !row.deleted && remote.content?.type === 'note' && onNoteIngested) {
@@ -2986,7 +3006,27 @@ const NotesStore = (() => {
     return { uuid: id, created: true };
   }
 
-  async function addAttachment(noteId, file, { displayName, sourceSha256 } = {}) {
+  function attachmentIndexReady(content) {
+    if (!content || content.type !== 'attachment') return false;
+    const method = content.ocr_method || '';
+    if (!method || method === 'pending' || method === 'failed') return false;
+    if (Number(content.ocr_index || 0) !== OCR_INDEX) return false;
+    if (method === 'text' || method === 'none') return true;
+    return !!String(content.ocr_text || '').trim() || Array.isArray(content.ocr_boxes);
+  }
+
+  function adoptRemoteOcr(target, source) {
+    target.ocr_text = source.ocr_text || '';
+    target.ocr_method = source.ocr_method || '';
+    target.ocr_index = source.ocr_index;
+    if (Array.isArray(source.ocr_boxes)) {
+      target.ocr_boxes = source.ocr_boxes;
+      if (source.ocr_boxes_v) target.ocr_boxes_v = source.ocr_boxes_v;
+      else delete target.ocr_boxes_v;
+    }
+  }
+
+  async function addAttachment(noteId, file, { displayName, sourceSha256, ocrPending = false } = {}) {
     if (!state.cryptoKey) throw new Error('Unlock the vault first');
     if (file.size > MAX_ATTACHMENT_BYTES) {
       throw new Error(`File too large (max ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB)`);
@@ -3004,6 +3044,7 @@ const NotesStore = (() => {
     const fileEnc = await NotesCrypto.encryptBytes(state.cryptoKey, raw);
     const id = newUuid();
     const content = defaultAttachment(noteId, file, fileEnc, displayName, contentSha256, sourceHash);
+    if (ocrPending) content.ocr_method = 'pending';
     upsert(id, content);
     const stored = get(id);
     if (!stored || !(await persistLocal(id, stored))) {

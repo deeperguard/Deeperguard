@@ -325,6 +325,14 @@ async function waitPersist(uuid, tries = 40) {
   assert.ok(syncStatuses.some((status) => status.state === 'syncing'));
   assert.strictEqual(syncStatuses.at(-1).state, 'ok');
 
+  const pendingNoteId = NotesStore.newUuid();
+  NotesStore.upsert(pendingNoteId, NotesStore.defaultNote());
+  const pendingId = await NotesStore.addAttachment(pendingNoteId, fakeFile('pending-body', 'pending.pdf', 'application/pdf'), { ocrPending: true });
+  assert.strictEqual(NotesStore.get(pendingId).content.ocr_method, 'pending');
+  NotesStore.setAttachmentOcr(pendingId, 'page one', 'pdftext', []);
+  assert.strictEqual(NotesStore.get(pendingId).content.ocr_method, 'pdftext');
+  assert.strictEqual(NotesStore.get(pendingId).content.ocr_index, NotesStore.OCR_INDEX);
+
   console.log('ok');
 })().catch((err) => {
   console.error(err);
