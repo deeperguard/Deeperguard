@@ -25,10 +25,17 @@ def user_upload_dir(email: str) -> Path:
     return path
 
 
+def _ensure_writable(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    if path.stat().st_mode & 0o200:
+        return
+    path.chmod(path.stat().st_mode | 0o700)
+
+
 def ensure_user_upload_dir(email: str) -> Path:
     root = user_upload_dir(email)
-    (root / "device-reports").mkdir(parents=True, exist_ok=True)
-    (root / "ocr").mkdir(parents=True, exist_ok=True)
+    for path in (UPLOADS_ROOT, root, root / "device-reports", root / "ocr"):
+        _ensure_writable(path)
     return root
 
 

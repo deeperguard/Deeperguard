@@ -525,7 +525,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_user_upload_dir_and_device_sessions(self):
         import db as notes_db
-        from uploads import email_fs_name, user_upload_dir
+        from uploads import email_fs_name, ensure_user_upload_dir, user_upload_dir
 
         email = "vault.user@home.local"
         self._register_user(email, "device-secure-pass")
@@ -534,6 +534,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(upload.name, email_fs_name(email))
         self.assertTrue((upload / "device-reports").is_dir())
         self.assertTrue((upload / "ocr").is_dir())
+        (upload / "ocr").chmod(0o555)
+        ensure_user_upload_dir(email)
+        self.assertTrue((upload / "ocr").stat().st_mode & 0o200)
 
         listed = self.client.get("/api/sessions")
         self.assertEqual(listed.status_code, 200)
@@ -2251,6 +2254,10 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("loadUploadPickerStartIn", app_js)
         self.assertIn("primeUploadPickerStartIn", app_js)
         self.assertIn("openDeviceFilePickerSync", app_js)
+        self.assertIn("uploadPickerStartInCache = undefined", app_js)
+        self.assertIn("dir.queryPermission", app_js)
+        self.assertIn("File too large to upload", (APP_DIR / "app.py").read_text(encoding="utf-8"))
+        self.assertIn("80 * 1024 * 1024", (APP_DIR / "app.py").read_text(encoding="utf-8"))
         self.assertIn("drops user activation", app_js)
         self.assertIn("describeDuplicateAttachment", (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8"))
         self.assertIn("Open note", app_js)

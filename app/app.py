@@ -64,7 +64,13 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("NOTES_SECURE_COOKIES", "0") == "1"
 app.config["SESSION_COOKIE_DOMAIN"] = session_cookie_domain()
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(seconds=SESSION_SECONDS)
-app.config["MAX_CONTENT_LENGTH"] = 48 * 1024 * 1024
+# 50 MB files are stored as base64 inside JSON (~4/3). 48 MB rejected those uploads.
+app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
+
+@app.errorhandler(413)
+def request_too_large(_err):
+    return jsonify({"error": "File too large to upload"}), 413
+
 
 log = logging.getLogger("deeperguard.sync")
 if not log.handlers:

@@ -9973,7 +9973,24 @@
   }
 
   async function primeUploadPickerStartIn() {
-    uploadPickerStartInCache = await loadUploadPickerStartIn();
+    const dir = await loadUploadPickerStartIn();
+    if (!dir) {
+      uploadPickerStartInCache = undefined;
+      return;
+    }
+    try {
+      if (typeof dir.queryPermission === 'function') {
+        const state = await dir.queryPermission({ mode: 'read' });
+        if (state !== 'granted') {
+          uploadPickerStartInCache = undefined;
+          return;
+        }
+      }
+    } catch (_) {
+      uploadPickerStartInCache = undefined;
+      return;
+    }
+    uploadPickerStartInCache = dir;
   }
 
   async function rememberUploadPickerDirectory(handles) {
@@ -9997,7 +10014,16 @@
       types: DEVICE_PICK_TYPES,
       id: UPLOAD_PICKER_ID,
     };
-    if (uploadPickerStartInCache) options.startIn = uploadPickerStartInCache;
+    // A remembered folder without read permission throws before the dialog opens.
+    // Drop it and try again in this same click, or the browser will block a later fallback.
+    if (uploadPickerStartInCache) {
+      try {
+        return window.showOpenFilePicker({ ...options, startIn: uploadPickerStartInCache });
+      } catch (err) {
+        uploadPickerStartInCache = undefined;
+        if (err && err.name === 'AbortError') throw err;
+      }
+    }
     return window.showOpenFilePicker(options);
   }
 
@@ -10032,20 +10058,7 @@
     return `${list.length} files`;
   }
 
-  async function pickDeviceFiles({ multiple = false } = {}) {
-    if (typeof window.showOpenFilePicker !== 'function') return null;
-    beginNotesPicker();
-    let handlesPromise;
-    try {
-      // showOpenFilePicker must run in the same turn as the click — awaiting IndexedDB first
-      // drops user activation and breaks uploads (hang / silent failure on desktop).
-      handlesPromise = openDeviceFilePickerSync({ multiple });
-    } catch (err) {
-      endNotesPicker();
-      if (err && err.name === 'AbortError') return { files: [], handles: [] };
-      if (uploadPickerStartInCache) uploadPickerStartInCache = undefined;
-      return null;
-    }
+  async function finishDeviceFilePick(handlesPromise) {
     try {
       const handles = await handlesPromise;
       const list = Array.isArray(handles) ? handles : [handles];
@@ -10054,10 +10067,30 @@
       return { files, handles: list };
     } catch (err) {
       if (err && err.name === 'AbortError') return { files: [], handles: [] };
-      if (uploadPickerStartInCache) uploadPickerStartInCache = undefined;
-      return null;
+      uploadPickerStartInCache = undefined;
+      throw err;
     } finally {
       endNotesPicker();
+    }
+  }
+
+  async function pickDeviceFiles({ multiple = false } = {}) {
+    if (typeof window.showOpenFilePicker !== 'function') return null;
+    let handlesPromise;
+    try {
+      // showOpenFilePicker must run in the same turn as the click — awaiting IndexedDB first
+      // drops user activation and breaks uploads (hang / silent failure on desktop).
+      beginNotesPicker();
+      handlesPromise = openDeviceFilePickerSync({ multiple });
+    } catch (err) {
+      endNotesPicker();
+      if (err && err.name === 'AbortError') return { files: [], handles: [] };
+      return null;
+    }
+    try {
+      return await finishDeviceFilePick(handlesPromise);
+    } catch (err) {
+      return null;
     }
   }
 
@@ -11472,13 +11505,19 @@
   document.getElementById('scan-choose-file').addEventListener('click', (event) => {
     if (useNativeFileInput()) return;
     event.preventDefault();
+    let handlesPromise;
+    try {
+      beginNotesPicker();
+      handlesPromise = openDeviceFilePickerSync({ multiple: true });
+    } catch (err) {
+      endNotesPicker();
+      if (err && err.name === 'AbortError') return;
+      document.getElementById('scan-input')?.click();
+      return;
+    }
     void (async () => {
       try {
-        const picked = await pickDeviceFiles({ multiple: true });
-        if (picked === null) {
-          document.getElementById('scan-input')?.click();
-          return;
-        }
+        const picked = await finishDeviceFilePick(handlesPromise);
         if (!picked?.files?.length) return;
         if (!pendingScan) pendingScan = { file: null, pages: [], createIfNeeded: true, sourceRemoval: emptyUploadSource() };
         pendingScan.sourceRemoval = mergeUploadSource(pendingScan.sourceRemoval, {
@@ -12467,14 +12506,20 @@
   document.getElementById('attachment-add-label')?.addEventListener('click', (event) => {
     if (useNativeFileInput()) return;
     event.preventDefault();
+    let handlesPromise;
+    try {
+      beginNotesPicker();
+      handlesPromise = openDeviceFilePickerSync({ multiple: true });
+    } catch (err) {
+      endNotesPicker();
+      if (err && err.name === 'AbortError') return;
+      ui.attachmentInput?.click();
+      return;
+    }
     void (async () => {
       try {
-        const picked = await pickDeviceFiles({ multiple: true });
-        if (picked === null) {
-          ui.attachmentInput?.click();
-          return;
-        }
-        if (!picked.files.length) return;
+        const picked = await finishDeviceFilePick(handlesPromise);
+        if (!picked?.files?.length) return;
         await ingestAttachmentFiles(picked.files, {
           sourceRemoval: {
             handles: picked.handles,
