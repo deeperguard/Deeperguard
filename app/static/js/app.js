@@ -10380,7 +10380,7 @@
     });
   }
 
-  async function ingestDocument(file, { createIfNeeded = false, title, displayName, quiet = false } = {}) {
+  async function ingestDocument(file, { createIfNeeded = false, title, displayName, quiet = false, noteId = '' } = {}) {
     if (!NotesStore.isUnlocked()) {
       toast('Unlock the vault first', true);
       return;
@@ -10439,8 +10439,8 @@
       return;
     }
     let created = false;
-    let id = currentId;
-    if (!id || createIfNeeded) {
+    let id = noteId || currentId;
+    if (!id || (createIfNeeded && !noteId)) {
       if (ui.search && ui.search.value) {
         ui.search.value = '';
         ui.search.dispatchEvent(new Event('input', { bubbles: true }));
@@ -10500,23 +10500,35 @@
       if (copy) list.push(copy);
     }
     if (!list.length) return 0;
+    const typedName = String(document.getElementById('scan-name')?.value || '').trim();
     hideScanDialog();
+    let noteId = (!createIfNeeded && currentId) ? currentId : '';
+    if (!noteId) {
+      const title = typedName || fileStem(list[0].name);
+      noteId = createNote({ silent: true, title });
+      if (!noteId) return 0;
+    }
+    const noteTitle = String(NotesStore.get(noteId)?.content?.title || '').trim() || fileStem(list[0].name);
     let saved = 0;
     for (let i = 0; i < list.length; i += 1) {
       const file = list[i];
       if (list.length > 1) toast(`Saving ${i + 1} of ${list.length}…`);
-      const note = (!createIfNeeded && currentId) ? NotesStore.get(currentId) : null;
-      const title = String(note?.content?.title || '').trim() || fileStem(file.name);
       const ok = await ingestDocument(file, {
-        createIfNeeded,
-        title,
+        noteId,
+        createIfNeeded: false,
+        title: noteTitle,
         displayName: file.name,
         quiet: list.length > 1,
       });
       if (ok) saved += 1;
     }
+    if (noteId && !NotesStore.listAttachments(noteId).length && createIfNeeded) {
+      NotesStore.remove(noteId);
+      if (currentId === noteId) closeEditor();
+      else renderNotes();
+    }
     if (list.length > 1) {
-      toast(saved ? `Saved ${saved} document${saved === 1 ? '' : 's'}` : 'No documents saved', !saved);
+      toast(saved ? `Saved ${saved} file${saved === 1 ? '' : 's'} on one note` : 'No documents saved', !saved);
     }
     return saved;
   }

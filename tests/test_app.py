@@ -2266,7 +2266,10 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("drops user activation", app_js)
         self.assertIn("describeDuplicateAttachment", (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8"))
         self.assertIn("Open note", app_js)
-        self.assertIn("Each file is saved on its own", (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8"))
+        self.assertIn("Several files are saved together on one new note", (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8"))
+        batch_fn = app_js[app_js.find("async function ingestDocumentBatch"):app_js.find("function canOcrAttachment")]
+        self.assertEqual(batch_fn.count("createNote({ silent: true, title })"), 1)
+        self.assertIn("createIfNeeded: false", batch_fn)
         self.assertNotIn('"-l", str(MAX_PDF_PAGES)', (APP_DIR / "ocr.py").read_text(encoding="utf-8"))
         self.assertIn("Number.POSITIVE_INFINITY", (APP_DIR / "static" / "js" / "client-ocr-engine.js").read_text(encoding="utf-8"))
         self.assertIn("Number(item.content.ocr_index) !== current", app_js)
