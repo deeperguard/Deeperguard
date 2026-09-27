@@ -2460,7 +2460,7 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   inset: 0;
   z-index: 3;
   margin: 0;
-  padding: 14px 18px;
+  padding: 6px 16px 4px;
   border: 0;
   background: transparent;
   color: transparent;
@@ -3002,8 +3002,8 @@ body.scan-dialog-open {
   border: 0;
   border-radius: 0;
   background: transparent;
-  padding: 14px 18px;
-  min-height: min(28vh, 12rem);
+  padding: 6px 16px 4px;
+  min-height: 0;
   font-family: var(--font);
   font-size: var(--note-body-size);
   line-height: var(--note-body-line);
@@ -3011,13 +3011,22 @@ body.scan-dialog-open {
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }
+.note-body-wrap:not([hidden]) {
+  flex: 1 1 auto;
+  min-height: 8rem;
+}
+#preview:not([hidden]) {
+  flex: 0 1 auto;
+}
+.preview p { margin: 0.35em 0; }
+.preview p:first-child { margin-top: 0; }
 .preview { overflow: auto; white-space: normal; }
 .note-body-links {
   position: absolute;
   inset: 0;
   z-index: 2;
   margin: 0;
-  padding: 14px 18px;
+  padding: 6px 16px 4px;
   border: 0;
   overflow: hidden;
   pointer-events: none;
@@ -4085,8 +4094,8 @@ html[data-theme="light"] {
 }
 
 .note-readonly-banner {
-  margin: 0 14px 8px;
-  padding: 10px 12px;
+  margin: 4px 14px 6px;
+  padding: 6px 10px;
   border-radius: 10px;
   background: var(--accent-soft);
   color: var(--muted);
@@ -4499,21 +4508,65 @@ body.doc-preview-open .fab-stack,
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
-  /* Note text keeps the flexible area. History scrolls inside its own cap
-     so a long version list cannot paint over the note. */
-  .note-body-wrap,
-  .editor > #preview:not([hidden]),
+  /* The writing area fills leftover space. A read-only preview stays as tall
+     as its text so a short note does not open with a blank band on top. */
+  .note-body-wrap:not([hidden]),
   .editor > #checklist:not([hidden]) {
     flex: 1 1 auto;
-    min-height: min(28vh, 12rem);
+    min-height: 8rem;
     overflow: auto;
     -webkit-overflow-scrolling: touch;
+  }
+  .editor > #preview:not([hidden]) {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow: visible;
   }
   .note-body, .preview {
     flex: 1 1 auto;
     min-height: 0;
     height: auto;
     overflow: auto;
+  }
+  .editor-head {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-areas:
+      "back title"
+      "tags tags"
+      "actions actions";
+    align-items: center;
+    gap: 2px 8px;
+    padding: 2px 12px 4px;
+  }
+  .editor-head .mobile-only {
+    grid-area: back;
+    width: 36px;
+    height: 36px;
+  }
+  .editor-head .editor-head-main { grid-area: title; min-width: 0; }
+  .editor-head .tag-bar-shell {
+    grid-area: tags;
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .editor-head .editor-actions { grid-area: actions; }
+  .editor-head .title-input {
+    min-width: 0;
+    min-height: 0;
+    font-size: var(--note-title-size);
+    padding: 0;
+  }
+  .editor-head .tag-bar-toggle {
+    width: 100%;
+    margin: 0;
+    padding: 2px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 13px;
+    min-height: 0;
   }
   .editor-foot,
   .attachments {
@@ -4532,36 +4585,6 @@ body.doc-preview-open .fab-stack,
   .tag-bar-shell.is-collapsed + .tag-suggest { margin-top: 0; }
   .doc-inline-stage { min-height: 52vh; }
   .doc-inline-thumbs { display: none; }
-  .editor-head {
-    display: grid;
-    grid-template-columns: var(--touch) minmax(0, 1fr);
-    grid-template-areas:
-      "back title"
-      "tags tags"
-      "actions actions";
-    align-items: start;
-    gap: 6px 8px;
-    padding: 6px 12px 8px;
-  }
-  .editor-head .mobile-only { grid-area: back; }
-  .editor-head .editor-head-main { grid-area: title; min-width: 0; }
-  .editor-head .tag-bar-shell {
-    grid-area: tags;
-    display: block;
-    width: 100%;
-    min-width: 0;
-  }
-  .editor-head .editor-actions { grid-area: actions; }
-  .title-input { min-width: 0; font-size: var(--note-title-size); padding: 2px 0; }
-  .tag-bar-toggle {
-    width: 100%;
-    margin: 0;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--bg-hover);
-    font-size: 14px;
-  }
   .tag-bar-shell:not(.is-collapsed) .tag-bar {
     max-height: min(40vh, 16rem);
     overflow-x: hidden;
@@ -5255,8 +5278,8 @@ body.doc-preview-open .fab-stack,
   .editor-head {
     flex-direction: column;
     align-items: stretch;
-    padding: 14px 20px 10px;
-    gap: 10px;
+    padding: 4px 16px 2px;
+    gap: 2px;
   }
   .editor-head-main {
     width: 100%;
@@ -5266,9 +5289,9 @@ body.doc-preview-open .fab-stack,
     display: block;
     width: 100%;
     box-sizing: border-box;
-    padding: 4px 0 6px;
+    padding: 0;
     line-height: var(--note-title-line);
-    min-height: 36px;
+    min-height: 0;
   }
   .editor-actions {
     flex-wrap: wrap;

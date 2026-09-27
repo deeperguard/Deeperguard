@@ -3880,7 +3880,7 @@ class NotesAppTests(unittest.TestCase):
         history_css = css[css.find(".history {"):css.find(".history {") + 280]
         self.assertIn("max-height: min(32vh, 15rem)", history_css)
         self.assertIn("overflow-y: auto", css[css.find(".history-list {"):css.find(".history-list {") + 220])
-        self.assertNotIn("z-index: 2", css[css.find("Note text keeps the flexible area"):css.find("Note text keeps the flexible area") + 900])
+        self.assertNotIn("z-index: 2", css[css.find("A read-only preview stays as tall"):css.find("A read-only preview stays as tall") + 1200])
 
         open_fn = app_js[app_js.find("function openNote(id, { skipGate = false, skipFlush = false } = {})"):app_js.find("function updateActionButtons(note)")]
         self.assertIn("listSelectionId = id", open_fn)
