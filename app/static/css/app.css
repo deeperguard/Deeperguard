@@ -1831,6 +1831,7 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 }
 .tag-section summary.section-label::-webkit-details-marker,
 .filter-section summary.section-label::-webkit-details-marker { display: none; }
+.tag-section:not([open]) > :not(summary) { display: none !important; }
 .tag-section summary.section-label::after,
 .filter-section summary.section-label::after {
   content: '▾';
@@ -1850,6 +1851,50 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   color: var(--muted);
 }
 .tag-section .tag-new-btn:hover { color: var(--text); border-color: var(--accent); }
+.scan-save-as {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 2px 0 8px;
+}
+.scan-save-as[hidden] { display: none !important; }
+.scan-save-as-label { font-size: 13px; color: var(--muted); }
+.scan-save-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.folder-list { display: flex; flex-direction: column; gap: 2px; }
+.folder-block.active > .folder-head { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 8px; }
+.folder-head { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.folder-toggle, .folder-select {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.folder-toggle { width: 22px; flex: 0 0 22px; padding: 4px 0; opacity: 0.7; }
+.folder-select { flex: 1; min-width: 0; text-align: left; padding: 6px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-notes { display: flex; flex-direction: column; padding: 0 0 4px 22px; }
+.folder-notes[hidden] { display: none !important; }
+.folder-note {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-note.active, .folder-note:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.folder-empty { margin: 0; padding: 2px 8px 6px; font-size: 12px; }
 .tag-list { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; }
 .tag-row { display: inline-flex; align-items: center; max-width: 100%; }
 .tag-chip-wrap {

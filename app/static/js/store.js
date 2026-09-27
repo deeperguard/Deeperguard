@@ -867,6 +867,16 @@ const NotesStore = (() => {
     };
   }
 
+  function defaultFolder(title) {
+    const now = new Date().toISOString();
+    return {
+      type: 'folder',
+      title: title || 'Folder',
+      created_at: now,
+      updated_at: now,
+    };
+  }
+
   function defaultTag(title) {
     const now = new Date().toISOString();
     return {
@@ -2761,6 +2771,44 @@ const NotesStore = (() => {
     return true;
   }
 
+  function listFolders() {
+    return [...state.items.values()]
+      .filter((i) => i.content?.type === 'folder' && !i.deleted)
+      .sort((a, b) => (a.content.title || '').localeCompare(b.content.title || ''));
+  }
+
+  function notesInFolder(folderId) {
+    return listNotes()
+      .filter((n) => n.content.folder_id === folderId && !n.content.trashed)
+      .sort((a, b) => (a.content.title || '').localeCompare(b.content.title || ''));
+  }
+
+  function createFolder(title) {
+    const name = String(title || '').trim() || 'Folder';
+    const id = newUuid();
+    upsert(id, defaultFolder(name));
+    return id;
+  }
+
+  function renameFolder(uuid, title) {
+    const folder = get(uuid);
+    if (!folder || folder.content?.type !== 'folder') return;
+    const name = String(title || '').trim();
+    if (!name) return;
+    upsert(uuid, { ...folder.content, title: name });
+  }
+
+  function deleteFolder(uuid) {
+    const folder = get(uuid);
+    if (!folder || folder.content?.type !== 'folder') return false;
+    for (const note of listNotes()) {
+      if (note.content.folder_id !== uuid) continue;
+      upsert(note.uuid, { ...note.content, folder_id: '' });
+    }
+    remove(uuid);
+    return true;
+  }
+
   function listTags() {
     return [...state.items.values()]
       .filter((i) => i.content?.type === 'tag' && !i.deleted)
@@ -3916,6 +3964,7 @@ const NotesStore = (() => {
     lock,
     newUuid,
     defaultNote,
+    defaultFolder,
     defaultTag,
     loadAccount,
     cacheAccount,
@@ -3946,6 +3995,11 @@ const NotesStore = (() => {
     addTotpAccount,
     removeTotpAccount,
     dedupeTotpAccounts,
+    listFolders,
+    notesInFolder,
+    createFolder,
+    renameFolder,
+    deleteFolder,
     listTags,
     noteCountForTag,
     renameTag,

@@ -556,7 +556,7 @@
           </select>
         </label>
       </div>
-      <details class="tag-section" id="tag-section">
+      <details class="tag-section" id="tag-section" open>
         <summary class="section-label"><span class="sn-tags">Tags</span></summary>
         <div id="tag-list" class="tag-list"></div>
         <div id="tag-color-bar" class="tag-color-bar" hidden></div>
@@ -568,6 +568,10 @@
           </div>
         </div>
         <button type="button" id="btn-new-tag" class="btn ghost sm tag-new-btn">+ New tag</button>
+      </details>
+      <details class="tag-section folder-section" id="folder-section" open>
+        <summary class="section-label"><span>Folders</span></summary>
+        <div id="folder-list" class="folder-list"></div>
       </details>
       <footer class="sidebar-foot">
         <button type="button" id="btn-settings-nav" class="btn icon" title="Settings" aria-label="Settings">
@@ -1297,7 +1301,7 @@
       <h2 id="scan-dialog-title">Add document</h2>
     </header>
     <div class="scan-dialog-body">
-      <p class="scan-dialog-lead muted">Take photos of one document, or choose several files. Several files are saved together on one new note.</p>
+      <p class="scan-dialog-lead muted">Take photos of one document, or choose several files. Save them on one new note, or in a new folder with one note per file.</p>
       <div id="scan-empty" class="scan-empty">
         <p class="scan-empty-title">No pages yet</p>
         <p class="scan-empty-hint muted">Add a photo, scan pages, or pick a PDF or text file.</p>
@@ -1308,7 +1312,12 @@
         <button type="button" class="btn scan-add-btn" id="scan-take-photo">Take photo</button>
         <label for="scan-input" class="btn ghost scan-add-btn" id="scan-choose-file">Choose files</label>
       </div>
-      <label class="scan-name-field">Document name
+      <div class="scan-save-as" id="scan-save-as" hidden>
+        <span class="scan-save-as-label">Save as</span>
+        <label class="scan-save-choice"><input type="radio" name="scan-save-as" value="note" checked> One note</label>
+        <label class="scan-save-choice"><input type="radio" name="scan-save-as" value="folder"> Folder</label>
+      </div>
+      <label class="scan-name-field"><span id="scan-name-label">Document name</span>
         <input id="scan-name" type="text" maxlength="120" required autocomplete="off" autocapitalize="words" enterkeyhint="done" placeholder="e.g. Passport, June invoice">
       </label>
       <p id="scan-name-error" class="error" hidden>Enter a name for this document.</p>

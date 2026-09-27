@@ -137,6 +137,7 @@
     lightVault: false,
     aiChat: null,
     tagsCollapsed: true,
+    foldersCollapsed: false,
     viewsCollapsed: false,
     searchFilters: {
       titlesOnly: false,
@@ -204,7 +205,7 @@
   // Vault-only prefs never touch localStorage (they hold secrets such as API keys).
   const VAULT_ONLY_PREF_KEYS = ['aiChat'];
   // Device-only prefs (storage/offline behaviour differs per device).
-  const DEVICE_PREF_KEYS = ['rememberDevice', 'lightVault', 'tagsCollapsed', 'viewsCollapsed', 'searchFilters'];
+  const DEVICE_PREF_KEYS = ['rememberDevice', 'lightVault', 'tagsCollapsed', 'foldersCollapsed', 'viewsCollapsed', 'searchFilters'];
   let globalPrefsAppliedAt = 0;
 
   function localPrefsJson() {
@@ -315,16 +316,13 @@
   function applyTagSection() {
     const section = document.getElementById('tag-section');
     if (!section) return;
-    // Keep tags open while a tag filter is active; otherwise honor collapsed pref.
-    if (currentTag) {
-      section.open = true;
-      return;
-    }
-    if (isDesktopLayout()) {
-      section.open = true;
-      return;
-    }
     section.open = !prefs.tagsCollapsed;
+  }
+
+  function applyFolderSection() {
+    const section = document.getElementById('folder-section');
+    if (!section) return;
+    section.open = !prefs.foldersCollapsed;
   }
 
   function applyFilterSection() {
@@ -354,6 +352,7 @@
     ui.noteList.classList.toggle('compact', !!prefs.compactList);
     ui.noteList.classList.toggle('hide-previews', !!prefs.hidePreviews);
     applyTagSection();
+    applyFolderSection();
     applyFilterSection();
     bumpIdle();
   }
@@ -550,6 +549,7 @@
   let currentFilter = 'all';
   let filterBeforeFiles = 'all';
   let currentTag = null;
+  let currentFolder = null;
   let previewOn = true;
   let editorMode = 'preview';
   const ocrQueue = [];
@@ -4916,6 +4916,7 @@
     ui.tagList.querySelectorAll('[data-tag]').forEach((btn) => {
       btn.addEventListener('click', () => {
         currentTag = currentTag === btn.dataset.tag ? null : btn.dataset.tag;
+        if (currentTag) currentFolder = null;
         if (currentTag && (currentFilter === 'untagged' || currentFilter === 'trash')) {
           setFilter('all');
         }
@@ -4933,6 +4934,93 @@
     });
     renderTagColorBar();
     renderSearchFilterTags();
+    renderFolders();
+  }
+
+  function folderOpenMap() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('notes_folder_open') || '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function setFolderOpen(folderId, open) {
+    const map = folderOpenMap();
+    map[folderId] = !!open;
+    try { localStorage.setItem('notes_folder_open', JSON.stringify(map)); } catch (err) { /* ignore */ }
+  }
+
+  function renderFolders() {
+    const host = document.getElementById('folder-list');
+    if (!host || !NotesStore.listFolders) return;
+    const folders = NotesStore.listFolders();
+    const openMap = folderOpenMap();
+    host.innerHTML = folders.map((folder) => {
+      const notes = NotesStore.notesInFolder(folder.uuid);
+      const open = !!openMap[folder.uuid];
+      const active = currentFolder === folder.uuid ? ' active' : '';
+      const kids = notes.map((note) => {
+        const on = currentId === note.uuid ? ' active' : '';
+        return `<button type="button" class="folder-note${on}" data-folder-note="${escapeAttr(note.uuid)}">${escapeHtml(note.content.title || 'Untitled')}</button>`;
+      }).join('');
+      return `<div class="folder-block${active}${open ? ' is-open' : ''}" data-folder="${escapeAttr(folder.uuid)}">
+        <div class="folder-head">
+          <button type="button" class="folder-toggle" data-folder-toggle="${escapeAttr(folder.uuid)}" aria-expanded="${open ? 'true' : 'false'}" aria-label="${open ? 'Collapse' : 'Expand'} ${escapeAttr(folder.content.title || 'Folder')}">${open ? '▾' : '▸'}</button>
+          <button type="button" class="folder-select" data-folder-select="${escapeAttr(folder.uuid)}">${escapeHtml(folder.content.title || 'Folder')}</button>
+          <span class="tag-count">${notes.length}</span>
+          <button type="button" class="tag-remove folder-remove" data-folder-remove="${escapeAttr(folder.uuid)}" aria-label="Delete folder ${escapeAttr(folder.content.title || 'Folder')}">×</button>
+        </div>
+        <div class="folder-notes"${open ? '' : ' hidden'}>${kids || '<p class="folder-empty muted">Empty</p>'}</div>
+      </div>`;
+    }).join('');
+    host.querySelectorAll('[data-folder-toggle]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.folderToggle;
+        const block = host.querySelector(`[data-folder="${id}"]`);
+        const next = !block?.classList.contains('is-open');
+        setFolderOpen(id, next);
+        renderFolders();
+      });
+    });
+    host.querySelectorAll('[data-folder-select]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.folderSelect;
+        currentFolder = currentFolder === id ? null : id;
+        if (currentFolder) {
+          currentTag = null;
+          if (currentFilter === 'trash' || currentFilter === 'untagged') setFilter('all');
+        }
+        renderTags();
+        renderNotes();
+      });
+    });
+    host.querySelectorAll('[data-folder-note]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const folderId = btn.closest('[data-folder]')?.dataset.folder || '';
+        if (folderId) currentFolder = folderId;
+        openNote(btn.dataset.folderNote);
+      });
+    });
+    host.querySelectorAll('[data-folder-remove]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.folderRemove;
+        const folder = NotesStore.get(id);
+        const name = folder?.content?.title || 'this folder';
+        confirmAction(`Remove “${name}”? Notes in it stay in your list.`, {
+          title: 'Remove folder',
+          confirmLabel: 'Remove',
+          danger: true,
+        }).then((ok) => {
+          if (!ok) return;
+          if (currentFolder === id) currentFolder = null;
+          NotesStore.deleteFolder(id);
+          renderFolders();
+          renderNotes();
+        });
+      });
+    });
   }
 
   function hideTagComposer() {
@@ -5198,7 +5286,7 @@
     const sf = searchFilterOptions();
     const sfKey = `${sf.titlesOnly ? 1 : 0}:${sf.includeArchived ? 1 : 0}:${sf.includeTrashed ? 1 : 0}:${sf.includeProtected ? 1 : 0}:${sf.tagIds.join(',')}`;
     const ids = notes.map((n) => `${n.uuid}:${n.content.updated_at || ''}:${(n.content.ocr_text || '').length}:${n.content.title || ''}:${n.content.pinned ? 1 : 0}:${n.content.starred ? 1 : 0}:${n.content.warn_at || ''}:${n.content.locked ? 1 : 0}:${n.content.prevent_edit ? 1 : 0}`).join('|');
-    return `${currentFilter}:${currentTag || ''}:${query}:${sfKey}:${prefs.sort}:${activeListNoteId()}:${ids}`;
+    return `${currentFilter}:${currentTag || ''}:${currentFolder || ''}:${query}:${sfKey}:${prefs.sort}:${activeListNoteId()}:${ids}`;
   }
 
   function activeListNoteId() {
@@ -5274,13 +5362,14 @@
     }, 30000);
   }
 
-  function listStoredFiles({ query = '', tagId = null } = {}) {
+  function listStoredFiles({ query = '', tagId = null, folderId = null } = {}) {
     const q = String(query || '').trim().toLowerCase();
     const files = [];
     for (const att of NotesStore.listAttachments()) {
       const note = NotesStore.get(att.content.note_id);
       if (!note || note.deleted || note.content?.trashed || note.content?.archived) continue;
       if (tagId && !(note.content.tags || []).includes(tagId)) continue;
+      if (folderId && note.content.folder_id !== folderId) continue;
       const name = String(att.content.filename || att.content.original_filename || '');
       const mime = String(att.content.mime || '');
       const title = String(note.content.title || '');
@@ -5617,11 +5706,12 @@
       query: ui.search.value,
       filter: currentFilter,
       tagId: currentTag,
+      folderId: currentFolder,
       tagMap: tagMap(),
       sort: prefs.sort,
       searchOptions,
     });
-    const files = listingFiles ? listStoredFiles({ query, tagId: currentTag }) : [];
+    const files = listingFiles ? listStoredFiles({ query, tagId: currentTag, folderId: currentFolder }) : [];
     const listed = listingFiles ? files : notes;
     const listedCount = listed.length;
     const meta = document.getElementById('search-meta');
@@ -5647,8 +5737,11 @@
     }
     if (listHead && listTitle && listCount) {
       const tag = currentTag ? tagMap().get(currentTag) : null;
+      const folder = currentFolder ? NotesStore.get(currentFolder) : null;
       listHead.hidden = false;
-      listTitle.textContent = tag ? tag.content.title || 'Tag' : (FILTER_TITLES[currentFilter] || 'Notes');
+      listTitle.textContent = folder
+        ? (folder.content.title || 'Folder')
+        : (tag ? tag.content.title || 'Tag' : (FILTER_TITLES[currentFilter] || 'Notes'));
       listCount.textContent = listedCount
         ? `${listedCount}`
         : '0';
@@ -10240,12 +10333,30 @@
     renderScanPages();
     const name = document.getElementById('scan-name');
     if (!name.value) {
-      const first = pendingScan?.pages?.[0] || pendingScan?.file;
+      const first = pendingScan?.pages?.[0] || pendingScan?.file || pendingScan?.batchFiles?.[0];
       name.value = first ? fileStem(first.name) : '';
     }
     if (wasHidden && !('ontouchstart' in globalThis)) {
       name.focus();
       name.select();
+    }
+    syncScanSaveMode();
+  }
+
+  function scanSaveAsFolder() {
+    return document.querySelector('input[name="scan-save-as"]:checked')?.value === 'folder';
+  }
+
+  function syncScanSaveMode() {
+    const box = document.getElementById('scan-save-as');
+    const label = document.getElementById('scan-name-label');
+    const name = document.getElementById('scan-name');
+    const show = !!pendingScan?.createIfNeeded;
+    if (box) box.hidden = !show;
+    const asFolder = show && scanSaveAsFolder();
+    if (label) label.textContent = asFolder ? 'Folder name' : 'Document name';
+    if (name) {
+      name.placeholder = asFolder ? 'e.g. Receipts, Trip photos' : 'e.g. Passport, June invoice';
     }
   }
 
@@ -10268,6 +10379,20 @@
       }
       if (add) add.hidden = true;
       applyScanKeyboardInset();
+      syncScanSaveMode();
+      return;
+    }
+    const batch = pendingScan?.batchFiles || [];
+    if (batch.length) {
+      host.hidden = true;
+      if (empty) empty.hidden = true;
+      if (label) {
+        label.hidden = false;
+        label.textContent = `${batch.length} file${batch.length === 1 ? '' : 's'} selected`;
+      }
+      if (add) add.hidden = true;
+      applyScanKeyboardInset();
+      syncScanSaveMode();
       return;
     }
     if (add) add.hidden = false;
@@ -10420,12 +10545,25 @@
         return;
       }
     }
+    if (pending.batchFiles?.length) {
+      const asFolder = !!pending.createIfNeeded && scanSaveAsFolder();
+      const batch = pending.batchFiles.slice();
+      hideScanDialog();
+      if (asFolder) await ingestFilesAsFolder(batch, name);
+      else await ingestDocumentBatch(batch, { createIfNeeded: true, title: name });
+      return;
+    }
     if (!file) {
       toast('Take a photo or choose a file first', true);
       return;
     }
+    const asFolder = !!pending.createIfNeeded && scanSaveAsFolder();
     hideScanDialog();
     const sourceRemoval = sourceRemovalFromPending(pending);
+    if (asFolder) {
+      await ingestFilesAsFolder([file], name);
+      return;
+    }
     await ingestDocument(file, {
       createIfNeeded: pending.createIfNeeded,
       title: name,
@@ -10551,14 +10689,14 @@
     return true;
   }
 
-  async function ingestDocumentBatch(files, { createIfNeeded = false } = {}) {
+  async function ingestDocumentBatch(files, { createIfNeeded = false, title = '' } = {}) {
     const list = [];
     for (const file of toFileArray(files)) {
       const copy = await snapshotPickedFile(file);
       if (copy) list.push(copy);
     }
     if (!list.length) return 0;
-    const typedName = String(document.getElementById('scan-name')?.value || '').trim();
+    const typedName = String(title || document.getElementById('scan-name')?.value || '').trim();
     hideScanDialog();
     let noteId = (!createIfNeeded && currentId) ? currentId : '';
     if (!noteId) {
@@ -10588,6 +10726,60 @@
     if (list.length > 1) {
       toast(saved ? `Saved ${saved} file${saved === 1 ? '' : 's'} on one note` : 'No documents saved', !saved);
     }
+    return saved;
+  }
+
+  async function ingestFilesAsFolder(files, title) {
+    const list = [];
+    for (const file of toFileArray(files)) {
+      const copy = await snapshotPickedFile(file);
+      if (copy) list.push(copy);
+    }
+    if (!list.length) return 0;
+    if (!NotesStore.isUnlocked()) {
+      toast('Unlock the vault first', true);
+      return 0;
+    }
+    const name = String(title || '').trim() || fileStem(list[0].name) || 'Folder';
+    hideScanDialog();
+    const folderId = NotesStore.createFolder(name);
+    if (!folderId) return 0;
+    setFolderOpen(folderId, true);
+    prefs.foldersCollapsed = false;
+    try { localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs)); } catch (err) { /* ignore */ }
+    applyFolderSection();
+    let saved = 0;
+    let firstNote = '';
+    for (let i = 0; i < list.length; i += 1) {
+      const file = list[i];
+      if (list.length > 1) toast(`Saving ${i + 1} of ${list.length}…`);
+      const noteTitle = fileStem(file.name) || name;
+      const noteId = createNote({ silent: true, title: noteTitle, folderId, open: false });
+      if (!noteId) continue;
+      if (!firstNote) firstNote = noteId;
+      const ok = await ingestDocument(file, {
+        noteId,
+        createIfNeeded: false,
+        title: noteTitle,
+        displayName: file.name,
+        quiet: true,
+      });
+      if (ok) saved += 1;
+      else if (!NotesStore.listAttachments(noteId).length) NotesStore.remove(noteId);
+    }
+    if (!saved) {
+      NotesStore.deleteFolder(folderId);
+      renderFolders();
+      renderNotes();
+      toast('No documents saved', true);
+      return 0;
+    }
+    currentFolder = folderId;
+    currentTag = null;
+    renderTags();
+    renderNotes();
+    if (firstNote) openNote(firstNote);
+    toast(`Saved ${saved} file${saved === 1 ? '' : 's'} in ${name}`);
     return saved;
   }
 
@@ -10920,7 +11112,7 @@
     ocrBusy = false;
   }
 
-  function createNote({ silent = false, title } = {}) {
+  function createNote({ silent = false, title, folderId = '', open = true } = {}) {
     if (!NotesStore.isUnlocked()) {
       toast('Unlock the vault first', true);
       return;
@@ -10930,12 +11122,13 @@
       const id = NotesStore.newUuid();
       const payload = NotesStore.defaultNote();
       if (title) payload.title = title;
+      if (folderId) payload.folder_id = folderId;
       if (currentTag) payload.tags = [currentTag];
       NotesStore.upsert(id, payload);
       renderNotes();
       renderTags();
-      openNote(id);
-      if (!silent) {
+      if (open) openNote(id);
+      if (!silent && open) {
         ui.title.focus();
         ui.title.select();
         toast('New note');
@@ -11550,6 +11743,30 @@
       }
       return;
     }
+    if (files.length > 1 && (pendingScan?.createIfNeeded ?? createIfNeeded)) {
+      const copies = [];
+      for (const file of files) {
+        const copy = await snapshotPickedFile(file);
+        if (copy) copies.push(copy);
+      }
+      if (!copies.length) {
+        setScanFeedback('No file was selected', { isError: true });
+        return;
+      }
+      pendingScan = {
+        file: null,
+        pages: [],
+        batchFiles: copies,
+        createIfNeeded: true,
+        sourceRemoval: mergeUploadSource(pendingScan?.sourceRemoval || sourceRemoval || emptyUploadSource(), {
+          label: sourceLabelFromFiles(copies),
+        }),
+      };
+      const name = document.getElementById('scan-name');
+      if (name && !name.value) name.value = fileStem(copies[0].name);
+      showScanDialog();
+      return;
+    }
     if (files.length > 1) {
       await ingestDocumentBatch(files, { createIfNeeded: pendingScan?.createIfNeeded ?? createIfNeeded });
       return;
@@ -11739,6 +11956,9 @@
   document.getElementById('scan-cancel').addEventListener('click', hideScanDialog);
   document.getElementById('scan-backdrop').addEventListener('click', hideScanDialog);
   document.getElementById('scan-confirm').addEventListener('click', confirmScanDialog);
+  document.querySelectorAll('input[name="scan-save-as"]').forEach((input) => {
+    input.addEventListener('change', () => syncScanSaveMode());
+  });
   document.getElementById('scan-name').addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -11792,6 +12012,13 @@
       localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs));
     });
   }
+  const folderSection = document.getElementById('folder-section');
+  if (folderSection) {
+    folderSection.addEventListener('toggle', () => {
+      prefs.foldersCollapsed = !folderSection.open;
+      localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs));
+    });
+  }
   const filterSection = document.getElementById('filter-section');
   if (filterSection) {
     filterSection.addEventListener('toggle', () => {
@@ -11802,6 +12029,7 @@
   }
   window.addEventListener('resize', () => {
     applyTagSection();
+    applyFolderSection();
     applyFilterSection();
     if (currentId) syncTagBarShell(NotesStore.get(currentId));
     layoutFindBarOverDocViewer();
@@ -11900,6 +12128,7 @@
 
   ui.filters.querySelectorAll('.filter').forEach((btn) => {
     btn.addEventListener('click', () => {
+      currentFolder = null;
       setFilter(btn.dataset.filter);
       renderTags();
       renderNotes();
@@ -11909,6 +12138,7 @@
   if (filterSelect) {
     filterSelect.value = currentFilter;
     filterSelect.addEventListener('change', () => {
+      currentFolder = null;
       setFilter(filterSelect.value);
       renderTags();
       renderNotes();

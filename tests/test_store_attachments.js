@@ -333,6 +333,17 @@ async function waitPersist(uuid, tries = 40) {
   assert.strictEqual(NotesStore.get(pendingId).content.ocr_method, 'pdftext');
   assert.strictEqual(NotesStore.get(pendingId).content.ocr_index, NotesStore.OCR_INDEX);
 
+  const folderId = NotesStore.createFolder('Receipts');
+  const filedId = NotesStore.newUuid();
+  const filed = NotesStore.defaultNote();
+  filed.title = 'Invoice';
+  filed.folder_id = folderId;
+  NotesStore.upsert(filedId, filed);
+  assert.strictEqual(NotesStore.notesInFolder(folderId).length, 1);
+  NotesStore.deleteFolder(folderId);
+  assert.ok(!NotesStore.listFolders().some((folder) => folder.uuid === folderId));
+  assert.strictEqual(NotesStore.get(filedId).content.folder_id, '');
+
   console.log('ok');
 })().catch((err) => {
   console.error(err);

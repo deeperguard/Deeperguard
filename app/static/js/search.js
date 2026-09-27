@@ -203,7 +203,7 @@ const NotesSearch = (() => {
     return !!(content?.locked || content?.prevent_edit);
   }
 
-  function filterNotes(notes, { query, filter, tagId, tagMap, sort, searchOptions = {} }) {
+  function filterNotes(notes, { query, filter, tagId, folderId, tagMap, sort, searchOptions = {} }) {
     const opts = defaultSearchOptions(searchOptions);
     const q = String(query || '').trim();
     const context = searchContextActive(q, opts);
@@ -249,6 +249,7 @@ const NotesSearch = (() => {
         }
 
         if (tagId && tagId !== '__untagged__' && !(c.tags || []).includes(tagId)) return false;
+        if (folderId && c.folder_id !== folderId) return false;
         if (opts.tagIds.length) {
           const noteTags = c.tags || [];
           if (!opts.tagIds.some((id) => noteTags.includes(id))) return false;
