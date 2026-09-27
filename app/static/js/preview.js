@@ -2,9 +2,9 @@ const NotesPreview = (() => {
   const IS_IOS = typeof navigator !== 'undefined'
     && (/iPad|iPhone|iPod/.test(navigator.userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-  // iOS Safari enforces a hard total canvas budget (~224MB). 24 pages at 3x DPR
-  // plus pixel snapshots exceeded it and crash-looped the tab.
-  const MAX_PDF_PAGES = IS_IOS ? 6 : 24;
+  // iOS Safari enforces a hard total canvas budget. Each page stays inside
+  // MAX_CANVAS_PIXELS; the PDF itself is not cut off after a page count.
+  const MAX_PDF_PAGES = Number.POSITIVE_INFINITY;
   const MAX_PAGE_DPR = IS_IOS ? 1.25 : 3;
   const MAX_CANVAS_PIXELS = IS_IOS ? 1800000 : 9000000;
   const MAX_SNAPSHOT_PIXELS = IS_IOS ? 1200000 : 6000000;
@@ -1051,19 +1051,13 @@ const NotesPreview = (() => {
       target.appendChild(p);
       return { pages: 0, embeddedHits: 0, renderedWidth: 0 };
     }
-    const pages = Math.min(doc.numPages, maxPages);
+    const pages = Number.isFinite(maxPages) ? Math.min(doc.numPages, maxPages) : doc.numPages;
     const width = Math.max(240, maxWidth || target.clientWidth || container?.clientWidth || 900);
     let embeddedHits = 0;
     for (let i = 1; i <= pages; i += 1) {
       const page = await renderPdfPage(doc, i, width, needle, ocrBoxes);
       if (page.querySelector('.doc-search-hit')) embeddedHits += 1;
       target.appendChild(page);
-    }
-    if (doc.numPages > pages) {
-      const more = document.createElement('p');
-      more.className = 'muted';
-      more.textContent = `Showing first ${pages} of ${doc.numPages} pages`;
-      target.appendChild(more);
     }
     if (showExcerpt && needle && !target.querySelector('.doc-search-hit')) {
       appendSearchExcerpt(target, ocrText, needle);

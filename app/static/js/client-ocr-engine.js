@@ -5,10 +5,8 @@
 const NotesClientOcr = (() => {
   const MAX_BYTES = 50 * 1024 * 1024;
   const MAX_SCAN_PAGES = 6;
-  const MAX_PDF_PAGES = typeof navigator !== 'undefined'
-    && (/iPad|iPhone|iPod/.test(navigator.userAgent)
-      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
-    ? 6 : 24;
+  // Every page of a PDF is read. Highlight boxes stop at MAX_BOXES; text does not.
+  const MAX_PDF_PAGES = Number.POSITIVE_INFINITY;
   const MAX_BOXES = 1500;
   const LIST_PREVIEW_PX = 224;
   const LIST_PREVIEW_QUALITY = 0.78;
@@ -361,11 +359,9 @@ const NotesClientOcr = (() => {
         const width = (item.width || 0) * viewport.scale || fontHeight * str.length * 0.5;
         const top = viewport.height - y - fontHeight;
         const box = makeBox(str, x, top, width, fontHeight, viewport.width, viewport.height, pageNum - 1);
-        if (box) boxes.push(box);
-        if (boxes.length >= MAX_BOXES) break;
+        if (box && boxes.length < MAX_BOXES) boxes.push(box);
       }
       if (pageText.length) parts.push(clean(pageText.join(' ')));
-      if (boxes.length >= MAX_BOXES) break;
     }
     return { text: clean(parts.join('\n\n')), boxes };
   }
@@ -388,8 +384,7 @@ const NotesClientOcr = (() => {
       const canvas = await rasterizePdfPage(page, 1.5);
       const result = await ocrImageCanvas(canvas, pageNum - 1);
       if (result.text) texts.push(result.text);
-      boxes.push(...result.boxes);
-      if (boxes.length >= MAX_BOXES) break;
+      if (boxes.length < MAX_BOXES) boxes.push(...result.boxes.slice(0, MAX_BOXES - boxes.length));
     }
     return { text: clean(texts.join('\n\n')), boxes: boxes.slice(0, MAX_BOXES), method: 'tesseract' };
   }

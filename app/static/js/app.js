@@ -6834,15 +6834,11 @@
     const maxWidth = previewStageWidth(stage);
 
     if (entry.kind === 'pdf') {
-      // Inline (in-note) previews on iPhone stay tiny; the full-screen viewer
-      // may render more pages within the platform canvas budget.
-      const inlineMaxPages = IS_IOS && stage.closest('#doc-inline') ? 3 : undefined;
       if (!needle) {
         await NotesPreview.renderPdfDocument(entry.bytes, stage, {
           maxWidth,
           query: '',
           showExcerpt: false,
-          ...(inlineMaxPages ? { maxPages: inlineMaxPages } : {}),
         });
         return;
       }
@@ -6856,7 +6852,6 @@
         ocrText,
         ocrBoxes: boxes,
         showExcerpt: true,
-        ...(inlineMaxPages ? { maxPages: inlineMaxPages } : {}),
       });
       if (paintToken !== docPaintToken || !stage.isConnected) return;
       if (!attachmentSearchBoxes(attId).length) {
@@ -10114,48 +10109,6 @@
     }
   }
 
-  async function offerRemoveUploadedSource(source) {
-    if (!source) return;
-    const handles = (source.handles || []).filter((h) => h && typeof h.remove === 'function');
-    const fromDevice = !!source.fromDevice;
-    if (!fromDevice && !handles.length) return;
-    const label = String(source.label || 'this file').trim() || 'this file';
-    const manualOnly = fromDevice && !handles.length;
-    const message = manualOnly
-      ? (source.fromCamera
-        ? `Remove the photo from your library? “${label}” is already saved in Deeperguard.`
-        : `Remove the original from this device? “${label}” is already saved in Deeperguard.`)
-      : `Remove “${label}” from this device? Your saved copy in Deeperguard stays.`;
-    const ok = await confirmAction(message, {
-      title: 'Remove from device?',
-      confirmLabel: 'Remove',
-      danger: true,
-    });
-    if (!ok) return;
-    if (handles.length) {
-      let removed = 0;
-      for (const handle of handles) {
-        try {
-          await handle.remove();
-          removed += 1;
-        } catch (_) { /* keep trying remaining handles */ }
-      }
-      if (removed === handles.length) {
-        toast(removed === 1 ? 'Original removed from device' : `${removed} originals removed from device`);
-      } else if (removed > 0) {
-        toast(`Removed ${removed} of ${handles.length} originals`, true);
-      } else {
-        toast('Could not remove the original from this device', true);
-      }
-      return;
-    }
-    toast(
-      source.fromCamera
-        ? 'Open Photos and delete the original — iPhone browsers cannot remove it automatically.'
-        : 'Open Photos or Files and delete the original — iPhone browsers cannot remove it automatically.',
-    );
-  }
-
   function sourceRemovalFromPending(pending) {
     if (!pending?.sourceRemoval) return null;
     const sr = pending.sourceRemoval;
@@ -10427,7 +10380,7 @@
     });
   }
 
-  async function ingestDocument(file, { createIfNeeded = false, title, displayName, sourceRemoval = null } = {}) {
+  async function ingestDocument(file, { createIfNeeded = false, title, displayName, quiet = false } = {}) {
     if (!NotesStore.isUnlocked()) {
       toast('Unlock the vault first', true);
       return;
@@ -10536,8 +10489,36 @@
       ingestBusy = false;
     }
     enqueueOcrJob({ attId, noteId: id, file: storeFile, suggestTags: true });
-    await offerRemoveUploadedSource(sourceRemoval);
-    toast('Document saved — reading text in the background');
+    if (!quiet) toast('Document saved — reading text in the background');
+    return true;
+  }
+
+  async function ingestDocumentBatch(files, { createIfNeeded = false } = {}) {
+    const list = [];
+    for (const file of toFileArray(files)) {
+      const copy = await snapshotPickedFile(file);
+      if (copy) list.push(copy);
+    }
+    if (!list.length) return 0;
+    hideScanDialog();
+    let saved = 0;
+    for (let i = 0; i < list.length; i += 1) {
+      const file = list[i];
+      if (list.length > 1) toast(`Saving ${i + 1} of ${list.length}…`);
+      const note = (!createIfNeeded && currentId) ? NotesStore.get(currentId) : null;
+      const title = String(note?.content?.title || '').trim() || fileStem(file.name);
+      const ok = await ingestDocument(file, {
+        createIfNeeded,
+        title,
+        displayName: file.name,
+        quiet: list.length > 1,
+      });
+      if (ok) saved += 1;
+    }
+    if (list.length > 1) {
+      toast(saved ? `Saved ${saved} document${saved === 1 ? '' : 's'}` : 'No documents saved', !saved);
+    }
+    return saved;
   }
 
   function canOcrAttachment(item) {
@@ -11494,6 +11475,10 @@
       if (pendingScan && !document.getElementById('scan-dialog')?.hidden) {
         setScanFeedback('No file was selected', { isError: true });
       }
+      return;
+    }
+    if (files.length > 1) {
+      await ingestDocumentBatch(files, { createIfNeeded: pendingScan?.createIfNeeded ?? createIfNeeded });
       return;
     }
     if (!pendingScan) pendingScan = { file: null, pages: [], createIfNeeded, sourceRemoval: emptyUploadSource() };
@@ -12480,43 +12465,33 @@
     writeChecklist(NotesChecklist.removeDone(rows), nested);
   });
 
-  async function ingestAttachmentFiles(files, { sourceRemoval = null } = {}) {
+  async function ingestAttachmentFiles(files) {
     const list = toFileArray(files);
     if (!list.length) return;
     if (!currentId) {
       toast('Open a note first', true);
       return;
     }
-    if (list.length === 1) {
-      const copy = await snapshotPickedFile(list[0]);
-      if (!copy) return;
-      const note = NotesStore.get(currentId);
-      const title = String(note?.content?.title || '').trim() || fileStem(copy.name) || 'Document';
-      try {
-        await ingestDocument(copy, {
-          createIfNeeded: false,
-          title,
-          displayName: copy.name,
-          sourceRemoval,
-        });
-      } catch (err) {
-        if (isDuplicateUploadError(err.message)) {
-          await showDuplicateDialog(null, copy, currentId, err.message);
-        } else {
-          toast(err.message || 'Could not attach file', true);
-        }
-      }
+    if (list.length > 1) {
+      await ingestDocumentBatch(list, { createIfNeeded: false });
       return;
     }
-    pendingScan = {
-      file: null,
-      pages: [],
-      createIfNeeded: false,
-      sourceRemoval: mergeUploadSource(emptyUploadSource(), sourceRemoval),
-    };
-    for (const file of list) {
-      const copy = await snapshotPickedFile(file);
-      if (copy) addScanFile(copy);
+    const copy = await snapshotPickedFile(list[0]);
+    if (!copy) return;
+    const note = NotesStore.get(currentId);
+    const title = String(note?.content?.title || '').trim() || fileStem(copy.name) || 'Document';
+    try {
+      await ingestDocument(copy, {
+        createIfNeeded: false,
+        title,
+        displayName: copy.name,
+      });
+    } catch (err) {
+      if (isDuplicateUploadError(err.message)) {
+        await showDuplicateDialog(null, copy, currentId, err.message);
+      } else {
+        toast(err.message || 'Could not attach file', true);
+      }
     }
   }
 

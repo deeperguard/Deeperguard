@@ -14,7 +14,6 @@ from typing import Any
 from PIL import Image, ImageEnhance, ImageOps
 
 MAX_BYTES = 50 * 1024 * 1024
-MAX_PDF_PAGES = 24
 MAX_SCAN_PAGES = 6
 MAX_BOXES = 1500
 LIST_PREVIEW_PX = 224
@@ -464,8 +463,8 @@ def _pdf_boxes(pdf_path: Path) -> list[dict[str, Any]]:
     try:
         pdftotext = _require("pdftotext")
         html = _run(
-            [pdftotext, "-bbox", "-enc", "UTF-8", "-l", str(MAX_PDF_PAGES), str(pdf_path), "-"],
-            timeout=45,
+            [pdftotext, "-bbox", "-enc", "UTF-8", str(pdf_path), "-"],
+            timeout=600,
         )
     except OcrError:
         return []
@@ -487,12 +486,10 @@ def _pdf_raster_boxes(pdf_path: Path) -> tuple[list[dict[str, Any]], list[str]]:
                 "110",
                 "-f",
                 "1",
-                "-l",
-                str(MAX_PDF_PAGES),
                 str(pdf_path),
                 str(prefix),
             ],
-            timeout=150,
+            timeout=1800,
         )
     except OcrError:
         # Some pdftoppm builds write pages and still exit non-zero on warnings.
@@ -513,10 +510,9 @@ def _pdf_raster_boxes(pdf_path: Path) -> tuple[list[dict[str, Any]], list[str]]:
             continue
         if text:
             texts.append(text)
-        boxes.extend(page_boxes)
-        if len(boxes) >= MAX_BOXES:
-            break
-    return boxes[:MAX_BOXES], texts
+        if len(boxes) < MAX_BOXES:
+            boxes.extend(page_boxes[: MAX_BOXES - len(boxes)])
+    return boxes, texts
 
 
 def _pdf(data: bytes) -> dict[str, Any]:
@@ -526,7 +522,7 @@ def _pdf(data: bytes) -> dict[str, Any]:
         pdf_path = root / "doc.pdf"
         pdf_path.write_bytes(data)
         embedded = _clean(
-            _run([pdftotext, "-layout", "-enc", "UTF-8", str(pdf_path), "-"], timeout=45)
+            _run([pdftotext, "-layout", "-enc", "UTF-8", str(pdf_path), "-"], timeout=600)
         )
         boxes = _pdf_boxes(pdf_path)
         if len(embedded) >= 40 and len(boxes) >= 5:
