@@ -273,7 +273,7 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   font-weight: 700;
   font-size: 22px;
   letter-spacing: 0.08em;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font);
 }
 .totp-ring {
   width: 22px;
@@ -430,11 +430,17 @@ body {
 }
 body.auth-page { overflow: auto; -webkit-overflow-scrolling: touch; }
 a { color: var(--accent); text-decoration: none; }
-html, body { font-family: var(--font); }
+html, body {
+  font-family: var(--font);
+  font-optical-sizing: none;
+}
+input, textarea, button, select, pre, code, kbd, samp {
+  font-family: var(--font);
+  color: inherit;
+}
 input, textarea, button, select {
   font: inherit;
   font-family: var(--font);
-  color: inherit;
 }
 input, textarea, select {
   width: 100%;
@@ -1052,7 +1058,7 @@ html[data-theme="light"] .zk-badge {
 }
 .brand-mark-monogram {
   fill: #ffffff;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font);
   font-size: 19px;
   font-weight: 800;
   letter-spacing: -0.8px;
@@ -3461,7 +3467,7 @@ html[data-theme="light"] .doc-search-hit {
   color: var(--text);
   background: transparent;
   font-size: 14px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font);
   text-align: left;
 }
 .doc-thumb {
@@ -3631,7 +3637,7 @@ html[data-theme="light"] .doc-search-hit {
   color: var(--text);
   font-size: 15px;
   line-height: 1.5;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font);
 }
 
 .modal {
@@ -4386,8 +4392,8 @@ html[data-theme="light"] {
 
 .mobile-only { display: none; }
 .desktop-only { display: inline-flex; }
-.note-body.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.note-body-wrap.mono .note-body-links { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.note-body.mono { font-family: var(--font); }
+.note-body-wrap.mono .note-body-links { font-family: var(--font); }
 .note-list.compact .note-item { padding: 10px 14px; }
 .note-list.hide-previews .note-item p,
 .note-list.hide-previews .note-preview,
