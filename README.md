@@ -4,7 +4,7 @@ Encrypted notes in your browser.
 
 **[Open the notes app](https://www.deeperguard.com/app)**
 
-## Pitch
+## What it does
 
 Deeperguard is a notes app that runs in the browser. You write, tag, search, pin, archive, and trash notes, attach files, use checklists and markdown, and scan documents. The same vault opens on your phone or computer, including from the home screen.
 
