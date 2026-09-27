@@ -7657,6 +7657,8 @@
   }
 
   function renderHistory(note) {
+    if (!ui.historyList) return;
+    const revisions = Array.isArray(note?.content?.revisions) ? note.content.revisions : [];
     if (!revisions.length) {
       ui.historyList.innerHTML = '<p class="muted">No previous versions yet.</p>';
       return;
@@ -10476,11 +10478,8 @@
         setFilter('all');
       }
       id = createNote({ silent: true, title: docName });
+      if (!id) return;
       created = true;
-      if (!id) {
-        toast('Could not create note for this document', true);
-        return;
-      }
     } else {
       const note = NotesStore.get(id);
       if (note && (!note.content.title || note.content.title === 'Untitled')) {

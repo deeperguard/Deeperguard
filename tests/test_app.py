@@ -3875,6 +3875,10 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("box-decoration-break: clone", preview_link)
         self.assertIn("background-size: 100% 1.5px", preview_link)
 
+        history_fn = app_js[app_js.find("function renderHistory(note)"):app_js.find("function noteHasDocs(noteId)")]
+        self.assertIn("const revisions = Array.isArray(note?.content?.revisions)", history_fn)
+        self.assertNotIn("if (!revisions.length)", history_fn[:history_fn.find("const revisions")])
+
         open_fn = app_js[app_js.find("function openNote(id, { skipGate = false } = {})"):app_js.find("function updateActionButtons(note)")]
         self.assertIn("listSelectionId = id", open_fn)
         self.assertLess(open_fn.find("markActiveNoteRow()"), open_fn.find("classList.add('editor-open')"))
