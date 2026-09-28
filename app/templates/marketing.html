@@ -598,29 +598,6 @@
       </nav>
     </footer>
   </main>
-  <script src="/static/js/marketing.js?v={{ build }}"></script>
-  <script>
-  (function () {
-    if (location.pathname !== '/' && location.pathname !== '') return;
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function (regs) {
-        regs.forEach(function (reg) { reg.update().catch(function () {}); });
-      });
-    }
-    if (!window.caches || !caches.keys) return;
-    caches.keys().then(function (keys) {
-      return Promise.all(keys.map(function (name) {
-        return caches.open(name).then(function (cache) {
-          return cache.keys().then(function (reqs) {
-            return Promise.all(reqs.filter(function (req) {
-              try { return new URL(req.url).pathname === '/'; }
-              catch (err) { return false; }
-            }).map(function (req) { return cache.delete(req); }));
-          });
-        });
-      }));
-    }).catch(function () {});
-  })();
-  </script>
+  <script src="/static/js/marketing.js?v={{ build }}" defer></script>
 </body>
 </html>

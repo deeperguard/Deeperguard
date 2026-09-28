@@ -354,7 +354,17 @@ def _headers(response):
         session.accessed = False
         session.modified = False
         _drop_set_cookie(response)
-    elif request.path in {"/", app_entry_path(), "/manifest.json"}:
+    elif request.path in {"/", "/pricing"}:
+        # Marketing HTML is public and cookie-free. A short cache keeps repeat
+        # visits off the origin. Clear-Site-Data must not be set here: the
+        # browser deletes its HTTP cache before painting, and the one-time
+        # cookie never stuck because this path strips Set-Cookie.
+        response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=86400"
+        response.headers.pop("Pragma", None)
+        session.accessed = False
+        session.modified = False
+        _drop_set_cookie(response)
+    elif request.path in {app_entry_path(), "/manifest.json"}:
         # Revalidate when the phone is online; keep a stale copy for offline.
         response.headers["Cache-Control"] = (
             "public, max-age=0, stale-while-revalidate=604800, stale-if-error=604800"
@@ -362,9 +372,7 @@ def _headers(response):
         response.headers.pop("Pragma", None)
         session.accessed = False
         session.modified = False
-        # Keep the one-time marketing cache-bust cookie on "/".
-        if request.path != "/" or request.cookies.get("dg_sw_fix") == "marketing2":
-            _drop_set_cookie(response)
+        _drop_set_cookie(response)
     elif auth.cacheable_shell(request.path):
         response.headers["Cache-Control"] = "public, max-age=86400, immutable"
         response.headers.pop("Pragma", None)
@@ -543,17 +551,6 @@ def health():
         },
         "server": server,
     })
-    # One-time drop of HTTP/Cache-API copies of the old notes shell at "/".
-    if request.cookies.get("dg_sw_fix") != "marketing1":
-        resp.headers["Clear-Site-Data"] = '"cache"'
-        resp.set_cookie(
-            "dg_sw_fix",
-            "marketing1",
-            max_age=60 * 60 * 24 * 365,
-            httponly=True,
-            samesite="Lax",
-            path="/",
-        )
     return resp
 
 
@@ -2038,17 +2035,6 @@ def index():
     if request.scheme != "https" and host not in {"localhost", "127.0.0.1", "::1"}:
         return render_template("https-setup.html", host=_lan_https_host(), build=NOTES_BUILD)
     response = make_response(render_template("marketing.html", **_marketing_context()))
-    # One-time drop of HTTP/Cache-API copies of the old notes shell at "/".
-    if request.cookies.get("dg_sw_fix") != "marketing2":
-        response.headers["Clear-Site-Data"] = '"cache"'
-        response.set_cookie(
-            "dg_sw_fix",
-            "marketing2",
-            max_age=60 * 60 * 24 * 365,
-            httponly=True,
-            samesite="Lax",
-            path="/",
-        )
     return response
 
 

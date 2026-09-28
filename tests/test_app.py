@@ -197,9 +197,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("db_bytes", data)
         self.assertIn("checks", data)
         self.assertIn("server", data)
-        self.assertEqual(res.headers.get("Clear-Site-Data"), '"cache"')
+        self.assertFalse(res.headers.get("Clear-Site-Data"))
         again = self.client.get("/api/health")
-        self.assertNotEqual(again.headers.get("Clear-Site-Data"), '"cache"')
+        self.assertFalse(again.headers.get("Clear-Site-Data"))
 
     # Check that marketing features are all present and clearly pitted
     def test_homepage_distinction_and_pricing(self):
@@ -229,6 +229,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b"Pro", res.data)
         self.assertIn(b"marketing.css", res.data)
         self.assertNotIn(b'id="editor"', res.data)
+        self.assertFalse(res.headers.get("Clear-Site-Data"))
+        self.assertIn("max-age=300", res.headers.get("Cache-Control") or "")
 
     def test_notes_app_entry_serves_shell(self):
         res = self.client.get("/app")
