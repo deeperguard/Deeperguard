@@ -165,10 +165,11 @@
   if (!Object.prototype.hasOwnProperty.call(savedPrefs, 'lockOnUnfocus')) {
     try { localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs)); } catch (e) { /* ignore quota */ }
   }
-  // One-time denser phone list chrome (collapse tags; more note rows visible).
-  if (prefs.listChromeDense !== 2) {
-    prefs.listChromeDense = 2;
+  // One-time denser phone list chrome (collapse tags/folders; more note rows visible).
+  if (prefs.listChromeDense !== 3) {
+    prefs.listChromeDense = 3;
     prefs.tagsCollapsed = true;
+    prefs.foldersCollapsed = true;
     try {
       localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs));
     } catch (e) {
@@ -3322,9 +3323,16 @@
     }
     if (phase === 'syncing') {
       if (!isVaultReadyForSync()) return;
-      meta.textContent = isPhoneShell() && pctMatch
-        ? `${pct}%`
-        : (message || (pctMatch ? `Downloading… ${pct}%` : 'Syncing…'));
+      if (isPhoneShell()) {
+        const banner = document.getElementById('sync-status-banner');
+        if (banner && !banner.hidden && banner.dataset.mode === 'downloading') {
+          const label = document.getElementById('sync-status-text');
+          if (label) label.textContent = syncBannerProgressText(message, label.textContent || 'Downloading notes…');
+        }
+        meta.textContent = when ? `Synced ${when}` : '';
+      } else {
+        meta.textContent = message || (pctMatch ? `Downloading… ${pct}%` : 'Syncing…');
+      }
       if (/Downloading/i.test(String(message || ''))) {
         const countMatch = String(message || '').match(/\((\d+)\/(\d+)\)/);
         beginVaultPull(countMatch ? Number(countMatch[2]) || 0 : vaultPullExpected);
@@ -3391,7 +3399,13 @@
   let vaultDownloadTimer = 0;
   const UNLOCK_DOWNLOAD_TIMEOUT_MS = 20000;
 
-  function showSyncBanner(mode, text) {
+  function syncBannerProgressText(message, fallback) {
+    const pctMatch = String(message || '').match(/(\d+)\s*%/);
+    if (pctMatch) return `${fallback || 'Downloading notes…'} ${pctMatch[1]}%`;
+    return fallback || message || 'Syncing…';
+  }
+
+  function showSyncBanner(mode, text, { message } = {}) {
     const banner = document.getElementById('sync-status-banner');
     const label = document.getElementById('sync-status-text');
     const retry = document.getElementById('sync-status-retry');
@@ -3404,7 +3418,11 @@
     }
     banner.hidden = false;
     banner.dataset.mode = mode;
-    if (label) label.textContent = text || '';
+    if (label) {
+      label.textContent = mode === 'downloading' && isPhoneShell()
+        ? syncBannerProgressText(message, text)
+        : (text || '');
+    }
     const actionable = mode === 'error' || mode === 'timeout';
     if (retry) retry.hidden = !actionable;
     if (relock) relock.hidden = !actionable;

@@ -1425,8 +1425,19 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("function applyFilterSection()", js)
         self.assertIn("viewsCollapsed: false", js)
         self.assertIn("tagsCollapsed: true", js)
-        self.assertIn("prefs.listChromeDense !== 2", js)
+        self.assertIn("prefs.listChromeDense !== 3", js)
         self.assertIn(".filter-section { display: none; }", mobile)
+
+    def test_mobile_list_chrome_quiets_header_and_sync_banner(self):
+        html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        self.assertLess(html.index('id="sync-status-banner"'), html.index('id="note-list-head"'))
+        self.assertIn('class="sync-status-banner list-sync-banner"', html)
+        self.assertIn(".sidebar-head .app-version { display: none; }", mobile)
+        self.assertIn(".sidebar-head .sync-meta { display: none; }", mobile)
+        self.assertIn(".list-sync-banner { order: 8; }", mobile)
+        self.assertIn("prefs.foldersCollapsed = true", (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8"))
 
     def test_client_vaultlock(self):
         self._run_node_script("test_vaultlock.js")

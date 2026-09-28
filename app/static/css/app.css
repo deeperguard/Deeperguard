@@ -4843,14 +4843,29 @@ body.search-filters-open .fab-stack,
   .brand-mark.sm { width: 32px; height: 32px; border-radius: 8px; }
   .brand-mark.sm .brand-mark-monogram-sm { font-size: 25px; letter-spacing: -1.2px; }
   .brand-copy strong { font-size: 15px; }
+  .sidebar-head .app-version { display: none; }
+  .sidebar-head .sync-meta { display: none; }
+  .sidebar-head #btn-account-info-head { display: none; }
   .vault-stats { display: none; }
-  .sync-meta {
-    display: block;
-    max-width: 11rem;
-  }
   .btn-sync-now { display: none; }
   .brand-sync-row { display: none !important; }
-  .sidebar-actions { gap: 4px; }
+  .sidebar-actions {
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .sidebar-actions .sync-indicator {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    border-radius: 10px;
+  }
+  .sidebar-actions .btn.icon {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+  }
   .sidebar-nav,
   .list-pane { display: contents; }
   .sidebar-head { order: 1; }
@@ -4859,9 +4874,13 @@ body.search-filters-open .fab-stack,
   .search-wrap { order: 4; }
   .filter-bar { order: 5; }
   .trash-toolbar { order: 6; }
-  .tag-section { order: 7; }
-  .note-list-head { order: 8; }
-  .note-list { order: 9; }
+  .tag-section,
+  .folder-section { order: 7; }
+  .list-sync-banner { order: 8; }
+  .note-list-head { order: 9; }
+  .note-list { order: 10; }
+  .tag-section.is-empty,
+  .folder-section.is-empty { display: none; }
   .sidebar-foot { display: none; }
   .list-toolbar {
     display: flex;
@@ -4970,8 +4989,14 @@ body.search-filters-open .fab-stack,
     min-height: 0;
     flex-shrink: 0;
   }
-  .tag-section:not([open]) {
+  .tag-section:not([open]),
+  .folder-section:not([open]) {
     padding-bottom: 0;
+  }
+  .tag-section:not([open]) .section-label,
+  .folder-section:not([open]) .section-label {
+    padding-top: 0;
+    padding-bottom: 2px;
   }
   /* iOS Safari can keep <details> body in layout when closed inside flex + display:contents. */
   .tag-section:not([open]) > :not(summary) {
@@ -5586,9 +5611,14 @@ body.search-filters-open .fab-stack,
 
   /* Sidebar — aligned, compact list */
   .list-pane .search-wrap,
-  .list-pane .note-list-head {
+  .list-pane .note-list-head,
+  .list-pane .list-sync-banner {
     padding-left: 14px;
     padding-right: 14px;
+  }
+  .list-pane .list-sync-banner {
+    margin: 0 0 6px;
+    border-radius: 8px;
   }
   .note-list-head-copy {
     display: flex;
@@ -5953,6 +5983,7 @@ body:not(.editor-tools-open) .md-toolbar {
   color: var(--text);
   font-size: 13px;
 }
+.list-sync-banner[hidden] { display: none !important; }
 .sync-status-banner[data-mode="error"],
 .sync-status-banner[data-mode="timeout"] {
   background: color-mix(in srgb, var(--danger, #b42318) 12%, var(--bg-elevated));
@@ -5982,4 +6013,22 @@ body:not(.editor-tools-open) .md-toolbar {
   .writing-tip {
     margin: 0 12px 8px;
   }
+  .list-sync-banner {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    margin: 0;
+    padding: 5px 14px;
+    border-radius: 0;
+    font-size: 12px;
+    line-height: 1.35;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  }
+  .list-sync-banner #sync-status-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .note-list-head .sync-status-banner { display: none !important; }
 }
