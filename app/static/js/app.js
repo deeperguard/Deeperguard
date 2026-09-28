@@ -5665,6 +5665,7 @@
     panel.hidden = !open;
     if (backdrop) backdrop.hidden = !open;
     toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    document.body.classList.toggle('search-filters-open', !!open);
     if (open) {
       syncSearchFilterControls();
       document.getElementById('search-titles-only')?.focus();
@@ -5930,6 +5931,7 @@
       || '';
     const displayTitle = NotesSearch.effectiveNoteTitle(n);
     const displaySnippet = String(snippet).slice(0, 120);
+    const titleAttr = displayTitle ? ` title="${escapeAttr(displayTitle)}"` : '';
     const titleHtml = displayTitle
       ? (query ? NotesSearch.highlightPlain(displayTitle, query) : escapeHtml(displayTitle))
       : '<span class="note-title-placeholder">Title</span>';
@@ -5968,7 +5970,7 @@
           <span class="note-title-row">
             ${pinHtml}
             ${lockBadgeHtml}
-            <h3>${titleHtml}</h3>${noteIndexingBadge(n.uuid)}
+            <h3${titleAttr}>${titleHtml}</h3>${noteIndexingBadge(n.uuid)}
           </span>
           ${previewHtml}
           ${tags}
@@ -6150,7 +6152,10 @@
       listCount.textContent = listedCount
         ? `${listedCount}`
         : '0';
-      listCount.title = listedCount ? `${listedCount} item${listedCount === 1 ? '' : 's'}` : 'No items';
+      const countLabel = listingFiles ? 'file' : 'note';
+      listCount.title = listedCount
+        ? `${listedCount} ${countLabel}${listedCount === 1 ? '' : 's'} in this view`
+        : `No ${countLabel}s in this view`;
     }
     updateTrashToolbar(currentFilter === 'trash' ? notes.length : undefined);
     const renderKey = listingFiles
@@ -6542,6 +6547,9 @@
         const retryBtn = attachmentOcrRetryable(a)
           ? `<button type="button" class="btn ghost sm ocr-retry" data-retry-ocr="${escapeAttr(a.uuid)}">Retry OCR</button>`
           : '';
+        const shareBtn = attachmentCanWebShare()
+          ? `<button type="button" class="btn ghost sm" data-share="${escapeAttr(a.uuid)}">Share</button>`
+          : '';
         return `<div class="attachment-item${busy ? ' is-ocr-busy' : ''}" data-att="${escapeAttr(a.uuid)}">
           <button type="button" class="attachment-thumb" data-preview="${escapeAttr(a.uuid)}" aria-label="Preview ${escapeAttr(a.content.filename || 'document')}">Open</button>
           <div class="attachment-main">
@@ -6552,7 +6560,7 @@
           <div class="attachment-item-actions">
             ${retryBtn}
             <button type="button" class="btn ghost sm" data-preview="${escapeAttr(a.uuid)}">Preview</button>
-            <button type="button" class="btn ghost sm" data-share="${escapeAttr(a.uuid)}">Share</button>
+            ${shareBtn}
             <button type="button" class="btn ghost sm" data-dl="${escapeAttr(a.uuid)}">Download</button>
             <button type="button" class="btn ghost sm" data-rm="${escapeAttr(a.uuid)}">Remove</button>
           </div>
@@ -7801,7 +7809,7 @@
           ${desktop ? '' : `<div class="doc-thumb-meta"><span>${escapeHtml(first.content.filename || 'Document')}</span></div>`}`;
     const toolbar = `<div class="doc-inline-tools">
           <button type="button" class="btn ghost sm doc-inline-expand" data-preview="${escapeAttr(first.uuid)}">Fullscreen</button>
-          <button type="button" class="btn ghost sm doc-inline-share" data-share="${escapeAttr(first.uuid)}">${deviceCanShare() ? 'Share' : 'Download'}</button>
+          <button type="button" class="btn ghost sm doc-inline-share" data-share="${escapeAttr(first.uuid)}">${attachmentCanWebShare() ? 'Share' : 'Download'}</button>
         </div>`;
     const mainBlock = desktop
       ? `${toolbar}<div class="doc-inline-main doc-inline-main-scroll">${mainInner}</div>`
@@ -8162,7 +8170,6 @@
       }
     }
     await downloadAttachment(id);
-    toast('Downloaded');
   }
 
   async function shareNote(noteId = currentId) {
@@ -8214,8 +8221,19 @@
     return typeof navigator.share === 'function';
   }
 
+  function attachmentCanWebShare() {
+    if (typeof navigator.share !== 'function') return false;
+    try {
+      const probe = new File(['x'], 'share-probe.txt', { type: 'text/plain' });
+      return !navigator.canShare || navigator.canShare({ files: [probe] });
+    } catch (_) {
+      return false;
+    }
+  }
+
   function syncShareLabels() {
     const noteShare = deviceCanShare();
+    const fileShare = attachmentCanWebShare();
     const noteLabel = noteShare ? 'Share' : 'Copy';
     ['btn-share', 'note-info-share', 'note-info-share-bottom'].forEach((id) => {
       const btn = document.getElementById(id);
@@ -8229,23 +8247,31 @@
       const label = shareBtn.querySelector('.share-label');
       if (label) label.textContent = noteLabel;
     }
-    const fileLabel = noteShare ? 'Share' : 'Download';
     const docShare = document.getElementById('doc-share');
     if (docShare) {
-      docShare.hidden = !noteShare;
+      docShare.hidden = !fileShare;
       docShare.title = 'Share';
       docShare.setAttribute('aria-label', 'Share');
       docShare.textContent = 'Share';
     }
+    const docDownload = document.getElementById('doc-download');
+    if (docDownload) {
+      docDownload.hidden = fileShare;
+      docDownload.title = 'Download';
+      docDownload.setAttribute('aria-label', 'Download');
+      docDownload.textContent = 'Download';
+    }
     const immersive = document.getElementById('doc-immersive-share');
     if (immersive) {
-      immersive.title = fileLabel;
-      immersive.setAttribute('aria-label', fileLabel);
+      immersive.hidden = !fileShare;
+      immersive.title = fileShare ? 'Share' : 'Download';
+      immersive.setAttribute('aria-label', fileShare ? 'Share' : 'Download');
     }
     document.querySelectorAll('.doc-inline-share').forEach((btn) => {
-      btn.textContent = fileLabel;
-      btn.title = fileLabel;
-      btn.setAttribute('aria-label', fileLabel);
+      const label = fileShare ? 'Share' : 'Download';
+      btn.textContent = label;
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
     });
   }
 
@@ -14883,7 +14909,7 @@
           if (synced === false) return;
           markNetworkReachable();
           pullGlobalPrefs();
-          const noteCount = NotesStore.listNotes().filter((n) => !n.content?.trashed).length;
+          const noteCount = NotesSearch.countLibraryNotes(NotesStore.listNotes());
           if (noteCount > 0) clearVaultSyncError();
           vaultDownloadStalled = false;
           showSyncBanner('ready');
@@ -14893,7 +14919,9 @@
             renderNotes();
             renderVaultStats();
             updateEmptyStateVisibility();
-            toast(noteCount ? `Synced · ${noteCount} note${noteCount === 1 ? '' : 's'}` : 'Synced · server returned no notes for this password');
+            toast(noteCount
+              ? `Synced · ${noteCount} active note${noteCount === 1 ? '' : 's'}`
+              : 'Synced · server returned no notes for this password');
           } else if (noteCount > 0) {
             lastNotesRenderKey = '';
             renderNotes();

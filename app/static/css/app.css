@@ -1471,7 +1471,7 @@ html[data-theme="light"] .zk-badge {
 }
 .search-filter-foot {
   border-top: 1px solid var(--border);
-  padding-bottom: calc(12px + var(--safe-bottom));
+  padding-bottom: calc(20px + var(--safe-bottom));
 }
 .search-filter-body {
   overflow: auto;
@@ -2143,6 +2143,11 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 .note-title-row h3 {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
 }
 .note-row-delete {
   display: none;
@@ -4290,12 +4295,19 @@ html[data-theme="light"] {
 }
 
 .note-readonly-banner {
-  margin: 4px 14px 6px;
-  padding: 6px 10px;
+  flex-shrink: 0;
+  margin: 0 14px 8px;
+  padding: 8px 12px;
   border-radius: 10px;
   background: var(--accent-soft);
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.35;
+}
+body.note-readonly .preview,
+body.note-readonly .note-body-wrap:not([hidden]),
+body.note-readonly #checklist:not([hidden]) {
+  padding-bottom: 4px;
 }
 .checklist {
   flex: 1 1 auto;
@@ -4643,6 +4655,8 @@ body.settings-open .fab,
 body.settings-open .fab-stack,
 body.doc-preview-open .fab,
 body.doc-preview-open .fab-stack,
+body.search-filters-open .fab,
+body.search-filters-open .fab-stack,
 .shell.editor-open ~ .fab,
 .shell.editor-open .fab-stack { display: none !important; }
 
@@ -5028,8 +5042,55 @@ body.doc-preview-open .fab-stack,
   .note-item-meta { font-size: 12px; margin-top: 8px; }
   #btn-new,
   #btn-totp-add { display: none !important; }
-  .fab-stack { display: flex; }
-  .fab { display: inline-flex; }
+  .note-list-tools {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .note-list-tools .sn-add {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .note-list-tools #btn-list-scan {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .note-list-head {
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .note-list-head-copy {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .note-list-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    flex: 0 0 auto;
+    min-width: max-content;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .sort-select-wrap--list {
+    display: flex;
+    max-width: 6.5rem;
+  }
+  .sort-select-wrap--list .sort-select {
+    max-width: 100%;
+    font-size: 12px;
+    padding-right: 1.5rem;
+  }
+  .fab-stack { display: none !important; }
+  .fab { display: none !important; }
   .empty-state-actions .btn { min-width: min(280px, 100%); min-height: var(--touch); }
 }
 
@@ -5335,19 +5396,25 @@ body.doc-preview-open .fab-stack,
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    flex-wrap: wrap;
+    gap: 8px 12px;
     padding: 18px 16px 8px;
   }
   .note-list-head-copy {
-    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
     flex: 1 1 auto;
-    overflow: hidden;
+    min-width: min(100%, 4.5rem);
+    overflow: visible;
   }
   .note-list-tools {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex: 0 0 auto;
     flex-shrink: 0;
+    margin-left: auto;
   }
   .sort-select-wrap--list {
     display: flex;
@@ -5535,15 +5602,20 @@ body.doc-preview-open .fab-stack,
     letter-spacing: -0.02em;
     text-transform: none;
     color: var(--text);
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex: 0 0 auto;
+    min-width: max-content;
+    overflow: visible;
+    text-overflow: clip;
     white-space: nowrap;
   }
   .note-list-count {
     font-size: 12px;
     font-weight: 400;
     color: var(--muted);
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .list-pane .note-section-label {
     font-size: 11px;
