@@ -471,13 +471,13 @@
               </div>
               <p id="sync-meta" class="sync-meta">Not synced yet</p>
             </div>
-            <button type="button" id="sync-indicator" class="sync-indicator" data-state="idle" title="Sync now" aria-label="Sync now">
-              <span class="sync-glyph" aria-hidden="true"></span>
-            </button>
           </div>
           <p id="vault-stats" class="vault-stats muted"></p>
         </div>
         <div class="sidebar-actions">
+          <button type="button" id="sync-indicator" class="sync-indicator" data-state="idle" title="Sync now" aria-label="Sync now">
+            <span class="sync-glyph" aria-hidden="true"></span>
+          </button>
           <button type="button" id="btn-lock-head" class="btn icon vault-lock-btn is-locked" title="Vault locked" aria-label="Vault locked">
             <svg class="ui-icon lock-closed" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -614,12 +614,12 @@
       </footer>
       </div>
       <div class="list-pane list-toolbar">
+      <div id="sync-status-banner" class="sync-status-banner list-sync-banner" hidden role="status">
+        <span id="sync-status-text"></span>
+        <button type="button" class="btn ghost sm" id="sync-status-retry" hidden>Retry</button>
+        <button type="button" class="btn ghost sm" id="sync-status-relock" hidden>Unlock again</button>
+      </div>
       <div class="note-list-head" id="note-list-head" hidden>
-        <div id="sync-status-banner" class="sync-status-banner" hidden role="status">
-          <span id="sync-status-text"></span>
-          <button type="button" class="btn ghost sm" id="sync-status-retry" hidden>Retry</button>
-          <button type="button" class="btn ghost sm" id="sync-status-relock" hidden>Unlock again</button>
-        </div>
         <div class="note-list-head-copy">
           <h2 id="note-list-title" class="note-list-title">Notes</h2>
           <span id="note-list-count" class="note-list-count"></span>
