@@ -849,7 +849,8 @@ const NotesStore = (() => {
     const now = new Date().toISOString();
     return {
       type: 'note',
-      title: 'Untitled',
+      title: '',
+      title_manual: false,
       content: '',
       tags: [],
       attachments: [],

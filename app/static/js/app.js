@@ -135,6 +135,7 @@
     lockOnUnfocus: '1min',
     rememberDevice: false,
     lightVault: false,
+    navPinned: false,
     aiChat: null,
     tagsCollapsed: true,
     foldersCollapsed: false,
@@ -354,7 +355,17 @@
     applyTagSection();
     applyFolderSection();
     applyFilterSection();
+    applyNavRail();
     bumpIdle();
+  }
+
+  function applyNavRail() {
+    document.body.classList.toggle('nav-pinned', !!prefs.navPinned);
+    const pin = document.getElementById('btn-nav-pin');
+    if (pin) {
+      pin.setAttribute('aria-pressed', prefs.navPinned ? 'true' : 'false');
+      pin.title = prefs.navPinned ? 'Collapse sidebar' : 'Pin sidebar';
+    }
   }
   applyTheme();
   if (window.matchMedia) {
@@ -496,8 +507,16 @@
   }
 
   function showHeroGuideIfNeeded() {
-    if (!vaultReady || heroGuideDismissed()) return;
-    setTimeout(() => showHeroGuide(), 400);
+    // Scan tips wait until a note has been saved with body text.
+  }
+
+  function maybeOfferWritingTip() {
+    if (heroGuideDismissed()) return;
+    const wrote = NotesStore.listNotes().some((note) => String(note?.content?.content || '').trim());
+    if (!wrote) return;
+    const tip = document.getElementById('writing-tip');
+    if (!tip) return;
+    tip.hidden = false;
   }
 
   async function offerDocumentSearch(text) {
@@ -565,6 +584,15 @@
   let ocrDeferToastAt = 0;
   let ocrRetryTimer = null;
   let saveDebounce = null;
+  let applyingDerivedTitle = false;
+
+  function titleLockedByUser(note) {
+    if (!note?.content) return false;
+    if (note.content.title_manual) return true;
+    const stored = String(note.content.title || '').trim();
+    if (!stored || stored === 'Untitled') return false;
+    return stored !== NotesSearch.derivedTitleFromBody(note.content.content || '');
+  }
   let toastTimer = null;
   let tagPressTimer = null;
   let idleTimer = null;
@@ -3353,6 +3381,65 @@
   let vaultPullExpected = 0;
   let vaultPullRenderTimer = 0;
   let deferredOpenNoteId = null;
+  let vaultDownloadStalled = false;
+  let vaultDownloadTimer = 0;
+  const UNLOCK_DOWNLOAD_TIMEOUT_MS = 20000;
+
+  function showSyncBanner(mode, text) {
+    const banner = document.getElementById('sync-status-banner');
+    const label = document.getElementById('sync-status-text');
+    const retry = document.getElementById('sync-status-retry');
+    const relock = document.getElementById('sync-status-relock');
+    if (!banner) return;
+    if (!mode || mode === 'ready') {
+      banner.hidden = true;
+      banner.dataset.mode = 'ready';
+      return;
+    }
+    banner.hidden = false;
+    banner.dataset.mode = mode;
+    if (label) label.textContent = text || '';
+    const actionable = mode === 'error' || mode === 'timeout';
+    if (retry) retry.hidden = !actionable;
+    if (relock) relock.hidden = !actionable;
+  }
+
+  function clearVaultDownloadTimeout() {
+    clearTimeout(vaultDownloadTimer);
+    vaultDownloadTimer = 0;
+  }
+
+  function releaseVaultPullChrome() {
+    if (!vaultPullActive) return;
+    vaultPullActive = false;
+    vaultPullExpected = 0;
+    document.body.classList.remove('vault-pulling');
+    clearTimeout(vaultPullRenderTimer);
+    vaultPullRenderTimer = 0;
+    lastNotesRenderKey = '';
+    renderNotes();
+    updateEmptyStateVisibility();
+  }
+
+  function armVaultDownloadTimeout() {
+    if (vaultDownloadTimer) return;
+    vaultDownloadTimer = setTimeout(() => {
+      vaultDownloadTimer = 0;
+      if (!NotesStore.isUnlocked()) return;
+      if (!syncInFlight && !vaultPullActive) return;
+      vaultDownloadStalled = true;
+      releaseVaultPullChrome();
+      const ready = NotesStore.listNotes().filter((note) => !note.content?.trashed).length;
+      showSyncBanner(
+        'timeout',
+        ready
+          ? `Still downloading. ${ready} note${ready === 1 ? '' : 's'} ready to edit.`
+          : 'Download is taking too long.',
+      );
+      refreshEmptyStateCopy();
+      updateEmptyStateVisibility();
+    }, UNLOCK_DOWNLOAD_TIMEOUT_MS);
+  }
 
   function isEditorOpen() {
     return !!(currentId && ui.editor && !ui.editor.hidden);
@@ -3391,6 +3478,8 @@
   function beginVaultPull(expectedTotal = 0) {
     if (!NotesStore.isUnlocked()) return;
     revealAppShell();
+    armVaultDownloadTimeout();
+    showSyncBanner('downloading', 'Downloading notes…');
     vaultPullActive = true;
     vaultPullExpected = Math.max(vaultPullExpected, Number(expectedTotal) || 0);
     document.body.classList.add('vault-pulling');
@@ -3400,10 +3489,16 @@
   }
 
   function endVaultPull() {
+    if (!vaultPullActive && !vaultDownloadStalled) {
+      clearVaultDownloadTimeout();
+      showSyncBanner('ready');
+    }
     if (!vaultPullActive) return;
     vaultPullActive = false;
     vaultPullExpected = 0;
     document.body.classList.remove('vault-pulling');
+    clearVaultDownloadTimeout();
+    if (!vaultDownloadStalled) showSyncBanner('ready');
     clearTimeout(vaultPullRenderTimer);
     vaultPullRenderTimer = 0;
     lastNotesRenderKey = '';
@@ -3451,7 +3546,7 @@
 
   NotesStore.setVaultPullCallbacks({
     begin: (expectedTotal) => beginVaultPull(expectedTotal),
-    page: () => scheduleVaultPullRender(true),
+    page: () => scheduleVaultPullRender(false),
     end: () => endVaultPull(),
   });
   NotesStore.setNoteIngestedCallback((uuid, meta) => {
@@ -3928,7 +4023,6 @@
     }
     dismissLoginProgress();
     vaultReady = true;
-    showHeroGuideIfNeeded();
   }
 
   async function revealPrimaryUnlock() {
@@ -4158,6 +4252,22 @@
     const relockBtn = document.getElementById('btn-empty-relock');
     if (!title || !message) return;
     const syncing = document.getElementById('sync-indicator')?.dataset?.state === 'syncing';
+    if (vaultDownloadStalled && NotesStore.listNotes().length === 0 && !vaultSyncError) {
+      title.textContent = 'Download paused';
+      message.textContent = 'Notes did not finish downloading. Retry, or unlock again.';
+      if (newBtn) newBtn.hidden = false;
+      if (scanBtn) scanBtn.hidden = true;
+      if (syncBtn) {
+        syncBtn.hidden = false;
+        syncBtn.textContent = 'Retry';
+      }
+      if (dismissBtn) dismissBtn.hidden = true;
+      if (relockBtn) {
+        relockBtn.hidden = false;
+        relockBtn.textContent = 'Unlock again';
+      }
+      return;
+    }
     if (syncing && NotesStore.listNotes().length === 0 && !vaultSyncError) {
       title.textContent = 'Downloading your notes';
       message.textContent = 'Notes appear in the list as they arrive. Sync continues in the background — check the progress at the top.';
@@ -4187,15 +4297,12 @@
       }
       return;
     }
-    title.textContent = 'Scan, search, find';
-    message.textContent = 'Scan a receipt or document — we read the text on your device so you can search it later. Or sync notes from your phone.';
+    title.textContent = 'Start writing';
+    message.textContent = 'Notes stay encrypted on this device. Start with a blank note.';
     if (newBtn) newBtn.hidden = false;
-    if (scanBtn) scanBtn.hidden = false;
-    if (syncBtn) {
-      syncBtn.hidden = false;
-      syncBtn.textContent = 'Sync notes';
-    }
-    if (dismissBtn) dismissBtn.hidden = false;
+    if (scanBtn) scanBtn.hidden = true;
+    if (syncBtn) syncBtn.hidden = true;
+    if (dismissBtn) dismissBtn.hidden = true;
     if (relockBtn) relockBtn.hidden = true;
   }
 
@@ -4222,7 +4329,7 @@
 
   function updateEmptyStateVisibility() {
     if (!ui.empty) return;
-    if (vaultPullActive) {
+    if (vaultPullActive && NotesStore.listNotes().length > 0) {
       ui.empty.hidden = true;
       return;
     }
@@ -5107,6 +5214,7 @@
     renderSearchFilterTags();
     renderFolders();
     renderTagManageList();
+    document.getElementById('tag-section')?.classList.toggle('is-empty', tags.length === 0);
   }
 
   function tagManageOpen() {
@@ -5230,6 +5338,7 @@
     const host = document.getElementById('folder-list');
     if (!host || !NotesStore.listFolders) return;
     const folders = NotesStore.listFolders();
+    document.getElementById('folder-section')?.classList.toggle('is-empty', folders.length === 0);
     const openMap = folderOpenMap();
     host.innerHTML = folders.map((folder) => {
       const notes = NotesStore.notesInFolder(folder.uuid);
@@ -5237,7 +5346,7 @@
       const active = currentFolder === folder.uuid ? ' active' : '';
       const kids = notes.map((note) => {
         const on = currentId === note.uuid ? ' active' : '';
-        return `<button type="button" class="folder-note${on}" data-folder-note="${escapeAttr(note.uuid)}">${escapeHtml(note.content.title || 'Untitled')}</button>`;
+        return `<button type="button" class="folder-note${on}" data-folder-note="${escapeAttr(note.uuid)}">${escapeHtml(NotesSearch.effectiveNoteTitle(note) || 'Title')}</button>`;
       }).join('');
       return `<div class="folder-block${active}${open ? ' is-open' : ''}" data-folder="${escapeAttr(folder.uuid)}">
         <div class="folder-head">
@@ -5813,11 +5922,11 @@
       || n.content.attachment_names
       || atts[0]?.content?.filename
       || '';
-    const displayTitle = n.content.title || 'Untitled';
+    const displayTitle = NotesSearch.effectiveNoteTitle(n);
     const displaySnippet = String(snippet).slice(0, 120);
-    const titleHtml = query
-      ? NotesSearch.highlightPlain(displayTitle, query)
-      : escapeHtml(displayTitle);
+    const titleHtml = displayTitle
+      ? (query ? NotesSearch.highlightPlain(displayTitle, query) : escapeHtml(displayTitle))
+      : '<span class="note-title-placeholder">Title</span>';
     const tags = isLocked ? '' : noteTagChipsHtml(n);
     const editedMs = noteEditedAtMs(n);
     const modified = formatModified(editedMs);
@@ -5873,7 +5982,7 @@
   let virtualSettleDepth = 0;
 
   function virtualListWindow(total, scrollTop, viewHeight, rowHeight = noteRowEstimate) {
-    const virtualThreshold = vaultPullActive ? Number.POSITIVE_INFINITY : NOTE_LIST_VIRTUAL_THRESHOLD;
+    const virtualThreshold = NOTE_LIST_VIRTUAL_THRESHOLD;
     if (total <= virtualThreshold) {
       return { total, start: 0, end: total, padTop: 0, padBottom: 0 };
     }
@@ -5941,7 +6050,7 @@
     const total = sections.reduce((count, section) => count + section.items.length, 0);
     const scrollTop = ui.noteList.scrollTop || 0;
     const viewHeight = ui.noteList.clientHeight || 640;
-    const virtualThreshold = vaultPullActive ? Number.POSITIVE_INFINITY : NOTE_LIST_VIRTUAL_THRESHOLD;
+    const virtualThreshold = NOTE_LIST_VIRTUAL_THRESHOLD;
     if (total <= virtualThreshold) {
       lastVirtualWindow = null;
       return sections.map((section) => {
@@ -8476,7 +8585,7 @@
     ui.empty.hidden = true;
     ui.editor.hidden = false;
     ui.shell.classList.add('editor-open');
-    ui.title.value = note.content.title || '';
+    ui.title.value = NotesSearch.effectiveNoteTitle(note);
     let body = note.content.content || '';
     if (!gated && (note.content.editor || '') === 'superscript' && window.NotesSuperscript) {
       body = NotesSuperscript.normalizeContent(body);
@@ -8666,8 +8775,13 @@
       attachments: [...new Set([...(note.content.attachments || []), ...live])],
     };
     if (!note.content.prevent_edit) {
-      next.title = ui.title.value || 'Untitled';
-      next.content = ui.body.value || '';
+      const manual = titleLockedByUser(note);
+      const body = ui.body.value || '';
+      next.title_manual = manual;
+      next.title = manual
+        ? (String(ui.title.value || '').trim() || 'Untitled')
+        : (NotesSearch.derivedTitleFromBody(body) || '');
+      next.content = body;
       next.editor = ui.editorType.value || 'plain';
     }
     if (NotesSearch.sameNoteContent(note.content, next)) {
@@ -8676,6 +8790,12 @@
     }
     NotesStore.upsert(currentId, next, { recordRevision: true });
     updateNoteMeta(NotesStore.get(currentId));
+    const rowTitle = ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"] h3`);
+    if (rowTitle) {
+      rowTitle.textContent = next.title || 'Title';
+      rowTitle.classList.toggle('note-title-placeholder', !next.title);
+    }
+    if (String(next.content || '').trim()) maybeOfferWritingTip();
   }
 
   function scheduleSave() {
@@ -12485,12 +12605,18 @@
     const note = NotesStore.get(currentId);
     if (note?.content?.prevent_edit) return;
     if (note?.content?.locked && !unlockedNotes.has(currentId)) return;
+    if (!applyingDerivedTitle && note?.content) note.content.title_manual = true;
     scheduleSave();
   });
   ui.body.addEventListener('input', () => {
     const note = NotesStore.get(currentId);
     if (note?.content?.prevent_edit) return;
     if (note?.content?.locked && !unlockedNotes.has(currentId)) return;
+    if (note && !titleLockedByUser(note)) {
+      applyingDerivedTitle = true;
+      ui.title.value = NotesSearch.derivedTitleFromBody(ui.body.value);
+      applyingDerivedTitle = false;
+    }
     scheduleSave();
     syncEditLinkOverlay();
     syncUndoButtons();
@@ -13236,6 +13362,40 @@
   document.getElementById('btn-sync-now')?.addEventListener('click', (event) => {
     requestManualSync(event);
   });
+  document.getElementById('sync-status-retry')?.addEventListener('click', () => {
+    vaultDownloadStalled = false;
+    syncNow({ full: true, force: true }).catch((err) => {
+      showSyncBanner('error', err?.message || 'Sync failed');
+    });
+  });
+  document.getElementById('sync-status-relock')?.addEventListener('click', () => {
+    lockVault();
+  });
+  document.getElementById('btn-nav-pin')?.addEventListener('click', () => {
+    prefs.navPinned = !prefs.navPinned;
+    savePrefs();
+    applyNavRail();
+  });
+  document.getElementById('writing-tip-dismiss')?.addEventListener('click', () => {
+    try { localStorage.setItem('notes_hero_guide_dismissed', '1'); } catch (_) { /* ignore */ }
+    const tip = document.getElementById('writing-tip');
+    if (tip) tip.hidden = true;
+  });
+  let editorToolsPinned = false;
+  document.getElementById('btn-editor-overflow')?.addEventListener('click', () => {
+    editorToolsPinned = !editorToolsPinned;
+    document.body.classList.toggle('editor-tools-open', editorToolsPinned);
+    document.getElementById('btn-editor-overflow')?.setAttribute('aria-expanded', editorToolsPinned ? 'true' : 'false');
+  });
+  document.addEventListener('selectionchange', () => {
+    if (editorToolsPinned) return;
+    const sel = document.getSelection();
+    const node = sel?.anchorNode;
+    const inEditor = node && (ui.body?.contains(node) || ui.title?.contains(node));
+    const open = !!(inEditor && sel && !sel.isCollapsed);
+    document.body.classList.toggle('editor-tools-open', open);
+    document.getElementById('btn-editor-overflow')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
   document.getElementById('btn-account-info-head')?.addEventListener('click', () => {
     showAccountInfo().catch(() => {});
   });
@@ -13261,7 +13421,8 @@
       emptySyncBtn.disabled = true;
       emptySyncBtn.textContent = 'Syncing…';
     }
-    toast('Downloading all notes…');
+    showSyncBanner('downloading', 'Downloading notes…');
+    armVaultDownloadTimeout();
     syncNow({ full: true }).catch((err) => {
       toast(err?.message || 'Sync failed', true);
     });
@@ -14538,7 +14699,8 @@
       if (syncInFlight) {
         if (!quiet && isVaultReadyForSync()) {
           setBusy(true);
-          toast(full ? 'Downloading all notes…' : 'Syncing…');
+          showSyncBanner('downloading', full ? 'Downloading notes…' : 'Syncing…');
+          armVaultDownloadTimeout();
         }
         return syncInFlight.finally(() => { if (!quiet) setBusy(false); });
       }
@@ -14567,7 +14729,10 @@
         return;
       }
       if (isVaultReadyForSync()) setBusy(true);
-      if (!quiet && isVaultReadyForSync()) toast(full ? 'Downloading all notes…' : 'Syncing…');
+      if (!quiet && isVaultReadyForSync()) {
+        showSyncBanner('downloading', full ? 'Downloading notes…' : 'Syncing…');
+        armVaultDownloadTimeout();
+      }
       syncInFlight = NotesStore.loadAccount()
         .then(async (account) => {
           if (account && typeof account === 'object') renderPlanUi(account);
@@ -14598,6 +14763,8 @@
           pullGlobalPrefs();
           const noteCount = NotesStore.listNotes().filter((n) => !n.content?.trashed).length;
           if (noteCount > 0) clearVaultSyncError();
+          vaultDownloadStalled = false;
+          showSyncBanner('ready');
           if (!quiet) {
             refreshAllNoteSearchIndexes();
             renderTags();
@@ -14632,8 +14799,10 @@
             networkReachable = false;
             NotesStore.emitSync('offline', 'Offline');
             if (!quiet) toast(OFFLINE_LAN_HINT, true);
-          } else if (!quiet) {
-            toast(err?.message || 'Sync failed', true);
+          } else {
+            vaultDownloadStalled = true;
+            showSyncBanner('error', err?.message || 'Sync failed');
+            if (!quiet) toast(err?.message || 'Sync failed', true);
           }
         })
         .finally(() => {

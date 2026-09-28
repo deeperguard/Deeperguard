@@ -1,5 +1,7 @@
 const assert = require('assert');
 const {
+  derivedTitleFromBody,
+  effectiveNoteTitle,
   filterNotes,
   findMatches,
   describeMatch,
@@ -349,5 +351,11 @@ const taggedPinned = filterNotes(
   { filter: 'all', tagId: 'tag-work', tagMap, sort: 'updated' },
 );
 assert.deepStrictEqual(taggedPinned.map((n) => n.uuid), ['tag-pin', 'tag-new']);
+
+assert.strictEqual(derivedTitleFromBody('  Hello   from Dennis — first note.\nsecond'), 'Hello from Dennis — first note.');
+assert.strictEqual(derivedTitleFromBody(`  ${'a'.repeat(80)}`), `${'a'.repeat(59)}…`);
+assert.strictEqual(effectiveNoteTitle(note({ title: 'Untitled', content: 'Hello from Dennis — first note.' })), 'Hello from Dennis — first note.');
+assert.strictEqual(effectiveNoteTitle(note({ title: 'Kept', title_manual: true, content: 'Other first line' })), 'Kept');
+assert.strictEqual(effectiveNoteTitle(note({ title: '', content: '   \n  Second line wins' })), 'Second line wins');
 
 console.log('ok');

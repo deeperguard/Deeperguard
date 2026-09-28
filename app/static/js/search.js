@@ -10,7 +10,7 @@ const NotesSearch = (() => {
     // Locked notes stay findable by title only — body/OCR/filenames must not leak.
     if (note.content.locked) return normalize(note.content.title || '');
     const parts = [
-      note.content.title || '',
+      effectiveNoteTitle(note),
       note.content.content || '',
       note.content.ocr_text || '',
       note.content.attachment_names || '',
@@ -61,7 +61,7 @@ const NotesSearch = (() => {
   function matchesNoteOrFileName(note, query, { includeFileNames = true } = {}) {
     const q = normalize(query);
     if (!q) return false;
-    const title = note.content?.title || '';
+    const title = effectiveNoteTitle(note);
     if (normalize(title).includes(q)) return true;
     if (!includeFileNames || note.content?.locked) return false;
     const files = note.content?.attachment_names || '';
@@ -71,7 +71,7 @@ const NotesSearch = (() => {
   function describeMatch(note, query, tagMap, { titlesOnly = false } = {}) {
     if (!query) return null;
     const q = normalize(query);
-    const title = note.content.title || '';
+    const title = effectiveNoteTitle(note);
     if (normalize(title).includes(q)) return { field: 'title', label: 'Title', snippet: title };
     const files = note.content.attachment_names || '';
     if (!note.content?.locked && normalize(files).includes(q)) {
@@ -153,12 +153,28 @@ const NotesSearch = (() => {
     return { pinned, rest };
   }
 
+  function derivedTitleFromBody(text) {
+    const line = String(text || '').split(/\r?\n/).map((part) => part.trim()).find(Boolean) || '';
+    const collapsed = line.replace(/\s+/g, ' ').trim();
+    if (!collapsed) return '';
+    if (collapsed.length <= 60) return collapsed;
+    return `${collapsed.slice(0, 59).trimEnd()}…`;
+  }
+
+  function effectiveNoteTitle(note) {
+    const stored = String(note?.content?.title || '').trim();
+    const manual = !!note?.content?.title_manual;
+    if (note?.content?.locked || manual) return stored === 'Untitled' ? '' : stored;
+    if (stored && stored !== 'Untitled') return stored;
+    return derivedTitleFromBody(note?.content?.content);
+  }
+
   function compareNotesForSort(a, b, sort) {
     const aPinned = noteIsPinned(a);
     const bPinned = noteIsPinned(b);
     if (aPinned !== bPinned) return aPinned ? -1 : 1;
     if (sort === 'title') {
-      return (a.content.title || '').localeCompare(b.content.title || '');
+      return effectiveNoteTitle(a).localeCompare(effectiveNoteTitle(b));
     }
     if (sort === 'created') {
       return createdStamp(b) - createdStamp(a);
@@ -392,6 +408,8 @@ const NotesSearch = (() => {
     noteIsPinned,
     partitionPinnedNotes,
     compareNotesForSort,
+    derivedTitleFromBody,
+    effectiveNoteTitle,
     listUsesDateSections,
   };
 })();
