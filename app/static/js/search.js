@@ -161,11 +161,69 @@ const NotesSearch = (() => {
     return `${collapsed.slice(0, 59).trimEnd()}…`;
   }
 
+  function looksLikeSpreadsheetJson(text) {
+    const raw = String(text || '').trim();
+    if (!raw.startsWith('{') || raw.length < 12) return false;
+    try {
+      const data = JSON.parse(raw);
+      return !!(data && (data.activeSheet || (Array.isArray(data.sheets) && data.sheets.length)));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function titleFromSpreadsheetJson(text) {
+    try {
+      const data = JSON.parse(String(text || '').trim());
+      const sheetName = data.activeSheet || data.sheets?.[0]?.name || '';
+      const sheet = (data.sheets || []).find((s) => s.name === data.activeSheet) || data.sheets?.[0];
+      const rows = Array.isArray(sheet?.rows) ? sheet.rows : [];
+      let firstCell = '';
+      for (const row of rows) {
+        if (!Array.isArray(row)) continue;
+        for (const cell of row) {
+          const part = String(cell ?? '').trim();
+          if (part) {
+            firstCell = part;
+            break;
+          }
+        }
+        if (firstCell) break;
+      }
+      if (sheetName && firstCell) {
+        const cell = firstCell.length > 48 ? `${firstCell.slice(0, 47).trimEnd()}…` : firstCell;
+        return `${sheetName}: ${cell}`;
+      }
+      if (sheetName) return String(sheetName);
+      if (firstCell) {
+        return firstCell.length > 60 ? `${firstCell.slice(0, 59).trimEnd()}…` : firstCell;
+      }
+    } catch (_) { /* ignore */ }
+    return 'Spreadsheet';
+  }
+
+  function isActiveLibraryNote(content) {
+    return !!(content && !content.trashed && !content.archived);
+  }
+
+  function countLibraryNotes(notes) {
+    return (notes || []).filter((n) => isActiveLibraryNote(n.content)).length;
+  }
+
   function effectiveNoteTitle(note) {
     const stored = String(note?.content?.title || '').trim();
     const manual = !!note?.content?.title_manual;
+    if (looksLikeSpreadsheetJson(stored)) {
+      const sheetTitle = titleFromSpreadsheetJson(stored);
+      if (sheetTitle) return sheetTitle;
+    }
     if (note?.content?.locked || manual) return stored === 'Untitled' ? '' : stored;
     if (stored && stored !== 'Untitled') return stored;
+    const body = String(note?.content?.content || '').trim();
+    if (looksLikeSpreadsheetJson(body)) {
+      const sheetTitle = titleFromSpreadsheetJson(body);
+      if (sheetTitle) return sheetTitle;
+    }
     return derivedTitleFromBody(note?.content?.content);
   }
 
@@ -410,6 +468,10 @@ const NotesSearch = (() => {
     compareNotesForSort,
     derivedTitleFromBody,
     effectiveNoteTitle,
+    looksLikeSpreadsheetJson,
+    titleFromSpreadsheetJson,
+    isActiveLibraryNote,
+    countLibraryNotes,
     listUsesDateSections,
   };
 })();

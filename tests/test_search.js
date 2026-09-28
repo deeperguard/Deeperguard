@@ -357,5 +357,12 @@ assert.strictEqual(derivedTitleFromBody(`  ${'a'.repeat(80)}`), `${'a'.repeat(59
 assert.strictEqual(effectiveNoteTitle(note({ title: 'Untitled', content: 'Hello from Dennis — first note.' })), 'Hello from Dennis — first note.');
 assert.strictEqual(effectiveNoteTitle(note({ title: 'Kept', title_manual: true, content: 'Other first line' })), 'Kept');
 assert.strictEqual(effectiveNoteTitle(note({ title: '', content: '   \n  Second line wins' })), 'Second line wins');
+assert.strictEqual(
+  effectiveNoteTitle(note({
+    title: '{"activeSheet":"Sheet1","sheets":[{"name":"Sheet1","rows":[["Budget","2024"]]}]}',
+    content: '',
+  })),
+  'Sheet1: Budget',
+);
 
 console.log('ok');
