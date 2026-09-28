@@ -1857,6 +1857,184 @@
       },
     });
     updateDocZoomLabel();
+    applyDocViewEnhance();
+  }
+
+  const docViewEnhance = { contrast: 1, sharpen: false, whiteBorders: false };
+  const docEnhanceOriginals = new WeakMap();
+
+  function docEnhanceLayer() {
+    return ui.docStage?.querySelector('.doc-zoom-layer') || ui.docStage;
+  }
+
+  function syncDocEnhanceControls() {
+    const contrast = document.getElementById('doc-contrast');
+    const value = document.getElementById('doc-contrast-value');
+    const percent = Math.round(docViewEnhance.contrast * 100);
+    if (contrast) {
+      contrast.value = String(percent);
+      contrast.setAttribute('aria-valuenow', String(percent));
+    }
+    if (value) value.textContent = `${percent}%`;
+    document.getElementById('doc-sharpen')?.setAttribute('aria-pressed', docViewEnhance.sharpen ? 'true' : 'false');
+    document.getElementById('doc-white-borders')?.setAttribute('aria-pressed', docViewEnhance.whiteBorders ? 'true' : 'false');
+  }
+
+  function applyDocViewFilters() {
+    const layer = docEnhanceLayer();
+    if (!layer?.style) return;
+    const parts = [];
+    if (Math.abs(docViewEnhance.contrast - 1) > 0.01) parts.push(`contrast(${docViewEnhance.contrast})`);
+    if (docViewEnhance.sharpen) parts.push('url(#doc-sharpen-filter)');
+    layer.style.filter = parts.join(' ');
+  }
+
+  function releaseDocEnhanceObjects(root) {
+    root?.querySelectorAll?.('img[data-doc-enhance-url]').forEach((img) => {
+      try { URL.revokeObjectURL(img.dataset.docEnhanceUrl); } catch (err) { /* ignore */ }
+    });
+  }
+
+  function restoreDocMedia(el) {
+    if (!el) return;
+    if (el.tagName === 'CANVAS') {
+      const backup = docEnhanceOriginals.get(el);
+      if (backup && el.width && el.height && backup.length === el.width * el.height * 4) {
+        const ctx = el.getContext('2d');
+        if (ctx) {
+          const image = ctx.createImageData(el.width, el.height);
+          image.data.set(backup);
+          ctx.putImageData(image, 0, 0);
+        }
+      }
+      docEnhanceOriginals.delete(el);
+    } else if (el.tagName === 'IMG') {
+      if (el.dataset.docOriginalSrc) el.src = el.dataset.docOriginalSrc;
+      if (el.dataset.docEnhanceUrl) {
+        try { URL.revokeObjectURL(el.dataset.docEnhanceUrl); } catch (err) { /* ignore */ }
+        delete el.dataset.docEnhanceUrl;
+      }
+      delete el.dataset.docOriginalSrc;
+    }
+    delete el.dataset.docWhitened;
+  }
+
+  function whitenDocCanvas(canvas) {
+    if (!canvas || canvas.dataset.docWhitened === '1' || canvas.classList.contains('doc-hit-canvas')) return;
+    const ctx = canvas.getContext('2d') || canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx || canvas.width < 8 || canvas.height < 8) return;
+    let full;
+    try {
+      full = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    } catch (err) {
+      return;
+    }
+    const backup = new Uint8ClampedArray(full.data);
+    let changed = false;
+    if (canvas.width * canvas.height <= 3500000) {
+      changed = NotesPreview.whitenDocumentBorders(full);
+      if (changed) ctx.putImageData(full, 0, 0);
+    } else {
+      changed = whitenLargeDocCanvas(canvas, ctx, full);
+    }
+    if (changed) docEnhanceOriginals.set(canvas, backup);
+    canvas.dataset.docWhitened = '1';
+  }
+
+  function whitenLargeDocCanvas(canvas, ctx, full) {
+    const maxEdge = 1000;
+    const scale = maxEdge / Math.max(canvas.width, canvas.height);
+    const w = Math.max(8, Math.round(canvas.width * scale));
+    const h = Math.max(8, Math.round(canvas.height * scale));
+    const small = document.createElement('canvas');
+    small.width = w;
+    small.height = h;
+    const smallCtx = small.getContext('2d');
+    if (!smallCtx) return false;
+    smallCtx.drawImage(canvas, 0, 0, w, h);
+    const data = smallCtx.getImageData(0, 0, w, h);
+    const before = new Uint8ClampedArray(data.data);
+    if (!NotesPreview.whitenDocumentBorders(data)) return false;
+    const src = full.data;
+    for (let y = 0; y < canvas.height; y += 1) {
+      const sy = Math.min(h - 1, Math.floor(y * h / canvas.height));
+      for (let x = 0; x < canvas.width; x += 1) {
+        const sx = Math.min(w - 1, Math.floor(x * w / canvas.width));
+        const sample = (sy * w + sx) * 4;
+        if (before[sample] === data.data[sample] && before[sample + 1] === data.data[sample + 1]) continue;
+        const offset = (y * canvas.width + x) * 4;
+        src[offset] = 255;
+        src[offset + 1] = 255;
+        src[offset + 2] = 255;
+      }
+    }
+    ctx.putImageData(full, 0, 0);
+    return true;
+  }
+
+  function whitenDocImage(img) {
+    if (!img || img.dataset.docWhitened === '1') return;
+    if (!img.complete || !img.naturalWidth || !img.naturalHeight) {
+      img.addEventListener('load', () => {
+        if (docViewEnhance.whiteBorders) whitenDocImage(img);
+      }, { once: true });
+      return;
+    }
+    if (!img.dataset.docOriginalSrc) img.dataset.docOriginalSrc = img.currentSrc || img.src;
+    const maxEdge = 1800;
+    const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(img, 0, 0, w, h);
+    let pixels;
+    try {
+      pixels = ctx.getImageData(0, 0, w, h);
+    } catch (err) {
+      return;
+    }
+    const changed = NotesPreview.whitenDocumentBorders(pixels);
+    img.dataset.docWhitened = '1';
+    if (!changed) return;
+    ctx.putImageData(pixels, 0, 0);
+    canvas.toBlob((blob) => {
+      if (!blob || !docViewEnhance.whiteBorders || !img.isConnected) return;
+      if (img.dataset.docEnhanceUrl) {
+        try { URL.revokeObjectURL(img.dataset.docEnhanceUrl); } catch (err) { /* ignore */ }
+      }
+      const url = URL.createObjectURL(blob);
+      img.dataset.docEnhanceUrl = url;
+      img.src = url;
+    }, 'image/jpeg', 0.92);
+  }
+
+  function applyDocWhiteBorders() {
+    const stage = ui.docStage;
+    if (!stage) return;
+    const media = [...stage.querySelectorAll('canvas, img')].filter((el) => !el.classList.contains('doc-hit-canvas'));
+    media.forEach((el) => {
+      if (docViewEnhance.whiteBorders) {
+        if (el.tagName === 'CANVAS') whitenDocCanvas(el);
+        else whitenDocImage(el);
+      } else if (el.dataset.docWhitened === '1' || el.dataset.docOriginalSrc) {
+        restoreDocMedia(el);
+      }
+    });
+  }
+
+  function applyDocViewEnhance() {
+    syncDocEnhanceControls();
+    applyDocViewFilters();
+    applyDocWhiteBorders();
+  }
+
+  function setDocEnhance(next) {
+    Object.assign(docViewEnhance, next);
+    applyDocViewEnhance();
   }
 
   function maybeUpgradePreviewQuality() {
@@ -4908,7 +5086,6 @@
               <span class="tag-name"># ${escapeHtml(t.content.title)}</span>
               <span class="tag-count">${count}</span>
             </button>
-            <button type="button" class="tag-remove" data-tag-remove="${escapeAttr(t.uuid)}" aria-label="Delete tag ${escapeAttr(t.content.title)}">×</button>
           </div>
         </div>`;
       })
@@ -4926,15 +5103,112 @@
       });
       bindTagLongPress(btn, btn.dataset.tag);
     });
-    ui.tagList.querySelectorAll('[data-tag-remove]').forEach((btn) => {
-      btn.addEventListener('click', (event) => {
-        event.stopPropagation();
-        deleteCurrentTag(btn.dataset.tagRemove);
-      });
-    });
     renderTagColorBar();
     renderSearchFilterTags();
     renderFolders();
+    renderTagManageList();
+  }
+
+  function tagManageOpen() {
+    const dialog = document.getElementById('tag-manage-dialog');
+    return Boolean(dialog && !dialog.hidden);
+  }
+
+  function renderTagManageList() {
+    const list = document.getElementById('tag-manage-list');
+    if (!list || !tagManageOpen()) return;
+    const tags = NotesStore.listTags();
+    if (!tags.length) {
+      list.innerHTML = '<p class="muted">No tags yet.</p>';
+      return;
+    }
+    list.innerHTML = tags.map((tag) => {
+      const color = safeColor(tag.content.color);
+      const count = NotesStore.noteCountForTag(tag.uuid);
+      const swatches = TAG_COLORS.map((swatch) => {
+        const on = color === swatch ? 'active' : '';
+        return `<button type="button" class="tag-color ${on}" data-manage-color="${swatch}" style="background:${swatch}" aria-label="Set color"></button>`;
+      }).join('');
+      return `<div class="tag-manage-row" data-manage-tag="${escapeAttr(tag.uuid)}">
+        <div class="tag-manage-main">
+          <span class="tag-dot" style="background:${color}"></span>
+          <span class="tag-manage-name">${escapeHtml(tag.content.title || 'Tag')}</span>
+          <span class="tag-count">${count}</span>
+          <button type="button" class="btn ghost sm" data-manage-rename>Rename</button>
+          <button type="button" class="btn ghost sm" data-manage-delete>Delete</button>
+        </div>
+        <div class="tag-colors">${swatches}</div>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('[data-manage-tag]').forEach((row) => {
+      const uuid = row.dataset.manageTag;
+      row.querySelector('[data-manage-rename]')?.addEventListener('click', () => beginManageRename(row, uuid));
+      row.querySelector('[data-manage-delete]')?.addEventListener('click', () => deleteCurrentTag(uuid));
+      row.querySelectorAll('[data-manage-color]').forEach((swatch) => {
+        swatch.addEventListener('click', () => {
+          NotesStore.setTagColor(uuid, swatch.dataset.manageColor);
+          invalidateTagMap();
+          renderTags();
+          if (currentId) renderTagBar(NotesStore.get(currentId));
+        });
+      });
+    });
+  }
+
+  function beginManageRename(row, uuid) {
+    const tag = NotesStore.get(uuid);
+    const name = row.querySelector('.tag-manage-name');
+    if (!tag || !name) return;
+    const input = document.createElement('input');
+    input.className = 'tag-manage-rename';
+    input.value = tag.content.title || '';
+    input.maxLength = 80;
+    input.setAttribute('aria-label', 'Rename tag');
+    name.replaceWith(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const commit = () => {
+      if (done) return;
+      done = true;
+      const title = input.value.trim();
+      if (title && title !== tag.content.title) {
+        NotesStore.renameTag(uuid, title);
+        invalidateTagMap();
+      }
+      renderTags();
+      renderNotes();
+      if (currentId) renderTagBar(NotesStore.get(currentId));
+    };
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commit();
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        done = true;
+        renderTagManageList();
+      }
+    });
+    input.addEventListener('blur', commit);
+  }
+
+  function openTagManage() {
+    const dialog = document.getElementById('tag-manage-dialog');
+    const backdrop = document.getElementById('tag-manage-backdrop');
+    if (!dialog) return;
+    dialog.hidden = false;
+    if (backdrop) backdrop.hidden = false;
+    renderTagManageList();
+  }
+
+  function closeTagManage() {
+    const dialog = document.getElementById('tag-manage-dialog');
+    const backdrop = document.getElementById('tag-manage-backdrop');
+    if (dialog) dialog.hidden = true;
+    if (backdrop) backdrop.hidden = true;
   }
 
   function folderOpenMap() {
@@ -7642,6 +7916,7 @@
     if (docGallery && refreshDocGalleryIds() && docGallery.ids.length > 1) {
       ui.docTitle.textContent = `${item.content.filename || 'Document'} (${docGallery.index + 1}/${docGallery.ids.length})`;
     }
+    releaseDocEnhanceObjects(ui.docStage);
     showDocStageLoading(ui.docStage);
     if (ui.docStage._docZoom) ui.docStage._docZoom.destroy();
     ui.docViewer.hidden = false;
@@ -7696,6 +7971,7 @@
     docGallery = null;
     restoreFindBarToEditor();
     if (!ui.docViewer) return;
+    releaseDocEnhanceObjects(ui.docStage);
     if (ui.docStage._docZoom) ui.docStage._docZoom.destroy();
     updateDocZoomLabel();
     setDocImmersive(false);
@@ -11955,6 +12231,29 @@
     ui.docStage?._docZoom?.reset?.();
     updateDocZoomLabel();
   });
+  document.getElementById('doc-enhance-toggle')?.addEventListener('click', () => {
+    const panel = document.getElementById('doc-enhance-panel');
+    const toggle = document.getElementById('doc-enhance-toggle');
+    if (!panel || !toggle) return;
+    panel.hidden = !panel.hidden;
+    toggle.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+  });
+  document.getElementById('doc-contrast')?.addEventListener('input', (event) => {
+    const percent = Number(event.target.value) || 100;
+    setDocEnhance({ contrast: percent / 100 });
+  });
+  document.getElementById('doc-sharpen')?.addEventListener('click', () => {
+    setDocEnhance({ sharpen: !docViewEnhance.sharpen });
+  });
+  document.getElementById('doc-white-borders')?.addEventListener('click', () => {
+    setDocEnhance({ whiteBorders: !docViewEnhance.whiteBorders });
+  });
+  document.getElementById('doc-enhance-auto')?.addEventListener('click', () => {
+    setDocEnhance({ contrast: 1.4, sharpen: true, whiteBorders: true });
+  });
+  document.getElementById('doc-enhance-reset')?.addEventListener('click', () => {
+    setDocEnhance({ contrast: 1, sharpen: false, whiteBorders: false });
+  });
   document.getElementById('doc-share').addEventListener('click', () => {
     if (!previewingId) return;
     shareAttachment(previewingId).catch((err) => toast(err.message || 'Share failed', true));
@@ -12004,6 +12303,22 @@
       createTag(title, { assignToCurrent: true });
     }
     hideTagSuggest();
+  });
+  document.getElementById('btn-manage-tags')?.addEventListener('click', () => {
+    if (!NotesStore.isUnlocked()) {
+      toast('Unlock the vault first', true);
+      return;
+    }
+    openTagManage();
+  });
+  document.getElementById('tag-manage-close')?.addEventListener('click', closeTagManage);
+  document.getElementById('tag-manage-backdrop')?.addEventListener('click', closeTagManage);
+  document.getElementById('tag-manage-dialog')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeTagManage();
+    }
   });
   document.getElementById('btn-new-tag').addEventListener('click', () => {
     if (!NotesStore.isUnlocked()) {

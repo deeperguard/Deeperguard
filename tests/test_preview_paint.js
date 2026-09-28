@@ -291,6 +291,8 @@ assert.strictEqual(zoomApi.zoomOut(), 1);
 zoomApi.zoomIn();
 zoomApi.reset();
 assert.strictEqual(zoomApi.getScale(), 1);
+assert.ok(zoomApi.zoomOut() < 1);
+assert.ok(zoomApi.getScale() >= 0.4);
 
 const dtViewport = document.createElement('div');
 dtViewport.clientWidth = 400;

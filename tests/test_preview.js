@@ -14,6 +14,7 @@ const {
   ensurePdf,
   openPdf,
   enablePinchZoom,
+  whitenDocumentBorders,
   upgradePdfQuality,
   upgradeImageQuality,
   rememberImagePaint,
@@ -122,5 +123,32 @@ assert.strictEqual(boxesMatchQuery([
 assert.strictEqual(boxesMatchQuery([
   { text: 'Invoice', l: 0.1, t: 0.2, w: 0.2, h: 0.05, page: 0 },
 ], 'xyz', 0), false);
+
+function solidImage(width, height, fill) {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const [r, g, b] = fill(x, y);
+      const offset = (y * width + x) * 4;
+      data[offset] = r;
+      data[offset + 1] = g;
+      data[offset + 2] = b;
+      data[offset + 3] = 255;
+    }
+  }
+  return { data, width, height };
+}
+const pageScan = solidImage(24, 24, (x, y) => (x < 4 || y < 4 || x > 19 || y > 19 ? [80, 80, 80] : [255, 255, 255]));
+pageScan.data[12 * 24 * 4 + 12 * 4] = 0;
+assert.strictEqual(whitenDocumentBorders(pageScan), true);
+assert.strictEqual(pageScan.data[0], 255);
+assert.strictEqual(pageScan.data[12 * 24 * 4 + 12 * 4], 0);
+const flat = solidImage(16, 16, () => [140, 140, 140]);
+assert.strictEqual(whitenDocumentBorders(flat), false);
+assert.strictEqual(flat.data[0], 140);
+const thickBorder = solidImage(80, 80, (x, y) => (x < 16 || y < 16 || x > 63 || y > 63 ? [80, 80, 80] : [255, 255, 255]));
+assert.strictEqual(whitenDocumentBorders(thickBorder), true);
+assert.strictEqual(thickBorder.data[0], 255);
+assert.strictEqual(thickBorder.data[(40 * 80 + 40) * 4], 255);
 
 console.log('ok');

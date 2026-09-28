@@ -1296,6 +1296,7 @@ const NotesPreview = (() => {
       const { height } = measureLayer();
       sizer.style.width = `${width * scale}px`;
       sizer.style.height = `${Math.max(1, height) * scale}px`;
+      sizer.classList.toggle('is-shrunk', scale < 0.98);
       viewport.classList.toggle('is-zoomed', scale > 1.02);
       clampScroll();
     }
@@ -1311,7 +1312,7 @@ const NotesPreview = (() => {
       const clientX = rect.left + viewport.clientWidth / 2;
       const clientY = rect.top + viewport.clientHeight / 2;
       const point = contentPoint(clientX, clientY);
-      scale = clamp(scale * factor, 1, 5);
+      scale = clamp(scale * factor, 0.4, 5);
       apply();
       scrollToPoint(point, clientX, clientY);
       notifySettled();
@@ -1364,7 +1365,7 @@ const NotesPreview = (() => {
       event.preventDefault();
       const mid = touchMid(event.touches[0], event.touches[1]);
       const point = contentPoint(mid.x, mid.y);
-      const nextScale = clamp(startScale * (touchDist(event.touches[0], event.touches[1]) / startDist), 1, 5);
+      const nextScale = clamp(startScale * (touchDist(event.touches[0], event.touches[1]) / startDist), 0.4, 5);
       if (nextScale > startScale * 1.08) pinchUsed = true;
       scale = nextScale;
       apply();
@@ -1390,7 +1391,7 @@ const NotesPreview = (() => {
           }
         }
         if (!doubleTapped) {
-          if (scale <= 1.05) reset();
+          if (scale > 0.98 && scale <= 1.05) reset();
           else {
             apply();
             notifySettled();
@@ -1420,8 +1421,8 @@ const NotesPreview = (() => {
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       const point = contentPoint(event.clientX, event.clientY);
-      scale = clamp(scale * (event.deltaY < 0 ? 1.12 : 0.9), 1, 5);
-      if (scale <= 1.02) reset();
+      scale = clamp(scale * (event.deltaY < 0 ? 1.12 : 0.9), 0.4, 5);
+      if (scale > 0.98 && scale < 1.02) reset();
       else {
         apply();
         scrollToPoint(point, event.clientX, event.clientY);
@@ -1451,6 +1452,93 @@ const NotesPreview = (() => {
     return api;
   }
 
+  function pixelLuminance(data, index) {
+    const offset = index * 4;
+    return data[offset] * 0.299 + data[offset + 1] * 0.587 + data[offset + 2] * 0.114;
+  }
+
+  function medianLuminance(samples) {
+    if (!samples.length) return 255;
+    const sorted = samples.slice().sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  }
+
+  function whitenDocumentBorders(imageData) {
+    const data = imageData?.data;
+    const width = imageData?.width || 0;
+    const height = imageData?.height || 0;
+    if (!data || width < 8 || height < 8) return false;
+    const lumAt = (index) => pixelLuminance(data, index);
+    const border = [];
+    for (let x = 0; x < width; x += 1) {
+      border.push(lumAt(x));
+      border.push(lumAt((height - 1) * width + x));
+    }
+    for (let y = 1; y < height - 1; y += 1) {
+      border.push(lumAt(y * width));
+      border.push(lumAt(y * width + width - 1));
+    }
+    const edge = medianLuminance(border);
+    if (edge > 242) return false;
+    const center = [];
+    const x0 = Math.floor(width * 0.35);
+    const x1 = Math.max(x0 + 1, Math.ceil(width * 0.65));
+    const y0 = Math.floor(height * 0.35);
+    const y1 = Math.max(y0 + 1, Math.ceil(height * 0.65));
+    const step = Math.max(1, Math.floor((x1 - x0) / 24));
+    for (let y = y0; y < y1; y += step) {
+      for (let x = x0; x < x1; x += step) center.push(lumAt(y * width + x));
+    }
+    const page = medianLuminance(center);
+    if (page - edge < 18) return false;
+    const lo = edge - 36;
+    const hi = Math.min(edge + 18, page - 12);
+    if (hi < lo) return false;
+    const seen = new Uint8Array(width * height);
+    const queue = new Int32Array(width * height);
+    let head = 0;
+    let tail = 0;
+    const push = (index) => {
+      if (seen[index]) return;
+      const lum = lumAt(index);
+      if (lum < lo || lum > hi) return;
+      seen[index] = 1;
+      queue[tail] = index;
+      tail += 1;
+    };
+    for (let x = 0; x < width; x += 1) {
+      push(x);
+      push((height - 1) * width + x);
+    }
+    for (let y = 1; y < height - 1; y += 1) {
+      push(y * width);
+      push(y * width + width - 1);
+    }
+    const limit = Math.floor(width * height * 0.8);
+    let count = 0;
+    while (head < tail) {
+      const index = queue[head];
+      head += 1;
+      count += 1;
+      if (count > limit) return false;
+      const x = index % width;
+      const y = (index - x) / width;
+      if (x > 0) push(index - 1);
+      if (x + 1 < width) push(index + 1);
+      if (y > 0) push(index - width);
+      if (y + 1 < height) push(index + width);
+    }
+    if (count < 8) return false;
+    for (let index = 0; index < seen.length; index += 1) {
+      if (!seen[index]) continue;
+      const offset = index * 4;
+      data[offset] = 255;
+      data[offset + 1] = 255;
+      data[offset + 2] = 255;
+    }
+    return true;
+  }
+
   return {
     MAX_PDF_PAGES,
     kindFromMeta,
@@ -1470,6 +1558,7 @@ const NotesPreview = (() => {
     upgradeImageQuality,
     rememberImagePaint,
     enablePinchZoom,
+    whitenDocumentBorders,
     joinTextItems,
     matchTextItems,
     matchOcrBoxes,

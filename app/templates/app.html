@@ -564,7 +564,10 @@
             <button type="button" class="btn primary sm" id="tag-create-confirm">Create</button>
           </div>
         </div>
-        <button type="button" id="btn-new-tag" class="btn ghost sm tag-new-btn">+ New tag</button>
+        <div class="tag-section-actions">
+          <button type="button" id="btn-new-tag" class="btn ghost sm tag-new-btn">+ New tag</button>
+          <button type="button" id="btn-manage-tags" class="btn ghost sm tag-new-btn">Manage</button>
+        </div>
       </details>
       <details class="tag-section folder-section" id="folder-section" open>
         <summary class="section-label"><span>Folders</span></summary>
@@ -1362,6 +1365,14 @@
     </footer>
   </div>
   <div id="doc-backdrop" class="settings-backdrop" hidden></div>
+  <div id="tag-manage-backdrop" class="settings-backdrop" hidden></div>
+  <div id="tag-manage-dialog" class="confirm-dialog tag-manage-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="tag-manage-title">
+    <h2 id="tag-manage-title">Manage tags</h2>
+    <div id="tag-manage-list" class="tag-manage-list"></div>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn ghost" id="tag-manage-close">Done</button>
+    </div>
+  </div>
   <div id="confirm-backdrop" class="settings-backdrop" hidden></div>
   <div id="account-info-backdrop" class="settings-backdrop" hidden></div>
   <div id="account-info-dialog" class="confirm-dialog account-info-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="account-info-title">
@@ -1404,6 +1415,13 @@
     </div>
   </div>
   <div id="doc-viewer" class="doc-viewer" hidden>
+    <svg class="doc-enhance-defs" aria-hidden="true" focusable="false">
+      <defs>
+        <filter id="doc-sharpen-filter" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+          <feConvolveMatrix order="3" kernelMatrix="0 -1 0 -1 5 -1 0 -1 0" preserveAlpha="true"/>
+        </filter>
+      </defs>
+    </svg>
     <header class="doc-viewer-head">
       <button type="button" class="btn icon" id="doc-close" aria-label="Close preview">×</button>
       <h2 id="doc-title" class="doc-title">Document</h2>
@@ -1418,10 +1436,21 @@
           <button type="button" class="btn ghost sm" id="doc-zoom-reset" aria-label="Reset zoom">100%</button>
           <button type="button" class="btn ghost sm" id="doc-zoom-in" aria-label="Zoom in">+</button>
         </div>
+        <button type="button" class="btn ghost sm" id="doc-enhance-toggle" aria-expanded="false" aria-controls="doc-enhance-panel">Enhance</button>
         <button type="button" class="btn ghost sm" id="doc-share">Share</button>
         <button type="button" class="btn ghost sm" id="doc-download">Download</button>
       </div>
     </header>
+    <div id="doc-enhance-panel" class="doc-enhance-panel" hidden>
+      <label class="doc-contrast-label" for="doc-contrast">Contrast
+        <input type="range" id="doc-contrast" min="60" max="200" step="5" value="100" aria-valuemin="60" aria-valuemax="200" aria-valuenow="100">
+        <span id="doc-contrast-value">100%</span>
+      </label>
+      <button type="button" class="btn ghost sm" id="doc-sharpen" aria-pressed="false">Sharpen</button>
+      <button type="button" class="btn ghost sm" id="doc-white-borders" aria-pressed="false">White borders</button>
+      <button type="button" class="btn ghost sm" id="doc-enhance-auto">Auto</button>
+      <button type="button" class="btn ghost sm" id="doc-enhance-reset">Reset</button>
+    </div>
     <div id="doc-viewer-find-slot" class="doc-viewer-find-slot"></div>
     <div id="doc-stage" class="doc-stage"></div>
     <button type="button" id="doc-immersive-share" class="doc-immersive-share" hidden aria-label="Share">
