@@ -3068,9 +3068,13 @@ body.scan-dialog-open {
 }
 .title-input {
   flex: 1;
+  min-width: 0;
   border: 0;
   background: transparent;
   padding: 8px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tag-bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 4px; }
 .tag-bar-shell.is-collapsed .tag-bar { display: none; }
@@ -4294,7 +4298,7 @@ html[data-theme="light"] {
 }
 .check-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-height: 40px;
   margin-left: calc(var(--indent, 0) * 20px);
@@ -4323,8 +4327,8 @@ html[data-theme="light"] {
   border: 0;
   overflow: hidden;
   pointer-events: none;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font: inherit;
   font-size: inherit;
   line-height: inherit;
@@ -4333,13 +4337,24 @@ html[data-theme="light"] {
 .check-text {
   position: relative;
   z-index: 2;
+  display: block;
   flex: 1;
   width: 100%;
   min-width: 0;
+  min-height: 2.4em;
+  box-sizing: border-box;
   border: 0;
   background: transparent;
   padding: 8px 4px;
   border-radius: 8px;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  field-sizing: content;
+  font: inherit;
+  line-height: 1.4;
+  color: inherit;
 }
 .check-text-links a.edit-link {
   pointer-events: auto;
@@ -4647,10 +4662,11 @@ body.doc-preview-open .fab-stack,
   }
   .editor-actions {
     grid-area: actions;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     min-width: 0;
     max-width: 100%;
-    overflow: visible;
+    overflow-x: auto;
+    scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     justify-content: flex-start;
@@ -4977,7 +4993,7 @@ body.doc-preview-open .fab-stack,
     display: none !important;
   }
   .note-list {
-    padding-bottom: calc(72px + var(--safe-bottom));
+    padding-bottom: calc(148px + var(--safe-bottom));
   }
   .note-item {
     padding: 14px 16px;
@@ -5511,6 +5527,10 @@ body.doc-preview-open .fab-stack,
     letter-spacing: -0.02em;
     text-transform: none;
     color: var(--text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .note-list-count {
     font-size: 12px;
@@ -5729,12 +5749,28 @@ body.doc-preview-open .fab-stack,
   .editor.doc-preview-active .find-bar {
     display: none !important;
   }
+  /* Breakpoints: <=860 list or editor; 861–1099 icon rail with a 240px overlay;
+     >=1100 pinned rail takes a real column. Hover never squeezes the list. */
   body:not(.nav-pinned) {
     --sn-nav-width: 64px;
   }
-  body:not(.nav-pinned):has(.sidebar-nav:hover),
-  body:not(.nav-pinned):has(.sidebar-nav:focus-within) {
-    --sn-nav-width: 240px;
+  .shell { position: relative; }
+  body.nav-pinned .sidebar-nav,
+  body:not(.nav-pinned) .sidebar-nav:hover,
+  body:not(.nav-pinned) .sidebar-nav:focus-within {
+    position: absolute;
+    z-index: 8;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 240px;
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.14);
+  }
+  .filter > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   body:not(.nav-pinned) .filter > span,
   body:not(.nav-pinned) .sn-nav-label,
@@ -5809,6 +5845,17 @@ body:not(.editor-tools-open) .editor-tools-divider,
 body:not(.editor-tools-open) .md-toolbar {
   display: none !important;
 }
+@media (min-width: 1100px) {
+  body.nav-pinned {
+    --sn-nav-width: 240px;
+  }
+  body.nav-pinned .sidebar-nav {
+    position: relative;
+    top: auto;
+    width: auto;
+    box-shadow: none;
+  }
+}
 .editor-overflow {
   font-size: 18px;
   letter-spacing: 0.08em;
@@ -5849,7 +5896,7 @@ body:not(.editor-tools-open) .md-toolbar {
   font-weight: 500;
 }
 @media (max-width: 860px) {
-  body.editor-tools-open .toolbar-secondary {
+  body.editor-tools-open .toolbar-secondary:not([hidden]) {
     display: inline-flex !important;
   }
   .writing-tip {

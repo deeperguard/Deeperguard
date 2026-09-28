@@ -2603,11 +2603,16 @@
       try { sessionStorage.setItem('notes_app_tab', appTab); } catch (err) { /* ignore */ }
     }
     if (appTab === '2fa') {
+      resetNoteTransientChrome();
+      closeDocPreview();
       refreshTotpVault({ migrate: true });
       startTotpClock();
     } else {
       stopTotpClock();
       if (appTab === 'files') {
+        resetNoteTransientChrome();
+        closeDocPreview();
+        if (currentId && NotesStore.get(currentId)) updateActionButtons(NotesStore.get(currentId));
         if (currentFilter !== 'documents') setFilter('documents');
         renderTags();
         renderNotes();
@@ -8225,13 +8230,18 @@
       if (label) label.textContent = noteLabel;
     }
     const fileLabel = noteShare ? 'Share' : 'Download';
-    ['doc-share', 'doc-immersive-share'].forEach((id) => {
-      const btn = document.getElementById(id);
-      if (!btn) return;
-      btn.title = fileLabel;
-      btn.setAttribute('aria-label', fileLabel);
-      if (id === 'doc-share') btn.textContent = fileLabel;
-    });
+    const docShare = document.getElementById('doc-share');
+    if (docShare) {
+      docShare.hidden = !noteShare;
+      docShare.title = 'Share';
+      docShare.setAttribute('aria-label', 'Share');
+      docShare.textContent = 'Share';
+    }
+    const immersive = document.getElementById('doc-immersive-share');
+    if (immersive) {
+      immersive.title = fileLabel;
+      immersive.setAttribute('aria-label', fileLabel);
+    }
     document.querySelectorAll('.doc-inline-share').forEach((btn) => {
       btn.textContent = fileLabel;
       btn.title = fileLabel;
@@ -8299,6 +8309,27 @@
 
   function syncEditorModeForSearch() {
     /* inline PDF search highlights use docSearchActive() — no mode switch needed */
+  }
+
+  function resetNoteTransientChrome({ clearSurfaces = false } = {}) {
+    hideFindBar();
+    const findInput = document.getElementById('find-input');
+    if (findInput) findInput.value = '';
+    closeNoteOptions();
+    document.querySelectorAll('.doc-hit-note').forEach((el) => el.remove());
+    document.getElementById('btn-delete-forever')?.toggleAttribute('hidden', true);
+    document.getElementById('btn-clear-checked')?.toggleAttribute('hidden', true);
+    if (!clearSurfaces) return;
+    if (ui.checklist) {
+      ui.checklist.hidden = true;
+      ui.checklist.innerHTML = '';
+    }
+    if (ui.docInline) {
+      ui.docInline.hidden = true;
+      ui.docInline.innerHTML = '';
+    }
+    ui.editor?.classList.remove('doc-preview-active');
+    document.body.classList.remove('editor-doc-preview');
   }
 
   function syncEditorBodyWrap() {
@@ -8482,7 +8513,7 @@
         <button type="button" class="check-box" data-check-toggle="${escapeAttr(row.id)}" aria-checked="${row.done}">${row.done ? '☑' : '☐'}</button>
         <div class="check-text-wrap">
           <div class="check-text-links" aria-hidden="true"></div>
-          <input class="check-text" data-check-text="${escapeAttr(row.id)}" value="${escapeAttr(row.text)}" placeholder="List item" ${note.content.prevent_edit ? 'readonly' : ''}>
+          <textarea class="check-text" data-check-text="${escapeAttr(row.id)}" rows="1" placeholder="List item" ${note.content.prevent_edit ? 'readonly' : ''}>${escapeHtml(row.text)}</textarea>
         </div>
         ${nested ? `<button type="button" class="btn ghost sm check-indent" data-check-indent="${escapeAttr(row.id)}" aria-label="Indent">⇥</button>` : ''}
       </div>`).join('') + (note.content.prevent_edit ? '' : '<button type="button" class="btn ghost sm check-add" id="check-add">Add item</button>');
@@ -8498,6 +8529,7 @@
         if (!note.content.prevent_edit) pushUndoSnapshot();
       });
       input.addEventListener('input', () => {
+        autosizeCheckText(input);
         if (note.content.prevent_edit) return;
         commit(NotesChecklist.setText(rows, input.dataset.checkText, input.value), { rerender: false });
         const layer = input.parentElement?.querySelector('.check-text-links');
@@ -8529,6 +8561,13 @@
     });
     syncClearCheckedButton(note);
     syncChecklistLinkOverlays(ui.checklist);
+    ui.checklist.querySelectorAll('.check-text').forEach((el) => autosizeCheckText(el));
+  }
+
+  function autosizeCheckText(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
   }
 
   function syncClearCheckedButton(note) {
@@ -8583,10 +8622,12 @@
     if (actions) actions.hidden = !!gated;
     if (tagShell) tagShell.hidden = !!gated;
     if (ui.editorType) ui.editorType.hidden = !!gated;
-    ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
+    ['btn-share', 'btn-note-info', 'btn-trash', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.hidden = !!gated;
     });
+    document.getElementById('btn-delete-forever')?.toggleAttribute('hidden', true);
+    document.getElementById('btn-clear-checked')?.toggleAttribute('hidden', true);
     if (gated) {
       toolbar.hidden = true;
       ui.body.hidden = true;
@@ -8652,8 +8693,10 @@
       clearTimeout(saveDebounce);
       saveDebounce = null;
     }
+    const switchingNote = currentId !== id;
     currentId = id;
     listSelectionId = id;
+    if (switchingNote) resetNoteTransientChrome({ clearSurfaces: true });
     // Paint the row while the list is still on screen. On iPhone the list
     // slides away with editor-open, and iOS keeps that layer's old highlight.
     markActiveNoteRow();
@@ -8662,6 +8705,7 @@
     ui.editor.hidden = false;
     ui.shell.classList.add('editor-open');
     ui.title.value = NotesSearch.effectiveNoteTitle(note);
+    ui.title.title = ui.title.value || '';
     let body = note.content.content || '';
     if (!gated && (note.content.editor || '') === 'superscript' && window.NotesSuperscript) {
       body = NotesSuperscript.normalizeContent(body);
@@ -12691,6 +12735,7 @@
     if (note && !titleLockedByUser(note)) {
       applyingDerivedTitle = true;
       ui.title.value = NotesSearch.derivedTitleFromBody(ui.body.value);
+      ui.title.title = ui.title.value || '';
       applyingDerivedTitle = false;
     }
     scheduleSave();
