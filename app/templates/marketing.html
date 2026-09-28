@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Deeperguard — Zero-knowledge encrypted notes</title>
-  <meta name="description" content="Private encrypted notes that sync across your devices. Zero-knowledge by design — no app to install, open in your browser. Basic and Pro plans. Free during public beta.">
+  <title>Deeperguard — Private notes for work you cannot leak</title>
+  <meta name="description" content="Encrypted notes for credentials, confidential work, and scanned documents. Encrypted on your device, searchable offline, synced everywhere. Free during public beta.">
   <meta name="theme-color" content="#ffffff">
   <meta property="og:title" content="Deeperguard — Zero-knowledge encrypted notes">
   <meta property="og:description" content="Notes encrypted on your device before sync. Client-side zero knowledge, on-device OCR, and instant browser access. Free accounts during public beta.">
@@ -24,7 +24,7 @@
 <body>
   <div class="mk-beta-banner" role="status">
     <span class="mk-beta-pill">Public Beta</span>
-    <strong>All accounts are 100% free with full Pro features</strong> (5&nbsp;GB encrypted storage, Passkeys, On-Device OCR, Encrypted Backups) during our public beta. No credit card required.
+    <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups. No payment details yet.
   </div>
 
   <header class="mk-topbar">
@@ -37,16 +37,16 @@
         </span>
       </a>
       <nav class="mk-nav" aria-label="Sections">
-        <a href="#why">Why Deeperguard</a>
-        <a href="#compare">Compare</a>
+        <a href="#use-cases">Use cases</a>
         <a href="#features">Features</a>
+        <a href="#security">Security</a>
         <a href="#pricing">Pricing</a>
         <a href="#faq">FAQ</a>
-        <a href="#contact">Contact</a>
+        <a href="{{ app_url }}">Open notes app</a>
       </nav>
       <div class="mk-topbar-actions">
         <a class="mk-btn ghost" href="{{ login_url }}">Sign in</a>
-        <a class="mk-btn" href="{{ register_url }}">Start free account</a>
+        <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
       </div>
     </div>
   </header>
@@ -60,32 +60,30 @@
           <span class="mk-badge">No app store required</span>
           <span class="mk-badge warn">Public beta · Free access</span>
         </div>
-        <h1>Your notes, <span class="gradient">encrypted on your device</span> before they ever leave.</h1>
-        <p class="mk-lede">
-          Deeperguard is an uncompromising, private note-taking application designed for people who take privacy seriously. We store only scrambled AES-GCM ciphertext. We cannot read your note titles, body content, attachments, or tags.
-        </p>
+        <h1>Private notes for people who cannot risk a leak.</h1>
+        <p class="mk-lede">Encrypted on your device. Searchable offline. Syncs everywhere.</p>
         <div class="mk-hero-actions">
-          <a class="mk-btn mk-btn-lg" href="{{ app_url }}">Open notes app</a>
-          <a class="mk-btn secondary mk-btn-lg" href="{{ register_url }}">Create free account</a>
-          <a class="mk-btn ghost mk-btn-lg" href="{{ login_url }}">Sign in</a>
+          <a class="mk-btn mk-btn-lg" href="{{ register_url }}">Create free vault</a>
+          <a class="mk-btn secondary mk-btn-lg" href="#security">How encryption works</a>
+          <a class="mk-btn ghost mk-btn-lg" href="{{ app_url }}">Open notes app</a>
         </div>
         <div class="mk-hero-trust">
-          <span>🔒 AES-GCM 256 client encryption</span>
-          <span>🔑 SRP-6a password zero-knowledge proof</span>
-          <span>⚡ Instant offline PWA</span>
+          <span>AES-GCM 256</span>
+          <span>Zero-knowledge authentication</span>
+          <span>On-Device OCR</span>
         </div>
       </div>
 
       <aside class="mk-hero-card" aria-label="Deeperguard Core Highlights">
         <div class="mk-hero-card-header">
           <span class="mk-hero-card-title">Why switch to Deeperguard?</span>
-          <span class="mk-badge ok">Zero Trust Architecture</span>
+          <span class="mk-badge ok">Encrypted before sync</span>
         </div>
         <ul>
           <li>
             <div>
-              <strong>True Client-Side Zero Knowledge</strong>
-              <span class="desc">Your vault encryption key never leaves your browser memory. We hold an SRP verifier, never your password.</span>
+              <strong>The server cannot read your notes</strong>
+              <span class="desc">Notes are encrypted on this device before sync. The server stores ciphertext only.</span>
             </div>
           </li>
           <li>
@@ -96,8 +94,8 @@
           </li>
           <li>
             <div>
-              <strong>Frictionless Universal Web App</strong>
-              <span class="desc">Open on iPhone, Mac, Windows, or Linux instantly. Add to Home Screen as a native-feel PWA with full offline read/write.</span>
+              <strong>Works in the browser, including offline</strong>
+              <span class="desc">Open it on iPhone, Mac, Windows, or Linux. Add it to your home screen and keep reading and writing without a connection.</span>
             </div>
           </li>
           <li>
@@ -110,10 +108,55 @@
       </aside>
     </section>
 
+    <section class="mk-trust" aria-label="What is true today">
+      <article>
+        <strong>Public beta</strong>
+        <p>Every account includes Pro during the beta. No payment details are collected.</p>
+      </article>
+      <article>
+        <strong>Ciphertext only</strong>
+        <p>The server stores encrypted notes. It does not hold a copy it can read.</p>
+      </article>
+      <article>
+        <strong>Encrypted before sync</strong>
+        <p>AES-GCM 256 runs on your device. Sync moves ciphertext, not the note.</p>
+      </article>
+      <article>
+        <strong>Security contact</strong>
+        <p><a href="mailto:notes@deeperguard.com">notes@deeperguard.com</a><br><a href="mailto:notes@deeperguard.com?subject=Vulnerability%20report">Report a vulnerability</a></p>
+      </article>
+    </section>
+
+    <section class="mk-section" id="use-cases">
+      <div class="mk-section-head">
+        <span class="mk-badge">Use cases</span>
+        <h2>Where a leak is not an option</h2>
+        <p>Zero-knowledge matters when the note itself is the secret. The server never receives a readable copy.</p>
+      </div>
+      <div class="mk-grid cols-2">
+        <article class="mk-card">
+          <h3>Credentials and 2FA</h3>
+          <p>Keep recovery codes and authenticator secrets in the vault. Pro includes a vault authenticator so those codes stay inside the same encrypted store.</p>
+        </article>
+        <article class="mk-card">
+          <h3>Receipts and invoices</h3>
+          <p>Photograph a document and search the text later. OCR runs on your device. The scan is encrypted before it syncs.</p>
+        </article>
+        <article class="mk-card">
+          <h3>Confidential work notes</h3>
+          <p>Client names, drafts, and internal notes stay unreadable to the host. Search still works on this device, including offline.</p>
+        </article>
+        <article class="mk-card">
+          <h3>A private journal</h3>
+          <p>Personal notes are encrypted with the same vault. There is no staff view and no server-side copy of the text.</p>
+        </article>
+      </div>
+    </section>
+
     <!-- Clear Distinction: Standard Notes vs Evernote vs Deeperguard -->
     <section class="mk-section" id="compare">
       <div class="mk-section-head">
-        <span class="mk-badge">Clear Market Distinction</span>
+        <span class="mk-badge">Comparison</span>
         <h2>How Deeperguard compares</h2>
         <p>
           Whether you are moving from mainstream cloud note apps like <strong>Evernote</strong> or evaluating encrypted tools like <strong>Standard Notes</strong>, here is the honest, direct distinction.
@@ -123,53 +166,52 @@
       <div class="mk-distinction-grid">
         <!-- Deeperguard -->
         <article class="mk-distinction-card featured">
-          <span class="mk-distinction-badge">Deeperguard (Recommended)</span>
+          <span class="mk-distinction-badge">Deeperguard</span>
           <h3>Deeperguard</h3>
-          <p class="mk-distinction-subtitle">Modern Zero-Knowledge web app with on-device OCR and seamless PWA access.</p>
+          <p class="mk-distinction-subtitle">Browser notes with client-side encryption, on-device OCR, and offline use.</p>
           <ul class="mk-distinction-points">
             <li class="pro"><strong>True zero-knowledge:</strong> Server stores only encrypted ciphertext blobs.</li>
             <li class="pro"><strong>Client-side OCR:</strong> Search scanned receipts and PDFs without cloud AI parsing.</li>
             <li class="pro"><strong>No app store lock-in:</strong> Installable PWA with full offline vault support.</li>
             <li class="pro"><strong>Built-in 2FA &amp; Passkeys:</strong> Modern WebAuthn hardware key support.</li>
             <li class="pro"><strong>Standard Notes Import:</strong> Easy migration with 1-click vault JSON import.</li>
-            <li class="pro"><strong>Public beta pricing:</strong> Full Pro tier <strong>100% Free</strong> with 5&nbsp;GB storage.</li>
+            <li class="pro"><strong>Public beta:</strong> Pro features included at no charge, including 5&nbsp;GB storage.</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>The verdict:</strong> Best for users who want bulletproof zero-knowledge security without installing bulky desktop/mobile software or paying high monthly subscription fees.
+            <strong>Difference:</strong> Ciphertext-only sync, OCR on the device, and a browser app you can use offline. Pro after beta adds passkeys, backups, and the vault authenticator.
           </div>
         </article>
 
         <!-- Standard Notes -->
         <article class="mk-distinction-card">
-          <span class="mk-distinction-badge neutral">Encrypted Competitor</span>
+          <span class="mk-distinction-badge neutral">Encrypted notes</span>
           <h3>Standard Notes</h3>
           <p class="mk-distinction-subtitle">Established encrypted notes ecosystem with extensive desktop apps and plugin extensions.</p>
           <ul class="mk-distinction-points">
             <li class="pro"><strong>Zero-knowledge:</strong> Mature end-to-end encrypted architecture.</li>
             <li class="pro"><strong>Extensible:</strong> Plentiful editors, themes, and extensions on paid tiers.</li>
-            <li class="con"><strong>Costly plans:</strong> Advanced features require ~€4–€10/month subscriptions.</li>
-            <li class="con"><strong>No on-device OCR:</strong> Document search inside image scans is not available.</li>
-            <li class="con"><strong>Native app dependency:</strong> Heavy desktop clients often preferred over lightweight web.</li>
+            <li class="con"><strong>Paid advanced features:</strong> Published plans are about €4–€10 per month.</li>
+            <li class="con"><strong>No on-device OCR:</strong> Searching text inside a scanned page is not part of the product.</li>
+            <li class="con"><strong>Apps:</strong> Desktop and mobile clients are the usual way to use it. A web app also exists.</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>The verdict:</strong> Excellent mature platform, but expensive and lacks client-side OCR for receipts, documents, and scanned PDFs.
+            <strong>Difference:</strong> Also zero-knowledge. It does not offer on-device OCR for scanned pages.
           </div>
         </article>
 
         <!-- Evernote -->
         <article class="mk-distinction-card">
-          <span class="mk-distinction-badge neutral">Legacy Cloud App</span>
+          <span class="mk-distinction-badge neutral">Cloud notebook</span>
           <h3>Evernote</h3>
           <p class="mk-distinction-subtitle">Mainstream productivity notebook with cloud-based features and third-party integrations.</p>
           <ul class="mk-distinction-points">
             <li class="pro"><strong>Rich features:</strong> Web clipper, audio recording, and extensive templates.</li>
-            <li class="con"><strong>Not zero-knowledge:</strong> Notes are readable on servers by company staff and AI models.</li>
-            <li class="con"><strong>Server-side OCR:</strong> Scanned text is indexed and analyzed on their cloud servers.</li>
-            <li class="con"><strong>Very expensive:</strong> Paid tiers range ~€8–€15/month with heavy free tier restrictions.</li>
-            <li class="con"><strong>Surveillance risk:</strong> Subject to third-party data breaches, sub-processors, and legal subpoenas.</li>
+            <li class="con"><strong>Not zero-knowledge:</strong> The service can access note plaintext on its servers.</li>
+            <li class="con"><strong>Cloud OCR:</strong> Text from scans is processed on Evernote’s servers.</li>
+            <li class="con"><strong>Paid plans:</strong> Published tiers are about €8–€15 per month. The free tier is limited.</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>The verdict:</strong> Feature-rich for corporate notebooks, but fundamentally unsafe for personal credentials, financial records, or confidential thoughts.
+            <strong>Difference:</strong> A full-featured notebook. It is not zero-knowledge: the server can access plaintext.
           </div>
         </article>
       </div>
@@ -293,9 +335,9 @@
     <!-- Key Features Grid -->
     <section class="mk-section" id="features">
       <div class="mk-section-head">
-        <span class="mk-badge">Security Architecture</span>
-        <h2>Built for total privacy, not monetization</h2>
-        <p>Everything in Deeperguard is architected with zero-trust principles. Even in the event of a full server database compromise, your notes remain undecryptable.</p>
+        <span class="mk-badge">Privacy by architecture</span>
+        <h2>Privacy by architecture, not by policy</h2>
+        <p>A database copy is still ciphertext. Reading a note requires the vault password on a device you unlock. The details of how that key is made are in <a href="#security">How encryption works</a>.</p>
       </div>
 
       <div class="mk-grid cols-3">
@@ -339,10 +381,10 @@
 
     <!-- How it Works -->
     <section class="mk-section" id="how">
-      <div class="mk-section-head">
-        <span class="mk-badge">Getting Started</span>
+      <div class="mk-section-head" id="security">
+        <span class="mk-badge">How encryption works</span>
         <h2>How Deeperguard works</h2>
-        <p>Three effortless steps to zero-knowledge privacy. No complicated setup or CLI commands required.</p>
+        <p>Create an account, unlock the vault on this device, then write and sync. The cryptography stays on the device.</p>
       </div>
       <div class="mk-steps">
         <article class="mk-step">
@@ -351,7 +393,7 @@
         </article>
         <article class="mk-step">
           <h3>Unlock your local vault</h3>
-          <p>Your browser derives your encryption keys locally. The server only sees your SRP authentication proof and stores ciphertext.</p>
+          <p>This device derives the vault key locally with Argon2id and PBKDF2. Sign-in uses SRP-6a, so the server stores a verifier, not the password. Sync stores AES-GCM 256 ciphertext.</p>
         </article>
         <article class="mk-step">
           <h3>Write, scan &amp; sync</h3>
@@ -366,13 +408,13 @@
         <span class="mk-badge ok">Public Beta Schedule</span>
         <h2>Transparent pricing schedule</h2>
         <p>
-          Deeperguard is currently in <strong>Public Beta</strong>. <strong>All accounts are 100% free with complete Pro access</strong>. Below is our post-beta pricing schedule so you know exactly what to expect when billing launches.
+          During the public beta every account includes Pro, and no payment details are collected. After the beta, Basic is €2.99/month or €29/year. Pro is €6.99/month or €69/year, and that is the plan that keeps backups, passkeys, OCR, 5&nbsp;GB, and the vault authenticator. Billing starts only after advance notice.
         </p>
       </div>
 
       <div class="mk-pricing-beta-highlight">
-        <h4>🎉 Beta Status: Free Accounts for All Users</h4>
-        <p>You will not be billed or asked for payment details during the public beta. You will receive advanced notice prior to any paid tier rollout.</p>
+        <h4>Free during the public beta</h4>
+        <p>No payment details are collected during the beta, and billing does not start without advance notice. After the beta, Pro is the plan that keeps 5&nbsp;GB, passkeys, two-factor sign-in, encrypted backups, on-device OCR, and the vault authenticator.</p>
       </div>
 
       <div class="mk-pricing">
@@ -420,7 +462,7 @@
             <li>{{ feat }}</li>
             {% endfor %}
           </ul>
-          <a class="mk-btn" href="{{ register_url }}">Get Free Pro Account</a>
+          <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
         </article>
       </div>
 
@@ -495,7 +537,7 @@
       <div class="mk-section-head">
         <span class="mk-badge">Get in Touch</span>
         <h2>Contact us</h2>
-        <p>Have questions about Deeperguard, security audits, or beta access? Send a note directly to our team — we reply from <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
+        <p>Questions about the product or the beta: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>. Security reports use the same address with the subject “Vulnerability report”.</p>
       </div>
       <form id="contact-form" class="mk-contact-form mk-card" novalidate>
         <div class="mk-contact-grid">
@@ -529,20 +571,29 @@
 
     <!-- Bottom CTA -->
     <section class="mk-cta">
-      <h2>Start writing with true privacy today</h2>
-      <p>Free Pro account during public beta · No credit card required · Zero-knowledge encrypted from day one</p>
-      <a class="mk-btn" href="{{ register_url }}">Create your free account</a>
+      <h2>Create a vault for notes you cannot leak</h2>
+      <p>Free Pro access during the public beta. No payment details until you are told billing will start.</p>
+      <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
     </section>
 
-    <!-- Footer -->
+    <!-- TODO: replace with a factual builder credit when one is published. Do not invent a team bio. -->
+    <section class="mk-section" id="about">
+      <div class="mk-section-head">
+        <span class="mk-badge">About</span>
+        <h2>Who builds Deeperguard</h2>
+        <p>Deeperguard is an independent notes product in public beta. Security reports and product questions go to <a href="mailto:notes@deeperguard.com">notes@deeperguard.com</a>.</p>
+      </div>
+    </section>
+
     <footer class="mk-footer">
-      <p>© Deeperguard · Zero-Knowledge Encrypted Notes · Outreach kit: <a href="/api/promo">/api/promo</a></p>
+      <p>© Deeperguard · Private encrypted notes</p>
       <nav aria-label="Footer Navigation">
-        <a href="/privacy">Privacy Policy</a>
-        <a href="/terms">Terms of Service</a>
-        <a href="#compare">Compare</a>
-        <a href="#pricing">Pricing Schedule</a>
-        <a href="#contact">Contact</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="#security">Security</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a href="mailto:notes@deeperguard.com?subject=Vulnerability%20report">Report a vulnerability</a>
         <a href="{{ app_url }}">Open notes app</a>
       </nav>
     </footer>

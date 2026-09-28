@@ -921,6 +921,14 @@ html[data-theme="light"] .zk-badge {
   text-align: left;
 }
 .auth-hint a { color: var(--accent); font-weight: 500; }
+.unlock-help {
+  margin-top: 0.75rem;
+}
+.unlock-help summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.unlock-help p { margin: 0.5rem 0 0; }
 .auth-status {
   margin: 0;
   text-align: center;

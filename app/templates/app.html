@@ -378,20 +378,19 @@
     <main class="auth-card">
       <div class="brand">
         {% include 'partials/auth-brand.html' %}
-        <h1>Unlock notes</h1>
-        <p id="unlock-email" class="muted">Enter your vault password to decrypt notes on this device</p>
+        <h1>Unlock your vault</h1>
+        <p id="unlock-email" class="muted">Enter your vault password. Notes decrypt on this device.</p>
         {% include 'partials/zk-plain.html' %}
-        <p id="unlock-first-hint" class="auth-hint" hidden>Step 2 of 2 — use the same password you just created (or your phone vault password if you synced from another device).</p>
+        <p id="unlock-first-hint" class="auth-hint" hidden>Use the vault password you just created.</p>
         <p class="zk-badge">Encrypted on this device</p>
-        <p id="unlock-secure-hint" class="auth-hint" hidden>iPhone offline requires HTTPS. Install the certificate from <a href="/ca.crt" download>ca.crt</a> or open Settings after your first online login.</p>
       </div>
       <form id="unlock-form" class="stack" onsubmit="event.preventDefault(); return false;">
         <label>Vault password
           <input id="unlock-password" type="password" name="password" autocomplete="current-password" required>
         </label>
         <p id="unlock-error" class="error" hidden></p>
-        <p id="unlock-recovery-hint" class="auth-hint" hidden>Stay signed in, then unlock with the same password that unlocks Notes on your phone — it can differ from the login password. After notes appear, use Settings → Change vault password so both match.</p>
-        <p id="unlock-session-hint" class="auth-hint" hidden>Your sign-in session expired. Unlocking with your vault password will sign you in again and resume sync.</p>
+        <p id="unlock-recovery-hint" class="auth-hint" hidden>This vault password can differ from the password you use to sign in. After your notes open, you can change it in Settings.</p>
+        <p id="unlock-session-hint" class="auth-hint" hidden>Your sign-in expired. Enter your vault password to continue and resume sync.</p>
         <p id="unlock-update-hint" class="auth-hint ocr-stale" hidden aria-live="polite"></p>
         <p id="unlock-status" class="unlock-status muted" hidden aria-live="polite"></p>
         <div id="unlock-progress" class="unlock-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Unlock progress">
@@ -400,6 +399,11 @@
         <button type="submit" id="unlock-submit" class="btn primary block">Unlock</button>
         <button type="button" id="unlock-clear-saved" class="btn ghost block">Clear saved password</button>
         <button type="button" id="unlock-signout" class="btn ghost block"{% if skip_login %} hidden{% endif %}>Sign out</button>
+        <details class="auth-hint unlock-help">
+          <summary>Having trouble on iPhone?</summary>
+          <p id="unlock-secure-hint" hidden>Offline unlock on iPhone needs a secure connection. If Safari warns about the certificate, <a href="/ca.crt" download>install the certificate</a>, or open the app once while you are online.</p>
+          <p>If notes will not open, use the vault password from the device where you created them. Password help is in Settings after you unlock. Write to <a href="mailto:notes@deeperguard.com">notes@deeperguard.com</a> if you are stuck.</p>
+        </details>
       </form>
     </main>
   </div>

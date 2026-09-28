@@ -5097,7 +5097,7 @@
       if (!savedSalt) {
         showUnlock(account && account.email);
         unlockError.hidden = false;
-        unlockError.textContent = 'Connect once over HTTPS on the LAN or WireGuard to unlock offline.';
+        unlockError.textContent = 'Sign in once while you are online. This device can unlock offline after that.';
         return new Promise((resolve) => {
           unlockResolver = resolve;
         });

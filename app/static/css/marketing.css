@@ -308,6 +308,23 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   align-items: center;
   gap: 0.4rem;
 }
+.mk-trust {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.5rem 0 2.5rem;
+}
+.mk-trust article {
+  background: var(--mk-panel);
+  border: 1px solid var(--mk-border);
+  border-radius: var(--mk-radius);
+  padding: 0.9rem 1rem;
+}
+.mk-trust strong { display: block; font-size: 0.92rem; margin-bottom: 0.25rem; }
+.mk-trust p { margin: 0; color: var(--mk-muted); font-size: 0.85rem; }
+@media (max-width: 860px) {
+  .mk-trust { grid-template-columns: 1fr 1fr; }
+}
 
 .mk-hero-card {
   background: #ffffff;
@@ -679,8 +696,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* Pricing Section */
 .mk-pricing-beta-highlight {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
+  background: var(--mk-panel);
+  border: 1px solid var(--mk-border);
   border-radius: var(--mk-radius);
   padding: 1.25rem 1.75rem;
   text-align: center;
@@ -693,14 +710,15 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .mk-pricing-beta-highlight h4 {
   margin: 0;
-  font-size: 1.15rem;
-  color: #1e40af;
-  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--mk-text);
+  font-weight: 650;
 }
 .mk-pricing-beta-highlight p {
   margin: 0;
-  color: #3b82f6;
+  color: var(--mk-muted);
   font-size: 0.95rem;
+  max-width: 42rem;
 }
 
 .mk-pricing {
