@@ -5074,10 +5074,29 @@ body.search-filters-open .fab-stack,
     flex-shrink: 0;
   }
   .note-list-tools .sn-add {
-    width: 34px;
-    height: 34px;
-    font-size: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
     flex-shrink: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-elevated);
+    color: var(--muted);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .note-list-tools .sn-add:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
   }
   .note-list-tools #btn-list-scan {
     display: inline-flex;
