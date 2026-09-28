@@ -1438,6 +1438,10 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(".sidebar-head .sync-meta { display: none; }", mobile)
         self.assertIn(".list-sync-banner { order: 8; }", mobile)
         self.assertIn("prefs.foldersCollapsed = true", (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8"))
+        sn_add = mobile[mobile.index(".note-list-tools .sn-add {") : mobile.index(".note-list-tools .sn-add:hover")]
+        self.assertIn("-webkit-appearance: none;", sn_add)
+        self.assertIn("background: var(--bg-elevated);", sn_add)
+        self.assertIn("border: 1px solid var(--border);", sn_add)
 
     def test_client_vaultlock(self):
         self._run_node_script("test_vaultlock.js")
