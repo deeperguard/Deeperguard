@@ -262,9 +262,9 @@
   const NOTE_SORT_ORDER = ['updated', 'created', 'title'];
 
   function sortModeLabel(mode) {
-    if (mode === 'created') return 'Sorted by date created';
-    if (mode === 'title') return 'Sorted by title';
-    return 'Sorted by last updated';
+    if (mode === 'created') return 'Date created';
+    if (mode === 'title') return 'Title';
+    return 'Recent';
   }
 
   function syncSortControls() {
@@ -1831,6 +1831,7 @@
 
   let renderNotesFrame = 0;
   let lastNotesRenderKey = '';
+  let lastListContextKey = '';
   let networkReachable = typeof navigator === 'undefined' || navigator.onLine !== false;
   let networkProbeTimer = null;
 
@@ -6094,6 +6095,11 @@
       return;
     }
     const query = ui.search.value.trim();
+    const listContextKey = `${currentFilter}:${currentTag || ''}:${currentFolder || ''}:${query}:${prefs.sort}`;
+    if (listContextKey !== lastListContextKey) {
+      lastListContextKey = listContextKey;
+      ui.noteList.scrollTop = 0;
+    }
     const searchOptions = searchFilterOptions();
     const listingFiles = currentFilter === 'documents';
     const notes = listingFiles ? [] : NotesSearch.filterNotes(NotesStore.listNotes(), {
@@ -6270,7 +6276,20 @@
         if (items?.length) sections.push({ label, items });
       });
     }
+    const sectionCount = sections.reduce((count, section) => count + section.items.length, 0);
+    if (!listingFiles && sectionCount < notes.length) {
+      const seen = new Set(sections.flatMap((section) => section.items.map((note) => note.uuid)));
+      const missing = notes.filter((note) => !seen.has(note.uuid));
+      if (missing.length) sections.push({ label: '', items: missing });
+    }
     ui.noteList.innerHTML = buildNoteListSectionsHtml(sections, query);
+    if (listedCount > 0 && !ui.noteList.querySelector('.note-row')) {
+      ui.noteList.scrollTop = 0;
+      const flat = listingFiles
+        ? files.map((file) => renderFileRow(file, query)).join('')
+        : notes.map((note) => renderNoteRow(note, query)).join('');
+      ui.noteList.innerHTML = `<div class="note-section" data-virtual="0">${flat}</div>`;
+    }
     markActiveNoteRow();
     if (!ui.noteList._virtualScrollBound) {
       ui.noteList._virtualScrollBound = true;
@@ -7777,7 +7796,7 @@
           ${desktop ? '' : `<div class="doc-thumb-meta"><span>${escapeHtml(first.content.filename || 'Document')}</span></div>`}`;
     const toolbar = `<div class="doc-inline-tools">
           <button type="button" class="btn ghost sm doc-inline-expand" data-preview="${escapeAttr(first.uuid)}">Fullscreen</button>
-          <button type="button" class="btn ghost sm doc-inline-share" data-share="${escapeAttr(first.uuid)}">Share</button>
+          <button type="button" class="btn ghost sm doc-inline-share" data-share="${escapeAttr(first.uuid)}">${deviceCanShare() ? 'Share' : 'Download'}</button>
         </div>`;
     const mainBlock = desktop
       ? `${toolbar}<div class="doc-inline-main doc-inline-main-scroll">${mainInner}</div>`
@@ -8132,14 +8151,13 @@
           title: item.content.filename || 'Document',
           text: item.content.filename || 'Document',
         });
-        toast('This device cannot attach the file. Use Download, then add it in Mail.');
         return;
       } catch (err) {
         if (err && (err.name === 'AbortError' || /cancel/i.test(err.message || ''))) return;
       }
     }
     await downloadAttachment(id);
-    toast('Sharing is not available here. The file was downloaded instead.');
+    toast('Downloaded');
   }
 
   async function shareNote(noteId = currentId) {
@@ -8151,10 +8169,10 @@
       toast('Unlock this protected note first', true);
       return;
     }
-    const title = note.content.title || 'Untitled';
+    const title = NotesSearch.effectiveNoteTitle(note) || 'Note';
     const body = note.content.content || '';
     const text = `# ${title}\n\n${body}`.trim();
-    const filename = `${(title || 'note').replace(/[^\w-]+/g, '-')}.md`;
+    const filename = `${title.replace(/[^\w-]+/g, '-') || 'note'}.md`;
 
     // Try web share API first
     if (typeof navigator.share === 'function') {
@@ -8177,23 +8195,48 @@
       }
     }
 
-    // Fallback: copy to clipboard or download markdown file
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
-        toast('Note copied to clipboard');
+        toast('Note copied');
         return;
       }
-    } catch (_) {}
+    } catch (_) { /* clipboard blocked */ }
+    toast('Sharing unavailable', true);
+  }
 
-    const blob = new Blob([text], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast('Note exported');
+  function deviceCanShare() {
+    return typeof navigator.share === 'function';
+  }
+
+  function syncShareLabels() {
+    const noteShare = deviceCanShare();
+    const noteLabel = noteShare ? 'Share' : 'Copy';
+    ['btn-share', 'note-info-share', 'note-info-share-bottom'].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.title = noteShare ? 'Share note' : 'Copy note';
+      btn.setAttribute('aria-label', noteShare ? 'Share note' : 'Copy note');
+      if (id !== 'btn-share') btn.textContent = id === 'note-info-share-bottom' ? `${noteLabel} note` : noteLabel;
+    });
+    const shareBtn = document.getElementById('btn-share');
+    if (shareBtn) {
+      const label = shareBtn.querySelector('.share-label');
+      if (label) label.textContent = noteLabel;
+    }
+    const fileLabel = noteShare ? 'Share' : 'Download';
+    ['doc-share', 'doc-immersive-share'].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.title = fileLabel;
+      btn.setAttribute('aria-label', fileLabel);
+      if (id === 'doc-share') btn.textContent = fileLabel;
+    });
+    document.querySelectorAll('.doc-inline-share').forEach((btn) => {
+      btn.textContent = fileLabel;
+      btn.title = fileLabel;
+      btn.setAttribute('aria-label', fileLabel);
+    });
   }
 
   function renderHistory(note) {
@@ -8281,15 +8324,35 @@
     if (ocrBtn) ocrBtn.hidden = !hasDocs;
     if (!currentId) {
       if (previewBtn) previewBtn.hidden = true;
+      if (ui.checklist) {
+        ui.checklist.hidden = true;
+        ui.checklist.innerHTML = '';
+      }
       return;
     }
     const note = NotesStore.get(currentId);
     const gated = !!note?.content?.locked && !unlockedNotes.has(currentId);
-    if (gated) return;
+    if (gated) {
+      if (ui.checklist) {
+        ui.checklist.hidden = true;
+        ui.checklist.innerHTML = '';
+      }
+      if (ui.docInline) {
+        ui.docInline.hidden = true;
+        ui.docInline.innerHTML = '';
+      }
+      ui.preview.hidden = true;
+      syncEditorDocPreviewLayout();
+      return;
+    }
     if (hasDocs && editorMode === 'preview') {
       ui.body.hidden = true;
       ui.preview.hidden = true;
       if (toolbar) toolbar.hidden = true;
+      if (ui.checklist) {
+        ui.checklist.hidden = true;
+        ui.checklist.innerHTML = '';
+      }
       if (ui.docInline) ui.docInline.hidden = false;
       if (previewBtn) previewBtn.textContent = 'Edit';
       if (ocrBtn) ocrBtn.textContent = 'OCR text';
@@ -8304,7 +8367,14 @@
       ui.body.hidden = true;
       ui.preview.hidden = false;
       if (toolbar) toolbar.hidden = true;
-      if (ui.docInline) ui.docInline.hidden = true;
+      if (ui.checklist) {
+        ui.checklist.hidden = true;
+        ui.checklist.innerHTML = '';
+      }
+      if (ui.docInline) {
+        ui.docInline.hidden = true;
+        ui.docInline.innerHTML = '';
+      }
       const text = ocrMarkdown(currentId);
       ui.preview.innerHTML = text
         ? NotesMarkdown.render(text)
@@ -8330,14 +8400,20 @@
     if (previewOn && !checklistOn) refreshPreview();
     syncEditorBodyWrap();
     syncEditLinkOverlay();
-    if (ui.checklist) ui.checklist.hidden = !checklistOn;
+    if (ui.checklist) {
+      ui.checklist.hidden = !checklistOn;
+      if (!checklistOn) ui.checklist.innerHTML = '';
+    }
+    if (ui.docInline) {
+      ui.docInline.hidden = true;
+      if (!docSearchActive()) ui.docInline.innerHTML = '';
+    }
     if (toolbar) toolbar.hidden = previewOn || checklistOn || type === 'plain';
     if (toolbar) {
       toolbar.querySelectorAll('[data-md="sup"]').forEach((btn) => {
         btn.hidden = type !== 'superscript';
       });
     }
-    if (ui.docInline) ui.docInline.hidden = true;
     if (previewBtn) {
       previewBtn.hidden = checklistOn || !hasDocs;
       if (hasDocs && editorMode === 'edit') previewBtn.textContent = 'Document';
@@ -10404,7 +10480,7 @@
     }
     if (!note.content.prevent_edit) flushSave();
     note.content.prevent_edit = !note.content.prevent_edit;
-    NotesStore.upsert(currentId, { ...note.content });
+    NotesStore.upsert(currentId, { ...note.content }, { touchUpdatedAt: false });
     editorMode = note.content.prevent_edit ? 'preview' : 'edit';
     applyReadOnly(note.content.prevent_edit);
     applyEditorMode();
@@ -12982,6 +13058,7 @@
   document.getElementById('btn-share')?.addEventListener('click', () => {
     shareNote(currentId).catch((err) => toast(err.message || 'Share failed', true));
   });
+  syncShareLabels();
   document.getElementById('btn-archive').addEventListener('click', () => {
     if (!currentId) return;
     const note = NotesStore.get(currentId);

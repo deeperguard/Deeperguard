@@ -3949,7 +3949,13 @@ class NotesAppTests(unittest.TestCase):
 
         # Share button is present in the editor toolbar and note info sheet
         self.assertIn('id="btn-share"', html)
+        self.assertIn('aria-label="Copy note"', html)
         self.assertIn('id="note-info-share"', html)
+        self.assertIn(">Copy<", html)
+        self.assertIn(">Download<", html)
+        self.assertIn("Sharing unavailable", app_js)
+        self.assertNotIn("The file was downloaded instead", app_js)
+        self.assertIn("touchUpdatedAt: false", app_js[app_js.find("function togglePreventEdit"):app_js.find("function togglePreventEdit") + 900])
         self.assertIn('id="doc-immersive-share"', html)
         self.assertIn('function shareNote(', app_js)
         self.assertIn('document.getElementById(\'btn-share\')', app_js)
