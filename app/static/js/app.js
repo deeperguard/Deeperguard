@@ -5434,9 +5434,18 @@
   }
 
   function noteRowSwipeDeleteHtml(note) {
-    const label = noteRowDeleteLabel(note);
+    const trashed = !!note?.content?.trashed;
+    const label = trashed ? 'Restore' : noteRowDeleteLabel(note);
     const id = escapeAttr(note.uuid);
-    return `<button type="button" class="note-swipe-delete" data-id="${id}" aria-label="${label} note">${label}</button>`;
+    const action = trashed ? 'restore' : 'trash';
+    const tone = trashed ? ' is-restore' : '';
+    return `<button type="button" class="note-swipe-delete${tone}" data-id="${id}" data-action="${action}" aria-label="${label} note">${label}</button>`;
+  }
+
+  function noteRowRestoreBtnHtml(note) {
+    if (!note?.content?.trashed) return '';
+    const id = escapeAttr(note.uuid);
+    return `<button type="button" class="note-row-restore" data-id="${id}" data-action="restore" aria-label="Restore note" title="Restore">Restore</button>`;
   }
 
   function noteRowDeleteBtnHtml(note) {
@@ -5492,6 +5501,7 @@
       : { icon: '📄', tone: 'note', svg: kindIconSvg('note') };
     return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(note.uuid)}">
       ${noteRowSwipeDeleteHtml(note)}
+      ${noteRowRestoreBtnHtml(note)}
       ${noteRowDeleteBtnHtml(note)}
       <button type="button" class="note-item ${active}" data-id="${escapeAttr(note.uuid)}">
         ${showThumb
@@ -5559,6 +5569,7 @@
       : `<span class="note-modified">${escapeHtml(modified || relativeTime(editedMs))}</span>`;
     return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(n.uuid)}">
       ${noteRowSwipeDeleteHtml(n)}
+      ${noteRowRestoreBtnHtml(n)}
       ${noteRowDeleteBtnHtml(n)}
       <button type="button" class="note-item ${active}" data-id="${escapeAttr(n.uuid)}">
         ${showListThumb
@@ -6841,8 +6852,9 @@
   }
 
   function ensureAttachmentOcr(attId, file, onProgress, { force = false } = {}) {
+    if (!force) NotesStore.applySearchIndexEntry?.(attId);
     const item = NotesStore.get(attId);
-    if (!force && attachmentOcrSettled(item)) {
+    if (!force && item && (attachmentOcrSettled(item) || NotesStore.searchIndexCovers?.(attId))) {
       return Promise.resolve({
         text: String(item.content.ocr_text || ''),
         method: item.content.ocr_method,
@@ -6852,8 +6864,9 @@
     const pending = ocrInFlight.get(attId);
     if (pending) return pending;
     const work = (async () => {
+      if (!force) NotesStore.applySearchIndexEntry?.(attId);
       const already = NotesStore.get(attId);
-      if (!force && attachmentOcrSettled(already)) {
+      if (!force && already && (attachmentOcrSettled(already) || NotesStore.searchIndexCovers?.(attId))) {
         return {
           text: String(already.content.ocr_text || ''),
           method: already.content.ocr_method,
@@ -6906,7 +6919,7 @@
   async function fetchSearchBoxes(attId, entry) {
     const item = NotesStore.get(attId);
     if (!item || !canOcrAttachment(item)) return [];
-    if (attachmentOcrSettled(item)) return attachmentSearchBoxes(attId);
+    if (NotesStore.searchIndexCovers?.(attId) || attachmentOcrSettled(item)) return attachmentSearchBoxes(attId);
     let cached = attachmentSearchBoxes(attId);
     if (cached.length) return cached;
     if (boxFetch.has(attId) || ocrInFlight.has(attId) || ocrQueued.has(attId)) {
@@ -10828,22 +10841,15 @@
     runOcrQueue();
   }
 
-  function attachmentNeedsBoxes(att) {
-    return !attachmentOcrSettled(att);
-  }
-
   function attachmentNeedsOcrRetry(att) {
     if (!att || !canOcrAttachment(att)) return false;
-    const method = att.content?.ocr_method || '';
-    if (method === 'pending') return ocrPendingStale(att);
-    if (method === 'none' || method === 'failed') return false;
+    if (NotesStore.searchIndexCovers?.(att.uuid)) return false;
+    if (NotesStore.applySearchIndexEntry?.(att.uuid) && attachmentOcrSettled(NotesStore.get(att.uuid))) return false;
     if (attachmentOcrSettled(att)) return false;
-    if (!method) return true;
-    const current = Number(NotesStore.OCR_INDEX || 0);
-    if (current && Number(att.content.ocr_index) !== current) return true;
-    const mime = att.content.mime || '';
-    if (!String(att.content.ocr_text || '').trim() && !mime.startsWith('text/')) return true;
-    return attachmentNeedsBoxes(att);
+    const method = att.content?.ocr_method || '';
+    if (method !== 'pending') return false;
+    const owner = att.content.ocr_owner || '';
+    return !!owner && owner === NotesStore.deviceId();
   }
 
   async function enqueueRetryOcrJobs({ quiet = false } = {}) {
@@ -10952,11 +10958,7 @@
       if (NotesStore.refreshNoteSearchText(noteId)) updated += 1;
     }
     const atts = NotesStore.listAttachments(noteId).filter(canOcrAttachment);
-    const needsServer = atts.filter((att) => {
-      if (attachmentNeedsOcrRetry(att)) return true;
-      const method = att.content?.ocr_method || '';
-      return !method || method === 'failed';
-    });
+    const needsServer = atts.filter((att) => attachmentNeedsOcrRetry(att));
     if (!needsServer.length) {
       if (updated) scheduleOcrUiRefresh();
       return updated;
@@ -10980,8 +10982,15 @@
 
   async function ensureOpenedAttachmentIndexed(attId, entry) {
     if (!attId || !entry) return true;
+    if (NotesStore.applySearchIndexEntry?.(attId) || NotesStore.searchIndexCovers?.(attId)) {
+      serverOcrKnown.add(attId);
+      return true;
+    }
     const item = NotesStore.get(attId);
-    if (item && (attachmentOcrSettled(item) || (item.content?.ocr_method === 'pending' && !ocrPendingStale(item)))) {
+    const owner = item?.content?.ocr_owner || '';
+    const method = item?.content?.ocr_method || '';
+    const ownedPending = method === 'pending' && owner && owner === NotesStore.deviceId();
+    if (!ownedPending || attachmentOcrSettled(item)) {
       serverOcrKnown.add(attId);
       return true;
     }
@@ -11041,7 +11050,8 @@
       const job = ocrQueue.shift();
       const existing = NotesStore.get(job.attId);
       const refresh = !!existing?.content?.ocr_method && existing.content.ocr_method !== 'pending';
-      if (existing && attachmentOcrSettled(existing) && !job.reindex) {
+      if (existing && !job.reindex && (attachmentOcrSettled(existing) || NotesStore.searchIndexCovers?.(existing.uuid))) {
+        NotesStore.applySearchIndexEntry?.(existing.uuid);
         ocrQueued.delete(job.attId);
         continue;
       }
@@ -12565,10 +12575,17 @@
     const note = NotesStore.get(id);
     if (!note || !note.content.trashed) return;
     NotesStore.upsert(id, { ...note.content, trashed: false });
-    restoreNoteReminder(NotesStore.get(id));
+    const live = NotesStore.get(id);
+    restoreNoteReminder(live);
+    currentTag = null;
+    currentFolder = null;
+    setFilter(live.content.archived ? 'archived' : 'all');
+    listSelectionId = id;
     renderNotes();
-    if (id === currentId) updateActionButtons(NotesStore.get(id));
-    toast('Restored');
+    renderTags();
+    if (id === currentId) updateActionButtons(live);
+    else openNote(id);
+    toast('Restored to notes');
   }
 
   async function deleteNoteForever(id) {
@@ -12636,7 +12653,7 @@
 
     list.addEventListener('pointerdown', (event) => {
       if (event.button && event.button !== 0) return;
-      if (event.target.closest('.note-swipe-delete, .note-row-delete')) return;
+      if (event.target.closest('.note-swipe-delete, .note-row-delete, .note-row-restore')) return;
       if (opened && !opened.isConnected) opened = null;
       const next = event.target.closest('.note-row');
       if (!next) return;
@@ -12686,7 +12703,9 @@
         if (decision === 'commit') {
           current.classList.remove('open');
           opened = null;
-          deleteFromList(current.dataset.id);
+          const swipe = current.querySelector('.note-swipe-delete');
+          if (swipe?.dataset.action === 'restore') restoreNote(current.dataset.id);
+          else deleteFromList(current.dataset.id);
         } else if (decision === 'open') {
           current.classList.add('open');
           opened = current;
@@ -12702,10 +12721,11 @@
     list.addEventListener('pointerup', finish);
     list.addEventListener('pointercancel', finish);
     list.addEventListener('click', (event) => {
-      const del = event.target.closest('.note-swipe-delete, .note-row-delete');
+      const del = event.target.closest('.note-swipe-delete, .note-row-delete, .note-row-restore');
       if (del) {
         event.preventDefault();
-        deleteFromList(del.dataset.id);
+        if (del.dataset.action === 'restore') restoreNote(del.dataset.id);
+        else deleteFromList(del.dataset.id);
         return;
       }
       const next = event.target.closest('.note-row');

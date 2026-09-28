@@ -2052,6 +2052,21 @@ const NotesStore = (() => {
                 protectionMerged = true;
               }
             } else if (
+              local?.content?.type === 'search_index'
+              && remote.content?.type === 'search_index'
+            ) {
+              const merged = mergeSearchEntries(local.content.entries, remote.content.entries);
+              if (!searchEntriesEqual(local.content.entries, merged)) {
+                const content = { ...local.content, type: 'search_index', version: OCR_INDEX, entries: merged };
+                const next = { ...local, content };
+                state.items.set(row.item_uuid, next);
+                state.dirty.add(row.item_uuid);
+                await persistLocal(row.item_uuid, next);
+                schedulePush();
+                applySearchIndexEntries();
+                applied = true;
+              }
+            } else if (
               local?.content?.type === 'attachment'
               && remote.content?.type === 'attachment'
               && attachmentIndexReady(remote.content)
@@ -2072,6 +2087,14 @@ const NotesStore = (() => {
           } else {
             const prevLocked = !!local?.content?.locked;
             const prevPrevent = !!local?.content?.prevent_edit;
+            if (remote.content?.type === 'search_index') {
+              const merged = mergeSearchEntries(local?.content?.entries, remote.content.entries);
+              if (!searchEntriesEqual(remote.content.entries, merged)) {
+                remote.content = { ...remote.content, type: 'search_index', entries: merged };
+                state.dirty.add(row.item_uuid);
+                schedulePush();
+              }
+            }
             if (remote.content?.type === 'note') attachLiveIds(remote.content, row.item_uuid);
             state.items.set(row.item_uuid, remote);
             if (row.content_hash) remote.content_hash = row.content_hash;
@@ -2086,7 +2109,9 @@ const NotesStore = (() => {
             if (light) remote.content = light;
             if (remote.content?.type === 'attachment' && remote.content.note_id) {
               refreshNoteSearchText(remote.content.note_id);
+              applySearchIndexEntry(row.item_uuid);
             }
+            if (remote.content?.type === 'search_index') applySearchIndexEntries();
             applied = true;
           }
           if (applied && !row.deleted && remote.content?.type === 'note' && onNoteIngested) {
@@ -2632,6 +2657,7 @@ const NotesStore = (() => {
       } else if (!quiet || hasChanges) {
         emitSync('ok', notes ? `Synced · ${notes} notes` : 'Synced');
       }
+      if (seedSearchIndexFromAttachments()) await pushDirty({ quiet: true });
       pull.liveCount = [...state.items.values()].filter((item) => !item.deleted).length;
       pull.noteCount = listNotes().filter((n) => !n.content?.trashed).length;
       state.lastSyncAt = Date.now();
@@ -3092,7 +3118,10 @@ const NotesStore = (() => {
     const fileEnc = await NotesCrypto.encryptBytes(state.cryptoKey, raw);
     const id = newUuid();
     const content = defaultAttachment(noteId, file, fileEnc, displayName, contentSha256, sourceHash);
-    if (ocrPending) content.ocr_method = 'pending';
+    if (ocrPending) {
+      content.ocr_method = 'pending';
+      content.ocr_owner = deviceId();
+    }
     upsert(id, content);
     const stored = get(id);
     if (!stored || !(await persistLocal(id, stored))) {
@@ -3399,6 +3428,7 @@ const NotesStore = (() => {
     }
     if (content.file_enc) delete content.data_b64;
     upsert(uuid, content);
+    rememberSearchIndexEntry(get(uuid));
     const noteId = item.content.note_id;
     if (noteId) refreshNoteSearchText(noteId);
     return true;
@@ -3432,6 +3462,136 @@ const NotesStore = (() => {
     return true;
   }
 
+  const SEARCH_INDEX_UUID = '6f637269-6e64-4780-8000-000000000001';
+
+  function searchIndexRecord() {
+    const item = state.items.get(SEARCH_INDEX_UUID);
+    if (!item || item.deleted || item.content?.type !== 'search_index') return null;
+    return item;
+  }
+
+  function searchIndexEntries() {
+    return searchIndexRecord()?.content?.entries || {};
+  }
+
+  function searchIndexCovers(attId) {
+    const entry = searchIndexEntries()[attId];
+    if (!entry) return false;
+    const method = entry.method || '';
+    if (!method || method === 'pending' || method === 'failed') return false;
+    if (method === 'none' || method === 'text') return true;
+    return !!String(entry.text || '').trim();
+  }
+
+  function mergeSearchEntries(localEntries, remoteEntries) {
+    const out = { ...(remoteEntries || {}) };
+    for (const [id, local] of Object.entries(localEntries || {})) {
+      const remote = out[id];
+      if (!remote) {
+        out[id] = local;
+        continue;
+      }
+      if (String(local.text || '').length > String(remote.text || '').length) out[id] = local;
+    }
+    return out;
+  }
+
+  function searchEntriesEqual(left, right) {
+    const a = left || {};
+    const b = right || {};
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const id of keys) {
+      if (String(a[id]?.text || '') !== String(b[id]?.text || '')) return false;
+      if (String(a[id]?.method || '') !== String(b[id]?.method || '')) return false;
+    }
+    return true;
+  }
+
+  function writeSearchIndex(entries) {
+    const existing = searchIndexRecord();
+    upsert(SEARCH_INDEX_UUID, {
+      type: 'search_index',
+      version: OCR_INDEX,
+      entries,
+      created_at: existing?.content?.created_at || new Date().toISOString(),
+    });
+  }
+
+  function rememberSearchIndexEntry(att) {
+    if (!att || att.deleted || att.content?.type !== 'attachment') return;
+    const method = att.content.ocr_method || '';
+    if (!method || method === 'pending' || method === 'failed') return;
+    const entry = {
+      note_id: att.content.note_id || '',
+      filename: att.content.filename || '',
+      text: String(att.content.ocr_text || ''),
+      method,
+    };
+    const entries = { ...searchIndexEntries() };
+    const prev = entries[att.uuid];
+    if (prev
+      && prev.text === entry.text
+      && prev.method === entry.method
+      && prev.note_id === entry.note_id
+      && prev.filename === entry.filename) return;
+    entries[att.uuid] = entry;
+    writeSearchIndex(entries);
+  }
+
+  function dropSearchIndexEntry(attId) {
+    const entries = { ...searchIndexEntries() };
+    if (!entries[attId]) return;
+    delete entries[attId];
+    writeSearchIndex(entries);
+  }
+
+  function applySearchIndexEntry(attId) {
+    if (!searchIndexCovers(attId)) return false;
+    const entry = searchIndexEntries()[attId];
+    const att = get(attId);
+    if (!att || att.deleted || att.content?.type !== 'attachment') return true;
+    if (String(att.content.ocr_text || '') === String(entry.text || '')
+      && String(att.content.ocr_method || '') === String(entry.method || '')
+      && Number(att.content.ocr_index || 0) === OCR_INDEX) return true;
+    upsert(attId, {
+      ...att.content,
+      ocr_text: entry.text || '',
+      ocr_method: entry.method || 'index',
+      ocr_index: OCR_INDEX,
+    }, { touchUpdatedAt: false, skipDirty: true });
+    if (att.content.note_id) refreshNoteSearchText(att.content.note_id);
+    return true;
+  }
+
+  function applySearchIndexEntries() {
+    let applied = 0;
+    for (const id of Object.keys(searchIndexEntries())) {
+      if (applySearchIndexEntry(id)) applied += 1;
+    }
+    return applied;
+  }
+
+  function seedSearchIndexFromAttachments() {
+    const entries = { ...searchIndexEntries() };
+    let changed = false;
+    for (const att of listAttachments()) {
+      if (entries[att.uuid]) continue;
+      const method = att.content?.ocr_method || '';
+      if (!method || method === 'pending' || method === 'failed') continue;
+      if (method !== 'none' && method !== 'text' && !String(att.content.ocr_text || '').trim()) continue;
+      entries[att.uuid] = {
+        note_id: att.content.note_id || '',
+        filename: att.content.filename || '',
+        text: String(att.content.ocr_text || ''),
+        method,
+      };
+      changed = true;
+    }
+    if (!changed) return false;
+    writeSearchIndex(entries);
+    return true;
+  }
+
   function restoreRevision(noteId, revision) {
     const note = get(noteId);
     if (!note) return;
@@ -3458,6 +3618,7 @@ const NotesStore = (() => {
     if (!force && item.content?.type === 'note' && (item.content.locked || item.content.prevent_edit)) {
       return false;
     }
+    if (item.content?.type === 'attachment') dropSearchIndexEntry(uuid);
     item.deleted = true;
     item.content = item.content || {};
     item.content.deleted = true;
@@ -4017,6 +4178,9 @@ const NotesStore = (() => {
     setAttachmentOcr,
     staleAttachmentOcr,
     OCR_INDEX,
+    SEARCH_INDEX_UUID,
+    searchIndexCovers,
+    applySearchIndexEntry,
     refreshNoteSearchText,
     restoreRevision,
     remove,

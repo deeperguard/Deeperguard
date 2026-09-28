@@ -291,6 +291,7 @@ async function waitPersist(uuid, tries = 40) {
       || beforeIds.includes(uuid)
       || uuid === legacyId
       || uuid === orphanId
+      || uuid === NotesStore.SEARCH_INDEX_UUID
       || extraIds.includes(uuid),
       uuid,
     );
@@ -329,9 +330,20 @@ async function waitPersist(uuid, tries = 40) {
   NotesStore.upsert(pendingNoteId, NotesStore.defaultNote());
   const pendingId = await NotesStore.addAttachment(pendingNoteId, fakeFile('pending-body', 'pending.pdf', 'application/pdf'), { ocrPending: true });
   assert.strictEqual(NotesStore.get(pendingId).content.ocr_method, 'pending');
+  assert.ok(NotesStore.get(pendingId).content.ocr_owner);
   NotesStore.setAttachmentOcr(pendingId, 'page one', 'pdftext', []);
   assert.strictEqual(NotesStore.get(pendingId).content.ocr_method, 'pdftext');
   assert.strictEqual(NotesStore.get(pendingId).content.ocr_index, NotesStore.OCR_INDEX);
+  const sharedIndex = NotesStore.get(NotesStore.SEARCH_INDEX_UUID);
+  assert.strictEqual(sharedIndex.content.type, 'search_index');
+  assert.strictEqual(sharedIndex.content.entries[pendingId].text, 'page one');
+  assert.strictEqual(NotesStore.searchIndexCovers(pendingId), true);
+  const cleared = { ...NotesStore.get(pendingId).content, ocr_text: '', ocr_method: 'pending', ocr_owner: 'other-device' };
+  delete cleared.ocr_index;
+  NotesStore.upsert(pendingId, cleared, { skipDirty: true, touchUpdatedAt: false });
+  assert.strictEqual(NotesStore.applySearchIndexEntry(pendingId), true);
+  assert.strictEqual(NotesStore.get(pendingId).content.ocr_text, 'page one');
+  assert.strictEqual(NotesStore.get(pendingId).content.ocr_method, 'pdftext');
 
   const folderId = NotesStore.createFolder('Receipts');
   const filedId = NotesStore.newUuid();

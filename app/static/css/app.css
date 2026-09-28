@@ -2074,6 +2074,9 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   visibility: visible;
   pointer-events: auto;
 }
+.note-swipe-delete.is-restore {
+  background: var(--accent);
+}
 .note-item {
   position: relative;
   z-index: 1;
@@ -2155,6 +2158,35 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   opacity: 1;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.note-row-restore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  top: 12px;
+  right: 10px;
+  z-index: 2;
+  height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+}
+.note-row-restore:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-elevated));
+}
+.note-row:has(.note-row-restore) .note-item-body {
+  padding-right: 78px;
+}
+.note-row:has(.note-row-restore) .note-row-delete {
+  right: 86px;
 }
 .note-pin {
   width: 16px;
@@ -5195,6 +5227,12 @@ body.doc-preview-open .fab-stack,
   .note-row:has(.note-row-delete) .note-item-body {
     padding-right: 30px;
   }
+  .note-row:has(.note-row-restore) .note-item-body {
+    padding-right: 78px;
+  }
+  .note-row:has(.note-row-restore) .note-row-delete {
+    right: 86px;
+  }
   .sn-add {
     width: 36px;
     height: 36px;
@@ -5288,6 +5326,15 @@ body.doc-preview-open .fab-stack,
     overflow: visible;
   }
   .tag-section:not([open]) { max-height: none; }
+  /* Closed Tags and Folders stay stacked. An open section can still grow. */
+  .sidebar-nav .tag-section:not([open]) {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding-bottom: 0;
+  }
+  .sidebar-nav .tag-section:not([open]) > summary.section-label {
+    margin-bottom: 2px;
+  }
 
   /* Sidebar — aligned, compact list */
   .list-pane .search-wrap,
