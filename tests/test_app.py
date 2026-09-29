@@ -1187,6 +1187,11 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('id="note-body-links"', editor_html)
         self.assertIn(".editor-scroll {", css)
         self.assertIn(".editor-scroll > .note-body-wrap:not([hidden])", css)
+        self.assertIn(
+            ".editor-pane .editor:not(.doc-preview-active) .editor-scroll > .note-body-wrap:not([hidden])",
+            css,
+        )
+        self.assertIn("min-height: 100%;", css)
         self.assertIn(".attachment-list:empty", css)
         self.assertIn("renderInlinePlainSegment", (APP_DIR / "static" / "js" / "superscript.js").read_text(encoding="utf-8"))
         self.assertIn("previewBtn.hidden = checklistOn || !hasDocs", app_js)
