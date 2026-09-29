@@ -8500,9 +8500,7 @@
     document.getElementById('btn-delete-forever')?.toggleAttribute('hidden', true);
     document.getElementById('btn-clear-checked')?.toggleAttribute('hidden', true);
     document.body.classList.remove('editor-tools-open');
-    const editorActionsBackdrop = document.getElementById('editor-actions-backdrop');
-    if (editorActionsBackdrop) editorActionsBackdrop.hidden = true;
-    document.getElementById('btn-editor-overflow')?.setAttribute('aria-expanded', 'false');
+    setNoteTypeMenuOpen(false);
     if (!clearSurfaces) return;
     if (ui.checklist) {
       ui.checklist.hidden = true;
@@ -8820,6 +8818,7 @@
     if (actions) actions.hidden = !!gated;
     if (tagShell) tagShell.hidden = !!gated;
     if (ui.editorType) ui.editorType.hidden = !!gated;
+    document.getElementById('btn-note-type-menu')?.toggleAttribute('hidden', !!gated);
     ['btn-share', 'btn-note-info', 'btn-trash', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.hidden = !!gated;
@@ -8916,6 +8915,7 @@
     ui.body.value = gated ? '' : body;
     resetNoteUndoStack(id);
     ui.editorType.value = note.content.editor || 'plain';
+    syncNoteTypeMenuSelection();
     editorMode = initialEditorMode(id);
     previewOn = editorMode !== 'edit';
     setEditorChrome(gated);
@@ -8997,6 +8997,39 @@
         closed.hidden = !starred;
       }
     });
+    const pinBtn = document.getElementById('btn-pin');
+    document.querySelectorAll('.editor-mobile-proxy[data-editor-proxy="btn-pin"]').forEach((proxy) => {
+      const pinned = !!pinBtn?.classList.contains('active');
+      proxy.classList.toggle('active', pinned);
+      proxy.title = pinBtn?.title || 'Pin';
+      proxy.setAttribute('aria-label', proxy.title);
+      const open = proxy.querySelector('.icon-pin-outline');
+      const closed = proxy.querySelector('.icon-pin-filled');
+      if (open && closed) {
+        open.hidden = pinned;
+        closed.hidden = !pinned;
+      }
+    });
+  }
+
+  function syncNoteTypeMenuSelection() {
+    const select = ui.editorType;
+    const menu = document.getElementById('note-type-menu');
+    if (!select || !menu) return;
+    const value = select.value || 'plain';
+    menu.querySelectorAll('.note-type-menu-item').forEach((item) => {
+      const match = item.getAttribute('data-note-type') === value;
+      item.setAttribute('aria-checked', match ? 'true' : 'false');
+    });
+  }
+
+  function setNoteTypeMenuOpen(open) {
+    const menu = document.getElementById('note-type-menu');
+    const trigger = document.getElementById('btn-note-type-menu');
+    if (!menu || !trigger) return;
+    const on = !!open;
+    menu.hidden = !on;
+    trigger.setAttribute('aria-expanded', on ? 'true' : 'false');
   }
 
   function syncEditorMobileDocActions() {
@@ -9014,7 +9047,12 @@
     fsBtn.hidden = !show;
     shareBtn.hidden = !show;
     if (show && inlineShare) {
-      shareBtn.textContent = inlineShare.textContent?.trim() || 'Share';
+      const label = inlineShare.textContent?.trim() || 'Share attachment';
+      shareBtn.title = label;
+      shareBtn.setAttribute('aria-label', label);
+    } else {
+      shareBtn.title = 'Share attachment';
+      shareBtn.setAttribute('aria-label', 'Share attachment');
     }
   }
 
@@ -9083,7 +9121,7 @@
     syncEditorMobileProxies();
     syncEditorMobileDocActions();
     if (note && note.content?.locked && !unlockedNotes.has(note.uuid)) {
-      ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
+      ['btn-share', 'btn-note-info', 'btn-note-type-menu', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.hidden = true;
       });
@@ -13388,6 +13426,7 @@
     note.content.editor = nextEditor;
     NotesStore.upsert(currentId, { ...note.content });
     ui.editorType.value = nextEditor;
+    syncNoteTypeMenuSelection();
     ui.body.classList.toggle('mono', note.content.editor === 'code' || prefs.monospace);
     document.getElementById('note-body-wrap')?.classList.toggle('mono', note.content.editor === 'code' || prefs.monospace);
     applyEditorMode();
@@ -13849,17 +13888,6 @@
     const tip = document.getElementById('writing-tip');
     if (tip) tip.hidden = true;
   });
-  function setEditorToolsOpen(open) {
-    const on = !!open;
-    document.body.classList.toggle('editor-tools-open', on);
-    const overflowBtn = document.getElementById('btn-editor-overflow');
-    overflowBtn?.setAttribute('aria-expanded', on ? 'true' : 'false');
-    const backdrop = document.getElementById('editor-actions-backdrop');
-    if (backdrop) {
-      backdrop.hidden = !on;
-      backdrop.setAttribute('aria-hidden', on ? 'false' : 'true');
-    }
-  }
   document.querySelectorAll('.editor-mobile-proxy').forEach((proxy) => {
     proxy.addEventListener('click', (event) => {
       event.preventDefault();
@@ -13868,22 +13896,29 @@
       document.getElementById(id)?.click();
     });
   });
-  document.getElementById('btn-editor-overflow')?.addEventListener('click', () => {
-    setEditorToolsOpen(!document.body.classList.contains('editor-tools-open'));
+  document.getElementById('btn-note-type-menu')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const menu = document.getElementById('note-type-menu');
+    if (!menu) return;
+    setNoteTypeMenuOpen(menu.hidden);
+    if (!menu.hidden) syncNoteTypeMenuSelection();
   });
-  document.getElementById('editor-actions-backdrop')?.addEventListener('click', () => {
-    setEditorToolsOpen(false);
+  document.getElementById('note-type-menu')?.addEventListener('click', (event) => {
+    const item = event.target.closest('.note-type-menu-item');
+    if (!item) return;
+    const nextType = item.getAttribute('data-note-type');
+    if (!nextType || !ui.editorType) return;
+    ui.editorType.value = nextType;
+    ui.editorType.dispatchEvent(new Event('change', { bubbles: true }));
+    setNoteTypeMenuOpen(false);
   });
-  document.getElementById('editor-actions-overflow-panel')?.addEventListener('click', (event) => {
-    if (!isPhoneShell() || !document.body.classList.contains('editor-tools-open')) return;
-    const control = event.target.closest('button');
-    if (!control || !control.closest('#editor-actions-overflow-panel')) return;
-    setEditorToolsOpen(false);
-  });
-  document.getElementById('note-editor-type')?.addEventListener('change', () => {
-    if (isPhoneShell() && document.body.classList.contains('editor-tools-open')) {
-      setEditorToolsOpen(false);
-    }
+  document.addEventListener('click', (event) => {
+    const menu = document.getElementById('note-type-menu');
+    const trigger = document.getElementById('btn-note-type-menu');
+    if (!menu || menu.hidden) return;
+    if (event.target === trigger || trigger?.contains(event.target) || menu.contains(event.target)) return;
+    setNoteTypeMenuOpen(false);
   });
   document.getElementById('btn-mobile-doc-fullscreen')?.addEventListener('click', (event) => {
     event.preventDefault();
@@ -13895,18 +13930,10 @@
   });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    if (!isPhoneShell() || !document.body.classList.contains('editor-tools-open')) return;
+    const menu = document.getElementById('note-type-menu');
+    if (!menu || menu.hidden) return;
     event.preventDefault();
-    setEditorToolsOpen(false);
-  });
-  document.addEventListener('selectionchange', () => {
-    if (isPhoneShell()) return;
-    const sel = document.getSelection();
-    const node = sel?.anchorNode;
-    const inEditor = node && (ui.body?.contains(node) || ui.title?.contains(node));
-    const open = !!(inEditor && sel && !sel.isCollapsed);
-    document.body.classList.toggle('editor-tools-open', open);
-    document.getElementById('btn-editor-overflow')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+    setNoteTypeMenuOpen(false);
   });
   document.getElementById('btn-account-info-head')?.addEventListener('click', () => {
     showAccountInfo().catch(() => {});

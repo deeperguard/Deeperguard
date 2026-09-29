@@ -759,8 +759,12 @@
                 <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M16.2 16.2 21 21"/>
               </svg>
             </button>
-            <button type="button" class="btn ghost sm toolbar-secondary editor-mobile-proxy" data-editor-proxy="btn-share" title="Copy note" aria-label="Copy note">
-              <span class="share-label">Copy</span>
+            <button type="button" class="btn icon toolbar-secondary editor-mobile-proxy" data-editor-proxy="btn-share" title="Share note" aria-label="Share note">
+              <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="16 6 12 2 8 6"/>
+                <line x1="12" y1="2" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
             </button>
             <button type="button" class="btn icon toolbar-secondary editor-mobile-proxy" data-editor-proxy="btn-star" title="Star" aria-label="Star">
               <svg class="ui-icon icon-star-outline" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -770,12 +774,32 @@
                 <polygon fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
             </button>
+            <button type="button" class="btn icon toolbar-secondary editor-mobile-proxy" data-editor-proxy="btn-pin" title="Pin" aria-label="Pin">
+              <svg class="ui-icon icon-pin-outline" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
+              </svg>
+              <svg class="ui-icon icon-pin-filled" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
+                <path fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
+              </svg>
+            </button>
             </div>
-            <div id="editor-actions-overflow-panel" class="editor-actions-overflow-panel editor-overflow-sheet">
+            <div id="editor-actions-overflow-panel" class="editor-actions-overflow-panel editor-phone-toolbar">
             <div class="editor-actions-group editor-actions-primary">
-            <button type="button" id="btn-preview" class="btn ghost sm mode-toggle toolbar-primary" title="Switch edit mode">Edit</button>
-            <button type="button" id="btn-undo" class="btn ghost sm toolbar-primary" title="Undo (⌘Z)" disabled>Undo</button>
-            <button type="button" id="btn-redo" class="btn ghost sm toolbar-primary" title="Redo (⇧⌘Z)" disabled>Redo</button>
+            <button type="button" id="btn-preview" class="btn ghost sm mode-toggle toolbar-primary editor-phone-toolbar-hide" title="Switch edit mode">Edit</button>
+            <button type="button" id="btn-undo" class="btn ghost sm toolbar-primary editor-phone-strip-btn" title="Undo (⌘Z)" aria-label="Undo" disabled>
+              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5"/>
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+              </svg>
+              <span class="editor-phone-strip-label desktop-only">Undo</span>
+            </button>
+            <button type="button" id="btn-redo" class="btn ghost sm toolbar-primary editor-phone-strip-btn" title="Redo (⇧⌘Z)" aria-label="Redo" disabled>
+              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 14l5-5-5-5"/>
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20v-7a4 4 0 0 1 4-4h12"/>
+              </svg>
+              <span class="editor-phone-strip-label desktop-only">Redo</span>
+            </button>
             <button type="button" id="btn-prevent-edit" class="btn icon edit-lock-btn is-unlocked toolbar-primary editor-toolbar-panel-lock" title="Lock editing" aria-label="Lock editing" aria-pressed="false">
               <svg class="edit-lock-icon edit-lock-open" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -786,39 +810,67 @@
                 <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
             </button>
-            <div class="editor-overflow-type-wrap toolbar-primary" title="Note type">
-              <span class="editor-overflow-row-icon" aria-hidden="true">
-                <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" focusable="false">
-                  <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M4 12h10M4 18h14"/>
-                </svg>
-              </span>
-              <label class="editor-overflow-type-label" for="note-editor-type">Note type</label>
-              <select id="note-editor-type" class="editor-select toolbar-primary editor-overflow-type-select" title="Note type" aria-label="Note type">
-                <option value="plain">Plain text</option>
-                <option value="checklist">Checklist</option>
-                <option value="super">Super checklist</option>
-                <option value="markdown">Markdown</option>
-                <option value="superscript">Superscript</option>
-                <option value="code">Code</option>
-              </select>
+            <div class="editor-note-type-control toolbar-primary" title="Note type">
+              <div class="editor-overflow-type-wrap editor-desktop-type" title="Note type">
+                <select id="note-editor-type" class="editor-select toolbar-primary editor-overflow-type-select" title="Note type" aria-label="Note type">
+                  <option value="plain">Plain text</option>
+                  <option value="checklist">Checklist</option>
+                  <option value="super">Super checklist</option>
+                  <option value="markdown">Markdown</option>
+                  <option value="superscript">Superscript</option>
+                  <option value="code">Code</option>
+                </select>
+              </div>
+              <div class="editor-note-type-mobile mobile-only">
+                <button type="button" id="btn-note-type-menu" class="btn icon editor-note-type-trigger editor-phone-strip-btn" title="Note type" aria-label="Note type" aria-haspopup="menu" aria-expanded="false" aria-controls="note-type-menu">
+                  <svg class="editor-phone-strip-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M4 12h10M4 18h14"/>
+                  </svg>
+                </button>
+                <div id="note-type-menu" class="note-type-menu" role="menu" hidden>
+                  <button type="button" class="note-type-menu-item" role="menuitemradio" data-note-type="plain" aria-checked="false">Plain text</button>
+                  <button type="button" class="note-type-menu-item" role="menuitemradio" data-note-type="checklist" aria-checked="false">Checklist</button>
+                  <button type="button" class="note-type-menu-item" role="menuitemradio" data-note-type="super" aria-checked="false">Super checklist</button>
+                  <button type="button" class="note-type-menu-item" role="menuitemradio" data-note-type="markdown" aria-checked="false">Markdown</button>
+                  <button type="button" class="note-type-menu-item" role="menuitemradio" data-note-type="superscript" aria-checked="false">Superscript</button>
+                  <button type="button" class="note-type-menu-item" role="menuitemradio" data-note-type="code" aria-checked="false">Code</button>
+                </div>
+              </div>
             </div>
-            <button type="button" id="btn-note-info" class="btn ghost sm toolbar-primary note-more-btn" title="Note actions and info" aria-label="Note actions and info">
-              <span class="note-more-label mobile-only" hidden aria-hidden="true">Note info</span>
-              <span class="note-more-icon desktop-only" aria-hidden="true">
+            <button type="button" id="btn-note-info" class="btn ghost sm toolbar-primary note-more-btn editor-phone-strip-btn" title="Note actions and info" aria-label="Note actions and info">
+              <span class="note-more-icon" aria-hidden="true">
                 <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                   <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
                   <line x1="12" y1="8" x2="12.01" y2="8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
                   <path d="M11 12h1v4h1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </span>
+              <span class="editor-phone-strip-label desktop-only">Note info</span>
             </button>
-            <button type="button" id="btn-ai-chat" class="btn ghost sm toolbar-primary" title="Ask AI about this note (sends this note's text to Ollama)">Ask AI</button>
+            <button type="button" id="btn-ai-chat" class="btn ghost sm toolbar-primary editor-phone-strip-btn" title="Ask AI about this note (sends this note's text to Ollama)" aria-label="Ask AI">
+              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>
+              </svg>
+              <span class="editor-phone-strip-label desktop-only">Ask AI</span>
+            </button>
             </div>
             <span class="editor-tools-divider toolbar-secondary" aria-hidden="true"></span>
             <div class="editor-actions-group editor-actions-secondary">
-            <button type="button" id="btn-mobile-doc-fullscreen" class="btn ghost sm mobile-only toolbar-secondary editor-mobile-doc-action" hidden>Fullscreen</button>
-            <button type="button" id="btn-mobile-doc-attachment-share" class="btn ghost sm mobile-only toolbar-secondary editor-mobile-doc-action" hidden>Share</button>
-            <button type="button" id="btn-star" class="btn icon toolbar-secondary editor-toolbar-panel-star" title="Star" aria-label="Star">
+            <button type="button" id="btn-mobile-doc-fullscreen" class="btn ghost sm mobile-only toolbar-secondary editor-mobile-doc-action editor-phone-strip-btn" hidden title="Fullscreen" aria-label="Fullscreen">
+              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>
+              </svg>
+              <span class="editor-phone-strip-label desktop-only">Fullscreen</span>
+            </button>
+            <button type="button" id="btn-mobile-doc-attachment-share" class="btn ghost sm mobile-only toolbar-secondary editor-mobile-doc-action editor-phone-strip-btn" hidden title="Share attachment" aria-label="Share attachment">
+              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="16 6 12 2 8 6"/>
+                <line x1="12" y1="2" x2="12" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <span class="editor-phone-strip-label desktop-only">Share</span>
+            </button>
+            <button type="button" id="btn-star" class="btn icon toolbar-secondary editor-toolbar-panel-star editor-phone-toolbar-hide" title="Star" aria-label="Star">
               <svg class="ui-icon icon-star-outline" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
@@ -826,7 +878,7 @@
                 <polygon fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
             </button>
-            <button type="button" id="btn-pin" class="btn icon toolbar-secondary" title="Pin" aria-label="Pin">
+            <button type="button" id="btn-pin" class="btn icon toolbar-secondary editor-phone-toolbar-hide" title="Pin" aria-label="Pin">
               <svg class="ui-icon icon-pin-outline" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
               </svg>
@@ -834,10 +886,10 @@
                 <path fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
               </svg>
             </button>
-            <button type="button" id="btn-find-desktop" class="btn ghost sm toolbar-secondary find-btn editor-overflow-sheet-exclude" title="Find in note (⌘F)" aria-label="Find in note">
+            <button type="button" id="btn-find-desktop" class="btn ghost sm toolbar-secondary find-btn editor-phone-toolbar-hide" title="Find in note (⌘F)" aria-label="Find in note">
               Find
             </button>
-            <button type="button" id="btn-share" class="btn ghost sm toolbar-secondary editor-toolbar-panel-share editor-overflow-sheet-note-share" title="Copy note" aria-label="Copy note">
+            <button type="button" id="btn-share" class="btn ghost sm toolbar-secondary editor-toolbar-panel-share editor-phone-toolbar-hide" title="Copy note" aria-label="Copy note">
               <span class="share-label">Copy</span>
             </button>
             <button type="button" id="btn-archive" class="btn icon toolbar-secondary" title="Archive" aria-label="Archive">
@@ -871,9 +923,7 @@
             <button type="button" id="btn-ocr-text" class="btn ghost sm doc-only-control toolbar-desktop" hidden>OCR text</button>
             </div>
             </div>
-            <button type="button" id="btn-editor-overflow" class="btn icon editor-overflow mobile-only" title="More note actions" aria-label="More note actions" aria-expanded="false" aria-controls="editor-actions-overflow-panel">…</button>
           </div>
-          <div id="editor-actions-backdrop" class="editor-actions-backdrop mobile-only" hidden aria-hidden="true"></div>
         </header>
         <div id="editor-scroll" class="editor-scroll">
         <div id="writing-tip" class="writing-tip" hidden>
