@@ -3045,7 +3045,44 @@ body.scan-dialog-open {
   font-size: 16px;
   line-height: 1;
 }
-.editor { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.editor { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow-x: hidden; overflow-y: hidden; }
+.editor-scroll {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.editor-scroll > .note-body-wrap:not([hidden]),
+.editor-scroll > #checklist:not([hidden]),
+.editor-scroll > #preview:not([hidden]),
+.editor-scroll > .doc-inline:not([hidden]) {
+  flex: 1 1 auto;
+  min-height: 8rem;
+}
+.editor-scroll > .editor-foot,
+.editor-scroll > .attachments,
+.editor-scroll > .history {
+  flex: 0 0 auto;
+}
+.attachment-list:empty {
+  display: none;
+  margin: 0;
+}
+.attachments:not(:has(.attachment-item)) {
+  padding-top: 6px;
+  padding-bottom: 8px;
+}
+.editor-scroll > .history {
+  max-height: none;
+  overflow: visible;
+}
+.editor-scroll > .history .history-list {
+  max-height: none;
+  overflow: visible;
+}
 .editor-head {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 14px;
@@ -4318,7 +4355,7 @@ body.note-readonly #checklist:not([hidden]) {
   flex: 1 1 auto;
   overflow: auto;
   padding: 8px 14px 16px;
-  min-height: 40vh;
+  min-height: 0;
   -webkit-overflow-scrolling: touch;
 }
 .check-row {
@@ -4734,19 +4771,18 @@ body.search-filters-open .fab-stack,
   }
   .editor {
     overflow-x: hidden;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow-y: hidden;
   }
   /* The writing area fills leftover space. A read-only preview stays as tall
      as its text so a short note does not open with a blank band on top. */
-  .note-body-wrap:not([hidden]),
-  .editor > #checklist:not([hidden]) {
+  .editor-scroll > .note-body-wrap:not([hidden]),
+  .editor-scroll > #checklist:not([hidden]) {
     flex: 1 1 auto;
     min-height: 8rem;
     overflow: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .editor > #preview:not([hidden]) {
+  .editor-scroll > #preview:not([hidden]) {
     flex: 0 1 auto;
     min-height: 0;
     overflow: visible;
@@ -4797,16 +4833,16 @@ body.search-filters-open .fab-stack,
     font-size: 13px;
     min-height: 0;
   }
-  .editor-foot,
-  .attachments {
+  .editor-scroll > .editor-foot,
+  .editor-scroll > .attachments {
     flex-shrink: 0;
     position: static;
     z-index: auto;
     background: transparent;
   }
-  .history {
-    flex: 0 1 auto;
-    max-height: min(32vh, 15rem);
+  .editor-scroll > .history {
+    flex: 0 0 auto;
+    max-height: none;
     position: static;
     z-index: auto;
     background: var(--bg);
@@ -5781,6 +5817,13 @@ body.search-filters-open .fab-stack,
   /* Document preview: fill the editor column on PC. */
   .editor.doc-preview-active {
     overflow: hidden;
+  }
+  .editor.doc-preview-active .editor-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .editor.doc-preview-active #note-body-wrap,
   .editor.doc-preview-active #checklist,
