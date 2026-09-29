@@ -4017,6 +4017,21 @@ class NotesAppTests(unittest.TestCase):
         run_ocr_fn = app_js[app_js.find("async function runOcrQueue()"):app_js.find("function canOcrAttachment(")]
         self.assertNotIn("offerDocumentSearch(", run_ocr_fn, "OCR queue should not offer search prompt after finishing OCR")
 
+    def test_mobile_open_note_progressive_toolbar(self):
+        html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        self.assertIn('id="editor-actions-overflow-panel"', html)
+        self.assertIn('id="btn-editor-overflow"', html)
+        self.assertIn('class="editor-actions-mobile-bar"', html)
+        self.assertIn('id="btn-clear-checked-list"', js)
+        self.assertIn('function syncEditorMobileProxies()', js)
+        self.assertIn('if (isPhoneShell()) return;', js)
+        self.assertIn(".editor-actions-overflow-panel {", mobile)
+        self.assertIn("body.editor-tools-open .editor-actions-overflow-panel", mobile)
+        self.assertIn("#btn-clear-checked {", mobile)
+
     def test_note_type_next_to_more_checklist_and_protection_symbols(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
