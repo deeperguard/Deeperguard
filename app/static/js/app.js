@@ -7928,6 +7928,7 @@
       inlineAttIds = '';
       inlineSearch = '';
       syncEditorDocPreviewLayout();
+      syncEditorMobileDocActions();
       return;
     }
     const query = activeFindNeedle();
@@ -8001,6 +8002,7 @@
       observeThumb(noteId, a.uuid, ui.docInline.querySelector(`[data-stage="${a.uuid}"]`));
     });
     syncEditorDocPreviewLayout();
+    syncEditorMobileDocActions();
   }
 
   function scheduleSearchHitRepaint(attId, stage, query) {
@@ -8510,6 +8512,7 @@
       ui.docInline.hidden = true;
       ui.docInline.innerHTML = '';
     }
+    syncEditorMobileDocActions();
     ui.editor?.classList.remove('doc-preview-active');
     document.body.classList.remove('editor-doc-preview');
   }
@@ -8556,6 +8559,7 @@
       }
       ui.preview.hidden = true;
       syncEditorDocPreviewLayout();
+      syncEditorMobileDocActions();
       return;
     }
     if (hasDocs && editorMode === 'preview') {
@@ -8995,6 +8999,25 @@
     });
   }
 
+  function syncEditorMobileDocActions() {
+    const fsBtn = document.getElementById('btn-mobile-doc-fullscreen');
+    const shareBtn = document.getElementById('btn-mobile-doc-attachment-share');
+    if (!fsBtn || !shareBtn) return;
+    if (!isPhoneShell()) {
+      fsBtn.hidden = true;
+      shareBtn.hidden = true;
+      return;
+    }
+    const inlineShare = ui.docInline?.querySelector('.doc-inline-share');
+    const inlineExpand = ui.docInline?.querySelector('.doc-inline-expand');
+    const show = !!(inlineExpand && !ui.docInline?.hidden);
+    fsBtn.hidden = !show;
+    shareBtn.hidden = !show;
+    if (show && inlineShare) {
+      shareBtn.textContent = inlineShare.textContent?.trim() || 'Share';
+    }
+  }
+
   function updateActionButtons(note) {
     const starBtn = document.getElementById('btn-star');
     const pinBtn = document.getElementById('btn-pin');
@@ -9058,6 +9081,7 @@
     document.getElementById('btn-delete-forever').hidden = !note.content.trashed;
     syncClearCheckedButton(note);
     syncEditorMobileProxies();
+    syncEditorMobileDocActions();
     if (note && note.content?.locked && !unlockedNotes.has(note.uuid)) {
       ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
         const el = document.getElementById(id);
@@ -13848,6 +13872,31 @@
     setEditorToolsOpen(!document.body.classList.contains('editor-tools-open'));
   });
   document.getElementById('editor-actions-backdrop')?.addEventListener('click', () => {
+    setEditorToolsOpen(false);
+  });
+  document.getElementById('editor-actions-overflow-panel')?.addEventListener('click', (event) => {
+    if (!isPhoneShell() || !document.body.classList.contains('editor-tools-open')) return;
+    const control = event.target.closest('button');
+    if (!control || !control.closest('#editor-actions-overflow-panel')) return;
+    setEditorToolsOpen(false);
+  });
+  document.getElementById('note-editor-type')?.addEventListener('change', () => {
+    if (isPhoneShell() && document.body.classList.contains('editor-tools-open')) {
+      setEditorToolsOpen(false);
+    }
+  });
+  document.getElementById('btn-mobile-doc-fullscreen')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    ui.docInline?.querySelector('.doc-inline-expand')?.click();
+  });
+  document.getElementById('btn-mobile-doc-attachment-share')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    ui.docInline?.querySelector('.doc-inline-share')?.click();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (!isPhoneShell() || !document.body.classList.contains('editor-tools-open')) return;
+    event.preventDefault();
     setEditorToolsOpen(false);
   });
   document.addEventListener('selectionchange', () => {
