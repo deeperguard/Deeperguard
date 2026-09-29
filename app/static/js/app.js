@@ -8497,6 +8497,10 @@
     document.querySelectorAll('.doc-hit-note').forEach((el) => el.remove());
     document.getElementById('btn-delete-forever')?.toggleAttribute('hidden', true);
     document.getElementById('btn-clear-checked')?.toggleAttribute('hidden', true);
+    document.body.classList.remove('editor-tools-open');
+    const editorActionsBackdrop = document.getElementById('editor-actions-backdrop');
+    if (editorActionsBackdrop) editorActionsBackdrop.hidden = true;
+    document.getElementById('btn-editor-overflow')?.setAttribute('aria-expanded', 'false');
     if (!clearSurfaces) return;
     if (ui.checklist) {
       ui.checklist.hidden = true;
@@ -8695,7 +8699,11 @@
           <textarea class="check-text" data-check-text="${escapeAttr(row.id)}" rows="1" placeholder="List item" ${note.content.prevent_edit ? 'readonly' : ''}>${escapeHtml(row.text)}</textarea>
         </div>
         ${nested ? `<button type="button" class="btn ghost sm check-indent" data-check-indent="${escapeAttr(row.id)}" aria-label="Indent">⇥</button>` : ''}
-      </div>`).join('') + (note.content.prevent_edit ? '' : '<button type="button" class="btn ghost sm check-add" id="check-add">Add item</button>');
+      </div>`).join('') + (note.content.prevent_edit ? '' : `
+      <div class="checklist-foot">
+        <button type="button" class="btn ghost sm check-add" id="check-add">Add item</button>
+        <button type="button" class="btn ghost sm check-clear-checked" id="btn-clear-checked-list" hidden>Clear checked</button>
+      </div>`);
     ui.checklist.querySelectorAll('[data-check-toggle]').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (note.content.prevent_edit) return;
@@ -8758,20 +8766,19 @@
   }
 
   function syncClearCheckedButton(note) {
-    const btn = document.getElementById('btn-clear-checked');
-    if (!btn) return;
-    if (!note) {
-      btn.hidden = true;
-      return;
+    let visible = false;
+    if (note) {
+      const type = note.content?.editor || ui.editorType?.value || 'plain';
+      if (isChecklistEditor(type) && !note.content?.prevent_edit) {
+        const nested = type === 'super';
+        const rows = window.NotesChecklist?.parse(note.content?.content || ui.body?.value || '', { nested }) || [];
+        visible = rows.some((row) => row.done);
+      }
     }
-    const type = note.content?.editor || ui.editorType?.value || 'plain';
-    if (!isChecklistEditor(type) || note.content?.prevent_edit) {
-      btn.hidden = true;
-      return;
-    }
-    const nested = type === 'super';
-    const rows = window.NotesChecklist?.parse(note.content?.content || ui.body?.value || '', { nested }) || [];
-    btn.hidden = !rows.some((row) => row.done);
+    ['btn-clear-checked', 'btn-clear-checked-list'].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (btn) btn.hidden = !visible;
+    });
   }
 
   function writeChecklist(rows, nested, { keepFocus, focusIndex, rerender = true } = {}) {
@@ -8961,6 +8968,33 @@
     }
   }
 
+  function syncEditorMobileProxies() {
+    const lock = document.getElementById('btn-prevent-edit');
+    document.querySelectorAll('.editor-mobile-proxy[data-editor-proxy="btn-prevent-edit"]').forEach((proxy) => {
+      const locked = !!lock?.classList.contains('is-locked');
+      proxy.classList.toggle('is-locked', locked);
+      proxy.classList.toggle('is-unlocked', !locked);
+      proxy.classList.toggle('active', locked);
+      proxy.title = lock?.title || 'Lock editing';
+      proxy.setAttribute('aria-label', proxy.title);
+      proxy.querySelector('.edit-lock-open')?.toggleAttribute('hidden', locked);
+      proxy.querySelector('.edit-lock-closed')?.toggleAttribute('hidden', !locked);
+    });
+    const starBtn = document.getElementById('btn-star');
+    document.querySelectorAll('.editor-mobile-proxy[data-editor-proxy="btn-star"]').forEach((proxy) => {
+      const starred = !!starBtn?.classList.contains('active');
+      proxy.classList.toggle('active', starred);
+      proxy.title = starBtn?.title || 'Star';
+      proxy.setAttribute('aria-label', proxy.title);
+      const open = proxy.querySelector('.icon-star-outline');
+      const closed = proxy.querySelector('.icon-star-filled');
+      if (open && closed) {
+        open.hidden = starred;
+        closed.hidden = !starred;
+      }
+    });
+  }
+
   function updateActionButtons(note) {
     const starBtn = document.getElementById('btn-star');
     const pinBtn = document.getElementById('btn-pin');
@@ -9023,6 +9057,7 @@
     }
     document.getElementById('btn-delete-forever').hidden = !note.content.trashed;
     syncClearCheckedButton(note);
+    syncEditorMobileProxies();
     if (note && note.content?.locked && !unlockedNotes.has(note.uuid)) {
       ['btn-share', 'btn-note-info', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
         const el = document.getElementById(id);
@@ -13620,7 +13655,7 @@
     deleteNoteForever(currentId);
   });
 
-  document.getElementById('btn-clear-checked')?.addEventListener('click', () => {
+  function clearCheckedChecklistItems() {
     if (!currentId || !window.NotesChecklist) return;
     const note = NotesStore.get(currentId);
     if (!note || note.content?.prevent_edit) return;
@@ -13631,6 +13666,11 @@
     if (!rows.some((row) => row.done)) return;
     pushUndoSnapshot();
     writeChecklist(NotesChecklist.removeDone(rows), nested);
+  }
+  document.getElementById('btn-clear-checked')?.addEventListener('click', clearCheckedChecklistItems);
+  document.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target.closest('#btn-clear-checked-list') : null;
+    if (target) clearCheckedChecklistItems();
   });
 
   async function ingestAttachmentFiles(files) {
@@ -13785,14 +13825,33 @@
     const tip = document.getElementById('writing-tip');
     if (tip) tip.hidden = true;
   });
-  let editorToolsPinned = false;
+  function setEditorToolsOpen(open) {
+    const on = !!open;
+    document.body.classList.toggle('editor-tools-open', on);
+    const overflowBtn = document.getElementById('btn-editor-overflow');
+    overflowBtn?.setAttribute('aria-expanded', on ? 'true' : 'false');
+    const backdrop = document.getElementById('editor-actions-backdrop');
+    if (backdrop) {
+      backdrop.hidden = !on;
+      backdrop.setAttribute('aria-hidden', on ? 'false' : 'true');
+    }
+  }
+  document.querySelectorAll('.editor-mobile-proxy').forEach((proxy) => {
+    proxy.addEventListener('click', (event) => {
+      event.preventDefault();
+      const id = proxy.getAttribute('data-editor-proxy');
+      if (!id) return;
+      document.getElementById(id)?.click();
+    });
+  });
   document.getElementById('btn-editor-overflow')?.addEventListener('click', () => {
-    editorToolsPinned = !editorToolsPinned;
-    document.body.classList.toggle('editor-tools-open', editorToolsPinned);
-    document.getElementById('btn-editor-overflow')?.setAttribute('aria-expanded', editorToolsPinned ? 'true' : 'false');
+    setEditorToolsOpen(!document.body.classList.contains('editor-tools-open'));
+  });
+  document.getElementById('editor-actions-backdrop')?.addEventListener('click', () => {
+    setEditorToolsOpen(false);
   });
   document.addEventListener('selectionchange', () => {
-    if (editorToolsPinned) return;
+    if (isPhoneShell()) return;
     const sel = document.getSelection();
     const node = sel?.anchorNode;
     const inEditor = node && (ui.body?.contains(node) || ui.title?.contains(node));

@@ -4769,43 +4769,121 @@ body.search-filters-open .fab-stack,
   }
   .editor-actions {
     grid-area: actions;
+    display: flex;
     flex-wrap: nowrap;
+    align-items: center;
     min-width: 0;
     max-width: 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
     justify-content: flex-start;
-    gap: 6px;
-    padding-bottom: 2px;
+    gap: 4px;
     width: 100%;
     border: 0;
     background: transparent;
     padding: 0;
     margin-top: 0;
+    overflow: visible;
+  }
+  .editor-actions-mobile-bar {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  .editor-actions-mobile-bar .toolbar-secondary {
+    display: inline-flex !important;
+  }
+  .editor-actions-overflow-panel {
+    display: none;
+    flex: none;
+  }
+  .editor-actions-overflow-panel .editor-toolbar-panel-lock,
+  .editor-actions-overflow-panel .editor-toolbar-panel-share,
+  .editor-actions-overflow-panel .editor-toolbar-panel-star {
+    display: none !important;
   }
   .editor-tools-divider { display: none; }
-  .editor-actions .toolbar-primary.mode-toggle,
-  .editor-actions .toolbar-primary.note-more-btn,
-  .editor-actions #btn-ai-chat,
-  .editor-actions .toolbar-primary.editor-select {
-    min-width: 3.75rem;
-    padding-left: 10px;
-    padding-right: 10px;
+  .editor-actions-mobile-bar .btn.icon,
+  .editor-actions-mobile-bar .editor-mobile-proxy {
+    width: var(--touch, 44px);
+    height: var(--touch, 44px);
+    min-width: var(--touch, 44px);
+    min-height: var(--touch, 44px);
     flex-shrink: 0;
-    white-space: nowrap;
+    justify-content: center;
+    align-items: center;
   }
-  .editor-actions .toolbar-primary.editor-select {
-    height: 32px;
-    min-height: 32px;
-    padding: 2px 22px 2px 8px;
-    font-size: 13px;
-    max-width: 125px;
-    min-width: unset;
+  .editor-actions-mobile-bar .editor-mobile-proxy.ghost.sm {
+    width: auto;
+    min-width: var(--touch, 44px);
+    padding: 0 12px;
+    font-size: 14px;
   }
-  .editor-actions .toolbar-primary.btn.icon {
+  #btn-editor-overflow {
+    width: var(--touch, 44px);
+    height: var(--touch, 44px);
+    min-width: var(--touch, 44px);
+    min-height: var(--touch, 44px);
     flex-shrink: 0;
+    border-radius: 10px;
+    margin-left: auto;
+  }
+  body.editor-tools-open .editor-actions-backdrop:not([hidden]) {
+    display: block;
+  }
+  body.editor-tools-open .editor-actions-overflow-panel {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 41;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 8px;
+    max-height: min(72vh, 520px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px 14px calc(16px + var(--safe-bottom));
+    border-radius: 16px 16px 0 0;
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    background: var(--bg-elevated);
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.22);
+  }
+  body.editor-tools-open .editor-actions-overflow-panel .editor-actions-group {
+    flex-wrap: wrap;
+  }
+  body.editor-tools-open .editor-actions-overflow-panel .editor-select {
+    width: 100%;
+    max-width: none;
+    min-height: var(--touch, 44px);
+    font-size: 15px;
+  }
+  body.editor-tools-open .editor-actions-overflow-panel .btn.ghost.sm {
+    min-height: var(--touch, 44px);
+    padding: 0 14px;
+    font-size: 15px;
+  }
+  body.editor-tools-open .editor-actions-overflow-panel .btn.icon {
+    width: var(--touch, 44px);
+    height: var(--touch, 44px);
+    min-width: var(--touch, 44px);
+    min-height: var(--touch, 44px);
+  }
+  #btn-clear-checked {
+    display: none !important;
+  }
+  .checklist-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0 0 36px;
+  }
+  .checklist-foot .check-add {
+    margin: 0;
   }
   .editor-pane {
     width: 100%;
@@ -6076,9 +6154,38 @@ body.search-filters-open .fab-stack,
   }
 }
 
-body:not(.editor-tools-open) .editor-actions-group,
-body:not(.editor-tools-open) .editor-tools-divider,
-body:not(.editor-tools-open) .md-toolbar {
+@media (min-width: 861px) {
+  .editor-actions-mobile-bar {
+    display: none !important;
+  }
+  .editor-actions-overflow-panel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+  }
+  #btn-editor-overflow,
+  .editor-actions-backdrop {
+    display: none !important;
+  }
+}
+.editor-actions-overflow-panel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+.editor-actions-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.45);
+}
+.editor-actions-backdrop[hidden] {
   display: none !important;
 }
 @media (min-width: 1100px) {
@@ -6133,9 +6240,6 @@ body:not(.editor-tools-open) .md-toolbar {
   font-weight: 500;
 }
 @media (max-width: 860px) {
-  body.editor-tools-open .toolbar-secondary:not([hidden]) {
-    display: inline-flex !important;
-  }
   .writing-tip {
     margin: 0 12px 8px;
   }
