@@ -853,6 +853,9 @@
               </svg>
               <span class="editor-phone-strip-label desktop-only">Ask AI</span>
             </button>
+            <button type="button" id="btn-share" class="btn ghost sm toolbar-primary editor-toolbar-panel-share editor-phone-toolbar-hide" title="Copy note" aria-label="Copy note">
+              <span class="share-label">Copy</span>
+            </button>
             </div>
             <span class="editor-tools-divider toolbar-secondary" aria-hidden="true"></span>
             <div class="editor-actions-group editor-actions-secondary">
@@ -862,7 +865,7 @@
               </svg>
               <span class="editor-phone-strip-label desktop-only">Fullscreen</span>
             </button>
-            <button type="button" id="btn-mobile-doc-attachment-share" class="btn ghost sm mobile-only toolbar-secondary editor-mobile-doc-action editor-phone-strip-btn editor-phone-toolbar-hide" hidden title="Share attachment" aria-label="Share attachment">
+            <button type="button" id="btn-mobile-doc-attachment-share" class="btn ghost sm mobile-only toolbar-secondary editor-mobile-doc-action editor-phone-strip-btn" hidden title="Share attachment" aria-label="Share attachment">
               <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
                 <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="16 6 12 2 8 6"/>
@@ -888,9 +891,6 @@
             </button>
             <button type="button" id="btn-find-desktop" class="btn ghost sm toolbar-secondary find-btn editor-phone-toolbar-hide" title="Find in note (⌘F)" aria-label="Find in note">
               Find
-            </button>
-            <button type="button" id="btn-share" class="btn ghost sm toolbar-secondary editor-toolbar-panel-share editor-phone-toolbar-hide" title="Copy note" aria-label="Copy note">
-              <span class="share-label">Copy</span>
             </button>
             <button type="button" id="btn-archive" class="btn icon toolbar-secondary" title="Archive" aria-label="Archive">
               <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -920,6 +920,7 @@
             <button type="button" id="btn-delete-forever" class="btn ghost sm toolbar-secondary" hidden>Delete forever</button>
             <button type="button" id="btn-clear-checked" class="btn ghost sm toolbar-secondary" hidden>Clear checked</button>
             <button type="button" id="btn-editor-settings" class="btn ghost sm mobile-only toolbar-desktop" title="Settings" aria-label="Settings">Settings</button>
+            <button type="button" id="btn-desktop-doc-fullscreen" class="btn ghost sm toolbar-desktop doc-only-control editor-desktop-doc-action" hidden title="Fullscreen" aria-label="Fullscreen">Fullscreen</button>
             <button type="button" id="btn-ocr-text" class="btn ghost sm doc-only-control toolbar-desktop" hidden>OCR text</button>
             </div>
             </div>

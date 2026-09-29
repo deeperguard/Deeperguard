@@ -6238,6 +6238,12 @@ body.search-filters-open .fab-stack,
 }
 
 @media (min-width: 861px) {
+  .doc-inline-tools {
+    display: none !important;
+  }
+  .editor-actions-overflow-panel [hidden] {
+    display: none !important;
+  }
   .editor-actions-mobile-bar {
     display: none !important;
   }

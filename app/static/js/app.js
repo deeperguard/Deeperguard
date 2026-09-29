@@ -7959,12 +7959,14 @@
     const desktop = isDesktopLayout();
     const mainInner = `<div class="doc-inline-stage is-loading" data-stage="${escapeAttr(first.uuid)}">${docLoadingHtml()}</div>
           ${desktop ? '' : `<div class="doc-thumb-meta"><span>${escapeHtml(first.content.filename || 'Document')}</span></div>`}`;
-    const toolbar = `<div class="doc-inline-tools">
+    const toolbar = desktop
+      ? ''
+      : `<div class="doc-inline-tools">
           <button type="button" class="btn ghost sm doc-inline-expand" data-preview="${escapeAttr(first.uuid)}">Fullscreen</button>
           <button type="button" class="btn ghost sm doc-inline-share" data-share="${escapeAttr(first.uuid)}">${attachmentCanWebShare() ? 'Share' : 'Download'}</button>
         </div>`;
     const mainBlock = desktop
-      ? `${toolbar}<div class="doc-inline-main doc-inline-main-scroll">${mainInner}</div>`
+      ? `<div class="doc-inline-main doc-inline-main-scroll">${mainInner}</div>`
       : `${toolbar}<button type="button" class="doc-inline-main" data-preview="${escapeAttr(first.uuid)}" aria-label="Open ${escapeAttr(first.content.filename || 'document')}">
           ${mainInner}
         </button>`;
@@ -8391,17 +8393,28 @@
     const noteShare = deviceCanShare();
     const fileShare = attachmentCanWebShare();
     const noteLabel = noteShare ? 'Share' : 'Copy';
+    const docToolbar = mobileDocToolbarActive();
+    const toolbarUsesAttachment = docToolbar && isDesktopLayout();
+    const toolbarLabel = toolbarUsesAttachment ? (fileShare ? 'Share' : 'Download') : noteLabel;
+    const toolbarTitle = toolbarUsesAttachment
+      ? (fileShare ? 'Share attachment' : 'Download attachment')
+      : (noteShare ? 'Share note' : 'Copy note');
     ['btn-share', 'note-info-share', 'note-info-share-bottom'].forEach((id) => {
       const btn = document.getElementById(id);
       if (!btn) return;
+      if (id === 'btn-share') {
+        btn.title = toolbarTitle;
+        btn.setAttribute('aria-label', toolbarTitle);
+        return;
+      }
       btn.title = noteShare ? 'Share note' : 'Copy note';
       btn.setAttribute('aria-label', noteShare ? 'Share note' : 'Copy note');
-      if (id !== 'btn-share') btn.textContent = id === 'note-info-share-bottom' ? `${noteLabel} note` : noteLabel;
+      btn.textContent = id === 'note-info-share-bottom' ? `${noteLabel} note` : noteLabel;
     });
     const shareBtn = document.getElementById('btn-share');
     if (shareBtn) {
       const label = shareBtn.querySelector('.share-label');
-      if (label) label.textContent = noteLabel;
+      if (label) label.textContent = toolbarLabel;
     }
     const docShare = document.getElementById('doc-share');
     if (docShare) {
@@ -8534,10 +8547,17 @@
     syncEditorMobileDocActions();
   }
 
+  function inlineDocPreviewAttId() {
+    if (!ui.docInline || ui.docInline.hidden) return null;
+    const expand = ui.docInline.querySelector('.doc-inline-expand');
+    if (expand?.dataset?.preview) return expand.dataset.preview;
+    const stage = ui.docInline.querySelector('.doc-inline-stage');
+    return stage?.dataset?.stage || null;
+  }
+
   function mobileDocToolbarActive() {
     if (!currentId || !noteHasDocs(currentId)) return false;
-    if (!ui.docInline || ui.docInline.hidden) return false;
-    if (!ui.docInline.querySelector('.doc-inline-expand')) return false;
+    if (!inlineDocPreviewAttId()) return false;
     return editorMode === 'preview' || !!activeFindNeedle();
   }
 
@@ -9057,18 +9077,22 @@
   function syncEditorMobileDocActions() {
     const fsBtn = document.getElementById('btn-mobile-doc-fullscreen');
     const shareBtn = document.getElementById('btn-mobile-doc-attachment-share');
+    const desktopFsBtn = document.getElementById('btn-desktop-doc-fullscreen');
+    const show = mobileDocToolbarActive();
+    if (desktopFsBtn) desktopFsBtn.hidden = !show || !isDesktopLayout();
     if (!fsBtn || !shareBtn) return;
     if (!isPhoneShell()) {
       fsBtn.hidden = true;
       shareBtn.hidden = true;
+      syncShareLabels();
       return;
     }
-    const show = mobileDocToolbarActive();
     fsBtn.hidden = !show;
     /* Primary row Share is always shown on phone; route attachment share through it. */
     shareBtn.hidden = true;
     shareBtn.title = 'Share attachment';
     shareBtn.setAttribute('aria-label', 'Share attachment');
+    syncShareLabels();
   }
 
   function updateActionButtons(note) {
@@ -13496,12 +13520,25 @@
   }, true);
 
   document.getElementById('btn-share')?.addEventListener('click', () => {
-    const inlineShare = mobileDocToolbarActive() ? ui.docInline?.querySelector('.doc-inline-share') : null;
-    if (inlineShare) {
-      inlineShare.click();
-      return;
+    if (mobileDocToolbarActive()) {
+      const attId = inlineDocPreviewAttId();
+      if (attId && isDesktopLayout()) {
+        shareAttachment(attId).catch((err) => toast(err.message || 'Share failed', true));
+        return;
+      }
+      const inlineShare = ui.docInline?.querySelector('.doc-inline-share');
+      if (inlineShare) {
+        inlineShare.click();
+        return;
+      }
     }
     shareNote(currentId).catch((err) => toast(err.message || 'Share failed', true));
+  });
+  document.getElementById('btn-desktop-doc-fullscreen')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    const attId = inlineDocPreviewAttId();
+    if (!attId) return;
+    openInlineDocFullscreen(attId, event);
   });
   syncShareLabels();
   document.getElementById('btn-archive').addEventListener('click', () => {
