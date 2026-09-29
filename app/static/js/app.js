@@ -7996,7 +7996,10 @@
         shareAttachment(btn.dataset.share).catch((err) => toast(err.message || 'Share failed', true));
       });
     });
-    if (!show) return;
+    if (!show) {
+      syncEditorMobileDocActions();
+      return;
+    }
     hydrateInlineDoc(noteId, first.uuid, ui.docInline.querySelector(`[data-stage="${first.uuid}"]`));
     rest.forEach((a) => {
       observeThumb(noteId, a.uuid, ui.docInline.querySelector(`[data-stage="${a.uuid}"]`));
@@ -8528,6 +8531,14 @@
       && !ui.docInline?.hidden;
     ui.editor?.classList.toggle('doc-preview-active', active);
     document.body.classList.toggle('editor-doc-preview', active && isDesktopLayout());
+    syncEditorMobileDocActions();
+  }
+
+  function mobileDocToolbarActive() {
+    if (!currentId || !noteHasDocs(currentId)) return false;
+    if (!ui.docInline || ui.docInline.hidden) return false;
+    if (!ui.docInline.querySelector('.doc-inline-expand')) return false;
+    return editorMode === 'preview' || !!activeFindNeedle();
   }
 
   function applyEditorMode() {
@@ -9010,6 +9021,17 @@
         closed.hidden = !pinned;
       }
     });
+    const shareBtn = document.getElementById('btn-share');
+    const inlineShare = mobileDocToolbarActive() ? ui.docInline?.querySelector('.doc-inline-share') : null;
+    document.querySelectorAll('.editor-mobile-proxy[data-editor-proxy="btn-share"]').forEach((proxy) => {
+      const title = inlineShare?.getAttribute('aria-label')
+        || inlineShare?.title
+        || shareBtn?.getAttribute('aria-label')
+        || shareBtn?.title
+        || 'Share note';
+      proxy.title = title;
+      proxy.setAttribute('aria-label', title);
+    });
   }
 
   function syncNoteTypeMenuSelection() {
@@ -9041,19 +9063,12 @@
       shareBtn.hidden = true;
       return;
     }
-    const inlineShare = ui.docInline?.querySelector('.doc-inline-share');
-    const inlineExpand = ui.docInline?.querySelector('.doc-inline-expand');
-    const show = !!(inlineExpand && !ui.docInline?.hidden);
+    const show = mobileDocToolbarActive();
     fsBtn.hidden = !show;
-    shareBtn.hidden = !show;
-    if (show && inlineShare) {
-      const label = inlineShare.textContent?.trim() || 'Share attachment';
-      shareBtn.title = label;
-      shareBtn.setAttribute('aria-label', label);
-    } else {
-      shareBtn.title = 'Share attachment';
-      shareBtn.setAttribute('aria-label', 'Share attachment');
-    }
+    /* Primary row Share is always shown on phone; route attachment share through it. */
+    shareBtn.hidden = true;
+    shareBtn.title = 'Share attachment';
+    shareBtn.setAttribute('aria-label', 'Share attachment');
   }
 
   function updateActionButtons(note) {
@@ -9118,8 +9133,8 @@
     }
     document.getElementById('btn-delete-forever').hidden = !note.content.trashed;
     syncClearCheckedButton(note);
-    syncEditorMobileProxies();
     syncEditorMobileDocActions();
+    syncEditorMobileProxies();
     if (note && note.content?.locked && !unlockedNotes.has(note.uuid)) {
       ['btn-share', 'btn-note-info', 'btn-note-type-menu', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
         const el = document.getElementById(id);
@@ -13481,6 +13496,11 @@
   }, true);
 
   document.getElementById('btn-share')?.addEventListener('click', () => {
+    const inlineShare = mobileDocToolbarActive() ? ui.docInline?.querySelector('.doc-inline-share') : null;
+    if (inlineShare) {
+      inlineShare.click();
+      return;
+    }
     shareNote(currentId).catch((err) => toast(err.message || 'Share failed', true));
   });
   syncShareLabels();
