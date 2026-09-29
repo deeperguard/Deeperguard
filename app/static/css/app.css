@@ -2572,7 +2572,7 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
 }
 .note-body-wrap {
   position: relative;
-  flex: 1;
+  flex: 0 0 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -2610,10 +2610,12 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
 .note-body-wrap .note-body {
   position: relative;
   z-index: 1;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  width: 100%;
+  box-sizing: border-box;
   min-height: 8rem;
-  field-sizing: content;
-  overflow: visible;
+  overflow: hidden;
+  resize: none;
   background: transparent;
 }
 .note-lock-gate {
@@ -3064,17 +3066,10 @@ body.scan-dialog-open {
 .editor-scroll > #checklist:not([hidden]),
 .editor-scroll > #preview:not([hidden]),
 .editor-scroll > .doc-inline:not([hidden]) {
-  flex: 0 1 auto;
-  min-height: 8rem;
-}
-.editor-scroll > .note-body-wrap:not([hidden])::after,
-.editor-scroll > #preview:not([hidden])::after,
-.editor-scroll > #checklist:not([hidden])::after {
-  content: "";
-  display: block;
   flex: 0 0 auto;
-  width: 100%;
-  height: var(--note-after-body-gap);
+  min-height: 8rem;
+  box-sizing: border-box;
+  padding-bottom: var(--note-after-body-gap);
 }
 .editor-scroll > .editor-foot,
 .editor-scroll > .attachments,
@@ -3229,7 +3224,7 @@ body.scan-dialog-open {
   -webkit-font-smoothing: antialiased;
 }
 .note-body-wrap:not([hidden]) {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-height: 8rem;
 }
 #preview:not([hidden]) {
@@ -4368,7 +4363,7 @@ html[data-theme="light"] {
   line-height: 1.35;
 }
 body.note-readonly .preview,
-body.note-readonly .note-body-wrap:not([hidden]),
+body.note-readonly .note-body-wrap:not([hidden]) .note-body,
 body.note-readonly #checklist:not([hidden]) {
   padding-bottom: 4px;
 }
@@ -4825,17 +4820,17 @@ body.search-filters-open .fab-stack,
      as its text so a short note does not open with a blank band on top. */
   .editor-scroll > .note-body-wrap:not([hidden]),
   .editor-scroll > #checklist:not([hidden]) {
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-height: 8rem;
     overflow: visible;
   }
   .editor-scroll > #preview:not([hidden]) {
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
     overflow: visible;
   }
   .note-body, .preview {
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-height: 8rem;
     height: auto;
     overflow: visible;
@@ -5699,8 +5694,9 @@ body.search-filters-open .fab-stack,
   /* Body height follows note content; trailing ::after supplies gap before Saved. */
   .editor-pane .editor:not(.doc-preview-active) .editor-scroll > .note-body-wrap:not([hidden]),
   .editor-pane .editor:not(.doc-preview-active) .editor-scroll > #checklist:not([hidden]),
-  .editor-pane .editor:not(.doc-preview-active) .editor-scroll > #preview:not([hidden]) {
-    flex: 0 1 auto;
+  .editor-pane .editor:not(.doc-preview-active) .editor-scroll > #preview:not([hidden]),
+  .editor-pane .editor:not(.doc-preview-active) .editor-scroll > .doc-inline:not([hidden]) {
+    flex: 0 0 auto;
     min-height: 8rem;
   }
   .tag-section summary.section-label,

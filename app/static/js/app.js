@@ -347,6 +347,7 @@
     applyTheme();
     applyNoteTypographyVars();
     ui.body.style.fontSize = `${prefs.fontSize}px`;
+    autosizeNoteBody();
     ui.body.classList.toggle('mono', !!prefs.monospace);
     document.getElementById('note-body-highlights')?.classList.toggle('mono', !!prefs.monospace);
     document.getElementById('note-body-wrap')?.classList.toggle('mono', !!prefs.monospace);
@@ -8640,6 +8641,7 @@
       syncClearCheckedButton(note);
       syncTagBarShell(note);
     }
+    autosizeNoteBody();
   }
 
   function applyReadOnly(on) {
@@ -8745,6 +8747,14 @@
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
+  }
+
+  function autosizeNoteBody() {
+    const el = ui.body;
+    if (!el || el.hidden) return;
+    el.style.height = 'auto';
+    const minPx = parseFloat(getComputedStyle(el).minHeight) || 0;
+    el.style.height = `${Math.max(minPx, el.scrollHeight)}px`;
   }
 
   function syncClearCheckedButton(note) {
@@ -13002,6 +13012,7 @@
       applyingDerivedTitle = false;
     }
     scheduleSave();
+    autosizeNoteBody();
     syncEditLinkOverlay();
     syncUndoButtons();
     if (!document.getElementById('find-bar')?.hidden) {
