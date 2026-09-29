@@ -3637,6 +3637,20 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('syncBtn.dataset.state = phase;', app_js)
         self.assertIn('el.title = statsText;', app_js)
 
+    def test_tablet_desktop_tabs_safe_area_and_sidebar_foot_sync(self):
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        desktop = css.split("@media (min-width: 861px)")[-1]
+        tabs_block = desktop[desktop.index("  .app-tabs {") : desktop.index("  .app-tab {", desktop.index("  .app-tabs {"))]
+        self.assertIn("padding-top: calc(6px + var(--safe-top))", tabs_block)
+        self.assertIn("padding-left: calc(12px + var(--safe-left))", tabs_block)
+        foot_block = desktop[desktop.index("  .sidebar-foot {") : desktop.index("  .sidebar-foot-actions {")]
+        self.assertIn("flex-direction: column", foot_block)
+        self.assertIn("padding-bottom: calc(8px + var(--safe-bottom))", foot_block)
+        sync_btn = desktop[desktop.index("  .sidebar-foot .btn-sync-now {") : desktop.index("  .sidebar-foot .btn-sync-now:hover")]
+        self.assertIn("max-width: none", sync_btn)
+        self.assertIn("width: 100%", sync_btn)
+        self.assertIn("overflow-wrap: anywhere", css)
+
     def test_protected_note_cannot_be_deleted(self):
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
         store_js = (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8")
