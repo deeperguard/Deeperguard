@@ -4023,6 +4023,9 @@ class NotesAppTests(unittest.TestCase):
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
         self.assertIn('id="editor-actions-overflow-panel"', html)
+        self.assertIn('editor-overflow-sheet', html)
+        self.assertIn('editor-overflow-sheet-exclude', html)
+        self.assertIn('editor-overflow-sheet-note-share', html)
         self.assertIn('id="btn-editor-overflow"', html)
         self.assertIn('class="editor-actions-mobile-bar"', html)
         self.assertIn('id="btn-clear-checked-list"', js)
@@ -4031,6 +4034,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(".editor-actions-overflow-panel {", mobile)
         self.assertIn("display: none !important", mobile)
         self.assertIn("body.editor-tools-open .editor-actions-overflow-panel", mobile)
+        self.assertIn("editor-overflow-sheet-exclude", mobile)
+        self.assertIn("editor-overflow-sheet-note-share", mobile)
         self.assertIn('id="btn-mobile-doc-fullscreen"', html)
         self.assertIn("#btn-clear-checked {", mobile)
 

@@ -771,7 +771,7 @@
               </svg>
             </button>
             </div>
-            <div id="editor-actions-overflow-panel" class="editor-actions-overflow-panel">
+            <div id="editor-actions-overflow-panel" class="editor-actions-overflow-panel editor-overflow-sheet">
             <div class="editor-actions-group editor-actions-primary">
             <button type="button" id="btn-preview" class="btn ghost sm mode-toggle toolbar-primary" title="Switch edit mode">Edit</button>
             <button type="button" id="btn-undo" class="btn ghost sm toolbar-primary" title="Undo (⌘Z)" disabled>Undo</button>
@@ -786,14 +786,22 @@
                 <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
             </button>
-            <select id="note-editor-type" class="editor-select toolbar-primary" title="Note type">
-              <option value="plain">Plain text</option>
-              <option value="checklist">Checklist</option>
-              <option value="super">Super checklist</option>
-              <option value="markdown">Markdown</option>
-              <option value="superscript">Superscript</option>
-              <option value="code">Code</option>
-            </select>
+            <div class="editor-overflow-type-wrap toolbar-primary" title="Note type">
+              <span class="editor-overflow-row-icon" aria-hidden="true">
+                <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" focusable="false">
+                  <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M4 12h10M4 18h14"/>
+                </svg>
+              </span>
+              <label class="editor-overflow-type-label" for="note-editor-type">Note type</label>
+              <select id="note-editor-type" class="editor-select toolbar-primary editor-overflow-type-select" title="Note type" aria-label="Note type">
+                <option value="plain">Plain text</option>
+                <option value="checklist">Checklist</option>
+                <option value="super">Super checklist</option>
+                <option value="markdown">Markdown</option>
+                <option value="superscript">Superscript</option>
+                <option value="code">Code</option>
+              </select>
+            </div>
             <button type="button" id="btn-note-info" class="btn ghost sm toolbar-primary note-more-btn" title="Note actions and info" aria-label="Note actions and info">
               <span class="note-more-label mobile-only" hidden aria-hidden="true">Note info</span>
               <span class="note-more-icon desktop-only" aria-hidden="true">
@@ -826,10 +834,10 @@
                 <path fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
               </svg>
             </button>
-            <button type="button" id="btn-find-desktop" class="btn ghost sm toolbar-secondary find-btn" title="Find in note (⌘F)" aria-label="Find in note">
+            <button type="button" id="btn-find-desktop" class="btn ghost sm toolbar-secondary find-btn editor-overflow-sheet-exclude" title="Find in note (⌘F)" aria-label="Find in note">
               Find
             </button>
-            <button type="button" id="btn-share" class="btn ghost sm toolbar-secondary editor-toolbar-panel-share" title="Copy note" aria-label="Copy note">
+            <button type="button" id="btn-share" class="btn ghost sm toolbar-secondary editor-toolbar-panel-share editor-overflow-sheet-note-share" title="Copy note" aria-label="Copy note">
               <span class="share-label">Copy</span>
             </button>
             <button type="button" id="btn-archive" class="btn icon toolbar-secondary" title="Archive" aria-label="Archive">
