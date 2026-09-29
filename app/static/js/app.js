@@ -7537,6 +7537,14 @@
       actions.append(prev, counter, next);
       note.appendChild(actions);
     }
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'btn icon doc-hit-note-dismiss';
+    dismiss.dataset.docHitDismiss = '1';
+    dismiss.setAttribute('aria-label', 'Dismiss matches bar');
+    dismiss.title = 'Dismiss';
+    dismiss.textContent = '×';
+    note.appendChild(dismiss);
     const head = host.querySelector('.doc-viewer-head');
     if (head && head.parentElement === host) {
       head.insertAdjacentElement('afterend', note);
@@ -7556,8 +7564,42 @@
   }
 
   let docSearchHitIndex = 0;
+  let docHitNoteDismissedFor = '';
   let findPaintNeedle = '';
   let findPaintPromise = null;
+
+  function activeDocHitNeedle() {
+    return String(activeFindNeedle() || '').trim();
+  }
+
+  function docHitNoteSuppressed() {
+    const needle = activeDocHitNeedle();
+    return needle && docHitNoteDismissedFor === needle;
+  }
+
+  function clearDocHitNavigation(stage) {
+    docSearchHitIndex = 0;
+    findIndex = 0;
+    if (!stage) return;
+    const root = docFindSearchRoot(stage) || stage;
+    NotesPreview.listSearchHits(root).forEach((el) => {
+      el.classList.remove('doc-search-hit-current', 'search-hit-current');
+    });
+  }
+
+  function dismissDocHitNote() {
+    const needle = activeDocHitNeedle();
+    if (needle) docHitNoteDismissedFor = needle;
+    const stage = activeDocSearchStage();
+    if (stage) {
+      showHitNote(stage, '');
+      clearDocHitNavigation(stage);
+    } else {
+      document.querySelectorAll('.doc-hit-note').forEach((el) => el.remove());
+      docSearchHitIndex = 0;
+      findIndex = 0;
+    }
+  }
 
   function updateDocHitNoteCount(stage, index, count) {
     const host = NotesPreview.hitNoteHost(stage);
@@ -7683,6 +7725,7 @@
   }
 
   function jumpDocSearchHit(delta = 1) {
+    if (docHitNoteSuppressed()) return;
     const stage = activeDocSearchStage();
     if (!stage) return;
     const root = docFindSearchRoot(stage) || stage;
@@ -7740,6 +7783,10 @@
     }
     docSearchHitIndex = 0;
     findPaintNeedle = String(query || '').trim();
+    if (docHitNoteSuppressed()) {
+      showHitNote(stage, '');
+      return;
+    }
     const where = summary.pages > 1 ? ` on page ${summary.page} of ${summary.pages}` : '';
     const many = summary.count === 1 ? '1 match' : `${summary.count} matches`;
     showHitNote(stage, `${many}${where}`, { index: 0, count: summary.count });
@@ -7910,7 +7957,7 @@
       const where = summary.pages > 1 && page ? ` on page ${page} of ${summary.pages}` : '';
       const many = hits.length === 1 ? '1 match' : `${hits.length} matches`;
       const inDocViewer = stage.closest('#doc-stage');
-      if (!(inDocViewer && findBarInDocViewer())) {
+      if (!(inDocViewer && findBarInDocViewer()) && !docHitNoteSuppressed()) {
         showHitNote(stage, `${many}${where}`, { index: idx, count: hits.length });
       } else {
         showHitNote(stage, '');
@@ -8359,6 +8406,7 @@
     hideFindBar();
     const findInput = document.getElementById('find-input');
     if (findInput) findInput.value = '';
+    docHitNoteDismissedFor = '';
     closeNoteOptions();
     document.querySelectorAll('.doc-hit-note').forEach((el) => el.remove());
     document.getElementById('btn-delete-forever')?.toggleAttribute('hidden', true);
@@ -12478,6 +12526,7 @@
   }, { passive: true });
   document.addEventListener('click', (event) => {
     if (event.target?.closest?.('[data-doc-hit-nav]')) return;
+    if (event.target?.closest?.('[data-doc-hit-dismiss]')) return;
     const hitNote = event.target?.closest?.('#doc-inline .doc-hit-note');
     if (hitNote && !event.target?.closest?.('[data-doc-hit-nav]')) {
       const stage = ui.docInline?.querySelector('.doc-inline-stage');
@@ -12932,6 +12981,12 @@
   updateSearchFilterBadge();
 
   document.addEventListener('click', (event) => {
+    const dismiss = event.target?.closest?.('[data-doc-hit-dismiss]');
+    if (dismiss) {
+      event.preventDefault();
+      dismissDocHitNote();
+      return;
+    }
     const nav = event.target?.closest?.('[data-doc-hit-nav]');
     if (!nav) return;
     event.preventDefault();
@@ -12940,7 +12995,7 @@
   document.addEventListener('keydown', (event) => {
     if (event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
     const stage = activeDocSearchStage();
-    if (!stage || !NotesPreview.listSearchHits(stage).length) return;
+    if (!stage || docHitNoteSuppressed() || !NotesPreview.listSearchHits(stage).length) return;
     if (event.key === 'F3' || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'g')) {
       event.preventDefault();
       jumpDocSearchHit(event.shiftKey ? -1 : 1);

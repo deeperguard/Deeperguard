@@ -3477,6 +3477,10 @@ body.scan-dialog-open {
   padding: 0 8px;
   font-variant-numeric: tabular-nums;
 }
+.doc-hit-note-dismiss {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
 .doc-search-hit-current,
 mark.search-hit-current {
   outline: none;
