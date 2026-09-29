@@ -1187,6 +1187,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('id="note-body-links"', editor_html)
         self.assertIn(".editor-scroll {", css)
         self.assertIn(".editor-scroll > .note-body-wrap:not([hidden])", css)
+        self.assertIn("--note-after-body-gap:", css)
+        self.assertIn(".editor-scroll > .note-body-wrap:not([hidden])::after", css)
         self.assertIn(
             ".editor-pane .editor:not(.doc-preview-active) .editor-scroll > .note-body-wrap:not([hidden])",
             css,

@@ -32,6 +32,7 @@
   --note-title-tracking: -0.01em;
   --note-body-size: 16px;
   --note-body-line: 1.55;
+  --note-after-body-gap: calc(var(--note-body-size) * var(--note-body-line) * 6);
   --note-preview-size: calc(var(--note-body-size) * 0.8125);
   --note-meta-size: calc(var(--note-body-size) * 0.75);
   --radius-sm: 8px;
@@ -2609,7 +2610,10 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
 .note-body-wrap .note-body {
   position: relative;
   z-index: 1;
-  flex: 1;
+  flex: 0 1 auto;
+  min-height: 8rem;
+  field-sizing: content;
+  overflow: visible;
   background: transparent;
 }
 .note-lock-gate {
@@ -3060,8 +3064,17 @@ body.scan-dialog-open {
 .editor-scroll > #checklist:not([hidden]),
 .editor-scroll > #preview:not([hidden]),
 .editor-scroll > .doc-inline:not([hidden]) {
-  flex: 1 1 0%;
+  flex: 0 1 auto;
   min-height: 8rem;
+}
+.editor-scroll > .note-body-wrap:not([hidden])::after,
+.editor-scroll > #preview:not([hidden])::after,
+.editor-scroll > #checklist:not([hidden])::after {
+  content: "";
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  height: var(--note-after-body-gap);
 }
 .editor-scroll > .editor-foot,
 .editor-scroll > .attachments,
@@ -3216,7 +3229,7 @@ body.scan-dialog-open {
   -webkit-font-smoothing: antialiased;
 }
 .note-body-wrap:not([hidden]) {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 8rem;
 }
 #preview:not([hidden]) {
@@ -3295,7 +3308,6 @@ body.scan-dialog-open {
   overflow: auto;
 }
 .editor-foot {
-  margin-top: calc(var(--note-body-size) * var(--note-body-line) * 6);
   padding: 8px 14px;
   padding-bottom: calc(8px + var(--safe-bottom));
   border-top: 1px solid var(--border);
@@ -4361,8 +4373,8 @@ body.note-readonly #checklist:not([hidden]) {
   padding-bottom: 4px;
 }
 .checklist {
-  flex: 1 1 auto;
-  overflow: auto;
+  flex: 0 1 auto;
+  overflow: visible;
   padding: 8px 14px 16px;
   min-height: 0;
   -webkit-overflow-scrolling: touch;
@@ -4813,10 +4825,9 @@ body.search-filters-open .fab-stack,
      as its text so a short note does not open with a blank band on top. */
   .editor-scroll > .note-body-wrap:not([hidden]),
   .editor-scroll > #checklist:not([hidden]) {
-    flex: 1 1 0%;
-    min-height: max(8rem, 100%);
-    overflow: auto;
-    -webkit-overflow-scrolling: touch;
+    flex: 0 1 auto;
+    min-height: 8rem;
+    overflow: visible;
   }
   .editor-scroll > #preview:not([hidden]) {
     flex: 0 1 auto;
@@ -4824,10 +4835,10 @@ body.search-filters-open .fab-stack,
     overflow: visible;
   }
   .note-body, .preview {
-    flex: 1 1 auto;
-    min-height: 0;
+    flex: 0 1 auto;
+    min-height: 8rem;
     height: auto;
-    overflow: auto;
+    overflow: visible;
   }
   .editor-head {
     display: grid;
@@ -5685,12 +5696,12 @@ body.search-filters-open .fab-stack,
     padding-left: 32px;
     padding-right: 32px;
   }
-  /* Fill the open-note scrollport so Saved / attachments / history sit below the fold. */
+  /* Body height follows note content; trailing ::after supplies gap before Saved. */
   .editor-pane .editor:not(.doc-preview-active) .editor-scroll > .note-body-wrap:not([hidden]),
   .editor-pane .editor:not(.doc-preview-active) .editor-scroll > #checklist:not([hidden]),
   .editor-pane .editor:not(.doc-preview-active) .editor-scroll > #preview:not([hidden]) {
-    flex: 1 1 0%;
-    min-height: 100%;
+    flex: 0 1 auto;
+    min-height: 8rem;
   }
   .tag-section summary.section-label,
   .filter-section summary.section-label { cursor: pointer; }
