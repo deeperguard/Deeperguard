@@ -617,6 +617,21 @@ const NotesPreview = (() => {
     return total;
   }
 
+  function clearSearchHighlights(container) {
+    if (!container) return;
+    const root = container.querySelector?.('.doc-zoom-layer') || container;
+    root.querySelectorAll('.doc-search-hit').forEach((el) => el.remove());
+    root.querySelectorAll('.doc-hit-canvas').forEach((el) => el.remove());
+    root.querySelectorAll('.doc-ocr-hits').forEach((el) => el.remove());
+    root.querySelectorAll('pre mark.search-hit').forEach((el) => {
+      const parent = el.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(el.textContent || ''), el);
+      parent.normalize?.();
+    });
+    root.querySelectorAll('.doc-search-excerpt').forEach((el) => el.remove());
+  }
+
   function listSearchHits(container) {
     if (!container) return [];
     const root = container.querySelector?.('.doc-zoom-layer') || container;
@@ -1573,6 +1588,7 @@ const NotesPreview = (() => {
     hitSummary,
     hitIsOnScreen,
     hitNoteHost,
+    clearSearchHighlights,
     listSearchHits,
     countStoredSearchHits,
     scrollableAncestors,

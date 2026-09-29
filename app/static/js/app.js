@@ -910,10 +910,51 @@
   }
 
   function renderNoteBodyPreview(text, editor) {
+    let html;
     if (window.NotesSuperscript && (editor === 'superscript' || editor === 'markdown' || editor === 'plain')) {
-      return NotesSuperscript.render(text);
+      html = NotesSuperscript.render(text);
+    } else {
+      html = NotesMarkdown.render(text);
     }
-    return NotesMarkdown.render(text);
+    if (window.NotesInDocNav?.annotateHeadingHtml) {
+      html = NotesInDocNav.annotateHeadingHtml(html);
+    }
+    return html;
+  }
+
+  function scrollEditorToLine(lineIndex) {
+    if (!ui.body || lineIndex < 0) return false;
+    const text = ui.body.value || '';
+    const lines = text.split('\n');
+    const line = Math.min(lineIndex, lines.length - 1);
+    let pos = 0;
+    for (let i = 0; i < line; i += 1) pos += lines[i].length + 1;
+    const lineEnd = pos + (lines[line]?.length || 0);
+    ui.body.focus();
+    ui.body.setSelectionRange(pos, lineEnd);
+    const lineHeight = parseFloat(getComputedStyle(ui.body).lineHeight) || 20;
+    ui.body.scrollTop = Math.max(0, line * lineHeight - ui.body.clientHeight / 3);
+    return true;
+  }
+
+  function followInDocLink(href) {
+    const nav = window.NotesInDocNav;
+    if (!nav) return false;
+    const raw = String(href || '').trim();
+    if (!raw || nav.isExternalHref(raw)) return false;
+    const bodyText = ui.body?.value || '';
+    const target = nav.resolveHeadingTarget(bodyText, raw);
+    if (!ui.preview?.hidden) {
+      const id = target?.id || nav.slugify(raw.replace(/^#/, ''));
+      const el = ui.preview.querySelector(`#${CSS.escape(id)}`)
+        || [...ui.preview.querySelectorAll('h1,h2,h3')].find((node) => nav.slugify(node.textContent || '') === id);
+      if (el) {
+        el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        return true;
+      }
+    }
+    if (target && target.line >= 0) return scrollEditorToLine(target.line);
+    return false;
   }
 
   function openExternalLink(href) {
@@ -1122,11 +1163,26 @@
     if (document.body._editLinksBound) return;
     document.body._editLinksBound = true;
     document.body.addEventListener('click', (event) => {
-      const anchor = event.target?.closest?.('a.edit-link[href]');
+      const anchor = event.target?.closest?.('a.edit-link[href], a.in-doc-link[href]');
       if (!anchor) return;
+      const href = anchor.getAttribute('href') || '';
+      if (followInDocLink(href)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (!anchor.classList.contains('edit-link')) return;
       event.preventDefault();
       event.stopPropagation();
-      openExternalLink(anchor.getAttribute('href') || '');
+      openExternalLink(href);
+    });
+    ui.preview?.addEventListener('click', (event) => {
+      const anchor = event.target?.closest?.('a.in-doc-link[href], a[href^="#"]');
+      if (!anchor) return;
+      const href = anchor.getAttribute('href') || '';
+      if (!followInDocLink(href)) return;
+      event.preventDefault();
+      event.stopPropagation();
     });
   }
 
@@ -7230,6 +7286,7 @@
     const findQ = currentFindQuery();
     if (findBarOpen() && findQ) return findQ;
     const sidebarQ = currentSearchQuery();
+    if (sidebarQ && docHitNoteSuppressed()) return '';
     if (sidebarQ) return sidebarQ;
     return findQ;
   }
@@ -7590,6 +7647,7 @@
   function dismissDocHitNote() {
     const needle = activeDocHitNeedle();
     if (needle) docHitNoteDismissedFor = needle;
+    clearDocumentSearchHighlights();
     const stage = activeDocSearchStage();
     if (stage) {
       showHitNote(stage, '');
@@ -7598,6 +7656,33 @@
       document.querySelectorAll('.doc-hit-note').forEach((el) => el.remove());
       docSearchHitIndex = 0;
       findIndex = 0;
+    }
+  }
+
+  async function clearDocumentSearchHighlights() {
+    const stages = new Set();
+    const live = activeDocSearchStage();
+    if (live) stages.add(live);
+    if (ui.docStage) stages.add(ui.docStage);
+    ui.docInline?.querySelectorAll('.doc-inline-stage, .doc-thumb-stage').forEach((el) => stages.add(el));
+    stages.forEach((stage) => NotesPreview.clearSearchHighlights(stage));
+    document.querySelectorAll('.doc-hit-note').forEach((el) => el.remove());
+    const repaintNeedle = findBarOpen() && currentFindQuery() ? currentFindQuery() : '';
+    for (const stage of stages) {
+      const attId = stage?.dataset?.stage;
+      if (!attId || !stage.isConnected) continue;
+      try {
+        const entry = await cachedPreview(attId);
+        if (!stage.isConnected) continue;
+        await paintDocumentSearch(attId, stage, entry, repaintNeedle);
+      } catch (_) { /* offline preview */ }
+    }
+    if (isNotePreviewVisible()) {
+      if (findBarOpen() && currentFindQuery()) highlightFindPreview();
+      else refreshPreview();
+    } else {
+      syncFindHighlights(repaintNeedle);
+      syncChecklistFindHighlights(repaintNeedle);
     }
   }
 
@@ -8747,6 +8832,7 @@
 
   function highlightPreview() {
     if (!ui.preview) return;
+    if (docHitNoteSuppressed()) return;
     const query = ui.search.value.trim();
     if (!query) return;
     NotesSearch.applyHighlights(ui.preview, query);
@@ -11851,7 +11937,10 @@
     }
     syncFindBarChrome(false);
     if (isNotePreviewVisible()) refreshPreview();
-    else syncFindHighlights('');
+    else {
+      syncFindHighlights('');
+      syncChecklistFindHighlights('');
+    }
   }
 
   function findBarOpen() {
@@ -11923,8 +12012,32 @@
     return [...ui.preview.querySelectorAll('mark.search-hit')];
   }
 
+  function scrollChecklistFindMatch(match) {
+    if (!match || !ui.checklist || ui.checklist.hidden) return;
+    const full = ui.body?.value || '';
+    const line = (full.slice(0, match.start).match(/\n/g) || []).length;
+    const inputs = ui.checklist.querySelectorAll('.check-text');
+    const target = inputs[line];
+    if (!target) return;
+    const lines = full.split('\n');
+    let lineStart = 0;
+    for (let i = 0; i < line; i += 1) lineStart += lines[i].length + 1;
+    const prefix = lines[line]?.match(/^(\s*[-*] \[[ xX]\] )/)?.[1]?.length || 0;
+    const start = Math.max(0, match.start - lineStart - prefix);
+    const end = Math.max(start, match.end - lineStart - prefix);
+    target.focus();
+    target.setSelectionRange(start, end);
+    target.scrollIntoView({ block: 'center', inline: 'nearest' });
+    syncChecklistFindHighlights(currentFindQuery());
+  }
+
   function scrollEditFindMatch(match) {
     if (!match || !ui.body) return;
+    const type = currentId ? (NotesStore.get(currentId)?.content?.editor || ui.editorType.value || 'plain') : 'plain';
+    if (isChecklistEditor(type) && ui.checklist && !ui.checklist.hidden) {
+      scrollChecklistFindMatch(match);
+      return;
+    }
     syncFindHighlights(currentFindQuery());
     ui.body.focus();
     ui.body.setSelectionRange(match.start, match.end);
@@ -11962,8 +12075,10 @@
     wrap.classList.toggle('find-active', !!show);
     if (!show) {
       layer.textContent = '';
+      syncChecklistFindHighlights('');
       return;
     }
+    syncChecklistFindHighlights(query);
     const text = ui.body.value || '';
     const matches = NotesSearch.findMatches(text, query, findMatchOptions());
     if (!matches.length) {
@@ -11989,6 +12104,60 @@
     if (!layer || !ui.body) return;
     layer.scrollTop = ui.body.scrollTop;
     layer.scrollLeft = ui.body.scrollLeft;
+    ui.checklist?.querySelectorAll('.check-find-highlights').forEach((rowLayer) => {
+      const input = rowLayer.parentElement?.querySelector('.check-text');
+      if (input) rowLayer.scrollTop = input.scrollTop;
+    });
+  }
+
+  function buildFindHighlightHtml(text, query, currentIndex) {
+    const matches = NotesSearch.findMatches(text, query, findMatchOptions());
+    if (!matches.length) return NotesSanitize.escapeHtml(text);
+    let html = '';
+    let last = 0;
+    matches.forEach((match, index) => {
+      html += NotesSanitize.escapeHtml(text.slice(last, match.start));
+      const cls = currentIndex >= 0 && index === currentIndex ? 'search-hit search-hit-current' : 'search-hit';
+      html += `<mark class="${cls}">${NotesSanitize.escapeHtml(text.slice(match.start, match.end))}</mark>`;
+      last = match.end;
+    });
+    html += NotesSanitize.escapeHtml(text.slice(last));
+    return html;
+  }
+
+  function syncChecklistFindHighlights(query) {
+    if (!ui.checklist || ui.checklist.hidden) return;
+    const barOpen = findBarOpen();
+    const needle = String(query || '').trim();
+    const show = barOpen && needle;
+    ui.checklist.classList.toggle('find-active', !!show);
+    if (!show) {
+      ui.checklist.querySelectorAll('.check-find-highlights').forEach((el) => el.remove());
+      return;
+    }
+    let matchOffset = 0;
+    const globalIndex = findIndex;
+    ui.checklist.querySelectorAll('.check-row').forEach((row) => {
+      const input = row.querySelector('.check-text');
+      const wrap = row.querySelector('.check-text-wrap');
+      if (!input || !wrap) return;
+      let layer = wrap.querySelector('.check-find-highlights');
+      if (!layer) {
+        layer = document.createElement('pre');
+        layer.className = 'check-find-highlights';
+        layer.setAttribute('aria-hidden', 'true');
+        wrap.insertBefore(layer, wrap.firstChild);
+      }
+      const text = input.value || '';
+      const matches = NotesSearch.findMatches(text, needle, findMatchOptions());
+      let localCurrent = -1;
+      if (matches.length && globalIndex >= matchOffset && globalIndex < matchOffset + matches.length) {
+        localCurrent = globalIndex - matchOffset;
+      }
+      layer.innerHTML = buildFindHighlightHtml(text, needle, localCurrent);
+      matchOffset += matches.length;
+      layer.scrollTop = input.scrollTop;
+    });
   }
 
   function highlightFindPreview() {
@@ -12736,6 +12905,7 @@
   let searchDebounceTimer = null;
   let searchRepairTimer = null;
   function applySearchFilter() {
+    docHitNoteDismissedFor = '';
     updateSearchClear();
     // Filter the list only — do not rebuild OCR search indexes on every keystroke.
     // That used to mark many notes dirty, kick sync, and feel like a full app reload.
@@ -12883,6 +13053,8 @@
 
   const btnFind = document.getElementById('btn-find');
   if (btnFind) btnFind.addEventListener('click', () => showFindBar());
+  const btnFindDesktop = document.getElementById('btn-find-desktop');
+  if (btnFindDesktop) btnFindDesktop.addEventListener('click', () => showFindBar());
 
   document.getElementById('md-toolbar').addEventListener('click', (event) => {
     const action = event.target.closest('[data-md]')?.dataset.md;

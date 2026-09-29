@@ -24,7 +24,10 @@ const NotesLinkOverlay = (() => {
       html += escapeHtml(src.slice(cursor, range.start));
       const chunk = src.slice(range.start, range.end);
       const href = escapeAttr(range.href);
-      html += `<a class="edit-link" href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(chunk)}</a>`;
+      const inDoc = String(range.href || '').trim().startsWith('#');
+      html += inDoc
+        ? `<a class="edit-link in-doc-link" href="${href}">${escapeHtml(chunk)}</a>`
+        : `<a class="edit-link" href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(chunk)}</a>`;
       cursor = range.end;
     });
     html += escapeHtml(src.slice(cursor));

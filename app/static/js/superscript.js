@@ -12,9 +12,16 @@
 
   function safeHref(raw) {
     const href = String(raw || '').trim();
+    if (/^#/.test(href)) return href;
     if (/^https?:\/\//i.test(href)) return href;
     if (/^mailto:/i.test(href)) return href;
     if (/^www\./i.test(href)) return `https://${href}`;
+    if (href && !/[\s<>"']/.test(href)) {
+      const nav = (typeof globalThis !== 'undefined' && globalThis.NotesInDocNav)
+        || (typeof window !== 'undefined' && window.NotesInDocNav);
+      const slug = nav?.slugify ? nav.slugify(href.replace(/^#/, '')) : href.toLowerCase().replace(/\s+/g, '-');
+      return `#${slug}`;
+    }
     return '';
   }
 
@@ -407,7 +414,11 @@
           const raw = chunk.slice(item.start, item.end);
           if (safe) {
             const attr = safe.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-            out += `<a href="${attr}" target="_blank" rel="noopener noreferrer">${escapeHtml(raw)}</a>`;
+            if (safe.startsWith('#')) {
+              out += `<a class="edit-link in-doc-link" href="${attr}">${escapeHtml(raw)}</a>`;
+            } else {
+              out += `<a href="${attr}" target="_blank" rel="noopener noreferrer">${escapeHtml(raw)}</a>`;
+            }
           } else {
             out += escapeHtml(raw);
           }
@@ -424,7 +435,11 @@
         out += escapeHtml(src.slice(token.start, token.end));
       } else {
         const attr = safe.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-        out += `<a href="${attr}" target="_blank" rel="noopener noreferrer">${escapeHtml(token.label || safe)}</a>`;
+        if (safe.startsWith('#')) {
+          out += `<a class="edit-link in-doc-link" href="${attr}">${escapeHtml(token.label || safe)}</a>`;
+        } else {
+          out += `<a href="${attr}" target="_blank" rel="noopener noreferrer">${escapeHtml(token.label || safe)}</a>`;
+        }
       }
       cursor = token.end;
     }
@@ -549,7 +564,10 @@
       .map((block) => block.replace(/\n/g, '<br>').trim())
       .filter(Boolean)
       .map((block) => `<p>${block}</p>`);
-    return paragraphs.length ? paragraphs.join('') : '<p></p>';
+    const joined = paragraphs.length ? paragraphs.join('') : '<p></p>';
+    const nav = (typeof globalThis !== 'undefined' && globalThis.NotesInDocNav)
+      || (typeof window !== 'undefined' && window.NotesInDocNav);
+    return nav?.annotateHeadingHtml ? nav.annotateHeadingHtml(joined) : joined;
   }
 
   const api = {

@@ -2556,7 +2556,8 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
 .editor.find-open #md-toolbar {
   display: none;
 }
-.editor.find-open .editor-actions #btn-find {
+.editor.find-open .editor-actions #btn-find,
+.editor.find-open .editor-actions #btn-find-desktop {
   display: none;
 }
 .find-case-toggle {
@@ -3267,6 +3268,13 @@ body.scan-dialog-open {
   font-family: inherit;
 }
 .preview h1, .preview h2, .preview h3 { margin-top: 1.2em; }
+.preview a.in-doc-link,
+.preview a[href^="#"] {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
 .preview sup { font-size: 0.75em; vertical-align: super; line-height: 0; }
 .preview a {
   color: var(--accent, #4f8cff);
@@ -3287,6 +3295,7 @@ body.scan-dialog-open {
   overflow: auto;
 }
 .editor-foot {
+  margin-top: calc(var(--note-body-size) * var(--note-body-line) * 6);
   padding: 8px 14px;
   padding-bottom: calc(8px + var(--safe-bottom));
   border-top: 1px solid var(--border);
@@ -4379,6 +4388,33 @@ body.note-readonly #checklist:not([hidden]) {
   position: relative;
   flex: 1;
   min-width: 0;
+}
+.check-find-highlights {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  white-space: pre-wrap;
+  overflow: hidden;
+  pointer-events: none;
+  font: inherit;
+  line-height: inherit;
+}
+.check-find-highlights mark.search-hit {
+  color: transparent;
+  background: color-mix(in srgb, #e10600 22%, transparent);
+  border-radius: 2px;
+}
+.check-find-highlights mark.search-hit-current {
+  background: color-mix(in srgb, #e10600 38%, transparent);
+  box-shadow: inset 0 -2px 0 #e10600;
+}
+.checklist.find-active .check-text-links {
+  opacity: 0;
 }
 .check-text-links {
   position: absolute;
