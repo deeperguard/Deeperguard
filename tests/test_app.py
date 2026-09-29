@@ -2428,7 +2428,11 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("scrollHitIntoView", (APP_DIR / "static" / "js" / "preview.js").read_text(encoding="utf-8"))
         self.assertIn("listSearchHits", (APP_DIR / "static" / "js" / "preview.js").read_text(encoding="utf-8"))
         self.assertIn("data-doc-hit-nav", app_js)
+        self.assertIn("data-doc-hit-dismiss", app_js)
+        self.assertIn("dismissDocHitNote", app_js)
+        self.assertIn("docHitNoteSuppressed", app_js)
         self.assertIn(".doc-hit-note-actions", (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8"))
+        self.assertIn(".doc-hit-note-dismiss", (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8"))
 
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         self.assertIn(".doc-inline-stage:has(pre)", css)
