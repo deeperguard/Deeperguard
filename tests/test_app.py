@@ -4029,7 +4029,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('function syncEditorMobileProxies()', js)
         self.assertIn('if (isPhoneShell()) return;', js)
         self.assertIn(".editor-actions-overflow-panel {", mobile)
+        self.assertIn("display: none !important", mobile)
         self.assertIn("body.editor-tools-open .editor-actions-overflow-panel", mobile)
+        self.assertIn('id="btn-mobile-doc-fullscreen"', html)
         self.assertIn("#btn-clear-checked {", mobile)
 
     def test_note_type_next_to_more_checklist_and_protection_symbols(self):
