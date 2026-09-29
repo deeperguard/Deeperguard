@@ -1181,8 +1181,13 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("function undoEdit", app_js)
         self.assertIn("syncEditLinkOverlay", app_js)
         editor_html = html[html.find('<article id="editor"'):html.find('<footer class="editor-foot"')]
+        self.assertIn('id="editor-scroll"', editor_html)
+        self.assertLess(editor_html.index('id="editor-scroll"'), editor_html.index('id="note-body-wrap"'))
         self.assertLess(editor_html.index('id="note-body-wrap"'), editor_html.index('id="preview"'))
         self.assertIn('id="note-body-links"', editor_html)
+        self.assertIn(".editor-scroll {", css)
+        self.assertIn(".editor-scroll > .note-body-wrap:not([hidden])", css)
+        self.assertIn(".attachment-list:empty", css)
         self.assertIn("renderInlinePlainSegment", (APP_DIR / "static" / "js" / "superscript.js").read_text(encoding="utf-8"))
         self.assertIn("previewBtn.hidden = checklistOn || !hasDocs", app_js)
         # Update must not navigate to ?hard=1 (Safari crash-looped on cellular).
