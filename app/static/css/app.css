@@ -3049,7 +3049,7 @@ body.scan-dialog-open {
 .editor-scroll {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -3059,7 +3059,7 @@ body.scan-dialog-open {
 .editor-scroll > #checklist:not([hidden]),
 .editor-scroll > #preview:not([hidden]),
 .editor-scroll > .doc-inline:not([hidden]) {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 8rem;
 }
 .editor-scroll > .editor-foot,
@@ -4777,8 +4777,8 @@ body.search-filters-open .fab-stack,
      as its text so a short note does not open with a blank band on top. */
   .editor-scroll > .note-body-wrap:not([hidden]),
   .editor-scroll > #checklist:not([hidden]) {
-    flex: 1 1 auto;
-    min-height: 8rem;
+    flex: 1 1 0%;
+    min-height: max(8rem, 100%);
     overflow: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -5648,6 +5648,13 @@ body.search-filters-open .fab-stack,
   .editor-pane .editor:not(.doc-preview-active) .note-body-highlights {
     padding-left: 32px;
     padding-right: 32px;
+  }
+  /* Fill the open-note scrollport so Saved / attachments / history sit below the fold. */
+  .editor-pane .editor:not(.doc-preview-active) .editor-scroll > .note-body-wrap:not([hidden]),
+  .editor-pane .editor:not(.doc-preview-active) .editor-scroll > #checklist:not([hidden]),
+  .editor-pane .editor:not(.doc-preview-active) .editor-scroll > #preview:not([hidden]) {
+    flex: 1 1 0%;
+    min-height: 100%;
   }
   .tag-section summary.section-label,
   .filter-section summary.section-label { cursor: pointer; }
