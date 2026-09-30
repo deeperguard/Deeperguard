@@ -207,10 +207,25 @@ async function networkFirstNavigate(request) {
   // Never hand Safari a failed navigation — that becomes the Dutch
   // "problem occurred repeatedly" crash page when LAN is unreachable.
   return new Response(
-    '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
-    + '<title>Notes offline</title><body style="font-family:system-ui;padding:24px">'
-    + '<h1>Notes is offline</h1><p>Join home Wi‑Fi or WireGuard, then reload.</p>'
-    + '<p><a href="' + APP_SHELL + '">Reload</a></p></body>',
+    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<title>Deeperguard — offline</title>'
+    + '<style>'
+    + '*,*::before,*::after{box-sizing:border-box}'
+    + 'body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#0f172a;background:radial-gradient(1000px 400px at 50% -30px,#e0f2fe 0%,rgba(224,242,254,.4) 40%,transparent 80%),linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%)}'
+    + '.card{width:min(420px,100%);padding:32px 24px 24px;border:1px solid #e2e8f0;border-radius:20px;background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.05),0 10px 25px -5px rgba(15,23,42,.08);text-align:center}'
+    + '.mark{width:56px;height:56px;margin:0 auto 12px;border-radius:14px;background:linear-gradient(145deg,#2563eb,#1d4ed8);display:grid;place-items:center;color:#fff;font-weight:800;font-size:22px;letter-spacing:-.04em}'
+    + 'h1{margin:0 0 8px;font-size:24px;letter-spacing:-.02em}'
+    + 'p{margin:0 0 18px;line-height:1.45;color:#64748b;font-size:15px}'
+    + '.hint{margin:0 0 20px;padding:10px 12px;border-radius:10px;background:#ecfdf5;border:1px solid #bbf7d0;color:#166534;font-size:13px;line-height:1.4}'
+    + 'button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border:0;border-radius:10px;background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer}'
+    + '</style></head><body>'
+    + '<main class="card" role="main">'
+    + '<div class="mark" aria-hidden="true">DG</div>'
+    + '<h1>You\'re offline</h1>'
+    + '<p class="hint">Notes are encrypted on your device. Reconnect to sync — we only store scrambled data on the server.</p>'
+    + '<p>Join home Wi‑Fi or WireGuard, then reload Deeperguard.</p>'
+    + '<button type="button" onclick="location.href=\'' + APP_SHELL + '\'">Reload</button>'
+    + '</main></body></html>',
     {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },

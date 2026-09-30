@@ -16,7 +16,29 @@ const NotesHistory = (() => {
     return !skipFlush;
   }
 
-  const api = { revisionRows, revisionTimestamp, shouldFlushOnOpen };
+  function revisionLabel(rev, note) {
+    const snap = {
+      content: {
+        title: rev?.title || '',
+        content: rev?.content || '',
+        title_manual: false,
+        locked: false,
+      },
+    };
+    const derived = typeof NotesSearch !== 'undefined' && NotesSearch.effectiveNoteTitle
+      ? NotesSearch.effectiveNoteTitle(snap)
+      : '';
+    if (derived) return derived;
+    const stored = String(rev?.title || '').trim();
+    if (stored && stored !== 'Untitled' && stored !== 'Title') return stored;
+    const currentTitle = typeof NotesSearch !== 'undefined' && NotesSearch.effectiveNoteTitle && note
+      ? NotesSearch.effectiveNoteTitle(note)
+      : String(note?.content?.title || '').trim();
+    if (stored && currentTitle && stored === currentTitle) return stored;
+    return 'Untitled version';
+  }
+
+  const api = { revisionRows, revisionTimestamp, shouldFlushOnOpen, revisionLabel };
   if (typeof window !== 'undefined') window.NotesHistory = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   return api;

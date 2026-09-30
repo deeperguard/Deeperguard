@@ -1097,6 +1097,45 @@
     const locked = noteEditingLocked();
     if (undoBtn) undoBtn.disabled = locked || !stack.length;
     if (redoBtn) redoBtn.disabled = locked || !redo.length;
+    if (undoBtn) undoBtn.hidden = locked;
+    if (redoBtn) redoBtn.hidden = locked;
+  }
+
+  function setEditorToolbarMenuOpen(open) {
+    const on = !!open;
+    document.body.classList.toggle('editor-toolbar-menu-open', on);
+    document.querySelectorAll('.editor-toolbar-overflow-toggle').forEach((btn) => {
+      btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+    });
+    const backdrop = document.getElementById('editor-toolbar-menu-backdrop');
+    if (backdrop) backdrop.hidden = !on;
+  }
+
+  function closeEditorToolbarMenu() {
+    setEditorToolbarMenuOpen(false);
+  }
+
+  function toggleEditorToolbarMenu() {
+    setEditorToolbarMenuOpen(!document.body.classList.contains('editor-toolbar-menu-open'));
+  }
+
+  function noteShouldList(note) {
+    if (!note) return false;
+    if (note.uuid === currentId) return true;
+    if (NotesStore.listAttachments(note.uuid).length) return true;
+    return !(NotesSearch.noteIsEmptyStub?.(note));
+  }
+
+  function discardEmptyDraftNote(noteId) {
+    const id = noteId || currentId;
+    if (!id) return false;
+    const note = NotesStore.get(id);
+    if (!note || note.deleted) return false;
+    if (NotesStore.listAttachments(id).length) return false;
+    if (!NotesSearch.noteIsEmptyStub?.(note)) return false;
+    NotesStore.remove(id, { force: true });
+    if (currentId === id) currentId = null;
+    return true;
   }
 
   function handleEditorUndoShortcut(event) {
@@ -4380,11 +4419,23 @@
     }
     title.textContent = 'Start writing';
     message.textContent = 'Notes stay encrypted on this device. Start with a blank note.';
-    if (newBtn) newBtn.hidden = false;
+    if (newBtn) {
+      newBtn.hidden = false;
+      newBtn.textContent = 'New note';
+      newBtn.classList.remove('primary');
+    }
     if (scanBtn) scanBtn.hidden = true;
     if (syncBtn) syncBtn.hidden = true;
     if (dismissBtn) dismissBtn.hidden = true;
     if (relockBtn) relockBtn.hidden = true;
+    if (NotesStore.listNotes().length > 0 && !vaultSyncError && !currentId) {
+      title.textContent = 'Select a note';
+      message.textContent = 'Pick a note from the list or start a new one. Everything stays encrypted on this device.';
+      if (newBtn) {
+        newBtn.textContent = 'Create a note';
+        newBtn.classList.add('primary');
+      }
+    }
   }
 
   function emptyStateDismissed() {
@@ -4420,6 +4471,11 @@
     }
     // If notes already synced in, never trap the user behind the error card.
     if (NotesStore.listNotes().length > 0 && !vaultSyncError) {
+      if (!currentId && ui.editor?.hidden) {
+        ui.empty.hidden = false;
+        refreshEmptyStateCopy();
+        return;
+      }
       ui.empty.hidden = true;
       return;
     }
@@ -4428,9 +4484,7 @@
       refreshEmptyStateCopy();
       return;
     }
-    // Once notes are on this device, hide the welcome card so desktop sync
-    // is not covered by a create/dismiss dialog.
-    if (NotesStore.listNotes().length > 0 || emptyStateDismissed()) {
+    if (NotesStore.listNotes().length === 0 && (emptyStateDismissed())) {
       ui.empty.hidden = true;
       return;
     }
@@ -6192,7 +6246,7 @@
       tagMap: tagMap(),
       sort: prefs.sort,
       searchOptions,
-    });
+    }).filter((note) => noteShouldList(note));
     const files = listingFiles ? listStoredFiles({ query, tagId: currentTag, folderId: currentFolder }) : [];
     const listed = listingFiles ? files : notes;
     const listedCount = listed.length;
@@ -8458,8 +8512,11 @@
         .map((rev, idx) => {
           const whenAt = typeof NotesHistory !== 'undefined' ? NotesHistory.revisionTimestamp(rev) : 0;
           const when = whenAt ? new Date(whenAt).toLocaleString() : '';
+          const label = typeof NotesHistory !== 'undefined' && NotesHistory.revisionLabel
+            ? NotesHistory.revisionLabel(rev, note)
+            : (rev.title || 'Untitled version');
           return `<div class="history-item">
-          <span><strong>${escapeHtml(rev.title || 'Untitled')}</strong><br><span class="muted">${when}</span></span>
+          <span><strong>${escapeHtml(label)}</strong><br><span class="muted">${when}</span></span>
           <button class="btn ghost sm" data-rev="${idx}">Restore</button>
         </div>`;
         })
@@ -8512,6 +8569,7 @@
     if (findInput) findInput.value = '';
     docHitNoteDismissedFor = '';
     closeNoteOptions();
+    closeEditorToolbarMenu();
     document.querySelectorAll('.doc-hit-note').forEach((el) => el.remove());
     document.getElementById('btn-delete-forever')?.toggleAttribute('hidden', true);
     document.getElementById('btn-clear-checked')?.toggleAttribute('hidden', true);
@@ -8686,7 +8744,7 @@
     if (banner) {
       banner.hidden = !on;
       banner.textContent = on
-        ? 'Editing is disabled for this note. Tap the lock icon in the toolbar to allow changes.'
+        ? 'Read only — tap the lock icon to edit.'
         : '';
     }
     ui.title.readOnly = !!on;
@@ -8863,6 +8921,7 @@
       if (ui.title) ui.title.readOnly = true;
       ui.body.value = '';
       closeNoteOptions();
+    closeEditorToolbarMenu();
       syncEditorBodyWrap();
       if (ui.docInline) {
         ui.docInline.hidden = true;
@@ -9223,8 +9282,12 @@
       const body = ui.body.value || '';
       next.title_manual = manual;
       next.title = manual
-        ? (String(ui.title.value || '').trim() || 'Untitled')
+        ? (String(ui.title.value || '').trim() || '')
         : (NotesSearch.derivedTitleFromBody(body) || '');
+      if (NotesSearch.isPlaceholderTitle?.(next.title)) {
+        next.title = '';
+        next.title_manual = false;
+      }
       next.content = body;
       next.editor = ui.editorType.value || 'plain';
     }
@@ -9232,12 +9295,18 @@
       updateNoteMeta(note);
       return;
     }
+    const draft = { uuid: currentId, content: next };
+    if (!live.length && NotesSearch.noteIsEmptyStub?.(draft)) {
+      NotesStore.remove(currentId, { force: true });
+      return;
+    }
     NotesStore.upsert(currentId, next, { recordRevision: true });
     updateNoteMeta(NotesStore.get(currentId));
+    const displayTitle = NotesSearch.effectiveNoteTitle(NotesStore.get(currentId));
     const rowTitle = ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"] h3`);
     if (rowTitle) {
-      rowTitle.textContent = next.title || 'Title';
-      rowTitle.classList.toggle('note-title-placeholder', !next.title);
+      rowTitle.textContent = displayTitle || 'Title';
+      rowTitle.classList.toggle('note-title-placeholder', !displayTitle);
     }
     if (String(next.content || '').trim()) maybeOfferWritingTip();
   }
@@ -10804,6 +10873,7 @@
     unlockedNotes.delete(currentId);
     NotesStore.upsert(currentId, { ...note.content });
     closeNoteOptions();
+    closeEditorToolbarMenu();
     updateActionButtons(NotesStore.get(currentId));
     updateNoteInfoPanel(NotesStore.get(currentId));
     renderNotes();
@@ -12561,7 +12631,9 @@
     const closingId = currentId;
     if (ui.title) ui.title.readOnly = false;
     closeNoteOptions();
+    closeEditorToolbarMenu();
     flushSave();
+    if (closingId) discardEmptyDraftNote(closingId);
     if (closingId) unlockedNotes.delete(closingId);
     hideFindBar();
     hideTagSuggest();
@@ -13202,6 +13274,20 @@
   if (btnFind) btnFind.addEventListener('click', () => showFindBar());
   const btnFindDesktop = document.getElementById('btn-find-desktop');
   if (btnFindDesktop) btnFindDesktop.addEventListener('click', () => showFindBar());
+
+  document.querySelectorAll('.editor-toolbar-overflow-toggle').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      toggleEditorToolbarMenu();
+    });
+  });
+  document.getElementById('editor-toolbar-menu-backdrop')?.addEventListener('click', () => closeEditorToolbarMenu());
+  document.addEventListener('click', (event) => {
+    if (!document.body.classList.contains('editor-toolbar-menu-open')) return;
+    if (event.target.closest('.editor-toolbar-overflow-toggle')) return;
+    if (event.target.closest('.editor-actions-overflow-panel')) return;
+    closeEditorToolbarMenu();
+  });
 
   document.getElementById('md-toolbar').addEventListener('click', (event) => {
     const action = event.target.closest('[data-md]')?.dataset.md;
@@ -14073,6 +14159,7 @@
       return;
     }
     closeNoteOptions();
+    closeEditorToolbarMenu();
     NotesAiChat.onNoteChanged(currentId);
     NotesAiChat.open();
   }
@@ -15831,6 +15918,7 @@
         const noteOptions = document.getElementById('note-options');
         if (noteOptions && !noteOptions.hidden) {
           closeNoteOptions();
+    closeEditorToolbarMenu();
           return;
         }
         if (!document.getElementById('tag-composer').hidden) {
