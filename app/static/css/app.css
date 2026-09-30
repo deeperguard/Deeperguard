@@ -2150,6 +2150,13 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   -webkit-box-orient: vertical;
   word-break: break-word;
 }
+.note-item-lock-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0 2px;
+}
 .note-row-delete {
   display: none;
   position: absolute;
@@ -3525,11 +3532,11 @@ body.scan-dialog-open {
   min-width: 4.5rem;
   font-variant-numeric: tabular-nums;
 }
-.find-btn {
+.btn.icon.find-btn {
   width: calc(var(--touch) + 6px);
   height: calc(var(--touch) + 6px);
 }
-.find-btn .find-icon { display: block; }
+.btn.icon.find-btn .find-icon { display: block; }
 .doc-inline-main {
   width: 100%;
   border: 0;
@@ -6268,13 +6275,47 @@ body.search-filters-open .fab-stack,
     display: none !important;
   }
   .editor-actions-overflow-panel .editor-phone-strip-btn.btn.ghost.sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     width: auto;
     min-width: 0;
-    height: auto;
-    min-height: 0;
-    padding: inherit;
-    font-size: inherit;
-    line-height: inherit;
+    height: 34px;
+    min-height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .editor-actions-overflow-panel #btn-note-info .editor-phone-strip-label,
+  .editor-actions-overflow-panel #btn-ai-chat .editor-phone-strip-label {
+    display: none !important;
+  }
+  .editor-actions-overflow-panel #btn-ai-chat .editor-phone-strip-icon {
+    display: block !important;
+    width: 17px;
+    height: 17px;
+    flex-shrink: 0;
+  }
+  .editor-actions-overflow-panel .note-more-btn .note-more-icon {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .editor-actions-overflow-panel .find-btn.btn.ghost.sm {
+    width: auto;
+    min-width: 0;
+    height: 34px;
+    min-height: 34px;
+  }
+  .editor-actions-overflow-panel .editor-actions-group {
+    flex-wrap: nowrap;
+  }
+  .editor-actions-overflow-panel {
+    flex-wrap: nowrap;
+    row-gap: 4px;
   }
   .editor-actions-overflow-panel .editor-phone-toolbar-hide {
     display: inline-flex !important;
