@@ -3419,12 +3419,21 @@
     }
     if (phase === 'syncing') {
       if (!isVaultReadyForSync()) return;
+      const banner = document.getElementById('sync-status-banner');
+      const bannerDownloading = banner && !banner.hidden && banner.dataset.mode === 'downloading';
+      const parsed = parseVaultSyncProgressMessage(message);
+      const progressPct = parsed.pct ?? (pctMatch ? pct : null);
+      if (bannerDownloading || vaultPullActive) {
+        const fallback = document.getElementById('sync-status-text')?.textContent || 'Downloading notes…';
+        const labelText = syncBannerProgressText(message, fallback);
+        setSyncBannerProgress({
+          text: labelText,
+          pct: progressPct,
+          indeterminate: progressPct == null,
+          visible: true,
+        });
+      }
       if (isPhoneShell()) {
-        const banner = document.getElementById('sync-status-banner');
-        if (banner && !banner.hidden && banner.dataset.mode === 'downloading') {
-          const label = document.getElementById('sync-status-text');
-          if (label) label.textContent = syncBannerProgressText(message, label.textContent || 'Downloading notes…');
-        }
         meta.textContent = when ? `Synced ${when}` : '';
       } else {
         meta.textContent = message || (pctMatch ? `Downloading… ${pct}%` : 'Syncing…');
@@ -3496,9 +3505,126 @@
   const UNLOCK_DOWNLOAD_TIMEOUT_MS = 20000;
 
   function syncBannerProgressText(message, fallback) {
-    const pctMatch = String(message || '').match(/(\d+)\s*%/);
-    if (pctMatch) return `${fallback || 'Downloading notes…'} ${pctMatch[1]}%`;
-    return fallback || message || 'Syncing…';
+    const parsed = parseVaultSyncProgressMessage(message);
+    const base = fallback || 'Downloading notes…';
+    if (parsed.done != null && parsed.total) {
+      const pct = parsed.pct != null ? ` · ${parsed.pct}%` : '';
+      return `${base} ${parsed.done} / ${parsed.total}${pct}`;
+    }
+    if (parsed.pct != null) return `${base} ${parsed.pct}%`;
+    return message || base || 'Syncing…';
+  }
+
+  function parseVaultSyncProgressMessage(message) {
+    const s = String(message || '');
+    const pctMatch = s.match(/(\d+)\s*%/);
+    const countMatch = s.match(/\((\d+)\/(\d+)\)/);
+    return {
+      pct: pctMatch ? Number(pctMatch[1]) : null,
+      done: countMatch ? Number(countMatch[1]) : null,
+      total: countMatch ? Number(countMatch[2]) : null,
+      isDownload: /Downloading/i.test(s),
+    };
+  }
+
+  function setSyncBannerProgress({ text, pct = null, indeterminate = false, visible = true } = {}) {
+    const wrap = document.getElementById('sync-status-progress');
+    const track = document.getElementById('sync-status-progress-track');
+    const bar = document.getElementById('sync-status-progress-bar');
+    const label = document.getElementById('sync-status-text');
+    if (label && text) label.textContent = text;
+    if (!wrap || !bar) return;
+    if (!visible) {
+      wrap.hidden = true;
+      bar.style.width = '0%';
+      bar.classList.remove('is-indeterminate');
+      if (track) track.removeAttribute('aria-valuenow');
+      return;
+    }
+    wrap.hidden = false;
+    if (indeterminate || pct == null) {
+      bar.classList.add('is-indeterminate');
+      bar.style.width = '';
+      if (track) track.removeAttribute('aria-valuenow');
+      return;
+    }
+    bar.classList.remove('is-indeterminate');
+    const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+    bar.style.width = `${clamped > 0 ? Math.max(2, clamped) : 0}%`;
+    if (track) track.setAttribute('aria-valuenow', String(clamped));
+  }
+
+  let fileDownloadTaskActive = false;
+  let fileDownloadCompleteTimer = 0;
+
+  function setFileDownloadProgress({ title, status, pct = null, indeterminate = true, visible = true } = {}) {
+    const overlay = document.getElementById('file-download-progress');
+    const titleEl = document.getElementById('file-download-progress-title');
+    const statusEl = document.getElementById('file-download-progress-status');
+    const track = document.getElementById('file-download-progress-track');
+    const bar = document.getElementById('file-download-progress-bar');
+    if (!overlay || !bar) return;
+    if (!visible) {
+      overlay.hidden = true;
+      overlay.setAttribute('aria-busy', 'false');
+      bar.style.width = '0%';
+      bar.classList.remove('is-indeterminate');
+      if (track) track.removeAttribute('aria-valuenow');
+      return;
+    }
+    overlay.hidden = false;
+    overlay.setAttribute('aria-busy', 'true');
+    if (titleEl && title) titleEl.textContent = title;
+    if (statusEl) statusEl.textContent = status || 'Preparing…';
+    if (indeterminate || pct == null) {
+      bar.classList.add('is-indeterminate');
+      bar.style.width = '';
+      if (track) track.removeAttribute('aria-valuenow');
+      return;
+    }
+    bar.classList.remove('is-indeterminate');
+    const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+    bar.style.width = `${clamped > 0 ? Math.max(2, clamped) : 0}%`;
+    if (track) track.setAttribute('aria-valuenow', String(clamped));
+  }
+
+  async function flashFileDownloadComplete() {
+    setFileDownloadProgress({ pct: 100, indeterminate: false, status: 'Done' });
+    await new Promise((resolve) => {
+      clearTimeout(fileDownloadCompleteTimer);
+      fileDownloadCompleteTimer = setTimeout(resolve, 320);
+    });
+    setFileDownloadProgress({ visible: false });
+  }
+
+  async function runFileDownloadTask({ title, prepareLabel, run }) {
+    if (fileDownloadTaskActive) return null;
+    fileDownloadTaskActive = true;
+    setFileDownloadProgress({
+      title: title || 'Downloading…',
+      status: prepareLabel || 'Preparing…',
+      indeterminate: true,
+      visible: true,
+    });
+    const report = (patch = {}) => {
+      setFileDownloadProgress({
+        title: patch.title || title || 'Downloading…',
+        status: patch.status,
+        pct: patch.pct,
+        indeterminate: patch.indeterminate ?? (patch.pct == null),
+        visible: true,
+      });
+    };
+    try {
+      const result = await run(report);
+      await flashFileDownloadComplete();
+      return result;
+    } catch (err) {
+      setFileDownloadProgress({ visible: false });
+      throw err;
+    } finally {
+      fileDownloadTaskActive = false;
+    }
   }
 
   function showSyncBanner(mode, text, { message } = {}) {
@@ -3510,14 +3636,25 @@
     if (!mode || mode === 'ready') {
       banner.hidden = true;
       banner.dataset.mode = 'ready';
+      setSyncBannerProgress({ visible: false });
       return;
     }
     banner.hidden = false;
     banner.dataset.mode = mode;
-    if (label) {
-      label.textContent = mode === 'downloading' && isPhoneShell()
-        ? syncBannerProgressText(message, text)
-        : (text || '');
+    const labelText = mode === 'downloading'
+      ? syncBannerProgressText(message, text)
+      : (text || '');
+    if (label) label.textContent = labelText;
+    if (mode === 'downloading') {
+      const parsed = parseVaultSyncProgressMessage(message || text);
+      setSyncBannerProgress({
+        text: labelText,
+        pct: parsed.pct,
+        indeterminate: parsed.pct == null,
+        visible: true,
+      });
+    } else {
+      setSyncBannerProgress({ visible: false });
     }
     const actionable = mode === 'error' || mode === 'timeout';
     if (retry) retry.hidden = !actionable;
@@ -3599,7 +3736,12 @@
     if (!NotesStore.isUnlocked()) return;
     revealAppShell();
     armVaultDownloadTimeout();
-    showSyncBanner('downloading', 'Downloading notes…');
+    showSyncBanner('downloading', 'Downloading notes…', { message: 'Downloading notes…' });
+    setSyncBannerProgress({
+      text: 'Downloading notes…',
+      indeterminate: true,
+      visible: true,
+    });
     vaultPullActive = true;
     vaultPullExpected = Math.max(vaultPullExpected, Number(expectedTotal) || 0);
     document.body.classList.add('vault-pulling');
@@ -3614,11 +3756,17 @@
       showSyncBanner('ready');
     }
     if (!vaultPullActive) return;
+    const stalled = vaultDownloadStalled;
     vaultPullActive = false;
     vaultPullExpected = 0;
     document.body.classList.remove('vault-pulling');
     clearVaultDownloadTimeout();
-    if (!vaultDownloadStalled) showSyncBanner('ready');
+    if (!stalled) {
+      setSyncBannerProgress({ pct: 100, indeterminate: false, text: 'Download complete' });
+      window.setTimeout(() => {
+        if (!vaultPullActive && !vaultDownloadStalled) showSyncBanner('ready');
+      }, 280);
+    }
     clearTimeout(vaultPullRenderTimer);
     vaultPullRenderTimer = 0;
     lastNotesRenderKey = '';
@@ -3666,7 +3814,23 @@
 
   NotesStore.setVaultPullCallbacks({
     begin: (expectedTotal) => beginVaultPull(expectedTotal),
-    page: () => scheduleVaultPullRender(false),
+    page: (meta) => {
+      scheduleVaultPullRender(false);
+      if (!meta) return;
+      const total = Number(meta.expectedTotal) || vaultPullExpected || 0;
+      const processed = Number(meta.processed) || 0;
+      if (total > 0 && processed >= 0) {
+        const pct = Math.max(1, Math.min(99, Math.round((processed / total) * 100)));
+        const notes = Number(meta.notes) || 0;
+        const noteHint = notes ? ` · ${notes} note${notes === 1 ? '' : 's'}` : '';
+        setSyncBannerProgress({
+          text: `Downloading notes… ${processed} / ${total}${noteHint}`,
+          pct,
+          indeterminate: false,
+          visible: true,
+        });
+      }
+    },
     end: () => endVaultPull(),
   });
   NotesStore.setNoteIngestedCallback((uuid, meta) => {
@@ -4390,7 +4554,7 @@
     }
     if (syncing && NotesStore.listNotes().length === 0 && !vaultSyncError) {
       title.textContent = 'Downloading your notes';
-      message.textContent = 'Notes appear in the list as they arrive. Sync continues in the background — check the progress at the top.';
+      message.textContent = 'Notes appear in the list as they arrive. Watch the progress bar above the list for download status.';
       if (newBtn) newBtn.hidden = false;
       if (scanBtn) scanBtn.hidden = true;
       if (syncBtn) syncBtn.hidden = true;
@@ -6315,6 +6479,9 @@
           ui.noteList.innerHTML = `<div class="note-list-empty">
               <p class="note-list-empty-title">Downloading notes…</p>
               <p class="muted">0${totalHint} received — your list fills as notes decrypt.</p>
+              <div class="note-list-download-progress sync-status-progress-track" role="progressbar" aria-label="Notes download progress" aria-busy="true">
+                <span class="is-indeterminate"></span>
+              </div>
             </div>`;
           updateVaultPullHead();
           renderVaultStats();
@@ -8342,14 +8509,24 @@
     }
     const item = NotesStore.get(id);
     if (!item) return;
-    const bytes = await NotesStore.getAttachmentBytes(id);
-    const blob = new Blob([bytes], { type: NotesPreview.mimeFromMeta(item.content.mime, item.content.filename) });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = item.content.filename || 'attachment';
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename = item.content.filename || 'attachment';
+    await runFileDownloadTask({
+      title: filename,
+      prepareLabel: 'Preparing download…',
+      run: async (report) => {
+        report({ status: 'Fetching file…', indeterminate: true });
+        const bytes = await NotesStore.getAttachmentBytes(id);
+        report({ status: 'Starting download…', pct: 92, indeterminate: false });
+        const blob = new Blob([bytes], { type: NotesPreview.mimeFromMeta(item.content.mime, item.content.filename) });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        report({ status: 'Download started', pct: 100, indeterminate: false });
+      },
+    });
   }
 
   async function shareAttachment(id) {
@@ -14416,24 +14593,26 @@
       toast('Unlock the vault first', true);
       return;
     }
+    const btn = document.getElementById('btn-reload-notes');
+    if (btn?.disabled) return;
+    if (btn) btn.disabled = true;
     try {
       closeSettings(true);
-      toast('Downloading notes…');
+      vaultDownloadStalled = false;
+      beginVaultPull(0);
       try {
         await NotesStore.clearUnreadableLocal();
       } catch (err) {
         await NotesStore.rememberLastSync(0);
       }
-      await NotesStore.sync({ full: true });
-      renderTags();
-      renderNotes();
-      renderVaultStats();
-      updateEmptyStateVisibility();
+      await syncNow({ full: true, force: true });
       const count = NotesStore.listNotes().filter((n) => !n.content.trashed).length;
       toast(count ? `Loaded ${count} note${count === 1 ? '' : 's'}` : 'Server returned no notes for this password');
     } catch (err) {
       if (err?.code === 'DECRYPT_FAILED' || err?.code === 'DECRYPT_PARTIAL') handleVaultDecryptFailure(err, { relock: false });
       else toast(err.message || 'Reload failed', true);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   });
   document.getElementById('btn-copy-diagnostics')?.addEventListener('click', () => {
@@ -14773,19 +14952,32 @@
   });
 
   document.getElementById('btn-download-backup').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-download-backup');
+    if (btn?.disabled || fileDownloadTaskActive) return;
+    if (btn) btn.disabled = true;
     try {
-      await NotesStore.flush();
-      const backup = await buildLocalBackup();
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'deeperguard-backup.enc.json';
-      a.click();
-      URL.revokeObjectURL(url);
+      await runFileDownloadTask({
+        title: 'Encrypted vault backup',
+        prepareLabel: 'Preparing backup…',
+        run: async (report) => {
+          await NotesStore.flush();
+          const backup = await buildLocalBackup(report);
+          report({ status: 'Starting download…', pct: 96, indeterminate: false });
+          const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'deeperguard-backup.enc.json';
+          a.click();
+          URL.revokeObjectURL(url);
+          report({ status: 'Download started', pct: 100, indeterminate: false });
+        },
+      });
       toast('Encrypted vault downloaded');
     } catch (err) {
       toast(err.message || 'Download failed', true);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   });
 
@@ -14848,10 +15040,12 @@
     }
   });
 
-  async function buildLocalBackup() {
+  async function buildLocalBackup(report) {
     const account = await NotesStore.loadAccount();
     const rows = [];
     const all = [...NotesStore.state.items.values()].filter((i) => !i.deleted);
+    const total = all.length || 1;
+    let done = 0;
     for (const item of all) {
       const wrapped = await NotesCrypto.encryptObject(NotesStore.state.cryptoKey, item.content);
       const ciphertext = JSON.stringify(wrapped);
@@ -14863,6 +15057,16 @@
         deleted: false,
         updated_at: item.updated_at,
       });
+      done += 1;
+      if (report && (done === 1 || done === total || done % 3 === 0)) {
+        const pct = Math.max(8, Math.min(92, Math.round((done / total) * 90)));
+        report({
+          status: `Encrypting item ${done} of ${total}…`,
+          pct,
+          indeterminate: false,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
     }
     return {
       format: 'deeperguard-backup-v1',

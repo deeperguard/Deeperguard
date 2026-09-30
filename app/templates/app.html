@@ -155,6 +155,15 @@
       <button type="button" id="btn-app-update-cancel" class="btn ghost sm">Cancel</button>
     </div>
   </div>
+  <div id="file-download-progress" class="file-download-progress" hidden role="dialog" aria-live="polite" aria-busy="true" aria-labelledby="file-download-progress-title">
+    <div class="file-download-progress-card">
+      <p id="file-download-progress-title">Downloading…</p>
+      <p id="file-download-progress-status" class="file-download-progress-status">Preparing…</p>
+      <div id="file-download-progress-track" class="file-download-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Download progress">
+        <span id="file-download-progress-bar"></span>
+      </div>
+    </div>
+  </div>
   <script>
     (function () {
       var meta = document.querySelector('meta[name="notes-build"]');
@@ -615,9 +624,18 @@
       </div>
       <div class="list-pane list-toolbar">
       <div id="sync-status-banner" class="sync-status-banner list-sync-banner" hidden role="status">
-        <span id="sync-status-text"></span>
-        <button type="button" class="btn ghost sm" id="sync-status-retry" hidden>Retry</button>
-        <button type="button" class="btn ghost sm" id="sync-status-relock" hidden>Unlock again</button>
+        <div class="sync-status-banner-main">
+          <span id="sync-status-text"></span>
+          <div id="sync-status-progress" class="sync-status-progress" hidden>
+            <div id="sync-status-progress-track" class="sync-status-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Notes download progress">
+              <span id="sync-status-progress-bar"></span>
+            </div>
+          </div>
+        </div>
+        <div class="sync-status-banner-actions">
+          <button type="button" class="btn ghost sm" id="sync-status-retry" hidden>Retry</button>
+          <button type="button" class="btn ghost sm" id="sync-status-relock" hidden>Unlock again</button>
+        </div>
       </div>
       <div class="note-list-head" id="note-list-head" hidden>
         <div class="note-list-head-copy">
