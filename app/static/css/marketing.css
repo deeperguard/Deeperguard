@@ -712,6 +712,98 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   vertical-align: middle;
 }
 
+/* App comparison table: stacked feature cards on narrow viewports */
+@media (max-width: 640px) {
+  .mk-compare-wrap:has(.mk-compare-apps) {
+    overflow-x: visible;
+  }
+  .mk-compare-apps {
+    min-width: 0;
+    display: block;
+  }
+  .mk-compare-apps thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .mk-compare-apps tbody {
+    display: block;
+  }
+  .mk-compare-apps tbody tr {
+    display: block;
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid var(--mk-border);
+  }
+  .mk-compare-apps tbody tr:last-child {
+    border-bottom: none;
+  }
+  .mk-compare-apps td {
+    display: block;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+    border-bottom: none;
+    text-align: left !important;
+    white-space: normal;
+    overflow: visible;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+  }
+  .mk-compare-apps td:first-child {
+    padding-bottom: 0.75rem;
+    font-weight: 600;
+    color: var(--mk-text);
+  }
+  .mk-compare-apps td:not(:first-child) {
+    margin-top: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: var(--mk-radius-sm);
+    background: var(--mk-panel-subtle);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.45rem;
+    line-height: 1.45;
+  }
+  .mk-compare-apps td:not(:first-child)::before {
+    flex: 0 0 100%;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--mk-muted);
+    margin-bottom: 0.1rem;
+  }
+  .mk-compare-apps td:nth-child(2)::before {
+    content: "Deeperguard";
+    color: #0369a1;
+  }
+  .mk-compare-apps td:nth-child(3)::before {
+    content: "Standard Notes";
+  }
+  .mk-compare-apps td:nth-child(4)::before {
+    content: "Evernote";
+  }
+  .mk-compare-apps td.mk-col-highlight {
+    background: #f0f7ff;
+    border: 1px solid #dbeafe;
+  }
+  .mk-compare-apps .yes {
+    display: inline;
+    white-space: normal;
+  }
+  .mk-compare-apps .mk-pro-tag {
+    margin-left: 0;
+    flex-shrink: 0;
+  }
+}
+
 /* How It Works Steps */
 .mk-steps {
   display: grid;
