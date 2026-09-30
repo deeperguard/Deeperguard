@@ -118,6 +118,7 @@ assert.ok(openFn.includes('renderHistory(note)'));
 
 const historyFn = appJs.slice(appJs.indexOf('function renderHistory(note)'), appJs.indexOf('function noteHasDocs(noteId)'));
 assert.ok(historyFn.includes('NotesHistory.revisionRows(note)'));
+assert.ok(historyFn.includes('revisionLabel'));
 assert.ok(historyFn.includes('catch (err)'));
 assert.ok(!historyFn.includes('if (!revisions.length)') || historyFn.indexOf('revisionRows') < historyFn.indexOf('if (!revisions.length)'));
 

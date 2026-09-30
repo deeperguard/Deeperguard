@@ -2,6 +2,7 @@ const assert = require('assert');
 const {
   derivedTitleFromBody,
   effectiveNoteTitle,
+  noteIsEmptyStub,
   filterNotes,
   findMatches,
   describeMatch,
@@ -364,5 +365,20 @@ assert.strictEqual(
   })),
   'Sheet1: Budget',
 );
+assert.strictEqual(
+  effectiveNoteTitle(note({ title: 'Title', content: '{"activeSheet":"Sheet1","sheets":[{"name":"Sheet1","rows":[["A"]]}]}' })),
+  'Sheet1: A',
+);
+assert.match(
+  effectiveNoteTitle(note({ title: '{"activeSheet":"Sheet1","sheets":[', content: '' })),
+  /^Spreadsheet · /,
+);
+assert.strictEqual(noteIsEmptyStub(note({ title: '', content: '' })), true);
+assert.strictEqual(noteIsEmptyStub(note({ title: 'Title', content: '' })), true);
+assert.strictEqual(noteIsEmptyStub(note({ title: 'Hello', content: '' })), false);
+
+const highlightedList = highlightPlain('To do list', 'To do');
+assert.match(highlightedList, /class="search-hit"/);
+assert.doesNotMatch(highlightedList, /text-decoration/);
 
 console.log('ok');

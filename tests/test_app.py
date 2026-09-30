@@ -1215,6 +1215,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("await self.skipWaiting()", sw)
         self.assertIn("Keep this file byte-stable", sw)
         self.assertIn("const CACHE = 'deeperguard-offline'", sw)
+        self.assertIn("You're offline", sw)
+        self.assertIn("Deeperguard", sw)
         self.assertIn("pdf.min.js?v=8", sw)
         self.assertIn("pdf.worker.min.js?v=8", sw)
         preview_js = (APP_DIR / "static" / "js" / "preview.js").read_text(encoding="utf-8")
@@ -4045,7 +4047,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(".note-type-menu", mobile)
         self.assertIn('id="btn-mobile-doc-fullscreen"', html)
         self.assertIn("#btn-clear-checked {", mobile)
-        self.assertIn('data-editor-proxy="btn-pin"', html)
+        self.assertIn('id="btn-editor-overflow-mobile"', html)
+        self.assertNotIn('data-editor-proxy="btn-pin"', html)
 
     def test_desktop_doc_note_toolbar_single_row(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
@@ -4053,19 +4056,23 @@ class NotesAppTests(unittest.TestCase):
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
         primary_actions = html[
             html.find('<div class="editor-actions-group editor-actions-primary">'):
-            html.find('<span class="editor-tools-divider toolbar-secondary"')
+            html.find('</div>\n            <span class="editor-tools-divider toolbar-secondary editor-toolbar-menu-item"')
         ]
-        share_pos = primary_actions.find('id="btn-share"')
-        ai_pos = primary_actions.find('id="btn-ai-chat"')
-        self.assertGreaterEqual(share_pos, 0)
-        self.assertGreater(ai_pos, 0)
-        self.assertLess(ai_pos, share_pos)
-        self.assertNotIn('id="btn-share"', html[html.find('editor-actions-secondary'):html.find('id="btn-editor-settings"')])
+        self.assertIn('id="btn-prevent-edit"', primary_actions)
+        self.assertIn('id="btn-find-desktop"', primary_actions)
+        self.assertIn('id="btn-ai-chat"', primary_actions)
+        self.assertIn('id="btn-editor-overflow-desktop"', primary_actions)
+        self.assertNotIn('id="btn-share"', primary_actions)
+        menu_panel = html[html.find('editor-toolbar-menu-panel'):html.find('id="btn-editor-settings"')]
+        self.assertIn('id="btn-share"', menu_panel)
+        self.assertIn('id="btn-trash"', menu_panel)
+        self.assertEqual(menu_panel.count('id="btn-trash"'), 1)
         self.assertIn('id="btn-desktop-doc-fullscreen"', html)
         self.assertIn("@media (min-width: 861px)", css)
         self.assertIn(".btn.icon.find-btn {", css)
         self.assertRegex(css, r"@media \(min-width: 861px\)[\s\S]*\.doc-inline-tools \{\s*display: none !important;")
         self.assertIn("function inlineDocPreviewAttId()", js)
+        self.assertIn("function setEditorToolbarMenuOpen(", js)
         inline_fn = js[js.find("function renderDocInline("):js.find("function scheduleSearchHitRepaint(")]
         self.assertIn("const toolbar = desktop", inline_fn)
         self.assertIn("? ''", inline_fn)
@@ -4075,16 +4082,18 @@ class NotesAppTests(unittest.TestCase):
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
 
-        # 1. Note type displayed next to More button in toolbar
+        # 1. Note type in primary toolbar; note info lives in overflow menu
         primary_actions = html[
             html.find('<div class="editor-actions-group editor-actions-primary">'):
-            html.find('<span class="editor-tools-divider toolbar-secondary"')
+            html.find('</div>\n            <span class="editor-tools-divider toolbar-secondary editor-toolbar-menu-item"')
         ]
         type_pos = primary_actions.find('id="note-editor-type"')
-        more_pos = primary_actions.find('id="btn-note-info"')
+        ai_pos = primary_actions.find('id="btn-ai-chat"')
         self.assertGreaterEqual(type_pos, 0)
-        self.assertGreaterEqual(more_pos, 0)
-        self.assertLess(type_pos, more_pos)
+        self.assertGreaterEqual(ai_pos, 0)
+        self.assertLess(type_pos, ai_pos)
+        menu_panel = html[html.find('editor-toolbar-menu-panel'):html.find('id="btn-editor-settings"')]
+        self.assertIn('id="btn-note-info"', menu_panel)
         self.assertIn("toolbar-primary", primary_actions[type_pos:type_pos + 60])
         self.assertIn(".editor-actions .toolbar-primary.editor-select", css)
 

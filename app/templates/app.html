@@ -716,11 +716,12 @@
     <main id="editor-pane" class="editor-pane">
       <div id="empty-state" class="empty-state">
         <div class="empty-state-card">
+          <div class="empty-state-mark" aria-hidden="true">{% include 'partials/brand-mark.html' %}</div>
           <h2 id="empty-state-title">Start writing</h2>
           <p id="empty-state-message">Notes stay encrypted on this device. Start with a blank note.</p>
           <div class="empty-state-actions">
             <button type="button" id="btn-empty-scan" class="btn primary" hidden>Scan document</button>
-            <button type="button" id="btn-empty-new" class="btn">New note</button>
+            <button type="button" id="btn-empty-new" class="btn primary">New note</button>
             <button type="button" id="btn-empty-sync" class="btn" hidden>Sync notes</button>
             <button type="button" id="btn-empty-dismiss" class="btn ghost" hidden>Dismiss</button>
             <button type="button" id="btn-empty-relock" class="btn primary" hidden>Try another password</button>
@@ -774,33 +775,17 @@
                 <polygon fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
             </button>
-            <button type="button" class="btn icon toolbar-primary editor-mobile-proxy" data-editor-proxy="btn-pin" title="Pin" aria-label="Pin">
-              <svg class="ui-icon icon-pin-outline" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
-              </svg>
-              <svg class="ui-icon icon-pin-filled" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
-                <path fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
+            <button type="button" id="btn-editor-overflow-mobile" class="btn icon toolbar-primary editor-toolbar-overflow-toggle mobile-only" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false" aria-controls="editor-actions-overflow-panel">
+              <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="5" cy="12" r="1.75" fill="currentColor" stroke="none"/>
+                <circle cx="12" cy="12" r="1.75" fill="currentColor" stroke="none"/>
+                <circle cx="19" cy="12" r="1.75" fill="currentColor" stroke="none"/>
               </svg>
             </button>
             </div>
             <div id="editor-actions-overflow-panel" class="editor-actions-overflow-panel editor-phone-toolbar">
             <div class="editor-actions-group editor-actions-primary">
-            <button type="button" id="btn-preview" class="btn ghost sm mode-toggle toolbar-primary editor-phone-toolbar-hide" title="Switch edit mode">Edit</button>
-            <button type="button" id="btn-undo" class="btn ghost sm toolbar-primary editor-phone-strip-btn" title="Undo (⌘Z)" aria-label="Undo" disabled>
-              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5"/>
-                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 20v-7a4 4 0 0 0-4-4H4"/>
-              </svg>
-              <span class="editor-phone-strip-label desktop-only">Undo</span>
-            </button>
-            <button type="button" id="btn-redo" class="btn ghost sm toolbar-primary editor-phone-strip-btn" title="Redo (⇧⌘Z)" aria-label="Redo" disabled>
-              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 14l5-5-5-5"/>
-                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20v-7a4 4 0 0 1 4-4h12"/>
-              </svg>
-              <span class="editor-phone-strip-label desktop-only">Redo</span>
-            </button>
-            <button type="button" id="btn-prevent-edit" class="btn icon edit-lock-btn is-unlocked toolbar-primary editor-toolbar-panel-lock" title="Lock editing" aria-label="Lock editing" aria-pressed="false">
+            <button type="button" id="btn-prevent-edit" class="btn icon edit-lock-btn is-unlocked toolbar-primary editor-toolbar-panel-lock editor-toolbar-row-item" title="Lock editing" aria-label="Lock editing" aria-pressed="false">
               <svg class="edit-lock-icon edit-lock-open" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                 <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M7 11V7a5 5 0 0 1 10 0"/>
@@ -810,7 +795,7 @@
                 <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
             </button>
-            <div class="editor-note-type-control toolbar-primary" title="Note type">
+            <div class="editor-note-type-control toolbar-primary editor-toolbar-row-item" title="Note type">
               <div class="editor-overflow-type-wrap editor-desktop-type" title="Note type">
                 <select id="note-editor-type" class="editor-select toolbar-primary editor-overflow-type-select" title="Note type" aria-label="Note type">
                   <option value="plain">Plain text</option>
@@ -822,7 +807,7 @@
                 </select>
               </div>
               <div class="editor-note-type-mobile mobile-only">
-                <button type="button" id="btn-note-type-menu" class="btn icon editor-note-type-trigger editor-phone-strip-btn" title="Note type" aria-label="Note type" aria-haspopup="menu" aria-expanded="false" aria-controls="note-type-menu">
+                <button type="button" id="btn-note-type-menu" class="btn icon editor-note-type-trigger editor-phone-strip-btn editor-toolbar-menu-item" title="Note type" aria-label="Note type" aria-haspopup="menu" aria-expanded="false" aria-controls="note-type-menu">
                   <svg class="editor-phone-strip-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                     <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M4 12h10M4 18h14"/>
                   </svg>
@@ -837,7 +822,44 @@
                 </div>
               </div>
             </div>
-            <button type="button" id="btn-note-info" class="btn ghost sm toolbar-primary note-more-btn editor-phone-strip-btn" title="Note actions and info" aria-label="Note actions and info">
+            <button type="button" id="btn-find-desktop" class="btn icon toolbar-primary find-btn editor-phone-toolbar-hide editor-toolbar-row-item" title="Find in note (⌘F)" aria-label="Find in note">
+              <svg class="find-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="10.5" cy="10.5" r="6.75" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M16.2 16.2 21 21"/>
+              </svg>
+            </button>
+            <button type="button" id="btn-ai-chat" class="btn ghost sm toolbar-primary editor-phone-strip-btn editor-toolbar-row-item" title="Ask AI about this note (sends this note's text to Ollama)" aria-label="Ask AI">
+              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>
+              </svg>
+              <span class="editor-phone-strip-label desktop-only">Ask AI</span>
+            </button>
+            <button type="button" id="btn-editor-overflow-desktop" class="btn icon toolbar-primary editor-toolbar-overflow-toggle toolbar-desktop editor-toolbar-row-item" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false" aria-controls="editor-actions-overflow-panel">
+              <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="5" cy="12" r="1.75" fill="currentColor" stroke="none"/>
+                <circle cx="12" cy="12" r="1.75" fill="currentColor" stroke="none"/>
+                <circle cx="19" cy="12" r="1.75" fill="currentColor" stroke="none"/>
+              </svg>
+            </button>
+            </div>
+            <span class="editor-tools-divider toolbar-secondary editor-toolbar-menu-item" aria-hidden="true"></span>
+            <div class="editor-actions-group editor-actions-secondary editor-toolbar-menu-panel">
+            <button type="button" id="btn-preview" class="btn ghost sm mode-toggle toolbar-primary editor-phone-toolbar-hide editor-toolbar-menu-item" title="Switch edit mode">Edit</button>
+            <button type="button" id="btn-undo" class="btn ghost sm toolbar-primary editor-phone-strip-btn editor-toolbar-menu-item" title="Undo (⌘Z)" aria-label="Undo" disabled>
+              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5"/>
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+              </svg>
+              <span class="editor-phone-strip-label desktop-only">Undo</span>
+            </button>
+            <button type="button" id="btn-redo" class="btn ghost sm toolbar-primary editor-phone-strip-btn editor-toolbar-menu-item" title="Redo (⇧⌘Z)" aria-label="Redo" disabled>
+              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 14l5-5-5-5"/>
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20v-7a4 4 0 0 1 4-4h12"/>
+              </svg>
+              <span class="editor-phone-strip-label desktop-only">Redo</span>
+            </button>
+            <button type="button" id="btn-note-info" class="btn ghost sm toolbar-primary note-more-btn editor-phone-strip-btn editor-toolbar-menu-item" title="Note actions and info" aria-label="Note actions and info">
               <span class="note-more-icon" aria-hidden="true">
                 <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                   <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -847,25 +869,16 @@
               </span>
               <span class="editor-phone-strip-label desktop-only">Note info</span>
             </button>
-            <button type="button" id="btn-ai-chat" class="btn ghost sm toolbar-primary editor-phone-strip-btn" title="Ask AI about this note (sends this note's text to Ollama)" aria-label="Ask AI">
-              <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>
-              </svg>
-              <span class="editor-phone-strip-label desktop-only">Ask AI</span>
-            </button>
-            <button type="button" id="btn-share" class="btn ghost sm toolbar-primary editor-toolbar-panel-share editor-phone-toolbar-hide" title="Copy note" aria-label="Copy note">
+            <button type="button" id="btn-share" class="btn ghost sm toolbar-primary editor-toolbar-panel-share editor-phone-toolbar-hide editor-toolbar-menu-item" title="Copy note" aria-label="Copy note">
               <span class="share-label">Copy</span>
             </button>
-            </div>
-            <span class="editor-tools-divider toolbar-secondary" aria-hidden="true"></span>
-            <div class="editor-actions-group editor-actions-secondary">
-            <button type="button" id="btn-mobile-doc-fullscreen" class="btn ghost sm mobile-only toolbar-secondary editor-mobile-doc-action editor-phone-strip-btn" hidden title="Fullscreen" aria-label="Fullscreen">
+            <button type="button" id="btn-mobile-doc-fullscreen" class="btn ghost sm mobile-only toolbar-secondary editor-mobile-doc-action editor-phone-strip-btn editor-toolbar-menu-item" hidden title="Fullscreen" aria-label="Fullscreen">
               <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>
               </svg>
               <span class="editor-phone-strip-label desktop-only">Fullscreen</span>
             </button>
-            <button type="button" id="btn-mobile-doc-attachment-share" class="btn ghost sm mobile-only toolbar-secondary editor-mobile-doc-action editor-phone-strip-btn" hidden title="Share attachment" aria-label="Share attachment">
+            <button type="button" id="btn-mobile-doc-attachment-share" class="btn ghost sm mobile-only toolbar-secondary editor-mobile-doc-action editor-phone-strip-btn editor-toolbar-menu-item" hidden title="Share attachment" aria-label="Share attachment">
               <svg class="editor-phone-strip-icon mobile-only" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
                 <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="16 6 12 2 8 6"/>
@@ -873,7 +886,7 @@
               </svg>
               <span class="editor-phone-strip-label desktop-only">Share</span>
             </button>
-            <button type="button" id="btn-star" class="btn icon toolbar-secondary editor-toolbar-panel-star editor-phone-toolbar-hide" title="Star" aria-label="Star">
+            <button type="button" id="btn-star" class="btn icon toolbar-secondary editor-toolbar-panel-star editor-phone-toolbar-hide editor-toolbar-menu-item" title="Star" aria-label="Star">
               <svg class="ui-icon icon-star-outline" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
@@ -881,7 +894,7 @@
                 <polygon fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
             </button>
-            <button type="button" id="btn-pin" class="btn icon toolbar-secondary editor-phone-toolbar-hide" title="Pin" aria-label="Pin">
+            <button type="button" id="btn-pin" class="btn icon toolbar-secondary editor-phone-toolbar-hide editor-toolbar-menu-item" title="Pin" aria-label="Pin">
               <svg class="ui-icon icon-pin-outline" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
               </svg>
@@ -889,23 +902,20 @@
                 <path fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M16 3l5 5-2 2-1 4-3 3-5-5 3-3 4-1 2-2-3-3zM4 20l5-5"/>
               </svg>
             </button>
-            <button type="button" id="btn-find-desktop" class="btn ghost sm toolbar-secondary find-btn editor-phone-toolbar-hide" title="Find in note (⌘F)" aria-label="Find in note">
-              Find
-            </button>
-            <button type="button" id="btn-archive" class="btn icon toolbar-secondary" title="Archive" aria-label="Archive">
+            <button type="button" id="btn-archive" class="btn icon toolbar-secondary editor-toolbar-menu-item" title="Archive" aria-label="Archive">
               <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/>
                 <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" fill="none" stroke="currentColor" stroke-width="2"/>
                 <line x1="10" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
             </button>
-            <button type="button" id="btn-duplicate" class="btn icon toolbar-secondary" title="Duplicate" aria-label="Duplicate">
+            <button type="button" id="btn-duplicate" class="btn icon toolbar-secondary editor-toolbar-menu-item" title="Duplicate" aria-label="Duplicate">
               <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <rect x="9" y="9" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
             </button>
-            <button type="button" id="btn-trash" class="btn icon toolbar-secondary" title="Trash" aria-label="Trash">
+            <button type="button" id="btn-trash" class="btn icon toolbar-secondary editor-toolbar-menu-item" title="Trash" aria-label="Trash">
               <svg class="ui-icon icon-trash" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="3 6 5 6 21 6"/>
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -917,13 +927,14 @@
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 20v-7a4 4 0 0 0-4-4H4"/>
               </svg>
             </button>
-            <button type="button" id="btn-delete-forever" class="btn ghost sm toolbar-secondary" hidden>Delete forever</button>
-            <button type="button" id="btn-clear-checked" class="btn ghost sm toolbar-secondary" hidden>Clear checked</button>
-            <button type="button" id="btn-editor-settings" class="btn ghost sm mobile-only toolbar-desktop" title="Settings" aria-label="Settings">Settings</button>
-            <button type="button" id="btn-desktop-doc-fullscreen" class="btn ghost sm toolbar-desktop doc-only-control editor-desktop-doc-action" hidden title="Fullscreen" aria-label="Fullscreen">Fullscreen</button>
-            <button type="button" id="btn-ocr-text" class="btn ghost sm doc-only-control toolbar-desktop" hidden>OCR text</button>
+            <button type="button" id="btn-delete-forever" class="btn ghost sm toolbar-secondary editor-toolbar-menu-item" hidden>Delete forever</button>
+            <button type="button" id="btn-clear-checked" class="btn ghost sm toolbar-secondary editor-toolbar-menu-item" hidden>Clear checked</button>
+            <button type="button" id="btn-editor-settings" class="btn ghost sm mobile-only toolbar-desktop editor-toolbar-menu-item" title="Settings" aria-label="Settings">Settings</button>
+            <button type="button" id="btn-desktop-doc-fullscreen" class="btn ghost sm toolbar-desktop doc-only-control editor-desktop-doc-action editor-toolbar-menu-item" hidden title="Fullscreen" aria-label="Fullscreen">Fullscreen</button>
+            <button type="button" id="btn-ocr-text" class="btn ghost sm doc-only-control toolbar-desktop editor-toolbar-menu-item" hidden>OCR text</button>
             </div>
             </div>
+            <div id="editor-toolbar-menu-backdrop" class="editor-toolbar-menu-backdrop" hidden aria-hidden="true"></div>
           </div>
         </header>
         <div id="editor-scroll" class="editor-scroll">

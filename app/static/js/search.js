@@ -172,6 +172,31 @@ const NotesSearch = (() => {
     }
   }
 
+  function looksLikeSpreadsheetPayload(text) {
+    const raw = String(text || '').trim();
+    if (!raw.startsWith('{')) return false;
+    if (looksLikeSpreadsheetJson(raw)) return true;
+    return /"activeSheet"\s*:/.test(raw) || /"sheets"\s*:\s*\[/.test(raw.slice(0, 240));
+  }
+
+  function isPlaceholderTitle(text) {
+    const value = String(text || '').trim();
+    return !value || value === 'Untitled' || value === 'Title';
+  }
+
+  function fallbackSpreadsheetTitle(text, note) {
+    if (looksLikeSpreadsheetJson(text)) {
+      const parsed = titleFromSpreadsheetJson(text);
+      if (parsed && parsed !== 'Spreadsheet') return parsed;
+    }
+    const when = parseNoteTime(note?.content?.updated_at) || parseNoteTime(note?.content?.created_at);
+    if (when > 0) {
+      const label = new Date(when).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      return `Spreadsheet · ${label}`;
+    }
+    return 'Spreadsheet';
+  }
+
   function titleFromSpreadsheetJson(text) {
     try {
       const data = JSON.parse(String(text || '').trim());
@@ -213,18 +238,32 @@ const NotesSearch = (() => {
   function effectiveNoteTitle(note) {
     const stored = String(note?.content?.title || '').trim();
     const manual = !!note?.content?.title_manual;
-    if (looksLikeSpreadsheetJson(stored)) {
-      const sheetTitle = titleFromSpreadsheetJson(stored);
-      if (sheetTitle) return sheetTitle;
+    if (looksLikeSpreadsheetPayload(stored)) {
+      return fallbackSpreadsheetTitle(stored, note);
     }
-    if (note?.content?.locked || manual) return stored === 'Untitled' ? '' : stored;
-    if (stored && stored !== 'Untitled') return stored;
+    if (note?.content?.locked || manual) {
+      if (isPlaceholderTitle(stored)) return '';
+      return stored;
+    }
+    if (!isPlaceholderTitle(stored)) return stored;
     const body = String(note?.content?.content || '').trim();
-    if (looksLikeSpreadsheetJson(body)) {
-      const sheetTitle = titleFromSpreadsheetJson(body);
-      if (sheetTitle) return sheetTitle;
+    if (looksLikeSpreadsheetPayload(body)) {
+      return fallbackSpreadsheetTitle(body, note);
     }
     return derivedTitleFromBody(note?.content?.content);
+  }
+
+  function noteIsEmptyStub(note) {
+    if (!note?.content || note.content.type !== 'note') return false;
+    if (note.content.trashed || note.content.archived) return false;
+    if (note.content.locked) return false;
+    if (String(note.content.content || '').trim()) return false;
+    if (String(note.content.ocr_text || '').trim()) return false;
+    if ((note.content.attachments || []).length) return false;
+    if ((note.content.tags || []).length) return false;
+    const stored = String(note.content.title || '').trim();
+    if (stored && !isPlaceholderTitle(stored)) return false;
+    return true;
   }
 
   function compareNotesForSort(a, b, sort) {
@@ -468,8 +507,12 @@ const NotesSearch = (() => {
     compareNotesForSort,
     derivedTitleFromBody,
     effectiveNoteTitle,
+    noteIsEmptyStub,
+    isPlaceholderTitle,
     looksLikeSpreadsheetJson,
+    looksLikeSpreadsheetPayload,
     titleFromSpreadsheetJson,
+    fallbackSpreadsheetTitle,
     isActiveLibraryNote,
     countLibraryNotes,
     listUsesDateSections,
