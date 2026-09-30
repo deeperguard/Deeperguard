@@ -5974,9 +5974,9 @@
     : kindIconHtml(icon)}
         <span class="note-item-body">
           <span class="note-title-row">
-            ${lockBadgeHtml}
             <h3>${titleHtml}</h3>
           </span>
+          ${lockBadgeHtml ? `<span class="note-item-lock-row">${lockBadgeHtml}</span>` : ''}
           ${prefs.hidePreviews ? '' : `<p class="note-preview">${snippetHtml}</p>`}
           ${noteTagChipsHtml(note)}
           <span class="note-modified">${escapeHtml(modified || relativeTime(editedMs))}</span>
@@ -6044,9 +6044,9 @@
         <span class="note-item-body">
           <span class="note-title-row">
             ${pinHtml}
-            ${lockBadgeHtml}
             <h3${titleAttr}>${titleHtml}</h3>${noteIndexingBadge(n.uuid)}
           </span>
+          ${lockBadgeHtml ? `<span class="note-item-lock-row">${lockBadgeHtml}</span>` : ''}
           ${previewHtml}
           ${tags}
           ${where}

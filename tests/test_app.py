@@ -3713,6 +3713,8 @@ class NotesAppTests(unittest.TestCase):
         # 4. List rows mask protected note snippets
         self.assertIn("Protected note", app_js)
         self.assertIn("note-lock-badge", app_js)
+        self.assertIn("note-item-lock-row", app_js)
+        self.assertIn(".note-item-lock-row", app_css)
 
         # 5. Editor chrome hides actions when gated
         self.assertIn("if (actions) actions.hidden = !!gated;", app_js)
@@ -4061,6 +4063,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertNotIn('id="btn-share"', html[html.find('editor-actions-secondary'):html.find('id="btn-editor-settings"')])
         self.assertIn('id="btn-desktop-doc-fullscreen"', html)
         self.assertIn("@media (min-width: 861px)", css)
+        self.assertIn(".btn.icon.find-btn {", css)
         self.assertRegex(css, r"@media \(min-width: 861px\)[\s\S]*\.doc-inline-tools \{\s*display: none !important;")
         self.assertIn("function inlineDocPreviewAttId()", js)
         inline_fn = js[js.find("function renderDocInline("):js.find("function scheduleSearchHitRepaint(")]
