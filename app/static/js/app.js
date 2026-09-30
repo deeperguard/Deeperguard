@@ -3421,11 +3421,11 @@
       if (!isVaultReadyForSync()) return;
       const banner = document.getElementById('sync-status-banner');
       const bannerDownloading = banner && !banner.hidden && banner.dataset.mode === 'downloading';
-      const parsed = parseVaultSyncProgressMessage(message);
+      const parsed = NotesVaultSyncProgress.parseVaultSyncProgressMessage(message);
       const progressPct = parsed.pct ?? (pctMatch ? pct : null);
       if (bannerDownloading || vaultPullActive) {
         const fallback = document.getElementById('sync-status-text')?.textContent || 'Downloading notes…';
-        const labelText = syncBannerProgressText(message, fallback);
+        const labelText = NotesVaultSyncProgress.syncBannerProgressText(message, fallback);
         setSyncBannerProgress({
           text: labelText,
           pct: progressPct,
@@ -3504,29 +3504,6 @@
   let vaultDownloadTimer = 0;
   const UNLOCK_DOWNLOAD_TIMEOUT_MS = 20000;
 
-  function syncBannerProgressText(message, fallback) {
-    const parsed = parseVaultSyncProgressMessage(message);
-    const base = fallback || 'Downloading notes…';
-    if (parsed.done != null && parsed.total) {
-      const pct = parsed.pct != null ? ` · ${parsed.pct}%` : '';
-      return `${base} ${parsed.done} / ${parsed.total}${pct}`;
-    }
-    if (parsed.pct != null) return `${base} ${parsed.pct}%`;
-    return message || base || 'Syncing…';
-  }
-
-  function parseVaultSyncProgressMessage(message) {
-    const s = String(message || '');
-    const pctMatch = s.match(/(\d+)\s*%/);
-    const countMatch = s.match(/\((\d+)\/(\d+)\)/);
-    return {
-      pct: pctMatch ? Number(pctMatch[1]) : null,
-      done: countMatch ? Number(countMatch[1]) : null,
-      total: countMatch ? Number(countMatch[2]) : null,
-      isDownload: /Downloading/i.test(s),
-    };
-  }
-
   function setSyncBannerProgress({ text, pct = null, indeterminate = false, visible = true } = {}) {
     const wrap = document.getElementById('sync-status-progress');
     const track = document.getElementById('sync-status-progress-track');
@@ -3556,6 +3533,71 @@
 
   let fileDownloadTaskActive = false;
   let fileDownloadCompleteTimer = 0;
+  let fileDownloadFocusRestore = null;
+  let fileDownloadKeydownHandler = null;
+  const FILE_DOWNLOAD_FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function fileDownloadFocusableNodes(root) {
+    if (!root) return [];
+    return [...root.querySelectorAll(FILE_DOWNLOAD_FOCUSABLE)].filter((node) => {
+      if (node.hasAttribute('disabled') || node.getAttribute('aria-hidden') === 'true') return false;
+      return node.getClientRects().length > 0;
+    });
+  }
+
+  function openFileDownloadOverlayA11y(overlay) {
+    if (!overlay || overlay.dataset.a11yOpen === '1') return;
+    overlay.dataset.a11yOpen = '1';
+    fileDownloadFocusRestore = document.activeElement;
+    const app = document.getElementById('app');
+    if (app) app.inert = true;
+    const card = overlay.querySelector('.file-download-progress-card');
+    const nodes = fileDownloadFocusableNodes(card);
+    (nodes[0] || card)?.focus({ preventScroll: true });
+    fileDownloadKeydownHandler = (event) => {
+      if (event.key !== 'Tab' || overlay.hidden) return;
+      const trapRoot = overlay.querySelector('.file-download-progress-card');
+      if (!trapRoot) return;
+      const focusables = fileDownloadFocusableNodes(trapRoot);
+      if (!focusables.length) {
+        event.preventDefault();
+        trapRoot.focus({ preventScroll: true });
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (event.shiftKey) {
+        if (document.activeElement === first || !trapRoot.contains(document.activeElement)) {
+          event.preventDefault();
+          last.focus({ preventScroll: true });
+        }
+      } else if (document.activeElement === last) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    };
+    document.addEventListener('keydown', fileDownloadKeydownHandler, true);
+  }
+
+  function closeFileDownloadOverlayA11y(overlay) {
+    if (!overlay || overlay.dataset.a11yOpen !== '1') return;
+    overlay.dataset.a11yOpen = '0';
+    const app = document.getElementById('app');
+    if (app) app.inert = false;
+    if (fileDownloadKeydownHandler) {
+      document.removeEventListener('keydown', fileDownloadKeydownHandler, true);
+      fileDownloadKeydownHandler = null;
+    }
+    const restore = fileDownloadFocusRestore;
+    fileDownloadFocusRestore = null;
+    if (restore && typeof restore.focus === 'function') {
+      try {
+        restore.focus({ preventScroll: true });
+      } catch (_) {
+        /* ignore */
+      }
+    }
+  }
 
   function setFileDownloadProgress({ title, status, pct = null, indeterminate = true, visible = true } = {}) {
     const overlay = document.getElementById('file-download-progress');
@@ -3567,12 +3609,14 @@
     if (!visible) {
       overlay.hidden = true;
       overlay.setAttribute('aria-busy', 'false');
+      closeFileDownloadOverlayA11y(overlay);
       bar.style.width = '0%';
       bar.classList.remove('is-indeterminate');
       if (track) track.removeAttribute('aria-valuenow');
       return;
     }
     overlay.hidden = false;
+    openFileDownloadOverlayA11y(overlay);
     overlay.setAttribute('aria-busy', 'true');
     if (titleEl && title) titleEl.textContent = title;
     if (statusEl) statusEl.textContent = status || 'Preparing…';
@@ -3598,7 +3642,10 @@
   }
 
   async function runFileDownloadTask({ title, prepareLabel, run }) {
-    if (fileDownloadTaskActive) return null;
+    if (fileDownloadTaskActive) {
+      toast('Download already in progress', true);
+      return null;
+    }
     fileDownloadTaskActive = true;
     setFileDownloadProgress({
       title: title || 'Downloading…',
@@ -3642,11 +3689,11 @@
     banner.hidden = false;
     banner.dataset.mode = mode;
     const labelText = mode === 'downloading'
-      ? syncBannerProgressText(message, text)
+      ? NotesVaultSyncProgress.syncBannerProgressText(message, text)
       : (text || '');
     if (label) label.textContent = labelText;
     if (mode === 'downloading') {
-      const parsed = parseVaultSyncProgressMessage(message || text);
+      const parsed = NotesVaultSyncProgress.parseVaultSyncProgressMessage(message || text);
       setSyncBannerProgress({
         text: labelText,
         pct: parsed.pct,
@@ -14953,7 +15000,7 @@
 
   document.getElementById('btn-download-backup').addEventListener('click', async () => {
     const btn = document.getElementById('btn-download-backup');
-    if (btn?.disabled || fileDownloadTaskActive) return;
+    if (btn?.disabled) return;
     if (btn) btn.disabled = true;
     try {
       await runFileDownloadTask({
