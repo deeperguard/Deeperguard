@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Deeperguard — Private notes for work you cannot leak</title>
   <meta name="description" content="Encrypted notes for credentials, confidential work, and scanned documents. Encrypted on your device, searchable offline, synced everywhere. Free during public beta.">
   <meta name="theme-color" content="#ffffff">
@@ -24,7 +24,10 @@
 <body>
   <div class="mk-beta-banner" role="status">
     <span class="mk-beta-pill">Public Beta</span>
-    <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups. No payment details yet.
+    <span class="mk-beta-copy mk-beta-copy--desktop">
+      <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups. No payment details yet.
+    </span>
+    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta · Pro included · No payment yet</span>
   </div>
 
   <header class="mk-topbar">
@@ -45,8 +48,11 @@
         <a href="{{ app_url }}">Open notes app</a>
       </nav>
       <div class="mk-topbar-actions">
-        <a class="mk-btn ghost" href="{{ login_url }}">Sign in</a>
-        <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
+        <a class="mk-btn ghost mk-topbar-signin" href="{{ login_url }}">Sign in</a>
+        <a class="mk-btn mk-topbar-cta" href="{{ register_url }}">
+          <span class="mk-topbar-cta-label mk-topbar-cta-label--desktop">Create free vault</span>
+          <span class="mk-topbar-cta-label mk-topbar-cta-label--mobile">Create vault</span>
+        </a>
       </div>
     </div>
   </header>
