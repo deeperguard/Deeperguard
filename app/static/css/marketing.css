@@ -374,9 +374,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .mk-trust {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.75rem;
   margin: 0.5rem 0 2.5rem;
+}
+@media (max-width: 1080px) {
+  .mk-trust { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .mk-trust article {
   background: var(--mk-panel);
@@ -388,6 +391,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .mk-trust p { margin: 0; color: var(--mk-muted); font-size: 0.85rem; }
 @media (max-width: 860px) {
   .mk-trust { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  .mk-trust article:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 
 .mk-hero-card {
