@@ -4052,6 +4052,22 @@ class NotesAppTests(unittest.TestCase):
         run_ocr_fn = app_js[app_js.find("async function runOcrQueue()"):app_js.find("function canOcrAttachment(")]
         self.assertNotIn("offerDocumentSearch(", run_ocr_fn, "OCR queue should not offer search prompt after finishing OCR")
 
+    def test_doc_immersive_toolbar_respects_safe_area(self):
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        self.assertIn(
+            "body.doc-preview-open.doc-immersive.doc-chrome-reveal .doc-viewer,\n"
+            "body.doc-preview-open.doc-immersive .doc-viewer:has(.doc-enhance-panel:not([hidden]))",
+            css,
+        )
+        self.assertIn("padding-top: var(--safe-top);", css[css.find("doc-chrome-reveal .doc-viewer"):css.find("doc-chrome-reveal .doc-viewer") + 400])
+        self.assertIn(
+            "body.doc-preview-open.doc-immersive.doc-chrome-reveal .doc-stage,\n"
+            "  body.doc-preview-open.doc-immersive .doc-viewer:has(.doc-enhance-panel:not([hidden])) .doc-stage",
+            mobile,
+        )
+        self.assertIn("padding-top: calc(52px + var(--safe-top));", mobile)
+
     def test_mobile_open_note_progressive_toolbar(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
