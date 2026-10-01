@@ -252,6 +252,22 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn(b"id=\"pricing\"", res.data)
 
+    def test_compare_standard_notes_is_public(self):
+        res = self.client.get("/compare/standard-notes", follow_redirects=False)
+        self.assertEqual(res.status_code, 200)
+        self.assertNotIn("Location", res.headers)
+        self.assertIn(b"Standard Notes alternative", res.data)
+        self.assertIn(b"encrypted notes alternative (PWA + OCR)", res.data)
+        self.assertIn(b"Import Standard Notes or Deeperguard backup", res.data)
+        self.assertIn(b"marketing.css", res.data)
+        self.assertIn("max-age=300", res.headers.get("Cache-Control") or "")
+
+    def test_homepage_links_standard_notes_compare_page(self):
+        res = self.client.get("/")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b'href="/compare/standard-notes"', res.data)
+        self.assertIn(b"Full Standard Notes comparison", res.data)
+
     def test_homepage_has_seo_tags(self):
         res = self.client.get("/")
         self.assertEqual(res.status_code, 200)

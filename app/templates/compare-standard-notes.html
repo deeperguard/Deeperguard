@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Deeperguard vs Standard Notes — encrypted notes alternative (PWA + OCR)</title>
+  <meta name="description" content="Zero-knowledge Standard Notes alternative with a browser PWA, on-device OCR, and full Pro free during public beta. Not DeepGuard deepfake software — encrypted notes at deeperguard.com.">
+  <meta name="theme-color" content="#ffffff">
+  <meta property="og:title" content="Deeperguard vs Standard Notes — encrypted notes alternative (PWA + OCR)">
+  <meta property="og:description" content="Same privacy class as Standard Notes: AES-GCM on your device, SRP-6a sign-in, Standard Notes import, and on-device OCR. Full Pro free in public beta.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ og_image }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Deeperguard vs Standard Notes — encrypted notes alternative">
+  <meta name="twitter:description" content="Zero-knowledge notes PWA with on-device OCR and Standard Notes import. Full Pro free during public beta.">
+  <meta name="twitter:image" content="{{ og_image }}">
+  <meta name="notes-build" content="{{ build }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+</head>
+<body>
+  <div class="mk-beta-banner" role="status">
+    <span class="mk-beta-pill">Public Beta</span>
+    <span class="mk-beta-copy mk-beta-copy--desktop">
+      <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups. No payment details yet.
+    </span>
+    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta · Pro included · No payment yet</span>
+  </div>
+
+  <header class="mk-topbar">
+    <div class="wrap mk-topbar-inner">
+      <a class="mk-brand" href="/">
+        <img src="/static/images/deeperguard-mark.svg" width="36" height="36" alt="Deeperguard Logo">
+        <span>
+          Deeperguard
+          <small>Zero-Knowledge Notes</small>
+        </span>
+      </a>
+      <nav class="mk-nav" aria-label="Sections">
+        <a href="/#compare">All comparisons</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a href="{{ app_url }}">Open notes app</a>
+      </nav>
+      <div class="mk-topbar-actions">
+        <a class="mk-btn ghost mk-topbar-signin" href="{{ login_url }}">Sign in</a>
+        <a class="mk-btn mk-topbar-cta" href="{{ register_url }}">
+          <span class="mk-topbar-cta-label mk-topbar-cta-label--desktop">Create free vault</span>
+          <span class="mk-topbar-cta-label mk-topbar-cta-label--mobile">Create vault</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap" id="top">
+    <section class="mk-hero mk-hero--compact">
+      <div>
+        <div class="mk-eyebrow">
+          <span class="mk-badge ok">Zero-knowledge by design</span>
+          <a class="mk-badge mk-badge-link ok" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">Open source · GitHub</a>
+        </div>
+        <h1>Standard Notes alternative that stays zero-knowledge — with on-device OCR and a free Pro beta</h1>
+        <p class="mk-lede">Encrypted on your device before sync. Browser PWA. Import your Standard Notes backup.</p>
+        <div class="mk-hero-actions">
+          <a class="mk-btn mk-btn-lg" href="{{ register_url }}">Create free vault</a>
+          <a class="mk-btn secondary mk-btn-lg" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+        </div>
+        <div class="mk-hero-trust">
+          <span>Public beta</span>
+          <span>No payment details</span>
+          <span>Open source</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="mk-section" id="who">
+      <div class="mk-section-head">
+        <span class="mk-badge">Who it&rsquo;s for</span>
+        <h2>When Standard Notes is close — but not quite the fit</h2>
+      </div>
+      <ul class="mk-bullet-list">
+        <li>You want zero-knowledge notes but hit friction on Standard Notes&rsquo; paid tiers for power features.</li>
+        <li>You need private receipt or PDF OCR without a cloud service reading the scan.</li>
+        <li>You prefer Add to Home Screen and a browser-first workflow over native apps.</li>
+        <li>You want to migrate with the built-in Standard Notes backup import in Settings.</li>
+      </ul>
+    </section>
+
+    <section class="mk-section" id="compare-table">
+      <div class="mk-section-head">
+        <span class="mk-badge">Comparison</span>
+        <h2>Standard Notes alternative — side by side</h2>
+        <p>Both products aim for zero-knowledge encrypted notes. This table stays factual; prices for Standard Notes are approximate USD list prices and change on their site.</p>
+      </div>
+      <div class="mk-card mk-compare-wrap">
+        <table class="mk-compare mk-compare-sn" aria-label="Deeperguard vs Standard Notes">
+          <thead>
+            <tr>
+              <th scope="col" class="mk-compare-feature-col">Topic</th>
+              <th scope="col" class="mk-col-highlight">Deeperguard</th>
+              <th scope="col">Standard Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Privacy model</td>
+              <td class="mk-col-highlight"><span class="yes">Zero-knowledge</span> — AES-GCM on device, SRP-6a sign-in</td>
+              <td><span class="yes">Zero-knowledge</span> — mature E2EE with a long track record</td>
+            </tr>
+            <tr>
+              <td>Form factor</td>
+              <td class="mk-col-highlight"><span class="yes">Browser PWA</span> — Add to Home Screen, offline vault</td>
+              <td><span class="partial">Native-first</span> — desktop and mobile apps; web app available</td>
+            </tr>
+            <tr>
+              <td>On-device OCR</td>
+              <td class="mk-col-highlight"><span class="yes">Yes</span> — WASM OCR in the browser <span class="mk-pro-tag">Pro</span></td>
+              <td><span class="no">Not a product focus</span></td>
+            </tr>
+            <tr>
+              <td>Free tier today</td>
+              <td class="mk-col-highlight"><span class="yes">Full Pro</span> during public beta</td>
+              <td><span class="partial">Basic free</span> — extensions and power features on paid plans</td>
+            </tr>
+            <tr>
+              <td>Paid plans (after beta / list)</td>
+              <td class="mk-col-highlight">Basic €{{ basic.suggested_price_eur_month }}/mo (€{{ basic.suggested_price_eur_year | int }}/yr) · Pro €{{ pro.suggested_price_eur_month }}/mo (€{{ pro.suggested_price_eur_year | int }}/yr)</td>
+              <td><span class="partial">Approx.</span> Productivity ~$90/yr · Professional ~$120/yr</td>
+            </tr>
+            <tr>
+              <td>Import from Standard Notes</td>
+              <td class="mk-col-highlight"><span class="yes">Built-in</span> — encrypted or decrypted SN backup</td>
+              <td><span class="no">—</span></td>
+            </tr>
+            <tr>
+              <td>Vault TOTP (authenticator inside notes)</td>
+              <td class="mk-col-highlight"><span class="yes">Vault authenticator</span> <span class="mk-pro-tag">Pro</span></td>
+              <td><span class="partial">Account 2FA</span> on paid plans (not the same as in-vault TOTP)</td>
+            </tr>
+            <tr>
+              <td>Maturity</td>
+              <td class="mk-col-highlight"><span class="partial">Early public beta</span></td>
+              <td><span class="yes">10+ years</span> — established brand and ecosystem</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="mk-section" id="wins">
+      <div class="mk-section-head">
+        <span class="mk-badge">Honest fit</span>
+        <h2>Where each product wins</h2>
+      </div>
+      <div class="mk-grid cols-2">
+        <article class="mk-card">
+          <h3>Where Deeperguard wins</h3>
+          <ul class="mk-distinction-points">
+            <li class="pro"><strong>Cost during beta:</strong> Full Pro free with no payment details collected.</li>
+            <li class="pro"><strong>PWA workflow:</strong> No app store required; install from the browser.</li>
+            <li class="pro"><strong>On-device OCR:</strong> Search scans and PDFs without cloud document parsing.</li>
+            <li class="pro"><strong>Standard Notes import:</strong> Upload your SN backup in Settings.</li>
+            <li class="pro"><strong>Pro security extras:</strong> Vault authenticator plus encrypted email and pCloud backups.</li>
+          </ul>
+        </article>
+        <article class="mk-card">
+          <h3>Where Standard Notes wins</h3>
+          <ul class="mk-distinction-points">
+            <li class="pro"><strong>Longevity &amp; audits:</strong> A mature product with years of independent security review.</li>
+            <li class="pro"><strong>Native apps:</strong> Polished desktop and mobile clients as the default experience.</li>
+            <li class="pro"><strong>Editor extensions:</strong> Themes, editors, and plugins on paid tiers.</li>
+            <li class="pro"><strong>Brand trust:</strong> Widely known name in encrypted notes — not a new beta.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="mk-section" id="migrate">
+      <div class="mk-section-head">
+        <span class="mk-badge">Migration</span>
+        <h2>Move from Standard Notes in three steps</h2>
+      </div>
+      <div class="mk-steps">
+        <article class="mk-step">
+          <h3>1. Export from Standard Notes</h3>
+          <p>Create a Standard Notes backup export (encrypted or decrypted) from your existing account.</p>
+        </article>
+        <article class="mk-step">
+          <h3>2. Create your vault</h3>
+          <p>Register at <a href="{{ register_url }}">deeperguard.com/register</a> and unlock your vault on this device.</p>
+        </article>
+        <article class="mk-step">
+          <h3>3. Import in Settings</h3>
+          <p>Open <strong>Settings → Backup &amp; import</strong> and choose <strong>Import Standard Notes or Deeperguard backup</strong>. Encrypted backups and decrypted exports (.zip or .txt) are supported.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="mk-section mk-faq" id="faq">
+      <div class="mk-section-head">
+        <span class="mk-badge">FAQ</span>
+        <h2>Questions Standard Notes shoppers ask</h2>
+      </div>
+      <details open>
+        <summary>Can Deeperguard or its host read my notes?</summary>
+        <p>No. Notes, titles, and attachments are encrypted in your browser before sync. The service stores ciphertext only. Your vault password is never sent in readable form.</p>
+      </details>
+      <details>
+        <summary>Is Deeperguard more secure than Standard Notes?</summary>
+        <p>No — same privacy class (zero-knowledge E2EE), different product surface. Standard Notes has a longer track record; Deeperguard adds a PWA, on-device OCR, and SN import.</p>
+      </details>
+      <details>
+        <summary>What if I lose my vault password?</summary>
+        <p>There is no password reset. Enable <strong>daily encrypted email backups</strong> and/or <strong>pCloud encrypted backups</strong> in Settings as soon as your vault is ready — archives stay encrypted, but you keep a copy if a device fails.</p>
+      </details>
+      <details>
+        <summary>What happens after the public beta?</summary>
+        <p>Basic will be €{{ basic.suggested_price_eur_month }}/mo (€{{ basic.suggested_price_eur_year | int }}/yr) and Pro €{{ pro.suggested_price_eur_month }}/mo (€{{ pro.suggested_price_eur_year | int }}/yr). You will get advance notice before billing starts; beta accounts are not charged without that notice.</p>
+      </details>
+    </section>
+
+    <section class="mk-cta">
+      <h2>Import your Standard Notes vault. Full Pro free during public beta.</h2>
+      <p>Same zero-knowledge goal — browser PWA, on-device OCR, and a clear price after beta.</p>
+      <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
+      <a class="mk-btn secondary" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </section>
+
+    <footer class="mk-footer">
+      <p>© Deeperguard · <a href="/">Encrypted notes home</a></p>
+      <nav aria-label="Footer Navigation">
+        <a href="{{ register_url }}">Create free vault</a>
+        <a href="/#compare">Compare all apps</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="mailto:notes@deeperguard.com?subject=Vulnerability%20report">Report a vulnerability</a>
+      </nav>
+    </footer>
+  </main>
+</body>
+</html>

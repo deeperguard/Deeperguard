@@ -1309,3 +1309,33 @@ a.mk-badge-link:hover {
 .mk-footer nav a:hover {
   color: var(--mk-text);
 }
+
+/* Standard Notes comparison landing */
+.mk-hero--compact {
+  grid-template-columns: 1fr;
+  padding-bottom: 0.5rem;
+}
+.mk-hero--compact h1 {
+  font-size: clamp(1.65rem, 4vw, 2.35rem);
+  max-width: 42rem;
+}
+.mk-bullet-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--mk-muted);
+  font-size: 1.02rem;
+  max-width: 46rem;
+}
+.mk-bullet-list li {
+  margin-bottom: 0.55rem;
+}
+.mk-compare-sn th:nth-child(2),
+.mk-compare-sn td:nth-child(2) {
+  min-width: 11rem;
+}
+.mk-distinction-card-link {
+  display: inline-block;
+  margin-top: 0.85rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
