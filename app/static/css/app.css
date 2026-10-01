@@ -311,7 +311,16 @@ body.doc-preview-open .doc-viewer {
   pointer-events: auto;
 }
 body.doc-preview-open.doc-immersive .doc-viewer {
-  padding: 0;
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+  padding-top: 0;
+}
+body.doc-preview-open.doc-immersive.doc-chrome-reveal .doc-viewer,
+body.doc-preview-open.doc-immersive .doc-viewer:has(.doc-enhance-panel:not([hidden])) {
+  padding-top: var(--safe-top);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
 }
 body.doc-preview-open.doc-immersive:not(.doc-chrome-reveal) .doc-viewer-head,
 body.doc-preview-open.doc-immersive:not(.doc-chrome-reveal) .doc-viewer-find-slot,
@@ -5304,6 +5313,12 @@ body.search-filters-open .fab-stack,
     padding-left: calc(8px + var(--safe-left));
     padding-right: calc(8px + var(--safe-right));
     background: #0a0a0a;
+  }
+  body.doc-preview-open.doc-immersive.doc-chrome-reveal .doc-stage,
+  body.doc-preview-open.doc-immersive .doc-viewer:has(.doc-enhance-panel:not([hidden])) .doc-stage {
+    padding-top: 12px;
+    padding-left: 8px;
+    padding-right: 8px;
   }
   .doc-inline-thumbs { display: none; }
   .tag-bar-shell:not(.is-collapsed) .tag-bar {
