@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   parseVaultSyncProgressMessage,
+  formatVaultSyncDownloadProgress,
   syncBannerProgressText,
 } = require('../app/static/js/vault-sync-progress.js');
 
@@ -10,28 +11,66 @@ assert.deepStrictEqual(parseVaultSyncProgressMessage(''), {
   pct: null,
   done: null,
   total: null,
+  notes: null,
   isDownload: false,
 });
 assert.deepStrictEqual(parseVaultSyncProgressMessage('Downloading notes… 42%'), {
   pct: 42,
   done: null,
   total: null,
+  notes: null,
   isDownload: true,
 });
 assert.deepStrictEqual(parseVaultSyncProgressMessage('Sync (3/10) · 30%'), {
   pct: 30,
   done: 3,
   total: 10,
+  notes: null,
   isDownload: false,
+});
+assert.deepStrictEqual(parseVaultSyncProgressMessage('Downloading notes… 799 / 800 · 550 notes'), {
+  pct: null,
+  done: 799,
+  total: 800,
+  notes: 550,
+  isDownload: true,
+});
+assert.deepStrictEqual(parseVaultSyncProgressMessage('Downloading… 40% (12/800) · 550 notes'), {
+  pct: 40,
+  done: 12,
+  total: 800,
+  notes: 550,
+  isDownload: true,
 });
 
 assert.strictEqual(
+  formatVaultSyncDownloadProgress({ processed: 799, total: 800, notes: 550 }),
+  'Downloading… 799 / 800 items · 550 notes ready',
+);
+assert.strictEqual(
+  formatVaultSyncDownloadProgress({ processed: 1, total: 5, notes: 0 }),
+  'Downloading… 1 / 5 items',
+);
+assert.strictEqual(
+  formatVaultSyncDownloadProgress({ pct: 55 }),
+  'Downloading… 55%',
+);
+
+assert.strictEqual(
   syncBannerProgressText('Downloading notes… 55%', 'Downloading notes…'),
-  'Downloading notes… 55%',
+  'Downloading… 55%',
 );
 assert.strictEqual(
   syncBannerProgressText('Sync (2/5) · 40%', 'Downloading notes…'),
-  'Downloading notes… 2 / 5 · 40%',
+  'Downloading… 2 / 5 items',
+);
+assert.strictEqual(
+  syncBannerProgressText('Downloading… 40% (799/800) · 550 notes', 'Downloading…'),
+  'Downloading… 799 / 800 items · 550 notes ready',
+);
+assert.strictEqual(
+  syncBannerProgressText('Downloading notes… 799 / 800 · 550 notes', 'Downloading notes…'),
+  'Downloading… 799 / 800 items · 550 notes ready',
 );
 
 const root = path.join(__dirname, '..');
@@ -56,6 +95,7 @@ assert.ok(appJs.includes("toast('Download already in progress', true)"));
 assert.ok(appJs.includes('openFileDownloadOverlayA11y'));
 assert.ok(appJs.includes('closeFileDownloadOverlayA11y'));
 assert.ok(appJs.includes('app.inert = true'));
+assert.ok(appJs.includes('formatVaultSyncDownloadProgress'));
 
 const vaultSrc = html.indexOf('/static/js/vault-sync-progress.js');
 const appSrc = html.indexOf('/static/js/app.js');
