@@ -372,6 +372,54 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   align-items: center;
   gap: 0.4rem;
 }
+
+/* Open source transparency callout (homepage) */
+.mk-oss-callout {
+  margin: 0 0 1.75rem;
+}
+.mk-oss-callout-inner {
+  background: linear-gradient(135deg, var(--mk-ok-bg) 0%, #f0fdf4 55%, #ffffff 100%);
+  border: 1px solid var(--mk-ok-border);
+  border-radius: calc(var(--mk-radius) + 4px);
+  padding: 1.75rem 2rem;
+  box-shadow: var(--mk-shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.mk-oss-callout-title {
+  margin: 0;
+  font-size: clamp(1.28rem, 2.8vw, 1.65rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.32;
+  color: var(--mk-text);
+  max-width: 44rem;
+}
+.mk-oss-callout-lede {
+  margin: 0;
+  color: var(--mk-muted);
+  font-size: 1.02rem;
+  line-height: 1.55;
+  max-width: 42rem;
+}
+.mk-oss-callout-btn {
+  margin-top: 0.15rem;
+}
+@media (max-width: 640px) {
+  .mk-oss-callout-inner {
+    padding: 1.35rem 1.15rem;
+  }
+  .mk-oss-callout-lede {
+    font-size: 0.96rem;
+  }
+  .mk-oss-callout-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .mk-trust {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
