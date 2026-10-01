@@ -1260,31 +1260,6 @@ a.mk-badge-link:hover {
   }
 }
 
-.mk-social-proof {
-  margin-top: 2rem;
-}
-.mk-quote {
-  margin: 0;
-  padding: 1.35rem 1.5rem;
-  border-radius: var(--mk-radius);
-  border: 1px dashed var(--mk-border-strong);
-  background: #ffffff;
-  color: var(--mk-muted);
-  font-size: 0.98rem;
-  line-height: 1.6;
-}
-.mk-quote--placeholder {
-  background: var(--mk-panel-subtle);
-}
-.mk-quote footer {
-  margin-top: 0.85rem;
-  font-size: 0.88rem;
-  color: var(--mk-faint);
-}
-.mk-quote-meta {
-  font-style: italic;
-}
-
 /* Footer */
 .mk-footer {
   margin-top: 4rem;
