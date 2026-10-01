@@ -306,6 +306,10 @@ body.doc-preview-open #app {
   visibility: hidden;
   pointer-events: none;
 }
+body.doc-preview-open .doc-viewer {
+  visibility: visible;
+  pointer-events: auto;
+}
 body.doc-preview-open.doc-immersive .doc-viewer {
   padding: 0;
 }
@@ -3645,6 +3649,10 @@ mark.search-hit-current {
   pointer-events: none;
   touch-action: manipulation;
 }
+.doc-inline-stage:not(.is-loading):is(:has(.doc-page-wrap), :has(img), :has(canvas.doc-page), :has(pre)) {
+  min-height: 0;
+  pointer-events: auto;
+}
 .doc-inline-stage.is-loading,
 .doc-stage.is-loading {
   place-items: center;
@@ -5181,7 +5189,122 @@ body.search-filters-open .fab-stack,
     background: var(--bg);
   }
   .tag-bar-shell.is-collapsed + .tag-suggest { margin-top: 0; }
-  .doc-inline-stage { min-height: 52vh; }
+  .doc-inline-stage { min-height: min(52vh, 50dvh); }
+  .doc-inline-stage:not(.is-loading):is(:has(.doc-page-wrap), :has(img), :has(canvas.doc-page), :has(pre)) {
+    min-height: 0;
+  }
+  .doc-inline-card {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .doc-inline-main,
+  .doc-inline-main-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    cursor: default;
+  }
+  .editor.doc-preview-active {
+    overflow: hidden;
+  }
+  .editor.doc-preview-active .editor-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .editor.doc-preview-active #note-body-wrap,
+  .editor.doc-preview-active #checklist,
+  .editor.doc-preview-active #preview,
+  .editor.doc-preview-active #note-readonly-banner {
+    display: none !important;
+  }
+  .editor.doc-preview-active .doc-inline {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-bottom: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    background: color-mix(in srgb, var(--text) 5%, var(--bg));
+  }
+  .editor.doc-preview-active .doc-inline-card {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .editor.doc-preview-active .doc-inline-main,
+  .editor.doc-preview-active .doc-inline-main-scroll {
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+  }
+  .editor.doc-preview-active .doc-inline-stage {
+    min-height: min(40vh, 45dvh);
+    max-height: none;
+    overflow: visible;
+    display: block;
+    width: 100%;
+    background: transparent;
+    padding: 0;
+  }
+  .editor.doc-preview-active .doc-inline-stage:not(.is-loading):is(:has(.doc-page-wrap), :has(img), :has(canvas.doc-page), :has(pre)) {
+    min-height: 0;
+  }
+  .editor.doc-preview-active .doc-inline-stage.is-loading {
+    display: grid;
+    min-height: min(40vh, 45dvh);
+    background: var(--doc-surface);
+    border-radius: 12px;
+    margin: 8px 12px 0;
+    width: auto;
+  }
+  .editor.doc-preview-active .doc-inline-stage .doc-page-wrap,
+  .editor.doc-preview-active .doc-inline-stage img,
+  .editor.doc-preview-active .doc-inline-stage canvas.doc-page {
+    background: var(--doc-page-bg);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 12%, transparent);
+  }
+  .editor.doc-preview-active .doc-inline-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    flex-shrink: 0;
+  }
+  .editor.doc-preview-active .doc-inline-count {
+    top: 10px;
+    right: 10px;
+  }
+  .editor.doc-preview-active .doc-inline-thumbs {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-elevated);
+  }
+  .editor.doc-preview-active .editor-foot {
+    flex-shrink: 0;
+  }
+  body.doc-preview-open.doc-immersive .doc-viewer {
+    background: #0a0a0a;
+  }
+  body.doc-preview-open.doc-immersive .doc-stage {
+    padding-top: calc(52px + var(--safe-top));
+    padding-bottom: calc(12px + var(--safe-bottom));
+    padding-left: calc(8px + var(--safe-left));
+    padding-right: calc(8px + var(--safe-right));
+    background: #0a0a0a;
+  }
   .doc-inline-thumbs { display: none; }
   .tag-bar-shell:not(.is-collapsed) .tag-bar {
     max-height: min(40vh, 16rem);

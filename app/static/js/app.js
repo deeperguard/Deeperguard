@@ -7605,6 +7605,10 @@
     }
   }
 
+  function inlineStagePainted(stage) {
+    return !!stage?.querySelector('img, canvas, pre, .doc-page-wrap, .error, .muted, .doc-ocr-wait');
+  }
+
   async function hydrateInlineDoc(noteId, id, stage) {
     if (!stage) return;
     if (heavyPreviewDeferred(id)) {
@@ -7614,6 +7618,8 @@
     }
     showDocStageLoading(stage);
     try {
+      await waitForStageLayout(stage);
+      if (currentId !== noteId || !stage.isConnected) return;
       const entry = await cachedPreview(id);
       if (currentId !== noteId) return;
       const query = activeFindNeedle();
@@ -7642,6 +7648,38 @@
           : (msg || 'Preview unavailable offline'));
       stage.innerHTML = `<p class="error">${escapeHtml(friendly)}</p>`;
     }
+  }
+
+  let inlineDocLayoutWatch = null;
+
+  function stopInlineDocLayoutWatch() {
+    if (!inlineDocLayoutWatch) return;
+    inlineDocLayoutWatch.disconnect();
+    inlineDocLayoutWatch = null;
+  }
+
+  function ensureInlineDocLayoutWatch() {
+    if (!ui.docInline || ui.docInline.hidden || !isMobileLayout()) return;
+    const stage = ui.docInline.querySelector('.doc-inline-stage');
+    const attId = stage?.dataset?.stage;
+    if (!stage || !attId || inlineStagePainted(stage)) {
+      stopInlineDocLayoutWatch();
+      return;
+    }
+    if (inlineDocLayoutWatch) return;
+    if (typeof ResizeObserver !== 'function') return;
+    inlineDocLayoutWatch = new ResizeObserver(() => {
+      if (!stage.isConnected || ui.docInline.hidden || inlineStagePainted(stage)) {
+        stopInlineDocLayoutWatch();
+        return;
+      }
+      if (stage.clientWidth > 120 && stage.classList.contains('is-loading')) {
+        hydrateInlineDoc(currentId, attId, stage).catch(() => {});
+        stopInlineDocLayoutWatch();
+      }
+    });
+    inlineDocLayoutWatch.observe(stage);
+    if (ui.docInline) inlineDocLayoutWatch.observe(ui.docInline);
   }
 
   function currentSearchQuery() {
@@ -7847,6 +7885,10 @@
     clearDocStageLoading(stage);
     const paintToken = ++docPaintToken;
     const needle = String(query || '').trim();
+    if (isMobileLayout() && stage.clientWidth <= 120) {
+      await waitForStageLayout(stage);
+      if (!stage.isConnected) return;
+    }
     const maxWidth = previewStageWidth(stage);
 
     if (entry.kind === 'pdf') {
@@ -8330,11 +8372,12 @@
           <button type="button" class="btn ghost sm doc-inline-expand" data-preview="${escapeAttr(first.uuid)}">Fullscreen</button>
           <button type="button" class="btn ghost sm doc-inline-share" data-share="${escapeAttr(first.uuid)}">${attachmentCanWebShare() ? 'Share' : 'Download'}</button>
         </div>`;
+    /* iOS Safari will not reliably paint PDF canvases inside <button> — use a div shell like desktop. */
     const mainBlock = desktop
       ? `<div class="doc-inline-main doc-inline-main-scroll">${mainInner}</div>`
-      : `${toolbar}<button type="button" class="doc-inline-main" data-preview="${escapeAttr(first.uuid)}" aria-label="Open ${escapeAttr(first.content.filename || 'document')}">
+      : `${toolbar}<div class="doc-inline-main doc-inline-main-scroll" data-preview="${escapeAttr(first.uuid)}" role="button" tabindex="0" aria-label="Open ${escapeAttr(first.content.filename || 'document')}">
           ${mainInner}
-        </button>`;
+        </div>`;
     ui.docInline.innerHTML = `<div class="doc-inline-card">
         ${countBtn}
         ${mainBlock}
@@ -8372,6 +8415,7 @@
       observeThumb(noteId, a.uuid, ui.docInline.querySelector(`[data-stage="${a.uuid}"]`));
     });
     syncEditorDocPreviewLayout();
+    ensureInlineDocLayoutWatch();
     syncEditorMobileDocActions();
   }
 
@@ -8586,6 +8630,9 @@
     ui.docViewer.hidden = false;
     document.body.classList.add('doc-preview-open');
     setDocImmersive(!isDesktopLayout());
+    if (!isDesktopLayout() && ui.docViewer) {
+      ui.docViewer.style.visibility = 'visible';
+    }
     bindDocStageChromeReveal();
     if (activeFindNeedle()) revealDocChromeTemporary(0);
     if (activeFindNeedle()) mountFindBarToDocViewer();
@@ -8640,6 +8687,7 @@
     updateDocZoomLabel();
     setDocImmersive(false);
     document.body.classList.remove('doc-preview-open');
+    if (ui.docViewer) ui.docViewer.style.visibility = '';
     if (ui.docViewer) ui.docViewer.style.paddingTop = '';
     ui.docViewer.hidden = true;
     ui.docBackdrop.hidden = true;
@@ -8905,6 +8953,7 @@
       ui.docInline.hidden = true;
       ui.docInline.innerHTML = '';
     }
+    stopInlineDocLayoutWatch();
     syncEditorMobileDocActions();
     ui.editor?.classList.remove('doc-preview-active');
     document.body.classList.remove('editor-doc-preview');
@@ -8923,6 +8972,8 @@
       && !ui.docInline?.hidden;
     ui.editor?.classList.toggle('doc-preview-active', active);
     document.body.classList.toggle('editor-doc-preview', active && isDesktopLayout());
+    if (active && isMobileLayout()) ensureInlineDocLayoutWatch();
+    else stopInlineDocLayoutWatch();
     syncEditorMobileDocActions();
   }
 

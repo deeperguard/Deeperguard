@@ -4111,6 +4111,10 @@ class NotesAppTests(unittest.TestCase):
         inline_fn = js[js.find("function renderDocInline("):js.find("function scheduleSearchHitRepaint(")]
         self.assertIn("const toolbar = desktop", inline_fn)
         self.assertIn("? ''", inline_fn)
+        self.assertIn("doc-inline-main-scroll", inline_fn)
+        self.assertNotIn('<button type="button" class="doc-inline-main"', inline_fn)
+        hydrate_inline = js[js.find("async function hydrateInlineDoc("):js.find("let inlineDocLayoutWatch")]
+        self.assertIn("await waitForStageLayout(stage)", hydrate_inline)
 
     def test_note_type_next_to_more_checklist_and_protection_symbols(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
