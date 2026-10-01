@@ -381,4 +381,33 @@ const highlightedList = highlightPlain('To do list', 'To do');
 assert.match(highlightedList, /class="search-hit"/);
 assert.doesNotMatch(highlightedList, /text-decoration/);
 
+assert.strictEqual(
+  effectiveNoteTitle(note({
+    title: '',
+    content: '{"activeSheet":"Sheet1","sheets":[{"name":"Sheet1","rows":[{"index":0,"cells":[{"value":"Date","index":0},{"value":"KLM","index":1}]}]}]}',
+  })),
+  'Sheet1: Date',
+);
+
+const heavyNotes = [];
+const bigJson = `{"activeSheet":"Sheet1","sheets":[{"name":"Sheet1","rows":[${Array.from({ length: 40 }, (_, i) => `{"index":${i},"cells":[{"value":"KLM row ${i}","index":0}]}`).join(',')}]}]}`;
+for (let i = 0; i < 120; i += 1) {
+  heavyNotes.push(note({
+    uuid: `h-${i}`,
+    title: i % 3 === 0 ? bigJson : `Werkgeversverklaring ${i}`,
+    content: i % 2 === 0 ? bigJson : `body mentions KLM ${i}`,
+    tags: i % 5 === 0 ? ['tag-klm'] : [],
+  }));
+}
+assert.doesNotThrow(() => {
+  const hits = filterNotes(heavyNotes, {
+    query: 'KLM',
+    filter: 'all',
+    tagMap,
+    sort: 'updated',
+    searchOptions: defaultSearchOptions(),
+  });
+  assert.ok(hits.length > 0);
+});
+
 console.log('ok');
