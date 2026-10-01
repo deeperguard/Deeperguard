@@ -3487,7 +3487,10 @@
       if (isPhoneShell()) {
         meta.textContent = when ? `Synced ${when}` : '';
       } else {
-        meta.textContent = message || (pctMatch ? `Downloading… ${pct}%` : 'Syncing…');
+        const displayMessage = /Downloading/i.test(String(message || ''))
+          ? NotesVaultSyncProgress.syncBannerProgressText(message, 'Downloading…')
+          : (message || (pctMatch ? `Downloading… ${pct}%` : 'Syncing…'));
+        meta.textContent = displayMessage;
       }
       if (/Downloading/i.test(String(message || ''))) {
         const countMatch = String(message || '').match(/\((\d+)\/(\d+)\)/);
@@ -3920,9 +3923,12 @@
       if (total > 0 && processed >= 0) {
         const pct = Math.max(1, Math.min(99, Math.round((processed / total) * 100)));
         const notes = Number(meta.notes) || 0;
-        const noteHint = notes ? ` · ${notes} note${notes === 1 ? '' : 's'}` : '';
         setSyncBannerProgress({
-          text: `Downloading notes… ${processed} / ${total}${noteHint}`,
+          text: NotesVaultSyncProgress.formatVaultSyncDownloadProgress({
+            processed,
+            total,
+            notes,
+          }),
           pct,
           indeterminate: false,
           visible: true,
