@@ -206,11 +206,15 @@ class NotesAppTests(unittest.TestCase):
         res = self.client.get("/")
         self.assertEqual(res.status_code, 200)
         self.assertIn(b"Standard Notes", res.data)
+        self.assertIn(b"Notesnook", res.data)
+        self.assertIn(b"Joplin", res.data)
         self.assertIn(b"Evernote", res.data)
         self.assertIn(b"Public Beta", res.data)
         self.assertIn(b"pricing", res.data.lower())
         self.assertIn(b"Free", res.data)
         self.assertIn(b"On-Device", res.data)
+        self.assertIn(b"encrypted notes", res.data.lower())
+        self.assertIn(b"id=\"discover\"", res.data)
 
     def test_homepage_serves_marketing(self):
         res = self.client.get("/")
@@ -254,6 +258,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b'rel="canonical"', res.data)
         self.assertIn(b"application/ld+json", res.data)
         self.assertIn(b"og:image", res.data)
+        self.assertIn(b"Deeperguard (encrypted notes)", res.data)
+        self.assertIn(b"DeepGuard deepfake", res.data)
 
     def test_robots_and_sitemap_are_public(self):
         robots = self.client.get("/robots.txt")
