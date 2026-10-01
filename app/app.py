@@ -354,7 +354,7 @@ def _headers(response):
         session.accessed = False
         session.modified = False
         _drop_set_cookie(response)
-    elif request.path in {"/", "/pricing"}:
+    elif request.path in {"/", "/pricing", "/compare/standard-notes"}:
         # Marketing HTML is public and cookie-free. A short cache keeps repeat
         # visits off the origin. Clear-Site-Data must not be set here: the
         # browser deletes its HTTP cache before painting, and the one-time
@@ -2071,6 +2071,16 @@ def pricing_page():
     return render_template("marketing.html", **ctx)
 
 
+@app.get("/compare/standard-notes")
+def compare_standard_notes_page():
+    host = _request_host()
+    if request.scheme != "https" and host not in {"localhost", "127.0.0.1", "::1"}:
+        return render_template("https-setup.html", host=_lan_https_host(), build=NOTES_BUILD)
+    ctx = _marketing_context()
+    ctx["canonical_url"] = f"{NOTES_PUBLIC_URL.rstrip('/')}/compare/standard-notes"
+    return make_response(render_template("compare-standard-notes.html", **ctx))
+
+
 @app.get("/api/promo")
 def api_promo():
     return jsonify(_promo_payload())
@@ -2093,7 +2103,18 @@ def robots_txt():
 def sitemap_xml():
     site = NOTES_PUBLIC_URL.rstrip("/")
     entry = app_entry_path()
-    pages = ["/", "/pricing", entry, "/register", "/login", "/privacy", "/terms", "/self-host", "/api/promo"]
+    pages = [
+        "/",
+        "/pricing",
+        "/compare/standard-notes",
+        entry,
+        "/register",
+        "/login",
+        "/privacy",
+        "/terms",
+        "/self-host",
+        "/api/promo",
+    ]
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',

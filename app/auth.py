@@ -444,7 +444,20 @@ def public_path(path: str) -> bool:
     from config import app_entry_path
 
     base = path.split("?", 1)[0]
-    if base in {"/", app_entry_path(), "/pricing", "/login", "/register", "/privacy", "/terms", "/self-host", "/api/health", "/api/app-shell", "/ca.crt"} or base.startswith("/static/"):
+    if base in {
+        "/",
+        app_entry_path(),
+        "/pricing",
+        "/compare/standard-notes",
+        "/login",
+        "/register",
+        "/privacy",
+        "/terms",
+        "/self-host",
+        "/api/health",
+        "/api/app-shell",
+        "/ca.crt",
+    } or base.startswith("/static/"):
         return True
     if base in {"/manifest.json", "/sw.js"}:
         return True

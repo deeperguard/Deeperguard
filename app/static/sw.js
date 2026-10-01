@@ -114,7 +114,8 @@ function isAuthPage(url) {
 function isMarketingPage(url) {
   const path = url.pathname;
   return path === '/' || path === ''
-    || path === '/pricing' || path === '/privacy' || path === '/terms'
+    || path === '/pricing' || path === '/compare/standard-notes'
+    || path === '/privacy' || path === '/terms'
     || path === '/self-host' || path === '/robots.txt' || path === '/sitemap.xml';
 }
 
