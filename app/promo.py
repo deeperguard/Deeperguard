@@ -129,9 +129,11 @@ def promo_payload(
         "operatingSystem": "Web",
         "browserRequirements": "Requires a modern browser with Web Crypto",
         "description": (
-            "Zero-knowledge encrypted notes that sync across devices. "
+            "Deeperguard encrypted notes — zero-knowledge notes PWA. "
+            "Not DeepGuard deepfake or AI video software. "
             "Notes are encrypted in the browser before upload."
         ),
+        "alternateName": "Deeperguard encrypted notes",
         "offers": {
             "@type": "Offer",
             "price": "0",

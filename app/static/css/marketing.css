@@ -222,7 +222,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 @media (max-width: 480px) {
   .mk-brand small { display: none; }
-  .mk-eyebrow .mk-badge:nth-child(3) { display: none; }
+  .mk-eyebrow .mk-badge:nth-child(4) { display: none; }
 }
 @media (min-width: 820px) {
   .mk-nav { display: flex; margin-left: 0; }
@@ -319,6 +319,14 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   background: #ecfdf5;
   color: #065f46;
   border-color: #a7f3d0;
+}
+a.mk-badge-link {
+  text-decoration: none !important;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+a.mk-badge-link:hover {
+  background: #d1fae5;
+  color: #047857 !important;
 }
 
 /* Hero Section */
@@ -589,7 +597,18 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 @media (min-width: 860px) {
   .mk-distinction-grid {
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .mk-distinction-card.featured {
+    grid-column: 1 / -1;
+  }
+}
+@media (min-width: 1100px) {
+  .mk-distinction-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .mk-distinction-card.featured {
+    grid-column: 1 / -1;
   }
 }
 .mk-distinction-card {
@@ -738,7 +757,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   font-size: 0.88rem;
 }
 .mk-compare-apps {
-  min-width: 44rem;
+  min-width: 52rem;
+}
+.mk-compare-feature-col {
+  width: 22%;
+  min-width: 9rem;
 }
 .mk-compare-apps .mk-col-highlight {
   background: #f0f7ff;
@@ -844,6 +867,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
     content: "Standard Notes";
   }
   .mk-compare-apps td:nth-child(4)::before {
+    content: "Notesnook";
+  }
+  .mk-compare-apps td:nth-child(5)::before {
+    content: "Joplin";
+  }
+  .mk-compare-apps td:nth-child(6)::before {
     content: "Evernote";
   }
   .mk-compare-apps td.mk-col-highlight {
@@ -1164,6 +1193,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   background: linear-gradient(135deg, #1e40af 0%, #3730a3 100%);
   color: #ffffff;
   box-shadow: var(--mk-shadow-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
 }
 .mk-cta h2 {
   margin: 0 0 0.75rem;
@@ -1173,7 +1206,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   color: #ffffff;
 }
 .mk-cta p {
-  margin: 0 0 1.75rem;
+  margin: 0 0 0.5rem;
   color: #e0e7ff;
   font-size: 1.1rem;
 }
@@ -1188,6 +1221,68 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .mk-cta .mk-btn:hover {
   background: #f8fafc;
   color: #172554 !important;
+}
+
+.mk-discover .mk-section-head p {
+  max-width: 52rem;
+}
+
+.mk-mid-cta {
+  margin: 2.5rem 0 0;
+  padding: 1.75rem 1.25rem;
+  border-radius: calc(var(--mk-radius) + 4px);
+  background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
+  border: 1px solid var(--mk-accent-border);
+  box-shadow: var(--mk-shadow);
+}
+.mk-mid-cta-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem 1rem;
+  text-align: center;
+}
+.mk-mid-cta-inner p {
+  margin: 0;
+  flex: 1 1 100%;
+  color: var(--mk-muted);
+  font-size: 1rem;
+}
+@media (min-width: 720px) {
+  .mk-mid-cta-inner p {
+    flex: 1 1 auto;
+    text-align: left;
+    max-width: 36rem;
+  }
+  .mk-mid-cta-inner {
+    justify-content: space-between;
+  }
+}
+
+.mk-social-proof {
+  margin-top: 2rem;
+}
+.mk-quote {
+  margin: 0;
+  padding: 1.35rem 1.5rem;
+  border-radius: var(--mk-radius);
+  border: 1px dashed var(--mk-border-strong);
+  background: #ffffff;
+  color: var(--mk-muted);
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+.mk-quote--placeholder {
+  background: var(--mk-panel-subtle);
+}
+.mk-quote footer {
+  margin-top: 0.85rem;
+  font-size: 0.88rem;
+  color: var(--mk-faint);
+}
+.mk-quote-meta {
+  font-style: italic;
 }
 
 /* Footer */
