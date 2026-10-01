@@ -42,6 +42,8 @@ global.NotesIDB = {
 };
 global.fetch = async () => ({ ok: true, json: async () => ({ items: [] }) });
 
+const NotesSearch = require('../app/static/js/search.js');
+global.NotesSearch = NotesSearch;
 const NotesHistory = require('../app/static/js/note-history.js');
 const NotesStore = require('../app/static/js/store.js');
 
@@ -69,6 +71,26 @@ assert.deepStrictEqual(NotesHistory.revisionRows(null), []);
 assert.deepStrictEqual(NotesHistory.revisionRows({ content: { revisions: 'nope' } }), []);
 assert.strictEqual(NotesHistory.shouldFlushOnOpen(false), true);
 assert.strictEqual(NotesHistory.shouldFlushOnOpen(true), false);
+
+const noteForLabels = {
+  content: { title: 'Current note', content: 'live body', title_manual: false },
+};
+assert.strictEqual(
+  NotesHistory.revisionLabel({ title: '', content: 'First line\nmore' }, noteForLabels),
+  'First line',
+);
+assert.strictEqual(
+  NotesHistory.revisionLabel({ title: 'Title', content: '' }, noteForLabels),
+  'Untitled version',
+);
+assert.strictEqual(
+  NotesHistory.revisionLabel({ title: 'Saved snapshot', content: '' }, noteForLabels),
+  'Saved snapshot',
+);
+assert.strictEqual(
+  NotesHistory.revisionLabel({ title: 'Current note', content: '' }, noteForLabels),
+  'Current note',
+);
 
 const id = NotesStore.newUuid();
 const payload = NotesStore.defaultNote();

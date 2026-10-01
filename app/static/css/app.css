@@ -6493,6 +6493,19 @@ body.search-filters-open .fab-stack,
   0% { transform: translateX(-120%); }
   100% { transform: translateX(320%); }
 }
+@media (prefers-reduced-motion: reduce) {
+  .sync-status-progress-track > span,
+  .file-download-progress-track > span {
+    transition: none;
+  }
+  .sync-status-progress-track > span.is-indeterminate,
+  .file-download-progress-track > span.is-indeterminate {
+    animation: none;
+    width: 100% !important;
+    opacity: 0.55;
+    transform: none;
+  }
+}
 body.vault-pulling .sync-progress {
   height: 3px;
 }

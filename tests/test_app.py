@@ -1668,6 +1668,15 @@ class NotesAppTests(unittest.TestCase):
     def test_client_note_history(self):
         self._run_node_script("test_note_history.js")
 
+    def test_client_download_progress(self):
+        self._run_node_script("test_download_progress.js")
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        self.assertIn("@media (prefers-reduced-motion: reduce)", css)
+        self.assertIn("download-progress-indeterminate", css)
+        html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
+        file_overlay = html[html.find('id="file-download-progress"') : html.find('id="file-download-progress"') + 220]
+        self.assertIn('aria-modal="true"', file_overlay)
+
     def test_ocr_text_file(self):
         os.environ["NOTES_SERVER_OCR"] = "1"
         self._register_user("ocr@home.local", "ocr-secure-pass")
@@ -4028,7 +4037,7 @@ class NotesAppTests(unittest.TestCase):
         mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
         self.assertIn('id="editor-actions-overflow-panel"', html)
         self.assertIn('class="editor-actions-mobile-bar"', html)
-        self.assertIn('class="editor-phone-toolbar"', html)
+        self.assertIn('class="editor-actions-overflow-panel editor-phone-toolbar"', html)
         self.assertIn('id="btn-note-type-menu"', html)
         self.assertIn('id="note-type-menu"', html)
         self.assertNotIn('id="btn-editor-overflow"', html)
@@ -4048,7 +4057,11 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('id="btn-mobile-doc-fullscreen"', html)
         self.assertIn("#btn-clear-checked {", mobile)
         self.assertIn('id="btn-editor-overflow-mobile"', html)
-        self.assertNotIn('data-editor-proxy="btn-pin"', html)
+        mobile_bar = html[
+            html.find('class="editor-actions-mobile-bar"'):
+            html.find('id="btn-editor-overflow-mobile"') + 80
+        ]
+        self.assertIn('data-editor-proxy="btn-pin"', mobile_bar)
 
     def test_desktop_doc_note_toolbar_single_row(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
