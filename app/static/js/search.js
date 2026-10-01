@@ -5,13 +5,19 @@ const NotesSearch = (() => {
     return (text || '').toLowerCase().trim();
   }
 
+  const SEARCH_BLOB_BODY_MAX = 8192;
+
   function buildSearchBlob(note, tagMap) {
     if (!note || !note.content || note.content.type !== 'note') return '';
     // Locked notes stay findable by title only — body/OCR/filenames must not leak.
     if (note.content.locked) return normalize(note.content.title || '');
+    let body = String(note.content.content || '');
+    if (looksLikeSpreadsheetPayload(body) && body.length > SEARCH_BLOB_BODY_MAX) {
+      body = body.slice(0, SEARCH_BLOB_BODY_MAX);
+    }
     const parts = [
       effectiveNoteTitle(note),
-      note.content.content || '',
+      body,
       note.content.ocr_text || '',
       note.content.attachment_names || '',
     ];
@@ -161,15 +167,22 @@ const NotesSearch = (() => {
     return `${collapsed.slice(0, 59).trimEnd()}…`;
   }
 
+  function safeParseJson(raw) {
+    const text = String(raw || '').trim();
+    if (!text.startsWith('{')) return null;
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      if (err instanceof RangeError) return null;
+      return null;
+    }
+  }
+
   function looksLikeSpreadsheetJson(text) {
     const raw = String(text || '').trim();
     if (!raw.startsWith('{') || raw.length < 12) return false;
-    try {
-      const data = JSON.parse(raw);
-      return !!(data && (data.activeSheet || (Array.isArray(data.sheets) && data.sheets.length)));
-    } catch (_) {
-      return false;
-    }
+    const data = safeParseJson(raw);
+    return !!(data && (data.activeSheet || (Array.isArray(data.sheets) && data.sheets.length)));
   }
 
   function looksLikeSpreadsheetPayload(text) {
@@ -197,20 +210,42 @@ const NotesSearch = (() => {
     return 'Spreadsheet';
   }
 
+  function spreadsheetCellText(cell) {
+    if (cell == null) return '';
+    if (typeof cell === 'string' || typeof cell === 'number' || typeof cell === 'boolean') {
+      return String(cell).trim();
+    }
+    if (typeof cell === 'object') {
+      if (cell.value != null) return String(cell.value).trim();
+      if (cell.v != null) return String(cell.v).trim();
+    }
+    return '';
+  }
+
   function titleFromSpreadsheetJson(text) {
     try {
-      const data = JSON.parse(String(text || '').trim());
+      const data = safeParseJson(text);
+      if (!data) return 'Spreadsheet';
       const sheetName = data.activeSheet || data.sheets?.[0]?.name || '';
       const sheet = (data.sheets || []).find((s) => s.name === data.activeSheet) || data.sheets?.[0];
       const rows = Array.isArray(sheet?.rows) ? sheet.rows : [];
       let firstCell = '';
       for (const row of rows) {
-        if (!Array.isArray(row)) continue;
-        for (const cell of row) {
-          const part = String(cell ?? '').trim();
-          if (part) {
-            firstCell = part;
-            break;
+        if (Array.isArray(row)) {
+          for (const cell of row) {
+            const part = spreadsheetCellText(cell);
+            if (part) {
+              firstCell = part;
+              break;
+            }
+          }
+        } else if (row && Array.isArray(row.cells)) {
+          for (const cell of row.cells) {
+            const part = spreadsheetCellText(cell);
+            if (part) {
+              firstCell = part;
+              break;
+            }
           }
         }
         if (firstCell) break;
@@ -320,8 +355,9 @@ const NotesSearch = (() => {
     const opts = defaultSearchOptions(searchOptions);
     const q = String(query || '').trim();
     const context = searchContextActive(q, opts);
-
-    return notes
+    let out;
+    try {
+      out = notes
       .filter((n) => {
         const c = n.content;
 
@@ -377,6 +413,23 @@ const NotesSearch = (() => {
         return matches(n, q, tagMap, { titlesOnly: opts.titlesOnly });
       })
       .sort((a, b) => compareNotesForSort(a, b, sort));
+    } catch (err) {
+      if (err instanceof RangeError) {
+        if (opts.titlesOnly) return [];
+        console.warn('Search filter failed — retrying titles only', err);
+        return filterNotes(notes, {
+          query,
+          filter,
+          tagId,
+          folderId,
+          tagMap,
+          sort,
+          searchOptions: { ...opts, titlesOnly: true },
+        });
+      }
+      throw err;
+    }
+    return out;
   }
 
   function sameNoteContent(prev, next) {

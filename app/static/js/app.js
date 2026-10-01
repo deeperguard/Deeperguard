@@ -128,7 +128,7 @@
     monospace: false,
     spellcheck: true,
     hidePreviews: false,
-    compactList: false,
+    compactList: true,
     sort: 'updated',
     autoPreview: false,
     autoLockMin: 0,
@@ -352,13 +352,20 @@
     document.getElementById('note-body-highlights')?.classList.toggle('mono', !!prefs.monospace);
     document.getElementById('note-body-wrap')?.classList.toggle('mono', !!prefs.monospace);
     ui.body.spellcheck = !!prefs.spellcheck;
-    ui.noteList.classList.toggle('compact', !!prefs.compactList);
+    ui.noteList.classList.toggle('compact', noteListDensity() === 'compact');
+    ui.noteList.classList.toggle('comfortable', noteListDensity() === 'comfortable');
     ui.noteList.classList.toggle('hide-previews', !!prefs.hidePreviews);
     applyTagSection();
     applyFolderSection();
     applyFilterSection();
     applyNavRail();
     bumpIdle();
+  }
+
+  function setNavViewsOpen(open) {
+    document.body.classList.toggle('nav-views-open', !!open);
+    const backdrop = document.getElementById('sidebar-nav-backdrop');
+    if (backdrop) backdrop.hidden = !open;
   }
 
   function applyNavRail() {
@@ -368,6 +375,7 @@
       pin.setAttribute('aria-pressed', prefs.navPinned ? 'true' : 'false');
       pin.title = prefs.navPinned ? 'Collapse sidebar' : 'Pin sidebar';
     }
+    if (prefs.navPinned) setNavViewsOpen(false);
   }
   applyTheme();
   if (window.matchMedia) {
@@ -784,6 +792,46 @@
     return `Modified ${formatted}`;
   }
 
+  function listTimeAbsolute(isoOrMs) {
+    const at = typeof isoOrMs === 'number' ? isoOrMs : parseTimestampMs(isoOrMs);
+    if (!Number.isFinite(at) || at <= 0) return '';
+    return new Date(at).toLocaleString(undefined, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  function listTimeLabel(isoOrMs) {
+    const rel = relativeTime(isoOrMs);
+    return rel || formatModified(isoOrMs).replace(/^Modified\s+/, '') || '';
+  }
+
+  function noteListDensity() {
+    return prefs.compactList ? 'compact' : 'comfortable';
+  }
+
+  function noteSpreadsheetSource(note) {
+    if (!note?.content) return '';
+    const body = String(note.content.content || '').trim();
+    const title = String(note.content.title || '').trim();
+    if (window.NotesSpreadsheet?.isPayload?.(body)) return body;
+    if (window.NotesSpreadsheet?.isPayload?.(title)) return title;
+    return '';
+  }
+
+  function noteTitleFingerprint(note) {
+    const title = String(note?.content?.title || '');
+    if (!title) return '';
+    if (title.length > 96 || (NotesSearch.looksLikeSpreadsheetPayload && NotesSearch.looksLikeSpreadsheetPayload(title))) {
+      return `len:${title.length}`;
+    }
+    return title;
+  }
+
   function formatDateTime(isoOrMs) {
     const at = typeof isoOrMs === 'number' ? isoOrMs : parseTimestampMs(isoOrMs);
     if (!Number.isFinite(at) || at <= 0) return '—';
@@ -912,7 +960,9 @@
 
   function renderNoteBodyPreview(text, editor) {
     let html;
-    if (window.NotesSuperscript && (editor === 'superscript' || editor === 'markdown' || editor === 'plain')) {
+    if (window.NotesSpreadsheet?.isPayload?.(text)) {
+      html = NotesSpreadsheet.renderPreview(text);
+    } else if (window.NotesSuperscript && (editor === 'superscript' || editor === 'markdown' || editor === 'plain')) {
       html = NotesSuperscript.render(text);
     } else {
       html = NotesMarkdown.render(text);
@@ -1914,6 +1964,7 @@
   function initialEditorMode(noteId) {
     const note = NotesStore.get(noteId);
     if (!note) return 'edit';
+    if (noteSpreadsheetSource(note)) return 'preview';
     if (noteHasDocs(noteId)) {
       if (currentSearchQuery()) return 'preview';
       const body = String(note.content.content || '').trim();
@@ -6015,7 +6066,7 @@
   function notesRenderKey(notes, query) {
     const sf = searchFilterOptions();
     const sfKey = `${sf.titlesOnly ? 1 : 0}:${sf.includeArchived ? 1 : 0}:${sf.includeTrashed ? 1 : 0}:${sf.includeProtected ? 1 : 0}:${sf.tagIds.join(',')}`;
-    const ids = notes.map((n) => `${n.uuid}:${n.content.updated_at || ''}:${(n.content.ocr_text || '').length}:${n.content.title || ''}:${n.content.pinned ? 1 : 0}:${n.content.starred ? 1 : 0}:${n.content.warn_at || ''}:${n.content.locked ? 1 : 0}:${n.content.prevent_edit ? 1 : 0}`).join('|');
+    const ids = notes.map((n) => `${n.uuid}:${n.content.updated_at || ''}:${(n.content.ocr_text || '').length}:${noteTitleFingerprint(n)}:${n.content.pinned ? 1 : 0}:${n.content.starred ? 1 : 0}:${n.content.warn_at || ''}:${n.content.locked ? 1 : 0}:${n.content.prevent_edit ? 1 : 0}`).join('|');
     return `${currentFilter}:${currentTag || ''}:${currentFolder || ''}:${query}:${sfKey}:${prefs.sort}:${activeListNoteId()}:${ids}`;
   }
 
@@ -6184,8 +6235,33 @@
     return `<button type="button" class="note-row-delete" data-id="${id}" aria-label="${label} note" title="${label}">×</button>`;
   }
 
+  function noteRowStatusGlyphs(note) {
+    if (!note?.content) return '';
+    const parts = [];
+    if (note.content.starred) {
+      parts.push('<span class="note-glyph note-glyph-star" title="Starred" aria-label="Starred">★</span>');
+    } else if (note.content.pinned) {
+      parts.push('<span class="note-glyph note-glyph-pin" title="Pinned" aria-label="Pinned">📌</span>');
+    }
+    if (note.content.locked) {
+      parts.push('<span class="note-glyph note-glyph-lock" title="Protected" aria-label="Protected">🔒</span>');
+    } else if (note.content.prevent_edit) {
+      parts.push('<span class="note-glyph note-glyph-lock" title="Read only" aria-label="Read only">🔒</span>');
+    }
+    return parts.join('');
+  }
+
+  function noteRowSecondaryLine(note, query) {
+    const tags = noteTagChipsHtml(note);
+    const kind = noteKindMeta(note).label;
+    const bits = [tags, kind ? `<span class="note-kind-label">${escapeHtml(kind)}</span>` : ''].filter(Boolean);
+    if (!bits.length) return '';
+    return `<span class="note-item-secondary">${bits.join('')}</span>`;
+  }
+
   function noteLockBadgeHtml(note) {
     if (!note?.content) return '';
+    if (noteListDensity() === 'compact') return '';
     if (note.content.locked) {
       return '<span class="note-lock-badge note-lock-badge-vault" title="Protected note" aria-label="Protected note">'
         + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
@@ -6225,7 +6301,9 @@
       ? '<span class="note-preview-locked"><svg class="preview-lock-glyph" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Protected document</span>'
       : (query ? NotesSearch.highlightPlain(snippet, query) : escapeHtml(snippet));
     const editedMs = Number(att.updated_at) > 0 ? Number(att.updated_at) * (Number(att.updated_at) < 1e12 ? 1000 : 1) : noteEditedAtMs(note);
-    const modified = formatModified(editedMs);
+    const timeTitle = listTimeAbsolute(editedMs);
+    const timeLabel = listTimeLabel(editedMs);
+    const compact = noteListDensity() === 'compact';
     const icon = kind === 'image'
       ? { icon: '🖼', tone: 'note' }
       : { icon: '📄', tone: 'note', svg: kindIconSvg('note') };
@@ -6240,11 +6318,12 @@
         <span class="note-item-body">
           <span class="note-title-row">
             <h3>${titleHtml}</h3>
+            <span class="note-row-trailing">${noteRowStatusGlyphs(note)}<span class="note-modified" title="${escapeAttr(timeTitle)}">${escapeHtml(timeLabel)}</span></span>
           </span>
           ${lockBadgeHtml ? `<span class="note-item-lock-row">${lockBadgeHtml}</span>` : ''}
-          ${prefs.hidePreviews ? '' : `<p class="note-preview">${snippetHtml}</p>`}
-          ${noteTagChipsHtml(note)}
-          <span class="note-modified">${escapeHtml(modified || relativeTime(editedMs))}</span>
+          ${compact ? '' : noteRowSecondaryLine(note, query)}
+          ${(prefs.hidePreviews || compact) ? '' : `<p class="note-preview">${snippetHtml}</p>`}
+          ${compact ? '' : noteTagChipsHtml(note)}
         </span>
       </button>
     </div>`;
@@ -6277,7 +6356,9 @@
       : '<span class="note-title-placeholder">Title</span>';
     const tags = isLocked ? '' : noteTagChipsHtml(n);
     const editedMs = noteEditedAtMs(n);
-    const modified = formatModified(editedMs);
+    const timeTitle = listTimeAbsolute(editedMs);
+    const timeLabel = listTimeLabel(editedMs);
+    const compact = noteListDensity() === 'compact';
     const kind = noteKindMeta(n);
     const firstAtt = atts[0];
     const thumbKind = firstAtt
@@ -6287,17 +6368,18 @@
       && firstAtt
       && (thumbKind === 'image' || thumbKind === 'pdf')
       && !prefs.hidePreviews;
-    const previewHtml = prefs.hidePreviews
+    const previewHtml = (prefs.hidePreviews || compact)
       ? ''
       : (isLocked
         ? '<p class="note-preview note-preview-locked"><svg class="preview-lock-glyph" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Protected note</p>'
         : noteListPreview(n, displaySnippet, query));
-    const pinHtml = (n.content.pinned || n.content.starred)
-      ? `<span class="note-pin" title="Pinned" aria-hidden="true"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.1 1.6l5.3 5.3-1.9 1-2.3 2.3v3.4L7.7 11l-2.6 2.6-2.1-2.1 2.6-2.6L2.8 6l3.4.1 2.3-2.3z"/></svg></span>`
-      : '';
+    const glyphs = noteRowStatusGlyphs(n);
     const where = match
       ? `<span class="note-modified note-match-label">${escapeHtml(match.label)}</span>`
-      : `<span class="note-modified">${escapeHtml(modified || relativeTime(editedMs))}</span>`;
+      : `<span class="note-modified" title="${escapeAttr(timeTitle)}">${escapeHtml(timeLabel)}</span>`;
+    const trailing = `<span class="note-row-trailing">${glyphs}${where}</span>`;
+    const secondary = compact ? '' : noteRowSecondaryLine(n, query);
+    const tagsLine = compact ? '' : tags;
     return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(n.uuid)}">
       ${noteRowSwipeDeleteHtml(n)}
       ${noteRowRestoreBtnHtml(n)}
@@ -6308,20 +6390,20 @@
     : kindIconHtml(kind)}
         <span class="note-item-body">
           <span class="note-title-row">
-            ${pinHtml}
             <h3${titleAttr}>${titleHtml}</h3>${noteIndexingBadge(n.uuid)}
+            ${trailing}
           </span>
           ${lockBadgeHtml ? `<span class="note-item-lock-row">${lockBadgeHtml}</span>` : ''}
+          ${secondary}
           ${previewHtml}
-          ${tags}
-          ${where}
+          ${tagsLine}
         </span>
       </button>
     </div>`;
   }
 
   const NOTE_LIST_VIRTUAL_THRESHOLD = 120;
-  const NOTE_ROW_ESTIMATE = 76;
+  const NOTE_ROW_ESTIMATE = 48;
 
   // Real rows are taller than the initial guess once tags/"Modified" lines show,
   // so the estimate is re-measured from rendered rows after every paint.
@@ -6466,8 +6548,8 @@
     const listTitle = document.getElementById('note-list-title');
     const listCount = document.getElementById('note-list-count');
     const context = NotesSearch.searchContextActive(query, searchOptions);
+    document.body.classList.toggle('list-search-active', !!query);
     if (query || context) {
-      meta.hidden = false;
       const parts = [];
       if (query) {
         parts.push(`${listedCount} match${listedCount === 1 ? '' : 'es'}`);
@@ -6476,10 +6558,14 @@
         parts.push(`${listedCount} ${listingFiles ? 'file' : 'note'}${listedCount === 1 ? '' : 's'}`);
       }
       if (searchOptions.tagIds.length) parts.push(`${searchOptions.tagIds.length} tag filter${searchOptions.tagIds.length === 1 ? '' : 's'}`);
-      meta.textContent = listedCount
+      const summary = listedCount
         ? `${parts.join(' · ')}${query && !searchOptions.titlesOnly && !listingFiles ? ' in notes and scanned documents' : ''}`
         : (query ? (listingFiles ? 'No files match that search' : 'No notes match that search') : 'No notes match these filters');
-    } else {
+      if (meta) {
+        meta.textContent = summary;
+        meta.hidden = !!query;
+      }
+    } else if (meta) {
       meta.hidden = true;
     }
     if (listHead && listTitle && listCount) {
@@ -6489,13 +6575,18 @@
       listTitle.textContent = folder
         ? (folder.content.title || 'Folder')
         : (tag ? tag.content.title || 'Tag' : (FILTER_TITLES[currentFilter] || 'Notes'));
-      listCount.textContent = listedCount
-        ? `${listedCount}`
-        : '0';
-      const countLabel = listingFiles ? 'file' : 'note';
-      listCount.title = listedCount
-        ? `${listedCount} ${countLabel}${listedCount === 1 ? '' : 's'} in this view`
-        : `No ${countLabel}s in this view`;
+      if (query && meta?.textContent) {
+        listCount.textContent = meta.textContent;
+        listCount.title = meta.textContent;
+      } else {
+        listCount.textContent = listedCount
+          ? `${listedCount}`
+          : '0';
+        const countLabel = listingFiles ? 'file' : 'note';
+        listCount.title = listedCount
+          ? `${listedCount} ${countLabel}${listedCount === 1 ? '' : 's'} in this view`
+          : `No ${countLabel}s in this view`;
+      }
     }
     updateTrashToolbar(currentFilter === 'trash' ? notes.length : undefined);
     const renderKey = listingFiles
@@ -13351,7 +13442,16 @@
     updateSearchClear();
     // Filter the list only — do not rebuild OCR search indexes on every keystroke.
     // That used to mark many notes dirty, kick sync, and feel like a full app reload.
-    renderNotes();
+    try {
+      renderNotes();
+    } catch (err) {
+      console.error('Search failed', err);
+      const meta = document.getElementById('search-meta');
+      if (meta) {
+        meta.hidden = false;
+        meta.textContent = 'Search failed — try again or clear filters';
+      }
+    }
     syncEditorModeForSearch();
     if (currentId) applyEditorMode();
     clearTimeout(searchRepairTimer);
@@ -14245,6 +14345,35 @@
   document.getElementById('sync-status-relock')?.addEventListener('click', () => {
     lockVault();
   });
+  const sidebarNav = document.querySelector('.sidebar-nav');
+  const sidebarNavBackdrop = document.getElementById('sidebar-nav-backdrop');
+  function navViewsShouldDrawer() {
+    return window.matchMedia && window.matchMedia('(min-width: 861px) and (max-width: 1099px)').matches && !prefs.navPinned;
+  }
+  sidebarNav?.addEventListener('pointerenter', () => {
+    if (!navViewsShouldDrawer()) return;
+    setNavViewsOpen(true);
+  });
+  sidebarNav?.addEventListener('focusin', () => {
+    if (!navViewsShouldDrawer()) return;
+    setNavViewsOpen(true);
+  });
+  sidebarNav?.addEventListener('pointerleave', (event) => {
+    if (!navViewsShouldDrawer()) return;
+    if (sidebarNav.contains(event.relatedTarget)) return;
+    setNavViewsOpen(false);
+  });
+  sidebarNav?.addEventListener('focusout', (event) => {
+    if (!navViewsShouldDrawer()) return;
+    if (sidebarNav.contains(event.relatedTarget)) return;
+    setNavViewsOpen(false);
+  });
+  sidebarNavBackdrop?.addEventListener('click', () => setNavViewsOpen(false));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.body.classList.contains('nav-views-open')) {
+      setNavViewsOpen(false);
+    }
+  });
   document.getElementById('btn-nav-pin')?.addEventListener('click', () => {
     prefs.navPinned = !prefs.navPinned;
     savePrefs();
@@ -14332,6 +14461,15 @@
     syncNow({ full: true }).catch((err) => {
       toast(err?.message || 'Sync failed', true);
     });
+  });
+  document.getElementById('btn-list-density')?.addEventListener('click', () => {
+    prefs.compactList = !prefs.compactList;
+    document.getElementById('pref-compact').checked = !!prefs.compactList;
+    savePrefs();
+    applyPrefs();
+    lastNotesRenderKey = '';
+    renderNotes();
+    toast(prefs.compactList ? 'Compact list' : 'Comfortable list');
   });
   document.getElementById('pref-compact').addEventListener('change', (e) => {
     prefs.compactList = e.target.checked;

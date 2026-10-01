@@ -467,6 +467,7 @@
       </div>
     </div>
     <div id="notes-shell" class="shell">
+    <div id="sidebar-nav-backdrop" class="sidebar-nav-backdrop" hidden aria-hidden="true"></div>
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-nav">
       <header class="sidebar-head">
@@ -606,7 +607,8 @@
         </button>
         <button type="button" id="btn-nav-pin" class="btn icon desktop-only" title="Pin sidebar" aria-label="Pin sidebar" aria-pressed="false">
           <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 3 15 9 21 10 16.5 14.5 18 21 12 17.5 6 21 7.5 14.5 3 10 9 9"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 2l1.2 4.8L18 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.8-1.2L12 2z"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 14v8"/>
           </svg>
         </button>
         <button type="button" id="btn-account-info-nav" class="btn icon" title="Account info" aria-label="Account info">
@@ -648,6 +650,7 @@
               <path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M12 3v13m0-13l-4 4m4-4l4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
             </svg>
           </button>
+          <button type="button" id="btn-list-density" class="btn icon sm list-density-btn" title="Toggle list density" aria-label="Toggle list density">≡</button>
           <label class="sort-select-wrap sort-select-wrap--list" title="Sort notes">
             <span class="sr-only">Sort</span>
             <select id="sort-select" class="sort-select" aria-label="Sort notes">
@@ -1621,6 +1624,7 @@
   <script src="/static/js/vendor/jsQR.js?v={{ build }}"></script>
   <script src="/static/js/totp.js?v={{ build }}"></script>
   <script src="/static/js/search.js?v={{ build }}"></script>
+  <script src="/static/js/spreadsheet.js?v={{ build }}"></script>
   <script src="/static/js/markdown.js?v={{ build }}"></script>
   <script src="/static/js/in-doc-nav.js?v={{ build }}"></script>
   <script src="/static/js/superscript.js?v={{ build }}"></script>

@@ -4779,7 +4779,80 @@ body.note-readonly #checklist:not([hidden]) {
 .desktop-only { display: inline-flex; }
 .note-body.mono { font-family: var(--font); }
 .note-body-wrap.mono .note-body-links { font-family: var(--font); }
-.note-list.compact .note-item { padding: 10px 14px; }
+.note-list.compact .note-item { padding: 8px 12px; min-height: 44px; }
+.note-list.compact .note-title-row h3 {
+  -webkit-line-clamp: 1;
+  font-size: 14px;
+}
+.note-list.comfortable .note-item { padding: 10px 14px; min-height: 56px; }
+.note-list.comfortable .note-title-row h3 { -webkit-line-clamp: 1; }
+.note-row-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+.note-title-row { width: 100%; }
+.note-glyph {
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.85;
+}
+.note-item-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.note-kind-label { font-size: 12px; }
+.list-density-btn {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.spreadsheet-wrap { display: grid; gap: 10px; }
+.spreadsheet-scroll {
+  overflow: auto;
+  max-height: min(70vh, 640px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+.spreadsheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.spreadsheet-table th,
+.spreadsheet-table td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+.spreadsheet-table th {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+  font-weight: 600;
+}
+.spreadsheet-source summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin: 4px 0;
+}
+.spreadsheet-json,
+.spreadsheet-json-fallback {
+  max-height: 40vh;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.45;
+}
 .note-list.hide-previews .note-item p,
 .note-list.hide-previews .note-preview,
 .note-list.hide-previews .note-preview-bullets,
@@ -5029,9 +5102,23 @@ body.search-filters-open .fab-stack,
     overflow: visible;
   }
   .editor-scroll > #preview:not([hidden]) {
-    flex: 0 0 auto;
-    min-height: 0;
+    flex: 1 1 auto;
+    min-height: min(42vh, 50dvh);
     overflow: visible;
+  }
+  .editor-scroll > .doc-inline:not([hidden]) {
+    flex: 1 1 auto;
+    min-height: min(42vh, 50dvh);
+    display: flex;
+    flex-direction: column;
+  }
+  body.list-search-active .list-pane .search-meta { display: none !important; }
+  body.list-search-active .sidebar-nav .tag-section.is-empty,
+  body.list-search-active .sidebar-nav .folder-section { display: none; }
+  body.list-search-active .note-list-head-copy .note-list-count {
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 600;
   }
   .note-body, .preview {
     flex: 0 0 auto;
@@ -6188,21 +6275,40 @@ body.search-filters-open .fab-stack,
   .editor.doc-preview-active .find-bar {
     display: none !important;
   }
-  /* Breakpoints: <=860 list or editor; 861–1099 icon rail with a 240px overlay;
-     >=1100 pinned rail takes a real column. Hover never squeezes the list. */
+  /* Breakpoints: <=860 list or editor; 861–1099 icon rail expands by pushing the list;
+     >=1100 pinned rail takes a real column. */
   body:not(.nav-pinned) {
     --sn-nav-width: 64px;
   }
+  body:not(.nav-pinned):has(.sidebar-nav:hover),
+  body:not(.nav-pinned):has(.sidebar-nav:focus-within),
+  body:not(.nav-pinned).nav-views-open {
+    --sn-nav-width: 240px;
+  }
   .shell { position: relative; }
+  .sidebar-nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 7;
+    background: rgba(0, 0, 0, 0.28);
+  }
+  body.nav-views-open .sidebar-nav-backdrop {
+    display: block;
+  }
   body.nav-pinned .sidebar-nav,
   body:not(.nav-pinned) .sidebar-nav:hover,
-  body:not(.nav-pinned) .sidebar-nav:focus-within {
-    position: absolute;
+  body:not(.nav-pinned) .sidebar-nav:focus-within,
+  body:not(.nav-pinned).nav-views-open .sidebar-nav {
+    position: relative;
     z-index: 8;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: 240px;
+    top: auto;
+    bottom: auto;
+    left: auto;
+    width: auto;
+    box-shadow: none;
+  }
+  body:not(.nav-pinned).nav-views-open .sidebar-nav {
     box-shadow: 8px 0 28px rgba(0, 0, 0, 0.14);
   }
   .filter > span {
