@@ -37,7 +37,7 @@ class NotesAppTests(unittest.TestCase):
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
 
         for name in list(sys.modules):
-            if name in {"app", "auth", "db", "config", "passwords", "totp", "ocr", "ocr_index", "ocr_jobs", "server_info_cache", "backup_pcloud", "backup_mail", "srp_auth", "webauthn_helper", "admin_api", "auth_rate_limit", "plans", "ai_relay"} or name.startswith("app."):
+            if name in {"app", "auth", "db", "config", "passwords", "totp", "ocr", "ocr_index", "ocr_jobs", "server_info_cache", "backup_pcloud", "backup_mail", "srp_auth", "webauthn_helper", "admin_api", "admin_notify", "auth_rate_limit", "plans", "ai_relay"} or name.startswith("app."):
                 sys.modules.pop(name, None)
         self.app_mod = importlib.import_module("app")
         self.client = self.app_mod.app.test_client()
@@ -2919,6 +2919,20 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(email, calls[0][1])
         self.assertIn(email, calls[0][2])
         self.assertIn("new user subscribed", calls[0][2].lower())
+
+    def test_srp_register_survives_signup_notify_failure(self):
+        import admin_notify
+        from unittest.mock import patch
+
+        email = "fail-notify@home.local"
+        password = "fail-notify-secure-pass"
+        with patch.object(admin_notify, "send_plain_email", side_effect=RuntimeError("smtp down")):
+            with patch.object(admin_notify, "admin_notification_recipients", return_value=["admin@home.local"]):
+                reg = self._register_user(email, password)
+        self.assertEqual(reg.status_code, 200)
+        import db as notes_db
+
+        self.assertIsNotNone(notes_db.get_user_by_email(email))
 
     def test_legacy_register_disabled(self):
         res = self.client.post(
