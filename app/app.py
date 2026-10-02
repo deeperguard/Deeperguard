@@ -25,7 +25,7 @@ import totp as totp_mod
 from flask.sessions import SecureCookieSessionInterface
 from datetime import timedelta
 
-from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, normalize_host, ocr_ephemeral, pcloud_password_set, pcloud_token_set, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, webauthn_preferred_host, user_is_admin
+from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, normalize_host, ocr_ephemeral, pcloud_password_set, pcloud_token_set, repair_login_password_enabled, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, webauthn_preferred_host, user_is_admin
 from uploads import ensure_user_upload_dir, user_upload_dir
 import promo as notes_promo
 from backup_mail import send_user_backup
@@ -121,6 +121,26 @@ def _client_srp_proves_password(email: str, password: str, srp_salt: str, srp_ve
     return computed == supplied
 
 
+def _srp_credential_challenge(email: str, srp_salt: str, srp_verifier: str) -> str:
+    sess = SrpServerSession()
+    b_hex = sess.step1(email, srp_salt, srp_verifier)
+    auth.store_srp_credential_challenge(email, srp_salt, srp_verifier, sess.to_private_state())
+    return b_hex
+
+
+def _verify_srp_credential_proof(email: str, srp_salt: str, srp_verifier: str, a_hex: str, m1: str) -> bool:
+    """True when A/M1 complete an SRP exchange for the given salt/verifier (password never sent)."""
+    state = auth.pop_srp_credential_challenge(email, srp_salt, srp_verifier)
+    if not state:
+        return False
+    try:
+        sess = SrpServerSession.from_private_state(state)
+        sess.step2(a_hex, m1)
+        return True
+    except ValueError:
+        return False
+
+
 def _vault_password_matches(user, password: str) -> bool:
     samples = db.get_recovery_sample_items(int(user["id"]))
     if not samples:
@@ -166,8 +186,16 @@ def _verify_login_password(user, email: str, password: str) -> tuple[bool, bool]
     return False, tried_recovery and not can_srp_fallback
 
 
-def _realign_login_credentials(uid: int, email: str, password: str, srp_salt: str, srp_verifier: str) -> None:
+def _realign_login_credentials(
+    uid: int,
+    email: str,
+    password: str | None,
+    srp_salt: str,
+    srp_verifier: str,
+) -> None:
     db.update_user_srp_verifier(uid, srp_salt, srp_verifier)
+    if not password:
+        return
     user = db.get_user_by_id(uid)
     if user and db.user_has_legacy_password(user):
         db.update_user_password(uid, hash_password(password))
@@ -771,34 +799,72 @@ def api_auth_srp_verify():
     return jsonify(payload)
 
 
+@app.post("/api/auth/repair-login/challenge")
+def api_auth_repair_login_challenge():
+    """SRP step-1 for repair-login: proves knowledge of password via verifier, not plaintext."""
+    body = request.get_json(silent=True) or {}
+    email = str(body.get("email") or "").strip().lower()
+    srp_salt = str(body.get("srp_salt") or "").strip().lower()
+    srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
+    if not EMAIL_RE.match(email) or not srp_salt or not srp_verifier:
+        return jsonify({"error": "invalid credentials"}), 400
+    if _auth_rate_limited("repair-login", email):
+        return jsonify({"error": "too many attempts"}), 429
+    user = db.get_user_by_email(email)
+    if not user:
+        return jsonify({"error": "invalid credentials"}), 401
+    try:
+        b_hex = _srp_credential_challenge(email, srp_salt, srp_verifier)
+    except ValueError:
+        return jsonify({"error": "invalid credentials"}), 401
+    return jsonify({"B": b_hex})
+
+
 @app.post("/api/auth/repair-login")
 def api_auth_repair_login():
-    """Fast server-side login for drifted credentials (avoids slow client SRP on mobile)."""
+    """Realign drifted SRP verifiers after a client SRP proof (password stays on the client)."""
     body = request.get_json(silent=True) or {}
     email = str(body.get("email") or "").strip().lower()
     password = str(body.get("password") or "")
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
-    if not EMAIL_RE.match(email) or not password:
+    a_hex = str(body.get("A") or "").strip().lower()
+    m1 = str(body.get("M1") or "").strip().lower()
+    if not EMAIL_RE.match(email):
         return jsonify({"error": "invalid credentials"}), 400
-    if len(password) < min_password_length():
-        return jsonify({"error": "invalid credentials"}), 401
     if _auth_rate_limited("repair-login", email):
         return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if not user:
         return jsonify({"error": "invalid credentials", "repair_exhausted": True}), 401
-    verified, repair_exhausted = _verify_login_password(user, email, password)
-    if not verified and _client_srp_proves_password(email, password, srp_salt, srp_verifier):
-        verified = True
-        repair_exhausted = False
-    if not verified:
-        return jsonify({"error": "invalid credentials", "repair_exhausted": repair_exhausted}), 401
-    if not srp_salt or not srp_verifier:
-        srp_salt = new_srp_salt_hex()
-        srp_verifier = generate_verifier_hex(srp_salt, email, password)
+
+    if repair_login_password_enabled() and password:
+        if len(password) < min_password_length():
+            return jsonify({"error": "invalid credentials"}), 401
+        verified, repair_exhausted = _verify_login_password(user, email, password)
+        if not verified and _client_srp_proves_password(email, password, srp_salt, srp_verifier):
+            verified = True
+            repair_exhausted = False
+        if not verified:
+            return jsonify({"error": "invalid credentials", "repair_exhausted": repair_exhausted}), 401
+        if not srp_salt or not srp_verifier:
+            srp_salt = new_srp_salt_hex()
+            srp_verifier = generate_verifier_hex(srp_salt, email, password)
+        uid = int(user["id"])
+        _realign_login_credentials(uid, email, password, srp_salt, srp_verifier)
+        totp_required = bool(user["totp_enabled"])
+        auth.login_user(uid, totp_ok=not totp_required)
+        user = db.get_user_by_id(uid)
+        payload = _login_payload(user, totp_required=totp_required)
+        payload["login_repaired"] = True
+        return jsonify(payload)
+
+    if not srp_salt or not srp_verifier or not a_hex or not m1:
+        return jsonify({"error": "invalid credentials"}), 400
+    if not _verify_srp_credential_proof(email, srp_salt, srp_verifier, a_hex, m1):
+        return jsonify({"error": "invalid credentials", "repair_exhausted": True}), 401
     uid = int(user["id"])
-    _realign_login_credentials(uid, email, password, srp_salt, srp_verifier)
+    _realign_login_credentials(uid, email, None, srp_salt, srp_verifier)
     totp_required = bool(user["totp_enabled"])
     auth.login_user(uid, totp_ok=not totp_required)
     user = db.get_user_by_id(uid)
@@ -859,6 +925,34 @@ def api_auth_verify_vault():
     return jsonify({"ok": True})
 
 
+@app.post("/api/auth/vault-recovery/challenge")
+def api_auth_vault_recovery_challenge():
+    """SRP step-1 for strict-ZK vault recovery (session + CSRF; binds to proposed verifier)."""
+    if not strict_zk():
+        return jsonify({"error": "not found"}), 404
+    body = request.get_json(silent=True) or {}
+    email = str(body.get("email") or "").strip().lower()
+    srp_salt = str(body.get("srp_salt") or "").strip().lower()
+    srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
+    if not srp_salt or not srp_verifier or not EMAIL_RE.match(email):
+        return jsonify({"error": "invalid credentials"}), 400
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "sign in required"}), 401
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    user = db.get_user_by_email(email)
+    if not user or int(user["id"]) != int(uid):
+        return jsonify({"error": "invalid credentials"}), 401
+    if _auth_rate_limited("vault-recovery", email):
+        return jsonify({"error": "too many attempts"}), 429
+    try:
+        b_hex = _srp_credential_challenge(email, srp_salt, srp_verifier)
+    except ValueError:
+        return jsonify({"error": "invalid credentials"}), 401
+    return jsonify({"B": b_hex})
+
+
 @app.post("/api/auth/vault-recovery")
 def api_auth_vault_recovery():
     """Rebuild login credentials from a client-generated SRP verifier (session required)."""
@@ -867,8 +961,10 @@ def api_auth_vault_recovery():
     password = str(body.get("password") or "")
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
+    a_hex = str(body.get("A") or "").strip().lower()
+    m1 = str(body.get("M1") or "").strip().lower()
     if strict_zk():
-        if not srp_salt or not srp_verifier or not EMAIL_RE.match(email):
+        if not srp_salt or not srp_verifier or not EMAIL_RE.match(email) or not a_hex or not m1:
             return jsonify({"error": "invalid credentials"}), 400
         uid = auth.current_user_id()
         if not uid:
@@ -880,6 +976,9 @@ def api_auth_vault_recovery():
             return jsonify({"error": "invalid credentials"}), 401
         if _auth_rate_limited("vault-recovery", email):
             return jsonify({"error": "too many attempts"}), 429
+        # Stolen session + CSRF cannot rotate SRP without proving the new verifier (SRP step2).
+        if not _verify_srp_credential_proof(email, srp_salt, srp_verifier, a_hex, m1):
+            return jsonify({"error": "invalid credentials"}), 401
         db.update_user_srp_verifier(int(uid), srp_salt, srp_verifier)
         totp_required = bool(user["totp_enabled"])
         auth.login_user(int(uid), totp_ok=not totp_required)

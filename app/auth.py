@@ -32,6 +32,10 @@ SESSION_CSRF = "csrf"
 SESSION_TOTP = "totp_ok"
 SESSION_SRP = "srp_state"
 SESSION_SRP_EMAIL = "srp_email"
+SESSION_SRP_CRED = "srp_cred_state"
+SESSION_SRP_CRED_EMAIL = "srp_cred_email"
+SESSION_SRP_CRED_SALT = "srp_cred_salt"
+SESSION_SRP_CRED_VERIFIER = "srp_cred_verifier"
 SESSION_SID = "sid"
 
 _GEO_CACHE: dict[str, str] = {}
@@ -497,6 +501,31 @@ def pop_srp_state(email: str) -> dict | None:
         return None
     state = session.pop(SESSION_SRP, None)
     session.pop(SESSION_SRP_EMAIL, None)
+    return state if isinstance(state, dict) else None
+
+
+def store_srp_credential_challenge(email: str, srp_salt: str, srp_verifier: str, state: dict) -> None:
+    session[SESSION_SRP_CRED_EMAIL] = email.strip().lower()
+    session[SESSION_SRP_CRED_SALT] = str(srp_salt or "").strip().lower()
+    session[SESSION_SRP_CRED_VERIFIER] = str(srp_verifier or "").strip().lower()
+    session[SESSION_SRP_CRED] = state
+
+
+def pop_srp_credential_challenge(email: str, srp_salt: str, srp_verifier: str) -> dict | None:
+    key = email.strip().lower()
+    stored_email = str(session.get(SESSION_SRP_CRED_EMAIL) or "").strip().lower()
+    stored_salt = str(session.get(SESSION_SRP_CRED_SALT) or "").strip().lower()
+    stored_verifier = str(session.get(SESSION_SRP_CRED_VERIFIER) or "").strip().lower()
+    if stored_email != key:
+        return None
+    if stored_salt != str(srp_salt or "").strip().lower():
+        return None
+    if stored_verifier != str(srp_verifier or "").strip().lower():
+        return None
+    state = session.pop(SESSION_SRP_CRED, None)
+    session.pop(SESSION_SRP_CRED_EMAIL, None)
+    session.pop(SESSION_SRP_CRED_SALT, None)
+    session.pop(SESSION_SRP_CRED_VERIFIER, None)
     return state if isinstance(state, dict) else None
 
 

@@ -170,17 +170,34 @@
     return false;
   }
 
+  async function credentialProofLogin(challengePath, loginPath, email, password) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const srp = await makeVerifier(normalizedEmail, password);
+    const challenge = await postJson(challengePath, {
+      email: normalizedEmail,
+      srp_salt: srp.srp_salt,
+      srp_verifier: srp.srp_verifier,
+    });
+    const client = new SrpClient();
+    client.step1(normalizedEmail, password);
+    const creds = await client.step2(srp.srp_salt, challenge.B);
+    return postJson(loginPath, {
+      email: normalizedEmail,
+      srp_salt: srp.srp_salt,
+      srp_verifier: srp.srp_verifier,
+      A: creds.A,
+      M1: creds.M1,
+    });
+  }
+
   async function repairLogin(email, password) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const body = { email: normalizedEmail, password };
-    try {
-      const srp = await makeVerifier(normalizedEmail, password);
-      body.srp_salt = srp.srp_salt;
-      body.srp_verifier = srp.srp_verifier;
-    } catch (err) {
-      /* server can mint a new verifier when legacy hash / vault checks pass */
-    }
-    return postJson('/api/auth/repair-login', body);
+    return credentialProofLogin(
+      '/api/auth/repair-login/challenge',
+      '/api/auth/repair-login',
+      normalizedEmail,
+      password,
+    );
   }
 
   /**
@@ -272,12 +289,12 @@
 
   async function vaultRecovery(email, password) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const srp = await makeVerifier(normalizedEmail, password);
-    return postJson('/api/auth/vault-recovery', {
-      email: normalizedEmail,
-      srp_salt: srp.srp_salt,
-      srp_verifier: srp.srp_verifier,
-    });
+    return credentialProofLogin(
+      '/api/auth/vault-recovery/challenge',
+      '/api/auth/vault-recovery',
+      normalizedEmail,
+      password,
+    );
   }
 
   global.NotesSrpAuth = {
