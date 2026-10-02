@@ -136,6 +136,58 @@ class NotesAppTests(unittest.TestCase):
         )
         return verify
 
+    def _srp_credential_proof(
+        self,
+        email: str,
+        password: str,
+        salt_hex: str,
+        challenge_path: str,
+        *,
+        headers: dict | None = None,
+    ):
+        import secrets
+
+        from srp_auth import G, K, N, _from_hex, _h, _to_hex
+
+        def strip_hex(value: str) -> str:
+            out = value.lower()
+            while out.startswith("0"):
+                out = out[1:]
+            return out
+
+        def sha_hex(text: str) -> str:
+            return strip_hex(_h(text))
+
+        from srp_auth import generate_verifier_hex
+
+        verifier = generate_verifier_hex(salt_hex, email, password)
+        challenge = self.client.post(
+            challenge_path,
+            json={"email": email, "srp_salt": salt_hex, "srp_verifier": verifier},
+            headers=headers or {},
+        )
+        self.assertEqual(challenge.status_code, 200, challenge.get_json())
+        b_hex = str(challenge.get_json()["B"]).lower()
+        hash1 = sha_hex(f"{email}:{password}")
+        x_hash = sha_hex(f"{salt_hex}{hash1}".upper())
+        x = int(x_hash, 16) % N
+        byte_len = (N.bit_length() + 7) // 8
+        while True:
+            a_bytes = secrets.token_bytes(byte_len)
+            a = int.from_bytes(a_bytes, "big") % N
+            if a != 0:
+                break
+        A = pow(G, a, N)
+        a_hex = _to_hex(A)
+        u = _from_hex(_h(a_hex + b_hex))
+        B = _from_hex(b_hex)
+        v = pow(G, x, N)
+        tmp = (v * K) % N
+        S = pow((B - tmp + N) % N, (u * x + a) % N, N)
+        s_hex = _to_hex(S)
+        m1 = _h(a_hex + b_hex + s_hex)
+        return a_hex, m1, verifier
+
     def test_server_info_requires_admin(self):
         self._register_user("plain@home.local", "plain-secure-pass")
         res = self.client.get("/api/server/info", headers={"X-CSRF-Token": self._csrf()})
@@ -3036,12 +3088,21 @@ class NotesAppTests(unittest.TestCase):
             sess["exp"] = time.time() + SESSION_SECONDS
             sess["totp_ok"] = True
             sess["csrf"] = sess_csrf
+        a_hex, m1, new_verifier = self._srp_credential_proof(
+            email,
+            password,
+            new_salt,
+            "/api/auth/vault-recovery/challenge",
+            headers={"X-CSRF-Token": sess_csrf},
+        )
         recovered = self.client.post(
             "/api/auth/vault-recovery",
             json={
                 "email": email,
                 "srp_salt": new_salt,
                 "srp_verifier": new_verifier,
+                "A": a_hex,
+                "M1": m1,
             },
             headers={"X-CSRF-Token": sess_csrf},
         )
@@ -3050,12 +3111,25 @@ class NotesAppTests(unittest.TestCase):
         login = self._srp_login(email, password, new_salt)
         self.assertEqual(login.status_code, 200)
 
+        session_only = self.client.post(
+            "/api/auth/vault-recovery",
+            json={
+                "email": email,
+                "srp_salt": new_salt,
+                "srp_verifier": new_verifier,
+            },
+            headers={"X-CSRF-Token": sess_csrf},
+        )
+        self.assertEqual(session_only.status_code, 400)
+
         denied = self.client.post(
             "/api/auth/vault-recovery",
             json={
                 "email": email,
                 "srp_salt": new_salt,
                 "srp_verifier": new_verifier,
+                "A": a_hex,
+                "M1": m1,
             },
         )
         self.assertEqual(denied.status_code, 400)
@@ -3132,6 +3206,22 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn("no encrypted notes", res.get_json().get("error", ""))
 
+    def test_repair_login_rejects_plaintext_password_by_default(self):
+        import db as notes_db
+        from passwords import new_kdf_salt
+
+        email = "no-plain-repair@home.local"
+        password = "no-plain-repair-pass"
+        salt_hex, verifier = self._srp_verifier(email, password)
+        notes_db.create_user_srp(email, new_kdf_salt(), salt_hex, verifier)
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        denied = self.client.post(
+            "/api/auth/repair-login",
+            json={"email": email, "password": password},
+        )
+        self.assertEqual(denied.status_code, 400)
+
     def test_repair_login_wrong_password_does_not_500(self):
         import db as notes_db
         from passwords import new_kdf_salt
@@ -3154,12 +3244,18 @@ class NotesAppTests(unittest.TestCase):
             sess.clear()
         wrong = self.client.post(
             "/api/auth/repair-login",
-            json={"email": email, "password": "definitely-wrong"},
+            json={"email": email, "srp_salt": salt_hex, "srp_verifier": verifier, "A": "1", "M1": "2"},
         )
         self.assertEqual(wrong.status_code, 401, wrong.get_data(as_text=True))
         self.assertTrue(wrong.get_json().get("repair_exhausted"))
 
     def test_repair_login_skips_client_srp(self):
+        os.environ["NOTES_REPAIR_LOGIN_PASSWORD"] = "1"
+        for name in list(sys.modules):
+            if name in {"app", "config", "auth"} or name.startswith("app."):
+                sys.modules.pop(name, None)
+        self.app_mod = importlib.import_module("app")
+        self.client = self.app_mod.app.test_client()
         import db as notes_db
         from passwords import hash_password, new_kdf_salt
 
@@ -3209,13 +3305,20 @@ class NotesAppTests(unittest.TestCase):
         good_verifier = generate_verifier_hex(good_salt, email, password)
         with self.client.session_transaction() as sess:
             sess.clear()
+        a_hex, m1, _ = self._srp_credential_proof(
+            email,
+            password,
+            good_salt,
+            "/api/auth/repair-login/challenge",
+        )
         repaired = self.client.post(
             "/api/auth/repair-login",
             json={
                 "email": email,
-                "password": password,
                 "srp_salt": good_salt,
                 "srp_verifier": good_verifier,
+                "A": a_hex,
+                "M1": m1,
             },
         )
         self.assertEqual(repaired.status_code, 200, repaired.get_json())

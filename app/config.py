@@ -101,6 +101,11 @@ def strict_zk() -> bool:
     return os.environ.get("NOTES_STRICT_ZK", "1") == "1"
 
 
+def repair_login_password_enabled() -> bool:
+    """When true, repair-login may accept plaintext passwords (legacy migration only)."""
+    return os.environ.get("NOTES_REPAIR_LOGIN_PASSWORD", "0") == "1"
+
+
 def allow_register() -> bool:
     return os.environ.get("NOTES_ALLOW_REGISTER", "1") == "1"
 
