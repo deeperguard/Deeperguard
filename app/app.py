@@ -29,6 +29,7 @@ from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOT
 from uploads import ensure_user_upload_dir, user_upload_dir
 import promo as notes_promo
 from backup_mail import send_user_backup
+from admin_notify import notify_new_user_signup
 from mailer import send_contact_email
 from backup_pcloud import pcloud_credentials_configured, save_pcloud_settings, sync_user_backup
 from passwords import hash_password, new_kdf_salt, verify_password
@@ -721,6 +722,7 @@ def api_auth_srp_register():
     kdf_salt = new_kdf_salt()
     user_id = db.create_user_srp(email, kdf_salt, srp_salt, srp_verifier)
     auth.login_user(user_id, totp_ok=True)
+    notify_new_user_signup(email)
     user = db.get_user_by_id(user_id)
     return jsonify(_login_payload(user, totp_required=False))
 
