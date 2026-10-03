@@ -68,6 +68,12 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(seconds=SESSION_SECONDS)
 # 50 MB files are stored as base64 inside JSON (~4/3). 48 MB rejected those uploads.
 app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
 
+
+@app.context_processor
+def _inject_template_globals():
+    return {"csp_nonce": auth.csp_nonce()}
+
+
 @app.errorhandler(413)
 def request_too_large(_err):
     return jsonify({"error": "File too large to upload"}), 413
@@ -1029,6 +1035,8 @@ def api_login():
     body = request.get_json(silent=True) or {}
     email = str(body.get("email") or "").strip().lower()
     password = str(body.get("password") or "").strip()
+    if _auth_rate_limited("legacy-login", email or auth.client_ip()):
+        return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if user and db.user_auth_method(user) == "srp":
         return jsonify({"error": "incorrect password", "auth_method": "srp"}), 401

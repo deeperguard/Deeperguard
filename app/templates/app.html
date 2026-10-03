@@ -21,7 +21,7 @@
   <link rel="apple-touch-startup-image" href="/static/icons/icon-512.png?v={{ build }}" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
   <link rel="stylesheet" href="/static/css/app.css?v={{ build }}">
   <script src="/static/js/vaultlock.js?v={{ build }}"></script>
-  <script>
+  <script nonce="{{ csp_nonce }}">
     (function () {
       // Apply theme before first paint so Update / reload does not flash dark.
       try {
@@ -38,7 +38,7 @@
       } catch (e) {}
     })();
   </script>
-  <script>
+  <script nonce="{{ csp_nonce }}">
     (function () {
       // Always probe /api/health — iOS LAN-only Wi‑Fi may report navigator.onLine=false.
       // Do NOT auto-reload on a newer server build — show the update banner/chip and wait.
@@ -104,7 +104,7 @@
       if (localBuild) probeHealth();
     })();
   </script>
-  <script>
+  <script nonce="{{ csp_nonce }}">
     (function () {
       try {
         // Same-tab Safari refetches keep sessionStorage. Force-quit clears it.
@@ -164,7 +164,7 @@
       </div>
     </div>
   </div>
-  <script>
+  <script nonce="{{ csp_nonce }}">
     (function () {
       var meta = document.querySelector('meta[name="notes-build"]');
       var localBuild = meta && meta.getAttribute('content');
@@ -424,7 +424,7 @@
       </div>
     </div>
   </div>
-  <script>
+  <script nonce="{{ csp_nonce }}">
     (function () {
       var btn = document.getElementById('unlock-submit');
       if (btn) {
