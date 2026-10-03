@@ -10,7 +10,7 @@ import time
 import urllib.error
 import urllib.request
 
-from flask import request, session
+from flask import g, request, session
 
 from config import SESSION_SECONDS, skip_login
 from db import (
@@ -534,6 +534,35 @@ def auth_exempt_path(path: str) -> bool:
     return public_path(base) or base in {"/api/account/unlock", "/api/sync/pull"}
 
 
+def csp_nonce() -> str:
+    nonce = getattr(g, "csp_nonce", None)
+    if not nonce:
+        nonce = secrets.token_urlsafe(16)
+        g.csp_nonce = nonce
+    return nonce
+
+
+def content_security_policy() -> str:
+    nonce = csp_nonce()
+    return "; ".join(
+        (
+            "default-src 'self'",
+            f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: blob:",
+            "font-src 'self'",
+            "connect-src 'self'",
+            "media-src 'self' blob:",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "frame-ancestors 'none'",
+            "worker-src 'self' blob:",
+            "manifest-src 'self'",
+            "form-action 'self'",
+        )
+    )
+
+
 def security_headers() -> dict[str, str]:
     headers = {
         "X-Content-Type-Options": "nosniff",
@@ -543,4 +572,9 @@ def security_headers() -> dict[str, str]:
     }
     if os.environ.get("NOTES_SECURE_COOKIES", "0") == "1":
         headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    policy = content_security_policy()
+    if os.environ.get("NOTES_CSP_REPORT_ONLY", "0") == "1":
+        headers["Content-Security-Policy-Report-Only"] = policy
+    else:
+        headers["Content-Security-Policy"] = policy
     return headers

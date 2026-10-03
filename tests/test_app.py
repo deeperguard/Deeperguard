@@ -47,7 +47,7 @@ class NotesAppTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
-        for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS", "NOTES_ALLOWED_CIDRS", "NOTES_SKIP_LOGIN", "NOTES_BUILD", "NOTES_SERVER_INFO_REFRESH", "NOTES_SERVER_OCR", "NOTES_STRICT_ZK", "NOTES_ADMIN_EMAILS", "NOTES_DEFAULT_USER_QUOTA_MB", "NOTES_DEFAULT_PLAN", "NOTES_APP_PATH"):
+        for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS", "NOTES_ALLOWED_CIDRS", "NOTES_SKIP_LOGIN", "NOTES_BUILD", "NOTES_SERVER_INFO_REFRESH", "NOTES_SERVER_OCR", "NOTES_STRICT_ZK", "NOTES_ADMIN_EMAILS", "NOTES_DEFAULT_USER_QUOTA_MB", "NOTES_DEFAULT_PLAN", "NOTES_APP_PATH", "NOTES_AUTH_RATE_LIMIT"):
             os.environ.pop(key, None)
 
     def _srp_verifier(self, email: str, password: str, salt_hex: str | None = None) -> tuple[str, str]:
@@ -2891,6 +2891,44 @@ class NotesAppTests(unittest.TestCase):
         self.assertTrue(good.get_json()["kdf_salt"])
         self.assertEqual(good.get_json()["vault_kdf_version"], 2)
         self.assertEqual(good.get_json()["auth_method"], "argon2")
+
+    def test_legacy_password_login_rate_limited(self):
+        os.environ["NOTES_AUTH_RATE_LIMIT"] = "2"
+        self._register_legacy_user("legacy-rate@home.local", "legacy-secure-pass")
+        import auth_rate_limit as arl
+
+        arl._hits.clear()
+        for _ in range(2):
+            res = self.client.post(
+                "/api/auth/login",
+                json={"email": "legacy-rate@home.local", "password": "wrong"},
+            )
+            self.assertEqual(res.status_code, 401)
+        blocked = self.client.post(
+            "/api/auth/login",
+            json={"email": "legacy-rate@home.local", "password": "wrong"},
+        )
+        self.assertEqual(blocked.status_code, 429)
+        self.assertEqual(blocked.get_json()["error"], "too many attempts")
+
+    def test_content_security_policy_headers(self):
+        import re
+
+        from config import app_entry_path
+
+        resp = self.client.get(app_entry_path())
+        self.assertEqual(resp.status_code, 200)
+        csp = resp.headers.get("Content-Security-Policy") or ""
+        self.assertTrue(csp)
+        self.assertIn("default-src 'self'", csp)
+        self.assertIn("worker-src 'self' blob:", csp)
+        html = resp.get_data(as_text=True)
+        nonce_match = re.search(r'nonce="([^"]+)"', html)
+        self.assertTrue(nonce_match)
+        self.assertIn(f"'nonce-{nonce_match.group(1)}'", csp)
+
+    def test_kdf_session_cache_never_persists_derived_key(self):
+        self._run_node_script("test_kdf_session_cache.js")
 
     def test_vault_kdf_upgrade(self):
         self._register_user("kdf@home.local", "kdf-secure-pass")

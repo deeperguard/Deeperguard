@@ -371,15 +371,10 @@ const NotesStore = (() => {
       encoding: derived.encoding || '',
     };
     try {
-      const raw = key.raw;
-      if (!(raw instanceof Uint8Array)) return;
-      let binary = '';
-      for (let i = 0; i < raw.length; i += 1) binary += String.fromCharCode(raw[i]);
       sessionStorage.setItem('notes_kdf_cache', JSON.stringify({
         salt: String(salt || ''),
         version: Number(version) || 1,
         encoding: derived.encoding || '',
-        raw: btoa(binary),
         fp: passwordFingerprint(password, salt),
       }));
     } catch (err) {
@@ -398,26 +393,8 @@ const NotesStore = (() => {
     ) {
       return lastDerivedKdf;
     }
-    try {
-      const raw = sessionStorage.getItem('notes_kdf_cache');
-      if (!raw) return null;
-      const cached = JSON.parse(raw);
-      if (!cached || cached.salt !== String(salt || '') || Number(cached.version) !== want) return null;
-      const fp = passwordFingerprint(password, salt);
-      if (!fp || cached.fp !== fp) return null;
-      const bytes = Uint8Array.from(atob(cached.raw), (ch) => ch.charCodeAt(0));
-      const hit = {
-        password: String(password || ''),
-        salt: String(salt || ''),
-        version: want,
-        key: { raw: bytes },
-        encoding: cached.encoding || '',
-      };
-      lastDerivedKdf = hit;
-      return hit;
-    } catch (err) {
-      return null;
-    }
+    /* Derived key bytes stay in memory only — sessionStorage holds KDF hints, not secrets. */
+    return null;
   }
 
   async function deriveVaultKey(password, salt, kdfVersion) {
@@ -712,9 +689,15 @@ const NotesStore = (() => {
     state.altCryptoKey = null;
     state.kdfProbeMixed = false;
     state.kdfVersion = 1;
+    lastDerivedKdf = null;
     state.items.clear();
     state.localReady = false;
     sessionStorage.removeItem('notes_unlocked');
+    try {
+      sessionStorage.removeItem('notes_kdf_cache');
+    } catch (err) {
+      /* ignore */
+    }
     if (typeof NotesVaultSecrets !== 'undefined') {
       NotesVaultSecrets.clearSecrets();
     }
