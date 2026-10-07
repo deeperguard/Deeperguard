@@ -6203,7 +6203,7 @@
   }
 
   function noteTagChipsHtml(note, { max = 3 } = {}) {
-    const assigned = (note?.content?.tags || [])
+    const assigned = [...new Set(note?.content?.tags || [])]
       .map((id) => tagMap().get(id))
       .filter(Boolean);
     const warn = noteWarnChipHtml(note);
@@ -6329,7 +6329,6 @@
           ${lockBadgeHtml ? `<span class="note-item-lock-row">${lockBadgeHtml}</span>` : ''}
           ${compact ? '' : noteRowSecondaryLine(note, query)}
           ${(prefs.hidePreviews || compact) ? '' : `<p class="note-preview">${snippetHtml}</p>`}
-          ${compact ? '' : noteTagChipsHtml(note)}
         </span>
       </button>
     </div>`;
@@ -6360,7 +6359,6 @@
     const titleHtml = displayTitle
       ? (query ? NotesSearch.highlightPlain(displayTitle, query) : escapeHtml(displayTitle))
       : '<span class="note-title-placeholder">Title</span>';
-    const tags = isLocked ? '' : noteTagChipsHtml(n);
     const editedMs = noteEditedAtMs(n);
     const timeTitle = listTimeAbsolute(editedMs);
     const timeLabel = listTimeLabel(editedMs);
@@ -6385,7 +6383,6 @@
       : `<span class="note-modified" title="${escapeAttr(timeTitle)}">${escapeHtml(timeLabel)}</span>`;
     const trailing = `<span class="note-row-trailing">${glyphs}${where}</span>`;
     const secondary = compact ? '' : noteRowSecondaryLine(n, query);
-    const tagsLine = compact ? '' : tags;
     return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(n.uuid)}">
       ${noteRowSwipeDeleteHtml(n)}
       ${noteRowRestoreBtnHtml(n)}
@@ -6402,7 +6399,6 @@
           ${lockBadgeHtml ? `<span class="note-item-lock-row">${lockBadgeHtml}</span>` : ''}
           ${secondary}
           ${previewHtml}
-          ${tagsLine}
         </span>
       </button>
     </div>`;

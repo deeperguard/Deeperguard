@@ -1408,7 +1408,11 @@ class NotesAppTests(unittest.TestCase):
         chips = js[js.index("function noteTagChipsHtml"):js.index("function renderFileRow")]
         self.assertIn("noteWarnChipHtml(note)", chips)
         note_row = js[js.index("function renderNoteRow"):js.index("const NOTE_LIST_VIRTUAL_THRESHOLD")]
-        self.assertIn("noteTagChipsHtml(n)", note_row)
+        file_row = js[js.index("function renderFileRow"):js.index("function renderNoteRow")]
+        secondary = js[js.index("function noteRowSecondaryLine"):js.index("function noteLockBadgeHtml")]
+        self.assertIn("noteTagChipsHtml(note)", secondary)
+        self.assertNotIn("noteTagChipsHtml", note_row, "comfortable rows render tags only in noteRowSecondaryLine")
+        self.assertNotIn("noteTagChipsHtml", file_row)
         chip = js[js.index("function noteWarnChipHtml"):js.index("function noteTagChipsHtml")]
         self.assertIn("warnMs <= Date.now()", chip, "chip must disappear once the warning has fired")
         self.assertIn("note-tag-warn-text", chip, "chip shows a short time next to the clock")
@@ -1417,6 +1421,24 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("day: 'numeric', month: 'short'", fmt)
         self.assertNotIn("sameDay", fmt)
         self.assertIn("dateOpts.year = 'numeric'", fmt)
+
+    def test_comfortable_list_row_single_note_item_tags_block(self):
+        js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        chips_fn = js[js.index("function noteTagChipsHtml"):js.index("function noteRowDeleteLabel")]
+        self.assertIn("new Set(note?.content?.tags || [])", chips_fn)
+        secondary = js[js.index("function noteRowSecondaryLine"):js.index("function noteLockBadgeHtml")]
+        self.assertEqual(secondary.count("note-item-tags"), 0)
+        self.assertEqual(secondary.count("noteTagChipsHtml"), 1)
+        note_row = js[js.index("function renderNoteRow"):js.index("const NOTE_LIST_VIRTUAL_THRESHOLD")]
+        self.assertEqual(note_row.count("note-item-tags"), 0)
+        self.assertEqual(note_row.count("noteTagChipsHtml"), 0)
+
+    def test_expanded_tag_bar_hides_collapsed_summary(self):
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        self.assertIn(
+            ".tag-bar-shell:not(.is-collapsed) .tag-bar-toggle-summary { display: none; }",
+            css,
+        )
 
     def test_note_options_sheet_fits_short_ios_viewports(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
