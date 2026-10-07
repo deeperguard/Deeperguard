@@ -6987,7 +6987,8 @@
         const retryBtn = attachmentOcrRetryable(a)
           ? `<button type="button" class="btn ghost sm ocr-retry" data-retry-ocr="${escapeAttr(a.uuid)}">Retry OCR</button>`
           : '';
-        const shareBtn = attachmentCanWebShare()
+        const hideAttShare = isPhoneShell() && editorMode === 'preview' && noteHasDocs(noteId);
+        const shareBtn = !hideAttShare && attachmentCanWebShare()
           ? `<button type="button" class="btn ghost sm" data-share="${escapeAttr(a.uuid)}">Share</button>`
           : '';
         return `<div class="attachment-item${busy ? ' is-ocr-busy' : ''}" data-att="${escapeAttr(a.uuid)}">
@@ -8366,16 +8367,10 @@
     const desktop = isDesktopLayout();
     const mainInner = `<div class="doc-inline-stage is-loading" data-stage="${escapeAttr(first.uuid)}">${docLoadingHtml()}</div>
           ${desktop ? '' : `<div class="doc-thumb-meta"><span>${escapeHtml(first.content.filename || 'Document')}</span></div>`}`;
-    const toolbar = desktop
-      ? ''
-      : `<div class="doc-inline-tools">
-          <button type="button" class="btn ghost sm doc-inline-expand" data-preview="${escapeAttr(first.uuid)}">Fullscreen</button>
-          <button type="button" class="btn ghost sm doc-inline-share" data-share="${escapeAttr(first.uuid)}">${attachmentCanWebShare() ? 'Share' : 'Download'}</button>
-        </div>`;
     /* iOS Safari will not reliably paint PDF canvases inside <button> — use a div shell like desktop. */
     const mainBlock = desktop
       ? `<div class="doc-inline-main doc-inline-main-scroll">${mainInner}</div>`
-      : `${toolbar}<div class="doc-inline-main doc-inline-main-scroll" data-preview="${escapeAttr(first.uuid)}" role="button" tabindex="0" aria-label="Open ${escapeAttr(first.content.filename || 'document')}">
+      : `<div class="doc-inline-main doc-inline-main-scroll" data-preview="${escapeAttr(first.uuid)}" role="button" tabindex="0" aria-label="Open ${escapeAttr(first.content.filename || 'document')}">
           ${mainInner}
         </div>`;
     ui.docInline.innerHTML = `<div class="doc-inline-card">
@@ -8859,12 +8854,6 @@
       immersive.title = fileShare ? 'Share' : 'Download';
       immersive.setAttribute('aria-label', fileShare ? 'Share' : 'Download');
     }
-    document.querySelectorAll('.doc-inline-share').forEach((btn) => {
-      const label = fileShare ? 'Share' : 'Download';
-      btn.textContent = label;
-      btn.title = label;
-      btn.setAttribute('aria-label', label);
-    });
   }
 
   function renderHistory(note) {
@@ -8979,8 +8968,6 @@
 
   function inlineDocPreviewAttId() {
     if (!ui.docInline || ui.docInline.hidden) return null;
-    const expand = ui.docInline.querySelector('.doc-inline-expand');
-    if (expand?.dataset?.preview) return expand.dataset.preview;
     const stage = ui.docInline.querySelector('.doc-inline-stage');
     return stage?.dataset?.stage || null;
   }
@@ -9473,11 +9460,8 @@
       }
     });
     const shareBtn = document.getElementById('btn-share');
-    const inlineShare = mobileDocToolbarActive() ? ui.docInline?.querySelector('.doc-inline-share') : null;
     document.querySelectorAll('.editor-mobile-proxy[data-editor-proxy="btn-share"]').forEach((proxy) => {
-      const title = inlineShare?.getAttribute('aria-label')
-        || inlineShare?.title
-        || shareBtn?.getAttribute('aria-label')
+      const title = shareBtn?.getAttribute('aria-label')
         || shareBtn?.title
         || 'Share note';
       proxy.title = title;
@@ -13987,15 +13971,10 @@
   }, true);
 
   document.getElementById('btn-share')?.addEventListener('click', () => {
-    if (mobileDocToolbarActive()) {
+    if (mobileDocToolbarActive() && isDesktopLayout()) {
       const attId = inlineDocPreviewAttId();
-      if (attId && isDesktopLayout()) {
+      if (attId) {
         shareAttachment(attId).catch((err) => toast(err.message || 'Share failed', true));
-        return;
-      }
-      const inlineShare = ui.docInline?.querySelector('.doc-inline-share');
-      if (inlineShare) {
-        inlineShare.click();
         return;
       }
     }
@@ -14475,11 +14454,15 @@
   });
   document.getElementById('btn-mobile-doc-fullscreen')?.addEventListener('click', (event) => {
     event.preventDefault();
-    ui.docInline?.querySelector('.doc-inline-expand')?.click();
+    const attId = inlineDocPreviewAttId();
+    if (!attId) return;
+    openInlineDocFullscreen(attId, event);
   });
   document.getElementById('btn-mobile-doc-attachment-share')?.addEventListener('click', (event) => {
     event.preventDefault();
-    ui.docInline?.querySelector('.doc-inline-share')?.click();
+    const attId = inlineDocPreviewAttId();
+    if (!attId) return;
+    shareAttachment(attId).catch((err) => toast(err.message || 'Share failed', true));
   });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
