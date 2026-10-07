@@ -6987,7 +6987,7 @@
         const retryBtn = attachmentOcrRetryable(a)
           ? `<button type="button" class="btn ghost sm ocr-retry" data-retry-ocr="${escapeAttr(a.uuid)}">Retry OCR</button>`
           : '';
-        const hideAttShare = isPhoneShell() && editorMode === 'preview' && noteHasDocs(noteId);
+        const hideAttShare = isPhoneShell() && mobileDocToolbarActive();
         const shareBtn = !hideAttShare && attachmentCanWebShare()
           ? `<button type="button" class="btn ghost sm" data-share="${escapeAttr(a.uuid)}">Share</button>`
           : '';
@@ -7635,10 +7635,12 @@
       if (entry.kind === 'text') {
         clearDocStageLoading(stage);
         NotesPreview.renderTextPreview(stage, entry.bytes, query);
+        markDocStagePainted(stage);
         return;
       }
       clearDocStageLoading(stage);
       stage.innerHTML = '<p class="muted">This file type cannot be previewed. Download it instead.</p>';
+      markDocStagePainted(stage);
     } catch (err) {
       clearDocStageLoading(stage);
       const msg = String(err.message || '');
@@ -7648,6 +7650,7 @@
           ? msg
           : (msg || 'Preview unavailable offline'));
       stage.innerHTML = `<p class="error">${escapeHtml(friendly)}</p>`;
+      markDocStagePainted(stage);
     }
   }
 
@@ -7730,12 +7733,22 @@
 
   function showDocStageLoading(stage) {
     if (!stage) return;
+    stage.classList.remove('is-painted');
     stage.classList.add('is-loading');
     stage.innerHTML = docLoadingHtml();
   }
 
   function clearDocStageLoading(stage) {
-    stage?.classList.remove('is-loading');
+    if (!stage) return;
+    stage.classList.remove('is-loading');
+  }
+
+  function markDocStagePainted(stage) {
+    if (!stage) return;
+    stage.classList.remove('is-loading');
+    if (!inlineStagePainted(stage)) return;
+    stage.classList.add('is-painted');
+    syncEditorDocPreviewLayout();
   }
 
   function previewHasHits(stage) {
@@ -7881,6 +7894,7 @@
     if (heavyPreviewDeferred(attId)) {
       clearDocStageLoading(stage);
       stage.innerHTML = '<p class="doc-ocr-wait">Indexing… preview opens when reading finishes.</p>';
+      markDocStagePainted(stage);
       return;
     }
     clearDocStageLoading(stage);
@@ -7899,6 +7913,7 @@
           query: '',
           showExcerpt: false,
         });
+        markDocStagePainted(stage);
         return;
       }
       await ensureOpenedAttachmentIndexed(attId, entry);
@@ -7925,6 +7940,7 @@
         NotesPreview.appendSearchExcerpt(stage, ocrText, needle);
       }
       revealSearchHits(stage, needle);
+      markDocStagePainted(stage);
       return;
     }
     if (entry.kind === 'image') {
@@ -7933,6 +7949,7 @@
         img.src = entry.url;
         img.alt = entry.filename;
         stage.replaceChildren(img);
+        markDocStagePainted(stage);
         return;
       }
       await ensureOpenedAttachmentIndexed(attId, entry);
@@ -7953,12 +7970,14 @@
       NotesPreview.repaintAllSearchHits(stage, boxes, needle);
       if (!previewHasExcerpt(stage)) NotesPreview.appendSearchExcerpt(stage, ocrText, needle);
       revealSearchHits(stage, needle);
+      markDocStagePainted(stage);
       return;
     }
     if (entry.kind === 'text') {
       if (paintToken !== docPaintToken || !stage.isConnected) return;
       NotesPreview.renderTextPreview(stage, entry.bytes, needle);
       if (needle) revealSearchHits(stage, needle);
+      markDocStagePainted(stage);
     }
   }
 
@@ -8946,6 +8965,7 @@
     syncEditorMobileDocActions();
     ui.editor?.classList.remove('doc-preview-active');
     document.body.classList.remove('editor-doc-preview');
+    document.body.classList.remove('editor-mobile-doc-preview');
   }
 
   function syncEditorBodyWrap() {
@@ -8961,6 +8981,7 @@
       && !ui.docInline?.hidden;
     ui.editor?.classList.toggle('doc-preview-active', active);
     document.body.classList.toggle('editor-doc-preview', active && isDesktopLayout());
+    document.body.classList.toggle('editor-mobile-doc-preview', active && isPhoneShell());
     if (active && isMobileLayout()) ensureInlineDocLayoutWatch();
     else stopInlineDocLayoutWatch();
     syncEditorMobileDocActions();

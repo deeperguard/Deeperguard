@@ -3658,8 +3658,8 @@ mark.search-hit-current {
   pointer-events: none;
   touch-action: manipulation;
 }
+.doc-inline-stage.is-painted,
 .doc-inline-stage:not(.is-loading):is(:has(.doc-page-wrap), :has(img), :has(canvas.doc-page), :has(pre)) {
-  min-height: 0;
   pointer-events: auto;
 }
 .doc-inline-stage.is-loading,
@@ -3685,15 +3685,7 @@ mark.search-hit-current {
   animation: sync-spin .7s linear infinite;
 }
 .doc-inline-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
-  border-radius: 8px 8px 0 0;
-  width: 100%;
+  display: none !important;
 }
 .doc-inline-share { justify-self: start; }
 .doc-inline-stage img,
@@ -5203,8 +5195,9 @@ body.search-filters-open .fab-stack,
   }
   .tag-bar-shell.is-collapsed + .tag-suggest { margin-top: 0; }
   .doc-inline-stage { min-height: min(52vh, 50dvh); }
+  .doc-inline-stage.is-painted,
   .doc-inline-stage:not(.is-loading):is(:has(.doc-page-wrap), :has(img), :has(canvas.doc-page), :has(pre)) {
-    min-height: min(36vh, 42dvh);
+    min-height: min(52vh, 50dvh);
     flex: 1 1 auto;
   }
   .doc-inline-card {
@@ -5227,9 +5220,11 @@ body.search-filters-open .fab-stack,
   .editor.doc-preview-active .editor-scroll {
     flex: 1 1 auto;
     min-height: 0;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
+    -webkit-overflow-scrolling: touch;
   }
   .editor.doc-preview-active #note-body-wrap,
   .editor.doc-preview-active #checklist,
@@ -5238,30 +5233,38 @@ body.search-filters-open .fab-stack,
     display: none !important;
   }
   .editor.doc-preview-active .doc-inline {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
+    flex: 0 0 auto;
+    min-height: min(58vh, 55dvh);
+    overflow: visible;
     border-bottom: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     background: color-mix(in srgb, var(--text) 5%, var(--bg));
   }
   .editor.doc-preview-active .doc-inline-card {
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: min(58vh, 55dvh);
+    display: flex;
+    flex-direction: column;
   }
   .editor.doc-preview-active .doc-inline-main,
   .editor.doc-preview-active .doc-inline-main-scroll {
+    flex: 1 1 auto;
+    min-height: min(52vh, 50dvh);
+    display: flex;
+    flex-direction: column;
     border-radius: 0;
     background: transparent;
     overflow: visible;
   }
+  .editor.doc-preview-active .doc-inline-main .doc-thumb-meta {
+    display: none;
+  }
   .editor.doc-preview-active .doc-inline-stage {
-    min-height: min(40vh, 45dvh);
+    flex: 1 1 auto;
+    min-height: min(52vh, 50dvh);
     max-height: none;
     overflow: visible;
     display: block;
@@ -5269,9 +5272,17 @@ body.search-filters-open .fab-stack,
     background: transparent;
     padding: 0;
   }
+  .editor.doc-preview-active .doc-inline-stage.is-painted,
   .editor.doc-preview-active .doc-inline-stage:not(.is-loading):is(:has(.doc-page-wrap), :has(img), :has(canvas.doc-page), :has(pre)) {
-    min-height: min(36vh, 42dvh);
+    min-height: min(52vh, 50dvh);
     flex: 1 1 auto;
+  }
+  body.editor-mobile-doc-preview .editor-actions-overflow-panel .editor-mobile-doc-action,
+  body.editor-mobile-doc-preview .editor-actions-overflow-panel #btn-desktop-doc-fullscreen {
+    display: none !important;
+  }
+  body.editor-mobile-doc-preview .attachment-item-actions .btn[data-share] {
+    display: none !important;
   }
   .editor.doc-preview-active .doc-inline-stage.is-loading {
     display: grid;
