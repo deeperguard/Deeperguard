@@ -47,7 +47,7 @@ class NotesAppTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
-        for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS", "NOTES_ALLOWED_CIDRS", "NOTES_SKIP_LOGIN", "NOTES_BUILD", "NOTES_SERVER_INFO_REFRESH", "NOTES_SERVER_OCR", "NOTES_STRICT_ZK", "NOTES_ADMIN_EMAILS", "NOTES_DEFAULT_USER_QUOTA_MB", "NOTES_DEFAULT_PLAN", "NOTES_APP_PATH", "NOTES_AUTH_RATE_LIMIT"):
+        for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS", "NOTES_ALLOWED_CIDRS", "NOTES_SKIP_LOGIN", "NOTES_BUILD", "NOTES_SERVER_INFO_REFRESH", "NOTES_SERVER_OCR", "NOTES_STRICT_ZK", "NOTES_ADMIN_EMAILS", "NOTES_DEFAULT_USER_QUOTA_MB", "NOTES_DEFAULT_PLAN", "NOTES_APP_PATH", "NOTES_AUTH_RATE_LIMIT", "NOTES_REPAIR_LOGIN_PASSWORD"):
             os.environ.pop(key, None)
 
     def _srp_verifier(self, email: str, password: str, salt_hex: str | None = None) -> tuple[str, str]:
@@ -145,6 +145,11 @@ class NotesAppTests(unittest.TestCase):
         *,
         headers: dict | None = None,
     ):
+        """Challenge + proof against the server-returned (stored) salt/verifier.
+
+        `password` is the password used for the proof; `salt_hex` only seeds the
+        rotation verifier returned as the third tuple element.
+        """
         import secrets
 
         from srp_auth import G, K, N, _from_hex, _h, _to_hex
@@ -160,16 +165,17 @@ class NotesAppTests(unittest.TestCase):
 
         from srp_auth import generate_verifier_hex
 
-        verifier = generate_verifier_hex(salt_hex, email, password)
+        rotation_verifier = generate_verifier_hex(salt_hex, email, password)
         challenge = self.client.post(
             challenge_path,
-            json={"email": email, "srp_salt": salt_hex, "srp_verifier": verifier},
+            json={"email": email},
             headers=headers or {},
         )
         self.assertEqual(challenge.status_code, 200, challenge.get_json())
         b_hex = str(challenge.get_json()["B"]).lower()
+        stored_salt = str(challenge.get_json()["srp_salt"]).lower()
         hash1 = sha_hex(f"{email}:{password}")
-        x_hash = sha_hex(f"{salt_hex}{hash1}".upper())
+        x_hash = sha_hex(f"{stored_salt}{hash1}".upper())
         x = int(x_hash, 16) % N
         byte_len = (N.bit_length() + 7) // 8
         while True:
@@ -186,7 +192,7 @@ class NotesAppTests(unittest.TestCase):
         S = pow((B - tmp + N) % N, (u * x + a) % N, N)
         s_hex = _to_hex(S)
         m1 = _h(a_hex + b_hex + s_hex)
-        return a_hex, m1, verifier
+        return a_hex, m1, rotation_verifier
 
     def test_server_info_requires_admin(self):
         self._register_user("plain@home.local", "plain-secure-pass")
@@ -3091,10 +3097,11 @@ class NotesAppTests(unittest.TestCase):
 
         email = "vault-recover@home.local"
         password = "vault-recover-pass"
-        wrong = "wrong-vault-pass"
-        salt_hex, bad_verifier = self._srp_verifier(email, wrong)
+        # Stored verifier matches the account's current password; recovery proves against it
+        # (SRP step2 bound to the *stored* verifier) before rotating to a fresh salt/verifier.
+        stored_salt, stored_verifier = self._srp_verifier(email, password)
         kdf_salt = new_kdf_salt()
-        user_id = notes_db.create_user_srp(email, kdf_salt, salt_hex, bad_verifier)
+        user_id = notes_db.create_user_srp(email, kdf_salt, stored_salt, stored_verifier)
         notes_db.update_user_vault_kdf_version(user_id, 1)
         ciphertext = encrypt_object(
             password,
@@ -3113,7 +3120,7 @@ class NotesAppTests(unittest.TestCase):
         )
         with self.client.session_transaction() as sess:
             sess.clear()
-        new_salt, new_verifier = self._srp_verifier(email, password)
+        new_salt, _ = self._srp_verifier(email, password)
         import secrets
         import time
 
@@ -3172,6 +3179,59 @@ class NotesAppTests(unittest.TestCase):
         )
         self.assertEqual(denied.status_code, 400)
         self.assertEqual(denied.get_json()["error"], "invalid CSRF token")
+
+    def test_vault_recovery_rejects_self_made_verifier(self):
+        """A session + CSRF holder cannot rotate SRP without proving the *stored* password.
+
+        Guards M-1: the recovery proof must authenticate against the verifier on file, so a
+        self-generated salt/verifier/proof (the old self-referential path) is rejected.
+        """
+        import db as notes_db
+        from passwords import new_kdf_salt
+
+        email = "vault-recover-attack@home.local"
+        password = "vault-recover-real-pass"
+        attacker_pw = "attacker-chosen-pass"
+        stored_salt, stored_verifier = self._srp_verifier(email, password)
+        user_id = notes_db.create_user_srp(email, new_kdf_salt(), stored_salt, stored_verifier)
+
+        import secrets
+        import time
+
+        from config import SESSION_SECONDS
+
+        sess_csrf = secrets.token_urlsafe(32)
+        with self.client.session_transaction() as sess:
+            sess["uid"] = int(user_id)
+            sess["authed"] = True
+            sess["exp"] = time.time() + SESSION_SECONDS
+            sess["totp_ok"] = True
+            sess["csrf"] = sess_csrf
+
+        # Attacker completes an SRP exchange, but the server's challenge is bound to the
+        # stored verifier, so a proof computed from the attacker's chosen password fails.
+        evil_salt, evil_verifier = self._srp_verifier(email, attacker_pw)
+        a_hex, m1, _ = self._srp_credential_proof(
+            email,
+            attacker_pw,
+            evil_salt,
+            "/api/auth/vault-recovery/challenge",
+            headers={"X-CSRF-Token": sess_csrf},
+        )
+        denied = self.client.post(
+            "/api/auth/vault-recovery",
+            json={
+                "email": email,
+                "srp_salt": evil_salt,
+                "srp_verifier": evil_verifier,
+                "A": a_hex,
+                "M1": m1,
+            },
+            headers={"X-CSRF-Token": sess_csrf},
+        )
+        self.assertEqual(denied.status_code, 401)
+        user = notes_db.get_user_by_id(user_id)
+        self.assertEqual(int(str(user["srp_verifier"]), 16), int(stored_verifier, 16))
 
     def test_verify_vault_disabled_in_strict_zk(self):
         res = self.client.post(
@@ -3328,33 +3388,77 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("shouldRetryWithRepairAfterSrp", srp_js)
         self.assertNotIn("if (!srpErr?.repairExhausted)", auth_js)
 
-    def test_repair_login_accepts_client_verifier_for_srp_only_drift(self):
+    def test_repair_login_rejects_self_made_verifier(self):
+        """Unauthenticated repair-login must not accept a client-made salt/verifier/proof.
+
+        Guards H-1: the challenge/proof is bound to the account's *stored* verifier, so a
+        caller who only knows a self-chosen password (not the stored one) cannot overwrite
+        another account's SRP verifier or obtain a session. An honest SRP-only drift that no
+        longer matches the stored verifier simply fails closed.
+        """
         import db as notes_db
         from passwords import new_kdf_salt
         from srp_auth import generate_verifier_hex, new_srp_salt_hex
 
         email = "srp-drift@home.local"
         password = "srp-drift-password"
-        wrong = "wrong-srp-drift-pass"
-        bad_salt, bad_verifier = self._srp_verifier(email, wrong)
+        stored_pw = "stored-srp-drift-pass"
+        stored_salt, stored_verifier = self._srp_verifier(email, stored_pw)
         kdf_salt = new_kdf_salt()
-        user_id = notes_db.create_user_srp(email, kdf_salt, bad_salt, bad_verifier)
-        good_salt = new_srp_salt_hex()
-        good_verifier = generate_verifier_hex(good_salt, email, password)
+        user_id = notes_db.create_user_srp(email, kdf_salt, stored_salt, stored_verifier)
+        attacker_salt = new_srp_salt_hex()
+        attacker_verifier = generate_verifier_hex(attacker_salt, email, password)
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        # Proof derived from the attacker-chosen password cannot complete the exchange the
+        # server seeds from the stored verifier.
+        a_hex, m1, _ = self._srp_credential_proof(
+            email,
+            password,
+            attacker_salt,
+            "/api/auth/repair-login/challenge",
+        )
+        denied = self.client.post(
+            "/api/auth/repair-login",
+            json={
+                "email": email,
+                "srp_salt": attacker_salt,
+                "srp_verifier": attacker_verifier,
+                "A": a_hex,
+                "M1": m1,
+            },
+        )
+        self.assertEqual(denied.status_code, 401, denied.get_json())
+        user = notes_db.get_user_by_id(user_id)
+        self.assertEqual(int(str(user["srp_verifier"]), 16), int(stored_verifier, 16))
+
+    def test_repair_login_accepts_proof_against_stored_verifier(self):
+        """Honest repair-login: a proof against the stored verifier rotates to a fresh salt."""
+        import db as notes_db
+        from passwords import new_kdf_salt
+        from srp_auth import generate_verifier_hex, new_srp_salt_hex
+
+        email = "srp-repair-ok@home.local"
+        password = "srp-repair-ok-pass"
+        stored_salt, stored_verifier = self._srp_verifier(email, password)
+        kdf_salt = new_kdf_salt()
+        user_id = notes_db.create_user_srp(email, kdf_salt, stored_salt, stored_verifier)
+        rotated_salt = new_srp_salt_hex()
+        rotated_verifier = generate_verifier_hex(rotated_salt, email, password)
         with self.client.session_transaction() as sess:
             sess.clear()
         a_hex, m1, _ = self._srp_credential_proof(
             email,
             password,
-            good_salt,
+            rotated_salt,
             "/api/auth/repair-login/challenge",
         )
         repaired = self.client.post(
             "/api/auth/repair-login",
             json={
                 "email": email,
-                "srp_salt": good_salt,
-                "srp_verifier": good_verifier,
+                "srp_salt": rotated_salt,
+                "srp_verifier": rotated_verifier,
                 "A": a_hex,
                 "M1": m1,
             },
@@ -3362,7 +3466,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(repaired.status_code, 200, repaired.get_json())
         self.assertTrue(repaired.get_json().get("login_repaired"))
         user = notes_db.get_user_by_id(user_id)
-        self.assertEqual(int(str(user["srp_verifier"]), 16), int(good_verifier, 16))
+        self.assertEqual(int(str(user["srp_verifier"]), 16), int(rotated_verifier, 16))
+        login = self._srp_login(email, password, rotated_salt)
+        self.assertEqual(login.status_code, 200)
 
     def test_app_repair_unlock_uses_password_sign_in(self):
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")

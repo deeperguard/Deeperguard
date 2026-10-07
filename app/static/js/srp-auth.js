@@ -170,21 +170,22 @@
     return false;
   }
 
+  /**
+   * Prove the password against the account's *stored* SRP verifier (server returns the
+   * stored salt + B), then rotate to a freshly generated salt/verifier. The server rejects
+   * proofs that do not match the credentials on file.
+   */
   async function credentialProofLogin(challengePath, loginPath, email, password) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const srp = await makeVerifier(normalizedEmail, password);
-    const challenge = await postJson(challengePath, {
-      email: normalizedEmail,
-      srp_salt: srp.srp_salt,
-      srp_verifier: srp.srp_verifier,
-    });
+    const rotated = await makeVerifier(normalizedEmail, password);
+    const challenge = await postJson(challengePath, { email: normalizedEmail });
     const client = new SrpClient();
     client.step1(normalizedEmail, password);
-    const creds = await client.step2(srp.srp_salt, challenge.B);
+    const creds = await client.step2(challenge.srp_salt, challenge.B);
     return postJson(loginPath, {
       email: normalizedEmail,
-      srp_salt: srp.srp_salt,
-      srp_verifier: srp.srp_verifier,
+      srp_salt: rotated.srp_salt,
+      srp_verifier: rotated.srp_verifier,
       A: creds.A,
       M1: creds.M1,
     });
