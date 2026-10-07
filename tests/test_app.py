@@ -4368,14 +4368,20 @@ class NotesAppTests(unittest.TestCase):
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        self.assertIn(".doc-inline-tools {\n  display: none !important;\n}", css)
         self.assertIn(".doc-inline-tools {\n    display: none !important;\n  }", mobile)
-        self.assertIn("min-height: min(36vh, 42dvh);", mobile)
+        self.assertIn("min-height: min(52vh, 50dvh);", mobile)
+        self.assertIn("overflow-y: auto;", mobile[mobile.find(".editor.doc-preview-active .editor-scroll"):mobile.find(".editor.doc-preview-active .editor-scroll") + 280])
+        self.assertIn("body.editor-mobile-doc-preview", mobile)
         self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", mobile)
         inline_fn = js[js.find("function renderDocInline("):js.find("function scheduleSearchHitRepaint(")]
         self.assertNotIn("doc-inline-tools", inline_fn)
         self.assertNotIn("doc-inline-share", inline_fn)
         render_att = js[js.find("function renderAttachments("):js.find("function attachmentOcrStatus(")]
         self.assertIn("hideAttShare", render_att)
+        self.assertIn("mobileDocToolbarActive()", render_att)
+        self.assertIn("function markDocStagePainted(", js)
+        self.assertIn("editor-mobile-doc-preview", js)
         self.assertIn('id="btn-mobile-doc-fullscreen"', html[html.find('class="editor-actions-mobile-bar"'):html.find('</div>\n            <div id="editor-actions-overflow-panel"')])
 
     def test_desktop_doc_note_toolbar_single_row(self):
