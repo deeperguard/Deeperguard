@@ -3264,6 +3264,7 @@ body.scan-dialog-open {
   color: var(--muted);
 }
 .tag-bar-shell:not(.is-collapsed) .tag-bar-toggle { margin-bottom: 2px; }
+.tag-bar-shell:not(.is-collapsed) .tag-bar-toggle-summary { display: none; }
 .tag-bar .tag-chip {
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--tag-color, var(--border)) 35%, var(--border));
