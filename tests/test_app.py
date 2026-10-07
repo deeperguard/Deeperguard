@@ -4361,6 +4361,22 @@ class NotesAppTests(unittest.TestCase):
             html.find('id="btn-editor-overflow-mobile"') + 80
         ]
         self.assertIn('data-editor-proxy="btn-pin"', mobile_bar)
+        self.assertIn('id="btn-mobile-doc-fullscreen"', mobile_bar)
+
+    def test_mobile_doc_inline_preview_layout(self):
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
+        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        self.assertIn(".doc-inline-tools {\n    display: none !important;\n  }", mobile)
+        self.assertIn("min-height: min(36vh, 42dvh);", mobile)
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", mobile)
+        inline_fn = js[js.find("function renderDocInline("):js.find("function scheduleSearchHitRepaint(")]
+        self.assertNotIn("doc-inline-tools", inline_fn)
+        self.assertNotIn("doc-inline-share", inline_fn)
+        render_att = js[js.find("function renderAttachments("):js.find("function attachmentOcrStatus(")]
+        self.assertIn("hideAttShare", render_att)
+        self.assertIn('id="btn-mobile-doc-fullscreen"', html[html.find('class="editor-actions-mobile-bar"'):html.find('</div>\n            <div id="editor-actions-overflow-panel"')])
 
     def test_desktop_doc_note_toolbar_single_row(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
@@ -4386,8 +4402,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("function inlineDocPreviewAttId()", js)
         self.assertIn("function setEditorToolbarMenuOpen(", js)
         inline_fn = js[js.find("function renderDocInline("):js.find("function scheduleSearchHitRepaint(")]
-        self.assertIn("const toolbar = desktop", inline_fn)
-        self.assertIn("? ''", inline_fn)
+        self.assertNotIn("doc-inline-tools", inline_fn)
         self.assertIn("doc-inline-main-scroll", inline_fn)
         self.assertNotIn('<button type="button" class="doc-inline-main"', inline_fn)
         hydrate_inline = js[js.find("async function hydrateInlineDoc("):js.find("let inlineDocLayoutWatch")]
