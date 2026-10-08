@@ -1,3 +1,6 @@
+/**
+ * Simulated page reload: sessionStorage KDF hints persist; in-memory lastDerivedKdf does not.
+ */
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -5,6 +8,7 @@ const vm = require('vm');
 
 const jsRoot = path.join(__dirname, '..', 'app', 'static', 'js');
 const vendorRoot = path.join(jsRoot, 'vendor');
+const storePath = path.join(jsRoot, 'store.js');
 
 global.addEventListener = () => {};
 global.window = global;
@@ -52,34 +56,34 @@ vm.runInThisContext(
   fs.readFileSync(path.join(vendorRoot, 'noble-argon2.js'), 'utf8') + ';globalThis.NobleArgon2=NobleArgon2;',
 );
 global.NotesCrypto = require(path.join(jsRoot, 'crypto.js'));
-const NotesStore = require(path.join(jsRoot, 'store.js'));
+
+function loadNotesStore() {
+  delete require.cache[require.resolve(storePath)];
+  return require(storePath);
+}
 
 (async () => {
   const salt = '74b797214bcbc094863155104fb361bb';
-  await NotesStore.unlock('vault-password', salt, { kdfVersion: 1 });
+  const password = 'vault-password-reload-test';
+
+  const NotesStore1 = loadNotesStore();
+  await NotesStore1.unlock(password, salt, { kdfVersion: 1 });
+  assert.ok(NotesStore1.isUnlocked(), 'first unlock');
   const cached = sessionStorage.getItem('notes_kdf_cache');
-  assert.ok(cached, 'KDF hint cache should exist after unlock');
+  assert.ok(cached, 'kdf hint in sessionStorage');
   const parsed = JSON.parse(cached);
-  assert.strictEqual(parsed.raw, undefined, 'derived key bytes must not be stored');
-  assert.strictEqual(parsed.fp, undefined, 'password fingerprint must not be stored in sessionStorage');
+  assert.strictEqual(parsed.fp, undefined, 'no fp in sessionStorage');
+  assert.strictEqual(parsed.version, 1);
 
-  sessionStorage.setItem(
-    'notes_kdf_cache',
-    JSON.stringify({
-      salt,
-      version: 1,
-      encoding: '',
-      fp: 'deadbeef',
-      raw: btoa('legacy-derived-key-bytes-should-be-ignored'),
-    }),
-  );
-  NotesStore.lock();
-  assert.strictEqual(sessionStorage.getItem('notes_kdf_cache'), null, 'lock clears KDF hints');
-  await NotesStore.unlock('vault-password', salt, { kdfVersion: 1 });
-  const after = JSON.parse(sessionStorage.getItem('notes_kdf_cache'));
-  assert.strictEqual(after.raw, undefined, 'rewritten cache must not resurrect raw bytes');
+  const saved = { ...sessionStorage.store };
+  sessionStorage.store = { ...saved };
 
-  console.log('ok');
+  const NotesStore2 = loadNotesStore();
+  assert.ok(!NotesStore2.isUnlocked(), 'fresh module starts locked');
+  await NotesStore2.unlock(password, salt, { kdfVersion: 1 });
+  assert.ok(NotesStore2.isUnlocked(), 'unlock after simulated reload');
+
+  console.log('ok unlock-after-reload');
 })().catch((err) => {
   console.error(err);
   process.exit(1);

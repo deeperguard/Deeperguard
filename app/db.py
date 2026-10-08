@@ -268,7 +268,7 @@ def create_user(email: str, password_hash: str, kdf_salt: str, kdf_iterations: i
             (email.strip().lower(), password_hash, kdf_salt, int(kdf_iterations), ts, ts),
         )
         user_id = int(cur.lastrowid)
-    _ensure_upload_dir(email)
+    _ensure_upload_dir(user_id)
     return user_id
 
 
@@ -318,15 +318,15 @@ def create_user_srp(
             ),
         )
         user_id = int(cur.lastrowid)
-    _ensure_upload_dir(email)
+    _ensure_upload_dir(user_id)
     return user_id
 
 
-def _ensure_upload_dir(email: str) -> None:
+def _ensure_upload_dir(user_id: int) -> None:
     try:
         from uploads import ensure_user_upload_dir
 
-        ensure_user_upload_dir(email)
+        ensure_user_upload_dir(int(user_id))
     except OSError:
         pass
 
@@ -1251,13 +1251,12 @@ def purge_user_data(user_id: int) -> bool:
     ocr_dir = DATA_DIR / "ocr" / str(uid)
     if ocr_dir.is_dir():
         shutil.rmtree(ocr_dir, ignore_errors=True)
-    if email:
-        try:
-            from uploads import remove_user_upload_dir
+    try:
+        from uploads import remove_user_upload_dir
 
-            remove_user_upload_dir(email)
-        except OSError:
-            pass
+        remove_user_upload_dir(uid)
+    except OSError:
+        pass
     cache_file = DATA_DIR / "server-info-cache" / f"user-{uid}.json"
     try:
         cache_file.unlink(missing_ok=True)

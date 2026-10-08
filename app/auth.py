@@ -114,11 +114,11 @@ def ip_location(ip: str = "") -> str:
 def _lookup_ip_location(ip: str) -> str:
     if ip in _GEO_CACHE:
         return _GEO_CACHE[ip]
-    if os.environ.get("NOTES_GEOIP", "1") != "1":
+    if os.environ.get("NOTES_GEOIP", "0") != "1":
         return "Unknown"
     loc = "Unknown"
     try:
-        url = f"http://ip-api.com/json/{ip}?fields=status,country,city"
+        url = f"https://ip-api.com/json/{ip}?fields=status,country,city"
         with urllib.request.urlopen(url, timeout=1.2) as resp:
             data = json.loads(resp.read().decode("utf-8", "replace"))
         if isinstance(data, dict) and data.get("status") == "success":
