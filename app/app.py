@@ -25,7 +25,7 @@ import totp as totp_mod
 from flask.sessions import SecureCookieSessionInterface
 from datetime import timedelta
 
-from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, normalize_host, ocr_ephemeral, pcloud_password_set, pcloud_token_set, repair_login_password_enabled, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, webauthn_preferred_host, user_is_admin
+from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, log_server_ocr_startup_warning, normalize_host, ocr_ephemeral, pcloud_password_set, pcloud_token_set, repair_login_password_enabled, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, webauthn_preferred_host, user_is_admin
 from uploads import ensure_user_upload_dir, user_upload_dir
 import promo as notes_promo
 from backup_mail import send_user_backup
@@ -2279,6 +2279,7 @@ def service_worker():
 
 
 # Initialize DB on import for gunicorn workers.
+log_server_ocr_startup_warning()
 db.init_schema()
 server_info_cache.start_refresh_loop()
 admin_api.register_admin_routes(app, NOTES_BUILD)

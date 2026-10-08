@@ -4742,6 +4742,96 @@ class NotesAppTests(unittest.TestCase):
         self.assertTrue(auth.cacheable_shell("/sw.js"))
 
 
+_APP_RELOAD_MODULES = {
+    "app",
+    "auth",
+    "db",
+    "config",
+    "passwords",
+    "totp",
+    "ocr",
+    "ocr_index",
+    "ocr_jobs",
+    "server_info_cache",
+    "backup_pcloud",
+    "backup_mail",
+    "srp_auth",
+    "webauthn_helper",
+    "admin_api",
+    "admin_notify",
+    "auth_rate_limit",
+    "plans",
+    "ai_relay",
+}
+
+
+class ServerOcrStartupWarningTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        os.environ["NOTES_ROOT"] = str(root)
+        os.environ["NOTES_DATA"] = str(root / "data")
+        os.environ["NOTES_KEYS"] = str(root / "keys")
+        os.environ["NOTES_ALLOWED_CIDRS"] = "130.0.0.1/32"
+        os.environ["NOTES_SKIP_LOGIN"] = "0"
+        os.environ["NOTES_BUILD"] = "192"
+        os.environ["NOTES_SERVER_INFO_REFRESH"] = "0"
+        os.environ["NOTES_STRICT_ZK"] = "1"
+        os.environ.pop("NOTES_SERVER_OCR", None)
+        os.environ.pop("NOTES_DISABLE_CIDR_GATE", None)
+        os.environ.pop("NOTES_OCR_EPHEMERAL", None)
+        (root / "keys").mkdir(parents=True)
+        (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
+        self._purge_app_modules()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        self._purge_app_modules()
+        for key in (
+            "NOTES_ROOT",
+            "NOTES_DATA",
+            "NOTES_KEYS",
+            "NOTES_ALLOWED_CIDRS",
+            "NOTES_SKIP_LOGIN",
+            "NOTES_BUILD",
+            "NOTES_SERVER_INFO_REFRESH",
+            "NOTES_SERVER_OCR",
+            "NOTES_STRICT_ZK",
+            "NOTES_DISABLE_CIDR_GATE",
+            "NOTES_OCR_EPHEMERAL",
+        ):
+            os.environ.pop(key, None)
+
+    def _purge_app_modules(self):
+        for name in list(sys.modules):
+            if name in _APP_RELOAD_MODULES or name.startswith("app."):
+                sys.modules.pop(name, None)
+
+    def _import_app(self):
+        return importlib.import_module("app")
+
+    def test_server_ocr_startup_warning_when_enabled(self):
+        os.environ["NOTES_SERVER_OCR"] = "1"
+        with self.assertLogs("deeperguard", level="WARNING") as cm:
+            self._import_app()
+        joined = "\n".join(cm.output).lower()
+        self.assertIn("notes_server_ocr", joined)
+        self.assertIn("zero-knowledge", joined)
+        self.assertNotIn("wan-exposed", joined)
+
+    def test_server_ocr_startup_warning_wan_and_persistence(self):
+        os.environ["NOTES_SERVER_OCR"] = "1"
+        os.environ["NOTES_DISABLE_CIDR_GATE"] = "1"
+        os.environ["NOTES_OCR_EPHEMERAL"] = "0"
+        with self.assertLogs("deeperguard", level="WARNING") as cm:
+            self._import_app()
+        joined = "\n".join(cm.output)
+        self.assertIn("WAN-exposed", joined)
+        self.assertIn("NOTES_OCR_EPHEMERAL is off", joined)
+
+    def test_server_ocr_startup_silent_when_disabled(self):
+        with self.assertNoLogs("deeperguard", level="WARNING"):
+            self._import_app()
 
 
 if __name__ == "__main__":

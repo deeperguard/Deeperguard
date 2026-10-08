@@ -96,6 +96,37 @@ def server_ocr_enabled() -> bool:
     return os.environ.get("NOTES_SERVER_OCR", "0") == "1"
 
 
+_server_ocr_startup_warned = False
+
+
+def log_server_ocr_startup_warning() -> None:
+    """Log once per process when legacy server-side OCR is enabled (security review)."""
+    global _server_ocr_startup_warned
+    if _server_ocr_startup_warned or not server_ocr_enabled():
+        return
+    _server_ocr_startup_warned = True
+    import logging
+
+    log = logging.getLogger("deeperguard")
+    wan_exposed = not cidr_gate_enabled()
+    if wan_exposed:
+        log.warning(
+            "NOTES_SERVER_OCR is enabled while the app is WAN-exposed "
+            "(NOTES_DISABLE_CIDR_GATE=1): server-side OCR processes decrypted document "
+            "plaintext on the server. Zero-knowledge guarantees do not apply to OCR'd documents."
+        )
+    else:
+        log.warning(
+            "NOTES_SERVER_OCR is enabled: server-side OCR processes decrypted document "
+            "plaintext on the server. Zero-knowledge guarantees do not apply to OCR'd documents."
+        )
+    if not ocr_ephemeral():
+        log.warning(
+            "NOTES_OCR_EPHEMERAL is off: OCR plaintext and search indexes are persisted on disk "
+            "under NOTES_DATA."
+        )
+
+
 def strict_zk() -> bool:
     """When true, vault passwords are never sent to the server for verification."""
     return os.environ.get("NOTES_STRICT_ZK", "1") == "1"
