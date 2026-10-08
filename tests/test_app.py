@@ -3008,6 +3008,34 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(verify.status_code, 200)
         self.assertIn("M2", verify.get_json())
 
+    def test_srp_verify_rejects_degenerate_client_public(self):
+        import hashlib
+
+        from srp_auth import _h, _to_hex
+
+        email = "srp-degen@home.local"
+        password = "srp-degen-pass"
+        salt_hex, verifier = self._srp_verifier(email, password, hashlib.sha256(b"degen-salt").hexdigest())
+        reg = self.client.post(
+            "/api/auth/srp/register",
+            json={"email": email, "srp_salt": salt_hex, "srp_verifier": verifier},
+        )
+        self.assertEqual(reg.status_code, 200)
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        challenge = self.client.post("/api/auth/srp/challenge", json={"email": email})
+        self.assertEqual(challenge.status_code, 200)
+        b_hex = str(challenge.get_json()["B"]).lower()
+        m1 = _h("0" + b_hex + _to_hex(0))
+        verify = self.client.post(
+            "/api/auth/srp/verify",
+            json={"email": email, "A": "0", "M1": m1},
+        )
+        self.assertEqual(verify.status_code, 401)
+        self.assertEqual(verify.get_json().get("error"), "invalid credentials")
+        with self.client.session_transaction() as sess:
+            self.assertFalse(sess.get("authed"))
+
     def test_srp_register_notifies_admins_by_email(self):
         try:
             import admin_notify

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 from dataclasses import dataclass
 from typing import Any
@@ -41,6 +42,14 @@ def _strip_hex(value: str) -> str:
     while out.startswith("0"):
         out = out[1:]
     return out
+
+
+def _client_hex_int(value: str) -> int:
+    """Parse client-supplied lowercase hex or raise bad client credentials."""
+    s = str(value or "").strip().lower()
+    if not s or not all(c in "0123456789abcdef" for c in s):
+        raise ValueError("bad client credentials")
+    return int(s, 16)
 
 
 def _random_nonzero_mod_n() -> int:
@@ -100,17 +109,31 @@ class SrpServerSession:
     def step2(self, a_hex: str, m1_client: str) -> str:
         if self.state != 1:
             raise ValueError("srp session not ready")
-        a_hex = a_hex.lower()
-        m1_client = m1_client.lower()
-        a_val = _from_hex(a_hex)
-        b_hex = _to_hex(self.B)
-        u = _from_hex(_h(a_hex + b_hex))
-        v = _from_hex(self.verifier_hex)
-        self.S = pow((pow(v, u, N) * a_val) % N, self.b, N)
-        s_hex = _to_hex(self.S)
-        m1_expected = _strip_hex(_h(a_hex + b_hex + s_hex))
-        if m1_client != m1_expected:
+        a_hex = str(a_hex or "").strip().lower()
+        m1_client = str(m1_client or "").strip().lower()
+        if not m1_client:
             raise ValueError("bad client credentials")
+        try:
+            a_val = _client_hex_int(a_hex)
+        except ValueError:
+            raise ValueError("bad client credentials") from None
+        if a_val % N == 0:
+            raise ValueError("bad client credentials")
+        b_hex = _to_hex(self.B)
+        u_hex = _h(a_hex + b_hex)
+        if not u_hex:
+            raise ValueError("bad client credentials")
+        u = _from_hex(u_hex)
+        if u == 0:
+            raise ValueError("bad client credentials")
+        v = _from_hex(self.verifier_hex)
+        S = pow((pow(v, u, N) * a_val) % N, self.b, N)
+        s_hex = _to_hex(S)
+        m1_expected = _strip_hex(_h(a_hex + b_hex + s_hex))
+        m1_norm = _strip_hex(m1_client)
+        if not hmac.compare_digest(m1_norm, m1_expected):
+            raise ValueError("bad client credentials")
+        self.S = S
         m2 = _strip_hex(_h(_to_hex(a_val) + m1_expected + s_hex))
         self.state = 2
         return m2
