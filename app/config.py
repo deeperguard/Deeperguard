@@ -127,6 +127,31 @@ def log_server_ocr_startup_warning() -> None:
         )
 
 
+_wan_secure_cookies_startup_warned = False
+
+
+def secure_cookies_enabled() -> bool:
+    return os.environ.get("NOTES_SECURE_COOKIES", "0") == "1"
+
+
+def log_wan_secure_cookies_startup_warning() -> None:
+    """Log once per process when WAN is open without Secure cookies / HSTS (security review M-2)."""
+    global _wan_secure_cookies_startup_warned
+    if _wan_secure_cookies_startup_warned:
+        return
+    if cidr_gate_enabled() or secure_cookies_enabled():
+        return
+    _wan_secure_cookies_startup_warned = True
+    import logging
+
+    log = logging.getLogger("deeperguard")
+    log.warning(
+        "NOTES_DISABLE_CIDR_GATE=1 but NOTES_SECURE_COOKIES is not 1: session cookies may be sent "
+        "without the Secure flag and Strict-Transport-Security is not enabled (HSTS off). "
+        "For WAN or Cloudflare-tunnel deployments over HTTPS, set NOTES_SECURE_COOKIES=1."
+    )
+
+
 def strict_zk() -> bool:
     """When true, vault passwords are never sent to the server for verification."""
     return os.environ.get("NOTES_STRICT_ZK", "1") == "1"

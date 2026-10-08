@@ -4880,6 +4880,7 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
         os.environ.pop("NOTES_SERVER_OCR", None)
         os.environ.pop("NOTES_DISABLE_CIDR_GATE", None)
         os.environ.pop("NOTES_OCR_EPHEMERAL", None)
+        os.environ.pop("NOTES_SECURE_COOKIES", None)
         (root / "keys").mkdir(parents=True)
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
         self._purge_app_modules()
@@ -4899,6 +4900,7 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
             "NOTES_STRICT_ZK",
             "NOTES_DISABLE_CIDR_GATE",
             "NOTES_OCR_EPHEMERAL",
+            "NOTES_SECURE_COOKIES",
         ):
             os.environ.pop(key, None)
 
@@ -4930,6 +4932,27 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
         self.assertIn("NOTES_OCR_EPHEMERAL is off", joined)
 
     def test_server_ocr_startup_silent_when_disabled(self):
+        with self.assertNoLogs("deeperguard", level="WARNING"):
+            self._import_app()
+
+    def test_wan_without_secure_cookies_startup_warning(self):
+        os.environ["NOTES_DISABLE_CIDR_GATE"] = "1"
+        os.environ["NOTES_SECURE_COOKIES"] = "0"
+        with self.assertLogs("deeperguard", level="WARNING") as cm:
+            self._import_app()
+        joined = "\n".join(cm.output)
+        self.assertIn("NOTES_DISABLE_CIDR_GATE=1", joined)
+        self.assertIn("NOTES_SECURE_COOKIES", joined)
+        self.assertIn("Strict-Transport-Security", joined)
+
+    def test_wan_with_secure_cookies_startup_silent(self):
+        os.environ["NOTES_DISABLE_CIDR_GATE"] = "1"
+        os.environ["NOTES_SECURE_COOKIES"] = "1"
+        with self.assertNoLogs("deeperguard", level="WARNING"):
+            self._import_app()
+
+    def test_cidr_gate_on_without_secure_cookies_startup_silent(self):
+        os.environ["NOTES_SECURE_COOKIES"] = "0"
         with self.assertNoLogs("deeperguard", level="WARNING"):
             self._import_app()
 
