@@ -369,13 +369,13 @@ const NotesStore = (() => {
       version: Number(version) || 1,
       key,
       encoding: derived.encoding || '',
+      fp: passwordFingerprint(password, salt),
     };
     try {
       sessionStorage.setItem('notes_kdf_cache', JSON.stringify({
         salt: String(salt || ''),
         version: Number(version) || 1,
         encoding: derived.encoding || '',
-        fp: passwordFingerprint(password, salt),
       }));
     } catch (err) {
       /* ignore quota / private mode */
@@ -485,17 +485,16 @@ const NotesStore = (() => {
 
   function sessionTrustedKdfVersion(password, salt) {
     const fp = passwordFingerprint(password, salt);
-    if (!fp) return null;
-    try {
-      const raw = sessionStorage.getItem('notes_kdf_cache');
-      if (!raw) return null;
-      const cached = JSON.parse(raw);
-      if (cached?.fp !== fp || cached.salt !== String(salt || '')) return null;
-      const ver = Number(cached.version);
-      return ver === 1 || ver === 2 ? ver : null;
-    } catch (err) {
+    if (!fp || !lastDerivedKdf) return null;
+    if (
+      lastDerivedKdf.fp !== fp
+      || lastDerivedKdf.salt !== String(salt || '')
+      || lastDerivedKdf.password !== String(password || '')
+    ) {
       return null;
     }
+    const ver = Number(lastDerivedKdf.version);
+    return ver === 1 || ver === 2 ? ver : null;
   }
 
   async function resolveUnlockKdfVersion(password, salt, options = {}) {

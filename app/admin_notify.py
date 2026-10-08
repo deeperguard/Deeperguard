@@ -10,14 +10,25 @@ from mailer import send_plain_email
 
 log = logging.getLogger("deeperguard.admin_notify")
 
-DEFAULT_SIGNUP_NOTIFY_RECIPIENTS = ("dennisschutten@protonmail.com",)
+_signup_notify_unset_logged = False
+
+
+def log_signup_notify_config() -> None:
+    """Log once at startup when signup notify recipients are not configured."""
+    global _signup_notify_unset_logged
+    if _signup_notify_unset_logged:
+        return
+    _signup_notify_unset_logged = True
+    if os.environ.get("NOTES_SIGNUP_NOTIFY_EMAILS", "").strip():
+        return
+    log.info("NOTES_SIGNUP_NOTIFY_EMAILS unset — new signup notification emails are disabled")
 
 
 def admin_notification_recipients() -> list[str]:
     raw = os.environ.get("NOTES_SIGNUP_NOTIFY_EMAILS", "").strip()
-    if raw:
-        return [part.strip() for part in raw.split(",") if part.strip()]
-    return list(DEFAULT_SIGNUP_NOTIFY_RECIPIENTS)
+    if not raw:
+        return []
+    return [part.strip() for part in raw.split(",") if part.strip()]
 
 
 def _signup_notify_subject(email: str) -> str:

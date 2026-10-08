@@ -20,18 +20,14 @@ ATT_ID_RE = re.compile(r"^[A-Za-z0-9._-]{8,80}$")
 def ocr_root(user_id: int) -> Path:
     legacy = DATA_DIR / "ocr" / str(int(user_id))
     try:
-        from db import get_user_by_id
-        from uploads import user_upload_dir
+        from uploads import ensure_user_upload_dir
 
-        user = get_user_by_id(int(user_id))
-        if user:
-            path = user_upload_dir(str(user["email"])) / "ocr"
-            if path.exists() or not legacy.exists():
-                path.mkdir(parents=True, exist_ok=True)
-                return path
-            return legacy
+        return ensure_user_upload_dir(int(user_id)) / "ocr"
     except Exception:
         pass
+    if legacy.is_dir():
+        return legacy
+    legacy.mkdir(parents=True, exist_ok=True)
     return legacy
 
 

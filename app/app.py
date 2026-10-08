@@ -29,7 +29,7 @@ from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOT
 from uploads import ensure_user_upload_dir, user_upload_dir
 import promo as notes_promo
 from backup_mail import send_user_backup
-from admin_notify import notify_new_user_signup
+from admin_notify import log_signup_notify_config, notify_new_user_signup
 from mailer import send_contact_email
 from backup_pcloud import pcloud_credentials_configured, save_pcloud_settings, sync_user_backup
 from passwords import hash_password, new_kdf_salt, verify_password
@@ -461,7 +461,7 @@ def _gate():
     if user:
         auth.ensure_device_session()
         try:
-            ensure_user_upload_dir(str(user["email"]))
+            ensure_user_upload_dir(int(user["id"]))
         except OSError:
             pass
     if not skipped and auth.needs_totp() and request.path not in {
@@ -554,8 +554,7 @@ def api_contact():
     return jsonify({"ok": True})
 
 
-@app.get("/api/health")
-def health():
+def _health_readiness() -> tuple[bool, bool, bool, int, dict]:
     db_ok = True
     db_bytes = 0
     try:
@@ -570,21 +569,33 @@ def health():
     disk_total = int(server.get("disk_total_bytes") or 0)
     disk_ok = disk_total == 0 or disk_free > disk_total * 0.05
     ready = db_ok and disk_ok
-    resp = jsonify({
+    return ready, db_ok, disk_ok, db_bytes, server
+
+
+@app.get("/api/health")
+def health():
+    ready, db_ok, disk_ok, db_bytes, server = _health_readiness()
+    payload: dict = {
         "ok": ready,
         "service": "deeperguard",
         "build": NOTES_BUILD,
-        "ocr_queue": ocr_jobs.queue_depth(),
-        "ocr_ephemeral": ocr_ephemeral(),
-        "db_bytes": db_bytes,
-        "checks": {
-            "database": db_ok,
-            "disk": disk_ok,
-            "registration_open": allow_register(),
-        },
-        "server": server,
-    })
-    return resp
+    }
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if user and user_is_admin(user):
+        payload.update({
+            "ocr_queue": ocr_jobs.queue_depth(),
+            "ocr_ephemeral": ocr_ephemeral(),
+            "db_bytes": db_bytes,
+            "checks": {
+                "database": db_ok,
+                "disk": disk_ok,
+                "registration_open": allow_register(),
+            },
+            "server": server,
+        })
+    status = 200 if ready else 503
+    return jsonify(payload), status
 
 
 @app.get("/api/server/info")
@@ -604,8 +615,8 @@ def api_server_info():
     })
 
 
-def _device_reports_dir(email: str) -> Path:
-    path = user_upload_dir(email) / "device-reports"
+def _device_reports_dir(user_id: int) -> Path:
+    path = user_upload_dir(int(user_id)) / "device-reports"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -660,7 +671,7 @@ def api_device_report():
         return jsonify({"error": "report required"}), 400
     if len(report) > DEVICE_REPORT_MAX:
         report = report[:DEVICE_REPORT_MAX]
-    reports_dir = _device_reports_dir(str(user["email"]))
+    reports_dir = _device_reports_dir(int(user["id"]))
     stamp = int(time.time())
     (reports_dir / f"{stamp}.txt").write_text(report, encoding="utf-8")
     (reports_dir / "latest.txt").write_text(report, encoding="utf-8")
@@ -785,6 +796,8 @@ def api_auth_srp_verify():
     m1 = str(body.get("M1") or "").strip().lower()
     if not email or not a_hex or not m1:
         return jsonify({"error": "invalid credentials"}), 400
+    if _auth_rate_limited("srp-verify", email):
+        return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if not user or not db.user_has_srp(user):
         return jsonify({"error": "invalid credentials"}), 401
@@ -887,6 +900,8 @@ def api_auth_srp_resync():
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
     if not EMAIL_RE.match(email) or not password or not srp_salt or not srp_verifier:
         return jsonify({"error": "invalid credentials"}), 400
+    if _auth_rate_limited("srp-resync", email):
+        return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if not user or db.user_auth_method(user) != "srp":
         return jsonify({"error": "invalid credentials"}), 401
@@ -1190,6 +1205,8 @@ def api_webauthn_remove_credential():
 def api_webauthn_login_options():
     body = request.get_json(silent=True) or {}
     email = str(body.get("email") or "").strip().lower()
+    if _auth_rate_limited("webauthn-login", email or auth.client_ip()):
+        return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if not user:
         return jsonify({"error": "invalid credentials"}), 401
@@ -1215,6 +1232,8 @@ def api_webauthn_login_verify():
     credential = body.get("credential")
     if not email or not isinstance(credential, dict):
         return jsonify({"error": "invalid credentials"}), 400
+    if _auth_rate_limited("webauthn-login", email):
+        return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if not user:
         return jsonify({"error": "invalid credentials"}), 401
@@ -2280,7 +2299,11 @@ def service_worker():
 
 # Initialize DB on import for gunicorn workers.
 log_server_ocr_startup_warning()
+log_signup_notify_config()
 db.init_schema()
+from uploads import migrate_email_named_upload_dirs
+
+migrate_email_named_upload_dirs()
 server_info_cache.start_refresh_loop()
 admin_api.register_admin_routes(app, NOTES_BUILD)
 if ocr_ephemeral():

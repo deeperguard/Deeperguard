@@ -61,7 +61,7 @@ const NotesStore = require(path.join(jsRoot, 'store.js'));
   assert.ok(cached, 'KDF hint cache should exist after unlock');
   const parsed = JSON.parse(cached);
   assert.strictEqual(parsed.raw, undefined, 'derived key bytes must not be stored');
-  assert.ok(parsed.fp, 'password fingerprint hint may be stored');
+  assert.strictEqual(parsed.fp, undefined, 'password fingerprint must not be stored in sessionStorage');
 
   sessionStorage.setItem(
     'notes_kdf_cache',
@@ -69,7 +69,7 @@ const NotesStore = require(path.join(jsRoot, 'store.js'));
       salt,
       version: 1,
       encoding: '',
-      fp: parsed.fp,
+      fp: 'deadbeef',
       raw: btoa('legacy-derived-key-bytes-should-be-ignored'),
     }),
   );

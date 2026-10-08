@@ -243,11 +243,7 @@
       M1: creds.M1,
     });
     if (result.M2) {
-      try {
-        await client.step3(result.M2);
-      } catch (m2Err) {
-        console.warn('SRP server proof check failed; login session was accepted', m2Err);
-      }
+      await client.step3(result.M2);
     }
     return result;
   }

@@ -45,14 +45,12 @@ def compute(user_id: int) -> dict[str, Any]:
     ocr_bytes = 0
     if not ocr_ephemeral():
         ocr_bytes = db.dir_size(DATA_DIR / "ocr" / str(int(user_id)))
-        user = db.get_user_by_id(int(user_id))
-        if user:
-            try:
-                from uploads import user_upload_dir
+        try:
+            from uploads import user_upload_dir
 
-                ocr_bytes += db.dir_size(user_upload_dir(str(user["email"])) / "ocr")
-            except OSError:
-                pass
+            ocr_bytes += db.dir_size(user_upload_dir(int(user_id)) / "ocr")
+        except OSError:
+            pass
     usage = shutil.disk_usage(str(DATA_DIR))
     return {
         "ok": True,

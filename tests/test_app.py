@@ -37,7 +37,7 @@ class NotesAppTests(unittest.TestCase):
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
 
         for name in list(sys.modules):
-            if name in {"app", "auth", "db", "config", "passwords", "totp", "ocr", "ocr_index", "ocr_jobs", "server_info_cache", "backup_pcloud", "backup_mail", "srp_auth", "webauthn_helper", "admin_api", "admin_notify", "auth_rate_limit", "plans", "ai_relay"} or name.startswith("app."):
+            if name in {"app", "auth", "db", "config", "passwords", "totp", "ocr", "ocr_index", "ocr_jobs", "server_info_cache", "backup_pcloud", "backup_mail", "srp_auth", "webauthn_helper", "admin_api", "admin_notify", "auth_rate_limit", "plans", "ai_relay", "uploads"} or name.startswith("app."):
                 sys.modules.pop(name, None)
         self.app_mod = importlib.import_module("app")
         self.client = self.app_mod.app.test_client()
@@ -251,13 +251,30 @@ class NotesAppTests(unittest.TestCase):
         data = res.get_json()
         self.assertTrue(data["ok"])
         self.assertEqual(data["build"], "192")
-        self.assertIn("ocr_queue", data)
-        self.assertIn("db_bytes", data)
-        self.assertIn("checks", data)
-        self.assertIn("server", data)
+        self.assertEqual(data["service"], "deeperguard")
+        self.assertEqual(set(data.keys()), {"ok", "service", "build"})
         self.assertFalse(res.headers.get("Clear-Site-Data"))
         again = self.client.get("/api/health")
         self.assertFalse(again.headers.get("Clear-Site-Data"))
+
+    def test_health_admin_includes_ops_detail(self):
+        import db as notes_db
+        from config import SESSION_SECONDS
+
+        email = "health-admin@home.local"
+        uid = notes_db.create_user_srp(email, "salt", "srp-salt", "a" * 64, is_admin=True)
+        with self.client.session_transaction() as sess:
+            sess["uid"] = int(uid)
+            sess["authed"] = True
+            sess["exp"] = time.time() + SESSION_SECONDS
+            sess["totp_ok"] = True
+        res = self.client.get("/api/health")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn("db_bytes", data)
+        self.assertIn("ocr_queue", data)
+        self.assertIn("checks", data)
+        self.assertIn("server", data)
 
     # Check that marketing features are all present and clearly pitted
     def test_homepage_distinction_and_pricing(self):
@@ -599,9 +616,11 @@ class NotesAppTests(unittest.TestCase):
         )
         self.assertEqual(res.status_code, 200)
         self.assertTrue(res.get_json()["ok"])
+        import db as notes_db
         from uploads import user_upload_dir
 
-        latest = (user_upload_dir("device@home.local") / "device-reports" / "latest.txt").read_text(encoding="utf-8")
+        user = notes_db.get_user_by_email("device@home.local")
+        latest = (user_upload_dir(int(user["id"])) / "device-reports" / "latest.txt").read_text(encoding="utf-8")
         self.assertIn("Photo OCR search — PASS", latest)
         self.assertFalse((DATA_DIR / "device-reports" / "latest.txt").exists())
 
@@ -611,13 +630,16 @@ class NotesAppTests(unittest.TestCase):
 
         email = "vault.user@home.local"
         self._register_user(email, "device-secure-pass")
-        upload = user_upload_dir(email)
+        user = notes_db.get_user_by_email(email)
+        uid = int(user["id"])
+        upload = user_upload_dir(uid)
         self.assertTrue(upload.is_dir())
-        self.assertEqual(upload.name, email_fs_name(email))
+        self.assertEqual(upload.name, str(uid))
+        self.assertNotEqual(upload.name, email_fs_name(email))
         self.assertTrue((upload / "device-reports").is_dir())
         self.assertTrue((upload / "ocr").is_dir())
         (upload / "ocr").chmod(0o555)
-        ensure_user_upload_dir(email)
+        ensure_user_upload_dir(uid)
         self.assertTrue((upload / "ocr").stat().st_mode & 0o200)
 
         listed = self.client.get("/api/sessions")
@@ -2938,6 +2960,84 @@ class NotesAppTests(unittest.TestCase):
         )
         self.assertEqual(blocked.status_code, 429)
         self.assertEqual(blocked.get_json()["error"], "too many attempts")
+
+    def test_srp_verify_rate_limited(self):
+        os.environ["NOTES_AUTH_RATE_LIMIT"] = "2"
+        email = "srp-rate@home.local"
+        self._register_user(email, "srp-rate-secure-pass")
+        import auth_rate_limit as arl
+
+        arl._hits.clear()
+        for _ in range(2):
+            res = self.client.post(
+                "/api/auth/srp/verify",
+                json={"email": email, "A": "1a", "M1": "2b"},
+            )
+            self.assertIn(res.status_code, {401, 400})
+        blocked = self.client.post(
+            "/api/auth/srp/verify",
+            json={"email": email, "A": "1a", "M1": "2b"},
+        )
+        self.assertEqual(blocked.status_code, 429)
+
+    def test_srp_verify_login_works_after_rate_limit_window(self):
+        import hashlib
+
+        email = "srp-rate-ok@home.local"
+        password = "srp-rate-ok-pass"
+        salt_hex, verifier = self._srp_verifier(email, password, hashlib.sha256(b"rate-ok").hexdigest())
+        reg = self.client.post(
+            "/api/auth/srp/register",
+            json={"email": email, "srp_salt": salt_hex, "srp_verifier": verifier},
+        )
+        self.assertEqual(reg.status_code, 200)
+        import auth_rate_limit as arl
+
+        arl._hits.clear()
+        verify = self._srp_login(email, password, salt_hex)
+        self.assertEqual(verify.status_code, 200)
+
+    def test_ip_location_prefers_cloudflare_headers(self):
+        import auth
+
+        wan_ip = "8.8.8.8"
+        with self.app_mod.app.test_request_context(
+            "/",
+            headers={"CF-IPCity": "Vienna", "CF-IPCountry": "AT"},
+            environ_base={"REMOTE_ADDR": wan_ip},
+        ):
+            self.assertEqual(auth.ip_location(wan_ip), "Vienna, AT")
+
+    def test_ip_geolocation_skips_third_party_by_default(self):
+        import auth
+        from unittest.mock import patch
+
+        wan_ip = "8.8.8.8"
+        auth._GEO_CACHE.clear()
+        with patch("urllib.request.urlopen") as mock_open:
+            with self.app_mod.app.test_request_context("/", environ_base={"REMOTE_ADDR": wan_ip}):
+                loc = auth.ip_location(wan_ip)
+            mock_open.assert_not_called()
+        self.assertEqual(loc, "Unknown")
+
+    def test_signup_notify_disabled_without_env(self):
+        import admin_notify
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"NOTES_SIGNUP_NOTIFY_EMAILS": ""}, clear=False):
+            self.assertEqual(admin_notify.admin_notification_recipients(), [])
+        email = "no-notify-env@home.local"
+        password = "no-notify-secure-pass"
+        calls = []
+        with patch.dict(os.environ, {"NOTES_SIGNUP_NOTIFY_EMAILS": ""}, clear=False):
+            with patch.object(
+                admin_notify,
+                "send_plain_email",
+                side_effect=lambda *args: calls.append(args),
+            ):
+                reg = self._register_user(email, password)
+        self.assertEqual(reg.status_code, 200)
+        self.assertEqual(calls, [])
 
     def test_content_security_policy_headers(self):
         import re
