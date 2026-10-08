@@ -3058,6 +3058,9 @@ class NotesAppTests(unittest.TestCase):
     def test_kdf_session_cache_never_persists_derived_key(self):
         self._run_node_script("test_kdf_session_cache.js")
 
+    def test_kdf_unlock_succeeds_after_simulated_reload(self):
+        self._run_node_script("test_kdf_unlock_after_reload.js", timeout=60)
+
     def test_vault_kdf_upgrade(self):
         self._register_user("kdf@home.local", "kdf-secure-pass")
         csrf = self._csrf()

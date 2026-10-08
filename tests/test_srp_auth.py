@@ -1,4 +1,5 @@
 """Unit tests for SRP server session (step2 hardening)."""
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -97,6 +98,28 @@ class SrpStep2SecurityTests(unittest.TestCase):
         m1_stripped = _strip_hex(m1)
         m2_client = _strip_hex(_h(a_hex + m1_stripped + s_hex))
         self.assertEqual(m2_server, m2_client)
+
+
+class SrpM2EndToEndTests(unittest.TestCase):
+    def test_browser_client_m2_matches_python_server(self):
+        import shutil
+        import subprocess
+        from pathlib import Path
+
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not installed")
+        script = Path(__file__).resolve().parent / "test_srp_m2_e2e.js"
+        completed = subprocess.run(
+            [node, str(script)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env={**os.environ, "SRP_M2_ITERATIONS": "200"},
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+        self.assertIn("ok 200", completed.stdout)
 
 
 if __name__ == "__main__":
