@@ -3036,6 +3036,124 @@ class NotesAppTests(unittest.TestCase):
         with self.client.session_transaction() as sess:
             self.assertFalse(sess.get("authed"))
 
+    def _degenerate_a_cases(self):
+        """Client public values that violate SRP-6a (A mod N == 0), with best-effort M1."""
+        from srp_auth import N, _h, _to_hex
+
+        def forged_m1(a_hex: str, b_hex: str) -> str:
+            return _h(a_hex + b_hex + _to_hex(0))
+
+        return [_to_hex(value) for value in (0, N, 2 * N)], forged_m1
+
+    def test_srp_verify_rejects_a_multiple_of_n(self):
+        email = "srp-degen-n@home.local"
+        password = "srp-degen-n-pass"
+        reg = self._register_user(email, password)
+        self.assertEqual(reg.status_code, 200)
+        degenerate_a, forged_m1 = self._degenerate_a_cases()
+        for a_hex in degenerate_a:
+            with self.client.session_transaction() as sess:
+                sess.clear()
+            challenge = self.client.post("/api/auth/srp/challenge", json={"email": email})
+            self.assertEqual(challenge.status_code, 200)
+            b_hex = str(challenge.get_json()["B"]).lower()
+            verify = self.client.post(
+                "/api/auth/srp/verify",
+                json={"email": email, "A": a_hex, "M1": forged_m1(a_hex, b_hex)},
+            )
+            self.assertEqual(verify.status_code, 401, f"A={a_hex[:16]}…")
+            self.assertEqual(verify.get_json().get("error"), "invalid credentials")
+            self.assertNotIn("M2", verify.get_json())
+            with self.client.session_transaction() as sess:
+                self.assertFalse(sess.get("authed"))
+
+    def test_repair_login_rejects_a_multiple_of_n(self):
+        import db as notes_db
+        from passwords import new_kdf_salt
+        from srp_auth import generate_verifier_hex, new_srp_salt_hex
+
+        email = "repair-degen@home.local"
+        password = "repair-degen-pass"
+        stored_salt, stored_verifier = self._srp_verifier(email, password)
+        user_id = notes_db.create_user_srp(email, new_kdf_salt(), stored_salt, stored_verifier)
+        rotation_salt = new_srp_salt_hex()
+        rotation_verifier = generate_verifier_hex(rotation_salt, email, password)
+        degenerate_a, forged_m1 = self._degenerate_a_cases()
+        for a_hex in degenerate_a:
+            with self.client.session_transaction() as sess:
+                sess.clear()
+            challenge = self.client.post(
+                "/api/auth/repair-login/challenge", json={"email": email}
+            )
+            self.assertEqual(challenge.status_code, 200)
+            b_hex = str(challenge.get_json()["B"]).lower()
+            denied = self.client.post(
+                "/api/auth/repair-login",
+                json={
+                    "email": email,
+                    "srp_salt": rotation_salt,
+                    "srp_verifier": rotation_verifier,
+                    "A": a_hex,
+                    "M1": forged_m1(a_hex, b_hex),
+                },
+            )
+            self.assertEqual(denied.status_code, 401, f"A={a_hex[:16]}…")
+            self.assertEqual(denied.get_json().get("error"), "invalid credentials")
+            with self.client.session_transaction() as sess:
+                self.assertFalse(sess.get("authed"))
+            user = notes_db.get_user_by_id(user_id)
+            self.assertEqual(int(str(user["srp_verifier"]), 16), int(stored_verifier, 16))
+            self.assertEqual(str(user["srp_salt"]).lower(), stored_salt.lower())
+
+    def test_vault_recovery_rejects_a_multiple_of_n(self):
+        import secrets
+        import time
+
+        import db as notes_db
+        from config import SESSION_SECONDS
+        from passwords import new_kdf_salt
+        from srp_auth import generate_verifier_hex, new_srp_salt_hex
+
+        email = "vault-degen@home.local"
+        password = "vault-degen-pass"
+        stored_salt, stored_verifier = self._srp_verifier(email, password)
+        user_id = notes_db.create_user_srp(email, new_kdf_salt(), stored_salt, stored_verifier)
+        rotation_salt = new_srp_salt_hex()
+        rotation_verifier = generate_verifier_hex(rotation_salt, email, password)
+        sess_csrf = secrets.token_urlsafe(32)
+        with self.client.session_transaction() as sess:
+            sess["uid"] = int(user_id)
+            sess["authed"] = True
+            sess["exp"] = time.time() + SESSION_SECONDS
+            sess["totp_ok"] = True
+            sess["csrf"] = sess_csrf
+        degenerate_a, forged_m1 = self._degenerate_a_cases()
+        for a_hex in degenerate_a:
+            challenge = self.client.post(
+                "/api/auth/vault-recovery/challenge",
+                json={"email": email},
+                headers={"X-CSRF-Token": sess_csrf},
+            )
+            self.assertEqual(challenge.status_code, 200)
+            b_hex = str(challenge.get_json()["B"]).lower()
+            denied = self.client.post(
+                "/api/auth/vault-recovery",
+                json={
+                    "email": email,
+                    "srp_salt": rotation_salt,
+                    "srp_verifier": rotation_verifier,
+                    "A": a_hex,
+                    "M1": forged_m1(a_hex, b_hex),
+                },
+                headers={"X-CSRF-Token": sess_csrf},
+            )
+            self.assertEqual(denied.status_code, 401, f"A={a_hex[:16]}…")
+            self.assertEqual(denied.get_json().get("error"), "invalid credentials")
+            self.assertFalse(denied.get_json().get("vault_recovered"))
+            user = notes_db.get_user_by_id(user_id)
+            self.assertEqual(int(str(user["srp_verifier"]), 16), int(stored_verifier, 16))
+            self.assertEqual(str(user["srp_salt"]).lower(), stored_salt.lower())
+
     def test_srp_register_notifies_admins_by_email(self):
         try:
             import admin_notify
