@@ -1303,6 +1303,12 @@ def api_account_unlock():
     return jsonify(_unlock_payload(user))
 
 
+def _password_rotation_seconds() -> int:
+    from auth import PASSWORD_ROTATION_SECONDS
+
+    return int(PASSWORD_ROTATION_SECONDS)
+
+
 @app.post("/api/account/password/challenge")
 def api_account_password_challenge():
     """SRP step-1 for vault password change (session + CSRF; binds to stored verifier)."""
@@ -1324,6 +1330,53 @@ def api_account_password_challenge():
     return jsonify({"srp_salt": str(user["srp_salt"]), "B": b_hex})
 
 
+@app.post("/api/account/password/prove")
+def api_account_password_prove():
+    """Verify current login password (SRP proof or legacy hash) before vault re-key."""
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    body = request.get_json(silent=True) or {}
+    current = str(body.get("current_password") or "").strip()
+    account = str(body.get("account_password") or "").strip()
+    align = bool(body.get("align_after_vault_rekey"))
+    a_hex = str(body.get("A") or "").strip().lower()
+    m1 = str(body.get("M1") or "").strip().lower()
+    email = str(user["email"] or "").strip().lower()
+    if _auth_rate_limited("account-password", email):
+        return jsonify({"error": "too many attempts"}), 429
+
+    if db.user_auth_method(user) == "srp":
+        if current or account:
+            return jsonify({"error": "password must not be sent to the server"}), 400
+        if not a_hex or not m1:
+            return jsonify({"error": "missing srp proof"}), 400
+        if not _verify_stored_srp_proof(email, user, a_hex, m1):
+            return jsonify({"error": "invalid password"}), 401
+    else:
+        if a_hex or m1:
+            return jsonify({"error": "invalid credentials"}), 400
+        if len(current) < min_password_length() and not (align and account):
+            return jsonify({"error": "invalid password"}), 401
+        if not db.user_has_legacy_password(user):
+            return jsonify({"error": "invalid password"}), 401
+        login_ok = verify_password(user["password_hash"], current)
+        if not login_ok and align and account:
+            login_ok = verify_password(user["password_hash"], account)
+        if not login_ok:
+            return jsonify({"error": "invalid password"}), 401
+
+    token = auth.issue_password_rotation_token(uid)
+    return jsonify({
+        "ok": True,
+        "rotation_token": token,
+        "expires_in": _password_rotation_seconds(),
+    })
+
+
 @app.post("/api/account/password")
 def api_account_password():
     uid = auth.current_user_id()
@@ -1341,32 +1394,29 @@ def api_account_password():
     m1 = str(body.get("M1") or "").strip().lower()
     align = bool(body.get("align_after_vault_rekey"))
     account = str(body.get("account_password") or "").strip()
+    rotation_token = str(body.get("rotation_token") or "").strip()
     email = str(user["email"] or "").strip().lower()
     if _auth_rate_limited("account-password", email):
         return jsonify({"error": "too many attempts"}), 429
 
-    use_srp_proof = db.user_auth_method(user) == "srp" or (
-        strict_zk() and db.user_has_srp(user) and srp_salt and srp_verifier and a_hex and m1
-    )
-    if use_srp_proof:
-        if current or new or account:
+    if not rotation_token or not auth.consume_password_rotation_token(uid, rotation_token):
+        if a_hex and m1 and db.user_auth_method(user) == "srp":
+            return jsonify({
+                "error": "password rotation not committed — prove current password first",
+            }), 400
+        return jsonify({"error": "invalid or expired rotation token"}), 401
+
+    if db.user_auth_method(user) == "srp":
+        if current or new or account or a_hex or m1:
             return jsonify({"error": "password must not be sent to the server"}), 400
-        if not srp_salt or not srp_verifier or not a_hex or not m1:
-            return jsonify({"error": "missing srp proof"}), 400
-        if not _verify_stored_srp_proof(email, user, a_hex, m1):
-            return jsonify({"error": "invalid password"}), 401
+        if not srp_salt or not srp_verifier:
+            return jsonify({"error": "missing srp verifier"}), 400
         changed_at = db.update_user_srp_verifier(uid, srp_salt, srp_verifier)
         db.clear_user_legacy_password(uid)
         return jsonify({"ok": True, "password_changed_at": changed_at, "auth_method": "srp"})
 
     if len(new) < 8:
         return jsonify({"error": "new password must be at least 8 characters"}), 400
-    if not verify_password(user["password_hash"], current):
-        account = str(body.get("account_password") or "").strip()
-        if not align or not current or not account:
-            return jsonify({"error": "invalid password"}), 401
-        if not verify_password(user["password_hash"], account):
-            return jsonify({"error": "invalid password"}), 401
     changed_at = db.update_user_password(uid, hash_password(new))
     if srp_salt and srp_verifier:
         db.upgrade_user_to_srp(uid, srp_salt, srp_verifier)

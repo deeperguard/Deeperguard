@@ -299,22 +299,33 @@
   }
 
   /**
-   * Rotate SRP login credentials after a vault re-key (session required).
-   * `proofPassword` must match the stored verifier (login password), not the new vault password.
+   * Step 1: prove the login password (SRP) before re-encrypting the vault.
+   * `proofPassword` must match the stored verifier, not the new vault password.
    */
-  async function passwordChange(email, proofPassword, newPassword) {
+  async function passwordChangeProve(email, proofPassword) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const rotated = await makeVerifier(normalizedEmail, newPassword);
     const challenge = await postJson('/api/account/password/challenge', { email: normalizedEmail });
     const client = new SrpClient();
     client.step1(normalizedEmail, proofPassword);
     const creds = await client.step2(challenge.srp_salt, challenge.B);
-    return postJson('/api/account/password', {
+    return postJson('/api/account/password/prove', {
       email: normalizedEmail,
-      srp_salt: rotated.srp_salt,
-      srp_verifier: rotated.srp_verifier,
       A: creds.A,
       M1: creds.M1,
+    });
+  }
+
+  /**
+   * Step 2: commit new SRP credentials after vault re-key + sync (rotation token required).
+   */
+  async function passwordChangeCommit(email, rotationToken, newPassword) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const rotated = await makeVerifier(normalizedEmail, newPassword);
+    return postJson('/api/account/password', {
+      email: normalizedEmail,
+      rotation_token: rotationToken,
+      srp_salt: rotated.srp_salt,
+      srp_verifier: rotated.srp_verifier,
     });
   }
 
@@ -327,7 +338,8 @@
     resync,
     verifyVault,
     vaultRecovery,
-    passwordChange,
+    passwordChangeProve,
+    passwordChangeCommit,
     repairLogin,
     passwordSignIn,
     shouldRetryWithRepairAfterSrp,

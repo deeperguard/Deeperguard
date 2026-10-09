@@ -1,6 +1,7 @@
 """LAN CIDR gate, sessions, CSRF, and account auth."""
 from __future__ import annotations
 
+import hashlib
 import hmac
 import ipaddress
 import json
@@ -36,7 +37,10 @@ SESSION_SRP_CRED = "srp_cred_state"
 SESSION_SRP_CRED_EMAIL = "srp_cred_email"
 SESSION_SRP_CRED_SALT = "srp_cred_salt"
 SESSION_SRP_CRED_VERIFIER = "srp_cred_verifier"
+SESSION_PW_ROTATION = "pw_rotation"
 SESSION_SID = "sid"
+
+PASSWORD_ROTATION_SECONDS = int(os.environ.get("NOTES_PASSWORD_ROTATION_SECONDS", "600"))
 
 _GEO_CACHE: dict[str, str] = {}
 
@@ -509,6 +513,43 @@ def store_srp_credential_challenge(email: str, srp_salt: str, srp_verifier: str,
     session[SESSION_SRP_CRED_SALT] = str(srp_salt or "").strip().lower()
     session[SESSION_SRP_CRED_VERIFIER] = str(srp_verifier or "").strip().lower()
     session[SESSION_SRP_CRED] = state
+
+
+def issue_password_rotation_token(user_id: int) -> str:
+    """Short-lived proof that the current password was verified before vault re-key."""
+    token = secrets.token_urlsafe(32)
+    session[SESSION_PW_ROTATION] = {
+        "uid": int(user_id),
+        "hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        "exp": time.time() + PASSWORD_ROTATION_SECONDS,
+    }
+    return token
+
+
+def peek_password_rotation_token(user_id: int) -> bool:
+    row = session.get(SESSION_PW_ROTATION)
+    if not isinstance(row, dict):
+        return False
+    if int(row.get("uid") or 0) != int(user_id):
+        return False
+    return time.time() <= float(row.get("exp") or 0)
+
+
+def consume_password_rotation_token(user_id: int, token: str) -> bool:
+    row = session.get(SESSION_PW_ROTATION)
+    if not isinstance(row, dict):
+        return False
+    if int(row.get("uid") or 0) != int(user_id):
+        return False
+    if time.time() > float(row.get("exp") or 0):
+        session.pop(SESSION_PW_ROTATION, None)
+        return False
+    want = str(row.get("hash") or "")
+    got = hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(want, got):
+        return False
+    session.pop(SESSION_PW_ROTATION, None)
+    return True
 
 
 def pop_srp_credential_challenge(email: str, srp_salt: str, srp_verifier: str) -> dict | None:
