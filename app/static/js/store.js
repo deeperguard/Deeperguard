@@ -3790,7 +3790,13 @@ const NotesStore = (() => {
       }
     }
 
+    let rotationToken = '';
+    let syncedNewKey = false;
     try {
+      if (!(await verifyVaultPassword(current))) {
+        throw new Error('Current password does not match this vault.');
+      }
+
       let loginMatchesCurrent = true;
       try {
         await api('/api/account/unlock', {
@@ -3807,6 +3813,49 @@ const NotesStore = (() => {
         } catch (sessionErr) {
           throw new Error('Sign in with the login password first, then change the vault password.');
         }
+      }
+
+      const srpAccount = String(state.account?.auth_method || '') === 'srp';
+      if (srpAccount && typeof NotesSrpAuth !== 'undefined' && NotesSrpAuth.passwordChangeProve) {
+        let proofPassword = current;
+        if (!loginMatchesCurrent) {
+          try {
+            proofPassword = String(
+              (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getAccountPassword()) || ''
+            ).trim();
+          } catch (err) {
+            proofPassword = '';
+          }
+          if (!proofPassword) {
+            throw new Error('Sign in again with your login password, then change the vault password.');
+          }
+        }
+        const proved = await NotesSrpAuth.passwordChangeProve(cached.email, proofPassword);
+        rotationToken = String(proved?.rotation_token || '').trim();
+        if (!rotationToken) throw new Error('Could not verify your current password — try again.');
+      } else {
+        const proveBody = { current_password: current };
+        if (!loginMatchesCurrent) {
+          proveBody.align_after_vault_rekey = true;
+          let accountPassword = '';
+          try {
+            accountPassword = String(
+              (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getAccountPassword()) || ''
+            ).trim();
+          } catch (err) {
+            accountPassword = '';
+          }
+          if (!accountPassword) {
+            throw new Error('Sign in again with your login password, then change the vault password.');
+          }
+          proveBody.account_password = accountPassword;
+        }
+        const proved = await api('/api/account/password/prove', {
+          method: 'POST',
+          body: JSON.stringify(proveBody),
+        });
+        rotationToken = String(proved?.rotation_token || '').trim();
+        if (!rotationToken) throw new Error('Could not verify your current password — try again.');
       }
 
       const oldKey = state.cryptoKey;
@@ -3835,34 +3884,27 @@ const NotesStore = (() => {
         await persistLocal(uuid, item);
       }
       await flush();
-      const passwordBody = { current_password: current, new_password: next };
-      if (typeof NotesSrpAuth !== 'undefined' && NotesSrpAuth.makeVerifier) {
-        const srp = await NotesSrpAuth.makeVerifier(cached.email, next);
-        passwordBody.srp_salt = srp.srp_salt;
-        passwordBody.srp_verifier = srp.srp_verifier;
-      }
-      if (!loginMatchesCurrent) {
-        passwordBody.align_after_vault_rekey = true;
-        let accountPassword = '';
-        try {
-          accountPassword = String(
-            (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getAccountPassword()) || ''
-          ).trim();
-        } catch (err) {
-          accountPassword = '';
+      syncedNewKey = true;
+
+      let passwordRes;
+      if (srpAccount && typeof NotesSrpAuth !== 'undefined' && NotesSrpAuth.passwordChangeCommit) {
+        passwordRes = await NotesSrpAuth.passwordChangeCommit(cached.email, rotationToken, next);
+      } else {
+        const passwordBody = {
+          rotation_token: rotationToken,
+          new_password: next,
+        };
+        if (typeof NotesSrpAuth !== 'undefined' && NotesSrpAuth.makeVerifier) {
+          const srp = await NotesSrpAuth.makeVerifier(cached.email, next);
+          passwordBody.srp_salt = srp.srp_salt;
+          passwordBody.srp_verifier = srp.srp_verifier;
         }
-        if (!accountPassword) {
-          throw new Error('Sign in again with your login password, then change the vault password.');
-        }
-        passwordBody.account_password = accountPassword;
+        passwordRes = await api('/api/account/password', {
+          method: 'POST',
+          body: JSON.stringify(passwordBody),
+        });
       }
-      await api('/api/account/password', {
-        method: 'POST',
-        body: JSON.stringify(passwordBody),
-      }).then((res) => {
-        ackPasswordChanged(res?.password_changed_at);
-        return res;
-      });
+      ackPasswordChanged(passwordRes?.password_changed_at);
       if (typeof NotesVaultSecrets !== 'undefined') {
         NotesVaultSecrets.setAccountPassword(next);
       }
@@ -3874,6 +3916,19 @@ const NotesStore = (() => {
       }
       return { reencrypted: snapshot.length };
     } catch (err) {
+      if (syncedNewKey) {
+        const recovery = new Error(
+          'Your notes were re-encrypted on the server, but sign-in was not updated. '
+          + 'While you are still signed in, try changing password again or use Repair sign-in with your new password.'
+        );
+        recovery.status = err?.status;
+        recovery.vaultRekeyCommitted = true;
+        if (err?.status === 429) {
+          recovery.message = 'Too many attempts while updating sign-in. Your notes already use the new password on the server. '
+            + 'Wait a few minutes, stay signed in, and try again or use Repair sign-in with your new password.';
+        }
+        throw recovery;
+      }
       try {
         await unlock(current, salt);
         for (const { uuid, item } of snapshot) {
