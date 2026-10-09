@@ -381,6 +381,15 @@ def update_user_srp_verifier(user_id: int, srp_salt: str, srp_verifier: str) -> 
     return ts
 
 
+def clear_user_legacy_password(user_id: int) -> None:
+    """Remove server-side Argon2 hash so SRP-only accounts cannot use legacy/resync paths."""
+    with tx() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = '', updated_at = ? WHERE id = ?",
+            (now(), user_id),
+        )
+
+
 def list_webauthn_credentials(user_id: int) -> list[sqlite3.Row]:
     return list(
         connection().execute(

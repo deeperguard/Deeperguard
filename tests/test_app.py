@@ -2858,68 +2858,126 @@ class NotesAppTests(unittest.TestCase):
             json={"srp_salt": stolen_salt, "srp_verifier": stolen_verifier},
             headers={"X-CSRF-Token": csrf},
         )
-        self.assertEqual(hijack.status_code, 401)
+        self.assertEqual(hijack.status_code, 400)
         user = notes_db.get_user_by_email(email)
         self.assertEqual(int(str(user["srp_verifier"]), 16), int(old_verifier, 16))
-        wrong = self.client.post(
+        plaintext = self.client.post(
             "/api/account/password",
             json={
-                "current_password": "wrong-srp-pass",
+                "current_password": current,
                 "new_password": nxt,
                 "srp_salt": stolen_salt,
                 "srp_verifier": stolen_verifier,
             },
             headers={"X-CSRF-Token": csrf},
         )
+        self.assertEqual(plaintext.status_code, 400)
+        a_hex, m1, _ = self._srp_credential_proof(
+            email,
+            "wrong-srp-pass",
+            stolen_salt,
+            "/api/account/password/challenge",
+            headers={"X-CSRF-Token": csrf},
+        )
+        wrong = self.client.post(
+            "/api/account/password",
+            json={
+                "srp_salt": stolen_salt,
+                "srp_verifier": stolen_verifier,
+                "A": a_hex,
+                "M1": m1,
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
         self.assertEqual(wrong.status_code, 401)
         new_salt, new_verifier = self._srp_verifier(email, nxt)
+        a_hex, m1, _ = self._srp_credential_proof(
+            email,
+            current,
+            new_salt,
+            "/api/account/password/challenge",
+            headers={"X-CSRF-Token": csrf},
+        )
         good = self.client.post(
             "/api/account/password",
             json={
-                "current_password": current,
-                "new_password": nxt,
                 "srp_salt": new_salt,
                 "srp_verifier": new_verifier,
+                "A": a_hex,
+                "M1": m1,
             },
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(good.status_code, 200)
         self.assertEqual(good.get_json().get("auth_method"), "srp")
         self.assertGreater(good.get_json().get("password_changed_at", 0), 0)
+        user = notes_db.get_user_by_email(email)
+        self.assertFalse(notes_db.user_has_legacy_password(user))
         old_login = self._srp_login(email, current, old_salt)
         self.assertEqual(old_login.status_code, 401)
         new_login = self._srp_login(email, nxt, new_salt)
         self.assertEqual(new_login.status_code, 200)
         csrf = self._csrf()
+        a_hex, m1, _ = self._srp_credential_proof(
+            email,
+            "wrong-login",
+            stolen_salt,
+            "/api/account/password/challenge",
+            headers={"X-CSRF-Token": csrf},
+        )
         align_bad = self.client.post(
             "/api/account/password",
             json={
-                "current_password": "vault-only-pass",
-                "new_password": "aligned-srp-secure-pass",
-                "align_after_vault_rekey": True,
-                "account_password": "wrong-login",
                 "srp_salt": stolen_salt,
                 "srp_verifier": stolen_verifier,
+                "A": a_hex,
+                "M1": m1,
             },
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(align_bad.status_code, 401)
         aligned_salt, aligned_verifier = self._srp_verifier(email, "aligned-srp-secure-pass")
+        a_hex, m1, _ = self._srp_credential_proof(
+            email,
+            nxt,
+            aligned_salt,
+            "/api/account/password/challenge",
+            headers={"X-CSRF-Token": csrf},
+        )
         align_ok = self.client.post(
             "/api/account/password",
             json={
-                "current_password": "vault-only-pass",
-                "new_password": "aligned-srp-secure-pass",
-                "align_after_vault_rekey": True,
-                "account_password": nxt,
                 "srp_salt": aligned_salt,
                 "srp_verifier": aligned_verifier,
+                "A": a_hex,
+                "M1": m1,
             },
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(align_ok.status_code, 200)
         aligned_login = self._srp_login(email, "aligned-srp-secure-pass", aligned_salt)
         self.assertEqual(aligned_login.status_code, 200)
+
+    def test_srp_account_password_change_rate_limited(self):
+        import auth_rate_limit as arl
+
+        os.environ["NOTES_AUTH_RATE_LIMIT"] = "2"
+        arl._hits.clear()
+        email = "srp-passchange-rate@home.local"
+        self._register_user(email, "srp-rate-pass-change")
+        csrf = self._csrf()
+        for _ in range(2):
+            ok = self.client.post(
+                "/api/account/password/challenge",
+                headers={"X-CSRF-Token": csrf},
+            )
+            self.assertEqual(ok.status_code, 200)
+        blocked = self.client.post(
+            "/api/account/password/challenge",
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(blocked.status_code, 429)
+        self.assertEqual(blocked.get_json()["error"], "too many attempts")
 
     def test_account_unlock_requires_session(self):
         self._register_legacy_user("unlock@home.local", "unlock-secure-pass")

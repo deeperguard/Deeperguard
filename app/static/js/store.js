@@ -3835,34 +3835,51 @@ const NotesStore = (() => {
         await persistLocal(uuid, item);
       }
       await flush();
-      const passwordBody = { current_password: current, new_password: next };
-      if (typeof NotesSrpAuth !== 'undefined' && NotesSrpAuth.makeVerifier) {
-        const srp = await NotesSrpAuth.makeVerifier(cached.email, next);
-        passwordBody.srp_salt = srp.srp_salt;
-        passwordBody.srp_verifier = srp.srp_verifier;
-      }
-      if (!loginMatchesCurrent) {
-        passwordBody.align_after_vault_rekey = true;
-        let accountPassword = '';
-        try {
-          accountPassword = String(
-            (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getAccountPassword()) || ''
-          ).trim();
-        } catch (err) {
-          accountPassword = '';
+      const srpAccount = String(state.account?.auth_method || '') === 'srp';
+      let passwordRes;
+      if (srpAccount && typeof NotesSrpAuth !== 'undefined' && NotesSrpAuth.passwordChange) {
+        let proofPassword = current;
+        if (!loginMatchesCurrent) {
+          try {
+            proofPassword = String(
+              (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getAccountPassword()) || ''
+            ).trim();
+          } catch (err) {
+            proofPassword = '';
+          }
+          if (!proofPassword) {
+            throw new Error('Sign in again with your login password, then change the vault password.');
+          }
         }
-        if (!accountPassword) {
-          throw new Error('Sign in again with your login password, then change the vault password.');
+        passwordRes = await NotesSrpAuth.passwordChange(cached.email, proofPassword, next);
+      } else {
+        const passwordBody = { current_password: current, new_password: next };
+        if (typeof NotesSrpAuth !== 'undefined' && NotesSrpAuth.makeVerifier) {
+          const srp = await NotesSrpAuth.makeVerifier(cached.email, next);
+          passwordBody.srp_salt = srp.srp_salt;
+          passwordBody.srp_verifier = srp.srp_verifier;
         }
-        passwordBody.account_password = accountPassword;
+        if (!loginMatchesCurrent) {
+          passwordBody.align_after_vault_rekey = true;
+          let accountPassword = '';
+          try {
+            accountPassword = String(
+              (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getAccountPassword()) || ''
+            ).trim();
+          } catch (err) {
+            accountPassword = '';
+          }
+          if (!accountPassword) {
+            throw new Error('Sign in again with your login password, then change the vault password.');
+          }
+          passwordBody.account_password = accountPassword;
+        }
+        passwordRes = await api('/api/account/password', {
+          method: 'POST',
+          body: JSON.stringify(passwordBody),
+        });
       }
-      await api('/api/account/password', {
-        method: 'POST',
-        body: JSON.stringify(passwordBody),
-      }).then((res) => {
-        ackPasswordChanged(res?.password_changed_at);
-        return res;
-      });
+      ackPasswordChanged(passwordRes?.password_changed_at);
       if (typeof NotesVaultSecrets !== 'undefined') {
         NotesVaultSecrets.setAccountPassword(next);
       }

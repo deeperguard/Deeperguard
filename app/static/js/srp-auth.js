@@ -298,6 +298,26 @@
     );
   }
 
+  /**
+   * Rotate SRP login credentials after a vault re-key (session required).
+   * `proofPassword` must match the stored verifier (login password), not the new vault password.
+   */
+  async function passwordChange(email, proofPassword, newPassword) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const rotated = await makeVerifier(normalizedEmail, newPassword);
+    const challenge = await postJson('/api/account/password/challenge', { email: normalizedEmail });
+    const client = new SrpClient();
+    client.step1(normalizedEmail, proofPassword);
+    const creds = await client.step2(challenge.srp_salt, challenge.B);
+    return postJson('/api/account/password', {
+      email: normalizedEmail,
+      srp_salt: rotated.srp_salt,
+      srp_verifier: rotated.srp_verifier,
+      A: creds.A,
+      M1: creds.M1,
+    });
+  }
+
   global.NotesSrpAuth = {
     SrpClient,
     register,
@@ -307,6 +327,7 @@
     resync,
     verifyVault,
     vaultRecovery,
+    passwordChange,
     repairLogin,
     passwordSignIn,
     shouldRetryWithRepairAfterSrp,
