@@ -242,9 +242,12 @@
       A: creds.A,
       M1: creds.M1,
     });
-    if (result.M2) {
-      await client.step3(result.M2);
+    if (!result.M2) {
+      const err = new Error('Sign-in failed — server did not complete mutual authentication');
+      err.status = 401;
+      throw err;
     }
+    await client.step3(result.M2);
     return result;
   }
 
@@ -253,6 +256,7 @@
     const srpSalt = await client.generateRandomSalt();
     const verifier = await client.generateVerifier(srpSalt, email, password);
     return postJson('/api/auth/srp/upgrade', {
+      current_password: password,
       srp_salt: srpSalt,
       srp_verifier: verifier,
     });

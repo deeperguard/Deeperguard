@@ -131,7 +131,8 @@ def write_rclone_config(user_id: int, username: str, password: str, region: str)
         return config_path, True
 
     proc = subprocess.run(
-        [rclone_bin(), "obscure", password],
+        [rclone_bin(), "obscure", "-"],
+        input=password,
         capture_output=True,
         text=True,
         check=True,

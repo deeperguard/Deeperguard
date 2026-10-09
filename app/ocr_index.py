@@ -178,11 +178,8 @@ def save_file_only(
     if not att_id:
         return {"att_id": "", "stored": False, "bytes": 0}
     if ocr_ephemeral():
-        folder = _doc_dir(user_id, att_id)
-        folder.mkdir(parents=True, exist_ok=True)
-        if data:
-            (folder / "file").write_bytes(data)
-        return {"att_id": att_id, "stored": True, "bytes": len(data)}
+        # Ephemeral OCR: do not persist raw document bytes on disk (process in-browser or re-upload).
+        return {"att_id": att_id, "stored": False, "bytes": len(data)}
     return save_document(
         user_id,
         att_id,

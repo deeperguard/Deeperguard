@@ -1033,13 +1033,21 @@ def api_auth_srp_upgrade():
     user = db.get_user_by_id(uid) if uid else None
     if not user:
         return jsonify({"error": "not found"}), 404
+    email = str(user["email"] or "").strip().lower()
+    if _auth_rate_limited("srp-upgrade", email):
+        return jsonify({"error": "too many attempts"}), 429
     if db.user_has_srp(user):
         return jsonify({"ok": True, "auth_method": "srp"})
     body = request.get_json(silent=True) or {}
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
+    current = str(body.get("current_password") or body.get("password") or "").strip()
     if not srp_salt or not srp_verifier:
         return jsonify({"error": "missing srp credentials"}), 400
+    if not db.user_has_legacy_password(user):
+        return jsonify({"error": "invalid credentials"}), 401
+    if not current or not verify_password(user["password_hash"], current):
+        return jsonify({"error": "invalid credentials"}), 401
     db.upgrade_user_to_srp(uid, srp_salt, srp_verifier)
     return jsonify({"ok": True, "auth_method": "srp"})
 

@@ -219,6 +219,30 @@ class BackupHelperTests(unittest.TestCase):
         out = self.backup_pcloud.normalize_pcloud_token('{"access_token":"abc","token_type":"bearer"}')
         self.assertIn("access_token", out)
 
+    def test_write_rclone_config_obscure_password_via_stdin(self):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append((list(cmd), kwargs.get("input")))
+            class Proc:
+                stdout = "obscured-token"
+                stderr = ""
+                returncode = 0
+
+            return Proc()
+
+        with patch.object(self.backup_pcloud, "pcloud_token", return_value=""), patch.object(
+            self.backup_pcloud, "rclone_bin", return_value="/usr/bin/rclone"
+        ), patch.object(self.backup_pcloud.subprocess, "run", side_effect=fake_run), patch.object(
+            self.backup_pcloud, "pcloud_rclone_config_path", return_value=Path(self.tmp.name) / "keys" / "rclone.conf"
+        ):
+            path, native = self.backup_pcloud.write_rclone_config(9, "user@pcloud", "s3cret!", "eu")
+        self.assertFalse(native)
+        self.assertTrue(path.is_file())
+        self.assertEqual(calls[0][0][-2:], ["obscure", "-"])
+        self.assertEqual(calls[0][1], "s3cret!")
+        self.assertIn("obscured-token", path.read_text(encoding="utf-8"))
+
     def test_run_pcloud_backups_emails_when_password_missing(self):
         sent = []
         with patch.object(self.backup_pcloud.db, "users_with_pcloud_enabled", return_value=[

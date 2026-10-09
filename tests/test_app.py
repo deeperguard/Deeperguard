@@ -1889,21 +1889,21 @@ class NotesAppTests(unittest.TestCase):
         stored_body = stored.get_json()
         self.assertEqual(stored_body["att_id"], att_id)
         self.assertTrue(stored_body.get("ephemeral"))
+        self.assertFalse(stored_body.get("stored"))
         listed = self.client.get("/api/ocr/index").get_json()
         self.assertEqual(listed["count"], 0)
         import db
         import ocr_index
         user = db.get_user_by_email("store@home.local")
         file_path = ocr_index.ocr_root(int(user["id"])) / att_id / "file"
-        self.assertTrue(file_path.is_file())
+        self.assertFalse(file_path.is_file())
         self.assertFalse((file_path.parent / "meta.json").is_file())
         deleted = self.client.delete(
             f"/api/ocr/{att_id}",
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(deleted.status_code, 200)
-        self.assertTrue(deleted.get_json().get("deleted"))
-        self.assertFalse(file_path.is_file())
+        self.assertFalse(deleted.get_json().get("deleted"))
 
     def test_ocr_rejects_unreadable_documents(self):
         os.environ["NOTES_SERVER_OCR"] = "1"
@@ -3318,14 +3318,58 @@ class NotesAppTests(unittest.TestCase):
         login = self.client.post("/api/auth/login", json={"email": email, "password": password})
         self.assertEqual(login.status_code, 200)
         salt_hex, verifier = self._srp_verifier(email, password)
-        upgraded = self.client.post(
+        csrf = self._csrf()
+        hijack = self.client.post(
             "/api/auth/srp/upgrade",
             json={"srp_salt": salt_hex, "srp_verifier": verifier},
-            headers={"X-CSRF-Token": self._csrf()},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(hijack.status_code, 401)
+        upgraded = self.client.post(
+            "/api/auth/srp/upgrade",
+            json={
+                "srp_salt": salt_hex,
+                "srp_verifier": verifier,
+                "current_password": password,
+            },
+            headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(upgraded.status_code, 200)
-        account = self.client.get("/api/account", headers={"X-CSRF-Token": self._csrf()})
+        account = self.client.get("/api/account", headers={"X-CSRF-Token": csrf})
         self.assertEqual(account.get_json()["auth_method"], "srp")
+
+    def test_srp_upgrade_rate_limited(self):
+        import auth_rate_limit as arl
+
+        os.environ["NOTES_AUTH_RATE_LIMIT"] = "2"
+        arl._hits.clear()
+        email = "upgrade-rate@home.local"
+        password = "upgrade-rate-secure-pass"
+        self._register_legacy_user(email, password)
+        self.client.post("/api/auth/login", json={"email": email, "password": password})
+        csrf = self._csrf()
+        salt_hex, verifier = self._srp_verifier(email, password)
+        for _ in range(2):
+            bad = self.client.post(
+                "/api/auth/srp/upgrade",
+                json={
+                    "srp_salt": salt_hex,
+                    "srp_verifier": verifier,
+                    "current_password": "wrong",
+                },
+                headers={"X-CSRF-Token": csrf},
+            )
+            self.assertEqual(bad.status_code, 401)
+        blocked = self.client.post(
+            "/api/auth/srp/upgrade",
+            json={
+                "srp_salt": salt_hex,
+                "srp_verifier": verifier,
+                "current_password": "wrong",
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(blocked.status_code, 429)
 
     def test_srp_resync_after_verifier_drift(self):
         email = "resync@home.local"
