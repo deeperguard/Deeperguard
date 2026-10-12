@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -247,6 +248,24 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
     if reminder_cols:
         # Titles were briefly stored in plaintext; zero-knowledge means none may remain.
         conn.execute("UPDATE note_reminders SET title = '' WHERE title != ''")
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS srp_challenges (
+            id TEXT PRIMARY KEY,
+            purpose TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            email TEXT NOT NULL COLLATE NOCASE,
+            state_json TEXT NOT NULL,
+            srp_salt TEXT NOT NULL DEFAULT '',
+            srp_verifier TEXT NOT NULL DEFAULT '',
+            created_at REAL NOT NULL,
+            expires_at REAL NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_srp_challenges_expires
+            ON srp_challenges(expires_at);
+        """
+    )
     conn.commit()
 
 
@@ -1697,4 +1716,99 @@ def item_is_deleted(user_id: int, item_uuid: str) -> bool:
     if not row:
         return False
     return bool(row["deleted"])
+
+
+SRP_CHALLENGE_TTL_SECONDS = 300
+
+
+def prune_srp_challenges(now_ts: float | None = None) -> int:
+    ts = float(now_ts if now_ts is not None else time.time())
+    with tx() as conn:
+        removed = conn.execute("DELETE FROM srp_challenges WHERE expires_at <= ?", (ts,)).rowcount
+    return int(removed or 0)
+
+
+def create_srp_challenge(
+    *,
+    purpose: str,
+    user_id: int,
+    email: str,
+    state: dict[str, str],
+    srp_salt: str = "",
+    srp_verifier: str = "",
+    ttl_seconds: int = SRP_CHALLENGE_TTL_SECONDS,
+) -> str:
+    challenge_id = secrets.token_urlsafe(32)
+    ts = now()
+    expires = ts + float(ttl_seconds)
+    prune_srp_challenges(ts)
+    with tx() as conn:
+        conn.execute(
+            """
+            INSERT INTO srp_challenges (
+                id, purpose, user_id, email, state_json, srp_salt, srp_verifier,
+                created_at, expires_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                challenge_id,
+                str(purpose),
+                int(user_id),
+                email.strip().lower(),
+                json.dumps(state, separators=(",", ":")),
+                str(srp_salt or "").strip().lower(),
+                str(srp_verifier or "").strip().lower(),
+                ts,
+                expires,
+            ),
+        )
+    return challenge_id
+
+
+def consume_srp_challenge(
+    challenge_id: str,
+    *,
+    purpose: str,
+    email: str,
+    user_id: int,
+    srp_salt: str = "",
+    srp_verifier: str = "",
+) -> dict[str, str] | None:
+    """Load and delete a challenge (single use). Returns private state or None."""
+    cid = str(challenge_id or "").strip()
+    if not cid:
+        return None
+    key = email.strip().lower()
+    salt_key = str(srp_salt or "").strip().lower()
+    verifier_key = str(srp_verifier or "").strip().lower()
+    ts = now()
+    with tx() as conn:
+        row = conn.execute(
+            """
+            DELETE FROM srp_challenges
+            WHERE id = ? AND expires_at > ?
+            RETURNING purpose, user_id, email, state_json, srp_salt, srp_verifier
+            """,
+            (cid, ts),
+        ).fetchone()
+    if not row:
+        return None
+    if str(row["purpose"]) != str(purpose):
+        return None
+    if int(row["user_id"]) != int(user_id):
+        return None
+    if str(row["email"]).strip().lower() != key:
+        return None
+    if salt_key and str(row["srp_salt"]).strip().lower() != salt_key:
+        return None
+    if verifier_key and str(row["srp_verifier"]).strip().lower() != verifier_key:
+        return None
+    try:
+        state = json.loads(str(row["state_json"]))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(state, dict):
+        return None
+    return {str(k): str(v) for k, v in state.items()}
 
