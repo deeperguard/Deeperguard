@@ -15,10 +15,13 @@ from flask import g, request, session
 
 from config import SESSION_SECONDS, skip_login
 from db import (
+    consume_srp_challenge,
+    create_srp_challenge,
     create_user_session,
     get_first_user,
     get_latest_session_for_device,
     get_session_by_token,
+    get_user_by_email,
     get_user_by_id,
     revoke_session_by_token,
     touch_user_session,
@@ -31,12 +34,20 @@ SESSION_AUTH = "authed"
 SESSION_EXP = "exp"
 SESSION_CSRF = "csrf"
 SESSION_TOTP = "totp_ok"
+SESSION_SRP_LOGIN_CHALLENGE = "srp_login_challenge_id"
+SESSION_SRP_CRED_CHALLENGE = "srp_cred_challenge_id"
+# Legacy keys (pre server-side SRP store) — must never hold private state again.
 SESSION_SRP = "srp_state"
 SESSION_SRP_EMAIL = "srp_email"
 SESSION_SRP_CRED = "srp_cred_state"
 SESSION_SRP_CRED_EMAIL = "srp_cred_email"
 SESSION_SRP_CRED_SALT = "srp_cred_salt"
 SESSION_SRP_CRED_VERIFIER = "srp_cred_verifier"
+
+SRP_PURPOSE_LOGIN = "login"
+SRP_PURPOSE_REPAIR_LOGIN = "repair-login"
+SRP_PURPOSE_VAULT_RECOVERY = "vault-recovery"
+SRP_PURPOSE_PASSWORD_CHANGE = "password-change"
 SESSION_PW_ROTATION = "pw_rotation"
 SESSION_SID = "sid"
 
@@ -494,25 +505,75 @@ def bootstrap_path(path: str, method: str) -> bool:
     return base == "/api/account/unlock" and method.upper() == "POST"
 
 
+def _clear_legacy_srp_session_keys() -> None:
+    for key in (
+        SESSION_SRP,
+        SESSION_SRP_EMAIL,
+        SESSION_SRP_CRED,
+        SESSION_SRP_CRED_EMAIL,
+        SESSION_SRP_CRED_SALT,
+        SESSION_SRP_CRED_VERIFIER,
+    ):
+        session.pop(key, None)
+
+
+def _user_id_for_email(email: str) -> int | None:
+    user = get_user_by_email(email.strip().lower())
+    if not user:
+        return None
+    return int(user["id"])
+
+
 def store_srp_state(email: str, state: dict) -> None:
-    session[SESSION_SRP_EMAIL] = email.strip().lower()
-    session[SESSION_SRP] = state
+    uid = _user_id_for_email(email)
+    if uid is None:
+        return
+    _clear_legacy_srp_session_keys()
+    challenge_id = create_srp_challenge(
+        purpose=SRP_PURPOSE_LOGIN,
+        user_id=uid,
+        email=email,
+        state=state,
+    )
+    session[SESSION_SRP_LOGIN_CHALLENGE] = challenge_id
 
 
 def pop_srp_state(email: str) -> dict | None:
-    stored_email = str(session.get(SESSION_SRP_EMAIL) or "").strip().lower()
-    if stored_email != email.strip().lower():
+    if session.get(SESSION_SRP) or session.get(SESSION_SRP_CRED):
+        _clear_legacy_srp_session_keys()
         return None
-    state = session.pop(SESSION_SRP, None)
-    session.pop(SESSION_SRP_EMAIL, None)
-    return state if isinstance(state, dict) else None
+    challenge_id = str(session.pop(SESSION_SRP_LOGIN_CHALLENGE, None) or "").strip()
+    if not challenge_id:
+        return None
+    uid = _user_id_for_email(email)
+    if uid is None:
+        return None
+    return consume_srp_challenge(
+        challenge_id,
+        purpose=SRP_PURPOSE_LOGIN,
+        email=email,
+        user_id=uid,
+    )
 
 
-def store_srp_credential_challenge(email: str, srp_salt: str, srp_verifier: str, state: dict) -> None:
-    session[SESSION_SRP_CRED_EMAIL] = email.strip().lower()
-    session[SESSION_SRP_CRED_SALT] = str(srp_salt or "").strip().lower()
-    session[SESSION_SRP_CRED_VERIFIER] = str(srp_verifier or "").strip().lower()
-    session[SESSION_SRP_CRED] = state
+def store_srp_credential_challenge(
+    email: str,
+    srp_salt: str,
+    srp_verifier: str,
+    state: dict,
+    purpose: str,
+    user_id: int,
+) -> None:
+    _clear_legacy_srp_session_keys()
+    challenge_id = create_srp_challenge(
+        purpose=purpose,
+        user_id=int(user_id),
+        email=email,
+        state=state,
+        srp_salt=srp_salt,
+        srp_verifier=srp_verifier,
+    )
+    session[SESSION_SRP_CRED_CHALLENGE] = challenge_id
 
 
 def issue_password_rotation_token(user_id: int) -> str:
@@ -552,22 +613,27 @@ def consume_password_rotation_token(user_id: int, token: str) -> bool:
     return True
 
 
-def pop_srp_credential_challenge(email: str, srp_salt: str, srp_verifier: str) -> dict | None:
-    key = email.strip().lower()
-    stored_email = str(session.get(SESSION_SRP_CRED_EMAIL) or "").strip().lower()
-    stored_salt = str(session.get(SESSION_SRP_CRED_SALT) or "").strip().lower()
-    stored_verifier = str(session.get(SESSION_SRP_CRED_VERIFIER) or "").strip().lower()
-    if stored_email != key:
+def pop_srp_credential_challenge(
+    email: str,
+    srp_salt: str,
+    srp_verifier: str,
+    purpose: str,
+    user_id: int,
+) -> dict | None:
+    if session.get(SESSION_SRP) or session.get(SESSION_SRP_CRED):
+        _clear_legacy_srp_session_keys()
         return None
-    if stored_salt != str(srp_salt or "").strip().lower():
+    challenge_id = str(session.pop(SESSION_SRP_CRED_CHALLENGE, None) or "").strip()
+    if not challenge_id:
         return None
-    if stored_verifier != str(srp_verifier or "").strip().lower():
-        return None
-    state = session.pop(SESSION_SRP_CRED, None)
-    session.pop(SESSION_SRP_CRED_EMAIL, None)
-    session.pop(SESSION_SRP_CRED_SALT, None)
-    session.pop(SESSION_SRP_CRED_VERIFIER, None)
-    return state if isinstance(state, dict) else None
+    return consume_srp_challenge(
+        challenge_id,
+        purpose=purpose,
+        email=email,
+        user_id=int(user_id),
+        srp_salt=srp_salt,
+        srp_verifier=srp_verifier,
+    )
 
 
 def auth_exempt_path(path: str) -> bool:
