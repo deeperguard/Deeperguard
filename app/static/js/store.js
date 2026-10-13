@@ -1191,12 +1191,31 @@ const NotesStore = (() => {
 
   function attachLiveIds(content, noteId) {
     if (!content || content.type !== 'note') return content;
+    const hidden = shadowDuplicateIds(listAttachments());
     const live = [];
     for (const item of state.items.values()) {
       if (item.deleted || item.content?.type !== 'attachment') continue;
-      if (item.content.note_id === noteId) live.push(item.uuid);
+      if (item.content.note_id !== noteId || hidden.has(item.uuid)) continue;
+      live.push(item.uuid);
     }
-    content.attachments = [...new Set([...(content.attachments || []), ...live])];
+    const prior = Array.isArray(content.attachments) ? content.attachments : [];
+    const kept = [];
+    for (const id of prior) {
+      if (hidden.has(id)) continue;
+      const item = state.items.get(id);
+      // A file owned by another note must not stay in this note's id list.
+      if (
+        item
+        && !item.deleted
+        && item.content?.type === 'attachment'
+        && item.content.note_id
+        && item.content.note_id !== noteId
+      ) {
+        continue;
+      }
+      kept.push(id);
+    }
+    content.attachments = [...new Set([...kept, ...live])];
     return content;
   }
 
@@ -2891,12 +2910,87 @@ const NotesStore = (() => {
     return merged;
   }
 
-  function listAttachments(noteId) {
-    return [...state.items.values()].filter(
-      (i) => i.content?.type === 'attachment'
-        && (noteId == null || i.content?.note_id === noteId)
-        && !i.deleted,
+  function attachmentFilenameStem(filename) {
+    const base = String(filename || '').split(/[/\\]/).pop() || '';
+    return base.replace(/\.[^.]+$/, '').trim().toLowerCase();
+  }
+
+  function titleOwnsAttachmentFilename(title, filename) {
+    const stem = attachmentFilenameStem(filename);
+    const name = String(title || '').trim().toLowerCase();
+    if (!stem || name.length < 4) return false;
+    return name === stem
+      || stem.endsWith(name)
+      || stem.startsWith(name)
+      || name.endsWith(stem)
+      || name.startsWith(stem);
+  }
+
+  function attachmentParentIsLiveNote(att) {
+    const parent = get(att?.content?.note_id);
+    return !!(
+      parent
+      && !parent.deleted
+      && parent.content?.type === 'note'
+      && !parent.content?.trashed
     );
+  }
+
+  function canonicalAttachmentId(peers) {
+    const ranked = [...peers].sort((a, b) => {
+      const aTitle = titleOwnsAttachmentFilename(
+        get(a.content?.note_id)?.content?.title,
+        a.content?.filename,
+      ) ? 1 : 0;
+      const bTitle = titleOwnsAttachmentFilename(
+        get(b.content?.note_id)?.content?.title,
+        b.content?.filename,
+      ) ? 1 : 0;
+      if (aTitle !== bTitle) return bTitle - aTitle;
+      const aCreated = String(a.content?.created_at || '');
+      const bCreated = String(b.content?.created_at || '');
+      if (aCreated !== bCreated) return aCreated < bCreated ? -1 : 1;
+      const aLen = String(get(a.content?.note_id)?.content?.content || '').length;
+      const bLen = String(get(b.content?.note_id)?.content?.content || '').length;
+      if (aLen !== bLen) return aLen - bLen;
+      return String(a.uuid).localeCompare(String(b.uuid));
+    });
+    return ranked[0]?.uuid || null;
+  }
+
+  // Same PDF bytes imported onto many notes left a visible copy on each one.
+  // Per-note listing keeps the canonical owner and hides the extra rows.
+  // The global list (no note id) still returns every row so nothing is deleted.
+  function shadowDuplicateIds(all) {
+    const byHash = new Map();
+    for (const att of all) {
+      const hash = String(att.content?.content_sha256 || '');
+      if (!hash || !attachmentParentIsLiveNote(att)) continue;
+      const list = byHash.get(hash) || [];
+      list.push(att);
+      byHash.set(hash, list);
+    }
+    const hidden = new Set();
+    for (const peers of byHash.values()) {
+      if (peers.length < 2) continue;
+      const winner = canonicalAttachmentId(peers);
+      for (const peer of peers) {
+        if (peer.uuid !== winner) hidden.add(peer.uuid);
+      }
+    }
+    return hidden;
+  }
+
+  function listAttachments(noteId) {
+    const all = [...state.items.values()].filter(
+      (i) => i.content?.type === 'attachment' && !i.deleted,
+    );
+    if (noteId == null) return all;
+    const mine = all.filter((i) => i.content?.note_id === noteId);
+    if (mine.length < 1) return mine;
+    const hidden = shadowDuplicateIds(all);
+    if (!hidden.size) return mine;
+    return mine.filter((att) => !hidden.has(att.uuid));
   }
 
   function get(uuid) {
@@ -3028,13 +3122,15 @@ const NotesStore = (() => {
     }
     const existing = uuid ? get(uuid) : null;
     if (existing && existing.content?.type === 'attachment' && !existing.deleted) {
-      linkNoteAttachment(noteId, uuid);
+      // Same file uuid already has one owner. Do not also list it on this note.
+      if (existing.content.note_id === noteId) linkNoteAttachment(noteId, uuid);
       return { uuid, created: false };
     }
     const contentSha256 = await attachmentContentHash(bytes);
     const duplicate = await findDuplicateAttachment({ contentSha256 });
-    if (duplicate && duplicate.content?.note_id === noteId) {
-      linkNoteAttachment(noteId, duplicate.uuid);
+    if (duplicate) {
+      // addAttachment rejects these bytes. Import must not clone them onto another note.
+      if (duplicate.content?.note_id === noteId) linkNoteAttachment(noteId, duplicate.uuid);
       return { uuid: duplicate.uuid, created: false };
     }
     const id = (uuid && !get(uuid)) ? uuid : newUuid();
@@ -3428,14 +3524,20 @@ const NotesStore = (() => {
   function refreshNoteSearchText(noteId) {
     const note = get(noteId);
     if (!note || note.content.type !== 'note') return;
+    const hadArray = Array.isArray(note.content.attachments);
+    const beforeIds = hadArray ? note.content.attachments.join('\0') : '';
+    attachLiveIds(note.content, noteId);
+    const afterIds = (note.content.attachments || []).join('\0');
     const atts = listAttachments(noteId);
     const ocr = atts.map((item) => item.content.ocr_text).filter(Boolean).join('\n\n');
     const names = atts.map((item) => {
       const parts = [item.content.filename, item.content.original_filename].filter(Boolean);
       return [...new Set(parts.map((part) => String(part).trim()).filter(Boolean))].join(' ');
     }).filter(Boolean).join(' ');
-    if (String(note.content.ocr_text || '') === ocr
-      && String(note.content.attachment_names || '') === names) return false;
+    if (hadArray
+      && String(note.content.ocr_text || '') === ocr
+      && String(note.content.attachment_names || '') === names
+      && beforeIds === afterIds) return false;
     // OCR / search-index refresh must not rewrite last-edit time or enqueue sync.
     upsert(noteId, { ...note.content, ocr_text: ocr, attachment_names: names }, {
       touchUpdatedAt: false,

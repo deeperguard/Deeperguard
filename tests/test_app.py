@@ -1664,6 +1664,15 @@ class NotesAppTests(unittest.TestCase):
     def test_client_attachment_encryption(self):
         self._run_node_script("test_store_attachments.js")
 
+    def test_client_attachment_search_isolation(self):
+        self._run_node_script("test_attachment_search_isolation.js")
+        app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        render_fn = app_js[app_js.find("function renderAttachments"):app_js.find("function ocrSnippet")]
+        self.assertIn("if (noteId == null || noteId === '')", render_fn)
+        self.assertIn("a.content?.note_id === noteId", render_fn)
+        self.assertIn("Array.isArray(note?.content?.attachments)", render_fn)
+        self.assertIn("Array.isArray(note?.content?.sn_pending_files)", render_fn)
+
     def test_light_vault_settings_and_ai_chat(self):
         self._run_node_script("test_light_vault_settings.js")
 
