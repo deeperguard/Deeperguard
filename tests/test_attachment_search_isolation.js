@@ -275,6 +275,104 @@ function hitsFor(query) {
   assert.notStrictEqual(retryAtt.uuid, trashAtt.uuid);
   assert.strictEqual(NotesStore.listAttachments(retryId).length, 1);
 
+  // Copies already stored before the hash check: same PDF name and size,
+  // different content hashes, OCR text containing 136 on the unrelated note.
+  const noteOwner = NotesStore.newUuid();
+  const noteOther = NotesStore.newUuid();
+  const ownerNote = NotesStore.defaultNote();
+  ownerNote.title = '2026-0198 Factuur Joyce';
+  ownerNote.content = '';
+  NotesStore.upsert(noteOwner, ownerNote);
+  const otherNote = NotesStore.defaultNote();
+  otherNote.title = 'Bevestiging registratie Schutten invest';
+  otherNote.content = 'Registration confirmed for the investment account.';
+  NotesStore.upsert(noteOther, otherNote);
+  const ownerAtt = NotesStore.newUuid();
+  const otherAtt = NotesStore.newUuid();
+  const storedFile = {
+    type: 'attachment',
+    filename: INVOICE_NAME,
+    original_filename: INVOICE_NAME,
+    mime: 'application/pdf',
+    size: 120832,
+    ocr_text: INVOICE_OCR,
+    ocr_method: 'pdftext',
+    ocr_index: NotesStore.OCR_INDEX,
+  };
+  NotesStore.upsert(ownerAtt, {
+    ...storedFile,
+    note_id: noteOwner,
+    content_sha256: 'hash-owner-copy',
+    created_at: '2026-09-27T00:00:00.000Z',
+  });
+  NotesStore.upsert(otherAtt, {
+    ...storedFile,
+    note_id: noteOther,
+    content_sha256: 'hash-other-copy',
+    created_at: '2026-09-20T00:00:00.000Z',
+  });
+  const ownerRow = NotesStore.get(noteOwner);
+  ownerRow.content.attachments = [ownerAtt];
+  ownerRow.content.ocr_text = INVOICE_OCR;
+  ownerRow.content.attachment_names = INVOICE_NAME;
+  const otherRow = NotesStore.get(noteOther);
+  otherRow.content.attachments = [otherAtt];
+  otherRow.content.ocr_text = INVOICE_OCR;
+  otherRow.content.attachment_names = INVOICE_NAME;
+  assert.ok(NotesStore.listAttachments(noteOwner).some((item) => item.uuid === ownerAtt));
+  assert.deepStrictEqual(
+    NotesStore.listAttachments(noteOther),
+    [],
+    'a stored copy with a different hash must not render on the unrelated note',
+  );
+  assert.ok(NotesStore.listAttachments().some((item) => item.uuid === otherAtt));
+  assert.ok(hitsFor('136').includes(noteOther), 'leaked OCR still matches until repair');
+  const repaired = NotesStore.repairStoredAttachmentCopies();
+  assert.ok(repaired >= 1);
+  assert.strictEqual(NotesStore.get(otherAtt).content.duplicate_of, ownerAtt);
+  assert.strictEqual(NotesStore.get(otherAtt).deleted, false);
+  assert.ok(!NotesStore.get(noteOther).content.attachments.includes(otherAtt));
+  assert.ok(!String(NotesStore.get(noteOther).content.ocr_text || '').includes('136'));
+  assert.ok(String(NotesStore.get(noteOwner).content.ocr_text || '').includes('136'));
+  assert.ok(NotesStore.listAttachments(noteOwner).some((item) => item.uuid === ownerAtt));
+  assert.deepStrictEqual(NotesStore.listAttachments(noteOther), []);
+  const repairedHits = hitsFor('136');
+  assert.ok(repairedHits.includes(noteOwner));
+  assert.ok(!repairedHits.includes(noteOther));
+  assert.ok(!repairedHits.includes(noteB));
+
+  const distinctA = NotesStore.newUuid();
+  const distinctB = NotesStore.newUuid();
+  NotesStore.upsert(distinctA, { ...NotesStore.defaultNote(), title: 'Scan A', content: 'alpha' });
+  NotesStore.upsert(distinctB, { ...NotesStore.defaultNote(), title: 'Scan B', content: 'beta' });
+  const distinctSize = 4096;
+  const attA = NotesStore.newUuid();
+  const attB = NotesStore.newUuid();
+  NotesStore.upsert(attA, {
+    type: 'attachment',
+    note_id: distinctA,
+    filename: 'notes.pdf',
+    mime: 'application/pdf',
+    size: distinctSize,
+    content_sha256: 'hash-distinct-a',
+    ocr_text: 'alpha only',
+    ocr_method: 'pdftext',
+    created_at: '2024-01-01T00:00:00.000Z',
+  });
+  NotesStore.upsert(attB, {
+    type: 'attachment',
+    note_id: distinctB,
+    filename: 'notes.pdf',
+    mime: 'application/pdf',
+    size: distinctSize,
+    content_sha256: 'hash-distinct-b',
+    ocr_text: 'beta only',
+    ocr_method: 'pdftext',
+    created_at: '2024-01-02T00:00:00.000Z',
+  });
+  assert.strictEqual(NotesStore.listAttachments(distinctA).length, 1);
+  assert.strictEqual(NotesStore.listAttachments(distinctB).length, 1);
+
   console.log('ok');
 })().catch((err) => {
   console.error(err);
