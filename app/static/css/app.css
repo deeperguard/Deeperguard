@@ -1111,6 +1111,7 @@ html[data-theme="light"] .zk-badge {
 }
 
 .shell { display: flex; flex: 1; height: auto; min-height: 0; }
+.pane-splitter { display: none; }
 .sidebar {
   width: var(--sidebar-width);
   border-right: 1px solid var(--border);
@@ -5720,6 +5721,7 @@ body.search-filters-open .fab-stack,
     grid-template-rows: minmax(0, 1fr);
     min-height: 0;
     overflow: hidden;
+    position: relative;
   }
   .sidebar {
     display: contents;
@@ -5746,11 +5748,61 @@ body.search-filters-open .fab-stack,
   .list-pane {
     grid-column: 2;
     background: var(--sn-list-bg);
-    border-right: 1px solid var(--border);
+    border-right: 0;
   }
   .editor-pane {
     grid-column: 3;
     background: var(--sn-editor-bg);
+  }
+  /* The list/editor divider is the drag handle. The line stays 1px; the hit area is wider. */
+  .pane-splitter {
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 6;
+    width: 16px;
+    left: calc(var(--sn-nav-width) + var(--sn-list-width) - 8px);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .pane-splitter::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    transform: translateX(-50%);
+    background: var(--border);
+    pointer-events: none;
+  }
+  .pane-splitter:hover::before,
+  .pane-splitter:focus-visible::before,
+  body.pane-resizing .pane-splitter::before {
+    width: 2px;
+    background: var(--accent);
+  }
+  .pane-splitter:focus {
+    outline: none;
+  }
+  .pane-splitter:focus-visible::before {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  body.pane-resizing,
+  body.pane-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+  }
+  @media (pointer: coarse) {
+    .pane-splitter {
+      width: 28px;
+      left: calc(var(--sn-nav-width) + var(--sn-list-width) - 14px);
+    }
   }
   .sidebar-head {
     flex-direction: column;

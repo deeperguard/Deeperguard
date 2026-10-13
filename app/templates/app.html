@@ -35,6 +35,10 @@
         document.documentElement.setAttribute('data-theme', theme);
         var themeMeta = document.querySelector('meta[name="theme-color"]');
         if (themeMeta) themeMeta.setAttribute('content', theme === 'light' ? '#ffffff' : '#0f1419');
+        var listWidth = Number(prefs.listPaneWidth);
+        if (listWidth >= 200 && listWidth <= 720) {
+          document.documentElement.style.setProperty('--sn-list-width', Math.round(listWidth) + 'px');
+        }
       } catch (e) {}
     })();
   </script>
@@ -733,6 +737,8 @@
       <div id="note-list" class="note-list"></div>
       </div>
     </aside>
+
+    <div id="pane-splitter" class="pane-splitter" role="separator" aria-orientation="vertical" aria-label="Resize note list" tabindex="0" aria-valuemin="200" aria-valuemax="720" aria-valuenow="280"></div>
 
     <main id="editor-pane" class="editor-pane">
       <div id="empty-state" class="empty-state">

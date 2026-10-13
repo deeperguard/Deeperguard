@@ -207,7 +207,7 @@
   // Vault-only prefs never touch localStorage (they hold secrets such as API keys).
   const VAULT_ONLY_PREF_KEYS = ['aiChat'];
   // Device-only prefs (storage/offline behaviour differs per device).
-  const DEVICE_PREF_KEYS = ['rememberDevice', 'lightVault', 'tagsCollapsed', 'foldersCollapsed', 'viewsCollapsed', 'searchFilters'];
+  const DEVICE_PREF_KEYS = ['rememberDevice', 'lightVault', 'tagsCollapsed', 'foldersCollapsed', 'viewsCollapsed', 'searchFilters', 'listPaneWidth'];
   let globalPrefsAppliedAt = 0;
 
   function localPrefsJson() {
@@ -298,6 +298,134 @@
     applyPrefs();
     renderNotes();
     pushGlobalPrefs();
+  }
+
+  const LIST_PANE_MIN = 200;
+  const LIST_PANE_DEFAULT = 280;
+  const LIST_PANE_ABS_MAX = 720;
+  const EDITOR_PANE_MIN = 320;
+  let paneSplitDragging = false;
+
+  function splitLayoutActive() {
+    return !!(window.matchMedia && window.matchMedia('(min-width: 861px)').matches);
+  }
+
+  function readStoredListWidth() {
+    const n = Number(prefs.listPaneWidth);
+    if (!Number.isFinite(n)) return LIST_PANE_DEFAULT;
+    return Math.round(Math.min(LIST_PANE_ABS_MAX, Math.max(LIST_PANE_MIN, n)));
+  }
+
+  function listPaneLimits() {
+    const shell = ui.shell?.getBoundingClientRect();
+    const nav = document.querySelector('.sidebar-nav')?.getBoundingClientRect();
+    const shellWidth = shell?.width || 0;
+    const navWidth = nav?.width || 0;
+    if (!splitLayoutActive() || shellWidth < 100) {
+      return {
+        min: LIST_PANE_MIN,
+        max: LIST_PANE_ABS_MAX,
+        shellLeft: shell?.left || 0,
+        navWidth,
+      };
+    }
+    const max = Math.max(
+      LIST_PANE_MIN,
+      Math.min(LIST_PANE_ABS_MAX, Math.floor(shellWidth - navWidth - EDITOR_PANE_MIN)),
+    );
+    return { min: LIST_PANE_MIN, max, shellLeft: shell?.left || 0, navWidth };
+  }
+
+  function clampListPaneWidth(px) {
+    const limits = listPaneLimits();
+    const n = Number(px);
+    const base = Number.isFinite(n) ? n : LIST_PANE_DEFAULT;
+    return Math.round(Math.min(limits.max, Math.max(limits.min, base)));
+  }
+
+  function applyListPaneWidth(px, { persist = false } = {}) {
+    const width = clampListPaneWidth(px);
+    document.documentElement.style.setProperty('--sn-list-width', `${width}px`);
+    const splitter = document.getElementById('pane-splitter');
+    if (splitter) {
+      const limits = listPaneLimits();
+      splitter.setAttribute('aria-valuemin', String(limits.min));
+      splitter.setAttribute('aria-valuemax', String(limits.max));
+      splitter.setAttribute('aria-valuenow', String(width));
+      splitter.setAttribute('aria-valuetext', `${width} pixels`);
+    }
+    if (persist) {
+      prefs.listPaneWidth = width;
+      try { localStorage.setItem('deeperguard-prefs', localPrefsJson()); } catch (err) { /* ignore quota */ }
+    }
+    return width;
+  }
+
+  function initPaneSplitter() {
+    const splitter = document.getElementById('pane-splitter');
+    if (!splitter || splitter.dataset.splitBound === '1') {
+      applyListPaneWidth(readStoredListWidth(), { persist: false });
+      return;
+    }
+    splitter.dataset.splitBound = '1';
+    applyListPaneWidth(readStoredListWidth(), { persist: false });
+
+    const finishDrag = (event) => {
+      if (!paneSplitDragging) return;
+      paneSplitDragging = false;
+      document.body.classList.remove('pane-resizing');
+      const current = Number(splitter.getAttribute('aria-valuenow'));
+      applyListPaneWidth(current, { persist: true });
+      if (event && splitter.hasPointerCapture?.(event.pointerId)) {
+        try { splitter.releasePointerCapture(event.pointerId); } catch (err) { /* already released */ }
+      }
+    };
+
+    splitter.addEventListener('pointerdown', (event) => {
+      if (!splitLayoutActive()) return;
+      if (event.button != null && event.button !== 0) return;
+      paneSplitDragging = true;
+      document.body.classList.add('pane-resizing');
+      try { splitter.setPointerCapture(event.pointerId); } catch (err) { /* pointer already gone */ }
+      event.preventDefault();
+    });
+    splitter.addEventListener('pointermove', (event) => {
+      if (!paneSplitDragging) return;
+      const limits = listPaneLimits();
+      applyListPaneWidth(event.clientX - limits.shellLeft - limits.navWidth, { persist: false });
+    });
+    splitter.addEventListener('pointerup', finishDrag);
+    splitter.addEventListener('pointercancel', finishDrag);
+    window.addEventListener('blur', () => {
+      if (!paneSplitDragging) return;
+      finishDrag(null);
+    });
+    splitter.addEventListener('keydown', (event) => {
+      if (!splitLayoutActive()) return;
+      const current = Number(splitter.getAttribute('aria-valuenow')) || readStoredListWidth();
+      const limits = listPaneLimits();
+      const step = event.shiftKey ? 48 : 16;
+      let next = null;
+      if (event.key === 'ArrowLeft') next = current - step;
+      else if (event.key === 'ArrowRight') next = current + step;
+      else if (event.key === 'Home') next = limits.min;
+      else if (event.key === 'End') next = limits.max;
+      else return;
+      event.preventDefault();
+      applyListPaneWidth(next, { persist: true });
+    });
+
+    const syncToViewport = () => {
+      if (paneSplitDragging) return;
+      applyListPaneWidth(readStoredListWidth(), { persist: false });
+    };
+    window.addEventListener('resize', syncToViewport);
+    if (window.ResizeObserver) {
+      const observer = new ResizeObserver(syncToViewport);
+      if (ui.shell) observer.observe(ui.shell);
+      const nav = document.querySelector('.sidebar-nav');
+      if (nav) observer.observe(nav);
+    }
   }
 
   function resolvedTheme() {
@@ -4366,6 +4494,9 @@
     dismissLoginProgress();
     primeUploadPickerStartIn().catch(() => {});
     try { sessionStorage.removeItem('notes_just_registered'); } catch (err) { /* ignore */ }
+    requestAnimationFrame(() => {
+      if (!paneSplitDragging) applyListPaneWidth(readStoredListWidth(), { persist: false });
+    });
     try {
       if (history.state?.notesView !== 'editor') {
         history.replaceState({ notesView: 'list' }, '', location.href);
@@ -16241,6 +16372,7 @@
     vaultReady = true;
     initPullToSync();
     initEditorEdgeSwipeBack();
+    initPaneSplitter();
     document.getElementById('btn-network-retry')?.addEventListener('click', () => {
       probeNetwork({ syncOnRecovery: true })
         .then((ok) => {
@@ -16403,5 +16535,6 @@
   window.notesRunAllDeviceTests = runAllDeviceTests;
   window.notesClearAppCaches = clearAppCaches;
 
+  initPaneSplitter();
   boot();
 })();

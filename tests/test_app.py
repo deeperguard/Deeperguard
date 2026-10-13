@@ -5140,6 +5140,30 @@ class NotesAppTests(unittest.TestCase):
         self.assertTrue(auth.cacheable_shell("/app"))
         self.assertTrue(auth.cacheable_shell("/sw.js"))
 
+    def test_note_list_splitter_is_draggable_and_persisted(self):
+        res = self.client.get("/app")
+        self.assertEqual(res.status_code, 200)
+        html = res.get_data(as_text=True)
+        self.assertIn('id="pane-splitter"', html)
+        self.assertIn('role="separator"', html)
+        self.assertIn('aria-orientation="vertical"', html)
+        self.assertIn("listPaneWidth", html)
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        self.assertIn(".pane-splitter { display: none; }", css)
+        self.assertIn("cursor: col-resize", css)
+        self.assertIn("touch-action: none", css)
+        self.assertLess(css.index(".pane-splitter { display: none; }"), css.index("@media (min-width: 861px)"))
+        desktop = css.split("@media (min-width: 861px)", 1)[1]
+        self.assertIn(".pane-splitter {\n    display: block;", desktop)
+        self.assertIn("border-right: 0;", desktop)
+        app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("function initPaneSplitter()", app_js)
+        self.assertIn("listPaneWidth", app_js)
+        self.assertIn("setPointerCapture", app_js)
+        self.assertIn("LIST_PANE_MIN = 200", app_js)
+        self.assertIn("EDITOR_PANE_MIN = 320", app_js)
+        self.assertNotIn("'listPaneWidth'", app_js.split("GLOBAL_PREF_KEYS", 1)[1].split("];", 1)[0])
+
 
 _APP_RELOAD_MODULES = {
     "app",
