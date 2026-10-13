@@ -9100,6 +9100,10 @@
       ui.docInline.hidden = true;
       ui.docInline.innerHTML = '';
     }
+    if (ui.attachmentList) ui.attachmentList.innerHTML = '';
+    inlineNoteId = null;
+    inlineAttIds = '';
+    inlineSearch = '';
     stopInlineDocLayoutWatch();
     syncEditorMobileDocActions();
     ui.editor?.classList.remove('doc-preview-active');
@@ -9522,6 +9526,9 @@
       }
     }
     ui.body.value = gated ? '' : body;
+    // Footer comes from this note. Later attachment rendering must not be able
+    // to leave the previous note's word count on screen.
+    updateNoteMeta(note);
     resetNoteUndoStack(id);
     ui.editorType.value = note.content.editor || 'plain';
     syncNoteTypeMenuSelection();
@@ -15709,6 +15716,20 @@
     return shellPreseedInFlight;
   }
 
+  async function cachedShellBuild() {
+    if (!window.isSecureContext || typeof caches === 'undefined') return '';
+    try {
+      const shell = await caches.open('deeperguard-shell');
+      const cached = await shell.match('/app');
+      if (!cached) return '';
+      const header = cached.headers.get('X-Notes-Build');
+      if (header) return String(header);
+      return buildFromHtml(await cached.clone().text());
+    } catch (err) {
+      return '';
+    }
+  }
+
   async function persistAppShell() {
     if (!window.isSecureContext || typeof caches === 'undefined') return;
     const build = document.querySelector('meta[name="notes-build"]')?.content || '';
@@ -15722,6 +15743,10 @@
     } catch (err) {
       /* offline — cache the shell we have for unlock */
     }
+    // A background refresh may already have stored the next build. Writing this
+    // page back would pin the bundle the phone is still running.
+    const cachedBuild = await cachedShellBuild();
+    if (cachedBuild && build && cachedBuild !== build) return;
     await writeShellCache(lockedShellHtml(), {
       build,
       cacheControl: 'public, max-age=0, stale-if-error=604800',

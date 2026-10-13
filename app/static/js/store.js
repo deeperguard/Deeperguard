@@ -2983,6 +2983,19 @@ const NotesStore = (() => {
     return String(att?.content?.ocr_text || '').replace(/\s+/g, ' ').trim();
   }
 
+  // The scanned text is what search and the attachment card show. Copies of one
+  // invoice often disagree on hash, byte size, and a trailing character, so
+  // filename/size grouping never saw them as one file.
+  function attachmentOcrIdentity(att) {
+    const text = attachmentOcrBody(att)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text.length < 40) return '';
+    return text;
+  }
+
   // Hash-only grouping missed copies already in the vault: same PDF, same
   // filename and size, but a different or empty content hash on each note.
   function attachmentsAreSameStoredFile(a, b) {
@@ -3037,6 +3050,17 @@ const NotesStore = (() => {
         return;
       }
       if (attachmentsAreSameStoredFile(live[prev], att)) unite(prev, index);
+    });
+    const byOcr = new Map();
+    live.forEach((att, index) => {
+      const key = attachmentOcrIdentity(att);
+      if (!key) return;
+      const prev = byOcr.get(key);
+      if (prev == null) {
+        byOcr.set(key, index);
+        return;
+      }
+      unite(prev, index);
     });
     const groups = new Map();
     live.forEach((att, index) => {
