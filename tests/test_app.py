@@ -4758,7 +4758,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("Sharing unavailable", app_js)
         self.assertNotIn("The file was downloaded instead", app_js)
         self.assertIn("function resetNoteTransientChrome(", app_js)
-        self.assertIn("docShare.hidden = !noteShare", app_js)
+        self.assertIn("docShare.hidden = !fileShare || isDesktopLayout()", app_js)
+        self.assertIn("docDownload.hidden = fileShare && isMobileLayout()", app_js)
         self.assertIn("<textarea class=\"check-text\"", app_js)
         self.assertIn("touchUpdatedAt: false", app_js[app_js.find("function togglePreventEdit"):app_js.find("function togglePreventEdit") + 900])
         self.assertIn('id="doc-immersive-share"', html)
@@ -4769,6 +4770,18 @@ class NotesAppTests(unittest.TestCase):
         # OCR popup "Document is searchable" is disabled after upload/indexing
         run_ocr_fn = app_js[app_js.find("async function runOcrQueue()"):app_js.find("function canOcrAttachment(")]
         self.assertNotIn("offerDocumentSearch(", run_ocr_fn, "OCR queue should not offer search prompt after finishing OCR")
+
+    def test_desktop_attachment_export_prefers_download(self):
+        app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("function attachmentExportUsesDownload()", app_js)
+        self.assertIn("function exportAttachment(id)", app_js)
+        self.assertIn("return isDesktopLayout()", app_js)
+        self.assertIn("exportAttachment(attId)", app_js)
+        immersive = app_js[
+            app_js.find("document.getElementById('doc-immersive-share')?.addEventListener"):
+            app_js.find("document.getElementById('doc-backdrop')")
+        ]
+        self.assertIn("exportAttachment(previewingId)", immersive)
 
     def test_doc_immersive_toolbar_respects_safe_area(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
