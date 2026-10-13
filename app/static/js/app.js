@@ -7261,6 +7261,9 @@
 
   function refreshAllNoteSearchIndexes() {
     let updated = 0;
+    if (typeof NotesStore.repairStoredAttachmentCopies === 'function') {
+      NotesStore.repairStoredAttachmentCopies();
+    }
     NotesStore.listNotes().forEach((note) => {
       if (NotesStore.refreshNoteSearchText(note.uuid)) updated += 1;
     });

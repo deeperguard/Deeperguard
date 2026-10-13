@@ -1347,9 +1347,17 @@ const NotesStore = (() => {
     if (attachmentDecryptInFlight) await attachmentDecryptInFlight;
   }
 
+  function shadowCopyOfLiveFile(att) {
+    const id = String(att?.content?.duplicate_of || '');
+    if (!id || id === att?.uuid) return false;
+    const winner = get(id);
+    return !!(winner && !winner.deleted && winner.content?.type === 'attachment');
+  }
+
   async function runUnlockMaintenance() {
     await migratePlainAttachments();
     await migrateLegacyBlobs();
+    repairStoredAttachmentCopies();
     rebuildSearchIndex();
   }
 
@@ -2390,7 +2398,10 @@ const NotesStore = (() => {
         : (lastData.server_time || cursorSince || Date.now() / 1000);
       await rememberLastSync(next);
     }
-    if (deferSearchIndex && anyItems) rebuildSearchIndex();
+    if (deferSearchIndex && anyItems) {
+      repairStoredAttachmentCopies();
+      rebuildSearchIndex();
+    }
     return {
       ...lastData,
       decryptSkipped,
@@ -2958,27 +2969,121 @@ const NotesStore = (() => {
     return ranked[0]?.uuid || null;
   }
 
-  // Same PDF bytes imported onto many notes left a visible copy on each one.
-  // Per-note listing keeps the canonical owner and hides the extra rows.
-  // The global list (no note id) still returns every row so nothing is deleted.
-  function shadowDuplicateIds(all) {
-    const byHash = new Map();
-    for (const att of all) {
-      const hash = String(att.content?.content_sha256 || '');
-      if (!hash || !attachmentParentIsLiveNote(att)) continue;
-      const list = byHash.get(hash) || [];
-      list.push(att);
-      byHash.set(hash, list);
+  function attachmentBasename(att) {
+    const name = att?.content?.filename || att?.content?.original_filename || '';
+    return String(name).split(/[/\\]/).pop().trim().toLowerCase();
+  }
+
+  function attachmentByteSize(att) {
+    const size = Number(att?.content?.size);
+    return Number.isFinite(size) && size > 0 ? size : 0;
+  }
+
+  function attachmentOcrBody(att) {
+    return String(att?.content?.ocr_text || '').replace(/\s+/g, ' ').trim();
+  }
+
+  // Hash-only grouping missed copies already in the vault: same PDF, same
+  // filename and size, but a different or empty content hash on each note.
+  function attachmentsAreSameStoredFile(a, b) {
+    const ah = String(a?.content?.content_sha256 || '');
+    const bh = String(b?.content?.content_sha256 || '');
+    if (ah && bh && ah === bh) return true;
+    const nameA = attachmentBasename(a);
+    const nameB = attachmentBasename(b);
+    const sizeA = attachmentByteSize(a);
+    const sizeB = attachmentByteSize(b);
+    if (!nameA || nameA !== nameB || !sizeA || sizeA !== sizeB) return false;
+    if (ah && bh && ah !== bh) {
+      const ocrA = attachmentOcrBody(a);
+      const ocrB = attachmentOcrBody(b);
+      if (ocrA && ocrB && ocrA !== ocrB) return false;
     }
-    const hidden = new Set();
-    for (const peers of byHash.values()) {
+    return true;
+  }
+
+  function shadowDuplicatePlan(all) {
+    const live = all.filter((att) => attachmentParentIsLiveNote(att));
+    const parent = live.map((_, index) => index);
+    function find(index) {
+      let at = index;
+      while (parent[at] !== at) {
+        parent[at] = parent[parent[at]];
+        at = parent[at];
+      }
+      return at;
+    }
+    function unite(left, right) {
+      const a = find(left);
+      const b = find(right);
+      if (a !== b) parent[b] = a;
+    }
+    const byHash = new Map();
+    const byFile = new Map();
+    live.forEach((att, index) => {
+      const hash = String(att.content?.content_sha256 || '');
+      if (hash) {
+        const prev = byHash.get(hash);
+        if (prev == null) byHash.set(hash, index);
+        else unite(prev, index);
+      }
+      const name = attachmentBasename(att);
+      const size = attachmentByteSize(att);
+      if (!name || !size) return;
+      const key = `${name}\0${size}`;
+      const prev = byFile.get(key);
+      if (prev == null) {
+        byFile.set(key, index);
+        return;
+      }
+      if (attachmentsAreSameStoredFile(live[prev], att)) unite(prev, index);
+    });
+    const groups = new Map();
+    live.forEach((att, index) => {
+      const root = find(index);
+      const list = groups.get(root) || [];
+      list.push(att);
+      groups.set(root, list);
+    });
+    const losers = new Map();
+    for (const peers of groups.values()) {
       if (peers.length < 2) continue;
       const winner = canonicalAttachmentId(peers);
+      if (!winner) continue;
       for (const peer of peers) {
-        if (peer.uuid !== winner) hidden.add(peer.uuid);
+        if (peer.uuid !== winner) losers.set(peer.uuid, winner);
       }
     }
-    return hidden;
+    return losers;
+  }
+
+  // Per-note listing keeps the canonical owner. The global list still returns
+  // every row, including the extra copies, so nothing is deleted.
+  function shadowDuplicateIds(all) {
+    return new Set(shadowDuplicatePlan(all).keys());
+  }
+
+  function repairStoredAttachmentCopies() {
+    const losers = shadowDuplicatePlan(listAttachments());
+    if (!losers.size) return 0;
+    const notes = new Set();
+    for (const [loserId, winnerId] of losers) {
+      const att = get(loserId);
+      if (!att || att.deleted || att.content?.type !== 'attachment') continue;
+      if (att.content.note_id) notes.add(att.content.note_id);
+      if (att.content.duplicate_of === winnerId) continue;
+      upsert(loserId, { ...att.content, duplicate_of: winnerId }, {
+        touchUpdatedAt: false,
+        skipDirty: true,
+      });
+    }
+    for (const note of listNotes()) {
+      const ids = note.content?.attachments;
+      if (!Array.isArray(ids)) continue;
+      if (ids.some((id) => losers.has(id))) notes.add(note.uuid);
+    }
+    for (const noteId of notes) refreshNoteSearchText(noteId);
+    return losers.size;
   }
 
   function listAttachments(noteId) {
@@ -2986,7 +3091,7 @@ const NotesStore = (() => {
       (i) => i.content?.type === 'attachment' && !i.deleted,
     );
     if (noteId == null) return all;
-    const mine = all.filter((i) => i.content?.note_id === noteId);
+    const mine = all.filter((i) => i.content?.note_id === noteId && !shadowCopyOfLiveFile(i));
     if (mine.length < 1) return mine;
     const hidden = shadowDuplicateIds(all);
     if (!hidden.size) return mine;
@@ -4322,6 +4427,7 @@ const NotesStore = (() => {
     searchIndexCovers,
     applySearchIndexEntry,
     refreshNoteSearchText,
+    repairStoredAttachmentCopies,
     restoreRevision,
     remove,
     importBackup,
