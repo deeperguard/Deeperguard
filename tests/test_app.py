@@ -4115,6 +4115,16 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(enabled.status_code, 200)
         self.assertTrue(notes_db.get_user_by_id(uid)["totp_enabled"])
 
+    def test_totp_disable_client_validates_code_before_api(self):
+        app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
+        self.assertIn("btn-confirm-disable-totp", app_js)
+        self.assertIn("6-digit authenticator code to disable 2FA", app_js)
+        self.assertIn("accountTotpCodeDigits", app_js)
+        self.assertIn("Current authenticator code (required)", html)
+        self.assertNotIn("/api/totp/disable", (APP_DIR / "static" / "js" / "auth-pages.js").read_text(encoding="utf-8"))
+        self.assertNotIn("/api/totp/setup", (APP_DIR / "static" / "js" / "totp-page.js").read_text(encoding="utf-8"))
+
     def test_totp_disable_requires_current_code_when_enabled(self):
         from unittest.mock import patch
 

@@ -1262,8 +1262,8 @@
               <input id="totp-disable-password" type="password" autocomplete="current-password">
             </label>
             <p id="totp-disable-srp-hint" class="settings-hint" hidden>Signed in with zero-knowledge login — only your authenticator code is required.</p>
-            <label>Authenticator code
-              <input id="totp-disable-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+            <label>Current authenticator code (required)
+              <input id="totp-disable-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required>
             </label>
             <button type="button" id="btn-confirm-disable-totp" class="btn danger">Confirm disable 2FA</button>
           </div>
