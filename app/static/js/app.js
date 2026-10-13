@@ -7069,6 +7069,14 @@
   }
 
   function renderAttachments(noteId) {
+    if (noteId == null || noteId === '') {
+      if (ui.attachmentList) ui.attachmentList.innerHTML = '';
+      if (ui.docInline) {
+        ui.docInline.hidden = true;
+        ui.docInline.innerHTML = '';
+      }
+      return;
+    }
     const note = NotesStore.get(noteId);
     const gated = !!note?.content?.locked && !unlockedNotes.has(noteId);
     if (gated) {
@@ -7080,7 +7088,7 @@
       }
       return;
     }
-    const items = NotesStore.listAttachments(noteId);
+    const items = NotesStore.listAttachments(noteId).filter((a) => a.content?.note_id === noteId);
     const attLabel = document.querySelector('.attachments .section-label');
     if (attLabel) {
       if (items.length > 1) {
@@ -7089,9 +7097,9 @@
         attLabel.textContent = 'Attachments';
       }
     }
-    const pending = (note?.content?.sn_pending_files || []).filter((item) => {
-      return !(note.content.attachments || []).includes(item.uuid);
-    });
+    const ownedIds = Array.isArray(note?.content?.attachments) ? note.content.attachments : [];
+    const pendingFiles = Array.isArray(note?.content?.sn_pending_files) ? note.content.sn_pending_files : [];
+    const pending = pendingFiles.filter((item) => !ownedIds.includes(item.uuid));
     const pendingHtml = pending.map((item) => {
       const sizeKb = item.size ? ` · ${Math.round(item.size / 1024)} KB` : '';
       return `<div class="attachment-item is-pending" data-pending-file="${escapeAttr(item.uuid)}">
@@ -7163,7 +7171,8 @@
         NotesStore.remove(btn.dataset.rm);
         const note = NotesStore.get(noteId);
         if (note) {
-          note.content.attachments = (note.content.attachments || []).filter((id) => id !== btn.dataset.rm);
+          const ids = Array.isArray(note.content.attachments) ? note.content.attachments : [];
+          note.content.attachments = ids.filter((id) => id !== btn.dataset.rm);
           NotesStore.upsert(noteId, { ...note.content });
         }
         NotesStore.refreshNoteSearchText(noteId);
