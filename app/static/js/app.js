@@ -14940,6 +14940,10 @@
     requestSignOut().catch((err) => toast(err.message || 'Could not sign out', true));
   });
 
+  function accountTotpCodeDigits(raw) {
+    return String(raw || '').replace(/\D/g, '').slice(0, 6);
+  }
+
   document.getElementById('btn-setup-totp').addEventListener('click', async () => {
     try {
       const data = await NotesStore.api('/api/totp/setup', { method: 'POST', body: '{}' });
@@ -14965,6 +14969,9 @@
   document.getElementById('btn-disable-totp').addEventListener('click', () => {
     const box = document.getElementById('totp-disable');
     box.hidden = !box.hidden;
+    if (!box.hidden) {
+      document.getElementById('totp-disable-code')?.focus();
+    }
   });
   document.getElementById('btn-add-passkey')?.addEventListener('click', async () => {
     const passkeyWrap = document.getElementById('passkey-settings');
@@ -14984,7 +14991,13 @@
   });
   document.getElementById('btn-confirm-disable-totp').addEventListener('click', async () => {
     const password = document.getElementById('totp-disable-password').value;
-    const code = document.getElementById('totp-disable-code').value;
+    const codeEl = document.getElementById('totp-disable-code');
+    const code = accountTotpCodeDigits(codeEl?.value);
+    if (code.length !== 6) {
+      toast('Enter your current 6-digit authenticator code to disable 2FA.', true);
+      codeEl?.focus();
+      return;
+    }
     const body = { code };
     if (password) body.password = password;
     try {
