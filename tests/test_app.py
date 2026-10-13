@@ -1666,6 +1666,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_client_attachment_search_isolation(self):
         self._run_node_script("test_attachment_search_isolation.js")
+        self._run_node_script("test_attachment_render_owner.js")
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
         render_fn = app_js[app_js.find("function renderAttachments"):app_js.find("function ocrSnippet")]
         self.assertIn("if (noteId == null || noteId === '')", render_fn)
