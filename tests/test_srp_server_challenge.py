@@ -333,6 +333,22 @@ class SrpServerChallengeTests(unittest.TestCase):
         verify = self._srp_verify_with_b(email, password, salt_hex, b_hex)
         self.assertEqual(verify.status_code, 200, verify.get_json())
 
+    def test_login_challenge_fails_after_verifier_rotation(self):
+        import db as notes_db
+
+        email = "rotated-login@home.local"
+        password = "rotated-login-pass"
+        self.assertEqual(self._register(email, password).status_code, 200)
+        challenge = self.client.post("/api/auth/srp/challenge", json={"email": email})
+        self.assertEqual(challenge.status_code, 200)
+        salt_hex, _ = self._srp_verifier(email, password)
+        b_hex = str(challenge.get_json()["B"]).lower()
+        user = notes_db.get_user_by_email(email)
+        new_salt, new_verifier = self._srp_verifier(email, "new-password-after-rotation")
+        notes_db.update_user_srp_verifier(int(user["id"]), new_salt, new_verifier)
+        verify = self._srp_verify_with_b(email, password, salt_hex, b_hex)
+        self.assertEqual(verify.status_code, 401)
+
 
 if __name__ == "__main__":
     unittest.main()

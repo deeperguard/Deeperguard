@@ -4042,6 +4042,106 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(setup.status_code, 200)
         self.assertIn("secret", setup.get_json())
 
+    def test_totp_setup_blocked_when_enabled_without_code(self):
+        from unittest.mock import patch
+
+        import db as notes_db
+
+        self._register_user("2fa-lock@home.local", "another-secure-pass")
+        csrf = self._csrf()
+        self.client.post("/api/totp/setup", headers={"X-CSRF-Token": csrf})
+        with patch("app.totp_mod.verify", return_value=True):
+            self.client.post(
+                "/api/totp/enable",
+                json={"code": "123456"},
+                headers={"X-CSRF-Token": csrf},
+            )
+        uid = notes_db.get_user_by_email("2fa-lock@home.local")["id"]
+        before = notes_db.get_user_by_id(uid)
+        self.assertTrue(before["totp_enabled"])
+        active_secret = str(before["totp_secret"])
+
+        csrf = self._csrf()
+        blocked = self.client.post("/api/totp/setup", headers={"X-CSRF-Token": csrf})
+        self.assertEqual(blocked.status_code, 403)
+        self.assertIn("code required", blocked.get_json().get("error", ""))
+
+        after = notes_db.get_user_by_id(uid)
+        self.assertTrue(after["totp_enabled"])
+        self.assertEqual(str(after["totp_secret"]), active_secret)
+
+    def test_totp_reenroll_requires_and_accepts_current_code(self):
+        from unittest.mock import patch
+
+        import db as notes_db
+
+        self._register_user("2fa-rotate@home.local", "another-secure-pass")
+        csrf = self._csrf()
+        self.client.post("/api/totp/setup", headers={"X-CSRF-Token": csrf})
+        with patch("app.totp_mod.verify", return_value=True):
+            self.client.post(
+                "/api/totp/enable",
+                json={"code": "123456"},
+                headers={"X-CSRF-Token": csrf},
+            )
+        uid = notes_db.get_user_by_email("2fa-rotate@home.local")["id"]
+        csrf = self._csrf()
+        with patch("app.totp_mod.verify", return_value=False):
+            denied = self.client.post(
+                "/api/totp/setup",
+                json={"code": "000000"},
+                headers={"X-CSRF-Token": csrf},
+            )
+        with patch("app.totp_mod.verify", side_effect=lambda secret, code: code == "654321"):
+            allowed = self.client.post(
+                "/api/totp/setup",
+                json={"code": "654321"},
+                headers={"X-CSRF-Token": csrf},
+            )
+        self.assertEqual(denied.status_code, 400)
+        self.assertEqual(allowed.status_code, 200)
+        new_secret = allowed.get_json().get("secret")
+        self.assertTrue(new_secret)
+        user = notes_db.get_user_by_id(uid)
+        self.assertFalse(user["totp_enabled"])
+        self.assertEqual(str(user["totp_secret"]), new_secret)
+        csrf = self._csrf()
+        with patch("app.totp_mod.verify", return_value=True):
+            enabled = self.client.post(
+                "/api/totp/enable",
+                json={"code": "111111"},
+                headers={"X-CSRF-Token": csrf},
+            )
+        self.assertEqual(enabled.status_code, 200)
+        self.assertTrue(notes_db.get_user_by_id(uid)["totp_enabled"])
+
+    def test_totp_disable_requires_current_code_when_enabled(self):
+        from unittest.mock import patch
+
+        self._register_user("2fa-off@home.local", "another-secure-pass")
+        csrf = self._csrf()
+        self.client.post("/api/totp/setup", headers={"X-CSRF-Token": csrf})
+        with patch("app.totp_mod.verify", return_value=True):
+            self.client.post(
+                "/api/totp/enable",
+                json={"code": "123456"},
+                headers={"X-CSRF-Token": csrf},
+            )
+        csrf = self._csrf()
+        missing = self.client.post(
+            "/api/totp/disable",
+            json={},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(missing.status_code, 403)
+        with patch("app.totp_mod.verify", return_value=False):
+            bad = self.client.post(
+                "/api/totp/disable",
+                json={"code": "000000"},
+                headers={"X-CSRF-Token": csrf},
+            )
+        self.assertEqual(bad.status_code, 400)
+
     def test_pcloud_settings_and_sync(self):
         from unittest.mock import patch
 

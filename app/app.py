@@ -795,7 +795,12 @@ def api_auth_srp_challenge():
     try:
         sess = SrpServerSession()
         b_hex = sess.step1(email, str(user["srp_salt"]), str(user["srp_verifier"]))
-        auth.store_srp_state(email, sess.to_private_state())
+        auth.store_srp_state(
+            email,
+            sess.to_private_state(),
+            str(user["srp_salt"]),
+            str(user["srp_verifier"]),
+        )
     except ValueError:
         return jsonify({"error": "invalid credentials"}), 401
     return jsonify({"srp_salt": str(user["srp_salt"]), "B": b_hex})
@@ -814,7 +819,7 @@ def api_auth_srp_verify():
     user = db.get_user_by_email(email)
     if not user or not db.user_has_srp(user):
         return jsonify({"error": "invalid credentials"}), 401
-    state = auth.pop_srp_state(email)
+    state = auth.pop_srp_state(email, str(user["srp_salt"]), str(user["srp_verifier"]))
     if not state:
         return jsonify({"error": "login expired — try again"}), 401
     try:
@@ -1505,6 +1510,13 @@ def api_totp_setup():
     blocked = _plan_block(user, "account_2fa")
     if blocked:
         return blocked
+    body = request.get_json(silent=True) or {}
+    code = str(body.get("code") or "")
+    if user["totp_enabled"]:
+        if not code:
+            return jsonify({"error": "current 2FA code required"}), 403
+        if not totp_mod.verify(str(user["totp_secret"]), code):
+            return jsonify({"error": "invalid code"}), 400
     secret = totp_mod.new_secret()
     db.update_user_totp(uid, secret, enabled=False)
     return jsonify(
@@ -1546,8 +1558,11 @@ def api_totp_disable():
     if db.user_auth_method(user) != "srp":
         if not verify_password(user["password_hash"], password):
             return jsonify({"error": "invalid password"}), 401
-    if user["totp_enabled"] and not totp_mod.verify(str(user["totp_secret"]), code):
-        return jsonify({"error": "invalid code"}), 400
+    if user["totp_enabled"]:
+        if not code:
+            return jsonify({"error": "current 2FA code required"}), 403
+        if not totp_mod.verify(str(user["totp_secret"]), code):
+            return jsonify({"error": "invalid code"}), 400
     db.update_user_totp(uid, "", enabled=False)
     auth.login_user(uid, totp_ok=True)
     return jsonify({"ok": True})

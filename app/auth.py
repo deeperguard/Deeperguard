@@ -524,7 +524,7 @@ def _user_id_for_email(email: str) -> int | None:
     return int(user["id"])
 
 
-def store_srp_state(email: str, state: dict) -> None:
+def store_srp_state(email: str, state: dict, srp_salt: str, srp_verifier: str) -> None:
     uid = _user_id_for_email(email)
     if uid is None:
         return
@@ -534,11 +534,13 @@ def store_srp_state(email: str, state: dict) -> None:
         user_id=uid,
         email=email,
         state=state,
+        srp_salt=srp_salt,
+        srp_verifier=srp_verifier,
     )
     session[SESSION_SRP_LOGIN_CHALLENGE] = challenge_id
 
 
-def pop_srp_state(email: str) -> dict | None:
+def pop_srp_state(email: str, srp_salt: str, srp_verifier: str) -> dict | None:
     if session.get(SESSION_SRP) or session.get(SESSION_SRP_CRED):
         _clear_legacy_srp_session_keys()
         return None
@@ -553,6 +555,8 @@ def pop_srp_state(email: str) -> dict | None:
         purpose=SRP_PURPOSE_LOGIN,
         email=email,
         user_id=uid,
+        srp_salt=srp_salt,
+        srp_verifier=srp_verifier,
     )
 
 
