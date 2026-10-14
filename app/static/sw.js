@@ -82,6 +82,7 @@ self.addEventListener('activate', (event) => {
           /* keep going */
         }
       }
+      await purgeCachedCryptoWorker();
       await self.clients.claim();
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       await Promise.all(windows.map((client) => {
@@ -262,6 +263,46 @@ function isVersioned(url) {
   return url.searchParams.has('v');
 }
 
+function isCryptoWorker(url) {
+  return url.pathname.endsWith('/crypto-worker.js');
+}
+
+async function purgeCachedCryptoWorker() {
+  for (const name of [CACHE, SHELL]) {
+    try {
+      const cache = await caches.open(name);
+      const stored = await cache.keys();
+      await Promise.all(stored.filter((req) => {
+        try {
+          return isCryptoWorker(new URL(req.url));
+        } catch (err) {
+          return false;
+        }
+      }).map((req) => cache.delete(req)));
+    } catch (err) {
+      /* keep going */
+    }
+  }
+}
+
+async function networkFirstCryptoWorker(request) {
+  // The worker derives the vault key. A cached copy is pinned by ?v= and will
+  // not update when the shell is stale, so a bad build keeps unlock failing.
+  try {
+    const fresh = await fetch(request, { credentials: 'same-origin', cache: 'reload' });
+    if (fresh && fresh.ok) {
+      const cache = await caches.open(CACHE);
+      await cache.put(request, fresh.clone());
+      return fresh;
+    }
+  } catch (err) {
+    /* offline — last good copy is still usable */
+  }
+  const cached = await matchExact(request);
+  if (cached) return cached;
+  return fetch(request);
+}
+
 async function cacheFirst(request, versioned) {
   // A ?v= asset must match its exact build. Falling back to a loose match would
   // pair freshly deployed HTML with the previous build's scripts, so every deploy
@@ -322,6 +363,10 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate' || isAppShell(url)) {
     const forceFresh = url.searchParams.get('nosync') === '1' || url.searchParams.get('hard') === '1';
     event.respondWith(forceFresh ? networkFirstNavigate(request) : cacheFirstNavigate(request));
+    return;
+  }
+  if (isCryptoWorker(url)) {
+    event.respondWith(networkFirstCryptoWorker(request));
     return;
   }
   if (url.pathname.startsWith('/static/')) {
