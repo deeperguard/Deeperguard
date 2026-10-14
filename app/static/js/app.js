@@ -7208,6 +7208,7 @@
       );
     });
     renderDocInline(noteId);
+    syncDownloadNoteButton();
   }
 
   function ocrSnippet(text, max = 48, meta = {}) {
@@ -8852,6 +8853,79 @@
     ui.docStage.replaceChildren();
   }
 
+  function setEditorMenuLabel(btn, text) {
+    if (!btn || text == null) return;
+    const label = btn.querySelector('.editor-menu-label, .share-label');
+    if (label) label.textContent = text;
+    else btn.textContent = text;
+  }
+
+  function openNoteFileAttachment(noteId) {
+    const id = noteId || currentId;
+    if (!id || typeof NotesStore === 'undefined' || typeof NotesStore.listAttachments !== 'function') return null;
+    const atts = NotesStore.listAttachments(id).filter((item) => {
+      const owner = item?.content?.note_id;
+      return !owner || owner === id;
+    });
+    if (!atts.length) return null;
+    const shown = typeof inlineDocPreviewAttId === 'function' ? inlineDocPreviewAttId() : null;
+    if (shown) {
+      const match = atts.find((item) => item.uuid === shown);
+      if (match) return match;
+    }
+    if (previewingId) {
+      const match = atts.find((item) => item.uuid === previewingId);
+      if (match) return match;
+    }
+    return atts[0];
+  }
+
+  function syncDownloadNoteButton() {
+    const btn = document.getElementById('btn-download-note');
+    if (!btn) return;
+    const note = currentId ? NotesStore.get(currentId) : null;
+    const locked = !!(note?.content?.locked && currentId && !unlockedNotes.has(currentId));
+    const file = !locked && currentId ? openNoteFileAttachment(currentId) : null;
+    const label = file ? 'Download file' : 'Download note';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    document.querySelectorAll('[data-editor-proxy="btn-download-note"]').forEach((proxy) => {
+      proxy.title = label;
+      proxy.setAttribute('aria-label', label);
+    });
+  }
+
+  function downloadNoteMarkdown(note, toastMessage = 'Note downloaded') {
+    const title = note?.content?.title || 'Untitled';
+    const blob = new Blob([`# ${title}\n\n${note?.content?.content || ''}`], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(note?.content?.title || 'note').replace(/[^\w-]+/g, '-')}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    if (toastMessage) toast(toastMessage);
+  }
+
+  async function downloadOpenNote() {
+    if (!currentId) {
+      toast('Open a note first', true);
+      return;
+    }
+    const note = NotesStore.get(currentId);
+    if (!note) return;
+    if (note.content?.locked && !unlockedNotes.has(currentId)) {
+      toast('Unlock this protected note first', true);
+      return;
+    }
+    const file = openNoteFileAttachment(currentId);
+    if (file) {
+      await downloadAttachment(file.uuid);
+      return;
+    }
+    downloadNoteMarkdown(note);
+  }
+
   async function downloadAttachment(id) {
     if (noteProtectionBlocks(id)) {
       toast('Unlock this protected note first', true);
@@ -8974,28 +9048,31 @@
     const noteShare = deviceCanShare();
     const fileShare = attachmentCanWebShare();
     const noteLabel = noteShare ? 'Share' : 'Copy';
-    const docToolbar = mobileDocToolbarActive();
-    const toolbarUsesAttachment = docToolbar && isDesktopLayout();
-    const toolbarLabel = toolbarUsesAttachment ? (fileShare ? 'Share' : 'Download') : noteLabel;
-    const toolbarTitle = toolbarUsesAttachment
-      ? (fileShare ? 'Share attachment' : 'Download attachment')
-      : (noteShare ? 'Share note' : 'Copy note');
+    const noteTitle = noteShare ? 'Share note' : 'Copy note';
     ['btn-share', 'note-info-share', 'note-info-share-bottom'].forEach((id) => {
       const btn = document.getElementById(id);
       if (!btn) return;
       if (id === 'btn-share') {
-        btn.title = toolbarTitle;
-        btn.setAttribute('aria-label', toolbarTitle);
+        btn.title = noteTitle;
+        btn.setAttribute('aria-label', noteTitle);
         return;
       }
-      btn.title = noteShare ? 'Share note' : 'Copy note';
-      btn.setAttribute('aria-label', noteShare ? 'Share note' : 'Copy note');
+      btn.title = noteTitle;
+      btn.setAttribute('aria-label', noteTitle);
       btn.textContent = id === 'note-info-share-bottom' ? `${noteLabel} note` : noteLabel;
     });
     const shareBtn = document.getElementById('btn-share');
     if (shareBtn) {
       const label = shareBtn.querySelector('.share-label');
-      if (label) label.textContent = toolbarLabel;
+      if (label) label.textContent = noteLabel;
+    }
+    const fileShareBtn = document.getElementById('btn-mobile-doc-attachment-share');
+    if (fileShareBtn && !isPhoneShell()) {
+      const showFileShare = fileShare && mobileDocToolbarActive();
+      fileShareBtn.hidden = !showFileShare;
+      fileShareBtn.title = 'Share file';
+      fileShareBtn.setAttribute('aria-label', 'Share file');
+      setEditorMenuLabel(fileShareBtn, 'Share file');
     }
     const docShare = document.getElementById('doc-share');
     if (docShare) {
@@ -9186,8 +9263,8 @@
         ui.checklist.innerHTML = '';
       }
       if (ui.docInline) ui.docInline.hidden = false;
-      if (previewBtn) previewBtn.textContent = 'Edit';
-      if (ocrBtn) ocrBtn.textContent = 'OCR text';
+      if (previewBtn) setEditorMenuLabel(previewBtn, 'Edit');
+      if (ocrBtn) setEditorMenuLabel(ocrBtn, 'OCR text');
       previewOn = false;
       if (!vaultPullActive) renderDocInline(currentId);
       syncEditorBodyWrap();
@@ -9212,8 +9289,8 @@
         ? NotesMarkdown.render(text)
         : '<p class="muted">OCR is still running, or no text was found. Stay on the document preview in the meantime.</p>';
       highlightPreview();
-      if (previewBtn) previewBtn.textContent = 'Document';
-      if (ocrBtn) ocrBtn.textContent = 'Edit';
+      if (previewBtn) setEditorMenuLabel(previewBtn, 'Document');
+      if (ocrBtn) setEditorMenuLabel(ocrBtn, 'Edit');
       previewOn = false;
       syncEditorBodyWrap();
       syncEditorDocPreviewLayout();
@@ -9248,11 +9325,11 @@
     }
     if (previewBtn) {
       previewBtn.hidden = checklistOn || !hasDocs;
-      if (hasDocs && editorMode === 'edit') previewBtn.textContent = 'Document';
-      else if (hasDocs) previewBtn.textContent = 'Edit';
+      if (hasDocs && editorMode === 'edit') setEditorMenuLabel(previewBtn, 'Document');
+      else if (hasDocs) setEditorMenuLabel(previewBtn, 'Edit');
       previewBtn.disabled = false;
     }
-    if (ocrBtn) ocrBtn.textContent = 'OCR text';
+    if (ocrBtn) setEditorMenuLabel(ocrBtn, 'OCR text');
     if (checklistOn) renderChecklist(note);
     if (docSearchActive()) {
       ui.docInline.hidden = false;
@@ -9436,7 +9513,7 @@
     if (tagShell) tagShell.hidden = !!gated;
     if (ui.editorType) ui.editorType.hidden = !!gated;
     document.getElementById('btn-note-type-menu')?.toggleAttribute('hidden', !!gated);
-    ['btn-share', 'btn-note-info', 'btn-trash', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
+    ['btn-share', 'btn-note-info', 'btn-trash', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate', 'btn-download-note'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.hidden = !!gated;
     });
@@ -9688,6 +9765,7 @@
     if (pinBtn) {
       pinBtn.title = note.content.pinned ? 'Unpin' : 'Pin';
       pinBtn.setAttribute('aria-label', pinBtn.title);
+      setEditorMenuLabel(pinBtn, pinBtn.title);
       pinBtn.classList.toggle('active', !!note.content.pinned);
       const open = pinBtn.querySelector('.icon-pin-outline');
       const closed = pinBtn.querySelector('.icon-pin-filled');
@@ -9701,6 +9779,7 @@
     if (starBtn) {
       starBtn.title = note.content.starred ? 'Unstar' : 'Star';
       starBtn.setAttribute('aria-label', starBtn.title);
+      setEditorMenuLabel(starBtn, starBtn.title);
       starBtn.classList.toggle('active', !!note.content.starred);
       const open = starBtn.querySelector('.icon-star-outline');
       const closed = starBtn.querySelector('.icon-star-filled');
@@ -9715,6 +9794,7 @@
     if (archiveBtn) {
       archiveBtn.title = note.content.archived ? 'Unarchive' : 'Archive';
       archiveBtn.setAttribute('aria-label', archiveBtn.title);
+      setEditorMenuLabel(archiveBtn, archiveBtn.title);
       archiveBtn.classList.toggle('active', !!note.content.archived);
     }
     const preventBtn = document.getElementById('btn-prevent-edit');
@@ -9733,6 +9813,7 @@
     if (trashBtn) {
       trashBtn.title = note.content.trashed ? 'Restore' : 'Trash';
       trashBtn.setAttribute('aria-label', trashBtn.title);
+      setEditorMenuLabel(trashBtn, trashBtn.title);
       const trashIcon = trashBtn.querySelector('.icon-trash');
       const restoreIcon = trashBtn.querySelector('.icon-restore');
       if (trashIcon && restoreIcon) {
@@ -9747,13 +9828,14 @@
     syncEditorMobileDocActions();
     syncEditorMobileProxies();
     if (note && note.content?.locked && !unlockedNotes.has(note.uuid)) {
-      ['btn-share', 'btn-note-info', 'btn-note-type-menu', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate'].forEach((id) => {
+      ['btn-share', 'btn-note-info', 'btn-note-type-menu', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate', 'btn-download-note'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.hidden = true;
       });
     }
     syncUndoButtons();
     syncNoteInfoActions(note);
+    syncDownloadNoteButton();
   }
 
   function syncNoteInfoActions(note) {
@@ -13818,6 +13900,10 @@
       toggleEditorToolbarMenu();
     });
   });
+  document.querySelector('.editor-toolbar-menu-panel')?.addEventListener('click', (event) => {
+    if (!event.target.closest('.editor-toolbar-menu-item')) return;
+    closeEditorToolbarMenu();
+  });
   document.getElementById('editor-toolbar-menu-backdrop')?.addEventListener('click', () => closeEditorToolbarMenu());
   document.addEventListener('click', (event) => {
     if (!document.body.classList.contains('editor-toolbar-menu-open')) return;
@@ -14143,14 +14229,10 @@
   }, true);
 
   document.getElementById('btn-share')?.addEventListener('click', () => {
-    if (mobileDocToolbarActive() && isDesktopLayout()) {
-      const attId = inlineDocPreviewAttId();
-      if (attId) {
-        shareAttachment(attId).catch((err) => toast(err.message || 'Share failed', true));
-        return;
-      }
-    }
     shareNote(currentId).catch((err) => toast(err.message || 'Share failed', true));
+  });
+  document.getElementById('btn-download-note')?.addEventListener('click', () => {
+    downloadOpenNote().catch((err) => toast(err.message || 'Download failed', true));
   });
   document.getElementById('btn-desktop-doc-fullscreen')?.addEventListener('click', (event) => {
     event.preventDefault();
@@ -15079,16 +15161,8 @@
       return;
     }
     const note = NotesStore.get(currentId);
-    const blob = new Blob([`# ${note.content.title || 'Untitled'}\n\n${note.content.content || ''}`], {
-      type: 'text/markdown',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(note.content.title || 'note').replace(/[^\w-]+/g, '-')}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast('Note exported');
+    if (!note) return;
+    downloadNoteMarkdown(note, 'Note exported');
   });
 
   document.getElementById('btn-logout')?.addEventListener('click', () => {
