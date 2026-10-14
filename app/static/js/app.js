@@ -186,6 +186,11 @@
       /* ignore quota */
     }
   }
+  // Tags start collapsed on every launch. A saved expanded preference must not reopen them.
+  prefs.tagsCollapsed = true;
+  if (savedPrefs.tagsCollapsed === false) {
+    try { localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs)); } catch (e) { /* ignore quota */ }
+  }
   if (!prefs.searchFilters || typeof prefs.searchFilters !== 'object') {
     prefs.searchFilters = {
       titlesOnly: false,

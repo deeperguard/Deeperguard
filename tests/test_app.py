@@ -1595,6 +1595,21 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(".sn-tags { display: block; }", desktop)
         self.assertIn(".sn-folders { display: none; }", desktop)
 
+    def test_tags_start_collapsed_every_launch(self):
+        html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
+        js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('<details class="tag-section" id="tag-section">', html)
+        self.assertNotIn('<details class="tag-section" id="tag-section" open>', html)
+        self.assertIn('<details class="tag-section folder-section" id="folder-section" open>', html)
+        boot = js[js.index("Object.assign(prefs, savedPrefs)"):js.index("const GLOBAL_PREF_KEYS")]
+        every = boot.index("Tags start collapsed on every launch")
+        self.assertGreater(every, boot.index("listChromeDense"))
+        force = boot[every:every + 320]
+        self.assertIn("prefs.tagsCollapsed = true", force)
+        self.assertIn("savedPrefs.tagsCollapsed === false", force)
+        self.assertNotIn("listChromeDense", force)
+        self.assertIn("section.open = !prefs.tagsCollapsed", js)
+
     def test_views_section_collapses_and_tags_label(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
