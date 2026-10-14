@@ -4290,24 +4290,46 @@ const NotesStore = (() => {
     return searchIndexRecord()?.content?.entries || {};
   }
 
+  // How long a removed attachment keeps a tombstone in the shared index so a
+  // device that still has the old entry cannot bring it back on merge. Both
+  // sides drop expired tombstones while merging, so a prune never ping-pongs.
+  const SEARCH_TOMBSTONE_MS = 90 * 24 * 60 * 60 * 1000;
+
+  function searchEntryRemoved(entry) {
+    return !!entry && entry.method === 'removed';
+  }
+
+  function searchEntryExpired(entry, now = Date.now()) {
+    if (!searchEntryRemoved(entry)) return false;
+    const at = Date.parse(entry.removed_at || '') || 0;
+    return !at || now - at > SEARCH_TOMBSTONE_MS;
+  }
+
   function searchIndexCovers(attId) {
     const entry = searchIndexEntries()[attId];
-    if (!entry) return false;
+    if (!entry || searchEntryRemoved(entry)) return false;
     const method = entry.method || '';
     if (!method || method === 'pending' || method === 'failed') return false;
     if (method === 'none' || method === 'text') return true;
     return !!String(entry.text || '').trim();
   }
 
-  function mergeSearchEntries(localEntries, remoteEntries) {
-    const out = { ...(remoteEntries || {}) };
-    for (const [id, local] of Object.entries(localEntries || {})) {
-      const remote = out[id];
-      if (!remote) {
-        out[id] = local;
-        continue;
+  function mergeSearchEntries(localEntries, remoteEntries, now = Date.now()) {
+    const out = {};
+    const ids = new Set([...Object.keys(remoteEntries || {}), ...Object.keys(localEntries || {})]);
+    for (const id of ids) {
+      const remote = remoteEntries?.[id];
+      const local = localEntries?.[id];
+      let chosen;
+      if (!remote || !local) chosen = remote || local;
+      else if (searchEntryRemoved(remote) || searchEntryRemoved(local)) {
+        // A removal on either side wins: attachment ids are never reused.
+        chosen = searchEntryRemoved(remote) ? remote : local;
+      } else {
+        chosen = String(local.text || '').length > String(remote.text || '').length ? local : remote;
       }
-      if (String(local.text || '').length > String(remote.text || '').length) out[id] = local;
+      if (!chosen || searchEntryExpired(chosen, now)) continue;
+      out[id] = chosen;
     }
     return out;
   }
@@ -4356,8 +4378,10 @@ const NotesStore = (() => {
 
   function dropSearchIndexEntry(attId) {
     const entries = { ...searchIndexEntries() };
-    if (!entries[attId]) return;
-    delete entries[attId];
+    if (searchEntryRemoved(entries[attId])) return;
+    // Deleting the key is not enough: the next merge with a device that still
+    // holds the entry would resurrect it. Leave a tombstone instead.
+    entries[attId] = { method: 'removed', removed_at: new Date().toISOString() };
     writeSearchIndex(entries);
   }
 
@@ -4381,7 +4405,9 @@ const NotesStore = (() => {
 
   function applySearchIndexEntries() {
     let applied = 0;
-    for (const id of Object.keys(searchIndexEntries())) {
+    const entries = searchIndexEntries();
+    for (const id of Object.keys(entries)) {
+      if (searchEntryRemoved(entries[id])) continue;
       if (applySearchIndexEntry(id)) applied += 1;
     }
     return applied;
@@ -4392,6 +4418,7 @@ const NotesStore = (() => {
     let changed = false;
     for (const att of listAttachments()) {
       if (entries[att.uuid]) continue;
+      if (att.deleted) continue;
       const method = att.content?.ocr_method || '';
       if (!method || method === 'pending' || method === 'failed') continue;
       if (method !== 'none' && method !== 'text' && !String(att.content.ocr_text || '').trim()) continue;
@@ -4433,6 +4460,14 @@ const NotesStore = (() => {
     if (!item) return false;
     if (!force && item.content?.type === 'note' && (item.content.locked || item.content.prevent_edit)) {
       return false;
+    }
+    if (item.content?.type === 'note') {
+      // A note's files go with it; otherwise they stay on the server (and
+      // count against the quota) with nothing pointing at them.
+      for (const att of [...attachmentsForNote(uuid)]) {
+        if (att.deleted || att.uuid === uuid) continue;
+        remove(att.uuid, { force: true });
+      }
     }
     if (item.content?.type === 'attachment') dropSearchIndexEntry(uuid);
     item.deleted = true;
@@ -5172,6 +5207,7 @@ const NotesStore = (() => {
     SEARCH_INDEX_UUID,
     searchIndexCovers,
     applySearchIndexEntry,
+    mergeSearchEntries,
     refreshNoteSearchText,
     repairStoredAttachmentCopies,
     restoreRevision,
