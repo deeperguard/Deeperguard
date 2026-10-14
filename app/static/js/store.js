@@ -49,11 +49,38 @@ const NotesStore = (() => {
     }
   }
 
+  // Which scanned PDF owns which text. Rebuilt once per vault change — a note
+  // row must not scan every copy, or a vault of OCR never paints the list.
+  let shadowDuplicateCache = null;
+  let shadowDuplicateIdCache = null;
+
+  function invalidateShadowDuplicates() {
+    shadowDuplicateCache = null;
+    shadowDuplicateIdCache = null;
+  }
+
+  class VaultItemMap extends Map {
+    set(key, value) {
+      invalidateShadowDuplicates();
+      return super.set(key, value);
+    }
+
+    delete(key) {
+      invalidateShadowDuplicates();
+      return super.delete(key);
+    }
+
+    clear() {
+      invalidateShadowDuplicates();
+      return super.clear();
+    }
+  }
+
   const state = {
     csrf: '',
     account: null,
     cryptoKey: null,
-    items: new Map(),
+    items: new VaultItemMap(),
     dirty: new DirtySet(),
     lastSync: 0,
     // Local wall clock (ms) of the last completed sync — for "recently synced"
@@ -3016,6 +3043,7 @@ const NotesStore = (() => {
   }
 
   function shadowDuplicatePlan(all) {
+    if (shadowDuplicateCache) return shadowDuplicateCache;
     const live = all.filter((att) => attachmentParentIsLiveNote(att));
     const parent = live.map((_, index) => index);
     function find(index) {
@@ -3078,13 +3106,16 @@ const NotesStore = (() => {
         if (peer.uuid !== winner) losers.set(peer.uuid, winner);
       }
     }
+    shadowDuplicateCache = losers;
     return losers;
   }
 
   // Per-note listing keeps the canonical owner. The global list still returns
   // every row, including the extra copies, so nothing is deleted.
   function shadowDuplicateIds(all) {
-    return new Set(shadowDuplicatePlan(all).keys());
+    if (shadowDuplicateIdCache) return shadowDuplicateIdCache;
+    shadowDuplicateIdCache = new Set(shadowDuplicatePlan(all).keys());
+    return shadowDuplicateIdCache;
   }
 
   function repairStoredAttachmentCopies() {
@@ -3837,6 +3868,8 @@ const NotesStore = (() => {
     item.content = item.content || {};
     item.content.deleted = true;
     item.content.updated_at = new Date().toISOString();
+    // Deleted in place — Map.set does not run, so drop the owner map here.
+    invalidateShadowDuplicates();
     state.dirty.add(uuid);
     persistLocal(uuid, item);
     schedulePush();

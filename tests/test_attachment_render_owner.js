@@ -196,6 +196,121 @@ function hitsFor(query) {
   assert.ok(renderFn.includes('a.content?.note_id === noteId'));
   assert.ok(!renderFn.includes('activeFindNeedle()') || renderFn.indexOf('listAttachments(noteId)') < renderFn.indexOf('activeFindNeedle()'));
 
+  const rowFn = appJs.slice(
+    appJs.indexOf('function renderNoteRow'),
+    appJs.indexOf('const NOTE_LIST_VIRTUAL_THRESHOLD'),
+  );
+  assert.ok(rowFn.includes('NotesStore.listAttachments(n.uuid)'), 'each note row still lists only that note\'s files');
+
+  // Same shape as painting the note list: one listAttachments call per row.
+  // Grouping must read each file's scanned text once per vault change, not once per row.
+  const rowCount = 6;
+  const rowNoteIds = [];
+  let ocrReads = 0;
+  for (let i = 0; i < rowCount; i += 1) {
+    const noteId = NotesStore.newUuid();
+    const note = NotesStore.defaultNote();
+    note.title = `Scan note ${i}`;
+    note.content = `body ${i}`;
+    NotesStore.upsert(noteId, note);
+    const text = `Unique scanned invoice ${i} ${'line '.repeat(40)}`;
+    const content = {
+      type: 'attachment',
+      note_id: noteId,
+      filename: `file-${i}.pdf`,
+      mime: 'application/pdf',
+      size: 2000 + i,
+      content_sha256: `hash-row-${i}`,
+      ocr_method: 'pdftext',
+      created_at: `2024-04-${String(i + 1).padStart(2, '0')}T00:00:00.000Z`,
+    };
+    Object.defineProperty(content, 'ocr_text', {
+      enumerable: true,
+      get() {
+        ocrReads += 1;
+        return text;
+      },
+    });
+    NotesStore.upsert(NotesStore.newUuid(), content);
+    rowNoteIds.push(noteId);
+  }
+  const beforeRows = ocrReads;
+  for (const id of rowNoteIds) NotesStore.listAttachments(id);
+  const rowReads = ocrReads - beforeRows;
+  assert.ok(rowReads > 0 && rowReads <= rowCount * 4, `owner grouping scanned OCR ${rowReads} times for ${rowCount} rows`);
+  assert.ok(rowReads < rowCount * rowCount, 'owner grouping ran again for every note row');
+  const warmed = ocrReads;
+  for (const id of rowNoteIds) NotesStore.listAttachments(id);
+  assert.strictEqual(ocrReads, warmed, 'a second pass over the same vault must reuse the owner map');
+  const beforeChange = ocrReads;
+  const edited = NotesStore.get(rowNoteIds[0]);
+  NotesStore.upsert(rowNoteIds[0], { ...edited.content, content: `${edited.content.content} edited` });
+  for (const id of rowNoteIds) NotesStore.listAttachments(id);
+  const changeReads = ocrReads - beforeChange;
+  assert.ok(
+    changeReads > 0 && changeReads <= rowCount * 5,
+    `a vault change rebuilt the owner map with ${changeReads} OCR reads`,
+  );
+  assert.ok(changeReads < rowCount * rowCount, 'a vault change must not scan OCR once per note row');
+
+  // Removing the owning file is an in-place delete. The copy must show on its note.
+  const keepId = NotesStore.newUuid();
+  const dropId = NotesStore.newUuid();
+  const keepNote = NotesStore.defaultNote();
+  keepNote.title = 'Kept scan';
+  keepNote.content = 'kept';
+  NotesStore.upsert(keepId, keepNote);
+  const dropNote = NotesStore.defaultNote();
+  dropNote.title = 'Owned scan title';
+  dropNote.content = 'dropped';
+  NotesStore.upsert(dropId, dropNote);
+  const sharedOcr = `Shared scanned body ${'token '.repeat(20)}`;
+  const dropAtt = NotesStore.newUuid();
+  NotesStore.upsert(dropAtt, {
+    type: 'attachment',
+    note_id: dropId,
+    filename: 'Owned scan title.pdf',
+    mime: 'application/pdf',
+    size: 5555,
+    content_sha256: 'hash-drop-owner',
+    ocr_text: sharedOcr,
+    ocr_method: 'pdftext',
+    created_at: '2024-01-01T00:00:00.000Z',
+  });
+  NotesStore.upsert(NotesStore.newUuid(), {
+    type: 'attachment',
+    note_id: keepId,
+    filename: 'Owned scan title.pdf',
+    mime: 'application/pdf',
+    size: 5556,
+    content_sha256: 'hash-keep-copy',
+    ocr_text: sharedOcr,
+    ocr_method: 'pdftext',
+    created_at: '2024-06-01T00:00:00.000Z',
+  });
+  assert.strictEqual(NotesStore.listAttachments(dropId).length, 1);
+  assert.strictEqual(NotesStore.listAttachments(keepId).length, 0);
+  NotesStore.listAttachments(dropId);
+  assert.strictEqual(NotesStore.remove(dropAtt), true);
+  assert.strictEqual(NotesStore.listAttachments(dropId).length, 0);
+  assert.strictEqual(
+    NotesStore.listAttachments(keepId).length,
+    1,
+    'deleting the owner must reveal the copy without a stale owner map',
+  );
+
+  const html = fs.readFileSync(path.join(__dirname, '..', 'app', 'templates', 'app.html'), 'utf8');
+  const tagSection = html.match(/<details class="tag-section" id="tag-section"([^>]*)>/);
+  assert.ok(tagSection, 'tag section markup missing');
+  assert.ok(!/\sopen(\s|=|>|$)/.test(tagSection[0]), 'Tags must not be open in the initial HTML');
+  const boot = appJs.slice(appJs.indexOf('Object.assign(prefs, savedPrefs)'), appJs.indexOf('const GLOBAL_PREF_KEYS'));
+  const everyLaunch = boot.indexOf('Tags start collapsed on every launch');
+  assert.ok(everyLaunch > boot.indexOf('listChromeDense'), 'collapsed Tags must be applied on every launch, after the one-time migration');
+  const force = boot.slice(everyLaunch, everyLaunch + 320);
+  assert.ok(force.includes('prefs.tagsCollapsed = true'));
+  assert.ok(force.includes('savedPrefs.tagsCollapsed === false'));
+  assert.ok(!force.includes('listChromeDense'));
+
   console.log('test_attachment_render_owner.js: ok');
 })().catch((err) => {
   console.error(err);
