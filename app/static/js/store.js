@@ -95,6 +95,10 @@ const NotesStore = (() => {
     cryptoKey: null,
     items: new VaultItemMap(),
     dirty: new DirtySet(),
+    // Dirty items the server refused individually (quota, size). They stay
+    // dirty but are skipped by keystroke pushes so they cannot wedge the queue;
+    // sync() retries them, and any new edit to the item clears the block.
+    blocked: new Map(),
     lastSync: 0,
     // Local wall clock (ms) of the last completed sync — for "recently synced"
     // throttling. lastSync is a server cursor and must not be compared to Date.now().
@@ -730,6 +734,7 @@ const NotesStore = (() => {
     state.kdfVersion = 1;
     lastDerivedKdf = null;
     state.items.clear();
+    state.blocked.clear();
     state.localReady = false;
     sessionStorage.removeItem('notes_unlocked');
     try {
@@ -801,12 +806,25 @@ const NotesStore = (() => {
   async function fetchMissingBlobs(rows) {
     // Light vault: attachment bytes are fetched on demand when a note is opened.
     if (state.lightVault) return rows;
-    const need = rows
+    const candidates = rows
       .filter((row) => !row.unchanged && !row.deleted && !row.blob_ciphertext
         && (row.has_blob || row.needs_blob))
       .map((row) => row.item_uuid)
       .filter(Boolean);
-    if (!need.length) return rows;
+    if (!candidates.length) return rows;
+    // Bytes this device already holds (it uploaded them, or fetched them
+    // earlier) are not downloaded again; the row keeps its has_blob marker.
+    const need = [];
+    for (const uuid of candidates) {
+      let stored = '';
+      if (typeof NotesIDB.getBlob === 'function') {
+        try { stored = await NotesIDB.getBlob(uuid); } catch (err) { stored = ''; }
+      }
+      if (!stored) need.push(uuid);
+    }
+    if (!need.length) {
+      return rows.map((row) => (candidates.includes(row.item_uuid) && !row.has_blob ? { ...row, has_blob: true } : row));
+    }
     const blobBytes = rows.reduce(
       (sum, row) => sum + String(row.ciphertext || '').length,
       0,
@@ -820,7 +838,9 @@ const NotesStore = (() => {
     return rows.map((row) => {
       if (row.blob_ciphertext || row.unchanged) return row;
       const blob = byId.get(row.item_uuid);
-      return blob ? { ...row, blob_ciphertext: blob } : row;
+      if (blob) return { ...row, blob_ciphertext: blob };
+      if (candidates.includes(row.item_uuid) && !row.has_blob) return { ...row, has_blob: true };
+      return row;
     });
   }
 
@@ -1140,6 +1160,7 @@ const NotesStore = (() => {
             updated_at: item.updated_at,
             deleted: true,
             has_blob: false,
+            rev: item.rev != null ? Number(item.rev) || 0 : undefined,
           });
           return true;
         }
@@ -1152,17 +1173,23 @@ const NotesStore = (() => {
       if (wrapped.blob_ciphertext && typeof NotesIDB.putBlob === 'function') {
         await NotesIDB.putBlob(uuid, wrapped.blob_ciphertext);
       }
+      // content_hash is the version token the server knows for this content.
+      // Keep it when we have one (pulled or pushed rows) so known_hashes can
+      // match; a fresh encryption's hash never equals the server's because of
+      // the random IV.
+      const contentHash = item.content_hash || wrapped.content_hash;
       await NotesIDB.putItem({
         uuid,
         ciphertext: wrapped.ciphertext,
-        content_hash: wrapped.content_hash,
+        content_hash: contentHash,
         updated_at: item.updated_at,
         deleted: false,
         // file_enc_stored without local bytes means the server still holds the blob.
         has_blob: !!wrapped.blob_ciphertext
           || !!(item.content?.type === 'attachment' && item.content.file_enc_stored),
+        rev: item.rev != null ? Number(item.rev) || 0 : undefined,
       });
-      item.content_hash = wrapped.content_hash;
+      if (!item.content_hash) item.content_hash = wrapped.content_hash;
       return true;
     } catch (e) {
       console.warn('idb persist failed', e);
@@ -1411,12 +1438,14 @@ const NotesStore = (() => {
       // Bytes live in IndexedDB or still on the server (light vault) — fetched on demand.
       content = { ...content, file_enc_stored: true };
     }
-    return {
+    const item = {
       uuid: row.item_uuid || row.uuid,
       content,
       updated_at: row.updated_at,
       deleted: !!row.deleted,
     };
+    if (row.rev != null && row.rev !== '') item.rev = Number(row.rev) || 0;
+    return item;
   }
 
   let unlockMaintenance = null;
@@ -1471,6 +1500,7 @@ const NotesStore = (() => {
       deleted: row.deleted,
       has_blob: row.has_blob,
       blob_ciphertext: row.blob_ciphertext,
+      rev: row.rev,
     }, { fast, skipBlob });
     if (row.content_hash) item.content_hash = row.content_hash;
     const light = strippedAttachmentContent(item.content);
@@ -1515,10 +1545,11 @@ const NotesStore = (() => {
     const uuid = String(row?.uuid || row?.item_uuid || '').trim();
     if (!uuid) return null;
     const updatedAt = Number(row.updated_at) || Date.now() / 1000;
+    const baseRev = row.rev != null && row.rev !== '' ? { base_rev: Number(row.rev) || 0 } : {};
     if (row.deleted) {
       const ciphertext = String(row.ciphertext || '');
       if (!ciphertext) return null;
-      const content_hash = row.content_hash || await NotesCrypto.hashText(ciphertext);
+      const content_hash = await NotesCrypto.hashText(ciphertext);
       return {
         item_uuid: uuid,
         content_version: 1,
@@ -1527,6 +1558,7 @@ const NotesStore = (() => {
         content_hash,
         deleted: true,
         updated_at: updatedAt,
+        ...baseRev,
       };
     }
     const ciphertext = String(row.ciphertext || '');
@@ -1536,7 +1568,10 @@ const NotesStore = (() => {
       const blob = await NotesIDB.getBlob(uuid);
       if (blob) blob_ciphertext = typeof blob === 'string' ? blob : JSON.stringify(blob);
     }
-    const content_hash = row.content_hash || await NotesCrypto.hashText(ciphertext);
+    // Hash what is sent: a stored row may carry the server's version token for
+    // an older ciphertext (kept for known_hashes), which must not describe
+    // this re-encrypted copy.
+    const content_hash = await NotesCrypto.hashText(ciphertext);
     return {
       item_uuid: uuid,
       content_version: 1,
@@ -1545,6 +1580,7 @@ const NotesStore = (() => {
       content_hash,
       deleted: false,
       updated_at: updatedAt,
+      ...baseRev,
     };
   }
 
@@ -1567,11 +1603,48 @@ const NotesStore = (() => {
         content_hash: row.content_hash || '',
         updated_at: Number(row.updated_at) || Date.now() / 1000,
         deleted: false,
-        has_blob: !!(row.blob_ciphertext || row.has_blob),
+        // Server rows say needs_blob (light vault); keep the marker so the
+        // file is fetched on demand after unlock instead of "not on this device".
+        has_blob: !!(row.blob_ciphertext || row.has_blob || row.needs_blob),
+        rev: row.rev != null ? Number(row.rev) || 0 : undefined,
       });
     } catch (err) {
       /* ignore */
     }
+  }
+
+  // Locked-vault push bookkeeping: rows the server stored leave the persisted
+  // queue and remember the stored hash/revision. Conflicts, size and quota
+  // refusals stay queued; they are resolved after the next unlock, when the
+  // plaintext is available to keep both versions or tell the user which file.
+  async function settlePersisted(results, byUuid, dirtyIds, deletedIds) {
+    const settled = new Set();
+    for (const [uuid, result] of results) {
+      const status = String(result?.status || '');
+      if (status !== 'ok' && status !== 'unchanged') continue;
+      settled.add(uuid);
+      const pushed = byUuid.get(uuid);
+      if (deletedIds.has(uuid) || !pushed) continue;
+      try {
+        const row = await NotesIDB.getItem(uuid);
+        if (row && !row.deleted) {
+          await NotesIDB.putItem({
+            ...row,
+            content_hash: pushed.content_hash,
+            rev: result.rev != null ? Number(result.rev) || 0 : row.rev,
+          });
+        }
+      } catch (err) {
+        /* bookkeeping only */
+      }
+    }
+    const remaining = dirtyIds.filter((id) => !settled.has(id));
+    await setPersistedDirtyIds(remaining);
+    for (const uuid of settled) {
+      if (!deletedIds.has(uuid)) continue;
+      try { await NotesIDB.deleteItem(uuid); } catch (err) { /* ignore */ }
+    }
+    return settled;
   }
 
   async function pushDirtyPersisted({ quiet = false } = {}) {
@@ -1607,27 +1680,15 @@ const NotesStore = (() => {
           payload.push(item);
         }
         if (!payload.length) return skipped.length === 0;
-        const body = JSON.stringify({ items: payload });
-        const timeoutMs = Math.min(180000, 20000 + Math.floor(body.length / 80));
-        const pushRes = await api('/api/sync/items', {
-          method: 'POST',
-          body,
-          timeoutMs,
-        });
-        const settled = new Set();
-        if (Array.isArray(pushRes.results)) {
-          for (const row of pushRes.results) {
-            if (row.status === 'ok' || row.status === 'unchanged' || row.status === 'stale') {
-              settled.add(row.item_uuid);
-            }
-          }
+        const byUuid = new Map(payload.map((row) => [row.item_uuid, row]));
+        let sent;
+        try {
+          sent = await sendPushChunks(payload);
+        } catch (err) {
+          if (err?.pushResults?.size) await settlePersisted(err.pushResults, byUuid, dirtyIds, deletedIds);
+          throw err;
         }
-        const remaining = dirtyIds.filter((id) => !settled.has(id));
-        await setPersistedDirtyIds(remaining);
-        for (const uuid of settled) {
-          if (!deletedIds.has(uuid)) continue;
-          try { await NotesIDB.deleteItem(uuid); } catch (err) { /* ignore */ }
-        }
+        const settled = await settlePersisted(sent.results, byUuid, dirtyIds, deletedIds);
         logSync('push-persisted', {
           items: payload.length,
           settled: settled.size,
@@ -1920,7 +1981,268 @@ const NotesStore = (() => {
     return state.account;
   }
 
-  async function pushDirty({ quiet = false } = {}) {
+  const PUSH_CHUNK_BYTES = 6 * 1024 * 1024;
+  const PUSH_CHUNK_ITEMS = 200;
+  // How many follow-up passes one pushDirty call may chain (edits that arrived
+  // mid-request, conflict re-pushes). Anything left after that waits for the
+  // next edit or timer instead of hammering the server.
+  const PUSH_MAX_PASSES = 4;
+
+  function pushRowBytes(row) {
+    return String(row?.ciphertext || '').length + String(row?.blob_ciphertext || '').length;
+  }
+
+  // Split a push into requests small enough that one big attachment can only
+  // fail its own request and a proxy body limit never rejects the whole queue.
+  function chunkPushRows(rows) {
+    const chunks = [];
+    let current = [];
+    let bytes = 0;
+    for (const row of rows) {
+      const size = pushRowBytes(row);
+      if (current.length && (current.length >= PUSH_CHUNK_ITEMS || bytes + size > PUSH_CHUNK_BYTES)) {
+        chunks.push(current);
+        current = [];
+        bytes = 0;
+      }
+      current.push(row);
+      bytes += size;
+    }
+    if (current.length) chunks.push(current);
+    return chunks;
+  }
+
+  // POST rows in chunks and collect one result per item. A 413 on a chunk of
+  // several items (older server, proxy body limit) splits the chunk; a 413 on
+  // a single item becomes that item's own too_large / quota_exceeded result.
+  async function sendPushChunks(rows) {
+    const results = new Map();
+    const queue = chunkPushRows(rows);
+    let bytes = 0;
+    let requests = 0;
+    while (queue.length) {
+      const chunk = queue.shift();
+      const body = JSON.stringify({ items: chunk, partial: 1 });
+      const timeoutMs = Math.min(180000, 20000 + Math.floor(body.length / 80));
+      let res;
+      try {
+        res = await api('/api/sync/items', { method: 'POST', body, timeoutMs });
+      } catch (err) {
+        if (err?.status !== 413) {
+          err.pushResults = results;
+          throw err;
+        }
+        requests += 1;
+        if (chunk.length > 1) {
+          const mid = Math.ceil(chunk.length / 2);
+          queue.unshift(chunk.slice(0, mid), chunk.slice(mid));
+          continue;
+        }
+        const only = chunk[0];
+        const quota = /quota/i.test(String(err.message || ''));
+        results.set(only.item_uuid, {
+          item_uuid: only.item_uuid,
+          status: quota ? 'quota_exceeded' : 'too_large',
+          error: err.message || 'HTTP 413',
+        });
+        continue;
+      }
+      requests += 1;
+      bytes += body.length;
+      const rowsRes = Array.isArray(res.results) ? res.results : [];
+      for (const row of rowsRes) {
+        if (row?.item_uuid) results.set(row.item_uuid, row);
+      }
+      // Servers without per-item results accepted the whole chunk.
+      for (const row of chunk) {
+        if (!results.has(row.item_uuid)) results.set(row.item_uuid, { item_uuid: row.item_uuid, status: 'ok' });
+      }
+    }
+    return { results, bytes, requests };
+  }
+
+  function itemLabel(uuid) {
+    const content = state.items.get(uuid)?.content;
+    const label = content?.title || content?.filename || content?.name || '';
+    return String(label || '').trim() || (content?.type === 'attachment' ? 'a file' : 'an item');
+  }
+
+  // Items the server refuses for size or quota stay on this device and out of
+  // the push queue's way; they are retried by sync() and whenever they change.
+  function blockItem(uuid, result) {
+    const item = state.items.get(uuid);
+    state.blocked.set(uuid, {
+      status: String(result?.status || ''),
+      reason: String(result?.reason || result?.error || ''),
+      max_item_bytes: Number(result?.max_item_bytes) || 0,
+      updated_at: Number(item?.updated_at) || 0,
+      at: Date.now(),
+    });
+    logSync('push-blocked', { uuid, status: result?.status, reason: result?.reason || result?.error || '' });
+  }
+
+  function blockedUnchanged(uuid, item) {
+    const info = state.blocked.get(uuid);
+    if (!info) return false;
+    if ((Number(item?.updated_at) || 0) !== info.updated_at) {
+      state.blocked.delete(uuid);
+      return false;
+    }
+    return true;
+  }
+
+  function blockedItems() {
+    return [...state.blocked.entries()].map(([uuid, info]) => ({ uuid, ...info, label: itemLabel(uuid) }));
+  }
+
+  function describeBlocked() {
+    const first = blockedItems()[0];
+    if (!first) return '';
+    const label = `“${first.label}”`;
+    const more = state.blocked.size > 1 ? ` (+${state.blocked.size - 1} more)` : '';
+    if (first.status === 'quota_exceeded') return `${label} did not sync: storage quota reached${more}`;
+    if (first.status === 'too_large') return `${label} did not sync: too large for the server${more}`;
+    return `${label} did not sync${more}`;
+  }
+
+  // After the server stored a row, remember exactly what it stored: the hash it
+  // will echo in known_hashes / unchanged stubs and the revision our next push
+  // builds on. Writing the pushed ciphertext (not a fresh encryption of the same
+  // content) keeps IndexedDB and the server on the same version token.
+  async function recordPushedState(uuid, pushed, result) {
+    const item = state.items.get(uuid);
+    if (!item) return;
+    if (pushed?.content_hash) item.content_hash = pushed.content_hash;
+    if (result?.rev != null && Number.isFinite(Number(result.rev))) item.rev = Number(result.rev);
+    if (item.deleted || !pushed?.ciphertext) return;
+    try {
+      const existing = await NotesIDB.getItem(uuid);
+      await NotesIDB.putItem({
+        uuid,
+        ciphertext: pushed.ciphertext,
+        content_hash: pushed.content_hash,
+        updated_at: pushed.updated_at,
+        deleted: false,
+        has_blob: !!(existing?.has_blob || pushed.blob_ciphertext
+          || (item.content?.type === 'attachment' && item.content.file_enc_stored)),
+        rev: item.rev != null ? Number(item.rev) || 0 : undefined,
+      });
+    } catch (err) {
+      /* bookkeeping only; the next pull repairs it */
+    }
+  }
+
+  // Replace the local item with the server's copy (the server won a conflict).
+  async function adoptServerItem(uuid, serverRow, remote) {
+    const previous = state.items.get(uuid);
+    const previousContent = previous && !previous.deleted ? previous.content : null;
+    state.dirty.delete(uuid);
+    state.blocked.delete(uuid);
+    if (serverRow.deleted || !remote) {
+      state.items.delete(uuid);
+      try { await NotesIDB.deleteItem(uuid); } catch (err) { /* ignore */ }
+      if (typeof NotesSearch !== 'undefined' && NotesSearch.removeFromIndex) NotesSearch.removeFromIndex(uuid);
+      logSync('conflict-adopt', { uuid, deleted: true });
+      return;
+    }
+    if (serverRow.content_hash) remote.content_hash = serverRow.content_hash;
+    if (serverRow.rev != null) remote.rev = Number(serverRow.rev) || 0;
+    if (remote.content?.type === 'note') attachLiveIds(remote.content, uuid);
+    state.items.set(uuid, remote);
+    await persistLocal(uuid, remote);
+    if (remote.content?.type === 'note') {
+      updateSearchIndexFor(uuid);
+      if (onNoteIngested) {
+        try {
+          onNoteIngested(uuid, {
+            quiet: true,
+            protectionMerged: false,
+            bodyChanged: !!previousContent && noteTextDiffers(previousContent, remote.content),
+            previousContent,
+          });
+        } catch (err) { /* ignore */ }
+      }
+    }
+    const light = strippedAttachmentContent(remote.content);
+    if (light) remote.content = light;
+    if (remote.content?.type === 'attachment' && remote.content.note_id) {
+      refreshNoteSearchText(remote.content.note_id);
+    }
+    if (remote.content?.type === 'search_index') applySearchIndexEntries();
+    logSync('conflict-adopt', { uuid, rev: remote.rev || 0 });
+  }
+
+  // The server's row moved on under a pending write (another device wrote
+  // first). Notes keep both texts: ours stays the live note, theirs becomes a
+  // "(conflict copy)" sibling. Edits beat deletes, search indexes merge, other
+  // item kinds take the newer edit clock. Returns true when our item must be
+  // pushed again on top of the server revision, false when the server copy was
+  // adopted (or nothing is left to push).
+  async function resolvePushConflict(uuid, result) {
+    const local = state.items.get(uuid);
+    if (!local) return false;
+    let serverRow = result?.server_item || null;
+    if (!serverRow) {
+      const rows = await refetchSyncItems([uuid], { includeBlobs: false });
+      serverRow = rows.find((row) => row.item_uuid === uuid) || null;
+    }
+    if (!serverRow) {
+      // Nothing to compare against: behave like before (the next pull brings
+      // whatever the server holds).
+      state.dirty.delete(uuid);
+      logSync('conflict-drop', { uuid, status: result?.status || '' });
+      return false;
+    }
+    const serverRev = Number(serverRow.rev ?? result?.rev) || 0;
+    const serverUpdated = Number(serverRow.updated_at) || 0;
+    const winLocal = () => {
+      if (serverRev) local.rev = serverRev;
+      // Legacy servers decide by clock; make the re-push the newest write.
+      if ((Number(local.updated_at) || 0) <= serverUpdated) local.updated_at = serverUpdated + 0.001;
+      return true;
+    };
+    if (serverRow.deleted) {
+      if (local.deleted) {
+        state.dirty.delete(uuid);
+        return false;
+      }
+      logSync('conflict-edit-beats-delete', { uuid });
+      return winLocal();
+    }
+    let remote = null;
+    try {
+      remote = await unwrapItem({ ...serverRow, item_uuid: uuid });
+    } catch (err) {
+      logSync('conflict-unreadable', { uuid, error: err?.message || String(err) });
+      return winLocal();
+    }
+    if (local.deleted) {
+      await adoptServerItem(uuid, serverRow, remote);
+      return false;
+    }
+    const type = local.content?.type;
+    if (type === 'note' && remote.content?.type === 'note') {
+      keepConflictCopy(uuid, remote.content, { source: 'sync', winnerContent: local.content });
+      const { changed, content } = mergeCrossDeviceProtection(local.content, remote.content);
+      if (changed) {
+        local.content = content;
+        await persistLocal(uuid, local);
+      }
+      return winLocal();
+    }
+    if (type === 'search_index' && remote.content?.type === 'search_index') {
+      const merged = mergeSearchEntries(local.content.entries, remote.content.entries);
+      local.content = { ...local.content, type: 'search_index', version: OCR_INDEX, entries: merged };
+      await persistLocal(uuid, local);
+      applySearchIndexEntries();
+      return winLocal();
+    }
+    if ((Number(local.updated_at) || 0) >= serverUpdated) return winLocal();
+    await adoptServerItem(uuid, serverRow, remote);
+    return false;
+  }
+
+  async function pushDirty({ quiet = false, retryBlocked = false, pass = 1 } = {}) {
     await finishLoadLocal();
     await finishUnlockMaintenance();
     if (state.blockPushForPasswordRotation) {
@@ -1942,21 +2264,80 @@ const NotesStore = (() => {
       emitSync('syncing', 'Saving…');
     }
     const epoch = state.lockEpoch;
-    // Set when edits arrived during the request (or new items were queued), so
-    // the caller runs one more pass instead of leaving them dirty until the
-    // next keystroke or timer.
+    // Set when edits arrived during the request (or new items were queued, or a
+    // conflict needs a re-push), so the caller runs one more pass instead of
+    // leaving them dirty until the next keystroke or timer.
     let needsAnotherPass = false;
+    const finishStatus = () => {
+      if (quiet) return;
+      const blockedText = describeBlocked();
+      if (blockedText) {
+        notifyStatus(`Saved on this device · ${blockedText}`, true);
+        emitSync('pending', blockedText);
+        return;
+      }
+      notifyStatus('Saved');
+      emitSync('ok', 'Synced');
+    };
     const pending = (async () => {
+      const snapshots = new Map();
+      const rowsByUuid = new Map();
+      const deletedIds = new Set();
+      const counts = {};
+      const settleResults = async (results) => {
+        // A lock during the request already dropped the in-memory queue; the
+        // persisted copy is reconciled on the next unlock (server answers "unchanged").
+        if (state.lockEpoch !== epoch) return;
+        const settled = [];
+        for (const [uuid, snap] of snapshots) {
+          const result = results.get(uuid);
+          if (!result) continue;
+          const status = String(result.status || 'ok');
+          counts[status] = (counts[status] || 0) + 1;
+          // Edits typed while this request was on the wire replaced the item or
+          // bumped its clock; they must stay dirty and go out with the next push.
+          if (editedSincePush(uuid, snap)) {
+            needsAnotherPass = true;
+            continue;
+          }
+          if (status === 'ok' || status === 'unchanged') {
+            await recordPushedState(uuid, rowsByUuid.get(uuid), result);
+            settled.push(uuid);
+          } else if (status === 'conflict' || status === 'stale') {
+            try {
+              if (await resolvePushConflict(uuid, result)) needsAnotherPass = true;
+            } catch (err) {
+              // Could not fetch or read the server copy: keep ours queued.
+              logSync('conflict-resolve-failed', { uuid, error: err?.message || String(err) });
+            }
+          } else if (status === 'quota_exceeded' || status === 'too_large') {
+            blockItem(uuid, result);
+          }
+          // "rejected" and unknown statuses stay queued; the next edit or
+          // timer retries them, not a tight loop.
+        }
+        if (state.lockEpoch !== epoch) return;
+        for (const uuid of settled) {
+          state.dirty.delete(uuid);
+          state.blocked.delete(uuid);
+        }
+        for (const uuid of state.dirty) {
+          if (!snapshots.has(uuid) && !state.blocked.has(uuid)) needsAnotherPass = true;
+        }
+        for (const uuid of settled) {
+          if (!deletedIds.has(uuid)) continue;
+          try { await NotesIDB.deleteItem(uuid); } catch (err) { /* tombstone cleanup is best effort */ }
+        }
+      };
       try {
-        const snapshots = new Map();
         const payload = [];
-        const deletedIds = new Set();
         for (const uuid of [...state.dirty]) {
           const item = state.items.get(uuid);
           if (!item) {
             state.dirty.delete(uuid);
             continue;
           }
+          if (!retryBlocked && blockedUnchanged(uuid, item)) continue;
           if (!state.cryptoKey) throw lockedError();
           await sealAttachmentContent(item.content);
           const content = { ...item.content };
@@ -1965,67 +2346,38 @@ const NotesStore = (() => {
             deletedIds.add(uuid);
           }
           snapshots.set(uuid, { item, updated_at: item.updated_at });
-          payload.push(await wrapItem(uuid, content, item.updated_at));
+          const row = await wrapItem(uuid, content, item.updated_at);
+          // The revision this write builds on; the server reports a conflict
+          // instead of picking a winner by clock when it has moved on.
+          if (item.rev != null && Number.isFinite(Number(item.rev))) row.base_rev = Number(item.rev);
+          rowsByUuid.set(uuid, row);
+          payload.push(row);
         }
         if (!payload.length) {
-          if (!quiet) {
-            notifyStatus('Saved');
-            emitSync('ok', 'Synced');
-          }
+          finishStatus();
           return true;
         }
-        const body = JSON.stringify({ items: payload });
-        const timeoutMs = Math.min(180000, 20000 + Math.floor(body.length / 80));
         const pushStarted = Date.now();
-        const pushRes = await api('/api/sync/items', {
-          method: 'POST',
-          body,
-          timeoutMs,
-        });
-        const settled = [];
-        const results = Array.isArray(pushRes.results) ? pushRes.results : null;
-        const statusByUuid = new Map((results || []).map((row) => [row.item_uuid, row]));
-        for (const [uuid, snap] of snapshots) {
-          // Servers without per-item results accepted the whole batch.
-          const status = results ? String(statusByUuid.get(uuid)?.status || '') : 'ok';
-          // "stale": another device stored a newer version — drop our pending
-          // write; the next pull brings the winning copy.
-          if (status !== 'ok' && status !== 'unchanged' && status !== 'stale') continue;
-          // Edits typed while this request was on the wire replaced the item or
-          // bumped its clock; they must stay dirty and go out with the next push.
-          if (editedSincePush(uuid, snap)) {
-            needsAnotherPass = true;
-            continue;
-          }
-          settled.push(uuid);
+        let sent;
+        try {
+          sent = await sendPushChunks(payload);
+        } catch (err) {
+          // Chunks answered before the failure still count.
+          if (err?.pushResults?.size) await settleResults(err.pushResults);
+          throw err;
         }
-        // A lock during the request already dropped the in-memory queue; the
-        // persisted copy is reconciled on the next unlock (server answers "unchanged").
-        if (state.lockEpoch === epoch) {
-          for (const uuid of settled) state.dirty.delete(uuid);
-          for (const uuid of state.dirty) {
-            if (!snapshots.has(uuid)) needsAnotherPass = true;
-          }
-        }
-        for (const uuid of settled) {
-          if (!deletedIds.has(uuid)) continue;
-          try { await NotesIDB.deleteItem(uuid); } catch (err) { /* tombstone cleanup is best effort */ }
-        }
+        await settleResults(sent.results);
         logSync('push', {
           items: payload.length,
-          bytes: body.length,
+          bytes: sent.bytes,
+          requests: sent.requests,
           ms: Date.now() - pushStarted,
           quiet: !!quiet,
           ok: true,
-          accepted: pushRes.accepted,
-          unchanged: pushRes.unchanged,
-          stale: pushRes.stale,
+          ...counts,
         });
         if (state.lockEpoch === epoch) await NotesIDB.putMeta('lastSync', state.lastSync);
-        if (!quiet) {
-          notifyStatus('Saved');
-          emitSync('ok', 'Synced');
-        }
+        finishStatus();
         return true;
       } catch (e) {
         if (e?.code === 'VAULT_LOCKED' || (!state.cryptoKey && state.lockEpoch !== epoch)) {
@@ -2063,7 +2415,9 @@ const NotesStore = (() => {
     }
     // Only loop when something new is waiting. Items the server refused this
     // round are retried by the next edit or timer, not in a tight loop.
-    if (ok && state.dirty.size && needsAnotherPass) return pushDirty({ quiet });
+    if (ok && state.dirty.size && needsAnotherPass && pass < PUSH_MAX_PASSES) {
+      return pushDirty({ quiet, pass: pass + 1 });
+    }
     return ok;
   }
 
@@ -2105,6 +2459,45 @@ const NotesStore = (() => {
     return Number(row?.updated_at) || 0;
   }
 
+  // Does the local copy stay when a pulled row arrives? With server revisions
+  // on both sides the answer is causal, not a clock race: a clean local copy
+  // at the same or a newer revision has nothing to learn, and a dirty local
+  // copy built on an older revision stays until the push reports the
+  // conflict and resolves it (conflict copy), instead of being overwritten
+  // because the other device's clock said so. Rows without revisions (older
+  // servers, never-pulled items) fall back to last-writer-wins by clock.
+  function localCopyWins(local, row) {
+    if (!local || local.deleted) return false;
+    const localRev = Number(local.rev) || 0;
+    const rowRev = Number(row?.rev) || 0;
+    const dirtyLocal = state.dirty.has(row.item_uuid);
+    if (localRev > 0 && rowRev > 0) {
+      if (dirtyLocal) return true;
+      return localRev >= rowRev;
+    }
+    return (Number(local.updated_at) || 0) > (Number(row?.updated_at) || 0);
+  }
+
+  // An "unchanged" stub tells us the revision the server holds for content we
+  // already have; remember it so the next push can name its base revision.
+  async function adoptServerRev(uuid, rev) {
+    if (rev == null || !Number.isFinite(Number(rev))) return;
+    const local = state.items.get(uuid);
+    if (!local || local.deleted) return;
+    const next = Number(rev);
+    if (local.rev === next) return;
+    local.rev = next;
+    if (state.dirty.has(uuid)) return;
+    try {
+      const row = await NotesIDB.getItem(uuid);
+      if (row && !row.deleted && row.ciphertext && Number(row.rev) !== next) {
+        await NotesIDB.putItem({ ...row, rev: next });
+      }
+    } catch (err) {
+      /* bookkeeping only */
+    }
+  }
+
   async function applySyncPayload(data, { finalize = true, progress = null, quiet = false } = {}) {
     const rows = orderSyncRows(data.items || []);
     const total = rows.length;
@@ -2126,6 +2519,8 @@ const NotesStore = (() => {
         if (!row.deleted && !state.items.has(row.item_uuid)) {
           unchangedMisses.push(row.item_uuid);
           logSync('unchanged-miss', { uuid: row.item_uuid, hash: row.content_hash || '' });
+        } else if (!row.deleted) {
+          await adoptServerRev(row.item_uuid, row.rev);
         }
         watermark = Math.max(watermark, rowCursor(row));
         continue;
@@ -2137,7 +2532,7 @@ const NotesStore = (() => {
         try {
           const remote = await unwrapItem(row);
           const local = state.items.get(row.item_uuid);
-          const localWins = local && !local.deleted && (local.updated_at || 0) > (row.updated_at || 0);
+          const localWins = localCopyWins(local, row);
           let applied = false;
           let protectionMerged = false;
           let previousContent = null;
@@ -2572,6 +2967,7 @@ const NotesStore = (() => {
       state.saveTimer = null;
       state.items.clear();
       state.dirty.clear();
+      state.blocked.clear();
       state.lastSync = 0;
       state.localReady = false;
       state.cryptoKey = null;
@@ -2649,7 +3045,7 @@ const NotesStore = (() => {
       // Unreadable local cache used to leave localReady=false and silently skip sync.
       if (!state.localReady) state.localReady = true;
       await retryPendingVaultKdfUpgrade();
-      await pushDirty({ quiet });
+      await pushDirty({ quiet, retryBlocked: true });
       const hadLocalItems = state.items.size > 0;
       const sizeBefore = state.items.size;
       const notesBefore = listNotes().filter((n) => !n.content?.trashed).length;
@@ -3337,7 +3733,9 @@ const NotesStore = (() => {
       updated_at: itemTs || Date.now() / 1000,
       deleted: false,
     };
+    if (existing?.rev != null) item.rev = existing.rev;
     state.items.set(uuid, item);
+    state.blocked.delete(uuid);
     if (!skipDirty) {
       state.dirty.add(uuid);
       schedulePush();
@@ -4008,6 +4406,7 @@ const NotesStore = (() => {
     item.updated_at = Math.max(Date.now() / 1000, (Number(item.updated_at) || 0) + 0.001);
     // Deleted in place — Map.set does not run, so drop the owner map here.
     invalidateShadowDuplicates();
+    state.blocked.delete(uuid);
     state.dirty.add(uuid);
     persistLocal(uuid, item);
     schedulePush();
@@ -4640,6 +5039,8 @@ const NotesStore = (() => {
     noteTextDiffers,
     keepConflictCopy,
     setConflictCopyCallback,
+    blockedItems,
+    chunkPushRows,
     verifyVaultPassword,
     fetchAttachmentBlobFromServer,
     hasLocalAttachmentBytes,

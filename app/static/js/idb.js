@@ -88,6 +88,7 @@ window.NotesIDB = (() => {
           content: row.content,
           has_blob: !!row.has_blob,
         };
+        if (row.rev != null) light.rev = row.rev;
         const done = onRow(light);
         if (done === false) {
           resolve();
