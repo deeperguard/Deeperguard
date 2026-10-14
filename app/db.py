@@ -242,6 +242,13 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_items_user_synced ON items(user_id, synced_at, item_uuid)"
     )
+    if "rev" not in item_cols:
+        # Server-assigned per-item revision, bumped on every accepted write.
+        # Clients that send base_rev get a "conflict" instead of silently losing
+        # to a client clock; clients that do not send it keep the old
+        # updated_at ordering. Existing rows start at revision 1.
+        conn.execute("ALTER TABLE items ADD COLUMN rev INTEGER NOT NULL DEFAULT 0")
+        conn.execute("UPDATE items SET rev = 1 WHERE rev = 0")
     reminder_cols = {row[1] for row in conn.execute("PRAGMA table_info(note_reminders)").fetchall()}
     if reminder_cols and "sending_at" not in reminder_cols:
         conn.execute("ALTER TABLE note_reminders ADD COLUMN sending_at REAL NOT NULL DEFAULT 0")
@@ -916,12 +923,17 @@ def upsert_item(
     *,
     conn: sqlite3.Connection | None = None,
     synced_at: float | None = None,
+    force: bool = False,
 ) -> None:
-    sql = """
+    """Write one sync row. ``force`` skips the client-clock guard; the batch
+    planner sets it when the client proved it saw the current revision
+    (base_rev matched), so the write must not be lost to a slow clock."""
+    guard = "" if force else "WHERE excluded.updated_at >= items.updated_at"
+    sql = f"""
         INSERT INTO items (
             user_id, item_uuid, content_version, ciphertext, content_hash,
-            blob_ciphertext, deleted, updated_at, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            blob_ciphertext, deleted, updated_at, synced_at, rev
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         ON CONFLICT(user_id, item_uuid) DO UPDATE SET
             content_version = excluded.content_version,
             ciphertext = excluded.ciphertext,
@@ -932,8 +944,9 @@ def upsert_item(
             END,
             deleted = excluded.deleted,
             updated_at = excluded.updated_at,
-            synced_at = excluded.synced_at
-        WHERE excluded.updated_at >= items.updated_at
+            synced_at = excluded.synced_at,
+            rev = items.rev + 1
+        {guard}
     """
     params = (
         user_id,
@@ -968,42 +981,110 @@ def next_synced_at(user_id: int, conn: sqlite3.Connection) -> float:
     return max(time.time(), last + 0.000001)
 
 
+# A client clock this far ahead of the server is treated as "now" for ordering,
+# so one device with a wrong clock cannot win every conflict for months.
+SYNC_MAX_CLOCK_SKEW_SEC = float(os.environ.get("NOTES_SYNC_MAX_CLOCK_SKEW_SEC", "300"))
+# Largest single item (ciphertext + blob) a push may carry. Anything bigger is
+# refused per item ("too_large") instead of failing the whole request body.
+SYNC_MAX_ITEM_BYTES = int(os.environ.get("NOTES_SYNC_MAX_ITEM_BYTES", str(75 * 1024 * 1024)))
+
+
+def _existing_rev(existing) -> int:
+    if not existing:
+        return 0
+    try:
+        return int(existing["rev"] or 0)
+    except (KeyError, IndexError, TypeError, ValueError):
+        return 0
+
+
+def _parse_base_rev(raw) -> int | None:
+    """Client's last-seen revision, or None for clients that do not send one."""
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return max(0, value)
+
+
 def _plan_sync_item(
     item: dict[str, Any],
     *,
     existing,
     quota: int | None,
     current_used: int,
-) -> tuple[dict[str, str], int, dict[str, Any] | None]:
-    """Return (result row, updated current_used, upsert payload or None)."""
+    now: float | None = None,
+) -> tuple[dict[str, Any], int, dict[str, Any] | None]:
+    """Return (result row, updated current_used, upsert payload or None).
+
+    Statuses: ``ok`` (written), ``unchanged`` (same hash already stored),
+    ``stale`` (legacy clients only: an older client clock lost last-writer-wins),
+    ``conflict`` (client sent ``base_rev`` and the server row moved on),
+    ``quota_exceeded``, ``too_large``, ``rejected`` (malformed). Every result
+    carries the server revision the client should remember.
+    """
+    now = time.time() if now is None else now
     item_uuid = str(item.get("item_uuid") or "").strip()
     ciphertext = str(item.get("ciphertext") or "")
     blob_ciphertext = str(item.get("blob_ciphertext") or "")
     if not item_uuid or not ciphertext:
-        return {"item_uuid": item_uuid or "", "status": "rejected"}, current_used, None
+        return {"item_uuid": item_uuid or "", "status": "rejected", "reason": "empty"}, current_used, None
+    try:
+        updated_at = float(item.get("updated_at") or now)
+    except (TypeError, ValueError):
+        return {"item_uuid": item_uuid, "status": "rejected", "reason": "bad_updated_at"}, current_used, None
+    if updated_at != updated_at or updated_at in (float("inf"), float("-inf")):
+        return {"item_uuid": item_uuid, "status": "rejected", "reason": "bad_updated_at"}, current_used, None
+    updated_at = min(updated_at, now + SYNC_MAX_CLOCK_SKEW_SEC)
+    existing_rev = _existing_rev(existing)
+    existing_updated = float(existing["updated_at"] or 0) if existing else 0.0
     incoming_hash = str(item.get("content_hash") or "")
-    if existing and incoming_hash and str(existing["content_hash"] or "") == incoming_hash:
-        if float(item.get("updated_at") or 0) <= float(existing["updated_at"] or 0):
-            return {"item_uuid": item_uuid, "status": "unchanged"}, current_used, None
-    if existing and float(item.get("updated_at") or 0) < float(existing["updated_at"] or 0):
-        # Another device already stored a newer version (last-writer-wins). Tell
-        # the client explicitly instead of a silent no-op "ok" so it can drop the
-        # pending push and take the server copy on its next pull.
-        return {"item_uuid": item_uuid, "status": "stale"}, current_used, None
+    base_rev = _parse_base_rev(item.get("base_rev"))
+    same_hash = bool(existing and incoming_hash and str(existing["content_hash"] or "") == incoming_hash)
+    if same_hash and updated_at <= existing_updated:
+        return {"item_uuid": item_uuid, "status": "unchanged", "rev": existing_rev}, current_used, None
+    force = False
+    if existing and base_rev is not None:
+        if base_rev != existing_rev:
+            if same_hash:
+                # Our earlier push landed but its response was lost.
+                return {"item_uuid": item_uuid, "status": "unchanged", "rev": existing_rev}, current_used, None
+            # Another device wrote since this client last saw the item. Do not
+            # pick a winner by clock; let the client keep both versions.
+            return {"item_uuid": item_uuid, "status": "conflict", "rev": existing_rev}, current_used, None
+        # The client saw the current revision: its write is the newest by
+        # causality, whatever its clock says.
+        force = True
+        updated_at = max(updated_at, existing_updated)
+    elif existing and updated_at < existing_updated:
+        # Legacy client (no base_rev): another device already stored a newer
+        # version (last-writer-wins). Tell the client explicitly instead of a
+        # silent no-op "ok" so it can drop the pending push and take the server
+        # copy on its next pull.
+        return {"item_uuid": item_uuid, "status": "stale", "rev": existing_rev}, current_used, None
     deleted = bool(item.get("deleted"))
+    new_size = _item_storage_size(ciphertext, blob_ciphertext)
+    if new_size > SYNC_MAX_ITEM_BYTES:
+        return {
+            "item_uuid": item_uuid,
+            "status": "too_large",
+            "rev": existing_rev,
+            "max_item_bytes": SYNC_MAX_ITEM_BYTES,
+        }, current_used, None
     used = current_used
     if quota is not None and not deleted:
         old_size = 0
         if existing and not int(existing["deleted"] or 0):
             old_size = int(existing["ct_len"] or 0) + int(existing["blob_len"] or 0)
-        new_size = _item_storage_size(ciphertext, blob_ciphertext)
         if not blob_ciphertext and existing:
             # Clients that never downloaded the file (light vault) push metadata only;
             # the stored blob is kept, so count it toward the new size.
             new_size += int(existing["blob_len"] or 0)
         projected = used - old_size + new_size
         if projected > quota and projected > used:
-            return {"item_uuid": item_uuid, "status": "quota_exceeded"}, used, None
+            return {"item_uuid": item_uuid, "status": "quota_exceeded", "rev": existing_rev}, used, None
         used = projected
     elif quota is not None and deleted and existing and not int(existing["deleted"] or 0):
         used -= int(existing["ct_len"] or 0) + int(existing["blob_len"] or 0)
@@ -1014,14 +1095,25 @@ def _plan_sync_item(
         "content_version": int(item.get("content_version") or 1),
         "content_hash": incoming_hash,
         "deleted": deleted,
-        "updated_at": float(item.get("updated_at") or time.time()),
+        "updated_at": updated_at,
         "blob_ciphertext": blob_ciphertext,
+        "force": force,
     }
-    return {"item_uuid": item_uuid, "status": "ok"}, used, payload
+    result = {
+        "item_uuid": item_uuid,
+        "status": "ok",
+        "rev": existing_rev + 1 if existing else 1,
+        "updated_at": updated_at,
+    }
+    return result, used, payload
 
 
-def upsert_items_batch(user_id: int, items: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """Upsert many sync items in a single transaction. Returns per-item status."""
+def upsert_items_batch(user_id: int, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Upsert many sync items in a single transaction. Returns per-item status.
+
+    Items the plan refuses (quota, size, conflict, stale, malformed) do not
+    block the others: every acceptable item in the batch is written.
+    """
     if not items:
         return []
     user = get_user_by_id(user_id)
@@ -1040,13 +1132,41 @@ def upsert_items_batch(user_id: int, items: list[dict[str, Any]]) -> list[dict[s
     return results
 
 
+def _conflict_server_item(conn: sqlite3.Connection, user_id: int, item_uuid: str) -> dict[str, Any] | None:
+    """The server's copy for a conflicting item (ciphertext only; the blob, if
+    any, is fetched through /api/sync/blobs like on a pull)."""
+    row = conn.execute(
+        """
+        SELECT item_uuid, content_version, ciphertext, content_hash, deleted,
+               updated_at, synced_at, rev, LENGTH(blob_ciphertext) AS blob_len
+        FROM items WHERE user_id = ? AND item_uuid = ?
+        """,
+        (user_id, item_uuid),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "item_uuid": row["item_uuid"],
+        "content_version": int(row["content_version"] or 1),
+        "ciphertext": row["ciphertext"],
+        "blob_ciphertext": "",
+        "needs_blob": bool(row["blob_len"]),
+        "content_hash": row["content_hash"],
+        "deleted": bool(row["deleted"]),
+        "updated_at": float(row["updated_at"] or 0),
+        "synced_at": float(row["synced_at"] or 0),
+        "rev": int(row["rev"] or 0),
+    }
+
+
 def _upsert_items_batch_locked(
     conn: sqlite3.Connection,
     user_id: int,
     items: list[dict[str, Any]],
     quota: int | None,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     synced_at = next_synced_at(user_id, conn)
+    now = time.time()
     current_used = 0
     if quota is not None:
         row = conn.execute(
@@ -1057,14 +1177,14 @@ def _upsert_items_batch_locked(
             (user_id,),
         ).fetchone()
         current_used = int(row["n"] if row else 0)
-    planned: list[tuple[dict[str, str], dict[str, Any] | None]] = []
+    results: list[dict[str, Any]] = []
     for item in items:
         item_uuid = str(item.get("item_uuid") or "").strip()
         existing = None
         if item_uuid:
             existing = conn.execute(
                 """
-                SELECT updated_at, content_hash, deleted, LENGTH(ciphertext) AS ct_len,
+                SELECT updated_at, content_hash, deleted, rev, LENGTH(ciphertext) AS ct_len,
                        LENGTH(blob_ciphertext) AS blob_len
                 FROM items
                 WHERE user_id = ? AND item_uuid = ?
@@ -1076,12 +1196,12 @@ def _upsert_items_batch_locked(
             existing=existing,
             quota=quota,
             current_used=current_used,
+            now=now,
         )
-        planned.append((result, payload))
-    if any(row[0].get("status") == "quota_exceeded" for row in planned):
-        return [row[0] for row in planned]
-    results: list[dict[str, str]] = []
-    for result, payload in planned:
+        if result.get("status") == "conflict":
+            server_item = _conflict_server_item(conn, user_id, item_uuid)
+            if server_item is not None:
+                result["server_item"] = server_item
         if payload is not None:
             upsert_item(
                 user_id,
@@ -1094,6 +1214,7 @@ def _upsert_items_batch_locked(
                 payload["blob_ciphertext"],
                 conn=conn,
                 synced_at=synced_at,
+                force=bool(payload.get("force")),
             )
         results.append(result)
     return results
@@ -1129,7 +1250,7 @@ def list_items_by_uuid(user_id: int, uuids: list[str], *, include_blobs: bool = 
     rows = connection().execute(
         f"""
         SELECT item_uuid, content_version, ciphertext, blob_ciphertext,
-               content_hash, deleted, updated_at, synced_at
+               content_hash, deleted, updated_at, synced_at, rev
         FROM items
         WHERE user_id = ? AND item_uuid IN ({placeholders})
         ORDER BY updated_at ASC, item_uuid ASC
@@ -1342,7 +1463,7 @@ def list_items_since(
     params: list[Any] = [user_id, since, since, after_uuid]
     sql = f"""
         SELECT item_uuid, content_version, ciphertext, blob_ciphertext,
-               content_hash, deleted, updated_at, synced_at
+               content_hash, deleted, updated_at, synced_at, rev
         FROM items
         WHERE user_id = ?
           AND (
@@ -1371,6 +1492,7 @@ def list_items_since(
                 "deleted": bool(item.get("deleted")),
                 "updated_at": float(item.get("updated_at") or 0),
                 "synced_at": float(item.get("synced_at") or 0),
+                "rev": int(item.get("rev") or 0),
                 "unchanged": True,
             })
             continue

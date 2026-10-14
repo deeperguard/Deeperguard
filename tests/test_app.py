@@ -4390,7 +4390,10 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("zero-knowledge", privacy.get_data(as_text=True).lower())
         self.assertIn("zero-knowledge", terms.get_data(as_text=True).lower())
 
-    def test_sync_push_quota_batch_is_atomic(self):
+    def test_sync_push_quota_hit_does_not_block_other_items_in_batch(self):
+        # One over-quota item used to make the whole batch a no-op (and wedge
+        # the client's push queue). The acceptable item is written; a client
+        # without the partial flag still gets the legacy 413.
         import db as notes_db
 
         self._register_user("batch@home.local", "batch-secure-pass")
@@ -4437,11 +4440,18 @@ class NotesAppTests(unittest.TestCase):
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(push.status_code, 413)
+        statuses = {row["item_uuid"]: row["status"] for row in push.get_json()["results"]}
+        self.assertEqual(statuses, {"b-seed": "ok", "b-big": "quota_exceeded"})
         row = notes_db.connection().execute(
             "SELECT LENGTH(ciphertext) AS n FROM items WHERE user_id = ? AND item_uuid = ?",
             (int(user["id"]), "b-seed"),
         ).fetchone()
-        self.assertEqual(int(row["n"]), 32)
+        self.assertEqual(int(row["n"]), 48)
+        missing = notes_db.connection().execute(
+            "SELECT 1 FROM items WHERE user_id = ? AND item_uuid = ?",
+            (int(user["id"]), "b-big"),
+        ).fetchone()
+        self.assertIsNone(missing)
 
     def test_admin_delete_user(self):
         import db as notes_db
@@ -4625,7 +4635,11 @@ class NotesAppTests(unittest.TestCase):
 
         # 10. Notes list re-renders when only protection flags change
         self.assertIn("${n.content.locked ? 1 : 0}:${n.content.prevent_edit ? 1 : 0}", app_js)
-        self.assertIn("if (!uuid || vaultPullActive || !meta?.protectionMerged) return;", app_js)
+        self.assertIn("if (!uuid || vaultPullActive) return;", app_js)
+        self.assertIn("if (!meta?.protectionMerged) return;", app_js)
+        # Remote edits to the open note reload the editor or keep a conflict copy.
+        self.assertIn("if (uuid === currentId && meta?.bodyChanged)", app_js)
+        self.assertIn("reconcileOpenNoteWithStore(uuid)", app_js)
         self.assertIn("if (note.content?.locked) unlockedNotes.delete(uuid);", app_js)
         self.assertIn("function syncVaultLockUi", app_js)
         self.assertIn("syncVaultLockUi(true)", app_js)

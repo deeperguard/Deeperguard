@@ -2138,34 +2138,49 @@ def api_sync_push():
         if not item_uuid or not ciphertext:
             continue
         valid_items.append(item)
+    # Current clients send partial=1 and read per-item statuses from a 200.
+    # Older clients treat any non-2xx as "nothing saved", so for them a quota
+    # hit still answers 413 (the acceptable items are written either way).
+    partial = str(body.get("partial", "0")).strip().lower() in {"1", "true", "yes"}
     results = db.upsert_items_batch(uid, valid_items)
     accepted = sum(1 for row in results if row.get("status") == "ok")
     unchanged = sum(1 for row in results if row.get("status") == "unchanged")
     stale = sum(1 for row in results if row.get("status") == "stale")
+    conflicts = sum(1 for row in results if row.get("status") == "conflict")
     quota_hits = sum(1 for row in results if row.get("status") == "quota_exceeded")
+    too_large = sum(1 for row in results if row.get("status") == "too_large")
     body_bytes = int(request.content_length or 0)
     line = (
         f"sync push user={uid} items={len(raw_items)} accepted={accepted} "
-        f"unchanged={unchanged} stale={stale} quota={quota_hits} bytes={body_bytes} "
+        f"unchanged={unchanged} stale={stale} conflict={conflicts} quota={quota_hits} "
+        f"too_large={too_large} bytes={body_bytes} partial={int(partial)} "
         f"ms={int((time.time() - started) * 1000)}"
     )
     _sync_log_line(line)
+    quota_bytes = 0
     if quota_hits:
         user = db.get_user_by_id(uid)
-        quota = db.user_storage_quota_bytes(user) if user else 0
-        return jsonify({
-            "error": "storage quota exceeded",
-            "quota_bytes": quota,
-            "results": results,
-        }), 413
-    return jsonify({
+        quota_bytes = db.user_storage_quota_bytes(user) if user else 0
+        if not partial:
+            return jsonify({
+                "error": "storage quota exceeded",
+                "quota_bytes": quota_bytes,
+                "results": results,
+            }), 413
+    response = {
         "ok": True,
         "accepted": accepted,
         "unchanged": unchanged,
         "stale": stale,
+        "conflicts": conflicts,
+        "quota_exceeded": quota_hits,
+        "too_large": too_large,
         "results": results,
         "server_time": time.time(),
-    })
+    }
+    if quota_hits:
+        response["quota_bytes"] = quota_bytes
+    return jsonify(response)
 
 
 def _lan_https_host() -> str:
