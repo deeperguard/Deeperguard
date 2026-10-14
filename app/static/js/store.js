@@ -1899,6 +1899,10 @@ const NotesStore = (() => {
       emitSync('syncing', 'Saving…');
     }
     const epoch = state.lockEpoch;
+    // Set when edits arrived during the request (or new items were queued), so
+    // the caller runs one more pass instead of leaving them dirty until the
+    // next keystroke or timer.
+    let needsAnotherPass = false;
     const pending = (async () => {
       try {
         const snapshots = new Map();
@@ -1917,7 +1921,7 @@ const NotesStore = (() => {
             content.deleted = true;
             deletedIds.add(uuid);
           }
-          snapshots.set(uuid, item.updated_at);
+          snapshots.set(uuid, { item, updated_at: item.updated_at });
           payload.push(await wrapItem(uuid, content, item.updated_at));
         }
         if (!payload.length) {
@@ -1936,24 +1940,29 @@ const NotesStore = (() => {
           timeoutMs,
         });
         const settled = [];
-        if (Array.isArray(pushRes.results)) {
-          for (const row of pushRes.results) {
-            // "stale": another device stored a newer version — drop our pending
-            // write; the next pull brings the winning copy.
-            if (row.status === 'ok' || row.status === 'unchanged' || row.status === 'stale') {
-              settled.push(row.item_uuid);
-            }
+        const results = Array.isArray(pushRes.results) ? pushRes.results : null;
+        const statusByUuid = new Map((results || []).map((row) => [row.item_uuid, row]));
+        for (const [uuid, snap] of snapshots) {
+          // Servers without per-item results accepted the whole batch.
+          const status = results ? String(statusByUuid.get(uuid)?.status || '') : 'ok';
+          // "stale": another device stored a newer version — drop our pending
+          // write; the next pull brings the winning copy.
+          if (status !== 'ok' && status !== 'unchanged' && status !== 'stale') continue;
+          // Edits typed while this request was on the wire replaced the item or
+          // bumped its clock; they must stay dirty and go out with the next push.
+          if (editedSincePush(uuid, snap)) {
+            needsAnotherPass = true;
+            continue;
           }
-        } else {
-          NotesSanitize.clearUnchangedDirty(state.dirty, snapshots, (uuid) => state.items.get(uuid)?.updated_at);
-          for (const uuid of snapshots.keys()) {
-            if (!state.dirty.has(uuid)) settled.push(uuid);
-          }
+          settled.push(uuid);
         }
         // A lock during the request already dropped the in-memory queue; the
         // persisted copy is reconciled on the next unlock (server answers "unchanged").
         if (state.lockEpoch === epoch) {
           for (const uuid of settled) state.dirty.delete(uuid);
+          for (const uuid of state.dirty) {
+            if (!snapshots.has(uuid)) needsAnotherPass = true;
+          }
         }
         for (const uuid of settled) {
           if (!deletedIds.has(uuid)) continue;
@@ -2009,8 +2018,16 @@ const NotesStore = (() => {
         state.activePush = null;
       }
     }
-    if (ok && state.dirty.size) return pushDirty({ quiet });
+    // Only loop when something new is waiting. Items the server refused this
+    // round are retried by the next edit or timer, not in a tight loop.
+    if (ok && state.dirty.size && needsAnotherPass) return pushDirty({ quiet });
     return ok;
+  }
+
+  function editedSincePush(uuid, snap) {
+    const current = state.items.get(uuid);
+    if (!current) return false;
+    return current !== snap.item || current.updated_at !== snap.updated_at;
   }
 
   function schedulePush() {
@@ -3936,6 +3953,10 @@ const NotesStore = (() => {
     item.content = item.content || {};
     item.content.deleted = true;
     item.content.updated_at = new Date().toISOString();
+    // A tombstone must be newer than the edit it replaces, otherwise another
+    // device's slightly later edit (or last-writer-wins on the server)
+    // resurrects the item, and a delete during an in-flight push looks unchanged.
+    item.updated_at = Math.max(Date.now() / 1000, (Number(item.updated_at) || 0) + 0.001);
     // Deleted in place — Map.set does not run, so drop the owner map here.
     invalidateShadowDuplicates();
     state.dirty.add(uuid);
