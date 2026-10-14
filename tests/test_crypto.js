@@ -11,6 +11,49 @@ vm.runInThisContext(
 );
 const NotesCrypto = require(path.join(jsRoot, 'crypto.js'));
 
+function loadCryptoWorker() {
+  const sandbox = {
+    console,
+    TextEncoder,
+    TextDecoder,
+    Uint8Array,
+    atob,
+    btoa,
+  };
+  sandbox.self = sandbox;
+  vm.createContext(sandbox);
+  sandbox.importScripts = (...urls) => {
+    for (const url of urls) {
+      vm.runInContext(fs.readFileSync(path.join(jsRoot, url), 'utf8'), sandbox);
+    }
+  };
+  vm.runInContext(fs.readFileSync(path.join(jsRoot, 'crypto-worker.js'), 'utf8'), sandbox);
+  return {
+    deriveKey(password, salt, kdfVersion) {
+      return new Promise((resolve, reject) => {
+        sandbox.postMessage = (msg) => {
+          if (msg.ok) resolve(msg.result);
+          else reject(new Error(msg.error || 'worker derive failed'));
+        };
+        sandbox.onmessage({
+          data: { id: 1, type: 'deriveKey', password, salt, kdfVersion },
+        }).catch(reject);
+      });
+    },
+    decrypt(rawKey, payload) {
+      return new Promise((resolve, reject) => {
+        sandbox.postMessage = (msg) => {
+          if (msg.ok) resolve(msg.content);
+          else reject(new Error(msg.error || 'worker decrypt failed'));
+        };
+        sandbox.onmessage({
+          data: { id: 2, type: 'decrypt', rawKey, payload },
+        }).catch(reject);
+      });
+    },
+  };
+}
+
 (async () => {
   const salt = 'c2FsdC0xMjM0NQ=='; // base64 "salt-12345"
 
@@ -33,6 +76,18 @@ const NotesCrypto = require(path.join(jsRoot, 'crypto.js'));
   const dec2 = await NotesCrypto.decryptBytes(v2Key, enc2);
   assert.deepStrictEqual(Buffer.from(dec2), Buffer.from(plain));
   await assert.rejects(() => NotesCrypto.decryptBytes(v1Key, enc2));
+
+  const worker = loadCryptoWorker();
+  const workerKey = await worker.deriveKey('vault-password', salt, 2);
+  assert.deepStrictEqual(
+    Buffer.from(workerKey.raw, 'base64'),
+    Buffer.from(v2Key.raw),
+    'worker Argon2 salt must match the main-thread salt',
+  );
+  const note = { type: 'note', title: 'worker' };
+  const noteEnc = await NotesCrypto.encryptObject(v2Key, note);
+  const workerNote = await worker.decrypt(workerKey.raw, noteEnc);
+  assert.strictEqual(JSON.stringify(workerNote), JSON.stringify(note));
 
   console.log('ok');
 })().catch((err) => {
