@@ -99,6 +99,11 @@ const NotesStore = (() => {
     // dirty but are skipped by keystroke pushes so they cannot wedge the queue;
     // sync() retries them, and any new edit to the item clears the block.
     blocked: new Map(),
+    // Rows this device could not decrypt (wrong key, damaged ciphertext).
+    // They count as "known" when judging whether the vault is incomplete.
+    undecryptable: new Set(),
+    // A full-vault refill for missing items runs at most once per unlock.
+    refillAttempted: false,
     lastSync: 0,
     // Local wall clock (ms) of the last completed sync — for "recently synced"
     // throttling. lastSync is a server cursor and must not be compared to Date.now().
@@ -735,6 +740,8 @@ const NotesStore = (() => {
     lastDerivedKdf = null;
     state.items.clear();
     state.blocked.clear();
+    state.undecryptable.clear();
+    state.refillAttempted = false;
     state.localReady = false;
     sessionStorage.removeItem('notes_unlocked');
     try {
@@ -1851,8 +1858,10 @@ const NotesStore = (() => {
           await ingestCipherRow(row, { fast: fastDecrypt, skipBlob });
           opened += 1;
           cipherOpened += 1;
+          state.undecryptable.delete(row.uuid);
         } catch (err) {
           failed += 1;
+          state.undecryptable.add(row.uuid);
         }
         batchDone += 1;
         if (onUnlockProgress && (
@@ -2641,11 +2650,13 @@ const NotesStore = (() => {
             } catch (ingestErr) { /* ignore */ }
           }
           decryptOk += 1;
+          state.undecryptable.delete(row.item_uuid);
           watermark = Math.max(watermark, rowCursor(row));
         } catch (e) {
           if (e?.code === 'VAULT_LOCKED') throw e;
           if (!state.cryptoKey || state.lockEpoch !== epoch) throw lockedError();
           console.warn('decrypt failed', row.item_uuid, e);
+          state.undecryptable.add(row.item_uuid);
           decryptSkipped += 1;
           if (firstFailedAt == null) firstFailedAt = Number(row.updated_at) || 0;
           // Keep going — one bad blob must not stop the rest of the vault.
@@ -2968,6 +2979,8 @@ const NotesStore = (() => {
       state.items.clear();
       state.dirty.clear();
       state.blocked.clear();
+      state.undecryptable.clear();
+      state.refillAttempted = false;
       state.lastSync = 0;
       state.localReady = false;
       state.cryptoKey = null;
@@ -3085,8 +3098,14 @@ const NotesStore = (() => {
       const liveCount = [...state.items.values()].filter((item) => !item.deleted).length;
       const serverTotal = Number(pull.total_undeleted) || 0;
       const totpCount = countTotpItems();
-      const vaultLooksIncomplete = serverTotal > 0 && liveCount < serverTotal;
-      const missingTotpAfterSync = totpCount === 0 && noteCount > 0 && vaultLooksIncomplete;
+      // Rows we already know we cannot read are accounted for: a vault with
+      // no authenticator entries and a few unreadable rows is complete as far
+      // as a re-download can help, so it must not be pulled from zero again
+      // on every timer tick.
+      const knownBad = [...state.undecryptable].filter((uuid) => !state.items.has(uuid)).length;
+      const vaultLooksIncomplete = serverTotal > 0 && liveCount + knownBad < serverTotal;
+      const missingTotpAfterSync = totpCount === 0 && noteCount > 0 && vaultLooksIncomplete
+        && !state.refillAttempted;
       if (serverTotal > 0 && since > 0
         && ((noteCount === 0 && (liveCount === 0 || (pull.processed || 0) === 0))
           || missingTotpAfterSync)) {
@@ -3095,10 +3114,14 @@ const NotesStore = (() => {
           since,
           serverTotal,
           liveCount,
+          knownBad,
           totpCount,
           processed: pull.processed || 0,
           missingTotp: missingTotpAfterSync,
         });
+        // One attempt per unlock: if the full pull does not close the gap the
+        // missing rows are not something this device can download its way to.
+        if (missingTotpAfterSync) state.refillAttempted = true;
         await rememberLastSync(0);
         pull = await pullChanges(0, { quiet });
         noteCount = listNotes().filter((n) => !n.content?.trashed).length;
