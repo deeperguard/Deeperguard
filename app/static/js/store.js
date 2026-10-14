@@ -1232,6 +1232,49 @@ const NotesStore = (() => {
     return { changed, content: merged };
   }
 
+  function noteTextDiffers(a, b) {
+    return String(a?.title || '') !== String(b?.title || '')
+      || String(a?.content || '') !== String(b?.content || '');
+  }
+
+  const CONFLICT_SUFFIX = ' (conflict copy)';
+  let onConflictCopy = null;
+
+  function setConflictCopyCallback(fn) {
+    onConflictCopy = typeof fn === 'function' ? fn : null;
+  }
+
+  // When two versions of a note collide, the losing text becomes a sibling
+  // note instead of disappearing. Everything stays client-side: the copy is
+  // pushed as ciphertext like any other note.
+  function keepConflictCopy(originalUuid, loserContent, { source = '', winnerContent = null } = {}) {
+    if (!loserContent || loserContent.type !== 'note' || loserContent.deleted) return null;
+    const original = state.items.get(originalUuid);
+    if (!original || original.deleted || original.content?.type !== 'note') return null;
+    if (!noteTextDiffers(winnerContent || original.content, loserContent)) return null;
+    const title = String(loserContent.title || original.content.title || '').trim();
+    const copy = { ...defaultNote(), ...JSON.parse(JSON.stringify(loserContent)) };
+    delete copy.attachments;
+    delete copy.ocr_text;
+    delete copy.attachment_names;
+    delete copy.sn_pending_files;
+    delete copy.warn_at;
+    copy.attachments = [];
+    copy.title = title ? `${title}${CONFLICT_SUFFIX}` : 'Conflict copy';
+    copy.title_manual = true;
+    copy.conflict_of = originalUuid;
+    copy.conflict_source = source;
+    copy.conflict_at = new Date().toISOString();
+    copy.pinned = false;
+    const uuid = newUuid();
+    upsert(uuid, copy);
+    logSync('conflict-copy', { of: originalUuid, copy: uuid, source });
+    if (onConflictCopy) {
+      try { onConflictCopy({ original: originalUuid, copy: uuid, title, source }); } catch (err) { /* ignore */ }
+    }
+    return uuid;
+  }
+
   function attachLiveIds(content, noteId) {
     if (!content || content.type !== 'note') return content;
     const hidden = shadowDuplicateIds(allAttachmentItems());
@@ -2097,6 +2140,7 @@ const NotesStore = (() => {
           const localWins = local && !local.deleted && (local.updated_at || 0) > (row.updated_at || 0);
           let applied = false;
           let protectionMerged = false;
+          let previousContent = null;
           if (row.deleted) {
             if (!localWins) {
               state.items.delete(row.item_uuid);
@@ -2159,6 +2203,7 @@ const NotesStore = (() => {
           } else {
             const prevLocked = !!local?.content?.locked;
             const prevPrevent = !!local?.content?.prevent_edit;
+            previousContent = local?.content || null;
             if (remote.content?.type === 'search_index') {
               const merged = mergeSearchEntries(local?.content?.entries, remote.content.entries);
               if (!searchEntriesEqual(remote.content.entries, merged)) {
@@ -2193,6 +2238,10 @@ const NotesStore = (() => {
                 done: doneBefore + i + 1,
                 quiet: !!quiet,
                 protectionMerged,
+                // The open editor needs to know when the text under it was
+                // replaced by another device, and what it was before.
+                bodyChanged: !!previousContent && noteTextDiffers(previousContent, remote.content),
+                previousContent,
               });
             } catch (ingestErr) { /* ignore */ }
           }
@@ -4588,6 +4637,9 @@ const NotesStore = (() => {
     changePassword,
     repairAttachmentsWithPreviousPassword,
     mergeCrossDeviceProtection,
+    noteTextDiffers,
+    keepConflictCopy,
+    setConflictCopyCallback,
     verifyVaultPassword,
     fetchAttachmentBlobFromServer,
     hasLocalAttachmentBytes,
