@@ -18,6 +18,8 @@ const server = {
   pushStatus: 200,
   refetchResponder: null,
   blobResponder: null,
+  // Optional catch-all: (url, body, call) => payload | { __status, body } | undefined.
+  route: null,
   watermark: { watermark: 1, synced_watermark: 5000, item_count: 1 },
 };
 
@@ -90,6 +92,13 @@ global.fetch = async (url, options = {}) => {
   }
   const call = { url: pathUrl, method: options.method || 'GET', body };
   fetchCalls.push(call);
+  if (server.route) {
+    const answer = await server.route(pathUrl, body, call);
+    if (answer !== undefined) {
+      if (answer && answer.__status) return jsonResponse(answer.__status, answer.body || {});
+      return jsonResponse(200, answer);
+    }
+  }
   if (pathUrl.includes('/api/sync/pull')) {
     const page = server.pullPages.length ? server.pullPages.shift() : { items: [], has_more: false };
     if (typeof page === 'function') return jsonResponse(200, await page(body));
@@ -203,6 +212,7 @@ function resetServer() {
   server.pushStatus = 200;
   server.refetchResponder = null;
   server.blobResponder = null;
+  server.route = null;
   fetchCalls.length = 0;
 }
 

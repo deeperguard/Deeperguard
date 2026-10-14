@@ -4470,6 +4470,77 @@ const NotesStore = (() => {
     return { repaired, failed };
   }
 
+  function cloneSyncItem(item) {
+    const copy = {
+      uuid: item.uuid,
+      content: JSON.parse(JSON.stringify(item.content)),
+      updated_at: item.updated_at,
+      deleted: !!item.deleted,
+    };
+    if (item.rev != null) copy.rev = item.rev;
+    return copy;
+  }
+
+  // Download attachment bytes this device does not hold. Returns the uuids the
+  // server does not hold either; throws when the server cannot be reached.
+  async function downloadMissingBlobs(uuids) {
+    const absent = [];
+    for (let i = 0; i < uuids.length; i += 50) {
+      const chunk = uuids.slice(i, i + 50);
+      const data = await api('/api/sync/blobs', {
+        method: 'POST',
+        body: JSON.stringify({ uuids: chunk }),
+        timeoutMs: syncRequestTimeoutMs(chunk.length * 2_000_000),
+      });
+      const byId = new Map((data.blobs || []).map((row) => [row.item_uuid, row.blob_ciphertext]));
+      for (const uuid of chunk) {
+        const blob = byId.get(uuid);
+        if (!blob) {
+          absent.push(uuid);
+          continue;
+        }
+        if (typeof NotesIDB.putBlob === 'function') await NotesIDB.putBlob(uuid, blob);
+      }
+    }
+    return absent;
+  }
+
+  // Give every attachment in a rekey snapshot its file bytes. Files this device
+  // never downloaded (light vault) are fetched first: a metadata-only push
+  // keeps the server's blob as it is, which after a key change would leave the
+  // file unreadable on every device. Files the server does not hold either keep
+  // their marker and are skipped. Throws when a download fails.
+  async function hydrateSnapshotBlobs(snapshot) {
+    const pending = [];
+    for (const { uuid, item } of snapshot) {
+      if (item.deleted || item.content?.type !== 'attachment') continue;
+      if (!item.content.file_enc_stored || item.content.file_enc) continue;
+      const fileEnc = await storedAttachmentFileEnc(uuid);
+      if (fileEnc) {
+        item.content.file_enc = fileEnc;
+        delete item.content.file_enc_stored;
+      } else {
+        pending.push({ uuid, item });
+      }
+    }
+    if (!pending.length) return { fetched: 0, absent: 0 };
+    const absent = new Set(await downloadMissingBlobs(pending.map((entry) => entry.uuid)));
+    let fetched = 0;
+    for (const { uuid, item } of pending) {
+      if (absent.has(uuid)) continue;
+      const fileEnc = await storedAttachmentFileEnc(uuid);
+      if (!fileEnc) {
+        absent.add(uuid);
+        continue;
+      }
+      item.content.file_enc = fileEnc;
+      delete item.content.file_enc_stored;
+      fetched += 1;
+    }
+    logSync('rekey-hydrate', { pending: pending.length, fetched, absent: absent.size });
+    return { fetched, absent: absent.size };
+  }
+
   async function migrateVaultKdfIfNeeded(password, salt) {
     if (!state.cryptoKey) return { migrated: false };
     if (state.kdfVersion >= 2) {
@@ -4490,23 +4561,16 @@ const NotesStore = (() => {
 
     vaultKdfMigrationInFlight = true;
     const oldKey = state.cryptoKey;
-    const snapshot = [...state.items.entries()].map(([uuid, item]) => ({
-      uuid,
-      item: {
-        uuid: item.uuid,
-        content: JSON.parse(JSON.stringify(item.content)),
-        updated_at: item.updated_at,
-        deleted: !!item.deleted,
-      },
-    }));
-    for (const { uuid, item } of snapshot) {
-      if (item.content?.type === 'attachment' && item.content.file_enc_stored && !item.content.file_enc) {
-        const fileEnc = await storedAttachmentFileEnc(uuid);
-        if (fileEnc) item.content.file_enc = fileEnc;
-        delete item.content.file_enc_stored;
-      }
-    }
+    const snapshot = [...state.items.entries()].map(([uuid, item]) => ({ uuid, item: cloneSyncItem(item) }));
     try {
+      try {
+        await hydrateSnapshotBlobs(snapshot);
+      } catch (err) {
+        // Without every file's bytes the upgrade would strand old-key blobs on
+        // the server; try again on a later unlock.
+        logSync('kdf-migrate-skip', { error: err?.message || String(err) });
+        return { migrated: false };
+      }
       const derived = await NotesCrypto.deriveKey(clean, vaultSalt, { kdfVersion: 2 });
       const newKey = derived.key;
       const ts = Date.now() / 1000;
@@ -4572,30 +4636,34 @@ const NotesStore = (() => {
     if (!salt) throw new Error('Missing vault salt — connect online once');
 
     passwordChangeInFlight = true;
-    const snapshot = [...state.items.entries()].map(([uuid, item]) => ({
-      uuid,
-      item: {
-        uuid: item.uuid,
-        content: JSON.parse(JSON.stringify(item.content)),
-        updated_at: item.updated_at,
-        deleted: !!item.deleted,
-      },
-    }));
-    // Hydrate stored attachment payloads with the CURRENT key before rekeying,
-    // otherwise stripped items would silently keep old-key file bytes.
-    for (const { uuid, item } of snapshot) {
-      if (item.content?.type === 'attachment' && item.content.file_enc_stored && !item.content.file_enc) {
-        const fileEnc = await storedAttachmentFileEnc(uuid);
-        if (fileEnc) item.content.file_enc = fileEnc;
-        delete item.content.file_enc_stored;
+    const snapshot = [...state.items.entries()].map(([uuid, item]) => ({ uuid, item: cloneSyncItem(item) }));
+    // Metadata-only copies for the rollback path (file bytes are turned back
+    // from the rekeyed items instead of being held twice in memory).
+    const pristine = new Map(snapshot.map(({ uuid, item }) => {
+      const copy = cloneSyncItem(item);
+      if (copy.content?.type === 'attachment' && copy.content.file_enc) {
+        delete copy.content.file_enc;
+        copy.content.file_enc_stored = true;
       }
-    }
+      return [uuid, copy];
+    }));
 
     let rotationToken = '';
     let syncedNewKey = false;
+    let rotated = false;
+    let oldKey = null;
+    let newKey = null;
     try {
       if (!(await verifyVaultPassword(current))) {
         throw new Error('Current password does not match this vault.');
+      }
+      // Hydrate stored attachment payloads with the CURRENT key before rekeying,
+      // otherwise stripped items would silently keep old-key file bytes.
+      try {
+        await hydrateSnapshotBlobs(snapshot);
+      } catch (err) {
+        const reason = isProbablyOffline(err) ? 'You are offline' : (err?.message || 'Download failed');
+        throw new Error(`${reason}. Some documents are not on this device yet; they must be downloaded before the vault can be re-encrypted. Try again when online.`);
       }
 
       let loginMatchesCurrent = true;
@@ -4659,9 +4727,10 @@ const NotesStore = (() => {
         if (!rotationToken) throw new Error('Could not verify your current password — try again.');
       }
 
-      const oldKey = state.cryptoKey;
+      oldKey = state.cryptoKey;
       await unlock(next, salt, { kdfVersion: state.kdfVersion });
-      const newKey = state.cryptoKey;
+      newKey = state.cryptoKey;
+      rotated = true;
       const ts = Date.now() / 1000;
       for (const { uuid, item } of snapshot) {
         if (item.content?.type === 'attachment' && item.content.file_enc) {
@@ -4684,7 +4753,21 @@ const NotesStore = (() => {
         state.dirty.add(uuid);
         await persistLocal(uuid, item);
       }
-      await flush();
+      // The sign-in change is committed only once every re-encrypted item is
+      // on the server; otherwise other devices would unlock with the new
+      // password and find rows they cannot read.
+      const pushed = await flush();
+      // Items the server refuses for size/quota were never on it under any
+      // key; they stay local and do not hold the change back.
+      const unsynced = snapshot.filter(({ uuid }) => state.dirty.has(uuid) && !state.blocked.has(uuid)).length;
+      if (!pushed || unsynced) {
+        const detail = state.lastError ? ` (${state.lastError})` : '';
+        const err = new Error(unsynced
+          ? `${unsynced} item${unsynced === 1 ? '' : 's'} could not be uploaded with the new password${detail}. Nothing was changed — try again when the upload works.`
+          : `The re-encrypted vault could not be uploaded${detail}. Nothing was changed — try again when online.`);
+        err.code = 'REKEY_UPLOAD_FAILED';
+        throw err;
+      }
       syncedNewKey = true;
 
       let passwordRes;
@@ -4730,15 +4813,43 @@ const NotesStore = (() => {
         }
         throw recovery;
       }
-      try {
-        await unlock(current, salt);
-        for (const { uuid, item } of snapshot) {
-          state.items.set(uuid, item);
-          state.dirty.delete(uuid);
-          await persistLocal(uuid, item);
+      if (rotated) {
+        try {
+          await unlock(current, salt, { kdfVersion: state.kdfVersion });
+          const now = Date.now() / 1000;
+          for (const { uuid } of snapshot) {
+            const live = state.items.get(uuid);
+            const restored = pristine.get(uuid);
+            if (!restored) continue;
+            if (live?.content?.type === 'attachment' && live.content.file_enc) {
+              restored.content.file_enc = live.content.file_enc;
+              delete restored.content.file_enc_stored;
+              try {
+                await rekeyAttachmentFileEnc(restored.content, newKey, oldKey);
+              } catch (rekeyErr) {
+                // Bytes never left the old key (rekey failed before this item).
+                restored.content.file_enc = live.content.file_enc;
+              }
+            }
+            // Rows that already went out under the new key must be overwritten
+            // on the server with the current key; keep their revision so the
+            // re-push is accepted, and make it the newest write.
+            if (live?.rev != null) restored.rev = live.rev;
+            restored.updated_at = Math.max(Number(restored.updated_at) || 0, now);
+            state.items.set(uuid, restored);
+            state.dirty.add(uuid);
+            await persistLocal(uuid, restored);
+          }
+          // Best effort: anything that cannot be uploaded now stays in the
+          // persisted queue and goes out with the next sync.
+          await flush();
+          for (const entry of state.items.values()) {
+            const light = strippedAttachmentContent(entry.content);
+            if (light) entry.content = light;
+          }
+        } catch (rollbackErr) {
+          console.warn('password change rollback failed', rollbackErr);
         }
-      } catch (rollbackErr) {
-        console.warn('password change rollback failed', rollbackErr);
       }
       throw err;
     } finally {
