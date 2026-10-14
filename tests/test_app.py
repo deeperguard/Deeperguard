@@ -820,6 +820,44 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(expired.status_code, 401)
         self.assertNotEqual(expired.get_json().get("code"), "session_revoked")
 
+    def test_remote_sign_out_wipe_is_scoped_to_the_signed_out_account(self):
+        """A device id is shared by every account on a browser: one account's
+        remote sign-out must not tell another account's expired tab to wipe."""
+        import secrets
+        import time
+
+        import db as notes_db
+
+        self._register_user("wipe.owner@home.local", "owner-secure-pass")
+        owner = int(notes_db.get_user_by_email("wipe.owner@home.local")["id"])
+        self.client.post("/api/auth/logout", headers={"X-CSRF-Token": self._csrf()})
+        self._register_user("wipe.other@home.local", "other-secure-pass")
+        other_uid = int(notes_db.get_user_by_email("wipe.other@home.local")["id"])
+        self.assertNotEqual(owner, other_uid)
+
+        device = "shared-family-ipad-1"
+        token = notes_db.create_user_session(owner, device_label="iPad", ip="203.0.113.5", device_id=device)
+        row = notes_db.get_session_by_token(token)
+        notes_db.revoke_user_session(int(row["id"]), owner, reason="user")
+
+        def expired_tab(uid):
+            tab = self.app_mod.app.test_client()
+            with tab.session_transaction() as sess:
+                sess["uid"] = uid
+                sess["authed"] = True
+                sess["exp"] = time.time() - 5
+                sess["csrf"] = secrets.token_urlsafe(32)
+            return tab
+
+        other_tab = expired_tab(other_uid).get("/api/account", headers={"X-Device-Id": device})
+        self.assertEqual(other_tab.status_code, 401)
+        self.assertNotEqual(other_tab.get_json().get("code"), "session_revoked",
+                            "another account's remote sign-out must not wipe this account")
+
+        owner_tab = expired_tab(owner).get("/api/account", headers={"X-Device-Id": device})
+        self.assertEqual(owner_tab.status_code, 401)
+        self.assertEqual(owner_tab.get_json().get("code"), "session_revoked")
+
     def test_duplicate_iphone_sessions_collapse(self):
         import db as notes_db
 

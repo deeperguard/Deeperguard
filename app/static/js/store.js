@@ -99,6 +99,11 @@ const NotesStore = (() => {
     // dirty but are skipped by keystroke pushes so they cannot wedge the queue;
     // sync() retries them, and any new edit to the item clears the block.
     blocked: new Map(),
+    // Rows this device could not decrypt (wrong key, damaged ciphertext).
+    // They count as "known" when judging whether the vault is incomplete.
+    undecryptable: new Set(),
+    // A full-vault refill for missing items runs at most once per unlock.
+    refillAttempted: false,
     lastSync: 0,
     // Local wall clock (ms) of the last completed sync — for "recently synced"
     // throttling. lastSync is a server cursor and must not be compared to Date.now().
@@ -735,6 +740,8 @@ const NotesStore = (() => {
     lastDerivedKdf = null;
     state.items.clear();
     state.blocked.clear();
+    state.undecryptable.clear();
+    state.refillAttempted = false;
     state.localReady = false;
     sessionStorage.removeItem('notes_unlocked');
     try {
@@ -1112,6 +1119,22 @@ const NotesStore = (() => {
     }
   }
 
+  // Record the signed-in account and point the local database at it. When the
+  // account changes, the shared pre-upgrade database stays with the account
+  // that was using it (see NotesIDB) instead of being read by the new one.
+  function rememberAccountEmail(email) {
+    const next = String(email || '').trim().toLowerCase();
+    if (!next) return;
+    const previous = String(localStorage.getItem('notes_email') || '').trim().toLowerCase();
+    if (previous && previous !== next && !localStorage.getItem('notes_idb_owner')) {
+      localStorage.setItem('notes_idb_owner', previous);
+    }
+    localStorage.setItem('notes_email', next);
+    if (typeof NotesIDB !== 'undefined' && typeof NotesIDB.setAccount === 'function') {
+      NotesIDB.setAccount(next);
+    }
+  }
+
   function cacheAccount(account) {
     if (!account) return;
     try {
@@ -1119,7 +1142,7 @@ const NotesStore = (() => {
         localStorage.setItem('notes_kdf_salt', account.kdf_salt);
         sessionStorage.setItem('notes_kdf_salt', account.kdf_salt);
       }
-      if (account.email) localStorage.setItem('notes_email', account.email);
+      if (account.email) rememberAccountEmail(account.email);
       if (account.vault_kdf_version) persistVaultKdfServerVersion(account.vault_kdf_version);
     } catch (e) {
       /* ignore quota */
@@ -1851,8 +1874,10 @@ const NotesStore = (() => {
           await ingestCipherRow(row, { fast: fastDecrypt, skipBlob });
           opened += 1;
           cipherOpened += 1;
+          state.undecryptable.delete(row.uuid);
         } catch (err) {
           failed += 1;
+          state.undecryptable.add(row.uuid);
         }
         batchDone += 1;
         if (onUnlockProgress && (
@@ -2641,11 +2666,13 @@ const NotesStore = (() => {
             } catch (ingestErr) { /* ignore */ }
           }
           decryptOk += 1;
+          state.undecryptable.delete(row.item_uuid);
           watermark = Math.max(watermark, rowCursor(row));
         } catch (e) {
           if (e?.code === 'VAULT_LOCKED') throw e;
           if (!state.cryptoKey || state.lockEpoch !== epoch) throw lockedError();
           console.warn('decrypt failed', row.item_uuid, e);
+          state.undecryptable.add(row.item_uuid);
           decryptSkipped += 1;
           if (firstFailedAt == null) firstFailedAt = Number(row.updated_at) || 0;
           // Keep going — one bad blob must not stop the rest of the vault.
@@ -2968,6 +2995,8 @@ const NotesStore = (() => {
       state.items.clear();
       state.dirty.clear();
       state.blocked.clear();
+      state.undecryptable.clear();
+      state.refillAttempted = false;
       state.lastSync = 0;
       state.localReady = false;
       state.cryptoKey = null;
@@ -3085,8 +3114,14 @@ const NotesStore = (() => {
       const liveCount = [...state.items.values()].filter((item) => !item.deleted).length;
       const serverTotal = Number(pull.total_undeleted) || 0;
       const totpCount = countTotpItems();
-      const vaultLooksIncomplete = serverTotal > 0 && liveCount < serverTotal;
-      const missingTotpAfterSync = totpCount === 0 && noteCount > 0 && vaultLooksIncomplete;
+      // Rows we already know we cannot read are accounted for: a vault with
+      // no authenticator entries and a few unreadable rows is complete as far
+      // as a re-download can help, so it must not be pulled from zero again
+      // on every timer tick.
+      const knownBad = [...state.undecryptable].filter((uuid) => !state.items.has(uuid)).length;
+      const vaultLooksIncomplete = serverTotal > 0 && liveCount + knownBad < serverTotal;
+      const missingTotpAfterSync = totpCount === 0 && noteCount > 0 && vaultLooksIncomplete
+        && !state.refillAttempted;
       if (serverTotal > 0 && since > 0
         && ((noteCount === 0 && (liveCount === 0 || (pull.processed || 0) === 0))
           || missingTotpAfterSync)) {
@@ -3095,10 +3130,14 @@ const NotesStore = (() => {
           since,
           serverTotal,
           liveCount,
+          knownBad,
           totpCount,
           processed: pull.processed || 0,
           missingTotp: missingTotpAfterSync,
         });
+        // One attempt per unlock: if the full pull does not close the gap the
+        // missing rows are not something this device can download its way to.
+        if (missingTotpAfterSync) state.refillAttempted = true;
         await rememberLastSync(0);
         pull = await pullChanges(0, { quiet });
         noteCount = listNotes().filter((n) => !n.content?.trashed).length;
@@ -4251,24 +4290,46 @@ const NotesStore = (() => {
     return searchIndexRecord()?.content?.entries || {};
   }
 
+  // How long a removed attachment keeps a tombstone in the shared index so a
+  // device that still has the old entry cannot bring it back on merge. Both
+  // sides drop expired tombstones while merging, so a prune never ping-pongs.
+  const SEARCH_TOMBSTONE_MS = 90 * 24 * 60 * 60 * 1000;
+
+  function searchEntryRemoved(entry) {
+    return !!entry && entry.method === 'removed';
+  }
+
+  function searchEntryExpired(entry, now = Date.now()) {
+    if (!searchEntryRemoved(entry)) return false;
+    const at = Date.parse(entry.removed_at || '') || 0;
+    return !at || now - at > SEARCH_TOMBSTONE_MS;
+  }
+
   function searchIndexCovers(attId) {
     const entry = searchIndexEntries()[attId];
-    if (!entry) return false;
+    if (!entry || searchEntryRemoved(entry)) return false;
     const method = entry.method || '';
     if (!method || method === 'pending' || method === 'failed') return false;
     if (method === 'none' || method === 'text') return true;
     return !!String(entry.text || '').trim();
   }
 
-  function mergeSearchEntries(localEntries, remoteEntries) {
-    const out = { ...(remoteEntries || {}) };
-    for (const [id, local] of Object.entries(localEntries || {})) {
-      const remote = out[id];
-      if (!remote) {
-        out[id] = local;
-        continue;
+  function mergeSearchEntries(localEntries, remoteEntries, now = Date.now()) {
+    const out = {};
+    const ids = new Set([...Object.keys(remoteEntries || {}), ...Object.keys(localEntries || {})]);
+    for (const id of ids) {
+      const remote = remoteEntries?.[id];
+      const local = localEntries?.[id];
+      let chosen;
+      if (!remote || !local) chosen = remote || local;
+      else if (searchEntryRemoved(remote) || searchEntryRemoved(local)) {
+        // A removal on either side wins: attachment ids are never reused.
+        chosen = searchEntryRemoved(remote) ? remote : local;
+      } else {
+        chosen = String(local.text || '').length > String(remote.text || '').length ? local : remote;
       }
-      if (String(local.text || '').length > String(remote.text || '').length) out[id] = local;
+      if (!chosen || searchEntryExpired(chosen, now)) continue;
+      out[id] = chosen;
     }
     return out;
   }
@@ -4317,8 +4378,10 @@ const NotesStore = (() => {
 
   function dropSearchIndexEntry(attId) {
     const entries = { ...searchIndexEntries() };
-    if (!entries[attId]) return;
-    delete entries[attId];
+    if (searchEntryRemoved(entries[attId])) return;
+    // Deleting the key is not enough: the next merge with a device that still
+    // holds the entry would resurrect it. Leave a tombstone instead.
+    entries[attId] = { method: 'removed', removed_at: new Date().toISOString() };
     writeSearchIndex(entries);
   }
 
@@ -4342,7 +4405,9 @@ const NotesStore = (() => {
 
   function applySearchIndexEntries() {
     let applied = 0;
-    for (const id of Object.keys(searchIndexEntries())) {
+    const entries = searchIndexEntries();
+    for (const id of Object.keys(entries)) {
+      if (searchEntryRemoved(entries[id])) continue;
       if (applySearchIndexEntry(id)) applied += 1;
     }
     return applied;
@@ -4353,6 +4418,7 @@ const NotesStore = (() => {
     let changed = false;
     for (const att of listAttachments()) {
       if (entries[att.uuid]) continue;
+      if (att.deleted) continue;
       const method = att.content?.ocr_method || '';
       if (!method || method === 'pending' || method === 'failed') continue;
       if (method !== 'none' && method !== 'text' && !String(att.content.ocr_text || '').trim()) continue;
@@ -4394,6 +4460,14 @@ const NotesStore = (() => {
     if (!item) return false;
     if (!force && item.content?.type === 'note' && (item.content.locked || item.content.prevent_edit)) {
       return false;
+    }
+    if (item.content?.type === 'note') {
+      // A note's files go with it; otherwise they stay on the server (and
+      // count against the quota) with nothing pointing at them.
+      for (const att of [...attachmentsForNote(uuid)]) {
+        if (att.deleted || att.uuid === uuid) continue;
+        remove(att.uuid, { force: true });
+      }
     }
     if (item.content?.type === 'attachment') dropSearchIndexEntry(uuid);
     item.deleted = true;
@@ -5133,6 +5207,7 @@ const NotesStore = (() => {
     SEARCH_INDEX_UUID,
     searchIndexCovers,
     applySearchIndexEntry,
+    mergeSearchEntries,
     refreshNoteSearchText,
     repairStoredAttachmentCopies,
     restoreRevision,
