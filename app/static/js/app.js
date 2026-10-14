@@ -8965,15 +8965,25 @@
     }
   }
 
+  /** Desktop browsers often expose Web Share but users expect a normal file download. */
+  function attachmentExportUsesDownload() {
+    return isDesktopLayout();
+  }
+
+  function exportAttachment(id) {
+    if (attachmentExportUsesDownload()) return downloadAttachment(id);
+    return shareAttachment(id);
+  }
+
   function syncShareLabels() {
     const noteShare = deviceCanShare();
     const fileShare = attachmentCanWebShare();
     const noteLabel = noteShare ? 'Share' : 'Copy';
     const docToolbar = mobileDocToolbarActive();
     const toolbarUsesAttachment = docToolbar && isDesktopLayout();
-    const toolbarLabel = toolbarUsesAttachment ? (fileShare ? 'Share' : 'Download') : noteLabel;
+    const toolbarLabel = toolbarUsesAttachment ? 'Download' : noteLabel;
     const toolbarTitle = toolbarUsesAttachment
-      ? (fileShare ? 'Share attachment' : 'Download attachment')
+      ? 'Download attachment'
       : (noteShare ? 'Share note' : 'Copy note');
     ['btn-share', 'note-info-share', 'note-info-share-bottom'].forEach((id) => {
       const btn = document.getElementById(id);
@@ -8994,23 +9004,23 @@
     }
     const docShare = document.getElementById('doc-share');
     if (docShare) {
-      docShare.hidden = !fileShare;
+      docShare.hidden = !fileShare || isDesktopLayout();
       docShare.title = 'Share';
       docShare.setAttribute('aria-label', 'Share');
       docShare.textContent = 'Share';
     }
     const docDownload = document.getElementById('doc-download');
     if (docDownload) {
-      docDownload.hidden = fileShare;
+      docDownload.hidden = fileShare && isMobileLayout();
       docDownload.title = 'Download';
       docDownload.setAttribute('aria-label', 'Download');
       docDownload.textContent = 'Download';
     }
     const immersive = document.getElementById('doc-immersive-share');
     if (immersive) {
-      immersive.hidden = !fileShare;
-      immersive.title = fileShare ? 'Share' : 'Download';
-      immersive.setAttribute('aria-label', fileShare ? 'Share' : 'Download');
+      const immersiveDownload = attachmentExportUsesDownload() || !fileShare;
+      immersive.title = immersiveDownload ? 'Download' : 'Share';
+      immersive.setAttribute('aria-label', immersiveDownload ? 'Download' : 'Share');
     }
   }
 
@@ -13384,7 +13394,7 @@
   document.getElementById('doc-immersive-close')?.addEventListener('click', closeDocPreview);
   document.getElementById('doc-immersive-share')?.addEventListener('click', () => {
     if (!previewingId) return;
-    shareAttachment(previewingId).catch((err) => toast(err.message || 'Share failed', true));
+    exportAttachment(previewingId).catch((err) => toast(err.message || 'Download failed', true));
   });
   document.getElementById('doc-backdrop').addEventListener('click', closeDocPreview);
   bindInlinePreviewGestures();
@@ -14141,7 +14151,7 @@
     if (mobileDocToolbarActive() && isDesktopLayout()) {
       const attId = inlineDocPreviewAttId();
       if (attId) {
-        shareAttachment(attId).catch((err) => toast(err.message || 'Share failed', true));
+        exportAttachment(attId).catch((err) => toast(err.message || 'Download failed', true));
         return;
       }
     }
