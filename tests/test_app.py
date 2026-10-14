@@ -4869,6 +4869,13 @@ class NotesAppTests(unittest.TestCase):
 
         self.assertIn("if (note.content.locked) return normalize(note.content.title || '')", search_js)
         self.assertIn("if (titlesOnly || note.content?.locked) return null;", search_js)
+        self.assertIn("function listCountLabel", search_js)
+        self.assertIn("function documentHighlightLabel", search_js)
+        self.assertIn("function noteBodyReading", search_js)
+        self.assertIn("clearMemoryIndex", store_js)
+        self.assertNotIn("in notes and scanned documents", app_js)
+        self.assertIn("min-width: max-content", (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8"))
+        self.assertNotIn("text-overflow: ellipsis;\n  }\n  .list-pane .note-section-label", (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8"))
         self.assertTrue(
             ("if (note.content?.locked) {\n      return !!describeMatch(note, query, tagMap, { titlesOnly: true });" in search_js)
             or ("if (note.content?.locked) {\n      return matchesNoteOrFileName(note, query, { includeFileNames: false });" in search_js)

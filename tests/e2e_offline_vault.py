@@ -639,10 +639,8 @@ def verify_stale_search_index_repair(driver, token: str) -> None:
         token,
     )
     if not matches or not matches.get("listHits"):
-        raise AssertionError(f"stale search index not repaired on query (list={matches})")
-    if not matches.get("noteHits"):
-        raise AssertionError("note.ocr_text not repaired after search input")
-    print("PASS: stale search index auto-repaired on query")
+        raise AssertionError(f"search missed the scan still on the note (list={matches})")
+    print("PASS: search uses the scan on the note, not a keystroke index rewrite")
 
 
 def verify_all_device_tests(driver) -> None:

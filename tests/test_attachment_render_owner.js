@@ -143,7 +143,7 @@ function hitsFor(query) {
     'opening a note that does not own the invoice must not render that PDF',
   );
   assert.deepStrictEqual(renderedAttachmentNames(ownerId), [INVOICE_NAME]);
-  assert.ok(hitsFor('136').includes(otherId), 'leaked scan text still matches until repair');
+  assert.ok(!hitsFor('136').includes(otherId), 'a copied scan the note list hides must not match');
   NotesStore.repairStoredAttachmentCopies();
   assert.ok(NotesStore.get(otherAtt) && !NotesStore.get(otherAtt).deleted);
   assert.ok(!String(NotesStore.get(otherId).content.ocr_text || '').includes('136'));

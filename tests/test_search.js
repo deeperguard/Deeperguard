@@ -14,6 +14,12 @@ const {
   noteIsProtected,
   indexNote,
   buildSearchBlob,
+  clearMemoryIndex,
+  memoryIndexActive,
+  listCountLabel,
+  documentHighlightLabel,
+  noteBodyReading,
+  fileRowMatches,
   noteIsPinned,
   partitionPinnedNotes,
   compareNotesForSort,
@@ -165,7 +171,13 @@ const titlesOnlyFile = filterNotes([scanned, loose], {
   tagMap,
   searchOptions: { titlesOnly: true },
 });
-assert.deepStrictEqual(titlesOnlyFile.map((n) => n.uuid), ['scan']);
+assert.deepStrictEqual(titlesOnlyFile.map((n) => n.uuid), []);
+const filenameHit = filterNotes([scanned, loose], {
+  filter: 'all',
+  query: 'reg-card',
+  tagMap,
+});
+assert.deepStrictEqual(filenameHit.map((n) => n.uuid), ['scan']);
 const info = describeMatch(scanned, 'registration', tagMap);
 assert.strictEqual(info.field, 'ocr');
 assert.match(info.snippet, /Vehicle registration/);
@@ -409,5 +421,99 @@ assert.doesNotThrow(() => {
   });
   assert.ok(hits.length > 0);
 });
+
+const invoice136 = note({ uuid: 'inv-136', title: 'Invoice 136', content: 'amount due' });
+const invoice1360 = note({ uuid: 'inv-1360', title: 'Invoice 1360', content: 'other amount' });
+const glued136 = note({ uuid: 'glued-136', title: 'x136y', content: 'code x136y' });
+const body136 = note({ uuid: 'body-136', title: 'Memo', content: 'Reference 136 on the invoice' });
+const numberHits = filterNotes([invoice136, invoice1360, glued136, body136, loose], {
+  filter: 'all',
+  query: '136',
+  tagMap,
+});
+assert.deepStrictEqual(numberHits.map((n) => n.uuid).sort(), ['body-136', 'inv-136']);
+const longerNumber = filterNotes([invoice136, invoice1360], {
+  filter: 'all',
+  query: '1360',
+  tagMap,
+});
+assert.deepStrictEqual(longerNumber.map((n) => n.uuid), ['inv-1360']);
+const wordSubstring = filterNotes([
+  work,
+  note({ uuid: 'workshop', title: 'Workshop notes', content: 'agenda' }),
+  loose,
+], { filter: 'all', query: 'work', tagMap });
+assert.ok(wordSubstring.some((n) => n.uuid === 'workshop'));
+assert.ok(wordSubstring.some((n) => n.uuid === 'work'));
+const exactInfo = describeMatch(body136, '136', tagMap);
+assert.strictEqual(exactInfo.field, 'body');
+assert.match(exactInfo.snippet, /\b136\b/);
+assert.strictEqual(describeMatch(invoice1360, '136', tagMap), null);
+
+const ghost = note({
+  uuid: 'ghost-136',
+  title: 'Unrelated',
+  content: 'no digits here',
+  ocr_text: 'copied invoice 136',
+});
+indexNote(ghost, tagMap);
+ghost.content.ocr_text = '';
+ghost.content.content = 'no digits here';
+assert.strictEqual(memoryIndexActive(), true);
+const ghostHits = filterNotes([ghost], { filter: 'all', query: '136', tagMap });
+assert.deepStrictEqual(ghostHits.map((n) => n.uuid), []);
+assert.strictEqual(describeMatch(ghost, '136', tagMap), null);
+
+assert.strictEqual(listCountLabel(12), '12 notes');
+assert.strictEqual(listCountLabel(1), '1 note');
+assert.strictEqual(listCountLabel(3, { files: true }), '3 files');
+assert.strictEqual(listCountLabel(1, { files: true }), '1 file');
+assert.strictEqual(documentHighlightLabel(12), '12 highlights in this PDF');
+assert.strictEqual(documentHighlightLabel(1, { page: 1, pages: 4 }), '1 highlight in this PDF, page 1 of 4');
+assert.notStrictEqual(listCountLabel(12), documentHighlightLabel(12));
+assert.doesNotMatch(listCountLabel(12), /highlight/);
+assert.doesNotMatch(documentHighlightLabel(12), /notes/);
+
+const emptyBody = note({
+  uuid: 'empty-body',
+  title: 'Invoice scan',
+  content: '',
+  ocr_text: 'invoice word '.repeat(40),
+});
+assert.deepStrictEqual(noteBodyReading(emptyBody), { words: 0, minutes: 0 });
+assert.deepStrictEqual(noteBodyReading(note({ content: 'one two three' })), { words: 3, minutes: 1 });
+
+assert.strictEqual(fileRowMatches(
+  { content: { filename: 'other.pdf', mime: 'application/pdf', ocr_text: '' } },
+  note({ title: 'Parent', content: '', ocr_text: 'total 136 due' }),
+  '136',
+), false);
+assert.strictEqual(fileRowMatches(
+  { content: { filename: 'invoice.pdf', mime: 'application/pdf', ocr_text: 'total 136 due' } },
+  note({ title: 'Parent', content: '' }),
+  '136',
+), true);
+assert.strictEqual(fileRowMatches(
+  { content: { filename: '1360-report.pdf', mime: 'application/pdf', ocr_text: '' } },
+  note({ title: 'Parent', content: '' }),
+  '136',
+), false);
+assert.strictEqual(fileRowMatches(
+  { content: { filename: 'reg-card.jpg', mime: 'image/jpeg', ocr_text: 'scan' } },
+  note({ title: 'Vehicle', content: '' }),
+  'reg-card',
+  { titlesOnly: true },
+), false);
+assert.strictEqual(fileRowMatches(
+  { content: { filename: 'reg-card.jpg', ocr_text: '' } },
+  note({ title: 'Vehicle card', content: '' }),
+  'vehicle',
+  { titlesOnly: true },
+), true);
+
+indexNote(invoice136, tagMap);
+assert.strictEqual(memoryIndexActive(), true);
+clearMemoryIndex();
+assert.strictEqual(memoryIndexActive(), false);
 
 console.log('ok');

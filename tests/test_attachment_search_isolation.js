@@ -326,7 +326,7 @@ function hitsFor(query) {
     'a stored copy with a different hash must not render on the unrelated note',
   );
   assert.ok(NotesStore.listAttachments().some((item) => item.uuid === otherAtt));
-  assert.ok(hitsFor('136').includes(noteOther), 'leaked OCR still matches until repair');
+  assert.ok(!hitsFor('136').includes(noteOther), 'a copied scan the note list hides must not match');
   const repaired = NotesStore.repairStoredAttachmentCopies();
   assert.ok(repaired >= 1);
   assert.strictEqual(NotesStore.get(otherAtt).content.duplicate_of, ownerAtt);
@@ -372,6 +372,126 @@ function hitsFor(query) {
   });
   assert.strictEqual(NotesStore.listAttachments(distinctA).length, 1);
   assert.strictEqual(NotesStore.listAttachments(distinctB).length, 1);
+
+  const sameNameA = NotesStore.newUuid();
+  const sameNameB = NotesStore.newUuid();
+  NotesStore.upsert(sameNameA, { ...NotesStore.defaultNote(), title: 'Upload A', content: 'first file' });
+  NotesStore.upsert(sameNameB, { ...NotesStore.defaultNote(), title: 'Upload B', content: 'second file' });
+  NotesStore.upsert(NotesStore.newUuid(), {
+    type: 'attachment',
+    note_id: sameNameA,
+    filename: 'same.pdf',
+    mime: 'application/pdf',
+    size: 2048,
+    content_sha256: 'hash-same-name-a',
+    ocr_text: '',
+    created_at: '2024-03-01T00:00:00.000Z',
+  });
+  NotesStore.upsert(NotesStore.newUuid(), {
+    type: 'attachment',
+    note_id: sameNameB,
+    filename: 'same.pdf',
+    mime: 'application/pdf',
+    size: 2048,
+    content_sha256: 'hash-same-name-b',
+    ocr_text: '',
+    created_at: '2024-03-02T00:00:00.000Z',
+  });
+  assert.strictEqual(NotesStore.listAttachments(sameNameA).length, 1, 'filename and size alone must not hide a file');
+  assert.strictEqual(NotesStore.listAttachments(sameNameB).length, 1, 'filename and size alone must not hide a file');
+
+  const nearOwner = NotesStore.newUuid();
+  const nearOther = NotesStore.newUuid();
+  const nearOwnerNote = NotesStore.defaultNote();
+  nearOwnerNote.title = 'Near invoice';
+  nearOwnerNote.content = '';
+  NotesStore.upsert(nearOwner, nearOwnerNote);
+  const nearOtherNote = NotesStore.defaultNote();
+  nearOtherNote.title = 'Near copy';
+  nearOtherNote.content = 'A different note that was given a copied scan.';
+  NotesStore.upsert(nearOther, nearOtherNote);
+  const nearOcr = `${INVOICE_OCR}\nNear copy marker ${'line '.repeat(20)}`;
+  const nearChanged = nearOcr.replace('Reeuwijk', 'Reexwijk');
+  assert.notStrictEqual(nearOcr, nearChanged);
+  assert.ok(nearChanged.includes('136'));
+  const nearOwnerAtt = NotesStore.newUuid();
+  const nearOtherAtt = NotesStore.newUuid();
+  NotesStore.upsert(nearOwnerAtt, {
+    type: 'attachment',
+    note_id: nearOwner,
+    filename: 'near-invoice.pdf',
+    mime: 'application/pdf',
+    size: 88001,
+    content_sha256: 'hash-near-owner',
+    ocr_text: nearOcr,
+    ocr_method: 'pdftext',
+    created_at: '2026-08-01T00:00:00.000Z',
+  });
+  NotesStore.upsert(nearOtherAtt, {
+    type: 'attachment',
+    note_id: nearOther,
+    filename: 'near-invoice-copy.pdf',
+    mime: 'application/pdf',
+    size: 88050,
+    content_sha256: 'hash-near-other',
+    ocr_text: nearChanged,
+    ocr_method: 'pdftext',
+    created_at: '2026-08-02T00:00:00.000Z',
+  });
+  NotesStore.get(nearOther).content.ocr_text = nearChanged;
+  NotesStore.get(nearOther).content.attachments = [nearOtherAtt];
+  assert.deepStrictEqual(NotesStore.listAttachments(nearOther), [], 'one-character OCR copies are the same document');
+  assert.ok(NotesStore.listAttachments().some((item) => item.uuid === nearOtherAtt));
+  assert.ok(!NotesStore.get(nearOtherAtt).deleted, 'hiding a copy must not delete its bytes');
+  assert.ok(!hitsFor('136').includes(nearOther));
+  assert.ok(hitsFor('136').includes(nearOwner));
+
+  const keptCopyNote = NotesStore.newUuid();
+  const keptNote = NotesStore.defaultNote();
+  keptNote.title = 'Duplicated invoice';
+  keptNote.content = '';
+  NotesStore.upsert(keptCopyNote, keptNote);
+  const keptAtt = NotesStore.newUuid();
+  NotesStore.upsert(keptAtt, {
+    type: 'attachment',
+    note_id: keptCopyNote,
+    filename: INVOICE_NAME,
+    mime: 'application/pdf',
+    size: 120832,
+    content_sha256: 'hash-owner-copy',
+    ocr_text: INVOICE_OCR,
+    ocr_method: 'pdftext',
+    intentional_copy: true,
+    created_at: '2026-10-01T00:00:00.000Z',
+  });
+  assert.ok(NotesStore.listAttachments(keptCopyNote).some((item) => item.uuid === keptAtt));
+  assert.ok(hitsFor('136').includes(keptCopyNote), 'Duplicate keeps a second file that still matches');
+  assert.ok(hitsFor('136').includes(noteOwner));
+
+  async function waitForIdb(uuid) {
+    for (let i = 0; i < 40; i += 1) {
+      if (idb.has(uuid)) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`not persisted: ${uuid}`);
+  }
+  await waitForIdb(nearOwner);
+  await waitForIdb(nearOther);
+  await waitForIdb(nearOtherAtt);
+  NotesSearch.indexNotes(NotesStore.listNotes(), new Map());
+  assert.strictEqual(NotesSearch.memoryIndexActive(), true);
+  await NotesStore.lock();
+  assert.strictEqual(NotesSearch.memoryIndexActive(), false, 'the in-memory index is dropped on lock');
+  await NotesStore.unlock('vault-password', 'salt-1');
+  await NotesStore.loadLocal();
+  await NotesStore.finishUnlockMaintenance();
+  const unlockedOther = NotesStore.get(nearOther);
+  assert.ok(unlockedOther, 'the copied note is still in the vault after unlock');
+  assert.ok(!String(unlockedOther.content.ocr_text || '').includes('136'), 'unlock cleanup drops the copied scan text');
+  assert.ok(NotesStore.get(nearOtherAtt) && !NotesStore.get(nearOtherAtt).deleted);
+  const unlockedHits = hitsFor('136');
+  assert.ok(unlockedHits.includes(nearOwner), 'the invoice note still matches after unlock');
+  assert.ok(!unlockedHits.includes(nearOther), 'a copied scan must not match after unlock');
 
   console.log('ok');
 })().catch((err) => {

@@ -2364,18 +2364,20 @@
   }
 
   function readingTime(text) {
-    const words = String(text || '').trim() ? String(text).trim().split(/\s+/).length : 0;
-    const minutes = Math.max(1, Math.round(words / 220));
-    return { words, minutes };
+    return NotesSearch.readingStats(text);
   }
 
   function noteReadableText(note) {
-    const body = String(note?.content?.content || '').trim();
-    if (body) return body;
-    return NotesStore.listAttachments(note?.uuid || '')
+    return String(note?.content?.content || '').trim();
+  }
+
+  function scannedTextWordCount(note) {
+    if (!note?.uuid || note.content?.locked) return 0;
+    const text = NotesStore.listAttachments(note.uuid)
       .map((item) => String(item.content?.ocr_text || '').trim())
       .filter(Boolean)
-      .join('\n\n');
+      .join('\n');
+    return readingTime(text).words;
   }
 
   function bumpIdle() {
@@ -4517,6 +4519,9 @@
   let unlockPrimaryRevealed = false;
 
   async function paintUnlockUi() {
+    if (typeof NotesStore.finishUnlockMaintenance === 'function') {
+      await NotesStore.finishUnlockMaintenance();
+    }
     refreshSyncMeta();
     if (typeof NotesStore.mergeDuplicateTags === 'function') {
       try {
@@ -4571,6 +4576,9 @@
           handleVaultDecryptFailure(err, { relock: false });
         }
       }
+    }
+    if (typeof NotesStore.finishUnlockMaintenance === 'function') {
+      await NotesStore.finishUnlockMaintenance();
     }
     refreshSyncMeta();
     if (typeof NotesStore.mergeDuplicateTags === 'function') {
@@ -6285,19 +6293,17 @@
     }, 30000);
   }
 
-  function listStoredFiles({ query = '', tagId = null, folderId = null } = {}) {
-    const q = String(query || '').trim().toLowerCase();
+  function listStoredFiles({ query = '', tagId = null, folderId = null, titlesOnly = false } = {}) {
     const files = [];
-    for (const att of NotesStore.listAttachments()) {
+    const attachments = typeof NotesStore.listVisibleAttachments === 'function'
+      ? NotesStore.listVisibleAttachments()
+      : NotesStore.listAttachments();
+    for (const att of attachments) {
       const note = NotesStore.get(att.content.note_id);
       if (!note || note.deleted || note.content?.trashed || note.content?.archived) continue;
       if (tagId && !(note.content.tags || []).includes(tagId)) continue;
       if (folderId && note.content.folder_id !== folderId) continue;
-      const name = String(att.content.filename || att.content.original_filename || '');
-      const mime = String(att.content.mime || '');
-      const title = String(note.content.title || '');
-      const ocr = String(att.content.ocr_text || note.content.ocr_text || '');
-      if (q && ![name, mime, title, ocr].some((part) => part.toLowerCase().includes(q))) continue;
+      if (!NotesSearch.fileRowMatches(att, note, query, { titlesOnly })) continue;
       files.push({ att, note });
     }
     const sort = NOTE_SORT_ORDER.includes(prefs.sort) ? prefs.sort : 'updated';
@@ -6678,7 +6684,12 @@
       sort: prefs.sort,
       searchOptions,
     }).filter((note) => noteShouldList(note));
-    const files = listingFiles ? listStoredFiles({ query, tagId: currentTag, folderId: currentFolder }) : [];
+    const files = listingFiles ? listStoredFiles({
+      query,
+      tagId: currentTag,
+      folderId: currentFolder,
+      titlesOnly: searchOptions.titlesOnly,
+    }) : [];
     const listed = listingFiles ? files : notes;
     const listedCount = listed.length;
     const meta = document.getElementById('search-meta');
@@ -6687,17 +6698,10 @@
     const listCount = document.getElementById('note-list-count');
     const context = NotesSearch.searchContextActive(query, searchOptions);
     document.body.classList.toggle('list-search-active', !!query);
+    const countLabel = NotesSearch.listCountLabel(listedCount, { files: listingFiles });
     if (query || context) {
-      const parts = [];
-      if (query) {
-        parts.push(`${listedCount} match${listedCount === 1 ? '' : 'es'}`);
-        if (searchOptions.titlesOnly) parts.push('titles only');
-      } else if (context) {
-        parts.push(`${listedCount} ${listingFiles ? 'file' : 'note'}${listedCount === 1 ? '' : 's'}`);
-      }
-      if (searchOptions.tagIds.length) parts.push(`${searchOptions.tagIds.length} tag filter${searchOptions.tagIds.length === 1 ? '' : 's'}`);
       const summary = listedCount
-        ? `${parts.join(' · ')}${query && !searchOptions.titlesOnly && !listingFiles ? ' in notes and scanned documents' : ''}`
+        ? countLabel
         : (query ? (listingFiles ? 'No files match that search' : 'No notes match that search') : 'No notes match these filters');
       if (meta) {
         meta.textContent = summary;
@@ -6713,18 +6717,9 @@
       listTitle.textContent = folder
         ? (folder.content.title || 'Folder')
         : (tag ? tag.content.title || 'Tag' : (FILTER_TITLES[currentFilter] || 'Notes'));
-      if (query && meta?.textContent) {
-        listCount.textContent = meta.textContent;
-        listCount.title = meta.textContent;
-      } else {
-        listCount.textContent = listedCount
-          ? `${listedCount}`
-          : '0';
-        const countLabel = listingFiles ? 'file' : 'note';
-        listCount.title = listedCount
-          ? `${listedCount} ${countLabel}${listedCount === 1 ? '' : 's'} in this view`
-          : `No ${countLabel}s in this view`;
-      }
+      // Note-list count only. PDF highlight totals stay on the document banner.
+      listCount.textContent = countLabel;
+      listCount.title = countLabel;
     }
     updateTrashToolbar(currentFilter === 'trash' ? notes.length : undefined);
     const renderKey = listingFiles
@@ -7449,6 +7444,9 @@
   let docGallery = null;
 
   function attachmentIdsForNote(noteId) {
+    if (typeof NotesStore.visibleAttachmentIds === 'function') {
+      return NotesStore.visibleAttachmentIds(noteId);
+    }
     return NotesStore.listAttachments(noteId).map((a) => a.uuid);
   }
 
@@ -8274,9 +8272,10 @@
         const idx = wrap ? wraps.indexOf(wrap) : -1;
         if (idx >= 0) page = idx + 1;
       }
-      const where = summary.pages > 1 && page ? ` on page ${page} of ${summary.pages}` : '';
-      const many = summary.count === 1 ? '1 match' : `${summary.count} matches`;
-      label.textContent = `${many}${where}`;
+      label.textContent = NotesSearch.documentHighlightLabel(summary.count, {
+        page,
+        pages: summary.pages,
+      });
     }
   }
 
@@ -8344,7 +8343,7 @@
       counter.textContent = '0/0';
       counter.removeAttribute('aria-label');
       if (status && findBarInDocViewer() && needle) {
-        status.textContent = 'No matches in this document';
+        status.textContent = NotesSearch.documentHighlightLabel(0);
         status.classList.add('is-empty');
         status.hidden = false;
       } else if (status) {
@@ -8368,11 +8367,13 @@
       const pageIdx = wrap ? wraps.indexOf(wrap) : -1;
       if (pageIdx >= 0) page = pageIdx + 1;
     }
-    const where = summary.pages > 1 && page ? ` · p.${page}/${summary.pages}` : '';
-    const many = hits.length === 1 ? '1 match' : `${hits.length} matches`;
-    counter.setAttribute('aria-label', `${idx + 1} of ${hits.length} matches${where}`);
+    const highlightLabel = NotesSearch.documentHighlightLabel(hits.length, {
+      page,
+      pages: summary.pages,
+    });
+    counter.setAttribute('aria-label', highlightLabel);
     if (status && findBarInDocViewer()) {
-      status.textContent = `${many}${where}`;
+      status.textContent = highlightLabel;
       status.classList.remove('is-empty');
       status.hidden = false;
     } else if (status) {
@@ -8445,9 +8446,11 @@
       showHitNote(stage, '');
       return;
     }
-    const where = summary.pages > 1 ? ` on page ${summary.page} of ${summary.pages}` : '';
-    const many = summary.count === 1 ? '1 match' : `${summary.count} matches`;
-    showHitNote(stage, `${many}${where}`, { index: 0, count: summary.count });
+    const highlightLabel = NotesSearch.documentHighlightLabel(summary.count, {
+      page: summary.page,
+      pages: summary.pages,
+    });
+    showHitNote(stage, highlightLabel, { index: 0, count: summary.count });
     syncDocFindCounter(stage, 0);
     const root = docFindSearchRoot(stage) || stage;
     const watch = watchUserScroll(stage);
@@ -8615,11 +8618,13 @@
         const pageIdx = wrap ? wraps.indexOf(wrap) : -1;
         if (pageIdx >= 0) page = pageIdx + 1;
       }
-      const where = summary.pages > 1 && page ? ` on page ${page} of ${summary.pages}` : '';
-      const many = hits.length === 1 ? '1 match' : `${hits.length} matches`;
+      const highlightLabel = NotesSearch.documentHighlightLabel(hits.length, {
+        page,
+        pages: summary.pages,
+      });
       const inDocViewer = stage.closest('#doc-stage');
       if (!(inDocViewer && findBarInDocViewer()) && !docHitNoteSuppressed()) {
-        showHitNote(stage, `${many}${where}`, { index: idx, count: hits.length });
+        showHitNote(stage, highlightLabel, { index: idx, count: hits.length });
       } else {
         showHitNote(stage, '');
       }
@@ -9863,13 +9868,25 @@
   }
 
   function updateNoteMeta(note) {
+    if (!ui.noteMeta) return;
     if (note.content?.locked && !unlockedNotes.has(note.uuid)) {
       ui.noteMeta.textContent = 'Protected note';
       return;
     }
-    const { words, minutes } = readingTime(noteReadableText(note));
+    const { words, minutes } = NotesSearch.noteBodyReading(note);
     const updated = relativeTime(noteEditedAtMs(note));
-    ui.noteMeta.textContent = `${words} words · ${minutes} min read · ${updated}`;
+    const primary = document.createElement('span');
+    primary.textContent = words
+      ? `${words} ${words === 1 ? 'word' : 'words'} · ${minutes} min read · ${updated}`
+      : `0 words · ${updated}`;
+    ui.noteMeta.replaceChildren(primary);
+    const scannedWords = scannedTextWordCount(note);
+    if (scannedWords > 0) {
+      const scan = document.createElement('span');
+      scan.className = 'note-meta-scan';
+      scan.textContent = `Scanned text: ${scannedWords} ${scannedWords === 1 ? 'word' : 'words'}`;
+      ui.noteMeta.append(scan);
+    }
     const sheet = document.getElementById('note-options');
     if (sheet && !sheet.hidden && note.uuid === currentId) updateNoteInfoPanel(note);
   }
@@ -10297,6 +10314,7 @@
       });
       const newId = await NotesStore.addAttachment(copyId, file, {
         displayName: att.content.display_name,
+        intentionalCopy: true,
       });
       if (att.content.ocr_text || att.content.ocr_method) {
         NotesStore.setAttachmentOcr(
@@ -11260,7 +11278,7 @@
     const idText = document.getElementById('note-info-id-text');
     if (!created || !note) return;
     if (note.content?.locked && !unlockedNotes.has(note.uuid)) return;
-    const { words: wordCount, minutes } = readingTime(noteReadableText(note));
+    const { words: wordCount, minutes } = NotesSearch.noteBodyReading(note);
     const attCount = NotesStore.listAttachments(note.uuid).length;
     const tagNames = (note.content.tags || [])
       .map((id) => tagMap().get(id))
@@ -11269,7 +11287,9 @@
       .join(', ');
     created.textContent = formatDateTime(note.content.created_at);
     updated.textContent = formatDateTime(noteEditedAtMs(note));
-    words.textContent = `${wordCount} · ${minutes} min read`;
+    words.textContent = wordCount
+      ? `${wordCount} · ${minutes} min read`
+      : '0 words';
     attachments.textContent = String(attCount);
     editor.textContent = EDITOR_LABELS[note.content.editor || 'plain'] || 'Plain text';
     tagsEl.textContent = tagNames || 'None';
@@ -13731,12 +13751,21 @@
   }
 
   let searchDebounceTimer = null;
-  let searchRepairTimer = null;
-  function applySearchFilter() {
+  let searchFilterEpoch = 0;
+  async function applySearchFilter() {
+    const epoch = ++searchFilterEpoch;
     docHitNoteDismissedFor = '';
     updateSearchClear();
-    // Filter the list only — do not rebuild OCR search indexes on every keystroke.
-    // That used to mark many notes dirty, kick sync, and feel like a full app reload.
+    // Wait for unlock cleanup so the first search does not use a copied scan.
+    // Do not rebuild the duplicate plan on each keystroke.
+    if (typeof NotesStore.finishUnlockMaintenance === 'function') {
+      try {
+        await NotesStore.finishUnlockMaintenance();
+      } catch (err) {
+        console.warn('search waited on unlock cleanup', err);
+      }
+    }
+    if (epoch !== searchFilterEpoch) return;
     try {
       renderNotes();
     } catch (err) {
@@ -13749,14 +13778,6 @@
     }
     syncEditorModeForSearch();
     if (currentId) applyEditorMode();
-    clearTimeout(searchRepairTimer);
-    if (!ui.search?.value?.trim()) return;
-    searchRepairTimer = setTimeout(() => {
-      if (!countStaleNoteSearchIndexes()) return;
-      repairSearchIndexesForQuery();
-      renderNotes();
-      if (currentId) applyEditorMode();
-    }, 1200);
   }
   ui.search.addEventListener('input', () => {
     clearTimeout(searchDebounceTimer);
@@ -14130,6 +14151,7 @@
         });
         const newId = await NotesStore.addAttachment(copyId, file, {
           displayName: att.content.display_name,
+          intentionalCopy: true,
         });
         if (att.content.ocr_text || att.content.ocr_method) {
           NotesStore.setAttachmentOcr(
@@ -16471,6 +16493,9 @@
       } catch (err) {
         console.warn('local vault load failed', err);
       }
+      if (typeof NotesStore.finishUnlockMaintenance === 'function') {
+        await NotesStore.finishUnlockMaintenance();
+      }
       refreshSyncMeta();
       renderTags();
       renderNotes();
@@ -16479,11 +16504,6 @@
       renderVaultStats();
       vaultHydrated = true;
       // Overview first after unlock; user picks a note from the list.
-    }
-    if (IS_IOS) {
-      scheduleIdleHeavyWork(() => refreshAllNoteSearchIndexes());
-    } else {
-      refreshAllNoteSearchIndexes();
     }
     vaultReady = true;
     initPullToSync();
