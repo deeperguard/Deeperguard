@@ -49,30 +49,43 @@ const NotesStore = (() => {
     }
   }
 
-  // Which scanned PDF owns which text. Rebuilt once per vault change — a note
-  // row must not scan every copy, or a vault of OCR never paints the list.
+  // Which scanned PDF owns which text. Rebuilt when attachments change, not
+  // while a note is being typed — a row must not rescan every copy.
   let shadowDuplicateCache = null;
   let shadowDuplicateIdCache = null;
+  let allAttachmentCache = null;
+  let attachmentsByNote = null;
+  let visibleAttachmentIdCache = null;
 
   function invalidateShadowDuplicates() {
     shadowDuplicateCache = null;
     shadowDuplicateIdCache = null;
+    allAttachmentCache = null;
+    attachmentsByNote = null;
+    visibleAttachmentIdCache = null;
+  }
+
+  function itemIsAttachment(item) {
+    return item?.content?.type === 'attachment';
   }
 
   class VaultItemMap extends Map {
     set(key, value) {
-      invalidateShadowDuplicates();
-      return super.set(key, value);
+      const prev = Map.prototype.get.call(this, key);
+      // Note text saves must not rebuild the duplicate plan on each keystroke.
+      if (itemIsAttachment(prev) || itemIsAttachment(value)) invalidateShadowDuplicates();
+      return Map.prototype.set.call(this, key, value);
     }
 
     delete(key) {
-      invalidateShadowDuplicates();
-      return super.delete(key);
+      const prev = Map.prototype.get.call(this, key);
+      if (itemIsAttachment(prev)) invalidateShadowDuplicates();
+      return Map.prototype.delete.call(this, key);
     }
 
     clear() {
       invalidateShadowDuplicates();
-      return super.clear();
+      return Map.prototype.clear.call(this);
     }
   }
 
@@ -727,6 +740,9 @@ const NotesStore = (() => {
     if (typeof NotesVaultSecrets !== 'undefined') {
       NotesVaultSecrets.clearSecrets();
     }
+    if (typeof NotesSearch !== 'undefined' && typeof NotesSearch.clearMemoryIndex === 'function') {
+      NotesSearch.clearMemoryIndex();
+    }
     if (typeof NotesCrypto !== 'undefined' && typeof NotesCrypto.terminateWorker === 'function') {
       NotesCrypto.terminateWorker();
     }
@@ -1218,11 +1234,10 @@ const NotesStore = (() => {
 
   function attachLiveIds(content, noteId) {
     if (!content || content.type !== 'note') return content;
-    const hidden = shadowDuplicateIds(listAttachments());
+    const hidden = shadowDuplicateIds(allAttachmentItems());
     const live = [];
-    for (const item of state.items.values()) {
-      if (item.deleted || item.content?.type !== 'attachment') continue;
-      if (item.content.note_id !== noteId || hidden.has(item.uuid)) continue;
+    for (const item of attachmentsForNote(noteId)) {
+      if (item.deleted || hidden.has(item.uuid)) continue;
       live.push(item.uuid);
     }
     const prior = Array.isArray(content.attachments) ? content.attachments : [];
@@ -1385,6 +1400,9 @@ const NotesStore = (() => {
     await migratePlainAttachments();
     await migrateLegacyBlobs();
     repairStoredAttachmentCopies();
+    // Rewrite copied scan text from the attachments the note list shows
+    // before the first search. This does not delete attachment bytes.
+    for (const note of listNotes()) refreshNoteSearchText(note.uuid);
     rebuildSearchIndex();
   }
 
@@ -2996,23 +3014,12 @@ const NotesStore = (() => {
     return ranked[0]?.uuid || null;
   }
 
-  function attachmentBasename(att) {
-    const name = att?.content?.filename || att?.content?.original_filename || '';
-    return String(name).split(/[/\\]/).pop().trim().toLowerCase();
-  }
-
-  function attachmentByteSize(att) {
-    const size = Number(att?.content?.size);
-    return Number.isFinite(size) && size > 0 ? size : 0;
-  }
-
   function attachmentOcrBody(att) {
     return String(att?.content?.ocr_text || '').replace(/\s+/g, ' ').trim();
   }
 
   // The scanned text is what search and the attachment card show. Copies of one
-  // invoice often disagree on hash, byte size, and a trailing character, so
-  // filename/size grouping never saw them as one file.
+  // invoice often disagree on hash, byte size, and a single character.
   function attachmentOcrIdentity(att) {
     const text = attachmentOcrBody(att)
       .toLowerCase()
@@ -3023,21 +3030,42 @@ const NotesStore = (() => {
     return text;
   }
 
-  // Hash-only grouping missed copies already in the vault: same PDF, same
-  // filename and size, but a different or empty content hash on each note.
-  function attachmentsAreSameStoredFile(a, b) {
-    const ah = String(a?.content?.content_sha256 || '');
-    const bh = String(b?.content?.content_sha256 || '');
-    if (ah && bh && ah === bh) return true;
-    const nameA = attachmentBasename(a);
-    const nameB = attachmentBasename(b);
-    const sizeA = attachmentByteSize(a);
-    const sizeB = attachmentByteSize(b);
-    if (!nameA || nameA !== nameB || !sizeA || sizeA !== sizeB) return false;
-    if (ah && bh && ah !== bh) {
-      const ocrA = attachmentOcrBody(a);
-      const ocrB = attachmentOcrBody(b);
-      if (ocrA && ocrB && ocrA !== ocrB) return false;
+  // One inserted, deleted, or substituted character still counts as the same scan.
+  function ocrEditAtMostOne(left, right) {
+    if (!left || !right || left === right) return left === right && !!left;
+    const diff = left.length - right.length;
+    if (Math.abs(diff) > 1) return false;
+    if (left.length >= 80) {
+      const n = 32;
+      const shareEnd = left.slice(-n) === right.slice(-n);
+      const shareStart = left.slice(0, n) === right.slice(0, n);
+      if (!shareStart && !shareEnd) return false;
+    }
+    if (diff === 0) {
+      let mismatches = 0;
+      for (let i = 0; i < left.length; i += 1) {
+        if (left.charCodeAt(i) !== right.charCodeAt(i)) {
+          mismatches += 1;
+          if (mismatches > 1) return false;
+        }
+      }
+      return mismatches === 1;
+    }
+    const longer = diff > 0 ? left : right;
+    const shorter = diff > 0 ? right : left;
+    let i = 0;
+    let j = 0;
+    let skipped = false;
+    while (i < longer.length && j < shorter.length) {
+      if (longer.charCodeAt(i) === shorter.charCodeAt(j)) {
+        i += 1;
+        j += 1;
+      } else if (skipped) {
+        return false;
+      } else {
+        skipped = true;
+        i += 1;
+      }
     }
     return true;
   }
@@ -3060,28 +3088,18 @@ const NotesStore = (() => {
       if (a !== b) parent[b] = a;
     }
     const byHash = new Map();
-    const byFile = new Map();
     live.forEach((att, index) => {
       const hash = String(att.content?.content_sha256 || '');
-      if (hash) {
-        const prev = byHash.get(hash);
-        if (prev == null) byHash.set(hash, index);
-        else unite(prev, index);
-      }
-      const name = attachmentBasename(att);
-      const size = attachmentByteSize(att);
-      if (!name || !size) return;
-      const key = `${name}\0${size}`;
-      const prev = byFile.get(key);
-      if (prev == null) {
-        byFile.set(key, index);
-        return;
-      }
-      if (attachmentsAreSameStoredFile(live[prev], att)) unite(prev, index);
+      if (!hash) return;
+      const prev = byHash.get(hash);
+      if (prev == null) byHash.set(hash, index);
+      else unite(prev, index);
     });
+    // Filename plus size is not enough — a person can attach two different
+    // files that happen to share a name. Same hash, or nearly the same scan, is.
+    const identities = live.map((att) => attachmentOcrIdentity(att));
     const byOcr = new Map();
-    live.forEach((att, index) => {
-      const key = attachmentOcrIdentity(att);
+    identities.forEach((key, index) => {
       if (!key) return;
       const prev = byOcr.get(key);
       if (prev == null) {
@@ -3090,6 +3108,16 @@ const NotesStore = (() => {
       }
       unite(prev, index);
     });
+    for (let i = 0; i < live.length; i += 1) {
+      const left = identities[i];
+      if (!left) continue;
+      for (let j = i + 1; j < live.length; j += 1) {
+        if (find(i) === find(j)) continue;
+        const right = identities[j];
+        if (!right || !ocrEditAtMostOne(left, right)) continue;
+        unite(i, j);
+      }
+    }
     const groups = new Map();
     live.forEach((att, index) => {
       const root = find(index);
@@ -3100,9 +3128,12 @@ const NotesStore = (() => {
     const losers = new Map();
     for (const peers of groups.values()) {
       if (peers.length < 2) continue;
-      const winner = canonicalAttachmentId(peers);
+      // Duplicate note makes a real second file. Do not hide that copy.
+      const originals = peers.filter((peer) => !peer.content?.intentional_copy);
+      const winner = canonicalAttachmentId(originals.length ? originals : peers);
       if (!winner) continue;
       for (const peer of peers) {
+        if (peer.content?.intentional_copy) continue;
         if (peer.uuid !== winner) losers.set(peer.uuid, winner);
       }
     }
@@ -3141,16 +3172,50 @@ const NotesStore = (() => {
     return losers.size;
   }
 
-  function listAttachments(noteId) {
-    const all = [...state.items.values()].filter(
+  function allAttachmentItems() {
+    if (allAttachmentCache) return allAttachmentCache;
+    allAttachmentCache = [...state.items.values()].filter(
       (i) => i.content?.type === 'attachment' && !i.deleted,
     );
-    if (noteId == null) return all;
-    const mine = all.filter((i) => i.content?.note_id === noteId && !shadowCopyOfLiveFile(i));
+    return allAttachmentCache;
+  }
+
+  function attachmentsForNote(noteId) {
+    if (!attachmentsByNote) {
+      attachmentsByNote = new Map();
+      for (const att of allAttachmentItems()) {
+        const id = att.content?.note_id;
+        if (!id) continue;
+        const list = attachmentsByNote.get(id);
+        if (list) list.push(att);
+        else attachmentsByNote.set(id, [att]);
+      }
+    }
+    return attachmentsByNote.get(noteId) || [];
+  }
+
+  function listAttachments(noteId) {
+    if (noteId == null) return allAttachmentItems();
+    const mine = attachmentsForNote(noteId).filter((att) => !shadowCopyOfLiveFile(att));
     if (mine.length < 1) return mine;
-    const hidden = shadowDuplicateIds(all);
+    const hidden = shadowDuplicateIds(allAttachmentItems());
     if (!hidden.size) return mine;
     return mine.filter((att) => !hidden.has(att.uuid));
+  }
+
+  function visibleAttachmentIds(noteId) {
+    if (!noteId) return [];
+    if (!visibleAttachmentIdCache) visibleAttachmentIdCache = new Map();
+    if (visibleAttachmentIdCache.has(noteId)) return visibleAttachmentIdCache.get(noteId);
+    const ids = listAttachments(noteId).map((att) => att.uuid);
+    visibleAttachmentIdCache.set(noteId, ids);
+    return ids;
+  }
+
+  // Files view skips copies the note list already hides.
+  function listVisibleAttachments() {
+    const hidden = shadowDuplicateIds(allAttachmentItems());
+    return allAttachmentItems().filter((att) => !hidden.has(att.uuid) && !shadowCopyOfLiveFile(att));
   }
 
   function get(uuid) {
@@ -3339,7 +3404,7 @@ const NotesStore = (() => {
     }
   }
 
-  async function addAttachment(noteId, file, { displayName, sourceSha256, ocrPending = false } = {}) {
+  async function addAttachment(noteId, file, { displayName, sourceSha256, ocrPending = false, intentionalCopy = false } = {}) {
     if (!state.cryptoKey) throw new Error('Unlock the vault first');
     if (file.size > MAX_ATTACHMENT_BYTES) {
       throw new Error(`File too large (max ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB)`);
@@ -3351,12 +3416,15 @@ const NotesStore = (() => {
       contentSha256,
       sourceSha256: sourceHash,
     });
-    if (duplicate) {
+    // A normal attach still refuses a second copy of the same bytes.
+    // Duplicate note is explicit: it keeps a real second file that search can find.
+    if (duplicate && !intentionalCopy) {
       throw new Error(duplicateAttachmentMessage(duplicate, file, noteId));
     }
     const fileEnc = await NotesCrypto.encryptBytes(state.cryptoKey, raw);
     const id = newUuid();
     const content = defaultAttachment(noteId, file, fileEnc, displayName, contentSha256, sourceHash);
+    if (intentionalCopy) content.intentional_copy = true;
     if (ocrPending) {
       content.ocr_method = 'pending';
       content.ocr_owner = deviceId();
@@ -4470,6 +4538,8 @@ const NotesStore = (() => {
     deleteTag,
     mergeDuplicateTags,
     listAttachments,
+    listVisibleAttachments,
+    visibleAttachmentIds,
     findDuplicateAttachment,
     describeDuplicateAttachment,
     formatDuplicateUploadMessage: duplicateAttachmentMessage,

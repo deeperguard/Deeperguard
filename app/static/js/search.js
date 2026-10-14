@@ -1,8 +1,65 @@
 const NotesSearch = (() => {
   const searchBlobs = new Map();
+  // Short numbers found in each note's blob. Memory only — cleared on lock.
+  const numericTokens = new Map();
 
   function normalize(text) {
     return (text || '').toLowerCase().trim();
+  }
+
+  // A short invoice or page number must match that token, not a longer number
+  // that happens to contain the same digits (136 vs 1360, or x136y).
+  function queryIsShortNumber(query) {
+    return /^\d{1,8}$/.test(normalize(query));
+  }
+
+  function queryIndex(text, query) {
+    const hay = String(text || '').toLowerCase();
+    const needle = normalize(query);
+    if (!needle || !hay) return -1;
+    if (!queryIsShortNumber(needle)) return hay.indexOf(needle);
+    const match = new RegExp(`\\b${needle}\\b`).exec(hay);
+    return match ? match.index : -1;
+  }
+
+  function textHasQuery(text, query) {
+    return queryIndex(text, query) >= 0;
+  }
+
+  function notesStore() {
+    if (typeof NotesStore !== 'undefined' && NotesStore) return NotesStore;
+    if (typeof window !== 'undefined' && window.NotesStore) return window.NotesStore;
+    return null;
+  }
+
+  // Attachments the note list would show. Null when there is no vault yet,
+  // so unit tests can still search the note's own ocr_text field.
+  function visibleAttachments(note) {
+    const store = notesStore();
+    if (!store || !note?.uuid || typeof store.listAttachments !== 'function') return null;
+    const listed = store.listAttachments(note.uuid);
+    return Array.isArray(listed) ? listed : null;
+  }
+
+  function scanTextForSearch(note) {
+    if (!note?.content || note.content.locked) return '';
+    const atts = visibleAttachments(note);
+    if (atts) {
+      return atts.map((item) => String(item.content?.ocr_text || '').trim()).filter(Boolean).join('\n\n');
+    }
+    return String(note.content.ocr_text || '');
+  }
+
+  function fileNamesForSearch(note) {
+    if (!note?.content || note.content.locked) return '';
+    const atts = visibleAttachments(note);
+    if (atts) {
+      return atts.map((item) => {
+        const parts = [item.content?.filename, item.content?.original_filename].filter(Boolean);
+        return [...new Set(parts.map((part) => String(part).trim()).filter(Boolean))].join(' ');
+      }).filter(Boolean).join(' ');
+    }
+    return String(note.content.attachment_names || '');
   }
 
   const SEARCH_BLOB_BODY_MAX = 8192;
@@ -18,8 +75,8 @@ const NotesSearch = (() => {
     const parts = [
       effectiveNoteTitle(note),
       body,
-      note.content.ocr_text || '',
-      note.content.attachment_names || '',
+      scanTextForSearch(note),
+      fileNamesForSearch(note),
     ];
     for (const tagId of note.content.tags || []) {
       const tag = tagMap.get(tagId);
@@ -28,39 +85,74 @@ const NotesSearch = (() => {
     return normalize(parts.join('\n'));
   }
 
+  function rememberNumericTokens(uuid, blob) {
+    const found = new Set();
+    if (blob) {
+      const re = /\b\d{1,8}\b/g;
+      let match = re.exec(blob);
+      while (match) {
+        found.add(match[0]);
+        match = re.exec(blob);
+      }
+    }
+    if (found.size) numericTokens.set(uuid, found);
+    else numericTokens.delete(uuid);
+  }
+
+  function dropNoteIndex(uuid) {
+    searchBlobs.delete(uuid);
+    numericTokens.delete(uuid);
+  }
+
+  function clearMemoryIndex() {
+    searchBlobs.clear();
+    numericTokens.clear();
+  }
+
+  function memoryIndexActive() {
+    return searchBlobs.size > 0 || numericTokens.size > 0;
+  }
+
   function indexNote(note, tagMap) {
     if (!note || note.deleted) {
-      searchBlobs.delete(note?.uuid);
+      dropNoteIndex(note?.uuid);
       return;
     }
     if (note.content?.type !== 'note') return;
-    searchBlobs.set(note.uuid, buildSearchBlob(note, tagMap));
+    const blob = buildSearchBlob(note, tagMap);
+    searchBlobs.set(note.uuid, blob);
+    rememberNumericTokens(note.uuid, blob);
   }
 
   function indexNotes(notes, tagMap) {
-    searchBlobs.clear();
+    clearMemoryIndex();
     for (const note of notes) indexNote(note, tagMap);
   }
 
   function removeFromIndex(uuid) {
-    searchBlobs.delete(uuid);
+    dropNoteIndex(uuid);
   }
 
   function indexedMatch(uuid, query) {
-    const blob = searchBlobs.get(uuid);
-    if (!blob) return null;
     const q = normalize(query);
     if (!q) return true;
+    if (queryIsShortNumber(q)) {
+      const tokens = numericTokens.get(uuid);
+      if (!tokens) return null;
+      return tokens.has(q);
+    }
+    const blob = searchBlobs.get(uuid);
+    if (!blob) return null;
     return blob.includes(q);
   }
 
   function snippetAround(text, query, width = 42) {
     const source = String(text || '').replace(/\s+/g, ' ').trim();
-    const q = normalize(query);
-    const at = normalize(source).indexOf(q);
+    const at = queryIndex(source, query);
     if (at < 0) return '';
+    const needle = String(query || '').trim();
     const start = Math.max(0, at - width);
-    const end = Math.min(source.length, at + query.length + width);
+    const end = Math.min(source.length, at + needle.length + width);
     return `${start ? '…' : ''}${source.slice(start, end)}${end < source.length ? '…' : ''}`;
   }
 
@@ -68,29 +160,27 @@ const NotesSearch = (() => {
     const q = normalize(query);
     if (!q) return false;
     const title = effectiveNoteTitle(note);
-    if (normalize(title).includes(q)) return true;
+    if (textHasQuery(title, query)) return true;
     if (!includeFileNames || note.content?.locked) return false;
-    const files = note.content?.attachment_names || '';
-    return normalize(files).includes(q);
+    return textHasQuery(fileNamesForSearch(note), query);
   }
 
   function describeMatch(note, query, tagMap, { titlesOnly = false } = {}) {
     if (!query) return null;
-    const q = normalize(query);
     const title = effectiveNoteTitle(note);
-    if (normalize(title).includes(q)) return { field: 'title', label: 'Title', snippet: title };
-    const files = note.content.attachment_names || '';
-    if (!note.content?.locked && normalize(files).includes(q)) {
+    if (textHasQuery(title, query)) return { field: 'title', label: 'Title', snippet: title };
+    const files = fileNamesForSearch(note);
+    if (!note.content?.locked && textHasQuery(files, query)) {
       return { field: 'file', label: 'Filename', snippet: snippetAround(files, query, 56) || files };
     }
     if (titlesOnly || note.content?.locked) return null;
     const body = note.content.content || '';
-    if (normalize(body).includes(q)) return { field: 'body', label: 'Note', snippet: snippetAround(body, query) };
-    const ocr = note.content.ocr_text || '';
-    if (normalize(ocr).includes(q)) return { field: 'ocr', label: 'Scanned document', snippet: snippetAround(ocr, query) };
+    if (textHasQuery(body, query)) return { field: 'body', label: 'Note', snippet: snippetAround(body, query) };
+    const ocr = scanTextForSearch(note);
+    if (textHasQuery(ocr, query)) return { field: 'ocr', label: 'Scanned document', snippet: snippetAround(ocr, query) };
     for (const tagId of note.content.tags || []) {
       const tag = tagMap.get(tagId);
-      if (tag && normalize(tag.content.title).includes(q)) {
+      if (tag && textHasQuery(tag.content.title, query)) {
         return { field: 'tag', label: 'Tag', snippet: tag.content.title };
       }
     }
@@ -100,15 +190,57 @@ const NotesSearch = (() => {
   function matches(note, query, tagMap, options = {}) {
     if (!query) return true;
     if (options.titlesOnly) {
-      return matchesNoteOrFileName(note, query, { includeFileNames: true });
+      // The switch is titled "Search titles only" — filenames stay on the normal search.
+      return matchesNoteOrFileName(note, query, { includeFileNames: false });
     }
     if (note.content?.locked) {
       return matchesNoteOrFileName(note, query, { includeFileNames: false });
     }
-    const indexed = indexedMatch(note.uuid, query);
-    if (indexed === true) return true;
-    if (describeMatch(note, query, tagMap, options)) return true;
-    return false;
+    // A blob that still contains the query must not keep a row whose live
+    // title, body, scan, filename, and tags do not.
+    return !!describeMatch(note, query, tagMap, options);
+  }
+
+  // Files view: this file's own OCR only. A parent note's copied scan does not count.
+  function fileRowMatches(att, note, query, { titlesOnly = false } = {}) {
+    const q = normalize(query);
+    if (!q) return true;
+    const title = effectiveNoteTitle(note);
+    if (titlesOnly) return textHasQuery(title, query);
+    const content = att?.content || att || {};
+    const name = String(content.filename || content.original_filename || '');
+    const mime = String(content.mime || '');
+    const ocr = String(content.ocr_text || '');
+    return textHasQuery(name, query)
+      || textHasQuery(mime, query)
+      || textHasQuery(title, query)
+      || textHasQuery(ocr, query);
+  }
+
+  function listCountLabel(count, { files = false } = {}) {
+    const n = Math.max(0, Number(count) || 0);
+    const noun = files ? 'file' : 'note';
+    return `${n} ${noun}${n === 1 ? '' : 's'}`;
+  }
+
+  function documentHighlightLabel(count, { page = 0, pages = 0 } = {}) {
+    const n = Math.max(0, Number(count) || 0);
+    if (!n) return 'No highlights in this PDF';
+    const noun = n === 1 ? 'highlight' : 'highlights';
+    const base = `${n} ${noun} in this PDF`;
+    if (pages > 1 && page) return `${base}, page ${page} of ${pages}`;
+    return base;
+  }
+
+  function readingStats(text) {
+    const raw = String(text || '').trim();
+    const words = raw ? raw.split(/\s+/).length : 0;
+    const minutes = words ? Math.max(1, Math.round(words / 220)) : 0;
+    return { words, minutes };
+  }
+
+  function noteBodyReading(note) {
+    return readingStats(note?.content?.content || '');
   }
 
   function parseNoteTime(raw) {
@@ -406,8 +538,10 @@ const NotesSearch = (() => {
 
         if (context && !opts.includeProtected && noteIsProtected(c)) {
           if (!q) return false;
-          const includeFiles = !c.locked;
-          return matchesNoteOrFileName(n, q, { includeFileNames: includeFiles });
+          if (opts.titlesOnly || c.locked) {
+            return matchesNoteOrFileName(n, q, { includeFileNames: false });
+          }
+          return matchesNoteOrFileName(n, q, { includeFileNames: true });
         }
 
         return matches(n, q, tagMap, { titlesOnly: opts.titlesOnly });
@@ -540,7 +674,16 @@ const NotesSearch = (() => {
     replaceAll,
     describeMatch,
     matchesNoteOrFileName,
+    textHasQuery,
+    queryIsShortNumber,
+    fileRowMatches,
+    listCountLabel,
+    documentHighlightLabel,
+    readingStats,
+    noteBodyReading,
     snippetAround,
+    clearMemoryIndex,
+    memoryIndexActive,
     sameNoteContent,
     highlightPlain,
     applyHighlights,
