@@ -1119,6 +1119,22 @@ const NotesStore = (() => {
     }
   }
 
+  // Record the signed-in account and point the local database at it. When the
+  // account changes, the shared pre-upgrade database stays with the account
+  // that was using it (see NotesIDB) instead of being read by the new one.
+  function rememberAccountEmail(email) {
+    const next = String(email || '').trim().toLowerCase();
+    if (!next) return;
+    const previous = String(localStorage.getItem('notes_email') || '').trim().toLowerCase();
+    if (previous && previous !== next && !localStorage.getItem('notes_idb_owner')) {
+      localStorage.setItem('notes_idb_owner', previous);
+    }
+    localStorage.setItem('notes_email', next);
+    if (typeof NotesIDB !== 'undefined' && typeof NotesIDB.setAccount === 'function') {
+      NotesIDB.setAccount(next);
+    }
+  }
+
   function cacheAccount(account) {
     if (!account) return;
     try {
@@ -1126,7 +1142,7 @@ const NotesStore = (() => {
         localStorage.setItem('notes_kdf_salt', account.kdf_salt);
         sessionStorage.setItem('notes_kdf_salt', account.kdf_salt);
       }
-      if (account.email) localStorage.setItem('notes_email', account.email);
+      if (account.email) rememberAccountEmail(account.email);
       if (account.vault_kdf_version) persistVaultKdfServerVersion(account.vault_kdf_version);
     } catch (e) {
       /* ignore quota */

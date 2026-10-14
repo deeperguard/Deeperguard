@@ -74,7 +74,16 @@ function ackPasswordChanged(at) {
 
 async function stashLoginSession(data, email, password) {
   try {
-    localStorage.setItem('notes_email', String(email || '').trim().toLowerCase());
+    const nextEmail = String(email || '').trim().toLowerCase();
+    const previousEmail = String(localStorage.getItem('notes_email') || '').trim().toLowerCase();
+    // The pre-upgrade local database was shared by every account on this
+    // device; it stays with the account that was using it. Other accounts get
+    // their own database (see NotesIDB), so a sign-in never reads another
+    // account's notes.
+    if (previousEmail && previousEmail !== nextEmail && !localStorage.getItem('notes_idb_owner')) {
+      localStorage.setItem('notes_idb_owner', previousEmail);
+    }
+    localStorage.setItem('notes_email', nextEmail);
     if (data.kdf_salt) localStorage.setItem('notes_kdf_salt', data.kdf_salt);
     if (data.vault_kdf_version) localStorage.setItem('notes_vault_kdf_version', String(data.vault_kdf_version));
     if (data.csrf) sessionStorage.setItem('notes_csrf', data.csrf);

@@ -442,7 +442,13 @@
           var el = document.getElementById('unlock-email');
           if (el) el.textContent = account.email;
           try {
-            localStorage.setItem('notes_email', account.email);
+            var nextEmail = String(account.email).trim().toLowerCase();
+            var previousEmail = String(localStorage.getItem('notes_email') || '').trim().toLowerCase();
+            if (previousEmail && previousEmail !== nextEmail && !localStorage.getItem('notes_idb_owner')) {
+              localStorage.setItem('notes_idb_owner', previousEmail);
+            }
+            localStorage.setItem('notes_email', nextEmail);
+            if (window.NotesIDB && NotesIDB.setAccount) NotesIDB.setAccount(nextEmail);
             if (account.kdf_salt) localStorage.setItem('notes_kdf_salt', account.kdf_salt);
             if (account.vault_kdf_version) localStorage.setItem('notes_vault_kdf_version', String(account.vault_kdf_version));
           } catch (e) {}

@@ -1,14 +1,93 @@
 window.NotesIDB = (() => {
-  const DB_NAME = 'deeperguard';
+  // Before accounts were scoped every account on a device shared this
+  // database. It now belongs to the account recorded in notes_idb_owner (the
+  // first account seen after the upgrade keeps it, so nothing is re-downloaded
+  // or wiped); every other account gets its own database.
+  const LEGACY_DB_NAME = 'deeperguard';
+  const OWNER_KEY = 'notes_idb_owner';
+  const EMAIL_KEY = 'notes_email';
   const DB_VERSION = 2;
   let dbPromise = null;
+  let openedName = '';
+  let account = '';
+
+  function readLocal(key) {
+    try {
+      return String(localStorage.getItem(key) || '').trim().toLowerCase();
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function writeLocal(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (err) {
+      /* ignore quota / private mode */
+    }
+  }
+
+  function normalizeAccount(email) {
+    return String(email || '').trim().toLowerCase();
+  }
+
+  // Short, stable, non-secret tag for a database name (the address itself
+  // already lives in localStorage; this only keeps names filesystem-friendly).
+  function accountTag(email) {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < email.length; i += 1) {
+      hash ^= email.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash.toString(16).padStart(8, '0');
+  }
+
+  function currentAccount() {
+    return account || readLocal(EMAIL_KEY);
+  }
+
+  function dbName() {
+    const email = currentAccount();
+    if (!email) return LEGACY_DB_NAME;
+    let owner = readLocal(OWNER_KEY);
+    if (!owner) {
+      writeLocal(OWNER_KEY, email);
+      owner = email;
+    }
+    if (owner === email) return LEGACY_DB_NAME;
+    return `${LEGACY_DB_NAME}-${accountTag(email)}`;
+  }
+
+  // Tell the store which account is signed in. Switching accounts closes the
+  // current database so the next access opens that account's own one.
+  function setAccount(email) {
+    const next = normalizeAccount(email);
+    if (next === account) return;
+    account = next;
+    if (dbPromise && openedName && openedName !== dbName()) {
+      dbPromise.then((db) => {
+        try { db.close(); } catch (err) { /* ignore */ }
+      }).catch(() => {});
+      dbPromise = null;
+      openedName = '';
+    }
+  }
 
   function openDb() {
-    if (dbPromise) return dbPromise;
+    const name = dbName();
+    if (dbPromise && openedName === name) return dbPromise;
+    if (dbPromise) {
+      dbPromise.then((db) => {
+        try { db.close(); } catch (err) { /* ignore */ }
+      }).catch(() => {});
+      dbPromise = null;
+    }
+    openedName = name;
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      const req = indexedDB.open(name, DB_VERSION);
       req.onerror = () => {
         dbPromise = null;
+        openedName = '';
         reject(req.error);
       };
       req.onupgradeneeded = (event) => {
@@ -28,9 +107,11 @@ window.NotesIDB = (() => {
         db.onversionchange = () => {
           db.close();
           dbPromise = null;
+          openedName = '';
         };
         db.onclose = () => {
           dbPromise = null;
+          openedName = '';
         };
         resolve(db);
       };
@@ -177,6 +258,9 @@ window.NotesIDB = (() => {
   }
 
   return {
+    setAccount,
+    currentAccount,
+    dbName,
     putItem,
     deleteItem,
     loadItems,
