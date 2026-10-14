@@ -728,6 +728,79 @@
   let ocrRetryTimer = null;
   let saveDebounce = null;
   let applyingDerivedTitle = false;
+  // Title/body the editor last loaded from (or saved to) the store. When the
+  // store copy no longer matches it, another device changed the open note and
+  // the editor buffer must not be written back over that change.
+  let editorBaseline = null;
+
+  function captureEditorBaseline(note, gated = false) {
+    if (!note || !currentId) {
+      editorBaseline = null;
+      return;
+    }
+    editorBaseline = {
+      id: currentId,
+      title: String(note.content?.title || ''),
+      content: String(note.content?.content || ''),
+      gated: !!gated,
+    };
+  }
+
+  function storeChangedUnderEditor(note) {
+    if (!editorBaseline || !note || editorBaseline.id !== currentId || editorBaseline.gated) return false;
+    return String(note.content?.title || '') !== editorBaseline.title
+      || String(note.content?.content || '') !== editorBaseline.content;
+  }
+
+  function editorHasUnsavedTyping(note) {
+    if (!editorBaseline || editorBaseline.id !== currentId) return false;
+    if (String(ui.body?.value || '') !== editorBaseline.content) return true;
+    if (!titleLockedByUser(note)) return false;
+    return String(ui.title?.value || '').trim() !== editorBaseline.title.trim();
+  }
+
+  function reloadOpenNoteFromStore(note) {
+    ui.title.value = NotesSearch.effectiveNoteTitle(note);
+    ui.title.title = ui.title.value || '';
+    ui.body.value = note.content.content || '';
+    captureEditorBaseline(note, false);
+    resetNoteUndoStack(currentId);
+    if (ui.editorType) ui.editorType.value = note.content.editor || 'plain';
+    try {
+      applyEditorMode();
+      renderHistory(note);
+      updateNoteMeta(note);
+      updateActionButtons(note);
+    } catch (err) {
+      /* chrome refresh is best effort */
+    }
+    if (ui.saveStatus) {
+      ui.saveStatus.textContent = 'Updated from another device';
+      ui.saveStatus.classList.remove('error');
+    }
+  }
+
+  // Another device changed the note that is open here. With nothing unsaved in
+  // the editor, show the new text. With unsaved typing, keep both: the remote
+  // text becomes a conflict copy and the editor's text stays the live note.
+  function reconcileOpenNoteWithStore(id) {
+    if (!id || id !== currentId) return 'none';
+    const note = NotesStore.get(id);
+    if (!note || note.deleted || note.content?.type !== 'note') return 'none';
+    if (note.content.locked && !unlockedNotes.has(id)) return 'none';
+    if (!storeChangedUnderEditor(note)) return 'none';
+    if (!editorHasUnsavedTyping(note)) {
+      reloadOpenNoteFromStore(note);
+      return 'reloaded';
+    }
+    NotesStore.keepConflictCopy(id, note.content, {
+      source: 'editor',
+      winnerContent: { title: String(ui.title?.value || ''), content: String(ui.body?.value || '') },
+    });
+    // The editor's text now wins; rebase so flushSave writes it as a normal edit.
+    captureEditorBaseline(note, false);
+    return 'conflict';
+  }
 
   function titleLockedByUser(note) {
     if (!note?.content) return false;
@@ -4072,10 +4145,24 @@
     },
     end: () => endVaultPull(),
   });
+  NotesStore.setConflictCopyCallback(({ title }) => {
+    toast(`“${title || 'Note'}” was changed on another device too — kept both; see “${title || 'Note'} (conflict copy)”`);
+    lastNotesRenderKey = '';
+    renderNotes();
+  });
   NotesStore.setNoteIngestedCallback((uuid, meta) => {
     // Throttled list paint during vault pull — never call renderNotes() per note on iOS.
     scheduleVaultPullRender();
-    if (!uuid || vaultPullActive || !meta?.protectionMerged) return;
+    if (!uuid || vaultPullActive) return;
+    if (uuid === currentId && meta?.bodyChanged) {
+      const outcome = reconcileOpenNoteWithStore(uuid);
+      if (outcome === 'conflict') flushSave();
+      if (outcome !== 'none') {
+        lastNotesRenderKey = '';
+        renderNotes();
+      }
+    }
+    if (!meta?.protectionMerged) return;
     const note = NotesStore.get(uuid);
     if (!note) return;
     if (note.content?.locked) unlockedNotes.delete(uuid);
@@ -9613,6 +9700,7 @@
       }
     }
     ui.body.value = gated ? '' : body;
+    captureEditorBaseline(note, gated);
     // Footer comes from this note. Later attachment rendering must not be able
     // to leave the previous note's word count on screen.
     updateNoteMeta(note);
@@ -9898,6 +9986,9 @@
     const note = NotesStore.get(currentId);
     if (!note || note.deleted) return;
     if (note.content?.locked && !unlockedNotes.has(currentId)) return;
+    // A pull replaced the open note's text: never write the stale editor
+    // buffer back over it (this also covers the flush on lock).
+    if (storeChangedUnderEditor(note) && reconcileOpenNoteWithStore(currentId) !== 'conflict') return;
     const live = NotesStore.listAttachments(currentId).map((item) => item.uuid);
     const next = {
       ...note.content,
@@ -9928,6 +10019,7 @@
       return;
     }
     NotesStore.upsert(currentId, next, { recordRevision: true });
+    captureEditorBaseline(NotesStore.get(currentId), false);
     updateNoteMeta(NotesStore.get(currentId));
     const displayTitle = NotesSearch.effectiveNoteTitle(NotesStore.get(currentId));
     const rowTitle = ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"] h3`);
