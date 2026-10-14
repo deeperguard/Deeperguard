@@ -5063,6 +5063,53 @@ body.search-filters-open .fab-stack,
   .editor-actions-overflow-panel .editor-phone-strip-label {
     display: none !important;
   }
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-note-type-control,
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel #btn-ai-chat {
+    width: 100%;
+  }
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item:not(.toolbar-desktop):not(.doc-only-control):not(.editor-phone-toolbar-hide),
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel #btn-ai-chat {
+    display: flex !important;
+    width: 100% !important;
+    height: auto !important;
+    min-width: 0 !important;
+    min-height: 40px;
+    justify-content: flex-start !important;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px !important;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 15px !important;
+    line-height: 1.2 !important;
+    color: var(--text);
+    text-align: left;
+  }
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-menu-label,
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel #btn-ai-chat .editor-phone-strip-label {
+    display: inline !important;
+    font-size: 15px;
+    line-height: 1.2;
+  }
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-menu-icon,
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item .ui-icon,
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel #btn-ai-chat .editor-phone-strip-icon {
+    display: block !important;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+  }
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item[hidden],
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .toolbar-secondary[hidden],
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item [hidden] {
+    display: none !important;
+  }
   .editor-actions-overflow-panel .note-more-icon .ui-icon {
     width: 17px;
     height: 17px;
@@ -6615,18 +6662,75 @@ body.search-filters-open .fab-stack,
     top: calc(100% + 6px);
     right: 0;
     z-index: 30;
-    min-width: 12rem;
+    min-width: 14rem;
     max-width: min(18rem, 70vw);
-    padding: 8px;
+    padding: 6px;
     border-radius: 12px;
     border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
     background: var(--bg-elevated);
     box-shadow: var(--shadow-md);
   }
   body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-toolbar-menu-item {
-    display: inline-flex !important;
-    width: 100%;
+    display: flex !important;
+    align-items: center;
     justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    min-height: 34px;
+    margin: 0;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--text);
+    text-align: left;
+    white-space: nowrap;
+  }
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-toolbar-menu-item:hover:not(:disabled),
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-toolbar-menu-item:focus-visible {
+    background: var(--bg-hover);
+  }
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-toolbar-menu-item.active {
+    color: var(--accent);
+  }
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-toolbar-menu-item:disabled {
+    opacity: 0.45;
+  }
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-menu-label,
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .share-label {
+    display: inline !important;
+    font-size: 13px;
+    line-height: 1.2;
+  }
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-menu-icon,
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-toolbar-menu-item .ui-icon {
+    display: block !important;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+  }
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .note-more-icon {
+    display: inline-flex;
+    flex: 0 0 16px;
+  }
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-toolbar-menu-item[hidden],
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-toolbar-menu-item [hidden] {
+    display: none !important;
+  }
+  .editor-menu-sep {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--border);
+    flex: 0 0 auto;
+  }
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel #btn-delete-forever {
+    color: var(--danger);
   }
   body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item:not(.editor-toolbar-menu-panel .editor-toolbar-menu-item) {
     display: none !important;
