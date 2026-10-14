@@ -1387,6 +1387,8 @@ class NotesAppTests(unittest.TestCase):
         # entry, or a deploy lands as new HTML running the previous scripts.
         self.assertIn("matchExact", sw)
         self.assertIn("isVersioned", sw)
+        self.assertIn("networkFirstCryptoWorker", sw)
+        self.assertIn("purgeCachedCryptoWorker", sw)
         self.assertIn("notes-build-ping", sw)
         self.assertIn(b'name="notes-build"', res.data)
         self.assertIn("deeperguard-shell", sw)
