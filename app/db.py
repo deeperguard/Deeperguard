@@ -684,10 +684,22 @@ def get_session_by_token(token: str) -> sqlite3.Row | None:
     ).fetchone()
 
 
-def get_latest_session_for_device(device_id: str) -> sqlite3.Row | None:
+def get_latest_session_for_device(device_id: str, user_id: int | None = None) -> sqlite3.Row | None:
+    """Newest session row for a device id; scoped to one account when known
+    (device ids are client-supplied and shared by every account on a browser)."""
     device_id = normalize_device_id(device_id)
     if not device_id:
         return None
+    if user_id is not None:
+        return connection().execute(
+            """
+            SELECT * FROM user_sessions
+            WHERE device_id = ? AND user_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (device_id, int(user_id)),
+        ).fetchone()
     return connection().execute(
         """
         SELECT * FROM user_sessions

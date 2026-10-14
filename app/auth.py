@@ -281,7 +281,17 @@ def session_requires_wipe() -> bool:
     device_id = request_device_id()
     if not device_id:
         return False
-    return _session_row_requires_wipe(get_latest_session_for_device(device_id))
+    # A device id is shared by every account that used this browser. When the
+    # (expired) cookie still names an account, only that account's sessions
+    # may tell the device to wipe; another account's remote sign-out must not
+    # erase this one's local vault.
+    user_id = None
+    try:
+        if session.get(SESSION_USER) is not None:
+            user_id = int(session.get(SESSION_USER))
+    except (TypeError, ValueError):
+        user_id = None
+    return _session_row_requires_wipe(get_latest_session_for_device(device_id, user_id=user_id))
 
 
 def slide_session() -> None:
