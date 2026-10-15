@@ -2164,9 +2164,11 @@ const NotesStore = (() => {
     state.dirty.delete(uuid);
     state.blocked.delete(uuid);
     if (serverRow.deleted || !remote) {
+      const parentNoteId = previous?.content?.type === 'attachment' ? previous.content.note_id : '';
       state.items.delete(uuid);
       try { await NotesIDB.deleteItem(uuid); } catch (err) { /* ignore */ }
       if (typeof NotesSearch !== 'undefined' && NotesSearch.removeFromIndex) NotesSearch.removeFromIndex(uuid);
+      if (parentNoteId) refreshNoteSearchText(parentNoteId);
       logSync('conflict-adopt', { uuid, deleted: true });
       return;
     }
@@ -2563,11 +2565,17 @@ const NotesStore = (() => {
           let previousContent = null;
           if (row.deleted) {
             if (!localWins) {
+              const parentNoteId = local?.content?.type === 'attachment'
+                ? local.content.note_id
+                : (remote?.content?.type === 'attachment' ? remote.content.note_id : '');
               state.items.delete(row.item_uuid);
               await NotesIDB.deleteItem(row.item_uuid);
               if (typeof NotesSearch !== 'undefined' && NotesSearch.removeFromIndex) {
                 NotesSearch.removeFromIndex(row.item_uuid);
               }
+              // A file deleted on another device leaves this note; its copied
+              // scan text and filename list must not keep matching searches.
+              if (parentNoteId) refreshNoteSearchText(parentNoteId);
               applied = true;
             }
           } else if (localWins) {
@@ -2933,6 +2941,10 @@ const NotesStore = (() => {
     }
     if (deferSearchIndex && anyItems) {
       repairStoredAttachmentCopies();
+      // Rows arrive smallest first, so a file often lands before its note and
+      // the note's copied scan text was never written. Fill it in once, now
+      // that the duplicate plan is settled, rather than per pulled row.
+      for (const note of listNotes()) refreshNoteSearchText(note.uuid);
       rebuildSearchIndex();
     }
     return {
@@ -3521,14 +3533,32 @@ const NotesStore = (() => {
 
   // The scanned text is what search and the attachment card show. Copies of one
   // invoice often disagree on hash, byte size, and a single character.
+  // Remembered per attachment content: the plan is rebuilt after every pulled
+  // file, and normalising every scan again each time made a first sync of a
+  // few hundred documents take minutes.
+  const ocrIdentityCache = new WeakMap();
+  let ocrIdentityComputed = 0;
+
   function attachmentOcrIdentity(att) {
+    const content = att?.content;
+    const source = String(content?.ocr_text || '');
+    if (content && typeof content === 'object') {
+      const hit = ocrIdentityCache.get(content);
+      if (hit && hit.source === source) return hit.identity;
+    }
+    ocrIdentityComputed += 1;
     const text = attachmentOcrBody(att)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    if (text.length < 40) return '';
-    return text;
+    const identity = text.length < 40 ? '' : text;
+    if (content && typeof content === 'object') ocrIdentityCache.set(content, { source, identity });
+    return identity;
+  }
+
+  function searchDiagnostics() {
+    return { ocrIdentityComputed };
   }
 
   // One inserted, deleted, or substituted character still counts as the same scan.
@@ -3609,14 +3639,26 @@ const NotesStore = (() => {
       }
       unite(prev, index);
     });
+    // One edit away means the lengths differ by at most one, so only scans of
+    // neighbouring lengths need the character comparison.
+    const byLength = new Map();
+    identities.forEach((key, index) => {
+      if (!key) return;
+      const list = byLength.get(key.length);
+      if (list) list.push(index);
+      else byLength.set(key.length, [index]);
+    });
     for (let i = 0; i < live.length; i += 1) {
       const left = identities[i];
       if (!left) continue;
-      for (let j = i + 1; j < live.length; j += 1) {
-        if (find(i) === find(j)) continue;
-        const right = identities[j];
-        if (!right || !ocrEditAtMostOne(left, right)) continue;
-        unite(i, j);
+      for (let length = left.length - 1; length <= left.length + 1; length += 1) {
+        const bucket = byLength.get(length);
+        if (!bucket) continue;
+        for (const j of bucket) {
+          if (j <= i || find(i) === find(j)) continue;
+          if (!ocrEditAtMostOne(left, identities[j])) continue;
+          unite(i, j);
+        }
       }
     }
     const groups = new Map();
@@ -5192,6 +5234,7 @@ const NotesStore = (() => {
     deleteTag,
     mergeDuplicateTags,
     listAttachments,
+    searchDiagnostics,
     listVisibleAttachments,
     visibleAttachmentIds,
     findDuplicateAttachment,
