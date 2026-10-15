@@ -1686,6 +1686,16 @@ class NotesAppTests(unittest.TestCase):
     def test_client_search_filters(self):
         self._run_node_script("test_search.js")
 
+    def test_client_search_terms_and_index(self):
+        self._run_node_script("test_search_terms.js")
+        self._run_node_script("test_search_sync_state.js")
+        app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        # The editor's find bar matches typed text literally; only the search box uses term rules.
+        find_opts = app_js[app_js.find("function findMatchOptions"):app_js.find("function normalizeFindIndex")]
+        self.assertIn("literal: true", find_opts)
+        # The Files view passes the Protected switch through, like the note list.
+        self.assertIn("fileRowMatches(att, note, query, { titlesOnly, includeProtected })", app_js)
+
     def test_client_note_protection_sync(self):
         self._run_node_script("test_note_protection_sync.js")
 
