@@ -433,6 +433,49 @@ const NotesSearch = (() => {
     return base;
   }
 
+  // How often the query occurs in one attachment's own scanned text. The
+  // note's copied ocr_text is not consulted: that would credit this file with
+  // hits that live in another file on the same note.
+  function attachmentHitCount(att, query) {
+    const terms = parseQueryTerms(query);
+    if (!terms.length) return 0;
+    const content = att?.content || att || {};
+    return findMatches(String(content.ocr_text || ''), query).length;
+  }
+
+  function attachmentMatchesQuery(att, query) {
+    const terms = parseQueryTerms(query);
+    if (!terms.length) return false;
+    if (attachmentHitCount(att, query) > 0) return true;
+    const content = att?.content || att || {};
+    return allTermsIn(terms, [attachmentNames(content)]);
+  }
+
+  // Badge on an attachment row. Empty when the file has no hits so a row
+  // never claims a count it cannot show.
+  function attachmentHighlightLabel(count) {
+    const n = Math.max(0, Number(count) || 0);
+    if (!n) return '';
+    return `${n} ${n === 1 ? 'highlight' : 'highlights'} in this file`;
+  }
+
+  // The file a note opens on while a query is active: most hits in its own
+  // text first, then a filename match, then the stored order. Stable, so
+  // notes without a hit keep their usual first attachment.
+  function orderAttachmentsForQuery(items, query) {
+    const list = Array.isArray(items) ? items : [];
+    const terms = parseQueryTerms(query);
+    if (!terms.length || list.length < 2) return list.slice();
+    const ranked = list.map((att, index) => ({
+      att,
+      index,
+      hits: attachmentHitCount(att, query),
+      name: allTermsIn(terms, [attachmentNames(att?.content || att || {})]) ? 1 : 0,
+    }));
+    ranked.sort((a, b) => b.hits - a.hits || b.name - a.name || a.index - b.index);
+    return ranked.map((entry) => entry.att);
+  }
+
   function readingStats(text) {
     const raw = String(text || '').trim();
     const words = raw ? raw.split(/\s+/).length : 0;
@@ -907,6 +950,10 @@ const NotesSearch = (() => {
     fileRowMatches,
     listCountLabel,
     documentHighlightLabel,
+    attachmentHitCount,
+    attachmentMatchesQuery,
+    attachmentHighlightLabel,
+    orderAttachmentsForQuery,
     readingStats,
     noteBodyReading,
     snippetAround,

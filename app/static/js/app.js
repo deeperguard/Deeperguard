@@ -7210,6 +7210,7 @@
         </div>
       </div>`;
     }).join('');
+    const rowQuery = activeFindNeedle();
     ui.attachmentList.innerHTML = items
       .map((a) => {
         const sizeKb = Math.round((a.content.size || 0) / 1024);
@@ -7223,11 +7224,18 @@
         const shareBtn = !hideAttShare && attachmentCanWebShare()
           ? `<button type="button" class="btn ghost sm" data-share="${escapeAttr(a.uuid)}">Share</button>`
           : '';
-        return `<div class="attachment-item${busy ? ' is-ocr-busy' : ''}" data-att="${escapeAttr(a.uuid)}">
+        const hitCount = rowQuery ? NotesSearch.attachmentHitCount(a, rowQuery) : 0;
+        const hitLabel = NotesSearch.attachmentHighlightLabel(hitCount);
+        const hitBadge = hitLabel
+          ? `<span class="attachment-hit-badge" data-att-hits="${hitCount}">${escapeHtml(hitLabel)}</span>`
+          : '';
+        const rowClass = `attachment-item${busy ? ' is-ocr-busy' : ''}${hitCount ? ' is-search-hit' : ''}`;
+        return `<div class="${rowClass}" data-att="${escapeAttr(a.uuid)}">
           <button type="button" class="attachment-thumb" data-preview="${escapeAttr(a.uuid)}" aria-label="Preview ${escapeAttr(a.content.filename || 'document')}">Open</button>
           <div class="attachment-main">
             <strong class="attachment-filename">${escapeHtml(a.content.filename)}</strong>${spinner}
             <span class="muted"> (${sizeKb} KB)</span>
+            ${hitBadge}
             ${status}
           </div>
           <div class="attachment-item-actions">
@@ -7934,18 +7942,29 @@
     const findQ = currentFindQuery();
     if (findBarOpen() && findQ) return findQ;
     const sidebarQ = currentSearchQuery();
-    if (sidebarQ && docHitNoteSuppressed()) return '';
+    // Compare against the dismissed query directly. docHitNoteSuppressed()
+    // resolves the needle through this function, so calling it here recursed
+    // until the stack overflowed whenever the search box had text.
+    if (sidebarQ && docHitNoteDismissedFor === sidebarQ) return '';
     if (sidebarQ) return sidebarQ;
     return findQ;
   }
 
   function attachmentSearchText(id) {
     const item = NotesStore.get(id);
-    const note = currentId ? NotesStore.get(currentId) : null;
-    const chunks = [];
-    if (item?.content?.ocr_text) chunks.push(String(item.content.ocr_text));
-    if (note?.content?.ocr_text) chunks.push(String(note.content.ocr_text));
-    return [...new Set(chunks.filter(Boolean))].join('\n\n');
+    const own = String(item?.content?.ocr_text || '');
+    // A file with its own scanned text is highlighted from that text only.
+    // Falling through to the note's copied text would paint hits from a
+    // sibling file onto this one. The note copy remains the fallback for
+    // files that were indexed before per-file text was stored.
+    if (own.trim()) return own;
+    const noteId = item?.content?.note_id || currentId;
+    const note = noteId ? NotesStore.get(noteId) : null;
+    if (!note?.content?.ocr_text) return '';
+    // The copy is unambiguous only when this is the note's single file.
+    const siblings = NotesStore.listAttachments(noteId);
+    if (siblings.length > 1 && siblings.some((a) => a.uuid !== id && String(a.content?.ocr_text || '').trim())) return '';
+    return String(note.content.ocr_text || '');
   }
 
   function attachmentSearchBoxes(id) {
@@ -8591,9 +8610,9 @@
   }
 
   function renderDocInline(noteId) {
-    const items = NotesStore.listAttachments(noteId);
+    const listed = NotesStore.listAttachments(noteId);
     if (!ui.docInline) return;
-    if (!items.length) {
+    if (!listed.length) {
       ui.docInline.hidden = true;
       ui.docInline.innerHTML = '';
       inlineNoteId = null;
@@ -8606,6 +8625,9 @@
     const query = activeFindNeedle();
     const show = editorMode === 'preview' || !!query;
     ui.docInline.hidden = !show;
+    // With a query, the file that contains it takes the main stage so the
+    // note opens on the matched document, not on whichever file was stored first.
+    const items = query ? NotesSearch.orderAttachmentsForQuery(listed, query) : listed;
     const ids = items.map((a) => a.uuid).join(',');
     const [first, ...rest] = items;
     const stage = ui.docInline.querySelector('.doc-inline-stage');
@@ -8624,13 +8646,18 @@
     inlineNoteId = noteId;
     inlineAttIds = ids;
     inlineSearch = query;
-    const galleryIndex = Math.max(0, items.findIndex((a) => a.uuid === first.uuid));
+    const galleryIndex = Math.max(0, listed.findIndex((a) => a.uuid === first.uuid));
+    const thumbMeta = (a) => {
+      const label = query ? NotesSearch.attachmentHighlightLabel(NotesSearch.attachmentHitCount(a, query)) : '';
+      const badge = label ? `<span class="attachment-hit-badge">${escapeHtml(label)}</span>` : '';
+      return `<span>${escapeHtml(a.content.filename || 'Document')}</span>${badge}`;
+    };
     const countBtn = items.length > 1
       ? `<button type="button" class="doc-inline-count" data-doc-gallery-open data-note-id="${escapeAttr(noteId)}" data-index="${galleryIndex}" aria-label="Open item ${galleryIndex + 1} of ${items.length}">${galleryIndex + 1} / ${items.length}</button>`
       : '';
     const desktop = isDesktopLayout();
     const mainInner = `<div class="doc-inline-stage is-loading" data-stage="${escapeAttr(first.uuid)}">${docLoadingHtml()}</div>
-          ${desktop ? '' : `<div class="doc-thumb-meta"><span>${escapeHtml(first.content.filename || 'Document')}</span></div>`}`;
+          ${desktop ? '' : `<div class="doc-thumb-meta">${thumbMeta(first)}</div>`}`;
     /* iOS Safari will not reliably paint PDF canvases inside <button> — use a div shell like desktop. */
     const mainBlock = desktop
       ? `<div class="doc-inline-main doc-inline-main-scroll">${mainInner}</div>`
@@ -8642,7 +8669,7 @@
         ${mainBlock}
       </div>${items.length > 1 ? `<div class="doc-inline-thumbs">${rest.map((a) => `<button type="button" class="doc-thumb" data-preview="${escapeAttr(a.uuid)}">
         <div class="doc-thumb-stage" data-stage="${escapeAttr(a.uuid)}"></div>
-        <div class="doc-thumb-meta">${escapeHtml(a.content.filename || 'Document')}</div>
+        <div class="doc-thumb-meta">${thumbMeta(a)}</div>
       </button>`).join('')}</div>` : ''}`;
     ui.docInline.querySelectorAll('[data-doc-gallery-open]').forEach((btn) => {
       btn.addEventListener('click', (event) => {

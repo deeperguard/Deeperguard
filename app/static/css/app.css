@@ -898,6 +898,24 @@ html[data-theme="light"] .zk-badge {
   vertical-align: middle;
 }
 .attachment-item.is-ocr-busy .ocr-retry { opacity: 0.55; pointer-events: none; }
+/* Search hit count on a file row or thumbnail: same yellow as the PDF banner. */
+.attachment-hit-badge {
+  display: inline-block;
+  margin: 2px 0 0 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(244, 211, 94, 0.32);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.attachment-item.is-search-hit {
+  box-shadow: inset 3px 0 0 rgba(244, 211, 94, 0.9);
+}
+.doc-thumb-meta .attachment-hit-badge { flex: 0 0 auto; margin-left: 0; }
 .fab-stack {
   display: none;
   position: fixed;
