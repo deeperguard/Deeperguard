@@ -6380,7 +6380,7 @@
     }, 30000);
   }
 
-  function listStoredFiles({ query = '', tagId = null, folderId = null, titlesOnly = false } = {}) {
+  function listStoredFiles({ query = '', tagId = null, folderId = null, titlesOnly = false, includeProtected = false } = {}) {
     const files = [];
     const attachments = typeof NotesStore.listVisibleAttachments === 'function'
       ? NotesStore.listVisibleAttachments()
@@ -6390,7 +6390,7 @@
       if (!note || note.deleted || note.content?.trashed || note.content?.archived) continue;
       if (tagId && !(note.content.tags || []).includes(tagId)) continue;
       if (folderId && note.content.folder_id !== folderId) continue;
-      if (!NotesSearch.fileRowMatches(att, note, query, { titlesOnly })) continue;
+      if (!NotesSearch.fileRowMatches(att, note, query, { titlesOnly, includeProtected })) continue;
       files.push({ att, note });
     }
     const sort = NOTE_SORT_ORDER.includes(prefs.sort) ? prefs.sort : 'updated';
@@ -6762,7 +6762,7 @@
     }
     const searchOptions = searchFilterOptions();
     const listingFiles = currentFilter === 'documents';
-    const notes = listingFiles ? [] : NotesSearch.filterNotes(NotesStore.listNotes(), {
+    const filtered = listingFiles ? [] : NotesSearch.filterNotes(NotesStore.listNotes(), {
       query: ui.search.value,
       filter: currentFilter,
       tagId: currentTag,
@@ -6770,12 +6770,15 @@
       tagMap: tagMap(),
       sort: prefs.sort,
       searchOptions,
-    }).filter((note) => noteShouldList(note));
+    });
+    const titlesOnlyFallback = !!filtered.titlesOnlyFallback;
+    const notes = filtered.filter((note) => noteShouldList(note));
     const files = listingFiles ? listStoredFiles({
       query,
       tagId: currentTag,
       folderId: currentFolder,
       titlesOnly: searchOptions.titlesOnly,
+      includeProtected: searchOptions.includeProtected,
     }) : [];
     const listed = listingFiles ? files : notes;
     const listedCount = listed.length;
@@ -6791,8 +6794,15 @@
         ? countLabel
         : (query ? (listingFiles ? 'No files match that search' : 'No notes match that search') : 'No notes match these filters');
       if (meta) {
-        meta.textContent = summary;
-        meta.hidden = !!query;
+        if (titlesOnlyFallback) {
+          // The vault was too large to search note text; say so instead of
+          // quietly listing titles only.
+          meta.textContent = `${summary} · titles only, note text and scans were skipped`;
+          meta.hidden = false;
+        } else {
+          meta.textContent = summary;
+          meta.hidden = !!query;
+        }
       }
     } else if (meta) {
       meta.hidden = true;
@@ -12894,7 +12904,9 @@
   }
 
   function findMatchOptions() {
-    return { caseSensitive: !!findCaseSensitive };
+    // The editor's find/replace matches the typed text exactly; only the
+    // search box uses word and phrase rules.
+    return { caseSensitive: !!findCaseSensitive, literal: true };
   }
 
   function normalizeFindIndex() {

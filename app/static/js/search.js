@@ -1,10 +1,33 @@
 const NotesSearch = (() => {
-  const searchBlobs = new Map();
-  // Short numbers found in each note's blob. Memory only — cleared on lock.
-  const numericTokens = new Map();
+  // Per-note search text, built from the live note and the attachments the
+  // note list shows. Memory only — cleared on lock. Each entry remembers what
+  // it was built from, so an edit made under it (remote save, OCR arriving,
+  // a tag rename, a file hidden or revived) is noticed at query time instead
+  // of hiding a note until the next full reindex.
+  const noteIndex = new Map();
 
   function normalize(text) {
-    return (text || '').toLowerCase().trim();
+    return foldText(text).trim();
+  }
+
+  // Lowercase and strip Latin diacritics one character at a time, so offsets
+  // into the folded text are offsets into the original ("Eén café" and
+  // "een cafe" line up). Characters that would change length stay as they are.
+  const foldCache = new Map();
+  function foldChar(ch) {
+    let out = foldCache.get(ch);
+    if (out !== undefined) return out;
+    const base = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    out = base.length === 1 ? base : ch;
+    foldCache.set(ch, out);
+    return out;
+  }
+
+  function foldText(text) {
+    const lower = String(text || '').toLowerCase();
+    // Latin-1 Supplement and Latin Extended-A/B cover Dutch, German, French,
+    // Spanish and Scandinavian letters without touching the rest of the string.
+    return /[\u00c0-\u024f]/.test(lower) ? lower.replace(/[\u00c0-\u024f]/g, foldChar) : lower;
   }
 
   // A short invoice or page number must match that token, not a longer number
@@ -13,17 +36,114 @@ const NotesSearch = (() => {
     return /^\d{1,8}$/.test(normalize(query));
   }
 
-  function queryIndex(text, query) {
-    const hay = String(text || '').toLowerCase();
-    const needle = normalize(query);
-    if (!needle || !hay) return -1;
-    if (!queryIsShortNumber(needle)) return hay.indexOf(needle);
-    const match = new RegExp(`\\b${needle}\\b`).exec(hay);
+  function escapeRegExp(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // One search term: a bare word, or a quoted phrase. Words inside a term are
+  // separated by any run of whitespace, and short numbers are whole tokens.
+  function compileTerm(text, { phrase = false } = {}) {
+    const words = text.split(' ').filter(Boolean);
+    const shortNumber = words.length === 1 && /^\d{1,8}$/.test(words[0]);
+    const plain = words.length === 1 && !shortNumber;
+    const source = words.map((word) => (/^\d{1,8}$/.test(word) ? `\\b${word}\\b` : escapeRegExp(word))).join('\\s+');
+    return {
+      text,
+      phrase,
+      shortNumber,
+      // Plain single words use indexOf; everything else needs the pattern.
+      plain,
+      regex: plain ? null : new RegExp(source, 'g'),
+    };
+  }
+
+  const termCache = new Map();
+
+  // "invoice 136" means both words, in any field, in any order.
+  // "\"invoice 136\"" means that phrase. Curly quotes from phone keyboards count.
+  function parseQueryTerms(query) {
+    const raw = String(query || '');
+    const cached = termCache.get(raw);
+    if (cached) return cached;
+    const text = foldText(raw).replace(/[\u201c\u201d\u201e\u00ab\u00bb]/g, '"');
+    const terms = [];
+    const re = /"([^"]*)"?|(\S+)/g;
+    let match = re.exec(text);
+    while (match) {
+      if (match[1] !== undefined) {
+        const phrase = match[1].replace(/\s+/g, ' ').trim();
+        if (phrase) terms.push(compileTerm(phrase, { phrase: true }));
+      } else {
+        const word = match[2].replace(/"/g, '');
+        if (word) terms.push(compileTerm(word));
+      }
+      match = re.exec(text);
+    }
+    if (termCache.size > 64) termCache.clear();
+    termCache.set(raw, terms);
+    return terms;
+  }
+
+  // Index of the first occurrence of one term in already-folded text.
+  function termIndex(hay, term, from = 0) {
+    if (term.plain) return hay.indexOf(term.text, from);
+    term.regex.lastIndex = from;
+    const match = term.regex.exec(hay);
     return match ? match.index : -1;
   }
 
+  function termMatchAt(hay, term, from = 0) {
+    if (term.plain) {
+      const at = hay.indexOf(term.text, from);
+      return at < 0 ? null : { start: at, end: at + term.text.length };
+    }
+    term.regex.lastIndex = from;
+    const match = term.regex.exec(hay);
+    if (!match) return null;
+    return { start: match.index, end: match.index + Math.max(1, match[0].length) };
+  }
+
+  // Texts folded on demand, so a hit in the title never lowercases the scan.
+  function lazyFolded(texts) {
+    const folded = new Array(texts.length).fill(undefined);
+    return (i) => {
+      if (folded[i] === undefined) folded[i] = texts[i] ? foldText(texts[i]) : '';
+      return folded[i];
+    };
+  }
+
+  function termInAny(term, folded, count) {
+    for (let i = 0; i < count; i += 1) {
+      const hay = folded(i);
+      if (hay && termIndex(hay, term) >= 0) return true;
+    }
+    return false;
+  }
+
+  // Every term has to appear in at least one of the texts.
+  function allTermsIn(terms, texts) {
+    const folded = lazyFolded(texts);
+    return terms.every((term) => termInAny(term, folded, texts.length));
+  }
+
+  // Position of the earliest term hit in text, or -1. Used for snippets.
+  function queryIndex(text, query) {
+    const terms = parseQueryTerms(query);
+    const hay = foldText(text);
+    if (!terms.length || !hay) return -1;
+    let best = -1;
+    for (const term of terms) {
+      const at = termIndex(hay, term);
+      if (at >= 0 && (best < 0 || at < best)) best = at;
+    }
+    return best;
+  }
+
+  // True when every term of the query occurs in this one text.
   function textHasQuery(text, query) {
-    return queryIndex(text, query) >= 0;
+    const terms = parseQueryTerms(query);
+    if (!terms.length) return false;
+    return allTermsIn(terms, [text]);
   }
 
   function notesStore() {
@@ -54,38 +174,69 @@ const NotesSearch = (() => {
     if (!note?.content || note.content.locked) return '';
     const atts = visibleAttachments(note);
     if (atts) {
-      return atts.map((item) => {
-        const parts = [item.content?.filename, item.content?.original_filename].filter(Boolean);
-        return [...new Set(parts.map((part) => String(part).trim()).filter(Boolean))].join(' ');
-      }).filter(Boolean).join(' ');
+      return atts.map((item) => attachmentNames(item.content)).filter(Boolean).join(' ');
     }
     return String(note.content.attachment_names || '');
   }
 
-  const SEARCH_BLOB_BODY_MAX = 8192;
+  function attachmentNames(content) {
+    const parts = [content?.filename, content?.original_filename].filter(Boolean);
+    return [...new Set(parts.map((part) => String(part).trim()).filter(Boolean))].join(' ');
+  }
+
+  // A spreadsheet note stores JSON. Search its sheet names and cells, not the
+  // structure around them — "cells" or "index" must not match every sheet.
+  function spreadsheetText(raw) {
+    const data = safeParseJson(raw);
+    if (!data) return null;
+    const sheets = Array.isArray(data.sheets) ? data.sheets : [];
+    const lines = [];
+    for (const sheet of sheets) {
+      if (sheet?.name) lines.push(String(sheet.name));
+      const rows = Array.isArray(sheet?.rows) ? sheet.rows : [];
+      for (const row of rows) {
+        const cells = Array.isArray(row) ? row : (Array.isArray(row?.cells) ? row.cells : []);
+        const texts = cells.map(spreadsheetCellText).filter(Boolean);
+        if (texts.length) lines.push(texts.join(' '));
+      }
+    }
+    return lines.join('\n');
+  }
+
+  // The body text search reads: the note text, or a spreadsheet's cells.
+  function searchableBody(note) {
+    const body = String(note?.content?.content || '');
+    if (looksLikeSpreadsheetPayload(body)) {
+      const cells = spreadsheetText(body);
+      if (cells != null) return cells;
+    }
+    return body;
+  }
+
+  function tagTitlesForSearch(note, tagMap) {
+    const titles = [];
+    for (const tagId of note?.content?.tags || []) {
+      const tag = tagMap?.get?.(tagId);
+      if (tag) titles.push(String(tag.content?.title || ''));
+    }
+    return titles;
+  }
 
   function buildSearchBlob(note, tagMap) {
     if (!note || !note.content || note.content.type !== 'note') return '';
     // Locked notes stay findable by title only — body/OCR/filenames must not leak.
     if (note.content.locked) return normalize(note.content.title || '');
-    let body = String(note.content.content || '');
-    if (looksLikeSpreadsheetPayload(body) && body.length > SEARCH_BLOB_BODY_MAX) {
-      body = body.slice(0, SEARCH_BLOB_BODY_MAX);
-    }
     const parts = [
       effectiveNoteTitle(note),
-      body,
+      searchableBody(note),
       scanTextForSearch(note),
       fileNamesForSearch(note),
+      ...tagTitlesForSearch(note, tagMap),
     ];
-    for (const tagId of note.content.tags || []) {
-      const tag = tagMap.get(tagId);
-      if (tag) parts.push(tag.content.title || '');
-    }
     return normalize(parts.join('\n'));
   }
 
-  function rememberNumericTokens(uuid, blob) {
+  function numericTokensIn(blob) {
     const found = new Set();
     if (blob) {
       const re = /\b\d{1,8}\b/g;
@@ -95,33 +246,78 @@ const NotesSearch = (() => {
         match = re.exec(blob);
       }
     }
-    if (found.size) numericTokens.set(uuid, found);
-    else numericTokens.delete(uuid);
+    return found;
   }
 
-  function dropNoteIndex(uuid) {
-    searchBlobs.delete(uuid);
-    numericTokens.delete(uuid);
+  // Everything the blob was built from, as a flat list: strings by value,
+  // attachment contents by identity. Cheap to compare on every keystroke.
+  function indexSignature(note, tagMap) {
+    const c = note.content || {};
+    const atts = c.locked ? null : visibleAttachments(note);
+    const sig = [c, c.title, !!c.title_manual, !!c.locked, c.content, c.updated_at, c.created_at];
+    if (atts) {
+      sig.push(atts.length);
+      for (const item of atts) {
+        const ac = item.content || {};
+        sig.push(ac, ac.ocr_text, ac.filename, ac.original_filename);
+      }
+    } else {
+      sig.push(-1, c.ocr_text, c.attachment_names);
+    }
+    for (const tagId of c.tags || []) {
+      const tag = tagMap?.get?.(tagId);
+      if (tag) sig.push(tag.content?.title);
+    }
+    return sig;
+  }
+
+  function sameSignature(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  function buildIndexEntry(note, tagMap) {
+    const signature = indexSignature(note, tagMap);
+    const blob = buildSearchBlob(note, tagMap);
+    const entry = { blob, tokens: numericTokensIn(blob), signature };
+    noteIndex.set(note.uuid, entry);
+    return entry;
+  }
+
+  // The entry for this note, rebuilt when anything it was built from changed.
+  function freshIndexEntry(note, tagMap) {
+    const entry = noteIndex.get(note.uuid);
+    if (entry && sameSignature(entry.signature, indexSignature(note, tagMap))) return entry;
+    return buildIndexEntry(note, tagMap);
+  }
+
+  function entryHasTerms(entry, terms) {
+    for (const term of terms) {
+      if (term.shortNumber) {
+        if (!entry.tokens.has(term.text)) return false;
+      } else if (termIndex(entry.blob, term) < 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   function clearMemoryIndex() {
-    searchBlobs.clear();
-    numericTokens.clear();
+    noteIndex.clear();
   }
 
   function memoryIndexActive() {
-    return searchBlobs.size > 0 || numericTokens.size > 0;
+    return noteIndex.size > 0;
   }
 
   function indexNote(note, tagMap) {
     if (!note || note.deleted) {
-      dropNoteIndex(note?.uuid);
+      noteIndex.delete(note?.uuid);
       return;
     }
     if (note.content?.type !== 'note') return;
-    const blob = buildSearchBlob(note, tagMap);
-    searchBlobs.set(note.uuid, blob);
-    rememberNumericTokens(note.uuid, blob);
+    buildIndexEntry(note, tagMap);
   }
 
   function indexNotes(notes, tagMap) {
@@ -130,91 +326,96 @@ const NotesSearch = (() => {
   }
 
   function removeFromIndex(uuid) {
-    dropNoteIndex(uuid);
-  }
-
-  function indexedMatch(uuid, query) {
-    const q = normalize(query);
-    if (!q) return true;
-    if (queryIsShortNumber(q)) {
-      const tokens = numericTokens.get(uuid);
-      if (!tokens) return null;
-      return tokens.has(q);
-    }
-    const blob = searchBlobs.get(uuid);
-    if (!blob) return null;
-    return blob.includes(q);
+    noteIndex.delete(uuid);
   }
 
   function snippetAround(text, query, width = 42) {
     const source = String(text || '').replace(/\s+/g, ' ').trim();
-    const at = queryIndex(source, query);
-    if (at < 0) return '';
-    const needle = String(query || '').trim();
-    const start = Math.max(0, at - width);
-    const end = Math.min(source.length, at + needle.length + width);
+    const terms = parseQueryTerms(query);
+    if (!terms.length || !source) return '';
+    const hay = foldText(source);
+    let hit = null;
+    for (const term of terms) {
+      const found = termMatchAt(hay, term);
+      if (found && (!hit || found.start < hit.start)) hit = found;
+    }
+    if (!hit) return '';
+    const start = Math.max(0, hit.start - width);
+    const end = Math.min(source.length, hit.end + width);
     return `${start ? '…' : ''}${source.slice(start, end)}${end < source.length ? '…' : ''}`;
   }
 
   function matchesNoteOrFileName(note, query, { includeFileNames = true } = {}) {
-    const q = normalize(query);
-    if (!q) return false;
-    const title = effectiveNoteTitle(note);
-    if (textHasQuery(title, query)) return true;
-    if (!includeFileNames || note.content?.locked) return false;
-    return textHasQuery(fileNamesForSearch(note), query);
+    const terms = parseQueryTerms(query);
+    if (!terms.length) return false;
+    const texts = [effectiveNoteTitle(note)];
+    if (includeFileNames && !note.content?.locked) texts.push(fileNamesForSearch(note));
+    return allTermsIn(terms, texts);
   }
 
+  // Which field to show for a hit: the first field that holds every term, or
+  // — when the words are spread over fields — the field with the first term.
   function describeMatch(note, query, tagMap, { titlesOnly = false } = {}) {
-    if (!query) return null;
-    const title = effectiveNoteTitle(note);
-    if (textHasQuery(title, query)) return { field: 'title', label: 'Title', snippet: title };
-    const files = fileNamesForSearch(note);
-    if (!note.content?.locked && textHasQuery(files, query)) {
-      return { field: 'file', label: 'Filename', snippet: snippetAround(files, query, 56) || files };
+    const terms = parseQueryTerms(query);
+    if (!terms.length) return null;
+    const locked = !!note.content?.locked;
+    const fields = [{ field: 'title', label: 'Title', text: () => effectiveNoteTitle(note), snippet: (text) => text }];
+    if (!locked) {
+      fields.push({ field: 'file', label: 'Filename', text: () => fileNamesForSearch(note), snippet: (text) => snippetAround(text, query, 56) || text });
     }
-    if (titlesOnly || note.content?.locked) return null;
-    const body = note.content.content || '';
-    if (textHasQuery(body, query)) return { field: 'body', label: 'Note', snippet: snippetAround(body, query) };
-    const ocr = scanTextForSearch(note);
-    if (textHasQuery(ocr, query)) return { field: 'ocr', label: 'Scanned document', snippet: snippetAround(ocr, query) };
-    for (const tagId of note.content.tags || []) {
-      const tag = tagMap.get(tagId);
-      if (tag && textHasQuery(tag.content.title, query)) {
-        return { field: 'tag', label: 'Tag', snippet: tag.content.title };
+    if (!titlesOnly && !locked) {
+      fields.push({ field: 'body', label: 'Note', text: () => searchableBody(note), snippet: (text) => snippetAround(text, query) });
+      fields.push({ field: 'ocr', label: 'Scanned document', text: () => scanTextForSearch(note), snippet: (text) => snippetAround(text, query) });
+      for (const tagTitle of tagTitlesForSearch(note, tagMap)) {
+        fields.push({ field: 'tag', label: 'Tag', text: () => tagTitle, snippet: (text) => text });
       }
+    }
+    // Field text and its folded form are read once, and only when reached.
+    const texts = new Array(fields.length).fill(undefined);
+    const text = (i) => {
+      if (texts[i] === undefined) texts[i] = fields[i].text();
+      return texts[i];
+    };
+    const foldedAt = new Array(fields.length).fill(undefined);
+    const at = (i) => {
+      if (foldedAt[i] === undefined) foldedAt[i] = text(i) ? foldText(text(i)) : '';
+      return foldedAt[i];
+    };
+    const describe = (i) => ({ field: fields[i].field, label: fields[i].label, snippet: fields[i].snippet(text(i)) });
+    for (let i = 0; i < fields.length; i += 1) {
+      if (at(i) && terms.every((term) => termIndex(at(i), term) >= 0)) return describe(i);
+    }
+    if (!terms.every((term) => termInAny(term, at, fields.length))) return null;
+    for (let i = 0; i < fields.length; i += 1) {
+      if (at(i) && termIndex(at(i), terms[0]) >= 0) return describe(i);
     }
     return null;
   }
 
   function matches(note, query, tagMap, options = {}) {
-    if (!query) return true;
-    if (options.titlesOnly) {
+    const terms = parseQueryTerms(query);
+    if (!terms.length) return true;
+    if (options.titlesOnly || note.content?.locked) {
       // The switch is titled "Search titles only" — filenames stay on the normal search.
       return matchesNoteOrFileName(note, query, { includeFileNames: false });
     }
-    if (note.content?.locked) {
-      return matchesNoteOrFileName(note, query, { includeFileNames: false });
-    }
-    // A blob that still contains the query must not keep a row whose live
-    // title, body, scan, filename, and tags do not.
+    // The index answers "no" cheaply; a "yes" is confirmed against the live
+    // fields, so a row never stays for text it no longer has.
+    if (!entryHasTerms(freshIndexEntry(note, tagMap), terms)) return false;
     return !!describeMatch(note, query, tagMap, options);
   }
 
-  // Files view: this file's own OCR only. A parent note's copied scan does not count.
-  function fileRowMatches(att, note, query, { titlesOnly = false } = {}) {
-    const q = normalize(query);
-    if (!q) return true;
+  // Files view: this file's own OCR only. A parent note's copied scan does not
+  // count, and a protected parent gives up no more than it does in the note list.
+  function fileRowMatches(att, note, query, { titlesOnly = false, includeProtected = false } = {}) {
+    const terms = parseQueryTerms(query);
+    if (!terms.length) return true;
     const title = effectiveNoteTitle(note);
-    if (titlesOnly) return textHasQuery(title, query);
+    if (titlesOnly || note?.content?.locked) return allTermsIn(terms, [title]);
     const content = att?.content || att || {};
-    const name = String(content.filename || content.original_filename || '');
-    const mime = String(content.mime || '');
-    const ocr = String(content.ocr_text || '');
-    return textHasQuery(name, query)
-      || textHasQuery(mime, query)
-      || textHasQuery(title, query)
-      || textHasQuery(ocr, query);
+    const name = attachmentNames(content);
+    if (!includeProtected && noteIsProtected(note?.content)) return allTermsIn(terms, [name, title]);
+    return allTermsIn(terms, [name, String(content.mime || ''), title, String(content.ocr_text || '')]);
   }
 
   function listCountLabel(count, { files = false } = {}) {
@@ -551,7 +752,7 @@ const NotesSearch = (() => {
       if (err instanceof RangeError) {
         if (opts.titlesOnly) return [];
         console.warn('Search filter failed — retrying titles only', err);
-        return filterNotes(notes, {
+        const fallback = filterNotes(notes, {
           query,
           filter,
           tagId,
@@ -560,6 +761,9 @@ const NotesSearch = (() => {
           sort,
           searchOptions: { ...opts, titlesOnly: true },
         });
+        // Body and scan hits were skipped; the caller should say so.
+        fallback.titlesOnlyFallback = true;
+        return fallback;
       }
       throw err;
     }
@@ -583,9 +787,9 @@ const NotesSearch = (() => {
       .replace(/>/g, '&gt;');
   }
 
-  function highlightPlain(text, query, { caseSensitive = false } = {}) {
+  function highlightPlain(text, query, { caseSensitive = false, literal = false } = {}) {
     const source = String(text ?? '');
-    const ranges = findMatches(source, query, { caseSensitive });
+    const ranges = findMatches(source, query, { caseSensitive, literal });
     if (!ranges.length) return escapeHtml(source);
     let html = '';
     let last = 0;
@@ -597,10 +801,8 @@ const NotesSearch = (() => {
     return html + escapeHtml(source.slice(last));
   }
 
-  function applyHighlights(root, query, { caseSensitive = false } = {}) {
+  function applyHighlights(root, query, { caseSensitive = false, literal = false } = {}) {
     if (!root || !String(query || '').trim()) return 0;
-    const needle = String(query).trim();
-    const find = caseSensitive ? needle : needle.toLowerCase();
     const doc = root.ownerDocument;
     if (!doc || typeof doc.createTreeWalker !== 'function') return 0;
     const walker = doc.createTreeWalker(root, 4);
@@ -610,23 +812,19 @@ const NotesSearch = (() => {
     for (const node of nodes) {
       if (node.parentElement && node.parentElement.closest('mark.search-hit')) continue;
       const text = node.nodeValue || '';
-      const hay = caseSensitive ? text : text.toLowerCase();
-      let from = 0;
-      let last = 0;
+      const ranges = findMatches(text, query, { caseSensitive, literal });
+      if (!ranges.length) continue;
       const parts = [];
-      while (from <= hay.length - find.length) {
-        const at = hay.indexOf(find, from);
-        if (at < 0) break;
-        if (at > last) parts.push(doc.createTextNode(text.slice(last, at)));
+      let last = 0;
+      for (const { start, end } of ranges) {
+        if (start > last) parts.push(doc.createTextNode(text.slice(last, start)));
         const mark = doc.createElement('mark');
         mark.className = 'search-hit';
-        mark.textContent = text.slice(at, at + needle.length);
+        mark.textContent = text.slice(start, end);
         parts.push(mark);
-        last = at + needle.length;
-        from = last;
+        last = end;
         count += 1;
       }
-      if (!parts.length) continue;
       if (last < text.length) parts.push(doc.createTextNode(text.slice(last)));
       const frag = doc.createDocumentFragment();
       parts.forEach((part) => frag.appendChild(part));
@@ -635,9 +833,37 @@ const NotesSearch = (() => {
     return count;
   }
 
-  function findMatches(text, query, { caseSensitive = false } = {}) {
+  // Ranges to highlight. By default these follow the search box rules (each
+  // term, short numbers as whole tokens, phrases across whitespace), so the
+  // marks in a row, a preview, or a PDF agree with why the note is listed.
+  // The editor's find/replace passes literal: true for exact substrings.
+  function findMatches(text, query, { caseSensitive = false, literal = false } = {}) {
     const source = String(text || '');
-    const needle = String(query || '');
+    if (literal || caseSensitive) return literalMatches(source, String(query || ''), caseSensitive);
+    const terms = parseQueryTerms(query);
+    if (!terms.length || !source) return [];
+    const hay = foldText(source);
+    const out = [];
+    for (const term of terms) {
+      let from = 0;
+      while (from <= hay.length) {
+        const hit = termMatchAt(hay, term, from);
+        if (!hit) break;
+        out.push(hit);
+        from = hit.end;
+      }
+    }
+    out.sort((a, b) => a.start - b.start || a.end - b.end);
+    const merged = [];
+    for (const range of out) {
+      const prev = merged[merged.length - 1];
+      if (prev && range.start < prev.end) prev.end = Math.max(prev.end, range.end);
+      else merged.push({ start: range.start, end: range.end });
+    }
+    return merged;
+  }
+
+  function literalMatches(source, needle, caseSensitive) {
     if (!needle) return [];
     const hay = caseSensitive ? source : source.toLowerCase();
     const find = caseSensitive ? needle : needle.toLowerCase();
@@ -656,7 +882,7 @@ const NotesSearch = (() => {
     const source = String(text || '');
     const needle = String(query || '');
     if (!needle) return source;
-    const matches = findMatches(source, needle, { caseSensitive });
+    const matches = findMatches(source, needle, { caseSensitive, literal: true });
     if (!matches.length) return source;
     let out = '';
     let last = 0;
@@ -676,6 +902,8 @@ const NotesSearch = (() => {
     matchesNoteOrFileName,
     textHasQuery,
     queryIsShortNumber,
+    parseQueryTerms,
+    searchableBody,
     fileRowMatches,
     listCountLabel,
     documentHighlightLabel,

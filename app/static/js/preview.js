@@ -297,12 +297,7 @@ const NotesPreview = (() => {
         .filter((span) => ranges.some((range) => range.start < span.end && range.end > span.start))
         .map((span) => span.box);
     }
-    const find = needle.toLowerCase();
-    return list.filter((box) => {
-      const word = String(box.text || '');
-      const hay = word.toLowerCase();
-      return hay.includes(find) || findRanges(word, needle).length > 0;
-    });
+    return list.filter((box) => findRanges(String(box.text || ''), needle).length > 0);
   }
 
   function matchOcrBoxesLoose(boxes, query, page) {
@@ -310,11 +305,13 @@ const NotesPreview = (() => {
       if (page == null) return true;
       return (Number(box.page) || 0) === page;
     });
-    const words = String(query || '').trim().toLowerCase().split(/\s+/).filter((w) => w.length >= 2);
+    const words = String(query || '').trim().split(/\s+/).filter((w) => w.length >= 2);
     if (!words.length) return [];
+    // Same rules as the note list: a short number is a whole token, so a
+    // search for 136 does not paint 1360.
     return list.filter((box) => {
-      const hay = String(box.text || '').toLowerCase();
-      return words.some((word) => hay.includes(word));
+      const text = String(box.text || '');
+      return words.some((word) => findRanges(text, word).length > 0);
     });
   }
 
