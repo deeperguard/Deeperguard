@@ -3053,6 +3053,7 @@
       } catch (err) {
         console.warn('2FA full vault resync failed', err);
       }
+      return true;
     })().finally(() => {
       totpResyncInFlight = null;
     });
@@ -3082,7 +3083,12 @@
       }
       totpEntries = (NotesStore.listTotpAccounts?.() || []).map(totpAccountFromItem);
       if (!totpEntries.length && NotesStore.listNotes().length > 0) {
-        ensureTotpAccountsFromServer().then(() => refreshTotpVault({ migrate: true }));
+        // Re-read only after a resync actually ran. The resolved-null path
+        // (already resynced this session) used to schedule this same
+        // function again from a microtask, which never yielded to the page.
+        ensureTotpAccountsFromServer().then((resynced) => {
+          if (resynced) refreshTotpVault({ migrate: true });
+        });
       } else if (totpEntries.length) {
         try { sessionStorage.removeItem('notes_totp_resync'); } catch (err) { /* ignore */ }
       }
