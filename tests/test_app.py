@@ -1696,6 +1696,11 @@ class NotesAppTests(unittest.TestCase):
         # The Files view passes the Protected switch through, like the note list.
         self.assertIn("fileRowMatches(att, note, query, { titlesOnly, includeProtected })", app_js)
 
+    def test_client_search_open_note(self):
+        # Active query -> open a matched note: the needle resolves (no recursion),
+        # the matched file leads the preview and its row shows the hit count.
+        self._run_node_script("test_search_open_note.js")
+
     def test_client_note_protection_sync(self):
         self._run_node_script("test_note_protection_sync.js")
 
