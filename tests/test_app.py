@@ -1701,6 +1701,9 @@ class NotesAppTests(unittest.TestCase):
         # the matched file leads the preview and its row shows the hit count.
         self._run_node_script("test_search_open_note.js")
 
+    def test_client_rescan_ocr(self):
+        self._run_node_script("test_rescan_ocr.js")
+
     def test_client_note_protection_sync(self):
         self._run_node_script("test_note_protection_sync.js")
 

@@ -721,6 +721,8 @@
   const ocrWaitingServer = new Set();
   const serverOcrKnown = new Set();
   const serverOcrInFlight = new Map();
+  const rescanOcrIds = new Set();
+  let rescanOcrBusy = false;
   let ocrBusy = false;
   let ocrUiTimer = null;
   let ocrProgressToastAt = 0;
@@ -863,7 +865,7 @@
   function attachmentOcrBusy(att) {
     const attId = att?.uuid;
     if (!attId) return false;
-    if (ocrWaitingServer.has(attId) || ocrInFlight.has(attId) || ocrQueued.has(attId)) return true;
+    if (rescanOcrIds.has(attId) || ocrWaitingServer.has(attId) || ocrInFlight.has(attId) || ocrQueued.has(attId)) return true;
     const method = att.content?.ocr_method || '';
     if (method === 'pending') return !ocrPendingStale(att);
     return !method;
@@ -7315,6 +7317,7 @@
     });
     renderDocInline(noteId);
     syncDownloadNoteButton();
+    syncRescanOcrButton();
   }
 
   function ocrSnippet(text, max = 48, meta = {}) {
@@ -7414,7 +7417,7 @@
   function attachmentOcrRetryable(att) {
     if (!canOcrAttachment(att)) return false;
     const attId = att?.uuid;
-    if (attId && (ocrWaitingServer.has(attId) || ocrInFlight.has(attId) || ocrQueued.has(attId))) {
+    if (attId && (rescanOcrIds.has(attId) || ocrWaitingServer.has(attId) || ocrInFlight.has(attId) || ocrQueued.has(attId))) {
       return false;
     }
     const method = att?.content?.ocr_method || '';
@@ -7430,7 +7433,7 @@
         retry: false,
       };
     }
-    if (attId && (ocrInFlight.has(attId) || ocrQueued.has(attId))) {
+    if (attId && (rescanOcrIds.has(attId) || ocrInFlight.has(attId) || ocrQueued.has(attId))) {
       return {
         html: '<p class="ocr-text">Reading text on this device…</p>',
         retry: false,
@@ -7519,6 +7522,110 @@
       toast('Document saved — OCR will retry shortly');
     }
     scheduleDeferredOcrRetry();
+  }
+
+  function attachmentIsPdfOrPhoto(item) {
+    const mime = String(item?.content?.mime || '');
+    const name = String(item?.content?.filename || '');
+    return mime.startsWith('image/')
+      || mime === 'application/pdf'
+      || /\.(pdf|png|jpe?g|webp|gif|bmp|hei[cf])$/i.test(name);
+  }
+
+  function notePdfOrPhotoAttachments(noteId) {
+    const id = noteId || currentId;
+    if (!id) return [];
+    return NotesStore.listAttachments(id).filter(attachmentIsPdfOrPhoto);
+  }
+
+  function syncRescanOcrButton() {
+    const btn = document.getElementById('btn-rescan-ocr');
+    if (!btn) return;
+    const note = currentId ? NotesStore.get(currentId) : null;
+    const gated = !!(note?.content?.locked && !unlockedNotes.has(currentId));
+    const show = !!currentId && !gated && notePdfOrPhotoAttachments(currentId).length > 0;
+    btn.hidden = !show;
+    btn.disabled = !!rescanOcrBusy;
+    if (!rescanOcrBusy) setEditorMenuLabel(btn, 'Rescan with OCR');
+  }
+
+  async function rescanOpenNoteOcr() {
+    if (!currentId) return;
+    if (rescanOcrBusy) {
+      toast('Rescan already running');
+      return;
+    }
+    const noteId = currentId;
+    const targets = notePdfOrPhotoAttachments(noteId);
+    if (!targets.length) return;
+    rescanOcrBusy = true;
+    targets.forEach((att) => rescanOcrIds.add(att.uuid));
+    const btn = document.getElementById('btn-rescan-ocr');
+    if (btn) setEditorMenuLabel(btn, 'Rescanning…');
+    syncRescanOcrButton();
+    scheduleOcrUiRefresh([noteId]);
+    let failed = 0;
+    let updated = 0;
+    try {
+      for (let i = 0; i < targets.length; i += 1) {
+        const att = targets[i];
+        const name = att.content?.filename || 'document';
+        toast(`Rescanning ${name} (${i + 1} of ${targets.length})…`);
+        try {
+          const bytes = await NotesStore.getAttachmentBytes(att.uuid);
+          if (!bytes) throw new Error('File is not on this device');
+          const mime = att.content?.mime || 'application/octet-stream';
+          const file = new File([bytes], name, { type: mime });
+          if (!window.NotesOcr?.extractFromFile) throw new Error('OCR is not available on this device');
+          const ocr = await NotesOcr.extractFromFile(file, (msg) => {
+            if (!msg || typeof msg.progress !== 'number') return;
+            const now = Date.now();
+            if (now - ocrProgressToastAt < 1200) return;
+            ocrProgressToastAt = now;
+            toast(`Rescanning ${name} ${Math.round(msg.progress * 100)}%`);
+          }, att.uuid);
+          const live = NotesStore.get(att.uuid);
+          if (!live || live.content?.type !== 'attachment') throw new Error('Attachment disappeared');
+          const stored = normalizeOcrStorage(
+            String(ocr?.text || '').trim(),
+            Array.isArray(ocr?.boxes) ? ocr.boxes : [],
+            live.content.mime,
+            live.content.filename,
+            ocr?.ocr_quality,
+            ocr?.method || 'client',
+          );
+          NotesStore.setAttachmentOcr(
+            att.uuid,
+            stored.text,
+            stored.method,
+            Array.isArray(ocr?.boxes) ? ocr.boxes : [],
+          );
+          if (ocr?.preview_jpeg?.length) {
+            await NotesStore.setAttachmentPreview(att.uuid, ocr.preview_jpeg);
+          }
+          NotesStore.refreshNoteSearchText(noteId);
+          updated += 1;
+          const snippet = String(stored.text || '').trim();
+          const short = snippet.length > 48 ? `${snippet.slice(0, 48)}…` : snippet;
+          if (targets.length === 1) {
+            toast(short ? `Searchable · ${short}` : 'OCR finished — no text found', !short);
+          }
+        } catch (err) {
+          failed += 1;
+          toast(`Could not rescan ${name}: ${err.message || 'OCR failed'}`, true);
+        } finally {
+          rescanOcrIds.delete(att.uuid);
+          scheduleOcrUiRefresh([noteId]);
+        }
+      }
+      if (updated > 1 && !failed) toast(`Rescanned ${updated} files`);
+      else if (failed && updated) toast(`Rescan finished with ${failed} failure${failed === 1 ? '' : 's'}`, true);
+    } finally {
+      targets.forEach((att) => rescanOcrIds.delete(att.uuid));
+      rescanOcrBusy = false;
+      syncRescanOcrButton();
+      scheduleOcrUiRefresh([noteId]);
+    }
   }
 
   async function retryAttachmentOcr(attId) {
@@ -9360,6 +9467,7 @@
   }
 
   function applyEditorMode() {
+    syncRescanOcrButton();
     const ocrBtn = document.getElementById('btn-ocr-text');
     const previewBtn = document.getElementById('btn-preview');
     const toolbar = document.getElementById('md-toolbar');
@@ -9669,6 +9777,7 @@
       }
       const ocrBtn = document.getElementById('btn-ocr-text');
       if (ocrBtn) ocrBtn.hidden = true;
+      syncRescanOcrButton();
       hideFindBar();
       if (ui.attachmentList) ui.attachmentList.innerHTML = '';
       if (ui.attachments) ui.attachments.hidden = true;
@@ -9972,6 +10081,7 @@
     syncUndoButtons();
     syncNoteInfoActions(note);
     syncDownloadNoteButton();
+    syncRescanOcrButton();
   }
 
   function syncNoteInfoActions(note) {
@@ -14024,6 +14134,9 @@
     }
   });
 
+  document.getElementById('btn-rescan-ocr')?.addEventListener('click', () => {
+    rescanOpenNoteOcr().catch((err) => toast(err.message || 'Rescan failed', true));
+  });
   document.getElementById('btn-ocr-text').addEventListener('click', () => {
     if (noteHasDocs(currentId)) {
       editorMode = editorMode === 'ocr' ? 'edit' : 'ocr';
