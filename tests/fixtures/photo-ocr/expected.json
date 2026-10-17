@@ -1,0 +1,35 @@
+{
+  "text": "Factuur 2024\nAirco installatie\nBTW 21 procent\nTotaal 186,00 EUR\nKlant Deeperguard BV",
+  "words": [
+    "factuur",
+    "2024",
+    "airco",
+    "installatie",
+    "btw",
+    "procent",
+    "totaal",
+    "186",
+    "eur",
+    "klant",
+    "deeperguard"
+  ],
+  "hard": {
+    "file": "hard-dutch-invoice.jpg",
+    "previous_preprocess_psm3": {
+      "word_recall": 0.636,
+      "character_error_rate": 0.479
+    },
+    "new_preprocess_psm4": {
+      "word_recall": 1.0,
+      "character_error_rate": 0.0
+    }
+  },
+  "clean": {
+    "file": "clean-dutch-invoice.png",
+    "new_preprocess_psm4": {
+      "word_recall": 1.0,
+      "character_error_rate": 0.0
+    }
+  },
+  "note": "Synthetic pages rendered with DejaVu. Numbers are from tests/test_photo_ocr_quality.py using vendored eng+nld traineddata."
+}

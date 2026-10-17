@@ -57,15 +57,29 @@ const NotesClientOcr = (() => {
     return new Promise((resolve) => setTimeout(resolve, 0));
   }
 
-  function downscaleCanvas(source, maxPixels) {
-    const pixels = Math.max(1, source.width * source.height);
-    if (pixels <= maxPixels) return source;
-    const scale = Math.sqrt(maxPixels / pixels);
+  function photoPreprocess() {
+    if (typeof NotesPhotoPreprocess !== 'undefined' && NotesPhotoPreprocess?.preparePhoto) {
+      return NotesPhotoPreprocess;
+    }
+    if (globalThis.NotesPhotoPreprocess?.preparePhoto) return globalThis.NotesPhotoPreprocess;
+    return null;
+  }
+
+  function canvasToRgba(canvas) {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    return { width: canvas.width, height: canvas.height, data: image.data };
+  }
+
+  function rgbaToCanvas(image) {
     const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.floor(source.width * scale));
-    canvas.height = Math.max(1, Math.floor(source.height * scale));
-    canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
-    if (canvas !== source) releaseCanvas(source);
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext('2d');
+    const data = image.data instanceof Uint8ClampedArray
+      ? image.data
+      : new Uint8ClampedArray(image.data);
+    ctx.putImageData(new ImageData(data, image.width, image.height), 0, 0);
     return canvas;
   }
 
@@ -212,6 +226,8 @@ const NotesClientOcr = (() => {
     await loadScript(`${TESS_BASE}/tesseract.min.js`);
     const Tesseract = globalThis.Tesseract;
     if (!Tesseract?.createWorker) throw new Error('OCR engine failed to load. Open the app once online.');
+    // Dutch + English traineddata is fetched here, when a scan starts,
+    // not with the first page load.
     const worker = await Tesseract.createWorker('eng+nld', 1, {
       workerPath: `${TESS_BASE}/worker.min.js`,
       corePath: `${TESS_BASE}/tesseract-core.wasm.js`,
@@ -251,6 +267,19 @@ const NotesClientOcr = (() => {
 
   async function decodeImageFile(file) {
     const tryDecode = async (blob) => {
+      if (typeof createImageBitmap === 'function') {
+        try {
+          const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, bitmap.width);
+          canvas.height = Math.max(1, bitmap.height);
+          canvas.getContext('2d').drawImage(bitmap, 0, 0);
+          if (typeof bitmap.close === 'function') bitmap.close();
+          return { canvas, width: canvas.width, height: canvas.height };
+        } catch (err) {
+          /* Fall through to Image(), which also honors EXIF orientation. */
+        }
+      }
       const url = URL.createObjectURL(blob);
       try {
         const img = new Image();
@@ -281,26 +310,42 @@ const NotesClientOcr = (() => {
     }
   }
 
-  function enhanceCanvas(source) {
-    const canvas = document.createElement('canvas');
-    let width = source.width;
-    let height = source.height;
-    const minDim = Math.min(width, height);
-    const target = 1800;
-    if (minDim < target) {
-      const scale = Math.min(2.5, target / Math.max(minDim, 1));
-      width = Math.max(1, Math.round(width * scale));
-      height = Math.max(1, Math.round(height * scale));
+  function remapBoxes(boxes, geometry) {
+    if (!geometry?.toOriginal) return boxes;
+    const pageW = geometry.outWidth;
+    const pageH = geometry.outHeight;
+    const mapped = [];
+    for (const box of boxes || []) {
+      const corners = [
+        [box.l * pageW, box.t * pageH],
+        [(box.l + box.w) * pageW, box.t * pageH],
+        [box.l * pageW, (box.t + box.h) * pageH],
+        [(box.l + box.w) * pageW, (box.t + box.h) * pageH],
+      ];
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const [x, y] of corners) {
+        const point = geometry.toOriginal(x, y);
+        if (point[0] < minX) minX = point[0];
+        if (point[1] < minY) minY = point[1];
+        if (point[0] > maxX) maxX = point[0];
+        if (point[1] > maxY) maxY = point[1];
+      }
+      const item = makeBox(
+        box.text,
+        minX,
+        minY,
+        maxX - minX,
+        maxY - minY,
+        geometry.srcWidth,
+        geometry.srcHeight,
+        box.page,
+      );
+      if (item) mapped.push(item);
     }
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.filter = 'grayscale(1) contrast(1.35) brightness(1.05)';
-    ctx.drawImage(source, 0, 0, width, height);
-    ctx.filter = 'none';
-    return canvas;
+    return mapped;
   }
 
   function ocrPickScore(text, boxes) {
@@ -337,49 +382,67 @@ const NotesClientOcr = (() => {
     return boxes;
   }
 
-  async function recognizeCanvas(canvas, { page = 0, psm = 3, enhanced = false } = {}) {
+  // PSM 4: a single column of mixed-size text, which matches a photographed
+  // page. PSM 6 is the uniform-block mode and fits screenshots better.
+  const DOCUMENT_PSM = 4;
+
+  function ocrPassPoor(result) {
+    if (weakOcrResult(result?.text, result?.boxes)) return true;
+    const confidence = Number(result?.confidence);
+    return Number.isFinite(confidence) && confidence > 0 && confidence < 58;
+  }
+
+  async function recognizeCanvas(canvas, { page = 0, psm = DOCUMENT_PSM, geometry = null } = {}) {
     const worker = await ensureWorker();
-    const input = enhanced ? enhanceCanvas(canvas) : canvas;
-    try {
-      if (typeof worker.setParameters === 'function') {
-        await worker.setParameters({
-          tessedit_pageseg_mode: String(psm),
-          preserve_interword_spaces: '1',
-        });
-      }
-      const result = await worker.recognize(input);
-      const data = result?.data || {};
-      const text = clean(data.text || '');
-      const words = Array.isArray(data.words) ? data.words : [];
-      const boxes = wordsToBoxes(words, input.width, input.height, page);
-      return { text, boxes };
-    } finally {
-      if (input !== canvas) releaseCanvas(input);
+    if (typeof worker.setParameters === 'function') {
+      await worker.setParameters({
+        tessedit_pageseg_mode: String(psm),
+        preserve_interword_spaces: '1',
+        user_defined_dpi: '300',
+      });
     }
+    const result = await worker.recognize(canvas);
+    const data = result?.data || {};
+    const text = clean(data.text || '');
+    const words = Array.isArray(data.words) ? data.words : [];
+    const rawBoxes = wordsToBoxes(words, canvas.width, canvas.height, page);
+    const boxes = remapBoxes(rawBoxes, geometry);
+    const confidence = Number(data.confidence);
+    return {
+      text,
+      boxes,
+      confidence: Number.isFinite(confidence) ? confidence : 0,
+    };
   }
 
   async function ocrImageCanvas(canvas, page = 0) {
-    // One pass on a phone. Five enhanced passes allocate another full canvas
-    // each time and are what gets the PWA jetsam-killed mid-index.
-    const attempts = memoryConstrained()
-      ? [{ psm: 6, enhanced: false }]
-      : [
-        { psm: 3, enhanced: true },
-        { psm: 6, enhanced: true },
-        { psm: 4, enhanced: true },
-        { psm: 11, enhanced: true },
-        { psm: 3, enhanced: false },
-      ];
-    let best = { text: '', boxes: [] };
-    for (const attempt of attempts) {
-      const result = await recognizeCanvas(canvas, { page, ...attempt });
-      best = chooseBetterOcr(best, result);
-      if (!weakOcrResult(best.text, best.boxes)) break;
+    const prep = photoPreprocess();
+    if (!prep) {
+      const result = await recognizeCanvas(canvas, { page, psm: DOCUMENT_PSM });
+      const quality = weakOcrResult(result.text, result.boxes) ? 'weak' : 'ok';
+      return { text: result.text, boxes: result.boxes, method: 'tesseract', ocr_quality: quality };
     }
-    const text = best.text;
-    const boxes = best.boxes;
-    const quality = weakOcrResult(text, boxes) ? 'weak' : 'ok';
-    return { text, boxes, method: 'tesseract', ocr_quality: quality };
+    const prepared = prep.preparePhoto(canvasToRgba(canvas), { maxPixels: maxOcrPixels() });
+    const primary = rgbaToCanvas(prep.renderPhotoPass(prepared, 'primary'));
+    let best;
+    try {
+      best = await recognizeCanvas(primary, { page, psm: DOCUMENT_PSM, geometry: prepared.geometry });
+    } finally {
+      releaseCanvas(primary);
+    }
+    // One retry, and only when the first pass is weak. The retry uses a
+    // tighter binarization of the same deskewed page. It does not loop.
+    if (ocrPassPoor(best)) {
+      const retry = rgbaToCanvas(prep.renderPhotoPass(prepared, 'strong'));
+      try {
+        const second = await recognizeCanvas(retry, { page, psm: DOCUMENT_PSM, geometry: prepared.geometry });
+        best = chooseBetterOcr(best, second);
+      } finally {
+        releaseCanvas(retry);
+      }
+    }
+    const quality = weakOcrResult(best.text, best.boxes) ? 'weak' : 'ok';
+    return { text: best.text, boxes: best.boxes, method: 'tesseract', ocr_quality: quality };
   }
 
   async function extractTextFile(file) {
@@ -425,7 +488,9 @@ const NotesClientOcr = (() => {
 
   function rasterScaleFor(page) {
     const base = page.getViewport({ scale: 1 });
-    let scale = memoryConstrained() ? 1.05 : 1.5;
+    // Scanned PDF pages are rendered above the on-screen preview so small
+    // type survives the later photo preprocess. Digital text never comes here.
+    let scale = memoryConstrained() ? 1.15 : 2;
     const raw = base.width * scale * base.height * scale;
     const cap = maxOcrPixels();
     if (raw > cap) scale *= Math.sqrt(cap / raw);
@@ -502,12 +567,12 @@ const NotesClientOcr = (() => {
 
   async function extractImage(file) {
     const decoded = await decodeImageFile(file);
-    const canvas = downscaleCanvas(decoded.canvas, maxOcrPixels());
+    // Photo OCR prepares its own working resolution. The list preview stays
+    // at LIST_PREVIEW_PX and is not the image Tesseract reads.
     try {
-      return await ocrImageCanvas(canvas, 0);
+      return await ocrImageCanvas(decoded.canvas, 0);
     } finally {
-      releaseCanvas(canvas);
-      if (decoded.canvas !== canvas) releaseCanvas(decoded.canvas);
+      releaseCanvas(decoded.canvas);
     }
   }
 
