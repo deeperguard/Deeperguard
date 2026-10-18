@@ -51,8 +51,23 @@
     html = html.replace(/^\s*[-*] (.+)$/gm, '<li>$1</li>');
     html = html.replace(/(<li[\s\S]*?<\/li>\n?)+/g, (block) => `<ul>${block}</ul>`);
     html = html.replace(/@@FENCE(\d+)@@/g, (_, i) => `<pre><code>${escapeHtml(fences[Number(i)])}</code></pre>`);
-    html = html.replace(/\n\n/g, '</p><p>');
-    return `<p>${html}</p>`;
+    return wrapMarkdownBlocks(html);
+  }
+
+  function wrapMarkdownBlocks(html) {
+    const parts = [];
+    const blockRe = /(<(?:h\d|ul|ol|pre|blockquote)\b[\s\S]*?<\/(?:h\d|ul|ol|pre|blockquote)>)/ig;
+    String(html || '').split(/\n\n+/).forEach((block) => {
+      const trimmed = block.replace(/^\n+|\n+$/g, '').trim();
+      if (!trimmed) return;
+      trimmed.split(blockRe).forEach((chunk) => {
+        const bit = chunk.trim();
+        if (!bit) return;
+        if (/^<(?:h\d|ul|ol|pre|blockquote)\b/i.test(bit)) parts.push(bit);
+        else parts.push(`<p>${bit.replace(/\n/g, '<br>')}</p>`);
+      });
+    });
+    return parts.join('');
   }
 
   const api = { render, toggleTaskAt };

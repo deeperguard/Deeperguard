@@ -415,7 +415,7 @@
         <details class="auth-hint unlock-help">
           <summary>Having trouble on iPhone?</summary>
           <p id="unlock-secure-hint" hidden>Offline unlock on iPhone needs a secure connection. If Safari warns about the certificate, <a href="/ca.crt" download>install the certificate</a>, or open the app once while you are online.</p>
-          <p>If notes will not open, use the vault password from the device where you created them. Password help is in Settings after you unlock. Write to notes@deeperguard.com if you are stuck.</p>
+          <p>If notes will not open, use the vault password from the device where you created them. Password help is in Settings after you unlock. Write to <span id="unlock-support-email"></span> if you are stuck.</p>
         </details>
       </form>
     </main>
@@ -435,6 +435,8 @@
         btn.disabled = false;
         btn.textContent = 'Unlock';
       }
+      var support = document.getElementById('unlock-support-email');
+      if (support) support.textContent = ['notes', '@', 'deeperguard.com'].join('');
       fetch('/api/account', { cache: 'no-store', credentials: 'same-origin' })
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (account) {
@@ -784,7 +786,7 @@
           </button>
           <button type="button" id="btn-back" class="btn icon mobile-only" title="Back to notes" aria-label="Back to notes">←</button>
           <div class="editor-head-main">
-            <input id="note-title" class="title-input" placeholder="Title">
+            <input id="note-title" class="title-input" placeholder="Title" aria-label="Title">
             <div class="editor-meta-row">
             <div id="tag-bar-shell" class="tag-bar-shell is-collapsed">
               <button type="button" id="tag-bar-toggle" class="tag-bar-toggle" aria-expanded="false" aria-controls="tag-bar">

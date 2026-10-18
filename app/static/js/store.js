@@ -471,6 +471,18 @@ const NotesStore = (() => {
     return derived;
   }
 
+  function adoptDerivedVaultKey(password, stashed) {
+    const raw = stashed?.raw;
+    if (!raw || !stashed.salt) return false;
+    const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+    rememberDerivedKdf(String(password || ''), stashed.salt, stashed.version || 2, {
+      key: { raw: bytes },
+      encoding: stashed.encoding || '',
+      version: stashed.version || 2,
+    });
+    return true;
+  }
+
   async function scoreVaultKdfVersion(password, salt, kdfVersion, ciphers) {
     let ok = 0;
     try {
@@ -5290,6 +5302,7 @@ const NotesStore = (() => {
     api,
     setSessionRevokedHandler,
     unlock,
+    adoptDerivedVaultKey,
     isUnlocked,
     isKeyVerified,
     markKeyVerified,

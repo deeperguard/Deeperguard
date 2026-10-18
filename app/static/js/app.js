@@ -52,24 +52,32 @@
     if (kind === 'image') return 'IMG';
     return 'FILE';
   }
+  function attachmentBadgeHtml(label) {
+    return `<span class="att-kind-badge" aria-hidden="true">${escapeHtml(label || 'FILE')}</span>`;
+  }
+  function thumbPaintRoot(stage) {
+    if (!stage) return stage;
+    return stage.querySelector(':scope > .thumb-paint') || stage;
+  }
   function paintThumbImage(stage, src, label) {
     const img = document.createElement('img');
     img.alt = '';
     img.decoding = 'async';
+    const paint = thumbPaintRoot(stage);
     const show = () => {
       if (!stage.isConnected || !img.naturalWidth) return;
       const fitted = fitThumbCanvas(img);
-      stage.replaceChildren(fitted || img);
+      paint.replaceChildren(fitted || img);
     };
-    img.onload = show;
-    img.onerror = () => {
+    img.addEventListener('load', show);
+    img.addEventListener('error', () => {
       if (!stage.isConnected) return;
-      stage.textContent = label || 'FILE';
-    };
+      paint.textContent = label || 'FILE';
+    });
     img.src = src;
     if (img.complete) {
       if (img.naturalWidth) show();
-      else stage.textContent = label || 'FILE';
+      else paint.textContent = label || 'FILE';
     }
   }
   function iosDeferPdfPreview(att, { forList = false } = {}) {
@@ -95,12 +103,13 @@
           ? 'PDF · connect to Wi‑Fi for thumbnail'
           : 'Tap Preview to open PDF';
     }
+    const paint = thumbPaintRoot(stage);
     if (stage.matches('button')) {
-      stage.innerHTML = `<span class="ios-pdf-label">${escapeHtml(label)}</span>`;
+      paint.innerHTML = `<span class="ios-pdf-label">${escapeHtml(label)}</span>`;
       stage.removeAttribute('data-lazy-thumb');
       return;
     }
-    stage.innerHTML = `<span class="ios-pdf-label${compact ? ' compact' : ''}">${escapeHtml(label)}</span>`;
+    paint.innerHTML = `<span class="ios-pdf-label${compact ? ' compact' : ''}">${escapeHtml(label)}</span>`;
     stage.removeAttribute('data-lazy-thumb');
   }
 
@@ -829,7 +838,8 @@
 
   function reloadOpenNoteFromStore(note) {
     ui.title.value = NotesSearch.effectiveNoteTitle(note);
-    ui.title.title = ui.title.value || '';
+    ui.title.removeAttribute('title');
+    ui.title.setAttribute('aria-label', 'Title');
     ui.body.value = note.content.content || '';
     captureEditorBaseline(note, false);
     resetNoteUndoStack(currentId);
@@ -1046,7 +1056,7 @@
     const at = typeof isoOrMs === 'number' ? isoOrMs : parseTimestampMs(isoOrMs);
     if (!Number.isFinite(at) || at <= 0) return '';
     const sec = Math.max(0, Math.round((Date.now() - at) / 1000));
-    if (sec < 45) return 'just now';
+    if (sec < 60) return 'just now';
     if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
     if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
     if (sec < 86400 * 7) return `${Math.floor(sec / 86400)}d ago`;
@@ -1084,6 +1094,16 @@
     const rel = relativeTime(isoOrMs);
     return rel || formatModified(isoOrMs).replace(/^Modified\s+/, '') || '';
   }
+
+  function refreshRelativeTimes() {
+    document.querySelectorAll('.note-modified[data-edited]').forEach((el) => {
+      const ms = Number(el.dataset.edited);
+      if (!ms) return;
+      const next = listTimeLabel(ms);
+      if (next && el.textContent !== next) el.textContent = next;
+    });
+  }
+  setInterval(refreshRelativeTimes, 30000);
 
   function noteListDensity() {
     return prefs.compactList ? 'compact' : 'comfortable';
@@ -1279,6 +1299,10 @@
     return type === 'plain' || type === 'markdown' || type === 'superscript';
   }
 
+  function htmlWithoutInlineHandlers(html) {
+    return String(html || '').replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  }
+
   function renderNoteBodyPreview(text, editor) {
     let html;
     if (window.NotesSpreadsheet?.isPayload?.(text)) {
@@ -1295,7 +1319,7 @@
     if (window.NotesInDocNav?.annotateHeadingHtml) {
       html = NotesInDocNav.annotateHeadingHtml(html);
     }
-    return html;
+    return htmlWithoutInlineHandlers(html);
   }
 
   function scrollEditorToLine(lineIndex) {
@@ -1506,10 +1530,28 @@
       else el.removeAttribute('role');
     });
     if (!on) {
-      document.querySelectorAll('.editor-toolbar-overflow-toggle').forEach((btn) => {
-        if (document.activeElement === btn) btn.blur();
-      });
+      document.body.classList.add('editor-toolbar-tip-suppress');
+      releaseToolbarTipWhenPointerLeaves();
     }
+  }
+  function toolbarTipStillHot() {
+    return [...document.querySelectorAll('.editor-toolbar-overflow-toggle')].some((btn) => {
+      if (document.activeElement === btn) btn.blur();
+      return btn.matches(':hover') || document.activeElement === btn;
+    });
+  }
+  let toolbarTipReleaseBound = false;
+  function releaseToolbarTipWhenPointerLeaves() {
+    const tick = () => {
+      if (!document.body.classList.contains('editor-toolbar-tip-suppress')) return;
+      if (toolbarTipStillHot()) return;
+      document.body.classList.remove('editor-toolbar-tip-suppress');
+    };
+    requestAnimationFrame(tick);
+    setTimeout(tick, 0);
+    if (toolbarTipReleaseBound) return;
+    toolbarTipReleaseBound = true;
+    document.addEventListener('pointermove', tick, true);
   }
 
   function closeEditorToolbarMenu() {
@@ -2223,10 +2265,12 @@
     return /(?:^|[^A-Za-z0-9])2\s*fa\b/i.test(String(note.content?.title || ''));
   }
 
-  function kindIconHtml(kind) {
+  function kindIconHtml(kind, badgeLabel) {
     const tone = kind.tone || 'note';
     const inner = kind.svg || escapeHtml(kind.icon || '');
-    return `<span class="note-kind-icon note-kind-icon--${escapeAttr(tone)}" aria-hidden="true">${inner}</span>`;
+    const icon = `<span class="note-kind-icon note-kind-icon--${escapeAttr(tone)}" aria-hidden="true">${inner}</span>`;
+    if (!badgeLabel) return icon;
+    return `<span class="note-kind-slot">${icon}${attachmentBadgeHtml(badgeLabel)}</span>`;
   }
 
   function listThumbPlaceholderHtml(kind) {
@@ -2235,15 +2279,16 @@
     return `<span class="note-kind-icon note-kind-icon--${escapeAttr(tone)} note-list-thumb-fallback" aria-hidden="true">${inner}</span>`;
   }
 
-  function listThumbHtml(att, noteId, kind) {
-    return `<div class="note-list-thumb" data-thumb-id="${escapeAttr(att.uuid)}" data-note-id="${escapeAttr(noteId)}" aria-hidden="true">${listThumbPlaceholderHtml(kind)}</div>`;
+  function listThumbHtml(att, noteId, kind, badgeLabel) {
+    const label = badgeLabel || (kind && /^(PDF|IMG|FILE)$/.test(kind.label) ? kind.label : 'FILE');
+    return `<div class="note-list-thumb" data-thumb-id="${escapeAttr(att.uuid)}" data-note-id="${escapeAttr(noteId)}" aria-hidden="true"><span class="thumb-paint">${listThumbPlaceholderHtml(kind)}</span>${attachmentBadgeHtml(label)}</div>`;
   }
 
   function paintListThumbFallback(stage, kind) {
     if (!stage) return;
     stage.classList.remove('ios-pdf-deferred', 'ios-pdf-loading');
     const meta = kind && (kind.svg || kind.icon) ? kind : { icon: '📄', tone: 'note', svg: kindIconSvg('note') };
-    stage.innerHTML = listThumbPlaceholderHtml(meta);
+    thumbPaintRoot(stage).innerHTML = listThumbPlaceholderHtml(meta);
   }
 
   function listThumbKindMeta(note, att) {
@@ -2256,7 +2301,7 @@
   }
 
   function attachListThumbErrorHandler(img, stage, noteId, attId) {
-    img.onerror = () => {
+    img.addEventListener('error', () => {
       // Only revoke URLs this cache owns; makeListThumbUrl can hand back the
       // full-size previewCache URL, which the inline viewer still needs.
       if (listThumbCache.get(attId) === img.src) {
@@ -2266,7 +2311,7 @@
       const note = NotesStore.get(noteId);
       const att = NotesStore.get(attId);
       paintListThumbFallback(stage, listThumbKindMeta(note, att));
-    };
+    });
   }
 
   function highlightListText(text, query) {
@@ -5953,6 +5998,12 @@
       } catch (err) {
         sessionPassword = '';
       }
+      const bootDerived = (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.takeBootDerivedKey)
+        ? NotesVaultSecrets.takeBootDerivedKey()
+        : null;
+      if (bootDerived && sessionPassword && typeof NotesStore.adoptDerivedVaultKey === 'function') {
+        NotesStore.adoptDerivedVaultKey(sessionPassword, bootDerived);
+      }
       const cached = NotesStore.cachedAccount();
       const bootSalt = cached.kdf_salt
         || localStorage.getItem('notes_kdf_salt')
@@ -6895,12 +6946,12 @@
       ${noteRowDeleteBtnHtml(note)}
       <button type="button" class="note-item ${active}" data-id="${escapeAttr(note.uuid)}">
         ${showThumb
-    ? listThumbHtml(att, note.uuid, icon)
-    : kindIconHtml(icon)}
+    ? listThumbHtml(att, note.uuid, icon, kindLabel)
+    : kindIconHtml(icon, kindLabel)}
         <span class="note-item-body">
           <span class="note-title-row">
             <h3>${titleHtml}</h3>
-            <span class="note-row-trailing">${noteRowStatusGlyphs(note)}<span class="note-modified" title="${escapeAttr(timeTitle)}">${escapeHtml(timeLabel)}</span></span>
+            <span class="note-row-trailing">${noteRowStatusGlyphs(note)}<span class="note-modified" data-edited="${editedMs || ''}" title="${escapeAttr(timeTitle)}">${escapeHtml(timeLabel)}</span></span>
           </span>
           ${lockBadgeHtml ? `<span class="note-item-lock-row">${lockBadgeHtml}</span>` : ''}
           ${compact ? '' : noteRowSecondaryLine(note, query)}
@@ -6962,7 +7013,7 @@
     const glyphs = noteRowStatusGlyphs(n);
     const where = match
       ? `<span class="note-modified note-match-label">${escapeHtml(match.label)}</span>`
-      : `<span class="note-modified" title="${escapeAttr(timeTitle)}">${escapeHtml(timeLabel)}</span>`;
+      : `<span class="note-modified" data-edited="${editedMs || ''}" title="${escapeAttr(timeTitle)}">${escapeHtml(timeLabel)}</span>`;
     const trailing = `<span class="note-row-trailing">${glyphs}${where}</span>`;
     const secondary = compact ? '' : noteRowSecondaryLine(n, query);
     return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(n.uuid)}">
@@ -6971,8 +7022,8 @@
       ${noteRowDeleteBtnHtml(n)}
       <button type="button" class="note-item ${active}" data-id="${escapeAttr(n.uuid)}">
         ${showListThumb
-    ? listThumbHtml(firstAtt, n.uuid, kind)
-    : kindIconHtml(kind)}
+    ? listThumbHtml(firstAtt, n.uuid, kind, firstAtt ? attachmentThumbLabel(thumbKind) : '')
+    : kindIconHtml(kind, firstAtt ? attachmentThumbLabel(thumbKind) : '')}
         <span class="note-item-body">
           <span class="note-title-row">
             <h3${titleAttr}>${titleHtml}</h3>${noteIndexingBadge(n.uuid)}
@@ -7599,7 +7650,7 @@
         const thumbKind = attachmentKind(a);
         const thumbLabel = attachmentThumbLabel(thumbKind);
         return `<div class="${rowClass}" data-att="${escapeAttr(a.uuid)}">
-          <button type="button" class="attachment-thumb" data-preview="${escapeAttr(a.uuid)}" aria-label="Preview ${escapeAttr(a.content.filename || 'document')}">${thumbLabel}</button>
+          <button type="button" class="attachment-thumb" data-preview="${escapeAttr(a.uuid)}" aria-label="Preview ${escapeAttr(a.content.filename || 'document')}"><span class="thumb-paint">${escapeHtml(thumbLabel)}</span>${attachmentBadgeHtml(thumbLabel)}</button>
           <div class="attachment-main">
             <strong class="attachment-filename">${rowQuery ? nameHit : escapeHtml(a.content.filename)}</strong>${spinner}
             <span class="muted"> (${sizeLabel})</span>
@@ -8222,17 +8273,16 @@
     img.alt = '';
     img.decoding = 'async';
     const noteId = stage.dataset.noteId || '';
+    const paint = thumbPaintRoot(stage);
     attachListThumbErrorHandler(img, stage, noteId, id);
-    img.onload = () => {
+    const show = () => {
       if (!stage.isConnected || !img.naturalWidth) return;
       const fitted = fitThumbCanvas(img);
-      stage.replaceChildren(fitted || img);
+      paint.replaceChildren(fitted || img);
     };
+    img.addEventListener('load', show);
     img.src = url;
-    if (img.complete && img.naturalWidth) {
-      const fitted = fitThumbCanvas(img);
-      stage.replaceChildren(fitted || img);
-    }
+    if (img.complete && img.naturalWidth) show();
     return true;
   }
 
@@ -8299,35 +8349,49 @@
     return { scan, full: coverage > 0.72, x, y, w: bw, h: bh };
   }
 
+  function thumbOutputPx() {
+    const dpr = Math.min(3, Math.max(1, (typeof window !== 'undefined' && window.devicePixelRatio) || 1));
+    return Math.max(LIST_THUMB_PX, Math.round(LIST_THUMB_PX * dpr));
+  }
+
   function fitThumbCanvas(source) {
     const box = thumbInkBox(source);
     if (!box) return null;
-    const side = LIST_THUMB_PX;
+    const srcW = source.naturalWidth || source.videoWidth || source.width || box.scan.width;
+    const srcH = source.naturalHeight || source.videoHeight || source.height || box.scan.height;
+    const scanW = box.scan.width || srcW;
+    const scanH = box.scan.height || srcH;
+    const side = thumbOutputPx();
     const out = document.createElement('canvas');
     out.width = side;
     out.height = side;
     const ctx = out.getContext('2d');
     if (!ctx) return null;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, side, side);
     let sx = 0;
     let sy = 0;
-    let sw = box.scan.width;
-    let sh = box.scan.height;
+    let sw = srcW;
+    let sh = srcH;
     if (!box.full) {
-      sx = box.x;
-      sy = box.y;
-      sw = Math.max(1, box.w);
-      sh = Math.max(1, box.h);
+      const mapX = srcW / scanW;
+      const mapY = srcH / scanH;
+      sx = box.x * mapX;
+      sy = box.y * mapY;
+      sw = Math.max(1, box.w * mapX);
+      sh = Math.max(1, box.h * mapY);
     }
     // Full scans stay contained. A short ink strip (one receipt line) is
     // scaled to fill the tile from the top-left so the glyphs stay readable.
+    // Draw from the original bitmap at devicePixelRatio, not the 160px scan.
     const scale = box.full
       ? Math.min(side / sw, side / sh)
       : Math.max(side / sw, side / sh);
     const dw = Math.max(1, Math.round(sw * scale));
     const dh = Math.max(1, Math.round(sh * scale));
-    ctx.drawImage(box.scan, sx, sy, sw, sh, 0, 0, dw, dh);
+    ctx.drawImage(source, sx, sy, sw, sh, 0, 0, dw, dh);
     return out;
   }
 
@@ -8345,24 +8409,26 @@
     const img = new Image();
     img.decoding = 'async';
     await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = () => reject(new Error('image decode failed'));
+      img.addEventListener('load', () => resolve());
+      img.addEventListener('error', () => reject(new Error('image decode failed')));
       img.src = entry.url;
     });
     const fitted = fitThumbCanvas(img);
     const canvas = fitted || document.createElement('canvas');
     if (!fitted) {
       const side = Math.max(img.naturalWidth, img.naturalHeight) || 1;
-      const scale = Math.min(1, LIST_THUMB_PX / side);
+      const scale = Math.min(1, thumbOutputPx() / side);
       canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
       canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
       const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     }
     img.src = '';
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
     const url = blob ? URL.createObjectURL(blob) : entry.url;
     listThumbCache.set(id, url);
     return url;
@@ -8378,16 +8444,19 @@
 
   async function hydrateThumbNow(noteId, id, stage, { forList = false } = {}) {
     try {
+      const paint = thumbPaintRoot(stage);
       if (forList && listThumbCache.has(id)) {
         const img = document.createElement('img');
         img.alt = '';
         img.decoding = 'async';
         img.src = listThumbCache.get(id);
         attachListThumbErrorHandler(img, stage, noteId, id);
-        stage.replaceChildren(img);
+        paint.replaceChildren(img);
         return;
       }
-      if (forList && await paintListThumbFromPreviewEnc(id, stage)) {
+      // iOS keeps the small stored preview to avoid decoding every PDF.
+      // Other devices render the original so receipt text stays legible.
+      if (forList && IS_IOS && await paintListThumbFromPreviewEnc(id, stage)) {
         return;
       }
       if (heavyPreviewDeferred(id) && attachmentKind(NotesStore.get(id)) === 'pdf') {
@@ -8408,13 +8477,14 @@
           img.alt = entry.filename || '';
           img.decoding = 'async';
           attachListThumbErrorHandler(img, stage, noteId, id);
-          img.onload = () => {
+          const show = () => {
             if (!stage.isConnected || !img.naturalWidth) return;
-            stage.replaceChildren(img);
+            paint.replaceChildren(img);
           };
+          img.addEventListener('load', show);
           img.src = await makeListThumbUrl(id, entry);
-          if (img.complete && img.naturalWidth) stage.replaceChildren(img);
-          else if (img.complete && !img.naturalWidth) stage.textContent = label;
+          if (img.complete && img.naturalWidth) show();
+          else if (img.complete && !img.naturalWidth) paint.textContent = label;
           // Drop the full-size bytes + blob URL right away on the overview.
           if (previewingId !== id) forgetPreview(id);
         } else {
@@ -8431,21 +8501,21 @@
         }
         const doc = await NotesPreview.openPdf(entry.bytes);
         const stageWidth = Math.round(stage.clientWidth || stage.parentElement?.clientWidth || 0);
-        const width = forList ? 56 : Math.max(84, stageWidth || 84);
+        const width = forList ? LIST_THUMB_PX : Math.max(84, stageWidth || 84);
         const page = await NotesPreview.renderPdfPage(doc, 1, width);
         paintFittedThumb(page);
-        stage.replaceChildren(page);
+        paint.replaceChildren(page);
         if (forList && previewingId !== id) forgetPreview(id);
         return;
       }
       if (entry.kind === 'text') {
         clearDocStageLoading(stage);
         const query = forList ? '' : activeFindNeedle();
-        NotesPreview.renderTextPreview(stage, entry.bytes, query);
+        NotesPreview.renderTextPreview(paint, entry.bytes, query);
         if (forList && previewingId !== id) forgetPreview(id);
         return;
       }
-      stage.textContent = 'FILE';
+      paint.textContent = 'FILE';
     } catch (err) {
       if (forList) {
         const att = NotesStore.get(id);
@@ -8458,7 +8528,7 @@
         paintListThumbFallback(stage, listThumbKindMeta(note, att));
         return;
       }
-      stage.textContent = 'Preview';
+      thumbPaintRoot(stage).textContent = 'Preview';
     }
   }
 
@@ -10215,6 +10285,11 @@
         <button type="button" class="btn ghost sm check-add" id="check-add">Add item</button>
         <button type="button" class="btn ghost sm check-clear-checked" id="btn-clear-checked-list" hidden>Clear checked</button>
       </div>`);
+    ui.checklist.querySelectorAll('.check-row').forEach((row) => {
+      const box = row.querySelector('[data-check-toggle]');
+      const text = row.querySelector('.check-text');
+      if (box && text && !String(text.value || '').trim()) box.setAttribute('aria-label', 'New list item');
+    });
     ui.checklist.querySelectorAll('[data-check-toggle]').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (note.content.prevent_edit) return;
@@ -10228,6 +10303,8 @@
       });
       input.addEventListener('input', () => {
         autosizeCheckText(input);
+        const box = input.closest('.check-row')?.querySelector('[data-check-toggle]');
+        if (box) box.setAttribute('aria-label', String(input.value || '').trim() || 'New list item');
         if (note.content.prevent_edit) return;
         commit(NotesChecklist.setText(rows, input.dataset.checkText, input.value), { rerender: false });
         const layer = input.parentElement?.querySelector('.check-text-links');
@@ -10448,7 +10525,8 @@
     ui.editor.hidden = false;
     ui.shell.classList.add('editor-open');
     ui.title.value = NotesSearch.effectiveNoteTitle(note);
-    ui.title.title = ui.title.value || '';
+    ui.title.removeAttribute('title');
+    ui.title.setAttribute('aria-label', 'Title');
     let body = note.content.content || '';
     if (!gated && (note.content.editor || '') === 'superscript' && window.NotesSuperscript) {
       body = NotesSuperscript.normalizeContent(body);
@@ -10510,6 +10588,7 @@
     updateActionButtons(note);
     updateNoteMeta(note);
     bindEditorKeyboardInset();
+    renderFolders();
     scrollOpenNoteToTop();
     try {
       const state = { notesView: 'editor', noteId: id };
@@ -14789,6 +14868,10 @@
       return;
     }
     dialog.hidden = false;
+    dialog.removeAttribute('aria-hidden');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'folder-prompt-title');
     input.value = '';
     input.focus();
   }
@@ -14994,6 +15077,7 @@
       if (btn.dataset.filter === 'all') currentTag = null;
       setFilter(btn.dataset.filter);
       renderTags();
+      renderFolders();
       renderNotes();
     });
   });
@@ -15005,6 +15089,7 @@
       if (filterSelect.value === 'all') currentTag = null;
       setFilter(filterSelect.value);
       renderTags();
+      renderFolders();
       renderNotes();
     });
   }
@@ -15034,7 +15119,8 @@
     if (note && !titleLockedByUser(note)) {
       applyingDerivedTitle = true;
       ui.title.value = NotesSearch.derivedTitleFromBody(ui.body.value);
-      ui.title.title = ui.title.value || '';
+      ui.title.removeAttribute('title');
+      ui.title.setAttribute('aria-label', 'Title');
       applyingDerivedTitle = false;
     }
     scheduleSave();
