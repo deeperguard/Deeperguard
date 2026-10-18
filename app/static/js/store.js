@@ -120,6 +120,7 @@ const NotesStore = (() => {
     altCryptoKey: null,
     kdfProbeMixed: false,
     kdfVersionsMissed: false,
+    kdfFastReject: false,
     // True only after ciphertext decrypts, or the server vault is empty.
     // A derived key alone is not proof — the KDF always "succeeds".
     keyVerified: false,
@@ -554,9 +555,11 @@ const NotesStore = (() => {
     const explicit = Number(options.kdfVersion || options.version);
     if (explicit === 1 || explicit === 2) {
       state.kdfProbeMixed = false;
+      state.kdfFastReject = false;
       return explicit;
     }
     state.kdfVersionsMissed = false;
+    state.kdfFastReject = false;
     const hint = vaultKdfVersionFromAccount(state.account);
     const ciphers = await sampleCipherRows(4);
     if (!ciphers.length) {
@@ -608,6 +611,9 @@ const NotesStore = (() => {
     }
     state.kdfProbeMixed = false;
     state.kdfVersionsMissed = true;
+    // Both versions missed every sample. Reject without a server pull —
+    // that extra round trip was most of the gap vs a successful unlock.
+    state.kdfFastReject = true;
     if (vaultKdfUpgradePending()) return 1;
     return hint;
   }

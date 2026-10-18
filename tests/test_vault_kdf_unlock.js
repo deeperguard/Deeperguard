@@ -201,6 +201,18 @@ function resetClient() {
   );
   assert.notStrictEqual(localStorage.getItem('notes_vault_kdf_upgrade_pending'), '1');
 
+  resetClient();
+  await NotesStore.unlock('vault-password', salt, { kdfVersion: 2 });
+  const badId = NotesStore.newUuid();
+  NotesStore.upsert(badId, { ...NotesStore.defaultNote(), title: 'secret' });
+  await waitPersist(badId);
+  NotesStore.state.account = { vault_kdf_version: 2, kdf_salt: salt };
+  localStorage.setItem('notes_vault_kdf_version', '2');
+  NotesStore.lock();
+  await NotesStore.unlock('wrong-password', salt);
+  assert.strictEqual(NotesStore.state.kdfFastReject, true, 'wrong password skips the server probe');
+  assert.strictEqual(NotesStore.state.kdfVersionsMissed, true);
+
   console.log('ok');
 })().catch((err) => {
   console.error(err);

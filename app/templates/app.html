@@ -464,7 +464,7 @@
         });
     })();
   </script>
-  <div id="app" class="app-root" data-csrf="{{ csrf_token }}" data-skip-login="{{ '1' if skip_login else '0' }}" hidden>
+  <div id="app" class="app-root" data-csrf="{{ csrf_token }}" data-skip-login="{{ '1' if skip_login else '0' }}" hidden aria-hidden="true">
     <nav class="app-tabs" role="tablist" aria-label="App sections">
       <button type="button" class="app-tab active" id="app-tab-notes" data-app-tab="notes" role="tab" aria-selected="true" aria-controls="notes-shell">Notes</button>
       <button type="button" class="app-tab" id="app-tab-2fa" data-app-tab="2fa" role="tab" aria-selected="false" aria-controls="totp-pane">2FA</button>
@@ -546,7 +546,7 @@
       </div>
       <div class="filter-bar">
         <details class="filter-section" id="filter-section" open>
-          <summary class="section-label sn-nav-label">Views</summary>
+          <summary class="section-label sn-nav-label">Views<span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
           <nav id="filters" class="filters" aria-label="Note filters">
             <button type="button" class="filter active" data-filter="all" title="Notes"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M14 3v5h5"/></svg><span>Notes</span></button>
             <button type="button" class="filter" data-filter="documents" title="Files"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
@@ -577,7 +577,7 @@
         </label>
       </div>
       <details class="tag-section" id="tag-section" open>
-        <summary class="section-label"><span class="sn-tags">Tags</span></summary>
+        <summary class="section-label"><span class="sn-tags">Tags</span><span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
         <div id="tag-list" class="tag-list"></div>
         <div id="tag-color-bar" class="tag-color-bar" hidden></div>
         <div class="tag-composer" id="tag-composer" hidden>
@@ -593,7 +593,7 @@
         </div>
       </details>
       <details class="tag-section folder-section" id="folder-section" open>
-        <summary class="section-label"><span>Folders</span></summary>
+        <summary class="section-label"><span>Folders</span><span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
         <div id="folder-list" class="folder-list"></div>
         <div class="tag-composer" id="folder-composer" hidden>
           <input id="folder-name-input" type="text" maxlength="80" placeholder="Folder name" autocomplete="off">
