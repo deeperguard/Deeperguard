@@ -1133,7 +1133,7 @@
           <h3 class="section-label">Attachments</h3>
           <div id="attachment-list" class="attachment-list"></div>
           <label class="file-label btn sm" id="attachment-add-label">Add file
-            <input id="attachment-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,.json,.docx,application/pdf,text/plain,application/json" multiple>
+            <input id="attachment-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,.json,.csv,.zip,.xml,.yaml,.yml,.docx,application/pdf,text/plain,text/csv,application/json,application/zip,application/xml,application/yaml" multiple>
           </label>
         </section>
         <section class="history">
@@ -1684,6 +1684,16 @@
     <div class="confirm-dialog-actions">
       <button type="button" class="btn ghost" id="hero-guide-scan">Scan now</button>
       <button type="button" class="btn primary" id="hero-guide-close">Got it</button>
+    </div>
+  </div>
+  <div id="folder-prompt" class="confirm-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="folder-prompt-title">
+    <h2 id="folder-prompt-title">New folder</h2>
+    <label class="settings-row stacked">Folder name
+      <input id="folder-prompt-input" type="text" autocomplete="off" maxlength="80">
+    </label>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn ghost" id="folder-prompt-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="folder-prompt-ok">Create</button>
     </div>
   </div>
   <div id="confirm-dialog" class="confirm-dialog" hidden role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">

@@ -119,7 +119,16 @@ const NotesClientOcr = (() => {
     if (type === 'application/pdf' || /\.pdf$/.test(name)) return 'pdf';
     if (/\.docx$/.test(name) || type.includes('wordprocessingml')) return 'docx';
     if (/\.zip$/.test(name) || type === 'application/zip' || type === 'application/x-zip-compressed') return 'zip';
-    if (type === 'application/json' || type.startsWith('text/') || /\.(txt|md|csv|json|log)$/i.test(name)) return 'text';
+    if (
+      type === 'application/json'
+      || type === 'application/xml'
+      || type === 'application/yaml'
+      || type === 'application/x-yaml'
+      || type.endsWith('+json')
+      || type.endsWith('+xml')
+      || type.startsWith('text/')
+      || /\.(txt|md|csv|json|log|xml|yaml|yml)$/i.test(name)
+    ) return 'text';
     if (type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|hei[cf])$/i.test(name)) return 'image';
     return 'other';
   }
@@ -614,10 +623,16 @@ const NotesClientOcr = (() => {
           node.forEach(walk);
           return;
         }
-        if (typeof node === 'object') Object.values(node).forEach(walk);
+        if (typeof node === 'object') {
+          Object.entries(node).forEach(([key, value]) => {
+            const name = String(key || '').trim();
+            if (name) parts.push(name);
+            walk(value);
+          });
+        }
       };
       walk(data);
-      if (parts.length) text = parts.join('\n');
+      if (parts.length) text = `${parts.join('\n')}\n${raw}`;
     } catch (err) {
       text = raw;
     }

@@ -88,8 +88,8 @@ self.onmessage = async (event) => {
       let ticks = 0;
       const timer = setInterval(() => {
         ticks += 1;
-        self.postMessage({ id, progress: Math.min(16, 8 + ticks) });
-      }, 200);
+        self.postMessage({ id, progress: ticks });
+      }, 700);
       try {
         const result = await deriveKey(msg.password, msg.salt, msg.kdfVersion);
         clearInterval(timer);

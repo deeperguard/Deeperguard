@@ -42,7 +42,7 @@ const NotesHistory = (() => {
     const fallbackTitle = (currentTitle && currentTitle !== 'Untitled' && currentTitle !== 'Title')
       ? currentTitle
       : (derived && derived !== 'Title' ? derived : 'Note');
-    if (when) return `${when} · ${fallbackTitle}`;
+    if (when && fallbackTitle && fallbackTitle !== 'Note') return fallbackTitle;
     if (fallbackTitle && fallbackTitle !== 'Note') return fallbackTitle;
     return 'Untitled version';
   }
