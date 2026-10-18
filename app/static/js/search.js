@@ -479,7 +479,7 @@ const NotesSearch = (() => {
   function readingStats(text) {
     const raw = String(text || '').trim();
     const words = raw ? raw.split(/\s+/).length : 0;
-    const minutes = words ? Math.max(1, Math.round(words / 220)) : 0;
+    const minutes = words >= 220 ? Math.max(1, Math.round(words / 220)) : 0;
     return { words, minutes };
   }
 

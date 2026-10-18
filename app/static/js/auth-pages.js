@@ -108,13 +108,13 @@ function mapPasswordSignInError(err) {
   if (err.status === 429) return err;
   const msg = String(err.message || '');
   if (err.status === 401 || err.repairExhausted || /invalid credentials/i.test(msg)) {
-    const wrong = new Error('Incorrect password');
+    const wrong = new Error('Email or password is incorrect');
     wrong.incorrectPassword = true;
     wrong.status = err.status;
     return wrong;
   }
   if (/bad server credentials/i.test(msg)) {
-    const wrong = new Error('Incorrect password');
+    const wrong = new Error('Email or password is incorrect');
     wrong.incorrectPassword = true;
     return wrong;
   }
@@ -171,12 +171,12 @@ if (loginForm) {
         showError('login-error', 'Too many sign-in attempts. Wait a few minutes and try again.');
         return;
       }
-      if (err?.incorrectPassword || /incorrect password/i.test(msg)) {
-        showError('login-error', 'Incorrect password');
+      if (err?.incorrectPassword || /incorrect password|email or password is incorrect/i.test(msg)) {
+        showError('login-error', 'Email or password is incorrect');
         return;
       }
       if (/invalid credentials|bad server credentials/i.test(msg)) {
-        showError('login-error', 'Incorrect password');
+        showError('login-error', 'Email or password is incorrect');
         return;
       }
       showError('login-error', msg);

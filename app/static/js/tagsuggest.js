@@ -12,7 +12,7 @@
   function tokenize(text) {
     return String(text || '')
       .toLowerCase()
-      .match(/[a-z][a-z0-9-]{2,}/g) || [];
+      .match(/[a-z][a-z0-9-]{3,}/g) || [];
   }
 
   function frequencies(tokens) {
@@ -35,20 +35,28 @@
       .replace(/\.[^.]+$/, '')
       .replace(/[_-]+/g, ' ')
       .trim();
-    const cleaned = tokenize(stem).filter((w) => !STOP.has(w))[0];
-    return titleCase(cleaned || stem || 'Scanned');
+    const cleaned = tokenize(stem).filter((w) => !STOP.has(w) && w.length >= 4)[0];
+    if (!cleaned || cleaned.length < 4) return '';
+    return titleCase(cleaned);
+  }
+
+  function hasWord(hay, word) {
+    const token = String(word || '').toLowerCase();
+    if (token.length < 4) return false;
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`, 'i').test(hay);
   }
 
   function scoreTag(title, text, freq) {
     const hay = String(text || '').toLowerCase();
     const name = String(title || '').trim().toLowerCase();
-    if (!name) return 0;
+    if (!name || name.length < 4) return 0;
     let score = 0;
-    if (hay.includes(name)) score += 8;
+    if (hasWord(hay, name)) score += 8;
     for (const word of name.split(/[^a-z0-9]+/).filter(Boolean)) {
-      if (STOP.has(word)) continue;
+      if (STOP.has(word) || word.length < 4) continue;
       score += (freq.get(word) || 0) * 3;
-      if (hay.includes(word)) score += 1;
+      if (hasWord(hay, word)) score += 1;
     }
     return score;
   }
@@ -64,10 +72,12 @@
       }
     }
     if (best && best.score >= 2) return best;
+    const title = inventTitle(freq, filename);
+    if (!title || title.length < 4) return null;
     return {
       existing: false,
       tagId: null,
-      title: inventTitle(freq, filename),
+      title,
       score: 1,
     };
   }

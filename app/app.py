@@ -1498,6 +1498,19 @@ def api_account_vault_kdf():
     return jsonify({"ok": True, "vault_kdf_version": version})
 
 
+def _pcloud_path_for_client(user) -> str:
+    """Leave the remote-folder field empty until pCloud is turned on.
+
+    Older databases defaulted new rows to HomelabNotes/backups. That string,
+    and the current Deeperguard/backups default, should stay a placeholder
+    until the account actually enables pCloud.
+    """
+    path = str(user["pcloud_remote_path"] or "").strip()
+    if not user["pcloud_enabled"] and path in {"", "HomelabNotes/backups", "Deeperguard/backups"}:
+        return ""
+    return path
+
+
 @app.get("/api/account")
 def api_account():
     uid = auth.current_user_id()
@@ -1521,7 +1534,7 @@ def api_account():
             ),
             "pcloud_enabled": bool(user["pcloud_enabled"]),
             "pcloud_username": user["pcloud_username"] or "",
-            "pcloud_remote_path": user["pcloud_remote_path"] or "Deeperguard/backups",
+            "pcloud_remote_path": _pcloud_path_for_client(user),
             "pcloud_region": user["pcloud_region"] or "eu",
             "pcloud_password_set": pcloud_password_set(uid),
             "pcloud_token_set": pcloud_token_set(uid),

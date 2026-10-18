@@ -119,6 +119,9 @@ const NotesStore = (() => {
     kdfVersion: 1,
     altCryptoKey: null,
     kdfProbeMixed: false,
+    // True only after ciphertext decrypts, or the server vault is empty.
+    // A derived key alone is not proof — the KDF always "succeeds".
+    keyVerified: false,
     // Light vault: keep note text local, download attachment files only when a note is opened.
     lightVault: false,
   };
@@ -708,6 +711,12 @@ const NotesStore = (() => {
       }
     }
     emitUnlockProgress('kdf', 3, 3);
+    state.keyVerified = false;
+    // Node unit tests unlock a harness vault with no server probe. Browsers
+    // stay unverified until ciphertext decrypts or the server vault is empty.
+    if (typeof process !== 'undefined' && process.release && process.release.name === 'node') {
+      state.keyVerified = true;
+    }
     sessionStorage.setItem('notes_unlocked', '1');
     sessionStorage.setItem('notes_salt', salt);
     if (typeof NotesVaultSecrets !== 'undefined') {
@@ -718,6 +727,20 @@ const NotesStore = (() => {
 
   function isUnlocked() {
     return !!state.cryptoKey;
+  }
+
+  function isKeyVerified() {
+    return !!state.cryptoKey && !!state.keyVerified;
+  }
+
+  function markKeyVerified() {
+    if (state.cryptoKey) state.keyVerified = true;
+  }
+
+  function unverifiedKeyError() {
+    const err = new Error('Unlock with the correct vault password before saving.');
+    err.code = 'VAULT_KEY_UNVERIFIED';
+    return err;
   }
 
   function lock() {
@@ -736,7 +759,9 @@ const NotesStore = (() => {
     state.cryptoKey = null;
     state.altCryptoKey = null;
     state.kdfProbeMixed = false;
+    state.keyVerified = false;
     state.kdfVersion = 1;
+    attachmentDecryptInFlight = null;
     lastDerivedKdf = null;
     state.items.clear();
     state.blocked.clear();
@@ -758,6 +783,7 @@ const NotesStore = (() => {
     if (typeof NotesCrypto !== 'undefined' && typeof NotesCrypto.terminateWorker === 'function') {
       NotesCrypto.terminateWorker();
     }
+    emitSync('idle', '');
   }
 
   function localWatermark() {
@@ -1915,6 +1941,15 @@ const NotesStore = (() => {
       reportProgress(rows.length, phase, rows.length);
     };
     await decryptBatch(primaryRows, 'decrypt');
+    // A wrong password decrypts nothing. Do not start attachment decrypt
+    // (that painted "Loading attachments") and do not reveal the app.
+    if (primaryRows.length > 0 && cipherOpened === 0 && failed > 0) {
+      const err = new Error('Wrong password or the local vault is unreadable');
+      err.code = 'LOCAL_DECRYPT_FAILED';
+      err.failed = failed;
+      throw err;
+    }
+    if (cipherOpened > 0) markKeyVerified();
     if (onPrimaryReady && !primaryReadyDone) {
       primaryReadyDone = true;
       try {
@@ -1991,6 +2026,7 @@ const NotesStore = (() => {
     if (!state.cryptoKey) throw lockedError();
     state.localReady = true;
     scheduleUnlockMaintenance();
+    if (cipherOpened > 0) markKeyVerified();
     if (failed && !opened) {
       const err = new Error('Wrong password or the local vault is unreadable');
       err.code = 'LOCAL_DECRYPT_FAILED';
@@ -1998,6 +2034,57 @@ const NotesStore = (() => {
       throw err;
     }
     return { opened, failed, cipherOpened };
+  }
+
+  // Decrypt a few server rows before the app shell opens. A derived key is
+  // not proof. An empty vault (nothing to decrypt) is proof.
+  async function probeServerKey() {
+    if (!state.cryptoKey) return { ok: false, locked: true };
+    if (state.keyVerified) return { ok: true, already: true };
+    let data;
+    try {
+      data = await api('/api/sync/pull', {
+        method: 'POST',
+        body: JSON.stringify({
+          since: 0,
+          limit: 8,
+          cursor: 'synced_at',
+          include_blobs: 0,
+        }),
+        timeoutMs: 15000,
+      });
+    } catch (err) {
+      if (isProbablyOffline(err)) {
+        const offline = new Error('Could not verify this password while offline. Connect and try again.');
+        offline.code = 'DECRYPT_FAILED';
+        offline.offline = true;
+        throw offline;
+      }
+      throw err;
+    }
+    const total = Number(data.total_undeleted) || 0;
+    const rows = (data.items || []).filter((row) => row && row.ciphertext && !row.deleted);
+    if (total === 0 && rows.length === 0) {
+      markKeyVerified();
+      return { ok: true, empty: true, opened: 0 };
+    }
+    let opened = 0;
+    for (const row of rows.slice(0, 3)) {
+      try {
+        const payload = parseCipherPayload(row.ciphertext);
+        if (!payload) continue;
+        await decryptCipherPayload(payload, { fast: true });
+        opened += 1;
+        break;
+      } catch (err) {
+        /* this row did not open with the derived key */
+      }
+    }
+    if (opened > 0) {
+      markKeyVerified();
+      return { ok: true, empty: false, opened };
+    }
+    return { ok: false, wrongKey: true, empty: false, opened: 0 };
   }
 
   async function loadAccount() {
@@ -2284,6 +2371,7 @@ const NotesStore = (() => {
     }
     // Locked vault: push pre-encrypted rows from IndexedDB when possible.
     if (!state.cryptoKey) return pushDirtyPersisted({ quiet });
+    if (!state.keyVerified) return false;
 
     state.pushing = true;
     if (!quiet) {
@@ -3766,6 +3854,7 @@ const NotesStore = (() => {
   }
 
   function upsert(uuid, content, { recordRevision = false, touchUpdatedAt = true, skipDirty = false } = {}) {
+    if (state.cryptoKey && !state.keyVerified) throw unverifiedKeyError();
     const existing = state.items.get(uuid);
     if (recordRevision && existing?.content?.type === 'note') {
       const prev = existing.content;
@@ -4157,7 +4246,7 @@ const NotesStore = (() => {
   }
 
   async function verifyVaultPassword(password) {
-    if (!state.cryptoKey) return false;
+    if (!state.cryptoKey || !state.keyVerified) return false;
     const clean = String(password || '').trim();
     if (!clean) return false;
     if (typeof NotesVaultSecrets !== 'undefined') {
@@ -5188,6 +5277,9 @@ const NotesStore = (() => {
     setSessionRevokedHandler,
     unlock,
     isUnlocked,
+    isKeyVerified,
+    markKeyVerified,
+    probeServerKey,
     lock,
     newUuid,
     defaultNote,
