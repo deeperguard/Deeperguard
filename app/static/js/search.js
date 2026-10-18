@@ -222,7 +222,15 @@ const NotesSearch = (() => {
     return titles;
   }
 
-  function buildSearchBlob(note, tagMap) {
+  function folderTitleForSearch(note, folderMap) {
+    const folderId = note?.content?.folder_id;
+    if (!folderId) return '';
+    const folder = folderMap?.get?.(folderId);
+    if (!folder) return '';
+    return String(folder.content?.title || '');
+  }
+
+  function buildSearchBlob(note, tagMap, folderMap) {
     if (!note || !note.content || note.content.type !== 'note') return '';
     // Locked notes stay findable by title only — body/OCR/filenames must not leak.
     if (note.content.locked) return normalize(note.content.title || '');
@@ -232,6 +240,7 @@ const NotesSearch = (() => {
       scanTextForSearch(note),
       fileNamesForSearch(note),
       ...tagTitlesForSearch(note, tagMap),
+      folderTitleForSearch(note, folderMap),
     ];
     return normalize(parts.join('\n'));
   }
@@ -251,7 +260,7 @@ const NotesSearch = (() => {
 
   // Everything the blob was built from, as a flat list: strings by value,
   // attachment contents by identity. Cheap to compare on every keystroke.
-  function indexSignature(note, tagMap) {
+  function indexSignature(note, tagMap, folderMap) {
     const c = note.content || {};
     const atts = c.locked ? null : visibleAttachments(note);
     const sig = [c, c.title, !!c.title_manual, !!c.locked, c.content, c.updated_at, c.created_at];
@@ -268,6 +277,7 @@ const NotesSearch = (() => {
       const tag = tagMap?.get?.(tagId);
       if (tag) sig.push(tag.content?.title);
     }
+    sig.push(c.folder_id || '', folderTitleForSearch(note, folderMap));
     return sig;
   }
 
@@ -277,19 +287,19 @@ const NotesSearch = (() => {
     return true;
   }
 
-  function buildIndexEntry(note, tagMap) {
-    const signature = indexSignature(note, tagMap);
-    const blob = buildSearchBlob(note, tagMap);
+  function buildIndexEntry(note, tagMap, folderMap) {
+    const signature = indexSignature(note, tagMap, folderMap);
+    const blob = buildSearchBlob(note, tagMap, folderMap);
     const entry = { blob, tokens: numericTokensIn(blob), signature };
     noteIndex.set(note.uuid, entry);
     return entry;
   }
 
   // The entry for this note, rebuilt when anything it was built from changed.
-  function freshIndexEntry(note, tagMap) {
+  function freshIndexEntry(note, tagMap, folderMap) {
     const entry = noteIndex.get(note.uuid);
-    if (entry && sameSignature(entry.signature, indexSignature(note, tagMap))) return entry;
-    return buildIndexEntry(note, tagMap);
+    if (entry && sameSignature(entry.signature, indexSignature(note, tagMap, folderMap))) return entry;
+    return buildIndexEntry(note, tagMap, folderMap);
   }
 
   function entryHasTerms(entry, terms) {
@@ -311,18 +321,18 @@ const NotesSearch = (() => {
     return noteIndex.size > 0;
   }
 
-  function indexNote(note, tagMap) {
+  function indexNote(note, tagMap, folderMap) {
     if (!note || note.deleted) {
       noteIndex.delete(note?.uuid);
       return;
     }
     if (note.content?.type !== 'note') return;
-    buildIndexEntry(note, tagMap);
+    buildIndexEntry(note, tagMap, folderMap);
   }
 
-  function indexNotes(notes, tagMap) {
+  function indexNotes(notes, tagMap, folderMap) {
     clearMemoryIndex();
-    for (const note of notes) indexNote(note, tagMap);
+    for (const note of notes) indexNote(note, tagMap, folderMap);
   }
 
   function removeFromIndex(uuid) {
@@ -355,7 +365,7 @@ const NotesSearch = (() => {
 
   // Which field to show for a hit: the first field that holds every term, or
   // — when the words are spread over fields — the field with the first term.
-  function describeMatch(note, query, tagMap, { titlesOnly = false } = {}) {
+  function describeMatch(note, query, tagMap, { titlesOnly = false, folderMap = null } = {}) {
     const terms = parseQueryTerms(query);
     if (!terms.length) return null;
     const locked = !!note.content?.locked;
@@ -368,6 +378,10 @@ const NotesSearch = (() => {
       fields.push({ field: 'ocr', label: 'Scanned document', text: () => scanTextForSearch(note), snippet: (text) => snippetAround(text, query) });
       for (const tagTitle of tagTitlesForSearch(note, tagMap)) {
         fields.push({ field: 'tag', label: 'Tag', text: () => tagTitle, snippet: (text) => text });
+      }
+      const folderTitle = folderTitleForSearch(note, folderMap);
+      if (folderTitle) {
+        fields.push({ field: 'folder', label: 'Folder', text: () => folderTitle, snippet: (text) => text });
       }
     }
     // Field text and its folded form are read once, and only when reached.
@@ -401,7 +415,7 @@ const NotesSearch = (() => {
     }
     // The index answers "no" cheaply; a "yes" is confirmed against the live
     // fields, so a row never stays for text it no longer has.
-    if (!entryHasTerms(freshIndexEntry(note, tagMap), terms)) return false;
+    if (!entryHasTerms(freshIndexEntry(note, tagMap, options.folderMap), terms)) return false;
     return !!describeMatch(note, query, tagMap, options);
   }
 
@@ -727,7 +741,7 @@ const NotesSearch = (() => {
     return !!(content?.locked || content?.prevent_edit);
   }
 
-  function filterNotes(notes, { query, filter, tagId, folderId, tagMap, sort, searchOptions = {} }) {
+  function filterNotes(notes, { query, filter, tagId, folderId, tagMap, folderMap, sort, searchOptions = {} }) {
     const opts = defaultSearchOptions(searchOptions);
     const q = String(query || '').trim();
     const context = searchContextActive(q, opts);
@@ -788,7 +802,7 @@ const NotesSearch = (() => {
           return matchesNoteOrFileName(n, q, { includeFileNames: true });
         }
 
-        return matches(n, q, tagMap, { titlesOnly: opts.titlesOnly });
+        return matches(n, q, tagMap, { titlesOnly: opts.titlesOnly, folderMap });
       })
       .sort((a, b) => compareNotesForSort(a, b, sort));
     } catch (err) {
@@ -801,6 +815,7 @@ const NotesSearch = (() => {
           tagId,
           folderId,
           tagMap,
+          folderMap,
           sort,
           searchOptions: { ...opts, titlesOnly: true },
         });

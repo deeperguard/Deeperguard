@@ -4309,6 +4309,27 @@ class NotesAppTests(unittest.TestCase):
         self.assertNotIn("Incorrect password", auth_js)
         self.assertIn("if (btn.dataset.filter === 'all') currentTag = null", app_js)
 
+    def test_round4_editor_stays_editable_and_folder_search(self):
+        app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        search_js = (APP_DIR / "static" / "js" / "search.js").read_text(encoding="utf-8")
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        self.assertIn("preserveEditor", app_js)
+        self.assertIn("if (preserveEditor) editorMode = 'edit'", app_js)
+        self.assertIn("preserveEditor: true", app_js)
+        self.assertIn("const show = editorMode === 'preview';", app_js)
+        self.assertNotIn("const show = editorMode === 'preview' || !!query", app_js)
+        self.assertNotIn("if (currentSearchQuery()) return 'preview'", app_js)
+        self.assertIn("editorMode === 'preview' && !!currentId && noteHasDocs(currentId)", app_js)
+        self.assertIn("function noteUploadsSearchable", app_js)
+        self.assertIn("!noteUploadsSearchable(note)", app_js)
+        self.assertIn("function syncNavFilterActive", app_js)
+        self.assertIn("name === 'all' && (currentTag || currentFolder)", app_js)
+        self.assertIn("function folderTitleForSearch", search_js)
+        self.assertIn("field: 'folder'", search_js)
+        self.assertIn("folderMap: folderMap()", app_js)
+        self.assertIn(".doc-inline-thumbs .doc-thumb-stage img", css)
+        self.assertIn("object-fit: cover", css[css.find(".doc-inline-thumbs .doc-thumb-stage img"):css.find(".doc-inline-thumbs .doc-thumb-stage img") + 500])
+
     def test_email_backup_streams_instead_of_loading_vault(self):
         mail = (APP_DIR / "backup_mail.py").read_text(encoding="utf-8")
         cron = (APP_DIR / "backup_cron.py").read_text(encoding="utf-8")

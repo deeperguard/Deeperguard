@@ -530,4 +530,25 @@ assert.strictEqual(memoryIndexActive(), true);
 clearMemoryIndex();
 assert.strictEqual(memoryIndexActive(), false);
 
+const folderMap = new Map([
+  ['folder-travel', { content: { title: 'Travelbox' } }],
+]);
+const tripA = note({ uuid: 'trip-a', title: 'Passport', content: 'Scan', folder_id: 'folder-travel' });
+const tripB = note({ uuid: 'trip-b', title: 'Hotel', content: 'Booking', folder_id: 'folder-travel' });
+const stayHome = note({ uuid: 'home', title: 'Groceries', content: 'Milk' });
+const folderHits = filterNotes([tripA, tripB, stayHome], {
+  filter: 'all',
+  query: 'travelbox',
+  tagMap,
+  folderMap,
+});
+assert.deepStrictEqual(folderHits.map((n) => n.uuid).sort(), ['trip-a', 'trip-b']);
+assert.strictEqual(describeMatch(tripA, 'travelbox', tagMap, { folderMap }).field, 'folder');
+assert.strictEqual(describeMatch(tripA, 'travelbox', tagMap, { folderMap }).label, 'Folder');
+assert.deepStrictEqual(filterNotes([tripA, tripB], {
+  filter: 'all',
+  query: 'travelbox',
+  tagMap,
+}).map((n) => n.uuid), []);
+
 console.log('ok');
