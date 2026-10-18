@@ -39,9 +39,13 @@
       NotesCrypto.terminateWorker();
     }
   }
+  function attachmentKindName(content) {
+    if (!content) return '';
+    return [content.filename, content.original_filename].filter(Boolean).join(' ');
+  }
   function attachmentKind(att) {
     if (!att?.content) return 'other';
-    return NotesPreview.kindFromMeta(att.content.mime, att.content.filename);
+    return NotesPreview.kindFromMeta(att.content.mime, attachmentKindName(att.content));
   }
   function attachmentThumbLabel(kind) {
     if (kind === 'pdf') return 'PDF';
@@ -510,7 +514,7 @@
     ui.body.classList.toggle('mono', !!prefs.monospace);
     document.getElementById('note-body-highlights')?.classList.toggle('mono', !!prefs.monospace);
     document.getElementById('note-body-wrap')?.classList.toggle('mono', !!prefs.monospace);
-    ui.body.spellcheck = !!prefs.spellcheck;
+    ui.body.spellcheck = !!prefs.spellcheck && !ui.editor?.classList.contains('code-note');
     ui.noteList.classList.toggle('compact', noteListDensity() === 'compact');
     ui.noteList.classList.toggle('comfortable', noteListDensity() === 'comfortable');
     ui.noteList.classList.toggle('hide-previews', !!prefs.hidePreviews);
@@ -1501,6 +1505,11 @@
       if (on && narrow) el.setAttribute('role', 'menuitem');
       else el.removeAttribute('role');
     });
+    if (!on) {
+      document.querySelectorAll('.editor-toolbar-overflow-toggle').forEach((btn) => {
+        if (document.activeElement === btn) btn.blur();
+      });
+    }
   }
 
   function closeEditorToolbarMenu() {
@@ -2295,7 +2304,11 @@
       const open = items.filter((row) => !row.done);
       const pct = items.length ? Math.round((done / items.length) * 100) : 0;
       const shown = checklistPreviewRows(items, query);
-      const bullets = shown.map((row) => highlightListText(`• ${row.text}`, query)).join('\n');
+      const bullets = shown.map((row) => (
+        row.done
+          ? `<span class="note-preview-checked">${highlightListText(`☑ ${row.text}`, query)}</span>`
+          : highlightListText(`• ${row.text}`, query)
+      )).join('\n');
       const more = Math.max(0, open.length - shown.filter((row) => !row.done).length);
       return `<p class="note-preview"><strong>${done}/${items.length}</strong> tasks completed</p>
         <span class="note-progress" aria-hidden="true"><span style="width:${pct}%"></span></span>
@@ -2314,7 +2327,7 @@
     const atts = NotesStore.listAttachments(note.uuid);
     if (atts.length) {
       const first = atts[0]?.content || {};
-      const kind = NotesPreview.kindFromMeta(first.mime, first.filename);
+      const kind = NotesPreview.kindFromMeta(first.mime, attachmentKindName(first));
       if (kind === 'pdf') return { icon: '📄', label: 'PDF', tone: 'note', svg: kindIconSvg('note') };
       if (kind === 'image') return { icon: '🖼', label: 'IMG', tone: 'note' };
       if (kind === 'text') return { icon: '📃', label: 'FILE', tone: 'note', svg: kindIconSvg('note') };
@@ -3646,7 +3659,10 @@
         resolve(true);
         return;
       }
+      titleEl.id = 'confirm-title';
       titleEl.textContent = title;
+      titleEl.removeAttribute('aria-hidden');
+      dialog.setAttribute('aria-labelledby', 'confirm-title');
       messageEl.textContent = message;
       okBtn.textContent = okLabel;
       okBtn.classList.remove('danger');
@@ -3801,7 +3817,10 @@
         return;
       }
       cancelBtn.hidden = false;
+      titleEl.id = 'confirm-title';
       titleEl.textContent = title;
+      titleEl.removeAttribute('aria-hidden');
+      dialog.setAttribute('aria-labelledby', 'confirm-title');
       messageEl.textContent = message;
       okBtn.textContent = confirmLabel;
       cancelBtn.textContent = cancelLabel;
@@ -4805,6 +4824,7 @@
     document.body.classList.remove('unlocked');
     unlockScreen.hidden = false;
     appShell.hidden = true;
+    appShell.setAttribute('aria-hidden', 'true');
     const updateBanner = document.getElementById('app-update-banner');
     if (updateBanner) updateBanner.hidden = true;
     const updating = window.NotesVaultLock?.isAppUpdating
@@ -4860,6 +4880,7 @@
     document.body.classList.remove('locked');
     unlockScreen.hidden = true;
     appShell.hidden = false;
+    appShell.removeAttribute('aria-hidden');
     markVaultShellUnlocked();
     endVaultPull();
     syncVaultLockUi(true);
@@ -5503,6 +5524,13 @@
       const salt = cached.kdf_salt;
         if (salt) {
         await NotesStore.unlock(clean, salt);
+        if (NotesStore.state.kdfFastReject) {
+          clearSavedUnlockSecrets();
+          NotesStore.lock();
+          const wrong = new Error('Wrong password.');
+          wrong.status = 401;
+          throw wrong;
+        }
         stopLoginCreep();
         startLoginCreep('decrypt', phaseCeiling('decrypt'));
         setLoginProgressTarget('decrypt', 0, 1);
@@ -6845,7 +6873,7 @@
     const active = note.uuid === activeListNoteId() ? 'active' : '';
     const protectedClass = isProtected ? 'is-protected' : '';
     const name = att.content.filename || att.content.original_filename || 'Untitled file';
-    const kind = NotesPreview.kindFromMeta(att.content.mime, name);
+    const kind = NotesPreview.kindFromMeta(att.content.mime, attachmentKindName(att.content) || name);
     const showThumb = !isLocked && (kind === 'image' || kind === 'pdf') && !prefs.hidePreviews;
     const noteTitle = note.content.title || 'Untitled';
     const kindLabel = attachmentThumbLabel(kind);
@@ -6914,7 +6942,7 @@
     const kind = noteKindMeta(n);
     const firstAtt = atts[0];
     const thumbKind = firstAtt
-      ? NotesPreview.kindFromMeta(firstAtt.content.mime, firstAtt.content.filename)
+      ? NotesPreview.kindFromMeta(firstAtt.content.mime, attachmentKindName(firstAtt.content))
       : null;
     const showListThumb = !isLocked
       && firstAtt
@@ -8289,16 +8317,14 @@
     if (!box.full) {
       sx = box.x;
       sy = box.y;
-      if (box.w > box.h * 1.8) {
-        sw = box.w;
-        sh = box.h;
-      } else {
-        const crop = Math.max(1, Math.min(box.w, box.h));
-        sw = crop;
-        sh = crop;
-      }
+      sw = Math.max(1, box.w);
+      sh = Math.max(1, box.h);
     }
-    const scale = Math.min(side / sw, side / sh);
+    // Full scans stay contained. A short ink strip (one receipt line) is
+    // scaled to fill the tile from the top-left so the glyphs stay readable.
+    const scale = box.full
+      ? Math.min(side / sw, side / sh)
+      : Math.max(side / sw, side / sh);
     const dw = Math.max(1, Math.round(sw * scale));
     const dh = Math.max(1, Math.round(sh * scale));
     ctx.drawImage(box.scan, sx, sy, sw, sh, 0, 0, dw, dh);
@@ -9613,6 +9639,8 @@
     const label = btn.querySelector('.editor-menu-label, .share-label');
     if (label) label.textContent = text;
     else btn.textContent = text;
+    btn.setAttribute('aria-label', text);
+    if (btn.hasAttribute('title')) btn.title = text;
   }
 
   function openNoteFileAttachment(noteId) {
@@ -10007,6 +10035,10 @@
       return;
     }
     const note = NotesStore.get(currentId);
+    if (ui.body) {
+      const editorKind = note?.content?.editor || '';
+      ui.body.spellcheck = editorKind === 'code' ? false : !!prefs.spellcheck;
+    }
     const gated = !!note?.content?.locked && !unlockedNotes.has(currentId);
     if (gated) {
       if (ui.checklist) {
@@ -10074,6 +10106,7 @@
     if (editingLocked) editorMode = 'preview';
     ui.editor?.classList.remove('rich-live-edit');
     ui.editor?.classList.toggle('code-note', codeNote);
+    if (ui.body) ui.body.spellcheck = codeNote ? false : !!prefs.spellcheck;
     previewOn = editingLocked || editorMode !== 'edit';
     ui.preview.hidden = !previewOn || checklistOn;
     ui.body.hidden = previewOn || checklistOn;
@@ -14246,10 +14279,49 @@
     }
   }
 
-  window.addEventListener('popstate', () => {
-    if (currentId || (ui.editor && !ui.editor.hidden)) {
-      closeEditor({ fromPopstate: true });
+  let trackedDevicePixelRatio = window.devicePixelRatio || 1;
+  let zoomPopstateGuardUntil = 0;
+  let popstateClosedAt = 0;
+  function noteBrowserZoom() {
+    const dpr = window.devicePixelRatio || 1;
+    if (Math.abs(dpr - trackedDevicePixelRatio) > 0.001) {
+      zoomPopstateGuardUntil = Date.now() + 800;
+      trackedDevicePixelRatio = dpr;
+      return true;
     }
+    return Date.now() < zoomPopstateGuardUntil;
+  }
+  function restoreEditorAfterZoom(noteId) {
+    const keepId = noteId || currentId || listSelectionId;
+    if (!keepId || !NotesStore.get(keepId)) return;
+    const needsOpen = currentId !== keepId || ui.editor?.hidden;
+    if (needsOpen) openNote(keepId, { skipFlush: true });
+    else if (history.state?.notesView !== 'editor' || history.state?.noteId !== keepId) {
+      try {
+        history.pushState({ notesView: 'editor', noteId: keepId }, '', location.href);
+      } catch (err) {
+        /* ignore */
+      }
+    }
+  }
+  window.addEventListener('popstate', () => {
+    const editorWasOpen = !!(currentId || (ui.editor && !ui.editor.hidden));
+    const idAtPop = currentId || listSelectionId;
+    if (!editorWasOpen) return;
+    if (Date.now() < zoomPopstateGuardUntil) {
+      restoreEditorAfterZoom(idAtPop);
+      return;
+    }
+    requestAnimationFrame(() => {
+      if (noteBrowserZoom() || Date.now() < zoomPopstateGuardUntil) {
+        restoreEditorAfterZoom(idAtPop);
+        return;
+      }
+      if (currentId || (ui.editor && !ui.editor.hidden)) {
+        popstateClosedAt = Date.now();
+        closeEditor({ fromPopstate: true });
+      }
+    });
   });
 
   document.getElementById('btn-new').addEventListener('click', () => createNote());
@@ -14643,9 +14715,21 @@
     });
   }
   window.addEventListener('resize', () => {
+    const zoomed = noteBrowserZoom();
     applyTagSection();
     applyFolderSection();
     applyFilterSection();
+    if (
+      zoomed
+      && popstateClosedAt
+      && Date.now() - popstateClosedAt < 800
+      && !currentId
+      && listSelectionId
+      && NotesStore.get(listSelectionId)
+    ) {
+      popstateClosedAt = 0;
+      openNote(listSelectionId, { skipFlush: true });
+    }
     if (currentId) syncTagBarShell(NotesStore.get(currentId));
     layoutFindBarOverDocViewer();
   });
