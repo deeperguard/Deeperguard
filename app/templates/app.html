@@ -1138,6 +1138,7 @@
         </section>
         <section class="history">
           <h3 class="section-label">Version history</h3>
+          <p class="muted history-grouping">Each pause saves a version. One burst of typing stays together.</p>
           <div id="history-list" class="history-list"></div>
         </section>
         </div>
@@ -1704,7 +1705,7 @@
       <button type="button" class="btn primary" id="confirm-ok">Confirm</button>
     </div>
   </div>
-  <div id="doc-viewer" class="doc-viewer" hidden>
+  <div id="doc-viewer" class="doc-viewer" hidden role="dialog" aria-modal="true" aria-labelledby="doc-title">
     <svg class="doc-enhance-defs" aria-hidden="true" focusable="false">
       <defs>
         <filter id="doc-sharpen-filter" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">

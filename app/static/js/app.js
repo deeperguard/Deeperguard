@@ -2985,11 +2985,14 @@
     const cached = NotesStore.cachedAccount?.() || {};
     showUnlock(cached.email || undefined);
     if (message) {
+      const neutralLock = message === 'Vault locked.' || /^Locked after\b/.test(message);
       if (unlockError) {
         unlockError.textContent = message;
         unlockError.hidden = false;
+        unlockError.classList.toggle('error', !neutralLock);
+        unlockError.classList.toggle('unlock-notice', neutralLock);
       }
-      toast(message, true);
+      toast(message, !neutralLock);
     }
   }
 
@@ -4412,17 +4415,36 @@
     });
   }
 
+  function loginProgressTracks() {
+    return [
+      document.querySelector('#login-progress-overlay .login-progress-track'),
+      document.getElementById('unlock-progress'),
+      document.querySelector('.app-login-progress-track'),
+    ].filter(Boolean);
+  }
+
   function renderLoginProgressFrame() {
+    const indeterminate = loginProgress.phase === 'kdf';
     const pct = loginProgress.displayed;
-    const text = `${unlockProgressLabel(loginProgress.phase)}… ${pct}%`;
+    const text = indeterminate
+      ? 'Checking password…'
+      : `${unlockProgressLabel(loginProgress.phase)}… ${pct}%`;
     const overlay = document.getElementById('login-progress-overlay');
     const overlayStatus = document.getElementById('login-progress-status');
     const overlayBar = document.getElementById('login-progress-bar');
     const overlayTrack = overlay?.querySelector('.login-progress-track');
     if (overlay) overlay.hidden = false;
     if (overlayStatus) overlayStatus.textContent = text;
-    if (overlayBar) overlayBar.style.width = `${Math.max(2, pct)}%`;
-    if (overlayTrack) overlayTrack.setAttribute('aria-valuenow', String(pct));
+    if (overlayBar) overlayBar.style.width = indeterminate ? '' : `${Math.max(2, pct)}%`;
+    if (overlayTrack) {
+      if (indeterminate) overlayTrack.removeAttribute('aria-valuenow');
+      else overlayTrack.setAttribute('aria-valuenow', String(pct));
+    }
+    for (const track of loginProgressTracks()) {
+      track.classList.toggle('is-indeterminate', indeterminate);
+      if (indeterminate) track.setAttribute('aria-busy', 'true');
+      else track.removeAttribute('aria-busy');
+    }
     const pairs = [
       ['unlock-status', 'unlock-progress-bar', 'unlock-progress'],
       ['app-login-status', 'app-login-progress-bar', 'app-login-progress'],
@@ -4435,14 +4457,15 @@
         statusEl.textContent = text;
         statusEl.hidden = false;
       }
-      if (barEl) barEl.style.width = `${Math.max(2, pct)}%`;
+      if (barEl) barEl.style.width = indeterminate ? '' : `${Math.max(2, pct)}%`;
       if (wrapEl) {
         wrapEl.hidden = false;
-        wrapEl.setAttribute('aria-valuenow', String(pct));
+        if (indeterminate) wrapEl.removeAttribute('aria-valuenow');
+        else wrapEl.setAttribute('aria-valuenow', String(pct));
       }
     }
     if (unlockSubmit && loginProgressActive) {
-      unlockSubmit.textContent = `${pct}%`;
+      unlockSubmit.textContent = indeterminate ? '…' : `${pct}%`;
       unlockSubmit.disabled = true;
     }
   }
@@ -4550,6 +4573,10 @@
       loginProgress.timer = 0;
     }
     loginProgressActive = false;
+    loginProgressTracks().forEach((track) => {
+      track.classList.remove('is-indeterminate');
+      track.removeAttribute('aria-busy');
+    });
     const overlay = document.getElementById('login-progress-overlay');
     if (overlay) {
       overlay.hidden = true;
@@ -5042,6 +5069,8 @@
       if (unlockError && msg) {
         unlockError.textContent = msg;
         unlockError.hidden = false;
+        unlockError.classList.add('error');
+        unlockError.classList.remove('unlock-notice');
       }
     } else if (NotesStore.isUnlocked()) {
       repairUnlockShellState();
@@ -5643,6 +5672,8 @@
           ? (err.message || 'Wrong password.')
           : err.message || 'Could not unlock.';
       unlockError.hidden = false;
+      unlockError.classList.add('error');
+      unlockError.classList.remove('unlock-notice');
       const recovery = document.getElementById('unlock-recovery-hint');
       if (recovery) recovery.hidden = false;
       unlockSubmit.disabled = false;
@@ -5774,6 +5805,8 @@
     unlockPassword.value = '';
     unlockError.hidden = false;
     unlockError.textContent = 'Saved password cleared. Enter your vault password below.';
+    unlockError.classList.add('error');
+    unlockError.classList.remove('unlock-notice');
     refreshUnlockEmail().catch(() => {});
     unlockPassword.focus();
   });
@@ -5926,6 +5959,8 @@
         showUnlock(account && account.email);
         unlockError.hidden = false;
         unlockError.textContent = 'Sign in once while you are online. This device can unlock offline after that.';
+        unlockError.classList.add('error');
+        unlockError.classList.remove('unlock-notice');
         return new Promise((resolve) => {
           unlockResolver = resolve;
         });
@@ -7643,6 +7678,7 @@
   }
 
   function attachmentOcrRetryable(att) {
+    if (!attachmentIsPdfOrPhoto(att)) return false;
     if (!canOcrAttachment(att)) return false;
     const attId = att?.uuid;
     if (attId && (rescanOcrIds.has(attId) || ocrWaitingServer.has(attId) || ocrInFlight.has(attId) || ocrQueued.has(attId))) {
@@ -7687,9 +7723,12 @@
       };
     }
     if (method === 'failed') {
+      const retry = attachmentIsPdfOrPhoto(att);
       return {
-        html: '<p class="ocr-text ocr-failed">Could not read text. Tap Retry OCR to try again.</p>',
-        retry: true,
+        html: retry
+          ? '<p class="ocr-text ocr-failed">Could not read text. Tap Retry OCR to try again.</p>'
+          : '<p class="ocr-text ocr-failed">Could not read text from this file.</p>',
+        retry,
       };
     }
     if (method === 'none') {
@@ -7898,6 +7937,7 @@
   // iOS Safari kills heavy tabs (silent reload mid-browse). Keep blob memory tiny there.
   const PREVIEW_CACHE_MAX = IS_IOS ? 2 : 12;
   let previewingId = null;
+  let docViewerReturnFocus = null;
   let docGallery = null;
 
   function attachmentIdsForNote(noteId) {
@@ -9280,6 +9320,7 @@
       if (idx >= 0) docGallery.index = idx;
     }
     previewingId = id;
+    docViewerReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     ui.docTitle.textContent = item.content.filename || 'Document';
     if (docGallery && refreshDocGalleryIds() && docGallery.ids.length > 1) {
       ui.docTitle.textContent = `${item.content.filename || 'Document'} (${docGallery.index + 1}/${docGallery.ids.length})`;
@@ -9289,6 +9330,8 @@
     if (ui.docStage._docZoom) ui.docStage._docZoom.destroy();
     ui.docViewer.hidden = false;
     document.body.classList.add('doc-preview-open');
+    const docCloseBtn = document.getElementById('doc-close');
+    if (docCloseBtn) docCloseBtn.focus();
     setDocImmersive(!isDesktopLayout());
     if (!isDesktopLayout() && ui.docViewer) {
       ui.docViewer.style.visibility = 'visible';
@@ -9337,10 +9380,18 @@
     }
   }
 
+  function docViewerFocusables() {
+    if (!ui.docViewer) return [];
+    return [...ui.docViewer.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => !el.hidden && !el.closest('[hidden]') && !el.disabled);
+  }
+
   function closeDocPreview() {
     previewingId = null;
     docGallery = null;
     restoreFindBarToEditor();
+    const returnFocus = docViewerReturnFocus;
+    docViewerReturnFocus = null;
     if (!ui.docViewer) return;
     releaseDocEnhanceObjects(ui.docStage);
     if (ui.docStage._docZoom) ui.docStage._docZoom.destroy();
@@ -9352,6 +9403,7 @@
     ui.docViewer.hidden = true;
     ui.docBackdrop.hidden = true;
     ui.docStage.replaceChildren();
+    if (returnFocus && returnFocus.isConnected) returnFocus.focus();
   }
 
   function setEditorMenuLabel(btn, text) {
@@ -12737,6 +12789,8 @@
       return;
     }
     let storeFile = localFile;
+    const originalName = localFile.name;
+    const originalSize = localFile.size;
     let sourceSha256 = '';
     const sourceBytes = new Uint8Array(await localFile.arrayBuffer());
     if (window.NotesOcr && isScanImage(localFile) && NotesOcr.needsPrepare([localFile])) {
@@ -12794,7 +12848,9 @@
       const uploadMeta = { content: { mime: storeFile.type, filename: storeFile.name } };
       const indexable = attachmentIsIndexable(uploadMeta);
       attId = await NotesStore.addAttachment(id, storeFile, {
-        displayName: displayName || namedDocument(docName, storeFile.name),
+        displayName: displayName || namedDocument(docName, originalName),
+        originalFilename: originalName,
+        originalSize,
         sourceSha256,
         ocrPending: indexable,
       });
@@ -16944,6 +17000,9 @@
       if (message) {
         unlockError.hidden = false;
         unlockError.textContent = message;
+        const neutralLock = message === 'Vault locked.' || /^Locked after\b/.test(message);
+        unlockError.classList.toggle('error', !neutralLock);
+        unlockError.classList.toggle('unlock-notice', neutralLock);
       } else {
         unlockError.hidden = true;
         unlockError.textContent = '';
@@ -17531,13 +17590,150 @@
       document.addEventListener(name, bumpIdle, { passive: true });
     });
     document.addEventListener('keydown', (event) => {
+      if (event.key === 'Tab') {
+        if (!ui.docViewer || ui.docViewer.hidden) return;
+        const items = docViewerFocusables();
+        if (!items.length) {
+          event.preventDefault();
+          return;
+        }
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && (active === first || !ui.docViewer.contains(active))) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (active === last || !ui.docViewer.contains(active))) {
+          event.preventDefault();
+          first.focus();
+        }
+        return;
+      }
       if (event.key !== 'Escape') return;
+      const stop = () => {
+        event.preventDefault();
+        event.stopPropagation();
+      };
       const folderPrompt = document.getElementById('folder-prompt');
-      if (folderPrompt && !folderPrompt.hidden) return;
-      if (!ui.settings || ui.settings.hidden) return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeSettings(true);
+      if (folderPrompt && !folderPrompt.hidden) {
+        closeFolderPrompt();
+        stop();
+        return;
+      }
+      const confirmDialog = document.getElementById('confirm-dialog');
+      if (confirmDialog && !confirmDialog.hidden) return;
+      if (ui.settings && !ui.settings.hidden) {
+        closeSettings(true);
+        stop();
+        return;
+      }
+      const accountDialog = document.getElementById('account-info-dialog');
+      if (accountDialog && !accountDialog.hidden) {
+        closeAccountInfoDialog();
+        stop();
+        return;
+      }
+      const tagManage = document.getElementById('tag-manage-dialog');
+      if (tagManage && !tagManage.hidden) {
+        closeTagManage();
+        stop();
+        return;
+      }
+      const scanDialog = document.getElementById('scan-dialog');
+      if (scanDialog && !scanDialog.hidden) {
+        hideScanDialog();
+        stop();
+        return;
+      }
+      if (ui.docViewer && !ui.docViewer.hidden) {
+        closeDocPreview();
+        stop();
+        return;
+      }
+      const noteTypeMenu = document.getElementById('note-type-menu');
+      if (noteTypeMenu && !noteTypeMenu.hidden) {
+        setNoteTypeMenuOpen(false);
+        stop();
+        return;
+      }
+      const menuOpen = document.body.classList.contains('editor-toolbar-menu-open')
+        || document.querySelector('.editor-toolbar-overflow-toggle[aria-expanded="true"]');
+      if (menuOpen) {
+        closeEditorToolbarMenu();
+        stop();
+        return;
+      }
+      const noteOptions = document.getElementById('note-options');
+      if (noteOptions && !noteOptions.hidden) {
+        closeNoteOptions();
+        stop();
+        return;
+      }
+      if (document.body.classList.contains('search-filters-open')) {
+        setSearchFilterPanelOpen(false);
+        stop();
+        return;
+      }
+      if (document.body.classList.contains('nav-drawer-open')) {
+        document.body.classList.remove('nav-drawer-open');
+        stop();
+        return;
+      }
+      if (document.body.classList.contains('nav-views-open')) {
+        setNavViewsOpen(false);
+        stop();
+        return;
+      }
+      const findBar = document.getElementById('find-bar');
+      if (findBar && !findBar.hidden) {
+        hideFindBar();
+        stop();
+        return;
+      }
+      const tagComposer = document.getElementById('tag-composer');
+      if (tagComposer && !tagComposer.hidden) {
+        hideTagComposer();
+        stop();
+        return;
+      }
+      const folderComposer = document.getElementById('folder-composer');
+      if (folderComposer && !folderComposer.hidden) {
+        hideFolderComposer();
+        stop();
+        return;
+      }
+      const tagInput = document.getElementById('tag-bar-input');
+      if (tagInput && (document.activeElement === tagInput || String(tagInput.value || '').trim())) {
+        tagInput.value = '';
+        tagInput.blur();
+        stop();
+        return;
+      }
+      const tagShell = document.getElementById('tag-bar-shell');
+      if (tagBarExpanded && tagShell && !tagShell.classList.contains('is-collapsed')) {
+        tagBarExpanded = false;
+        syncTagBarShell(currentId ? NotesStore.get(currentId) : null);
+        stop();
+        return;
+      }
+      const openRow = ui.noteList?.querySelector('.note-row.open');
+      if (openRow) {
+        openRow.classList.remove('open');
+        stop();
+        return;
+      }
+      const editorOpen = !!(currentId || (ui.editor && !ui.editor.hidden));
+      const filterSection = document.getElementById('filter-section');
+      if (!editorOpen && filterSection?.open) {
+        filterSection.open = false;
+        stop();
+        return;
+      }
+      if (ui.empty && !ui.empty.hidden && !currentId && !vaultSyncError) {
+        dismissEmptyState();
+        stop();
+      }
+      // Escape never closes the open note. Back still does.
     }, true);
     document.addEventListener('keydown', (e) => {
       if (
@@ -17567,78 +17763,6 @@
         const at = items.findIndex((btn) => btn.dataset.id === currentId);
         const next = e.key === 'j' ? Math.min(items.length - 1, at + 1) : Math.max(0, at <= 0 ? 0 : at - 1);
         openNote(items[next].dataset.id);
-      }
-      if (e.key === 'Escape') {
-        const folderPrompt = document.getElementById('folder-prompt');
-        if (folderPrompt && !folderPrompt.hidden) {
-          closeFolderPrompt();
-          e.preventDefault();
-          return;
-        }
-        if (ui.settings && !ui.settings.hidden) {
-          closeSettings(true);
-          e.preventDefault();
-          return;
-        }
-        if (document.body.classList.contains('editor-toolbar-menu-open')) {
-          closeEditorToolbarMenu();
-          e.preventDefault();
-          return;
-        }
-        if (document.body.classList.contains('search-filters-open')) {
-          setSearchFilterPanelOpen(false);
-          e.preventDefault();
-          return;
-        }
-        if (document.body.classList.contains('nav-drawer-open')) {
-          document.body.classList.remove('nav-drawer-open');
-          e.preventDefault();
-          return;
-        }
-        const noteTypeMenu = document.getElementById('note-type-menu');
-        if (noteTypeMenu && !noteTypeMenu.hidden) {
-          setNoteTypeMenuOpen(false);
-          e.preventDefault();
-          return;
-        }
-        const filterSection = document.getElementById('filter-section');
-        if (filterSection?.open) {
-          filterSection.open = false;
-          e.preventDefault();
-          return;
-        }
-        if (ui.docViewer && !ui.docViewer.hidden) {
-          closeDocPreview();
-          return;
-        }
-        if (ui.empty && !ui.empty.hidden && !currentId && !vaultSyncError) {
-          dismissEmptyState();
-          return;
-        }
-        if (!document.getElementById('scan-dialog').hidden) {
-          hideScanDialog();
-          return;
-        }
-        if (!document.getElementById('find-bar').hidden) {
-          hideFindBar();
-          return;
-        }
-        const noteOptions = document.getElementById('note-options');
-        if (noteOptions && !noteOptions.hidden) {
-          closeNoteOptions();
-    closeEditorToolbarMenu();
-          return;
-        }
-        if (!document.getElementById('tag-composer').hidden) {
-          hideTagComposer();
-          return;
-        }
-        const openRow = ui.noteList.querySelector('.note-row.open');
-        if (openRow) {
-          openRow.classList.remove('open');
-          return;
-        }
-        if (currentId) closeEditor();
       }
     });
     setInterval(() => runBackgroundSync(), 120000);

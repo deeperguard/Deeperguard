@@ -551,4 +551,28 @@ assert.deepStrictEqual(filterNotes([tripA, tripB], {
   tagMap,
 }).map((n) => n.uuid), []);
 
+const csvNote = note({
+  uuid: 'csv-note',
+  title: 'Data',
+  content: '',
+});
+global.NotesStore = {
+  listAttachments(id) {
+    if (id !== 'csv-note') return [];
+    return [{
+      uuid: 'csv-file',
+      content: {
+        filename: 'data.csv',
+        mime: 'text/csv',
+        ocr_text: 'walrus,ok',
+        ocr_method: 'text',
+      },
+    }];
+  },
+};
+const csvInfo = describeMatch(csvNote, 'walrus', tagMap);
+assert.strictEqual(csvInfo.field, 'ocr');
+assert.strictEqual(csvInfo.label, 'Attachment text');
+delete global.NotesStore;
+
 console.log('ok');
