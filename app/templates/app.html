@@ -467,7 +467,6 @@
   <div id="app" class="app-root" data-csrf="{{ csrf_token }}" data-skip-login="{{ '1' if skip_login else '0' }}" hidden>
     <nav class="app-tabs" role="tablist" aria-label="App sections">
       <button type="button" class="app-tab active" id="app-tab-notes" data-app-tab="notes" role="tab" aria-selected="true" aria-controls="notes-shell">Notes</button>
-      <button type="button" class="app-tab" id="app-tab-files" data-app-tab="files" role="tab" aria-selected="false" aria-controls="notes-shell">Files</button>
       <button type="button" class="app-tab" id="app-tab-2fa" data-app-tab="2fa" role="tab" aria-selected="false" aria-controls="totp-pane">2FA</button>
     </nav>
     <div id="app-login-progress" class="app-login-progress" hidden role="status" aria-live="polite">
@@ -577,7 +576,7 @@
           </select>
         </label>
       </div>
-      <details class="tag-section" id="tag-section">
+      <details class="tag-section" id="tag-section" open>
         <summary class="section-label"><span class="sn-tags">Tags</span></summary>
         <div id="tag-list" class="tag-list"></div>
         <div id="tag-color-bar" class="tag-color-bar" hidden></div>
@@ -660,6 +659,11 @@
         </div>
       </div>
       <div class="note-list-head" id="note-list-head" hidden>
+        <button type="button" id="btn-list-menu" class="btn icon narrow-only" title="Open sidebar" aria-label="Open sidebar">
+          <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/>
+          </svg>
+        </button>
         <div class="note-list-head-copy">
           <h2 id="note-list-title" class="note-list-title">Notes</h2>
           <span id="note-list-count" class="note-list-count"></span>
@@ -773,9 +777,15 @@
       </div>
       <article id="editor" class="editor" hidden>
         <header class="editor-head">
-          <button type="button" id="btn-back" class="btn icon mobile-only" aria-label="Back">←</button>
+          <button type="button" id="btn-nav-menu" class="btn icon narrow-only" title="Open sidebar" aria-label="Open sidebar">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/>
+            </svg>
+          </button>
+          <button type="button" id="btn-back" class="btn icon mobile-only" title="Back to notes" aria-label="Back to notes">←</button>
           <div class="editor-head-main">
             <input id="note-title" class="title-input" placeholder="Title">
+            <div class="editor-meta-row">
             <div id="tag-bar-shell" class="tag-bar-shell is-collapsed">
               <button type="button" id="tag-bar-toggle" class="tag-bar-toggle" aria-expanded="false" aria-controls="tag-bar">
                 <span class="tag-bar-toggle-label">Tags</span>
@@ -783,6 +793,13 @@
                 <span class="tag-bar-toggle-chevron" aria-hidden="true">▾</span>
               </button>
               <div id="tag-bar" class="tag-bar"></div>
+            </div>
+            <label class="editor-folder-control" id="note-folder-control">
+              <span class="editor-menu-label">Folder</span>
+              <select id="note-folder-select" aria-label="Folder">
+                <option value="">No folder</option>
+              </select>
+            </label>
             </div>
           </div>
           <div class="editor-actions">
@@ -1005,12 +1022,6 @@
               </svg>
               <span class="editor-menu-label">Pin</span>
             </button>
-            <label class="editor-folder-control editor-toolbar-menu-item" id="note-folder-control">
-              <span class="editor-menu-label">Folder</span>
-              <select id="note-folder-select" aria-label="Folder">
-                <option value="">No folder</option>
-              </select>
-            </label>
             <button type="button" id="btn-archive" class="btn icon toolbar-secondary editor-toolbar-menu-item" role="menuitem" title="Archive" aria-label="Archive">
               <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -1078,8 +1089,12 @@
           <button type="button" class="btn ghost sm" data-md="heading" title="Heading">H</button>
           <button type="button" class="btn ghost sm" data-md="check" title="Checklist">☑</button>
           <button type="button" class="btn ghost sm" data-md="link" title="Link">Link</button>
-          <button type="button" class="btn ghost sm" data-md="sup" title="Superscript">x²</button>
-          <button type="button" class="btn ghost sm" data-md="code" title="Code">`</button>
+          <button type="button" class="btn ghost sm" data-md="sup" title="Superscript" hidden>x²</button>
+          <button type="button" class="btn ghost sm" data-md="code" title="Inline code">`</button>
+          <button type="button" class="btn ghost sm" data-code="comment" title="Comment" hidden>//</button>
+          <button type="button" class="btn ghost sm" data-code="indent" title="Indent" hidden>Indent</button>
+          <button type="button" class="btn ghost sm" data-code="outdent" title="Outdent" hidden>Outdent</button>
+          <button type="button" class="btn ghost sm" id="btn-md-mode" title="Preview markdown" hidden>Preview</button>
         </div>
         <div id="find-bar" class="find-bar" hidden>
           <div class="find-bar-row find-bar-search">
@@ -1118,7 +1133,7 @@
           <h3 class="section-label">Attachments</h3>
           <div id="attachment-list" class="attachment-list"></div>
           <label class="file-label btn sm" id="attachment-add-label">Add file
-            <input id="attachment-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,application/pdf,text/plain" multiple>
+            <input id="attachment-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,.json,.docx,application/pdf,text/plain,application/json" multiple>
           </label>
         </section>
         <section class="history">

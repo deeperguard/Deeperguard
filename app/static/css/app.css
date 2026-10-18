@@ -1704,20 +1704,21 @@ html[data-theme="light"] .zk-badge {
   text-decoration: none;
 }
 mark.search-hit {
-  background: transparent;
-  color: inherit;
-  padding: 0;
-  border-radius: 0;
+  background: #fde047;
+  color: #1a1a1a;
+  padding: 0 2px;
+  border-radius: 2px;
   box-shadow: none;
   text-decoration-line: underline;
-  text-decoration-color: #e10600;
+  text-decoration-color: #b45309;
   text-decoration-thickness: 2px;
   text-underline-offset: 0.12em;
 }
 mark.search-hit-current {
-  text-decoration-color: #e10600;
+  text-decoration-color: #b45309;
   text-decoration-thickness: 3px;
-  background: color-mix(in srgb, #e10600 12%, transparent);
+  background: #facc15;
+  color: #1a1a1a;
 }
 .preview mark.search-hit {
   text-decoration-thickness: 2px;
@@ -2246,13 +2247,16 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   min-width: 0;
 }
 .note-title-row h3 {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 6.5rem;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   word-break: break-word;
+}
+.note-indexing {
+  flex: 0 0 auto;
 }
 .note-item-lock-row {
   display: flex;
@@ -3572,9 +3576,11 @@ body.scan-dialog-open {
   object-fit: cover;
 }
 .attachment-thumb img, .attachment-thumb canvas {
-  width: 100%;
-  height: 100%;
+  width: 72px;
+  height: 72px;
+  max-width: 100%;
   object-fit: cover;
+  display: block;
 }
 .ios-pdf-deferred .ios-pdf-label {
   display: block;
@@ -7131,4 +7137,84 @@ body.vault-pulling .sync-progress {
     white-space: nowrap;
   }
   .note-list-head .sync-status-banner { display: none !important; }
+}
+
+.editor-meta-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.editor-meta-row .tag-bar-shell { flex: 1 1 auto; min-width: 0; }
+.editor-meta-row .editor-folder-control { flex: 0 1 220px; margin: 0; padding: 0; }
+.narrow-only { display: none; }
+.toast { display: flex; align-items: center; gap: 12px; }
+.toast-undo { margin-left: 4px; }
+.check-row:has(.check-box[aria-checked="true"]) .check-text {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.code-preview {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}
+.tok-kw { color: #7dd3fc; }
+.tok-str { color: #86efac; }
+.tok-comment { color: #94a3b8; font-style: italic; }
+html[data-theme="light"] .tok-kw { color: #0369a1; }
+html[data-theme="light"] .tok-str { color: #166534; }
+html[data-theme="light"] .tok-comment { color: #64748b; }
+.btn.icon[aria-label] { position: relative; }
+.btn.icon[aria-label]:hover::after,
+.btn.icon[aria-label]:focus-visible::after {
+  content: attr(aria-label);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,.2));
+}
+body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item,
+body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-folder-control,
+body.editor-toolbar-menu-open .editor-actions-overflow-panel button {
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+@media (min-width: 861px) {
+  .editor-pane .editor:not(.doc-preview-active) .md-toolbar,
+  .editor-pane .editor:not(.doc-preview-active) .checklist {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+@media (max-width: 768px) {
+  .narrow-only { display: inline-flex; }
+  .shell { display: block; position: relative; }
+  .editor-pane { display: none; }
+  .shell.editor-open .sidebar { display: none; }
+  .shell.editor-open .editor-pane {
+    display: flex;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    min-height: 0;
+  }
+  body.nav-drawer-open .sidebar-nav-backdrop { display: block; }
+  body.nav-drawer-open .tag-section,
+  body.nav-drawer-open .folder-section {
+    position: relative;
+    z-index: 8;
+    background: var(--bg-elevated);
+  }
 }

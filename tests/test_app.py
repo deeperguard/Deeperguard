@@ -1380,7 +1380,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("min-height: 100%;", css)
         self.assertIn(".attachment-list:empty", css)
         self.assertIn("renderInlinePlainSegment", (APP_DIR / "static" / "js" / "superscript.js").read_text(encoding="utf-8"))
-        self.assertIn("previewBtn.hidden = checklistOn || !hasDocs", app_js)
+        self.assertIn("previewBtn.hidden = checklistOn || (!hasDocs && !markdownNote)", app_js)
         # Update must not navigate to ?hard=1 (Safari crash-looped on cellular).
         self.assertNotIn(b"&hard=1", res.data)
         hard = self.client.get("/app?hard=1&nosync=1", follow_redirects=False)
@@ -1448,15 +1448,14 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b'class="sn-add" title="Add document"', res.data)
         self.assertIn(b'data-filter="documents"', res.data)
         self.assertIn(b'id="app-tab-notes"', res.data)
-        self.assertIn(b'id="app-tab-files"', res.data)
-        self.assertIn(b'data-app-tab="files"', res.data)
+        self.assertNotIn(b'id="app-tab-files"', res.data)
+        self.assertNotIn(b'data-app-tab="files"', res.data)
         self.assertIn(b'id="app-tab-2fa"', res.data)
         self.assertNotIn(b'id="files-tab-count"', res.data)
         self.assertNotIn(b'id="totp-tab-count"', res.data)
         notes_tab = res.data.find(b'id="app-tab-notes"')
-        files_tab = res.data.find(b'id="app-tab-files"')
         twofa_tab = res.data.find(b'id="app-tab-2fa"')
-        self.assertTrue(0 <= notes_tab < files_tab < twofa_tab)
+        self.assertTrue(0 <= notes_tab < twofa_tab)
         self.assertIn("normalizeAppTab", app_js)
         self.assertIn("listStoredFiles", app_js)
         self.assertNotIn("updateFilesTabCount", app_js)
@@ -1638,15 +1637,14 @@ class NotesAppTests(unittest.TestCase):
     def test_tags_start_collapsed_every_launch(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
-        self.assertIn('<details class="tag-section" id="tag-section">', html)
-        self.assertNotIn('<details class="tag-section" id="tag-section" open>', html)
+        self.assertIn('<details class="tag-section" id="tag-section" open>', html)
         self.assertIn('<details class="tag-section folder-section" id="folder-section" open>', html)
         boot = js[js.index("Object.assign(prefs, savedPrefs)"):js.index("const GLOBAL_PREF_KEYS")]
-        every = boot.index("Tags start collapsed on every launch")
+        every = boot.index("Tags start expanded")
         self.assertGreater(every, boot.index("listChromeDense"))
-        force = boot[every:every + 320]
-        self.assertIn("prefs.tagsCollapsed = true", force)
-        self.assertIn("savedPrefs.tagsCollapsed === false", force)
+        force = boot[every:every + 360]
+        self.assertIn("prefs.tagsCollapsed = false", force)
+        self.assertIn("tagsExpandedDefault", force)
         self.assertNotIn("listChromeDense", force)
         self.assertIn("section.open = !prefs.tagsCollapsed", js)
 
@@ -1662,7 +1660,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('id="folder-section"', html)
         self.assertIn("function applyFilterSection()", js)
         self.assertIn("viewsCollapsed: false", js)
-        self.assertIn("tagsCollapsed: true", js)
+        self.assertIn("tagsCollapsed: false", js)
         self.assertIn("prefs.listChromeDense !== 3", js)
         self.assertIn(".filter-section { display: none; }", mobile)
 
@@ -4936,7 +4934,7 @@ class NotesAppTests(unittest.TestCase):
         idb_js = (APP_DIR / "static" / "js" / "idb.js").read_text(encoding="utf-8")
 
         self.assertIn("SIGN_OUT_WARNING", app_js)
-        self.assertIn("encrypted data stays on the DeeperGuard server", app_js)
+        self.assertIn("encrypted data stays on the Deeperguard server", app_js)
         self.assertIn("async function requestSignOut()", app_js)
         self.assertIn("await NotesStore.clearDeviceData()", app_js)
         logout_handler = app_js[

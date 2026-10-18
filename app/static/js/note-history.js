@@ -35,6 +35,15 @@ const NotesHistory = (() => {
       ? NotesSearch.effectiveNoteTitle(note)
       : String(note?.content?.title || '').trim();
     if (stored && currentTitle && stored === currentTitle) return stored;
+    const at = revisionTimestamp(rev);
+    const when = at
+      ? new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+      : '';
+    const fallbackTitle = (currentTitle && currentTitle !== 'Untitled' && currentTitle !== 'Title')
+      ? currentTitle
+      : (derived && derived !== 'Title' ? derived : 'Note');
+    if (when) return `${when} · ${fallbackTitle}`;
+    if (fallbackTitle && fallbackTitle !== 'Note') return fallbackTitle;
     return 'Untitled version';
   }
 

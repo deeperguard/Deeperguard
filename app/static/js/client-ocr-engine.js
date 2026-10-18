@@ -117,7 +117,9 @@ const NotesClientOcr = (() => {
     const name = String(file?.name || '').toLowerCase();
     const type = String(file?.type || '').toLowerCase();
     if (type === 'application/pdf' || /\.pdf$/.test(name)) return 'pdf';
-    if (type.startsWith('text/') || /\.(txt|md|csv|json|log)$/i.test(name)) return 'text';
+    if (/\.docx$/.test(name) || type.includes('wordprocessingml')) return 'docx';
+    if (/\.zip$/.test(name) || type === 'application/zip' || type === 'application/x-zip-compressed') return 'zip';
+    if (type === 'application/json' || type.startsWith('text/') || /\.(txt|md|csv|json|log)$/i.test(name)) return 'text';
     if (type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|hei[cf])$/i.test(name)) return 'image';
     return 'other';
   }
@@ -441,6 +443,12 @@ const NotesClientOcr = (() => {
         releaseCanvas(retry);
       }
     }
+    // Clean JPEG/WebP scans (large type on a white page) survive a direct
+    // pass better than photo binarization. Keep whichever read is stronger.
+    if (ocrPassPoor(best)) {
+      const direct = await recognizeCanvas(canvas, { page, psm: 6 });
+      best = chooseBetterOcr(best, direct);
+    }
     const quality = weakOcrResult(best.text, best.boxes) ? 'weak' : 'ok';
     return { text: best.text, boxes: best.boxes, method: 'tesseract', ocr_quality: quality };
   }
@@ -565,6 +573,57 @@ const NotesClientOcr = (() => {
     }
   }
 
+  function docxXmlToText(xml) {
+    return clean(String(xml || '')
+      .replace(/<w:tab[^/]*\/>/g, '\t')
+      .replace(/<w:br[^/]*\/>/g, '\n')
+      .replace(/<\/w:p>/g, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))));
+  }
+
+  async function extractDocx(file) {
+    const unzip = globalThis.NotesSnImport?.unzip;
+    if (typeof unzip !== 'function') throw new Error('Could not read this Word document on this device.');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const entries = await unzip(bytes);
+    const doc = (entries || []).find((entry) => /word\/document\.xml$/i.test(entry.name || ''));
+    if (!doc?.bytes?.length) throw new Error('This Word document has no text.');
+    const xml = new TextDecoder().decode(doc.bytes);
+    return { text: docxXmlToText(xml), method: 'text', boxes: [], ocr_quality: 'ok' };
+  }
+
+  async function extractJsonFile(file) {
+    const raw = await file.text();
+    let text = raw;
+    try {
+      const data = JSON.parse(raw);
+      const parts = [];
+      const walk = (node) => {
+        if (node == null) return;
+        if (typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') {
+          const bit = String(node).trim();
+          if (bit) parts.push(bit);
+          return;
+        }
+        if (Array.isArray(node)) {
+          node.forEach(walk);
+          return;
+        }
+        if (typeof node === 'object') Object.values(node).forEach(walk);
+      };
+      walk(data);
+      if (parts.length) text = parts.join('\n');
+    } catch (err) {
+      text = raw;
+    }
+    return { text: clean(text), method: 'text', boxes: [], ocr_quality: 'ok' };
+  }
+
   async function extractImage(file) {
     const decoded = await decodeImageFile(file);
     // Photo OCR prepares its own working resolution. The list preview stays
@@ -682,13 +741,20 @@ const NotesClientOcr = (() => {
     };
     report(0.05);
     let kind = fileKind(file);
+    if (kind === 'zip') {
+      throw new Error('Zip archives are not indexed.');
+    }
     if (kind === 'other') {
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (looksLikeTextBytes(bytes)) kind = 'text';
     }
     report(0.15);
     let result;
-    if (kind === 'text') {
+    if (kind === 'docx') {
+      result = await extractDocx(file);
+    } else if (kind === 'text' && (/\.json$/i.test(file.name || '') || String(file.type || '').includes('json'))) {
+      result = await extractJsonFile(file);
+    } else if (kind === 'text') {
       result = await extractTextFile(file);
     } else if (kind === 'pdf') {
       result = await extractPdf(file);

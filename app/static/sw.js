@@ -224,7 +224,7 @@ async function networkFirstNavigate(request) {
     + '</style></head><body>'
     + '<main class="card" role="main">'
     + '<div class="mark" aria-hidden="true">DG</div>'
-    + '<h1>You\'re offline</h1>'
+    + "<h1>You're offline</h1>"
     + '<p class="hint">Notes are encrypted on your device. Reconnect to sync — we only store scrambled data on the server.</p>'
     + '<p>Join home Wi‑Fi or WireGuard, then reload Deeperguard.</p>'
     + '<button type="button" onclick="location.href=\'' + APP_SHELL + '\'">Reload</button>'
@@ -362,8 +362,10 @@ self.addEventListener('fetch', (event) => {
   if (!sameOrigin(url) || isApi(url) || isAuthPage(url) || isMarketingPage(url)) return;
 
   if (request.mode === 'navigate' || isAppShell(url)) {
-    const forceFresh = url.searchParams.get('nosync') === '1' || url.searchParams.get('hard') === '1';
-    event.respondWith(forceFresh ? networkFirstNavigate(request) : cacheFirstNavigate(request));
+    // Network first so a deploy replaces the cached shell on the next load.
+    // cacheFirstNavigate stays for offline-only callers; online navigations
+    // must not keep serving the previous build's HTML.
+    event.respondWith(networkFirstNavigate(request));
     return;
   }
   if (isCryptoWorker(url)) {

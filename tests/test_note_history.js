@@ -81,7 +81,11 @@ assert.strictEqual(
 );
 assert.strictEqual(
   NotesHistory.revisionLabel({ title: 'Title', content: '' }, noteForLabels),
-  'Untitled version',
+  'Current note',
+);
+assert.match(
+  NotesHistory.revisionLabel({ at: '2024-06-01T12:30:00.000Z', title: 'Title', content: '' }, noteForLabels),
+  /Current note/,
 );
 assert.strictEqual(
   NotesHistory.revisionLabel({ title: 'Saved snapshot', content: '' }, noteForLabels),
