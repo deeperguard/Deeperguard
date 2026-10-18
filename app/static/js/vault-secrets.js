@@ -12,6 +12,8 @@
   const DEV_ENC = 'notes_device_password_enc';
   const BOOT_KEY = 'notes_boot_key';
   const BOOT_ENC = 'notes_boot_password_enc';
+  const BOOT_KDF = 'notes_boot_kdf';
+  let pendingBootDerived = null;
 
   function setVaultPassword(password) {
     vaultPassword = String(password || '').trim();
@@ -69,17 +71,78 @@
     }
   }
 
+  async function readBootDerived(bootKeyRaw, kdfRaw) {
+    if (!bootKeyRaw || !kdfRaw) return null;
+    try {
+      const payload = JSON.parse(kdfRaw);
+      const key = await crypto.subtle.importKey(
+        'raw',
+        b64ToBytes(bootKeyRaw),
+        'AES-GCM',
+        false,
+        ['decrypt'],
+      );
+      const plain = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: b64ToBytes(payload.iv) },
+        key,
+        b64ToBytes(payload.data),
+      );
+      return {
+        raw: new Uint8Array(plain),
+        salt: String(payload.salt || ''),
+        version: Number(payload.version) || 2,
+        encoding: payload.encoding || '',
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function stashBootDerivedKey(derived, salt, version) {
+    const raw = derived?.key?.raw || derived?.raw;
+    if (!raw || !salt) return;
+    try {
+      const key = await getBootKey();
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+      const cipher = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        bytes,
+      );
+      sessionStorage.setItem(BOOT_KDF, JSON.stringify({
+        iv: bytesToB64(iv),
+        data: bytesToB64(new Uint8Array(cipher)),
+        salt: String(salt),
+        version: Number(version) || Number(derived.version) || 2,
+        encoding: derived.encoding || 'argon2id',
+      }));
+    } catch (err) {
+      /* ignore quota / private mode */
+    }
+  }
+
+  function takeBootDerivedKey() {
+    const value = pendingBootDerived;
+    pendingBootDerived = null;
+    return value;
+  }
+
   async function consumeBootPassword() {
     let payloadRaw = '';
     let bootKeyRaw = '';
+    let kdfRaw = '';
     try {
       payloadRaw = sessionStorage.getItem(BOOT_ENC) || '';
       bootKeyRaw = sessionStorage.getItem(BOOT_KEY) || '';
+      kdfRaw = sessionStorage.getItem(BOOT_KDF) || '';
       sessionStorage.removeItem(BOOT_ENC);
       sessionStorage.removeItem(BOOT_KEY);
+      sessionStorage.removeItem(BOOT_KDF);
     } catch (err) {
       return '';
     }
+    pendingBootDerived = await readBootDerived(bootKeyRaw, kdfRaw);
     if (!payloadRaw || !bootKeyRaw) return '';
     try {
       const payload = JSON.parse(payloadRaw);
@@ -105,9 +168,11 @@
   }
 
   function clearBootPassword() {
+    pendingBootDerived = null;
     try {
       sessionStorage.removeItem(BOOT_ENC);
       sessionStorage.removeItem(BOOT_KEY);
+      sessionStorage.removeItem(BOOT_KDF);
     } catch (err) {
       /* ignore */
     }
@@ -223,6 +288,8 @@
     getAccountPassword,
     clearSecrets,
     stashBootPassword,
+    stashBootDerivedKey,
+    takeBootDerivedKey,
     consumeBootPassword,
     clearBootPassword,
     saveDevicePassword,

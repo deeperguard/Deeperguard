@@ -60,6 +60,9 @@
     {% endif %}
     {% include 'partials/auth-footer.html' %}
   </main>
+  <script src="/static/js/vendor/noble-crypto.js?v={{ build }}"></script>
+  <script src="/static/js/vendor/noble-argon2.js?v={{ build }}"></script>
+  <script src="/static/js/crypto.js?v={{ build }}"></script>
   <script src="/static/js/vault-secrets.js?v={{ build }}"></script>
   <script src="/static/js/srp-auth.js?v={{ build }}"></script>
   <script src="/static/js/auth-pages.js?v={{ build }}"></script>

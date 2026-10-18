@@ -1,0 +1,54 @@
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+
+const root = path.join(__dirname, '..');
+const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'app/static/css/app.css'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'app/templates/app.html'), 'utf8');
+const markdown = fs.readFileSync(path.join(root, 'app/static/js/markdown.js'), 'utf8');
+const auth = fs.readFileSync(path.join(root, 'app/static/js/auth-pages.js'), 'utf8');
+const store = fs.readFileSync(path.join(root, 'app/static/js/store.js'), 'utf8');
+const secrets = fs.readFileSync(path.join(root, 'app/static/js/vault-secrets.js'), 'utf8');
+
+assert.ok(appJs.includes('function attachmentBadgeHtml('));
+assert.ok(appJs.includes('class="att-kind-badge"'));
+assert.ok(appJs.includes('class="thumb-paint"'));
+assert.ok(appJs.includes('function thumbOutputPx('));
+assert.ok(appJs.includes("ctx.imageSmoothingQuality = 'high'"));
+assert.ok(appJs.includes('image/jpeg', 0.92) || appJs.includes("'image/jpeg', 0.92"));
+assert.ok(appJs.includes('forList ? LIST_THUMB_PX'));
+assert.ok(css.includes('.att-kind-badge'));
+assert.ok(appJs.includes('editor-toolbar-tip-suppress'));
+assert.ok(css.includes('editor-toolbar-tip-suppress'));
+assert.ok(appJs.includes('if (sec < 60) return \'just now\''));
+assert.ok(appJs.includes('data-edited='));
+assert.ok(appJs.includes('refreshRelativeTimes'));
+assert.ok(appJs.includes('htmlWithoutInlineHandlers'));
+assert.ok(appJs.includes('New list item'));
+assert.ok(appJs.includes("aria-label=\"${escapeAttr(String(row.text || '').trim() || 'List item')}\""));
+assert.ok(html.includes('aria-label="Title"'));
+assert.ok(appJs.includes("setAttribute('aria-label', 'Title')"));
+assert.ok(appJs.includes("setAttribute('aria-labelledby', 'folder-prompt-title')"));
+assert.ok(css.includes('input[type="file"].sr-file'));
+assert.ok(css.includes('position: fixed;'));
+assert.ok(css.includes('clip-path: inset(50%)'));
+assert.ok(markdown.includes('function wrapMarkdownBlocks('));
+assert.ok(!markdown.includes("html.replace(/\\n\\n/g, '</p><p>')"));
+assert.ok(css.includes('.md-toolbar'));
+assert.ok(css.includes('flex-wrap: nowrap'));
+assert.ok(css.includes('.folder-note {\n  border: 0;\n  background: transparent;\n  color: inherit;\n  font-size: 13px;'));
+assert.ok(auth.includes('stashBootDerivedKey'));
+assert.ok(store.includes('function adoptDerivedVaultKey('));
+assert.ok(secrets.includes('notes_boot_kdf'));
+assert.ok(!html.includes('notes@deeperguard.com'));
+assert.ok(html.includes('unlock-support-email'));
+
+const { render } = require('../app/static/js/markdown.js');
+const preview = render('# Title\n\nHello\n\n- item');
+assert.ok(!preview.includes('<p></p>'));
+assert.ok(!preview.includes('<p><h1'));
+assert.ok(preview.includes('<h1>Title</h1>'));
+assert.ok(preview.includes('<p>Hello</p>'));
+
+console.log('ok');

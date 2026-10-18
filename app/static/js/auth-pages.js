@@ -365,12 +365,36 @@ if (registerForm) {
       setFieldError('register-terms', 'register-terms-error', '');
     }
     if (invalid) return;
+    const submitBtn = registerForm.querySelector('[type="submit"]');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creating account…';
+    }
     try {
       const data = await NotesSrpAuth.register(email, password);
       await stashLoginSession(data, email, password);
       try { sessionStorage.setItem('notes_just_registered', '1'); } catch (err) { /* ignore */ }
+      if (data?.kdf_salt && window.NotesCrypto?.deriveKey && window.NotesVaultSecrets?.stashBootDerivedKey) {
+        if (submitBtn) submitBtn.textContent = 'Preparing your vault…';
+        const version = Number(data.vault_kdf_version) === 1 ? 1 : 2;
+        let derived;
+        if (NotesCrypto.workerEnabled?.()) {
+          try {
+            derived = await NotesCrypto.deriveKeyInWorker(password, data.kdf_salt, { kdfVersion: version });
+          } catch (err) {
+            derived = await NotesCrypto.deriveKey(password, data.kdf_salt, { kdfVersion: version });
+          }
+        } else {
+          derived = await NotesCrypto.deriveKey(password, data.kdf_salt, { kdfVersion: version });
+        }
+        await NotesVaultSecrets.stashBootDerivedKey(derived, data.kdf_salt, derived?.version || version);
+      }
       location.replace(afterAuthUrl('/app'));
     } catch (err) {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create account';
+      }
       showError('register-error', err.message);
     }
   });
