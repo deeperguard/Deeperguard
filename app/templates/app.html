@@ -415,7 +415,7 @@
         <details class="auth-hint unlock-help">
           <summary>Having trouble on iPhone?</summary>
           <p id="unlock-secure-hint" hidden>Offline unlock on iPhone needs a secure connection. If Safari warns about the certificate, <a href="/ca.crt" download>install the certificate</a>, or open the app once while you are online.</p>
-          <p>If notes will not open, use the vault password from the device where you created them. Password help is in Settings after you unlock. Write to <a href="mailto:notes@deeperguard.com">notes@deeperguard.com</a> if you are stuck.</p>
+          <p>If notes will not open, use the vault password from the device where you created them. Password help is in Settings after you unlock. Write to notes@deeperguard.com if you are stuck.</p>
         </details>
       </form>
     </main>
@@ -874,9 +874,9 @@
                 <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
             </button>
-            <div class="editor-note-type-control toolbar-primary editor-toolbar-row-item" title="Note type">
-              <div class="editor-overflow-type-wrap editor-desktop-type" title="Note type">
-                <select id="note-editor-type" class="editor-select toolbar-primary editor-overflow-type-select" title="Note type" aria-label="Note type">
+            <div class="editor-note-type-control toolbar-primary editor-toolbar-row-item">
+              <div class="editor-overflow-type-wrap editor-desktop-type">
+                <select id="note-editor-type" class="editor-select toolbar-primary editor-overflow-type-select" aria-label="Note type">
                   <option value="plain">Plain text</option>
                   <option value="checklist">Checklist</option>
                   <option value="super">Super checklist</option>
@@ -886,7 +886,7 @@
                 </select>
               </div>
               <div class="editor-note-type-mobile mobile-only">
-                <button type="button" id="btn-note-type-menu" class="btn icon editor-note-type-trigger editor-phone-strip-btn editor-toolbar-menu-item" title="Note type" aria-label="Note type" aria-haspopup="menu" aria-expanded="false" aria-controls="note-type-menu">
+                <button type="button" id="btn-note-type-menu" class="btn icon editor-note-type-trigger editor-phone-strip-btn editor-toolbar-menu-item" aria-label="Note type" aria-haspopup="menu" aria-expanded="false" aria-controls="note-type-menu">
                   <svg class="editor-menu-icon ui-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                     <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 6h16M4 12h10M4 18h14"/>
                   </svg>
@@ -1697,7 +1697,7 @@
       <button type="button" class="btn primary" id="folder-prompt-ok">Create</button>
     </div>
   </div>
-  <div id="confirm-dialog" class="confirm-dialog" hidden role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div id="confirm-dialog" class="confirm-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title">
     <h2 id="confirm-title">Confirm</h2>
     <p id="confirm-message"></p>
     <div class="confirm-dialog-actions">

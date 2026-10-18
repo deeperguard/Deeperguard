@@ -2799,7 +2799,8 @@ class NotesAppTests(unittest.TestCase):
         )
         self.assertIn("submitUnlockForm", app_js)
         self.assertIn('id="unlock-form"', html)
-        self.assertIn("onsubmit=\"event.preventDefault(); return false;\"", html)
+        self.assertNotIn("onsubmit=", html)
+        self.assertIn("unlockForm?.addEventListener('submit'", app_js)
         self.assertIn("if (!vaultHydrated)", app_js)
         self.assertIn("lastNotesRenderKey = ''", app_js)
 

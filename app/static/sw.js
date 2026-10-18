@@ -165,6 +165,32 @@ function refresh(request) {
     .catch(() => undefined);
 }
 
+function htmlHasInlineHandler(text) {
+  return /\son[a-z]+\s*=/i.test(String(text || ''));
+}
+
+async function withoutInlineHandlers(response) {
+  if (!response) return response;
+  const type = response.headers.get('content-type') || '';
+  if (type && !/text\/html/i.test(type)) return response;
+  let text;
+  try {
+    text = await response.clone().text();
+  } catch (err) {
+    return response;
+  }
+  if (!htmlHasInlineHandler(text)) return response;
+  const cleaned = text.replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  if (!headers.get('content-type')) headers.set('Content-Type', 'text/html; charset=utf-8');
+  return new Response(cleaned, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 async function networkFirstNavigate(request) {
   let hard = false;
   try {
@@ -179,6 +205,7 @@ async function networkFirstNavigate(request) {
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
     ]);
     if (fresh && fresh.ok) {
+      const safe = await withoutInlineHandlers(fresh);
       let key = request;
       try {
         const url = new URL(request.url);
@@ -186,16 +213,17 @@ async function networkFirstNavigate(request) {
       } catch (err) {
         key = request;
       }
-      await putBoth(key, fresh);
-      return fresh;
+      await putBoth(key, safe);
+      return safe;
     }
   } catch (err) {
     if (hard) {
       try {
         const forced = await fetch(request, { credentials: 'same-origin', cache: 'reload' });
         if (forced && forced.ok) {
-          await putBoth(APP_SHELL, forced);
-          return forced;
+          const safe = await withoutInlineHandlers(forced);
+          await putBoth(APP_SHELL, safe);
+          return safe;
         }
       } catch (e2) {
         /* fall through */
@@ -204,9 +232,9 @@ async function networkFirstNavigate(request) {
     /* LAN is down — fall back to the last cached shell */
   }
   const cached = await matchCached(request);
-  if (cached) return cached;
+  if (cached) return withoutInlineHandlers(cached);
   const home = await matchCached(new Request(APP_SHELL));
-  if (home) return home;
+  if (home) return withoutInlineHandlers(home);
   // Never hand Safari a failed navigation — that becomes the Dutch
   // "problem occurred repeatedly" crash page when LAN is unreachable.
   return new Response(
@@ -227,7 +255,8 @@ async function networkFirstNavigate(request) {
     + "<h1>You're offline</h1>"
     + '<p class="hint">Notes are encrypted on your device. Reconnect to sync — we only store scrambled data on the server.</p>'
     + '<p>Join home Wi‑Fi or WireGuard, then reload Deeperguard.</p>'
-    + '<button type="button" onclick="location.href=\'' + APP_SHELL + '\'">Reload</button>'
+    + '<button type="button" id="offline-reload">Reload</button>'
+    + '<script>document.getElementById("offline-reload").addEventListener("click",function(){location.href="' + APP_SHELL + '";});</script>'
     + '</main></body></html>',
     {
       status: 200,
@@ -242,7 +271,7 @@ async function cacheFirstNavigate(request) {
   const cached = await matchCached(request);
   if (cached) {
     refresh(request);
-    return cached;
+    return withoutInlineHandlers(cached);
   }
   return networkFirstNavigate(request);
 }
