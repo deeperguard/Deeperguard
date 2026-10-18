@@ -1,18 +1,68 @@
 (function () {
-  function revealHashTarget() {
+  function hashTarget() {
     const id = decodeURIComponent((location.hash || '').replace(/^#/, ''));
-    if (!id) return;
-    const el = document.getElementById(id);
-    if (!el) return;
+    if (!id) return null;
+    return document.getElementById(id);
+  }
+
+  function scrollHashIntoView() {
+    const el = hashTarget();
+    if (!el) return false;
     document.documentElement.classList.add('mk-hash-open');
     el.style.opacity = '1';
     el.style.visibility = 'visible';
     el.style.transform = 'none';
-    el.scrollIntoView({ block: 'start', behavior: 'auto' });
+    const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+    const top = el.getBoundingClientRect().top + window.scrollY - margin;
+    const scroller = document.scrollingElement || document.documentElement;
+    const next = Math.max(0, top);
+    window.scrollTo(0, next);
+    if (scroller && scroller !== document.documentElement) scroller.scrollTop = next;
+    return true;
   }
+
+  function settleHashScroll() {
+    if (!location.hash) return;
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    let lastTop = null;
+    let stable = 0;
+    let userMoved = false;
+    const started = performance.now();
+    function stopForUser() { userMoved = true; }
+    window.addEventListener('wheel', stopForUser, { passive: true });
+    window.addEventListener('touchstart', stopForUser, { passive: true });
+    window.addEventListener('keydown', stopForUser);
+    function tick() {
+      if (userMoved) return;
+      const el = hashTarget();
+      scrollHashIntoView();
+      const margin = el ? (parseFloat(getComputedStyle(el).scrollMarginTop) || 0) : 0;
+      const top = el ? el.getBoundingClientRect().top : null;
+      const aligned = top != null && Math.abs(top - margin) < 3;
+      if (aligned && lastTop != null && Math.abs(top - lastTop) < 1) stable += 1;
+      else stable = 0;
+      lastTop = top;
+      if (stable < 6 && performance.now() - started < 2500) requestAnimationFrame(tick);
+    }
+    tick();
+    window.addEventListener('load', () => {
+      if (userMoved) return;
+      scrollHashIntoView();
+      requestAnimationFrame(scrollHashIntoView);
+    });
+    window.addEventListener('pageshow', () => {
+      if (!userMoved) scrollHashIntoView();
+    });
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => {
+        if (!userMoved) scrollHashIntoView();
+      });
+    }
+  }
+
   if (location.hash) {
-    revealHashTarget();
-    window.addEventListener('load', revealHashTarget);
+    document.documentElement.classList.add('mk-hash-open');
+    settleHashScroll();
   }
 
   const form = document.getElementById('contact-form');

@@ -1056,6 +1056,7 @@ a.mk-badge-link:hover {
   padding: 0;
   list-style: none;
   display: grid;
+  align-content: start;
   gap: 0.75rem;
   flex: 1;
 }
@@ -1071,6 +1072,13 @@ a.mk-badge-link:hover {
   left: 0;
   color: #059669;
   font-weight: 800;
+}
+.mk-plan li.is-unavailable {
+  color: var(--mk-muted);
+}
+.mk-plan li.is-unavailable::before {
+  content: "—";
+  color: var(--mk-faint);
 }
 .mk-plan .mk-btn {
   width: 100%;

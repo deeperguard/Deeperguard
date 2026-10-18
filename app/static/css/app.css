@@ -580,6 +580,13 @@ html[data-theme="light"] .auth-card {
   color: var(--danger);
   font-size: 13px;
 }
+.auth-field {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+}
 .consent-row {
   display: flex;
   gap: 10px;
@@ -587,7 +594,18 @@ html[data-theme="light"] .auth-card {
   font-size: 14px;
   color: var(--text);
 }
-.consent-row input { margin-top: 3px; }
+.consent-row input[type="checkbox"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: 0 0 auto;
+  margin-top: 2px;
+  padding: 0;
+}
+.consent-row input[type="checkbox"][aria-invalid="true"] {
+  box-shadow: none;
+  outline: 2px solid var(--danger);
+  outline-offset: 2px;
+}
 .pw-meter { display: grid; gap: 4px; }
 .pw-meter-bar {
   display: block;

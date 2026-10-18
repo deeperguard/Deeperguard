@@ -194,19 +194,84 @@ function setFieldError(inputId, errorId, message) {
   if (input) input.setAttribute('aria-invalid', message ? 'true' : 'false');
 }
 
+const COMMON_PASSWORD_FRAGMENTS = [
+  'password', 'qwerty', 'letmein', 'welcome', 'admin', 'iloveyou',
+  'abc123', 'passw0rd', 'deeperguard', '111111', '000000', '123456',
+];
+
+function longestStepRun(value, rows) {
+  const lower = String(value || '').toLowerCase();
+  let longest = 1;
+  const alphabets = rows || null;
+  let run = 1;
+  for (let i = 1; i < lower.length; i += 1) {
+    let stepped = false;
+    if (!alphabets) {
+      const delta = lower.charCodeAt(i) - lower.charCodeAt(i - 1);
+      stepped = delta === 1 || delta === -1;
+    } else {
+      const prev = lower[i - 1];
+      const cur = lower[i];
+      stepped = alphabets.some((row) => {
+        const a = row.indexOf(prev);
+        const b = row.indexOf(cur);
+        return a >= 0 && b >= 0 && Math.abs(a - b) === 1;
+      });
+    }
+    if (stepped) {
+      run += 1;
+      if (run > longest) longest = run;
+    } else {
+      run = 1;
+    }
+  }
+  return longest;
+}
+
 function passwordStrength(password) {
   const value = String(password || '');
-  let score = 0;
-  if (value.length >= 12) score += 1;
-  if (value.length >= 16) score += 1;
-  if (/[a-z]/.test(value) && /[A-Z]/.test(value)) score += 1;
-  if (/\d/.test(value)) score += 1;
-  if (/[^A-Za-z0-9]/.test(value)) score += 1;
-  if (value.length > 0 && value.length < 12) return { pct: '20%', color: '#dc2626', label: 'Too short — use at least 12 characters' };
   if (!value) return { pct: '0%', color: '#94a3b8', label: 'Password strength' };
-  if (score <= 2) return { pct: '45%', color: '#d97706', label: 'Okay — add a mix of letters, numbers, or symbols' };
-  if (score <= 3) return { pct: '70%', color: '#2563eb', label: 'Good' };
-  return { pct: '100%', color: '#059669', label: 'Strong' };
+  if (value.length < 12) {
+    return { pct: '16%', color: '#dc2626', label: 'Too short — use at least 12 characters' };
+  }
+
+  const classTests = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/];
+  const classes = classTests.filter((re) => re.test(value)).length;
+  const unique = new Set(value).size;
+  let charset = 0;
+  if (/[a-z]/.test(value)) charset += 26;
+  if (/[A-Z]/.test(value)) charset += 26;
+  if (/\d/.test(value)) charset += 10;
+  if (/[^A-Za-z0-9]/.test(value)) charset += 33;
+  let bits = Math.log2(Math.max(charset, 1)) * value.length;
+
+  const collapsed = value.replace(/(.)\1{2,}/g, '$1');
+  if (collapsed.length < value.length) {
+    bits *= Math.max(0.15, collapsed.length / value.length);
+  }
+  if (unique <= 3) bits *= 0.35;
+  else if (unique < value.length * 0.45) bits *= 0.7;
+
+  const patterned = Math.max(
+    longestStepRun(value),
+    longestStepRun(value, ['qwertyuiop', 'asdfghjkl', 'zxcvbnm', '1234567890']),
+  );
+  if (patterned >= 4) bits -= (patterned - 3) * 8;
+  if (patterned >= 6) bits = Math.min(bits, classes >= 3 ? 40 : 24);
+
+  const lower = value.toLowerCase();
+  if (COMMON_PASSWORD_FRAGMENTS.some((word) => lower.includes(word))) {
+    bits = Math.min(bits, 28);
+  }
+
+  const variedEnough = classes >= 3 || value.length >= 20;
+  if (bits >= 60 && variedEnough && patterned < 6 && unique >= 8) {
+    return { pct: '100%', color: '#059669', label: 'Strong' };
+  }
+  if (bits >= 36 && classes >= 2 && unique >= 6) {
+    return { pct: '62%', color: '#d97706', label: 'Fair' };
+  }
+  return { pct: '34%', color: '#dc2626', label: 'Weak' };
 }
 
 function paintPasswordStrength(password) {

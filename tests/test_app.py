@@ -4545,9 +4545,31 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("unlocks the vault on this device automatically", register)
         css = (APP_DIR / "static" / "css" / "marketing.css").read_text(encoding="utf-8")
         self.assertIn("scroll-margin-top: 5.75rem", css)
+        self.assertIn("align-content: start", css)
         home = self.client.get("/")
         self.assertIn(b"Free during beta: Pro, 5", home.data)
         self.assertNotIn("€0".encode(), home.data)
+        self.assertIn(b'class="is-unavailable">Not included: Passkey sign-in', home.data)
+        self.assertIn(b"mk-hash-open", home.data)
+        marketing_js = (APP_DIR / "static" / "js" / "marketing.js").read_text(encoding="utf-8")
+        self.assertIn("settleHashScroll", marketing_js)
+        self.assertIn("scrollRestoration", marketing_js)
+
+    def test_register_retest_copy_strength_and_labels(self):
+        register = (APP_DIR / "templates" / "register.html").read_text(encoding="utf-8")
+        self.assertIn("Creating an account does not ask for a code", register)
+        self.assertIn("you only enter it in Settings before encrypted backups are sent", register)
+        self.assertNotIn("We email a verification code before encrypted backups are sent", register)
+        self.assertIn('id="register-password-label" for="register-password">Password</label>', register)
+        self.assertIn('aria-label="Show password"', register)
+        self.assertIn('id="register-terms" type="checkbox" name="terms" value="yes" required', register)
+        label_at = register.index('id="register-password-label"')
+        button_at = register.index('data-target="register-password"', label_at)
+        self.assertIn("</label>", register[label_at:button_at])
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        self.assertIn(".consent-row input[type=\"checkbox\"]", css)
+        self.assertIn("outline: 2px solid var(--danger)", css)
+        self._run_node_script("test_password_strength.js")
 
     def test_sync_push_quota_hit_does_not_block_other_items_in_batch(self):
         # One over-quota item used to make the whole batch a no-op (and wedge

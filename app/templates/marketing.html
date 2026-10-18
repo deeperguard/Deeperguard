@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>
+    if (location.hash) document.documentElement.classList.add('mk-hash-open');
+  </script>
   <title>Deeperguard (encrypted notes) — Private notes you cannot leak</title>
   <meta name="description" content="Deeperguard is a zero-knowledge encrypted notes PWA — not DeepGuard deepfake software. AES-GCM on your device, free Pro in public beta. Create a vault at deeperguard.com.">
   <meta name="theme-color" content="#ffffff">
@@ -399,6 +402,9 @@
           <ul>
             {% for feat in basic_features %}
             <li>{{ feat }}</li>
+            {% endfor %}
+            {% for feat in pro_only_features %}
+            <li class="is-unavailable">Not included: {{ feat }}</li>
             {% endfor %}
           </ul>
           <p class="mk-plan-tagline">Not what you get in the beta. Beta accounts are Pro.</p>

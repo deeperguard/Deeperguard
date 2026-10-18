@@ -26,31 +26,33 @@
         <input id="register-email" type="email" name="email" autocomplete="email" inputmode="email" required aria-required="true" aria-invalid="false" aria-describedby="register-email-error">
       </label>
       <p id="register-email-error" class="field-error" role="alert" hidden></p>
-      <label for="register-password">Password
+      <div class="auth-field">
+        <label id="register-password-label" for="register-password">Password</label>
         <span class="password-field-wrap">
-          <input id="register-password" type="password" name="password" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-describedby="register-password-hint register-password-error register-strength">
+          <input id="register-password" type="password" name="password" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-labelledby="register-password-label" aria-describedby="register-password-hint register-password-error register-strength">
           <button type="button" class="password-toggle btn ghost sm" data-target="register-password" aria-label="Show password">Show</button>
         </span>
-      </label>
+      </div>
       <p id="register-password-hint" class="hint">At least 12 characters. This password encrypts your notes — we cannot recover it.</p>
       <div id="register-strength" class="pw-meter" aria-live="polite">
         <span id="register-strength-bar" class="pw-meter-bar"></span>
         <span id="register-strength-label" class="pw-meter-label">Password strength</span>
       </div>
       <p id="register-password-error" class="field-error" role="alert" hidden></p>
-      <label for="register-password2">Confirm password
+      <div class="auth-field">
+        <label id="register-password2-label" for="register-password2">Confirm password</label>
         <span class="password-field-wrap">
-          <input id="register-password2" type="password" name="password2" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-describedby="register-password2-error">
+          <input id="register-password2" type="password" name="password2" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-labelledby="register-password2-label" aria-describedby="register-password2-error">
           <button type="button" class="password-toggle btn ghost sm" data-target="register-password2" aria-label="Show password">Show</button>
         </span>
-      </label>
+      </div>
       <p id="register-password2-error" class="field-error" role="alert" hidden></p>
       <label class="consent-row" for="register-terms">
-        <input id="register-terms" type="checkbox" name="terms" value="yes" aria-invalid="false" aria-describedby="register-terms-error">
+        <input id="register-terms" type="checkbox" name="terms" value="yes" required aria-required="true" aria-invalid="false" aria-describedby="register-terms-error">
         <span>I agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy policy</a>.</span>
       </label>
       <p id="register-terms-error" class="field-error" role="alert" hidden></p>
-      <p class="auth-hint">Public beta: new accounts start on <strong>Pro</strong> (free for now) with <strong>5&nbsp;GB</strong> encrypted storage. After the beta, <strong>Basic</strong> is €2.99/month or €29/year (100&nbsp;MB) and <strong>Pro</strong> is €6.99/month or €69/year (5&nbsp;GB). We email a verification code before encrypted backups are sent to your address.</p>
+      <p class="auth-hint">Public beta: new accounts start on <strong>Pro</strong> (free for now) with <strong>5&nbsp;GB</strong> encrypted storage. After the beta, <strong>Basic</strong> is €2.99/month or €29/year (100&nbsp;MB) and <strong>Pro</strong> is €6.99/month or €69/year (5&nbsp;GB). Creating an account does not ask for a code. We email a verification code to this address, and you only enter it in Settings before encrypted backups are sent.</p>
       <p id="register-error" class="error" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
       <button type="submit" class="btn primary block">Create account</button>
     </form>
