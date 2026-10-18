@@ -413,8 +413,11 @@ def _headers(response):
         _drop_set_cookie(response)
     elif request.path in {app_entry_path(), "/manifest.json"}:
         # Revalidate when the phone is online; keep a stale copy for offline.
+        # must-revalidate: do not paint a previous deploy's HTML while
+        # revalidation is in flight (that left fresh sessions on an old build).
+        # stale-if-error still covers a dead origin.
         response.headers["Cache-Control"] = (
-            "public, max-age=0, stale-while-revalidate=604800, stale-if-error=604800"
+            "public, max-age=0, must-revalidate, stale-if-error=604800"
         )
         response.headers.pop("Pragma", None)
         session.accessed = False

@@ -176,7 +176,13 @@ const NotesCrypto = (() => {
     if (!workerRef) {
       workerRef = new Worker(workerUrl());
       workerRef.onmessage = (event) => {
-        const { id, ok, result, content, error } = event.data || {};
+        const { id, ok, result, content, error, progress } = event.data || {};
+        if (progress != null && !result && !error) {
+          if (typeof globalThis.__notesKdfProgress === 'function') {
+            globalThis.__notesKdfProgress(progress);
+          }
+          return;
+        }
         const waiter = workerWaiters.get(id);
         if (!waiter) return;
         workerWaiters.delete(id);

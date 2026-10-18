@@ -82,8 +82,22 @@ self.onmessage = async (event) => {
   const id = msg.id;
   try {
     if (msg.type === 'deriveKey') {
-      const result = await deriveKey(msg.password, msg.salt, msg.kdfVersion);
-      self.postMessage({ id, ok: true, result });
+      // Keep the tab's progress moving while Argon2 runs. The page's
+      // requestAnimationFrame loop is frozen in a background tab; this
+      // worker is not.
+      let ticks = 0;
+      const timer = setInterval(() => {
+        ticks += 1;
+        self.postMessage({ id, progress: Math.min(16, 8 + ticks) });
+      }, 200);
+      try {
+        const result = await deriveKey(msg.password, msg.salt, msg.kdfVersion);
+        clearInterval(timer);
+        self.postMessage({ id, ok: true, result });
+      } catch (err) {
+        clearInterval(timer);
+        throw err;
+      }
       return;
     }
     if (msg.type === 'decrypt') {

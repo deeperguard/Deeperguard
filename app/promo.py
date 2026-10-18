@@ -113,7 +113,7 @@ def promo_payload(
             "autonomous": False,
         },
         {
-            "name": "DeeperGuard Pool cross-link",
+            "name": "Deeperguard Pool cross-link",
             "url": "https://pool.deeperguard.com/",
             "action": "Pool homepage links to notes site (deploy pool static update)",
             "autonomous": True,

@@ -42,16 +42,17 @@
     if (readableWords < 2) return true;
     if (ocrLetterRatio(trimmed) < 0.3) return true;
 
-    // Engine "weak" hints target noisy photo OCR; PDFs may still have usable text.
+    // Engine "weak" hints target noisy photo OCR. A short, clear read
+    // (JPEG/WebP scans of a few large words) is still worth keeping.
     if (qualityHint === 'weak' && isImageAttachment(mime, filename) && !isPdfAttachment(mime, filename)) {
-      return true;
+      if (!(readableWords >= 2 && ocrLetterRatio(trimmed) >= 0.45)) return true;
     }
 
     if (isImageAttachment(mime, filename) && !isPdfAttachment(mime, filename)) {
       const tokens = trimmed.split(/\s+/).filter(Boolean);
       const noisy = tokens.filter((token) => /[^\w\s]/.test(token) || token.length <= 1).length;
       if (tokens.length >= 6 && noisy / tokens.length > 0.4) return true;
-      if (trimmed.length < 48 && readableWords < 3) return true;
+      if (trimmed.length < 48 && readableWords < 2) return true;
     }
 
     return false;

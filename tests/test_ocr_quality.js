@@ -27,6 +27,14 @@ assert.ok(
   !ocrResultWeak('Invoice number 12345 due April', [], 'image/jpeg', 'scan.jpg'),
   'real invoice text should not be weak',
 );
+assert.ok(
+  !ocrResultWeak('WARRANTY CARD KIWI 2026', [], 'image/jpeg', 'warranty.jpg', 'weak'),
+  'short clear JPEG text should be kept',
+);
+assert.strictEqual(
+  normalizeOcrStorage('WARRANTY CARD KIWI 2026', [], 'image/webp', 'scan.webp', 'weak', 'tesseract').text,
+  'WARRANTY CARD KIWI 2026',
+);
 
 assert.strictEqual(
   normalizeOcrStorage('Vehicle registration expires June', [], 'application/pdf', 'doc.pdf').text,
