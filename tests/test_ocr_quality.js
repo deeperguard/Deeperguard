@@ -55,4 +55,17 @@ assert.strictEqual(
   'Embedded invoice text with enough readable words here',
 );
 
+const walrus = 'walrus\nok';
+assert.ok(!ocrResultWeak(walrus, [], 'application/json', 'data.json'), 'short JSON text stays indexed');
+assert.strictEqual(
+  normalizeOcrStorage(walrus, [], 'application/json', 'data.json', '', 'text').text,
+  walrus,
+);
+assert.strictEqual(
+  normalizeOcrStorage(walrus, [], 'application/json', 'data.json', '', 'text').method,
+  'text',
+);
+assert.ok(!ocrResultWeak('<project>walrus</project>', [], 'application/xml', 'data.xml'));
+assert.ok(!ocrResultWeak('project: walrus', [], 'application/yaml', 'data.yaml'));
+
 console.log('ok');

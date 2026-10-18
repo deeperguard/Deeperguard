@@ -1200,12 +1200,50 @@
     return type === 'markdown' || type === 'superscript';
   }
 
+  function colorCodeKeywords(html) {
+    return String(html || '').replace(
+      /\b(const|let|var|function|return|if|else|for|while|class|import|from|def|async|await|True|False|None)\b/g,
+      '<span class="tok-kw">$1</span>',
+    );
+  }
+
   function highlightCode(text) {
-    const escaped = escapeHtml(String(text || ''));
-    return escaped
-      .replace(/(&quot;[^&]*&quot;|&#39;[^&]*&#39;)/g, '<span class="tok-str">$1</span>')
-      .replace(/(^|\n)(\/\/.*|#.*)/g, '$1<span class="tok-comment">$2</span>')
-      .replace(/\b(const|let|var|function|return|if|else|for|while|class|import|from|def|async|await|True|False|None)\b/g, '<span class="tok-kw">$1</span>');
+    const stringRe = /("[^"\n]*"|'[^'\n]*'|`[^`\n]*`)/g;
+    return String(text || '').split('\n').map((line) => {
+      let commentStart = -1;
+      let quote = '';
+      for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i];
+        if (quote) {
+          if (ch === '\\') { i += 1; continue; }
+          if (ch === quote) quote = '';
+          continue;
+        }
+        if (ch === '"' || ch === "'" || ch === '`') {
+          quote = ch;
+          continue;
+        }
+        if (ch === '#' || (ch === '/' && line[i + 1] === '/')) {
+          commentStart = i;
+          break;
+        }
+      }
+      const code = commentStart >= 0 ? line.slice(0, commentStart) : line;
+      const comment = commentStart >= 0 ? line.slice(commentStart) : '';
+      const parts = [];
+      let last = 0;
+      stringRe.lastIndex = 0;
+      let match = stringRe.exec(code);
+      while (match) {
+        parts.push(colorCodeKeywords(escapeHtml(code.slice(last, match.index))));
+        parts.push(`<span class="tok-str">${escapeHtml(match[0])}</span>`);
+        last = match.index + match[0].length;
+        match = stringRe.exec(code);
+      }
+      parts.push(colorCodeKeywords(escapeHtml(code.slice(last))));
+      if (comment) parts.push(`<span class="tok-comment">${escapeHtml(comment)}</span>`);
+      return parts.join('');
+    }).join('\n');
   }
 
   function noteUsesRenderedBody(type) {
@@ -1487,6 +1525,21 @@
       if (!input || !layer) return;
       layer.innerHTML = NotesLinkOverlay.renderHtml(input.value);
     });
+  }
+
+  function syncCodeHighlight() {
+    const wrap = document.getElementById('note-body-wrap');
+    const layer = document.getElementById('note-body-highlights');
+    const note = currentId ? NotesStore.get(currentId) : null;
+    const type = note?.content?.editor || ui.editorType?.value || 'plain';
+    const findOpen = document.getElementById('find-bar') && !document.getElementById('find-bar').hidden;
+    const on = type === 'code' && ui.body && !ui.body.hidden && !findOpen;
+    wrap?.classList.toggle('code-highlight-live', !!on);
+    if (!layer || !on) {
+      if (layer && !findOpen && layer.querySelector('.tok-kw, .tok-str, .tok-comment')) layer.innerHTML = '';
+      return;
+    }
+    layer.innerHTML = highlightCode(ui.body.value || '');
   }
 
   function syncEditLinkOverlay() {
@@ -2223,9 +2276,7 @@
     const note = NotesStore.get(noteId);
     if (!note) return 'edit';
     if (noteSpreadsheetSource(note)) return 'preview';
-    if (noteHasVisualDocs(noteId)) {
-      const body = String(note.content.content || '').trim();
-      if (!body) return 'preview';
+    if (noteHasVisualDocs(noteId) || noteHasDocs(noteId)) {
       return prefs.autoPreview ? 'preview' : 'edit';
     }
     const type = note.content.editor || 'plain';
@@ -2990,9 +3041,10 @@
     el.classList.toggle('error', !!isError);
     el.hidden = false;
     clearTimeout(toastTimer);
+    const linger = message === 'New note' ? 1400 : 3200;
     toastTimer = setTimeout(() => {
       el.hidden = true;
-    }, 3200);
+    }, linger);
   }
 
   const totpUi = {
@@ -4330,6 +4382,7 @@
   }
 
   function unlockProgressLabel(phase) {
+    if (phase === 'kdf' && loginProgress.displayed >= 8) return 'Checking password';
     return (UNLOCK_PHASE_WEIGHT[phase] || UNLOCK_PHASE_WEIGHT.decrypt).label;
   }
 
@@ -4424,14 +4477,15 @@
 
   function startLoginCreep(phase, ceiling) {
     stopLoginCreep();
-    const cap = ceiling ?? phaseCeiling(phase);
+    const kdf = phase === 'kdf';
+    const cap = kdf ? 64 : (ceiling ?? phaseCeiling(phase));
     loginProgress.creep = window.setInterval(() => {
       if (!loginProgressActive) return;
       if (loginProgress.displayed >= cap) return;
       loginProgress.displayed = Math.min(cap, loginProgress.displayed + 1);
       loginProgress.target = Math.max(loginProgress.target, loginProgress.displayed);
       renderLoginProgressFrame();
-    }, (typeof document !== 'undefined' && document.hidden) ? 250 : 100);
+    }, kdf ? 450 : ((typeof document !== 'undefined' && document.hidden) ? 250 : 100));
   }
 
   function setLoginProgressTarget(phase, done, total, pctOverride) {
@@ -4447,9 +4501,11 @@
     renderLoginProgressFrame();
   }
 
-  window.__notesKdfProgress = (pct) => {
-    if (!loginProgressActive || loginProgress.phase !== 'kdf') return;
-    const next = Math.max(loginProgress.displayed, Math.min(phaseCeiling('kdf'), Number(pct) || 0));
+  window.__notesKdfProgress = () => {
+    if (!loginProgressActive || loginProgress.phase !== 'kdf' || loginProgress.creep) return;
+    const cap = 64;
+    if (loginProgress.displayed >= cap) return;
+    const next = loginProgress.displayed + 1;
     loginProgress.displayed = next;
     loginProgress.target = Math.max(loginProgress.target, next);
     renderLoginProgressFrame();
@@ -5378,7 +5434,7 @@
         let localAllFailed = loadResult.localAllFailed;
         let vaultRepairedOnline = false;
         let hadStaleLocalCipher = false;
-        if (localAllFailed) {
+        if (localAllFailed && !NotesStore.state.kdfVersionsMissed) {
           hadStaleLocalCipher = true;
           unlockPrimaryRevealed = false;
           const altVersion = NotesStore.state.kdfVersion >= 2 ? 1 : 2;
@@ -6760,10 +6816,16 @@
       && firstAtt
       && (thumbKind === 'image' || thumbKind === 'pdf')
       && !prefs.hidePreviews;
-    const previewHtml = (prefs.hidePreviews || compact)
-      ? ''
-      : (isLocked
-        ? '<p class="note-preview note-preview-locked"><svg class="preview-lock-glyph" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Protected note</p>'
+    const titleMarked = query && displayTitle
+      ? NotesSearch.highlightPlain(displayTitle, query).includes('search-hit')
+      : false;
+    const fileMatch = !!(match && match.field && match.field !== 'title' && displaySnippet);
+    const previewHtml = isLocked
+      ? ((prefs.hidePreviews || compact)
+        ? ''
+        : '<p class="note-preview note-preview-locked"><svg class="preview-lock-glyph" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Protected note</p>')
+      : ((prefs.hidePreviews || compact) && !(fileMatch && !titleMarked)
+        ? ''
         : noteListPreview(n, displaySnippet, query));
     const glyphs = noteRowStatusGlyphs(n);
     const where = match
@@ -7395,17 +7457,19 @@
           ? `<button type="button" class="btn ghost sm" data-share="${escapeAttr(a.uuid)}">Share</button>`
           : '';
         const hitCount = rowQuery ? NotesSearch.attachmentHitCount(a, rowQuery) : 0;
+        const nameHit = rowQuery ? NotesSearch.highlightPlain(a.content.filename || '', rowQuery) : '';
+        const fileHit = !!(rowQuery && (hitCount || (nameHit && nameHit.includes('search-hit'))));
         const hitLabel = NotesSearch.attachmentHighlightLabel(hitCount);
         const hitBadge = hitLabel
           ? `<span class="attachment-hit-badge" data-att-hits="${hitCount}">${escapeHtml(hitLabel)}</span>`
           : '';
-        const rowClass = `attachment-item${busy ? ' is-ocr-busy' : ''}${hitCount ? ' is-search-hit' : ''}`;
+        const rowClass = `attachment-item${busy ? ' is-ocr-busy' : ''}${fileHit ? ' is-search-hit' : ''}`;
         const thumbKind = attachmentKind(a);
         const thumbLabel = thumbKind === 'pdf' ? 'PDF' : (thumbKind === 'image' ? 'IMG' : 'FILE');
         return `<div class="${rowClass}" data-att="${escapeAttr(a.uuid)}">
           <button type="button" class="attachment-thumb" data-preview="${escapeAttr(a.uuid)}" aria-label="Preview ${escapeAttr(a.content.filename || 'document')}">${thumbLabel}</button>
           <div class="attachment-main">
-            <strong class="attachment-filename">${escapeHtml(a.content.filename)}</strong>${spinner}
+            <strong class="attachment-filename">${rowQuery ? nameHit : escapeHtml(a.content.filename)}</strong>${spinner}
             <span class="muted"> (${sizeLabel})</span>
             ${hitBadge}
             ${status}
@@ -7636,7 +7700,10 @@
     }
     const text = String(att.content?.ocr_text || '').trim();
     const boxes = Array.isArray(att.content?.ocr_boxes) ? att.content.ocr_boxes : [];
-    if (text && ocrResultWeak(text, boxes, att.content?.mime, att.content?.filename)) {
+    const plainText = method === 'text'
+      || method === 'pdftext'
+      || window.NotesOcrQuality?.isPlainTextAttachment?.(att.content?.mime, att.content?.filename);
+    if (text && !plainText && ocrResultWeak(text, boxes, att.content?.mime, att.content?.filename)) {
       const noteId = att.content?.note_id;
       queueMicrotask(() => {
         const live = NotesStore.get(attId);
@@ -7652,8 +7719,10 @@
     }
     if (text) {
       const snippet = text.length > 72 ? `${text.slice(0, 72)}…` : text;
+      const query = String(ui.search?.value || '').trim();
+      const snippetHtml = query ? NotesSearch.highlightPlain(snippet, query) : escapeHtml(snippet);
       return {
-        html: `<p class="ocr-text ocr-ready">Searchable · ${escapeHtml(snippet)}</p>`,
+        html: `<p class="ocr-text ocr-ready">Searchable · ${snippetHtml}</p>`,
         retry: false,
       };
     }
@@ -9543,13 +9612,14 @@
       }
       ui.historyList.innerHTML = revisions
         .map((rev, idx) => {
-          const whenAt = typeof NotesHistory !== 'undefined' ? NotesHistory.revisionTimestamp(rev) : 0;
-          const when = whenAt ? new Date(whenAt).toLocaleString() : '';
           const label = typeof NotesHistory !== 'undefined' && NotesHistory.revisionLabel
             ? NotesHistory.revisionLabel(rev, note)
             : (rev.title || 'Untitled version');
+          const version = `Version ${revisions.length - idx}`;
+          const preview = String(rev.content || '').trim().split('\n').find((line) => line.trim()) || '';
+          const previewBit = preview && preview !== label ? ` · ${preview.slice(0, 48)}` : '';
           return `<div class="history-item">
-          <span><strong>${escapeHtml(label)}</strong><br><span class="muted">${when}</span></span>
+          <span><strong>${escapeHtml(version)}</strong> · ${escapeHtml(label)}${escapeHtml(previewBit)}</span>
           <button class="btn ghost sm" data-rev="${idx}">Restore</button>
         </div>`;
         })
@@ -9788,6 +9858,7 @@
     }
     if (ocrBtn) setEditorMenuLabel(ocrBtn, 'OCR text');
     if (checklistOn) renderChecklist(note);
+    syncCodeHighlight();
     if (docSearchActive()) {
       ui.docInline.hidden = false;
       renderDocInline(currentId);
@@ -12881,8 +12952,13 @@
       || mime.startsWith('image/')
       || mime === 'application/pdf'
       || mime === 'application/json'
+      || mime === 'application/xml'
+      || mime === 'application/yaml'
+      || mime === 'application/x-yaml'
+      || mime.endsWith('+json')
+      || mime.endsWith('+xml')
       || mime.includes('wordprocessingml')
-      || /\.(txt|md|csv|json|docx|pdf|png|jpe?g|webp|gif|bmp|hei[cf])$/i.test(name);
+      || /\.(txt|md|csv|json|log|xml|yaml|yml|docx|pdf|png|jpe?g|webp|gif|bmp|hei[cf])$/i.test(name);
   }
 
   // Light vault: background OCR must not pull every file onto the device.
@@ -14304,15 +14380,76 @@
     toast('Folder created');
   }
 
+  function closeFolderPrompt() {
+    const dialog = document.getElementById('folder-prompt');
+    const input = document.getElementById('folder-prompt-input');
+    if (dialog) dialog.hidden = true;
+    if (input) input.value = '';
+  }
+
+  function openFolderPrompt() {
+    if (!NotesStore.isUnlocked()) {
+      toast('Unlock the vault first', true);
+      return;
+    }
+    folderCreateForNote = currentId || '';
+    const dialog = document.getElementById('folder-prompt');
+    const input = document.getElementById('folder-prompt-input');
+    if (!dialog || !input) {
+      document.getElementById('btn-new-folder')?.click();
+      return;
+    }
+    dialog.hidden = false;
+    input.value = '';
+    input.focus();
+  }
+
+  function confirmFolderPrompt() {
+    const input = document.getElementById('folder-prompt-input');
+    const name = String(input?.value || '').trim();
+    if (!name) {
+      toast('Enter a folder name', true);
+      input?.focus();
+      return;
+    }
+    const folderId = NotesStore.createFolder(name);
+    const assignTo = folderCreateForNote;
+    folderCreateForNote = '';
+    closeFolderPrompt();
+    if (!folderId) return;
+    setFolderOpen(folderId, true);
+    currentFolder = folderId;
+    prefs.foldersCollapsed = false;
+    try { localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs)); } catch (err) { /* ignore */ }
+    applyFolderSection();
+    renderFolders();
+    renderNotes();
+    if (assignTo && currentId === assignTo) assignCurrentNoteFolder(folderId);
+    if (currentId) syncNoteFolderControl(NotesStore.get(currentId));
+    toast('Folder created');
+  }
+
   document.getElementById('note-folder-select')?.addEventListener('change', (event) => {
     const select = event.currentTarget;
     if (select.value === '__new__') {
       select.value = NotesStore.get(currentId)?.content?.folder_id || '';
-      folderCreateForNote = currentId || '';
-      document.getElementById('btn-new-folder')?.click();
+      openFolderPrompt();
       return;
     }
     assignCurrentNoteFolder(select.value);
+  });
+  document.getElementById('folder-prompt-ok')?.addEventListener('click', confirmFolderPrompt);
+  document.getElementById('folder-prompt-cancel')?.addEventListener('click', closeFolderPrompt);
+  document.getElementById('folder-prompt-input')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      confirmFolderPrompt();
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeFolderPrompt();
+    }
   });
   document.getElementById('btn-new-folder')?.addEventListener('click', () => {
     if (!NotesStore.isUnlocked()) {
@@ -14514,6 +14651,7 @@
     scheduleSave();
     autosizeNoteBody();
     syncEditLinkOverlay();
+    syncCodeHighlight();
     syncUndoButtons();
     if (!document.getElementById('find-bar')?.hidden) {
       const query = document.getElementById('find-input')?.value?.trim() || '';
@@ -17392,6 +17530,15 @@
     ['pointerdown', 'keydown', 'touchstart'].forEach((name) => {
       document.addEventListener(name, bumpIdle, { passive: true });
     });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      const folderPrompt = document.getElementById('folder-prompt');
+      if (folderPrompt && !folderPrompt.hidden) return;
+      if (!ui.settings || ui.settings.hidden) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeSettings(true);
+    }, true);
     document.addEventListener('keydown', (e) => {
       if (
         e.key === 'Backspace'
@@ -17422,6 +17569,17 @@
         openNote(items[next].dataset.id);
       }
       if (e.key === 'Escape') {
+        const folderPrompt = document.getElementById('folder-prompt');
+        if (folderPrompt && !folderPrompt.hidden) {
+          closeFolderPrompt();
+          e.preventDefault();
+          return;
+        }
+        if (ui.settings && !ui.settings.hidden) {
+          closeSettings(true);
+          e.preventDefault();
+          return;
+        }
         if (document.body.classList.contains('editor-toolbar-menu-open')) {
           closeEditorToolbarMenu();
           e.preventDefault();
@@ -17463,10 +17621,6 @@
         }
         if (!document.getElementById('find-bar').hidden) {
           hideFindBar();
-          return;
-        }
-        if (!ui.settings.hidden) {
-          closeSettings(true);
           return;
         }
         const noteOptions = document.getElementById('note-options');

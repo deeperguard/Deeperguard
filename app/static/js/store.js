@@ -119,6 +119,7 @@ const NotesStore = (() => {
     kdfVersion: 1,
     altCryptoKey: null,
     kdfProbeMixed: false,
+    kdfVersionsMissed: false,
     // True only after ciphertext decrypts, or the server vault is empty.
     // A derived key alone is not proof — the KDF always "succeeds".
     keyVerified: false,
@@ -555,6 +556,7 @@ const NotesStore = (() => {
       state.kdfProbeMixed = false;
       return explicit;
     }
+    state.kdfVersionsMissed = false;
     const hint = vaultKdfVersionFromAccount(state.account);
     const ciphers = await sampleCipherRows(4);
     if (!ciphers.length) {
@@ -601,9 +603,11 @@ const NotesStore = (() => {
     const secondScore = await scoreVaultKdfVersion(password, salt, second, ciphers);
     if (secondScore > 0) {
       state.kdfProbeMixed = false;
+      state.kdfVersionsMissed = false;
       return second;
     }
     state.kdfProbeMixed = false;
+    state.kdfVersionsMissed = true;
     if (vaultKdfUpgradePending()) return 1;
     return hint;
   }
@@ -3869,7 +3873,7 @@ const NotesStore = (() => {
         const latest = content.revisions[0];
         const latestAt = latest?.at ? new Date(latest.at).getTime() : 0;
         // Coalesce rapid edits into one history row (avoid per-keystroke revisions).
-        const REVISION_GAP_MS = 60_000;
+        const REVISION_GAP_MS = 5_000;
         if (latest && Number.isFinite(latestAt) && now - latestAt < REVISION_GAP_MS) {
           /* keep the existing revision snapshot from the start of this edit burst */
         } else {

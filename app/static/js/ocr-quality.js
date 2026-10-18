@@ -16,6 +16,21 @@
     return kind === 'application/pdf' || /\.pdf$/i.test(name);
   }
 
+  function isPlainTextAttachment(mime, filename) {
+    const kind = String(mime || '').toLowerCase();
+    const name = String(filename || '').toLowerCase();
+    if (kind.startsWith('text/')) return true;
+    if (
+      kind === 'application/json'
+      || kind === 'application/xml'
+      || kind === 'application/yaml'
+      || kind === 'application/x-yaml'
+      || kind.endsWith('+json')
+      || kind.endsWith('+xml')
+    ) return true;
+    return /\.(txt|md|csv|json|log|xml|yaml|yml)$/i.test(name);
+  }
+
   function ocrReadableWordCount(text) {
     const words = String(text || '').trim().split(/\s+/).map(normalizeOcrWord).filter(Boolean);
     return words.filter((word) => {
@@ -37,6 +52,9 @@
   function ocrResultWeak(text, boxes, mime, filename, qualityHint) {
     const trimmed = String(text || '').trim();
     if (!trimmed) return true;
+    // JSON, XML, YAML, CSV and other text files are the document. A short
+    // value such as {"project":"walrus","status":"ok"} is still searchable.
+    if (isPlainTextAttachment(mime, filename)) return false;
 
     const readableWords = ocrReadableWordCount(trimmed);
     if (readableWords < 2) return true;
@@ -74,6 +92,7 @@
   const api = {
     isImageAttachment,
     isPdfAttachment,
+    isPlainTextAttachment,
     ocrReadableWordCount,
     ocrLetterRatio,
     ocrResultWeak,

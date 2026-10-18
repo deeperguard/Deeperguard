@@ -33,6 +33,11 @@
       return `@@FENCE${fences.length - 1}@@`;
     });
     let html = escapeHtml(text);
+    html = html.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (full, label, href) => {
+      const raw = href.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      if (!/^(https?:\/\/|mailto:)/i.test(raw)) return full;
+      return `<a href="${href}" rel="noopener noreferrer" target="_blank">${label}</a>`;
+    });
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
