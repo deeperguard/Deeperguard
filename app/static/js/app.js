@@ -54,7 +54,8 @@
     img.decoding = 'async';
     const show = () => {
       if (!stage.isConnected || !img.naturalWidth) return;
-      stage.replaceChildren(img);
+      const fitted = fitThumbCanvas(img);
+      stage.replaceChildren(fitted || img);
     };
     img.onload = show;
     img.onerror = () => {
@@ -1479,6 +1480,27 @@
     });
     const backdrop = document.getElementById('editor-toolbar-menu-backdrop');
     if (backdrop) backdrop.hidden = !on;
+    const panel = document.getElementById('editor-actions-overflow-panel');
+    const inner = panel?.querySelector('.editor-toolbar-menu-panel');
+    const narrow = typeof window.matchMedia === 'function'
+      && window.matchMedia('(max-width: 860px)').matches;
+    if (panel) {
+      if (on && narrow) {
+        panel.setAttribute('role', 'menu');
+        panel.setAttribute('aria-label', 'Note actions');
+        if (inner) inner.setAttribute('role', 'presentation');
+      } else {
+        panel.removeAttribute('role');
+        panel.removeAttribute('aria-label');
+        if (inner) inner.setAttribute('role', 'menu');
+      }
+    }
+    ['btn-ai-chat', 'btn-note-type-menu'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (on && narrow) el.setAttribute('role', 'menuitem');
+      else el.removeAttribute('role');
+    });
   }
 
   function closeEditorToolbarMenu() {
@@ -2219,8 +2241,9 @@
     if (note) return noteKindMeta(note);
     const name = att?.content?.filename || att?.content?.original_filename || '';
     const fileKind = NotesPreview.kindFromMeta(att?.content?.mime, name);
-    if (fileKind === 'image') return { icon: '🖼', label: 'Photo', tone: 'note' };
-    return { icon: '📄', label: 'Document', tone: 'note', svg: kindIconSvg('note') };
+    if (fileKind === 'image') return { icon: '🖼', label: 'IMG', tone: 'note' };
+    if (fileKind === 'pdf') return { icon: '📄', label: 'PDF', tone: 'note', svg: kindIconSvg('note') };
+    return { icon: '📄', label: 'FILE', tone: 'note', svg: kindIconSvg('note') };
   }
 
   function attachListThumbErrorHandler(img, stage, noteId, attId) {
@@ -2237,6 +2260,27 @@
     };
   }
 
+  function highlightListText(text, query) {
+    const source = String(text || '');
+    const needle = String(query || '').trim();
+    if (needle && typeof NotesSearch !== 'undefined' && NotesSearch.highlightPlain) {
+      return NotesSearch.highlightPlain(source, needle);
+    }
+    return escapeHtml(source);
+  }
+
+  function checklistPreviewRows(items, query) {
+    const open = items.filter((row) => !row.done);
+    const needle = String(query || '').trim();
+    if (!needle || typeof NotesSearch === 'undefined' || !NotesSearch.highlightPlain) {
+      return open.slice(0, 2);
+    }
+    const hits = items.filter((row) => NotesSearch.highlightPlain(row.text, needle).includes('search-hit'));
+    const openHits = hits.filter((row) => !row.done);
+    const preferred = openHits.length ? openHits : (hits.length ? hits : open);
+    return preferred.slice(0, 2);
+  }
+
   function noteListPreview(note, fallbackSnippet, query) {
     if (isTwoFaListNote(note) && window.NotesTotp?.parseText) {
       const count = NotesTotp.parseText(note.content.content || '').length;
@@ -2250,11 +2294,12 @@
       const done = items.filter((row) => row.done).length;
       const open = items.filter((row) => !row.done);
       const pct = items.length ? Math.round((done / items.length) * 100) : 0;
-      const bullets = open.slice(0, 2).map((row) => `• ${row.text}`).join('\n');
-      const more = Math.max(0, open.length - 2);
+      const shown = checklistPreviewRows(items, query);
+      const bullets = shown.map((row) => highlightListText(`• ${row.text}`, query)).join('\n');
+      const more = Math.max(0, open.length - shown.filter((row) => !row.done).length);
       return `<p class="note-preview"><strong>${done}/${items.length}</strong> tasks completed</p>
         <span class="note-progress" aria-hidden="true"><span style="width:${pct}%"></span></span>
-        ${bullets ? `<p class="note-preview-bullets">${escapeHtml(bullets)}</p>` : ''}
+        ${bullets ? `<p class="note-preview-bullets">${bullets}</p>` : ''}
         ${more ? `<p class="note-preview-more">And ${more} other open task${more === 1 ? '' : 's'}.</p>` : ''}`;
     }
     if (!fallbackSnippet) return '';
@@ -2270,10 +2315,10 @@
     if (atts.length) {
       const first = atts[0]?.content || {};
       const kind = NotesPreview.kindFromMeta(first.mime, first.filename);
-      if (kind === 'pdf') return { icon: '📄', label: 'Document', tone: 'note', svg: kindIconSvg('note') };
-      if (kind === 'image') return { icon: '🖼', label: 'Photo', tone: 'note' };
-      if (kind === 'text') return { icon: '📃', label: 'Text file', tone: 'note', svg: kindIconSvg('note') };
-      return { icon: '📎', label: 'Attachment', tone: 'note' };
+      if (kind === 'pdf') return { icon: '📄', label: 'PDF', tone: 'note', svg: kindIconSvg('note') };
+      if (kind === 'image') return { icon: '🖼', label: 'IMG', tone: 'note' };
+      if (kind === 'text') return { icon: '📃', label: 'FILE', tone: 'note', svg: kindIconSvg('note') };
+      return { icon: '📎', label: 'FILE', tone: 'note' };
     }
     const editor = note.content.editor || 'plain';
     if (editor === 'checklist' || editor === 'super') return { icon: '☑', label: 'Checklist', tone: 'checklist', svg: kindIconSvg('checklist') };
@@ -6803,7 +6848,7 @@
     const kind = NotesPreview.kindFromMeta(att.content.mime, name);
     const showThumb = !isLocked && (kind === 'image' || kind === 'pdf') && !prefs.hidePreviews;
     const noteTitle = note.content.title || 'Untitled';
-    const kindLabel = kind === 'pdf' ? 'PDF' : kind === 'image' ? 'Image' : (att.content.mime || 'FILE');
+    const kindLabel = attachmentThumbLabel(kind);
     const snippet = isLocked ? '' : (noteTitle && noteTitle !== name ? noteTitle : kindLabel);
     const titleHtml = query ? NotesSearch.highlightPlain(name, query) : escapeHtml(name);
     const snippetHtml = isLocked
@@ -8148,10 +8193,18 @@
     const img = document.createElement('img');
     img.alt = '';
     img.decoding = 'async';
-    img.src = url;
     const noteId = stage.dataset.noteId || '';
     attachListThumbErrorHandler(img, stage, noteId, id);
-    stage.replaceChildren(img);
+    img.onload = () => {
+      if (!stage.isConnected || !img.naturalWidth) return;
+      const fitted = fitThumbCanvas(img);
+      stage.replaceChildren(fitted || img);
+    };
+    img.src = url;
+    if (img.complete && img.naturalWidth) {
+      const fitted = fitThumbCanvas(img);
+      stage.replaceChildren(fitted || img);
+    }
     return true;
   }
 
@@ -8160,6 +8213,105 @@
       try { URL.revokeObjectURL(url); } catch (err) { /* ignore */ }
     }
     listThumbCache.clear();
+  }
+
+  function thumbInkBox(source) {
+    const sw = source.naturalWidth || source.width || 0;
+    const sh = source.naturalHeight || source.height || 0;
+    if (!sw || !sh) return null;
+    const maxScan = 160;
+    const scale = Math.min(1, maxScan / Math.max(sw, sh));
+    const w = Math.max(1, Math.round(sw * scale));
+    const h = Math.max(1, Math.round(sh * scale));
+    const scan = document.createElement('canvas');
+    scan.width = w;
+    scan.height = h;
+    const ctx = scan.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    try {
+      ctx.drawImage(source, 0, 0, w, h);
+    } catch (err) {
+      return null;
+    }
+    let pixels;
+    try {
+      pixels = ctx.getImageData(0, 0, w, h).data;
+    } catch (err) {
+      return null;
+    }
+    const step = Math.max(1, Math.floor(Math.min(w, h) / 80));
+    let minX = w;
+    let minY = h;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < h; y += step) {
+      for (let x = 0; x < w; x += step) {
+        const i = (y * w + x) * 4;
+        const r = pixels[i];
+        const g = pixels[i + 1];
+        const b = pixels[i + 2];
+        const a = pixels[i + 3];
+        if (a < 20) continue;
+        if (r > 244 && g > 244 && b > 244) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (maxX < 0) return { scan, full: true, x: 0, y: 0, w, h };
+    const pad = step;
+    const x = Math.max(0, minX - pad);
+    const y = Math.max(0, minY - pad);
+    const bw = Math.min(w - x, (maxX - minX + 1) + pad * 2);
+    const bh = Math.min(h - y, (maxY - minY + 1) + pad * 2);
+    const coverage = (bw * bh) / (w * h);
+    return { scan, full: coverage > 0.72, x, y, w: bw, h: bh };
+  }
+
+  function fitThumbCanvas(source) {
+    const box = thumbInkBox(source);
+    if (!box) return null;
+    const side = LIST_THUMB_PX;
+    const out = document.createElement('canvas');
+    out.width = side;
+    out.height = side;
+    const ctx = out.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, side, side);
+    let sx = 0;
+    let sy = 0;
+    let sw = box.scan.width;
+    let sh = box.scan.height;
+    if (!box.full) {
+      sx = box.x;
+      sy = box.y;
+      if (box.w > box.h * 1.8) {
+        sw = box.w;
+        sh = box.h;
+      } else {
+        const crop = Math.max(1, Math.min(box.w, box.h));
+        sw = crop;
+        sh = crop;
+      }
+    }
+    const scale = Math.min(side / sw, side / sh);
+    const dw = Math.max(1, Math.round(sw * scale));
+    const dh = Math.max(1, Math.round(sh * scale));
+    ctx.drawImage(box.scan, sx, sy, sw, sh, 0, 0, dw, dh);
+    return out;
+  }
+
+  function paintFittedThumb(node) {
+    const canvas = node?.tagName === 'CANVAS' ? node : node?.querySelector?.('canvas');
+    if (!canvas || !canvas.width) return;
+    const fitted = fitThumbCanvas(canvas);
+    if (!fitted) return;
+    fitted.className = canvas.className || '';
+    canvas.replaceWith(fitted);
   }
 
   async function makeListThumbUrl(id, entry) {
@@ -8171,17 +8323,18 @@
       img.onerror = () => reject(new Error('image decode failed'));
       img.src = entry.url;
     });
-    const side = Math.max(img.naturalWidth, img.naturalHeight) || 1;
-    const scale = Math.min(1, LIST_THUMB_PX / side);
-    const w = Math.max(1, Math.round(img.naturalWidth * scale));
-    const h = Math.max(1, Math.round(img.naturalHeight * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(img, 0, 0, w, h);
+    const fitted = fitThumbCanvas(img);
+    const canvas = fitted || document.createElement('canvas');
+    if (!fitted) {
+      const side = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+      const scale = Math.min(1, LIST_THUMB_PX / side);
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
     img.src = '';
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.7));
     const url = blob ? URL.createObjectURL(blob) : entry.url;
@@ -8253,7 +8406,9 @@
         const doc = await NotesPreview.openPdf(entry.bytes);
         const stageWidth = Math.round(stage.clientWidth || stage.parentElement?.clientWidth || 0);
         const width = forList ? 56 : Math.max(84, stageWidth || 84);
-        stage.replaceChildren(await NotesPreview.renderPdfPage(doc, 1, width));
+        const page = await NotesPreview.renderPdfPage(doc, 1, width);
+        paintFittedThumb(page);
+        stage.replaceChildren(page);
         if (forList && previewingId !== id) forgetPreview(id);
         return;
       }
@@ -10016,7 +10171,7 @@
     };
     ui.checklist.innerHTML = rows.map((row) => `
       <div class="check-row" data-check-id="${escapeAttr(row.id)}" style="--indent:${row.indent || 0}">
-        <button type="button" class="check-box" data-check-toggle="${escapeAttr(row.id)}" aria-checked="${row.done}">${row.done ? '☑' : '☐'}</button>
+        <button type="button" class="check-box" role="checkbox" data-check-toggle="${escapeAttr(row.id)}" aria-checked="${row.done ? 'true' : 'false'}" aria-label="${escapeAttr(String(row.text || '').trim() || 'List item')}">${row.done ? '☑' : '☐'}</button>
         <div class="check-text-wrap">
           <div class="check-text-links" aria-hidden="true"></div>
           <textarea class="check-text" data-check-text="${escapeAttr(row.id)}" rows="1" placeholder="List item" ${note.content.prevent_edit ? 'readonly' : ''}>${escapeHtml(row.text)}</textarea>
@@ -10213,7 +10368,7 @@
     if (!query) return;
     NotesSearch.applyHighlights(ui.preview, query);
     const first = ui.preview.querySelector('mark.search-hit');
-    if (first && typeof first.scrollIntoView === 'function') {
+    if (first && first.getClientRects().length && typeof first.scrollIntoView === 'function') {
       first.scrollIntoView({ block: 'center', inline: 'nearest' });
     }
   }
@@ -10322,6 +10477,7 @@
     updateActionButtons(note);
     updateNoteMeta(note);
     bindEditorKeyboardInset();
+    scrollOpenNoteToTop();
     try {
       const state = { notesView: 'editor', noteId: id };
       if (alreadyEditing || history.state?.notesView === 'editor') {
@@ -10332,6 +10488,16 @@
     } catch (err) {
       /* ignore */
     }
+  }
+
+  function scrollOpenNoteToTop() {
+    const scroller = ui.editor?.querySelector('.editor-scroll');
+    if (scroller) scroller.scrollTop = 0;
+    if (ui.checklist) ui.checklist.scrollTop = 0;
+    if (ui.body) ui.body.scrollTop = 0;
+    requestAnimationFrame(() => {
+      if (scroller) scroller.scrollTop = 0;
+    });
   }
 
   function syncEditorMobileProxies() {
