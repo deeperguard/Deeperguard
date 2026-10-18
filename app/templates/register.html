@@ -10,24 +10,54 @@
       {% include 'partials/auth-brand.html' %}
       <h1>Create account</h1>
       {% include 'partials/zk-plain.html' %}
-      <p class="auth-hint"><strong>One password, two steps:</strong> create your account, then unlock your vault with the same password. You can change the vault password later in Settings.</p>
+      <p class="auth-hint"><strong>One password.</strong> Creating an account unlocks the vault on this device automatically. The account password and the vault password start as the same password. You can set a different vault password later in Settings. We cannot recover it.</p>
     </div>
-    <form id="register-form" class="stack" onsubmit="event.preventDefault(); return false;">
-      <label>Email
-        <input type="email" name="email" autocomplete="username" required>
+    {% if signed_in_email %}
+    <div class="signed-in-notice" role="status">
+      <p>You're already signed in as <strong>{{ signed_in_email }}</strong>.</p>
+      <div class="signed-in-actions">
+        <a class="btn primary block" href="/app">Go to your vault</a>
+        <button type="button" class="btn block" id="sign-out-create" data-csrf="{{ csrf_token }}">Sign out and create a new account</button>
+      </div>
+    </div>
+    {% else %}
+    <form id="register-form" class="stack" novalidate>
+      <label for="register-email">Email
+        <input id="register-email" type="email" name="email" autocomplete="email" inputmode="email" required aria-required="true" aria-invalid="false" aria-describedby="register-email-error">
       </label>
-      <label>Password (sign-in + vault encryption)
-        <input type="password" name="password" autocomplete="new-password" minlength="12" required>
+      <p id="register-email-error" class="field-error" role="alert" hidden></p>
+      <div class="auth-field">
+        <label id="register-password-label" for="register-password">Password</label>
+        <span class="password-field-wrap">
+          <input id="register-password" type="password" name="password" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-labelledby="register-password-label" aria-describedby="register-password-hint register-password-error register-strength">
+          <button type="button" class="password-toggle btn ghost sm" data-target="register-password" aria-label="Show password">Show</button>
+        </span>
+      </div>
+      <p id="register-password-hint" class="hint">At least 12 characters. This password encrypts your notes — we cannot recover it.</p>
+      <div id="register-strength" class="pw-meter" aria-live="polite">
+        <span id="register-strength-bar" class="pw-meter-bar"></span>
+        <span id="register-strength-label" class="pw-meter-label">Password strength</span>
+      </div>
+      <p id="register-password-error" class="field-error" role="alert" hidden></p>
+      <div class="auth-field">
+        <label id="register-password2-label" for="register-password2">Confirm password</label>
+        <span class="password-field-wrap">
+          <input id="register-password2" type="password" name="password2" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-labelledby="register-password2-label" aria-describedby="register-password2-error">
+          <button type="button" class="password-toggle btn ghost sm" data-target="register-password2" aria-label="Show password">Show</button>
+        </span>
+      </div>
+      <p id="register-password2-error" class="field-error" role="alert" hidden></p>
+      <label class="consent-row" for="register-terms">
+        <input id="register-terms" type="checkbox" name="terms" value="yes" required aria-required="true" aria-invalid="false" aria-describedby="register-terms-error">
+        <span>I agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy policy</a>.</span>
       </label>
-      <label>Confirm password
-        <input type="password" name="password2" autocomplete="new-password" minlength="12" required>
-      </label>
-      <p class="hint">Use at least 12 characters. This password encrypts your notes — we cannot recover it.</p>
-      <p class="auth-hint">Public beta: new accounts start on <strong>Pro</strong> (free for now) with <strong>5&nbsp;GB</strong> encrypted storage. <strong>Basic</strong> (100&nbsp;MB) will be €2.99/mo when billing launches; <strong>Pro</strong> €6.99/mo. By creating an account you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy policy</a>.</p>
+      <p id="register-terms-error" class="field-error" role="alert" hidden></p>
+      <p class="auth-hint">Public beta: new accounts start on <strong>Pro</strong> (free for now) with <strong>5&nbsp;GB</strong> encrypted storage. After the beta, <strong>Basic</strong> is €2.99/month or €29/year (100&nbsp;MB) and <strong>Pro</strong> is €6.99/month or €69/year (5&nbsp;GB). Creating an account does not ask for a code. We email a verification code to this address, and you only enter it in Settings before encrypted backups are sent.</p>
       <p id="register-error" class="error" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
       <button type="submit" class="btn primary block">Create account</button>
     </form>
     <p class="muted center auth-switch">Already have an account? <a href="/login">Sign in</a></p>
+    {% endif %}
     {% include 'partials/auth-footer.html' %}
   </main>
   <script src="/static/js/vault-secrets.js?v={{ build }}"></script>

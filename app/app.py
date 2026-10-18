@@ -16,6 +16,7 @@ import admin_api
 import ai_relay
 import auth
 import db
+import email_verify
 import ocr as ocr_mod
 import ocr_index
 import ocr_jobs
@@ -400,7 +401,7 @@ def _headers(response):
         session.accessed = False
         session.modified = False
         _drop_set_cookie(response)
-    elif request.path in {"/", "/pricing", "/compare/standard-notes"}:
+    elif request.path in {"/", "/pricing", "/compare/standard-notes", "/contact", "/download", "/privacy", "/terms"}:
         # Marketing HTML is public and cookie-free. A short cache keeps repeat
         # visits off the origin. Clear-Site-Data must not be set here: the
         # browser deletes its HTTP cache before painting, and the one-time
@@ -437,6 +438,11 @@ def _gate():
         return legacy
     if not auth.client_allowed():
         return ("Deeperguard is limited to the LAN and WireGuard.", 403)
+    # Unmatched URLs must not bounce to the sign-in page.
+    if request.url_rule is None:
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "not found"}), 404
+        return render_template("not-found.html", **_marketing_context()), 404
     # Do not create a session on the app shell. A Set-Cookie header makes
     # Safari refuse to keep "/" in its HTTP cache, so the home-screen icon
     # cannot open when the LAN is unreachable.
@@ -565,6 +571,20 @@ def api_contact():
         log.exception("contact form email failed")
         return jsonify({"error": "Could not send your message right now. Please email us directly."}), 503
     return jsonify({"ok": True})
+
+
+def _signed_in_user():
+    if not auth.authenticated():
+        return None
+    uid = auth.current_user_id()
+    return db.get_user_by_id(uid) if uid else None
+
+
+@app.errorhandler(404)
+def not_found(_err):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "not found"}), 404
+    return render_template("not-found.html", **_marketing_context()), 404
 
 
 def _health_readiness() -> tuple[bool, bool, bool, int, dict]:
@@ -733,19 +753,33 @@ def login():
     form_error = ""
     if request.method == "POST":
         form_error = "Sign-in did not finish. Reload this page and try again."
-    resp = make_response(render_template("login.html", build=NOTES_BUILD, form_error=form_error))
+    user = _signed_in_user()
+    resp = make_response(render_template(
+        "login.html",
+        build=NOTES_BUILD,
+        form_error=form_error,
+        signed_in_email=(user["email"] if user else ""),
+        csrf_token=(auth.csrf_token() if user else ""),
+    ))
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    if auth.authenticated():
-        return redirect(url_for("notes_app"))
+    user = _signed_in_user()
     form_error = ""
-    if request.method == "POST":
+    if request.method == "POST" and not user:
         form_error = "Account setup did not finish. Reload this page and try again."
-    return render_template("register.html", build=NOTES_BUILD, form_error=form_error)
+    resp = make_response(render_template(
+        "register.html",
+        build=NOTES_BUILD,
+        form_error=form_error,
+        signed_in_email=(user["email"] if user else ""),
+        csrf_token=(auth.csrf_token() if user else ""),
+    ))
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.post("/api/auth/register")
@@ -780,6 +814,10 @@ def api_auth_srp_register():
     auth.login_user(user_id, totp_ok=True)
     notify_new_user_signup(email)
     user = db.get_user_by_id(user_id)
+    try:
+        email_verify.send_account_code(user)
+    except Exception:
+        log.exception("signup verification email failed")
     return jsonify(_login_payload(user, totp_required=False))
 
 
@@ -1477,6 +1515,10 @@ def api_account():
             "totp_enabled": bool(user["totp_enabled"]),
             "backup_email": user["backup_email"] or user["email"],
             "backup_enabled": bool(user["backup_enabled"]),
+            "email_verified": email_verify.account_verified(user),
+            "backup_recipient_verified": email_verify.recipient_verified(
+                user, user["backup_email"] or user["email"]
+            ),
             "pcloud_enabled": bool(user["pcloud_enabled"]),
             "pcloud_username": user["pcloud_username"] or "",
             "pcloud_remote_path": user["pcloud_remote_path"] or "Deeperguard/backups",
@@ -1632,8 +1674,25 @@ def api_backup_settings():
             return blocked
     if not email and user:
         email = str(user["email"])
-    db.update_backup_settings(uid, email, enabled)
-    return jsonify({"ok": True, "email": email, "enabled": enabled})
+    verified = email_verify.recipient_verified(user, email) if user else False
+    previous = str((user["backup_email"] if user else "") or "").strip().lower()
+    account_email = str((user["email"] if user else "") or "").strip().lower()
+    if email != previous and not (email == account_email and email_verify.account_verified(user)):
+        verified = False
+    db.update_backup_settings(uid, email, enabled, backup_email_verified=1 if verified else 0)
+    if user and email and not verified:
+        if email == account_email:
+            email_verify.send_account_code(db.get_user_by_id(uid))
+        else:
+            fresh = db.get_user_by_id(uid)
+            email_verify.send_backup_code(fresh, email)
+    return jsonify({
+        "ok": True,
+        "email": email,
+        "enabled": enabled,
+        "verified": verified,
+        "email_verified": email_verify.account_verified(db.get_user_by_id(uid)),
+    })
 
 
 @app.post("/api/backup/email")
@@ -1646,6 +1705,15 @@ def api_backup_email():
     recipient = str(body.get("email") or user["backup_email"] or user["email"]).strip().lower()
     if not EMAIL_RE.match(recipient):
         return jsonify({"error": "invalid email"}), 400
+    if not email_verify.recipient_verified(user, recipient):
+        if recipient == str(user["email"] or "").strip().lower():
+            email_verify.send_account_code(user)
+        else:
+            email_verify.send_backup_code(user, recipient)
+        return jsonify({
+            "error": "Verify this email before backups can be sent. We sent a code.",
+            "code": "email_unverified",
+        }), 403
     try:
         meta = send_user_backup(uid, recipient)
     except Exception as exc:
@@ -2324,6 +2392,74 @@ def api_app_shell():
     return response
 
 
+@app.post("/api/account/email/verify")
+def api_account_email_verify():
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    if _auth_rate_limited("email-verify", str(user["email"])):
+        return jsonify({"error": "too many attempts"}), 429
+    body = request.get_json(silent=True) or {}
+    if not email_verify.check_code(uid, "account", str(body.get("code") or "")):
+        return jsonify({"error": "That code is wrong or expired."}), 400
+    return jsonify({"ok": True, "email_verified": True})
+
+
+@app.post("/api/account/email/resend")
+def api_account_email_resend():
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    if email_verify.account_verified(user):
+        return jsonify({"ok": True, "email_verified": True})
+    if _auth_rate_limited("email-verify-resend", str(user["email"])):
+        return jsonify({"error": "too many attempts"}), 429
+    email_verify.send_account_code(user)
+    return jsonify({"ok": True, "sent": True})
+
+
+@app.post("/api/backup/email/verify")
+def api_backup_email_verify():
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    if _auth_rate_limited("backup-verify", str(user["email"])):
+        return jsonify({"error": "too many attempts"}), 429
+    body = request.get_json(silent=True) or {}
+    if not email_verify.check_code(uid, "backup", str(body.get("code") or "")):
+        return jsonify({"error": "That code is wrong or expired."}), 400
+    return jsonify({"ok": True, "backup_recipient_verified": True})
+
+
+@app.post("/api/backup/email/resend")
+def api_backup_email_resend():
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    recipient = str(user["backup_email"] or user["email"]).strip().lower()
+    if _auth_rate_limited("backup-verify-resend", recipient):
+        return jsonify({"error": "too many attempts"}), 429
+    if recipient == str(user["email"]).strip().lower():
+        email_verify.send_account_code(user)
+    else:
+        email_verify.send_backup_code(user, recipient)
+    return jsonify({"ok": True, "sent": True})
+
+
+@app.get("/contact")
+def contact_page():
+    return render_template("contact.html", **_marketing_context())
+
+
+@app.get("/download")
+def download_page():
+    return render_template("download.html", **_marketing_context())
+
+
 @app.get("/pricing")
 def pricing_page():
     ctx = _marketing_context()
@@ -2372,6 +2508,8 @@ def sitemap_xml():
         "/login",
         "/privacy",
         "/terms",
+        "/contact",
+        "/download",
         "/self-host",
         "/api/promo",
     ]

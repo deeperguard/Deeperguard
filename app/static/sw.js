@@ -117,6 +117,7 @@ function isMarketingPage(url) {
   return path === '/' || path === ''
     || path === '/pricing' || path === '/compare/standard-notes'
     || path === '/privacy' || path === '/terms'
+    || path === '/contact' || path === '/download'
     || path === '/self-host' || path === '/robots.txt' || path === '/sitemap.xml';
 }
 

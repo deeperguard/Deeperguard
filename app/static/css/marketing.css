@@ -30,7 +30,9 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-padding-top: 5.75rem; }
+html.mk-hash-open { scroll-behavior: auto; }
+[id] { scroll-margin-top: 5.75rem; }
 html, body {
   margin: 0;
   padding: 0;
@@ -518,7 +520,17 @@ a.mk-badge-link:hover {
 /* Sections */
 .mk-section {
   margin-top: 4.5rem;
+  scroll-margin-top: 5.75rem;
 }
+.mk-subpage { padding-bottom: 3rem; }
+.mk-subpage h1 { font-size: 2.2rem; letter-spacing: -0.03em; margin: 0.4rem 0 0.6rem; }
+.mk-legal { max-width: 46rem; }
+.mk-legal .legal-section h2 { margin: 1.6rem 0 0.4rem; font-size: 1.15rem; }
+.mk-legal .legal-section p,
+.mk-legal .legal-section li { line-height: 1.6; }
+.mk-legal .legal-section ul { padding-left: 1.2rem; }
+.mk-subpage ol { padding-left: 1.2rem; }
+.mk-subpage .mk-card h2 { margin-top: 0; font-size: 1.2rem; }
 .mk-section-head {
   text-align: center;
   max-width: 44rem;
@@ -1044,6 +1056,7 @@ a.mk-badge-link:hover {
   padding: 0;
   list-style: none;
   display: grid;
+  align-content: start;
   gap: 0.75rem;
   flex: 1;
 }
@@ -1059,6 +1072,13 @@ a.mk-badge-link:hover {
   left: 0;
   color: #059669;
   font-weight: 800;
+}
+.mk-plan li.is-unavailable {
+  color: var(--mk-muted);
+}
+.mk-plan li.is-unavailable::before {
+  content: "—";
+  color: var(--mk-faint);
 }
 .mk-plan .mk-btn {
   width: 100%;

@@ -19,6 +19,7 @@ const {
   listCountLabel,
   documentHighlightLabel,
   noteBodyReading,
+  readingStats,
   fileRowMatches,
   noteIsPinned,
   partitionPinnedNotes,
@@ -482,6 +483,11 @@ const emptyBody = note({
 });
 assert.deepStrictEqual(noteBodyReading(emptyBody), { words: 0, minutes: 0 });
 assert.deepStrictEqual(noteBodyReading(note({ content: 'one two three' })), { words: 3, minutes: 1 });
+assert.deepStrictEqual(
+  readingStats('alpha bravo charlie delta echo foxtrot golf hotel'),
+  { words: 8, minutes: 1 },
+  'eight words stay eight — the counter must not stop at three',
+);
 
 assert.strictEqual(fileRowMatches(
   { content: { filename: 'other.pdf', mime: 'application/pdf', ocr_text: '' } },

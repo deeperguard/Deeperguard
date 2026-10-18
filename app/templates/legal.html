@@ -1,15 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% if page == 'terms' %}Terms{% else %}Privacy{% endif %} — Deeperguard</title>
-  {% include 'partials/auth-head.html' %}
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
 </head>
-<body class="auth-page legal-page">
-  <main class="auth-card legal-card">
-    <div class="brand">
-      {% include 'partials/brand-mark.html' %}
+<body>
+  {% include 'partials/mk-topbar.html' %}
+  <main class="wrap mk-subpage mk-legal">
+    <div class="mk-section-head">
+      <span class="mk-badge">Public beta</span>
       <h1>{% if page == 'terms' %}Terms of use{% else %}Privacy policy{% endif %}</h1>
-      <p class="beta-badge">Public beta</p>
     </div>
 
     {% if page == 'privacy' %}
@@ -67,15 +71,7 @@
     </section>
     {% endif %}
 
-    <nav class="legal-nav muted center" aria-label="Site">
-      <a href="/privacy">Privacy</a>
-      <span aria-hidden="true">·</span>
-      <a href="/terms">Terms</a>
-      <span aria-hidden="true">·</span>
-      <a href="/register">Create account</a>
-      <span aria-hidden="true">·</span>
-      <a href="/login">Sign in</a>
-    </nav>
+    {% include 'partials/mk-footer.html' %}
   </main>
 </body>
 </html>

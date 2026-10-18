@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>
+    if (location.hash) document.documentElement.classList.add('mk-hash-open');
+  </script>
   <title>Deeperguard (encrypted notes) — Private notes you cannot leak</title>
   <meta name="description" content="Deeperguard is a zero-knowledge encrypted notes PWA — not DeepGuard deepfake software. AES-GCM on your device, free Pro in public beta. Create a vault at deeperguard.com.">
   <meta name="theme-color" content="#ffffff">
@@ -130,10 +133,7 @@
         <span class="mk-badge">Encrypted notes app</span>
         <h2>Zero-knowledge notes PWA for work you cannot leak</h2>
         <p>
-          Looking for <strong>encrypted notes</strong>, a <strong>Standard Notes alternative</strong>, or a
-          <strong>private receipt scanner</strong> that never sends document text to the cloud?
-          Deeperguard is a <strong>zero-knowledge notes PWA</strong>: AES-GCM and SRP-6a on your device, ciphertext-only sync,
-          and optional on-device OCR under receipts and invoices — not a separate “scan-first” product.
+          Deeperguard is a <strong>zero-knowledge notes PWA</strong> for <strong>encrypted notes</strong>: ciphertext-only sync and on-device OCR.
           <a href="/compare/standard-notes">Full Standard Notes comparison →</a>
         </p>
       </div>
@@ -194,14 +194,6 @@
           <h3>A private journal</h3>
           <p>Personal notes are encrypted with the same vault. There is no staff view and no server-side copy of the text.</p>
         </article>
-      </div>
-    </section>
-
-    <section class="mk-mid-cta" aria-label="Start free">
-      <div class="mk-mid-cta-inner">
-        <p><strong>Public beta:</strong> full Pro free — 5&nbsp;GB, passkeys, encrypted backups, on-device OCR. No payment details.</p>
-        <a class="mk-btn mk-btn-lg" href="{{ register_url }}">Create free vault</a>
-        <a class="mk-btn ghost mk-btn-lg" href="{{ login_url }}">Sign in</a>
       </div>
     </section>
 
@@ -303,156 +295,7 @@
           </div>
         </article>
       </div>
-
-      <!-- Side by Side Capability Table -->
-      <div class="mk-card mk-compare-wrap">
-        <table class="mk-compare mk-compare-apps" aria-label="Comparison table between Deeperguard, Standard Notes, Notesnook, Joplin, and Evernote">
-          <thead>
-            <tr>
-              <th scope="col" class="mk-compare-feature-col">Feature / Capability</th>
-              <th scope="col" class="mk-col-highlight">Deeperguard</th>
-              <th scope="col">Standard Notes</th>
-              <th scope="col">Notesnook</th>
-              <th scope="col">Joplin</th>
-              <th scope="col">Evernote</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                Zero-Knowledge Privacy
-                <span class="mk-row-hint">Provider cannot read titles, notes, or attachments</span>
-              </td>
-              <td class="mk-col-highlight"><span class="yes">✓ Yes (Strict)</span></td>
-              <td><span class="yes">✓ Yes</span></td>
-              <td><span class="yes">✓ Yes (Notesnook sync)</span></td>
-              <td><span class="partial">Optional E2EE</span></td>
-              <td><span class="no">✕ No (Cloud Access)</span></td>
-            </tr>
-            <tr>
-              <td>
-                Client-Side Cryptography
-                <span class="mk-row-hint">Encrypted on device before any sync occurs</span>
-              </td>
-              <td class="mk-col-highlight"><span class="yes">✓ AES-GCM 256</span></td>
-              <td><span class="yes">✓ Yes</span></td>
-              <td><span class="yes">✓ Yes</span></td>
-              <td><span class="partial">When E2EE enabled</span></td>
-              <td><span class="no">✕ Server-side only</span></td>
-            </tr>
-            <tr>
-              <td>
-                Zero-Knowledge Authentication
-                <span class="mk-row-hint">Master vault password never sent across the internet</span>
-              </td>
-              <td class="mk-col-highlight"><span class="yes">✓ SRP-6a Proof</span></td>
-              <td><span class="yes">✓ Key derivation</span></td>
-              <td><span class="yes">✓ Password-based ZK login</span></td>
-              <td><span class="partial">Master password for E2EE</span></td>
-              <td><span class="no">✕ Password sent to server</span></td>
-            </tr>
-            <tr>
-              <td>
-                Document Scan &amp; Search (OCR)
-                <span class="mk-row-hint">Search text inside images and PDFs</span>
-              </td>
-              <td class="mk-col-highlight"><span class="yes">✓ On-Device (Client)</span> <span class="mk-pro-tag">Pro</span></td>
-              <td><span class="partial">Raw files only</span></td>
-              <td><span class="partial">Attachments; no WASM OCR focus</span></td>
-              <td><span class="partial">Plugins / external tools</span></td>
-              <td><span class="partial">Cloud OCR (Server reads)</span></td>
-            </tr>
-            <tr>
-              <td>
-                App install
-                <span class="mk-row-hint">Browser · Add to Home Screen (no app store)</span>
-              </td>
-              <td class="mk-col-highlight"><span class="yes">✓ No store install (PWA)</span></td>
-              <td><span class="partial">Web or Desktop apps</span></td>
-              <td><span class="partial">Native apps primary</span></td>
-              <td><span class="partial">Desktop / mobile apps</span></td>
-              <td><span class="partial">Native apps expected</span></td>
-            </tr>
-            <tr>
-              <td>
-                Passkeys (WebAuthn) &amp; 2FA
-                <span class="mk-row-hint">Biometrics, Touch ID, Face ID, TOTP</span>
-              </td>
-              <td class="mk-col-highlight"><span class="yes">✓ Passkeys + TOTP</span> <span class="mk-pro-tag">Pro</span></td>
-              <td><span class="yes">✓ 2FA (Paid plans)</span></td>
-              <td><span class="partial">2FA on paid tiers</span></td>
-              <td><span class="partial">Varies by sync / plugins</span></td>
-              <td><span class="partial">Limited 2FA</span></td>
-            </tr>
-            <tr>
-              <td>
-                Automated Encrypted Backups
-                <span class="mk-row-hint">Daily encrypted backups to email or cloud</span>
-              </td>
-              <td class="mk-col-highlight"><span class="yes">✓ Email + pCloud</span> <span class="mk-pro-tag">Pro</span></td>
-              <td><span class="partial">Cloud Sync (Paid)</span></td>
-              <td><span class="partial">Export / sync (plan-dependent)</span></td>
-              <td><span class="partial">Export + your sync target</span></td>
-              <td><span class="no">✕ Proprietary backup</span></td>
-            </tr>
-            <tr>
-              <td>
-                Migration Support
-                <span class="mk-row-hint">Import existing notes from other platforms</span>
-              </td>
-              <td class="mk-col-highlight"><span class="yes">✓ Standard Notes import</span></td>
-              <td><span class="no">—</span></td>
-              <td><span class="partial">Importers / export from others</span></td>
-              <td><span class="partial">Many import formats</span></td>
-              <td><span class="no">—</span></td>
-            </tr>
-            <tr>
-              <td>
-                Vault Authenticator
-                <span class="mk-row-hint">Store 2FA TOTP secret keys inside encrypted notes</span>
-              </td>
-              <td class="mk-col-highlight"><span class="yes">✓ Built-in TOTP</span> <span class="mk-pro-tag">Pro</span></td>
-              <td><span class="no">—</span></td>
-              <td><span class="no">—</span></td>
-              <td><span class="no">—</span></td>
-              <td><span class="no">—</span></td>
-            </tr>
-            <tr>
-              <td>
-                Open source client
-                <span class="mk-row-hint">Review encryption implementation yourself</span>
-              </td>
-              <td class="mk-col-highlight"><span class="yes">✓ <a href="https://github.com/deeperguard/Deeperguard">GitHub</a></span></td>
-              <td><span class="yes">✓ Yes</span></td>
-              <td><span class="yes">✓ Yes</span></td>
-              <td><span class="yes">✓ Yes</span></td>
-              <td><span class="no">✕ Closed source</span></td>
-            </tr>
-            <tr>
-              <td>
-                Current Beta Pricing
-                <span class="mk-row-hint">Active cost during public rollout</span>
-              </td>
-              <td class="mk-col-highlight"><strong>Free during public beta</strong></td>
-              <td>~€4 – €10 / month</td>
-              <td>Free tier + paid Pro</td>
-              <td>Free (self-sync) / Joplin Cloud paid</td>
-              <td>~€8 – €15 / month</td>
-            </tr>
-            <tr>
-              <td>
-                Free Tier Storage
-                <span class="mk-row-hint">Capacity provided without payment</span>
-              </td>
-              <td class="mk-col-highlight"><strong>5 GB (Pro Beta)</strong></td>
-              <td>Limited text notes</td>
-              <td>Plan-dependent</td>
-              <td>Unlimited local; sync limits vary</td>
-              <td>50 notes max (restricted)</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <p class="mk-section-head"><a href="/compare/standard-notes">Full Standard Notes comparison →</a></p>
     </section>
 
     <!-- Key Features Grid -->
@@ -526,18 +369,18 @@
     </section>
 
     <!-- Pricing Section: Beta Schedule & Plans -->
-    <section class="mk-section" id="pricing">
-      <div class="mk-section-head">
+    <section class="mk-section">
+      <div class="mk-section-head" id="pricing">
         <span class="mk-badge ok">Public Beta Schedule</span>
         <h2>Transparent pricing schedule</h2>
         <p>
-          During the public beta every account includes Pro, and no payment details are collected. After the beta, Basic is €2.99/month or €29/year. Pro is €6.99/month or €69/year, and that is the plan that keeps backups, passkeys, OCR, 5&nbsp;GB, and the vault authenticator. Billing starts only after advance notice.
+          <strong>Free during beta: Pro, 5&nbsp;GB.</strong> No payment details are collected. After the beta, Basic is €2.99/month or €29/year (100&nbsp;MB). Pro is €6.99/month or €69/year (5&nbsp;GB) and keeps backups, passkeys, OCR, and the vault authenticator. Billing starts only after advance notice.
         </p>
       </div>
 
       <div class="mk-pricing-beta-highlight">
-        <h4>Free during the public beta</h4>
-        <p>No payment details are collected during the beta, and billing does not start without advance notice. After the beta, Pro is the plan that keeps 5&nbsp;GB, passkeys, two-factor sign-in, encrypted backups, on-device OCR, and the vault authenticator.</p>
+        <h4>Free during beta: Pro, 5 GB</h4>
+        <p>The cards below are the post-beta prices. During the public beta every new account is Pro with 5&nbsp;GB, not the Basic 100&nbsp;MB plan.</p>
       </div>
 
       <div class="mk-pricing">
@@ -549,19 +392,22 @@
           </div>
           <div class="mk-price-block">
             <div class="mk-price-beta">
-              €0<small>/month</small>
+              After beta
             </div>
             <div class="mk-price-post-beta">
-              <strong>Free in beta</strong> · Standard schedule: €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr
+              <strong>€{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo</strong> or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr
             </div>
           </div>
-          <p><strong>{{ basic.storage_quota_mb }}&nbsp;MB</strong> encrypted storage</p>
+          <p><strong>{{ basic.storage_quota_mb }}&nbsp;MB</strong> after beta. During beta you get Pro, 5&nbsp;GB.</p>
           <ul>
             {% for feat in basic_features %}
             <li>{{ feat }}</li>
             {% endfor %}
+            {% for feat in pro_only_features %}
+            <li class="is-unavailable">Not included: {{ feat }}</li>
+            {% endfor %}
           </ul>
-          <a class="mk-btn secondary" href="{{ register_url }}">Start with Basic</a>
+          <p class="mk-plan-tagline">Not what you get in the beta. Beta accounts are Pro.</p>
         </article>
 
         <!-- Pro Plan (Featured) -->
@@ -573,13 +419,13 @@
           </div>
           <div class="mk-price-block">
             <div class="mk-price-beta">
-              €0<small>/month</small>
+              Free during beta
             </div>
             <div class="mk-price-post-beta">
-              <strong>Free in beta</strong> · Standard schedule: €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr
+              After beta: <strong>€{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo</strong> or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr
             </div>
           </div>
-          <p><strong>{{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB</strong> encrypted storage</p>
+          <p><strong>{{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB</strong> encrypted storage during beta and on Pro after beta.</p>
           <ul>
             {% for feat in pro_features %}
             <li>{{ feat }}</li>
@@ -718,7 +564,7 @@
     <footer class="mk-footer">
       <p>© Deeperguard · Private encrypted notes</p>
       <nav aria-label="Footer Navigation">
-        <a href="{{ register_url }}">Create free vault</a>
+        <a href="{{ register_url }}">Create account</a>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
         <a href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">GitHub</a>

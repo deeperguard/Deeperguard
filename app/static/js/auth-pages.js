@@ -184,33 +184,211 @@ if (loginForm) {
   });
 }
 
+function setFieldError(inputId, errorId, message) {
+  const input = document.getElementById(inputId);
+  const error = document.getElementById(errorId);
+  if (error) {
+    error.textContent = message || '';
+    error.hidden = !message;
+  }
+  if (input) input.setAttribute('aria-invalid', message ? 'true' : 'false');
+}
+
+const COMMON_PASSWORD_FRAGMENTS = [
+  'password', 'qwerty', 'letmein', 'welcome', 'admin', 'iloveyou',
+  'abc123', 'passw0rd', 'deeperguard', '111111', '000000', '123456',
+];
+
+function longestStepRun(value, rows) {
+  const lower = String(value || '').toLowerCase();
+  let longest = 1;
+  const alphabets = rows || null;
+  let run = 1;
+  for (let i = 1; i < lower.length; i += 1) {
+    let stepped = false;
+    if (!alphabets) {
+      const delta = lower.charCodeAt(i) - lower.charCodeAt(i - 1);
+      stepped = delta === 1 || delta === -1;
+    } else {
+      const prev = lower[i - 1];
+      const cur = lower[i];
+      stepped = alphabets.some((row) => {
+        const a = row.indexOf(prev);
+        const b = row.indexOf(cur);
+        return a >= 0 && b >= 0 && Math.abs(a - b) === 1;
+      });
+    }
+    if (stepped) {
+      run += 1;
+      if (run > longest) longest = run;
+    } else {
+      run = 1;
+    }
+  }
+  return longest;
+}
+
+function passwordStrength(password) {
+  const value = String(password || '');
+  if (!value) return { pct: '0%', color: '#94a3b8', label: 'Password strength' };
+  if (value.length < 12) {
+    return { pct: '16%', color: '#dc2626', label: 'Too short — use at least 12 characters' };
+  }
+
+  const classTests = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/];
+  const classes = classTests.filter((re) => re.test(value)).length;
+  const unique = new Set(value).size;
+  let charset = 0;
+  if (/[a-z]/.test(value)) charset += 26;
+  if (/[A-Z]/.test(value)) charset += 26;
+  if (/\d/.test(value)) charset += 10;
+  if (/[^A-Za-z0-9]/.test(value)) charset += 33;
+  let bits = Math.log2(Math.max(charset, 1)) * value.length;
+
+  const collapsed = value.replace(/(.)\1{2,}/g, '$1');
+  if (collapsed.length < value.length) {
+    bits *= Math.max(0.15, collapsed.length / value.length);
+  }
+  if (unique <= 3) bits *= 0.35;
+  else if (unique < value.length * 0.45) bits *= 0.7;
+
+  const patterned = Math.max(
+    longestStepRun(value),
+    longestStepRun(value, ['qwertyuiop', 'asdfghjkl', 'zxcvbnm', '1234567890']),
+  );
+  if (patterned >= 4) bits -= (patterned - 3) * 8;
+  if (patterned >= 6) bits = Math.min(bits, classes >= 3 ? 40 : 24);
+
+  const lower = value.toLowerCase();
+  if (COMMON_PASSWORD_FRAGMENTS.some((word) => lower.includes(word))) {
+    bits = Math.min(bits, 28);
+  }
+
+  const variedEnough = classes >= 3 || value.length >= 20;
+  if (bits >= 60 && variedEnough && patterned < 6 && unique >= 8) {
+    return { pct: '100%', color: '#059669', label: 'Strong' };
+  }
+  if (bits >= 36 && classes >= 2 && unique >= 6) {
+    return { pct: '62%', color: '#d97706', label: 'Fair' };
+  }
+  return { pct: '34%', color: '#dc2626', label: 'Weak' };
+}
+
+function paintPasswordStrength(password) {
+  const bar = document.getElementById('register-strength-bar');
+  const label = document.getElementById('register-strength-label');
+  const meter = passwordStrength(password);
+  if (bar) {
+    bar.style.setProperty('--pw-pct', meter.pct);
+    bar.style.setProperty('--pw-color', meter.color);
+  }
+  if (label) label.textContent = meter.label;
+}
+
+function bindPasswordToggles(root) {
+  (root || document).querySelectorAll('.password-toggle').forEach((toggle) => {
+    if (toggle.dataset.bound === '1') return;
+    toggle.dataset.bound = '1';
+    toggle.addEventListener('click', () => {
+      const input = document.getElementById(toggle.dataset.target || '');
+      if (!input) return;
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      toggle.textContent = show ? 'Hide' : 'Show';
+      toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    });
+  });
+}
+
 const registerForm = document.getElementById('register-form');
 if (registerForm) {
+  bindPasswordToggles(registerForm);
+  const emailInput = document.getElementById('register-email');
+  const passwordInput = document.getElementById('register-password');
+  const confirmInput = document.getElementById('register-password2');
+  const termsInput = document.getElementById('register-terms');
+
+  function syncConfirmError() {
+    const password = String(passwordInput?.value || '');
+    const confirm = String(confirmInput?.value || '');
+    if (!confirm || password === confirm) {
+      setFieldError('register-password2', 'register-password2-error', '');
+      return;
+    }
+    setFieldError('register-password2', 'register-password2-error', 'Passwords do not match');
+  }
+
+  passwordInput?.addEventListener('input', () => {
+    paintPasswordStrength(passwordInput.value);
+    if (String(passwordInput.value || '').length >= 12) {
+      setFieldError('register-password', 'register-password-error', '');
+    }
+    syncConfirmError();
+  });
+  confirmInput?.addEventListener('input', syncConfirmError);
+  emailInput?.addEventListener('input', () => {
+    if (emailInput.validity.valid) setFieldError('register-email', 'register-email-error', '');
+  });
+  termsInput?.addEventListener('change', () => {
+    if (termsInput.checked) setFieldError('register-terms', 'register-terms-error', '');
+  });
+
   registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     showError('register-error', '');
-    const fd = new FormData(registerForm);
-    const email = String(fd.get('email') || '').trim().toLowerCase();
-    const password = String(fd.get('password') || '');
-    const password2 = fd.get('password2');
+    const email = String(emailInput?.value || '').trim().toLowerCase();
+    const password = String(passwordInput?.value || '');
+    const password2 = String(confirmInput?.value || '');
+    let invalid = false;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setFieldError('register-email', 'register-email-error', 'Enter a valid email address');
+      invalid = true;
+    } else {
+      setFieldError('register-email', 'register-email-error', '');
+    }
     if (password.length < 12) {
-      showError('register-error', 'Password must be at least 12 characters');
-      return;
+      setFieldError('register-password', 'register-password-error', 'Password must be at least 12 characters');
+      invalid = true;
+    } else {
+      setFieldError('register-password', 'register-password-error', '');
     }
     if (password !== password2) {
-      showError('register-error', 'Passwords do not match');
-      return;
+      setFieldError('register-password2', 'register-password2-error', 'Passwords do not match');
+      invalid = true;
+    } else {
+      setFieldError('register-password2', 'register-password2-error', '');
     }
+    if (!termsInput?.checked) {
+      setFieldError('register-terms', 'register-terms-error', 'Agree to the Terms and Privacy policy to create an account');
+      invalid = true;
+    } else {
+      setFieldError('register-terms', 'register-terms-error', '');
+    }
+    if (invalid) return;
     try {
       const data = await NotesSrpAuth.register(email, password);
       await stashLoginSession(data, email, password);
-      try { sessionStorage.setItem('notes_just_registered', '1'); } catch (e) { /* ignore */ }
+      try { sessionStorage.setItem('notes_just_registered', '1'); } catch (err) { /* ignore */ }
       location.replace(afterAuthUrl('/app'));
     } catch (err) {
       showError('register-error', err.message);
     }
   });
 }
+
+document.getElementById('sign-out-create')?.addEventListener('click', async () => {
+  const btn = document.getElementById('sign-out-create');
+  const token = btn?.dataset.csrf || '';
+  btn.disabled = true;
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRF-Token': token },
+    });
+  } catch (err) { /* still leave the signed-in page */ }
+  location.href = '/register';
+});
 
 const webauthnLoginBtn = document.getElementById('webauthn-login');
 if (webauthnLoginBtn) {

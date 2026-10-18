@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Page not found — Deeperguard</title>
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+</head>
+<body>
+  {% include 'partials/mk-topbar.html' %}
+  <main class="wrap mk-subpage">
+    <section class="mk-section mk-section-head">
+      <span class="mk-badge">404</span>
+      <h1>This page is not on Deeperguard</h1>
+      <p>The link may be out of date. The notes app, pricing, and support pages are below.</p>
+      <div class="mk-hero-actions">
+        <a class="mk-btn" href="/">Home</a>
+        <a class="mk-btn secondary" href="{{ app_url }}">Open notes app</a>
+        <a class="mk-btn ghost" href="/contact">Contact</a>
+        <a class="mk-btn ghost" href="/download">Download</a>
+      </div>
+    </section>
+    {% include 'partials/mk-footer.html' %}
+  </main>
+</body>
+</html>

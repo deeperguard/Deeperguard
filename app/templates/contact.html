@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Contact — Deeperguard</title>
+  <meta name="description" content="Contact Deeperguard support at notes@deeperguard.com.">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+</head>
+<body>
+  {% include 'partials/mk-topbar.html' %}
+  <main class="wrap mk-subpage">
+    <section class="mk-section" id="contact">
+      <div class="mk-section-head">
+        <span class="mk-badge">Support</span>
+        <h1>Contact</h1>
+        <p>Write to <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>. We reply within two business days. Security reports use the same address with the subject “Vulnerability report”.</p>
+      </div>
+      <form id="contact-form" class="mk-contact-form mk-card" novalidate>
+        <div class="mk-contact-grid">
+          <label class="mk-field">
+            <span>Your Name</span>
+            <input type="text" name="name" autocomplete="name" maxlength="120" placeholder="e.g. Alex Morgan">
+          </label>
+          <label class="mk-field">
+            <span>Email Address <em class="mk-required">*required</em></span>
+            <input type="email" name="email" autocomplete="email" required maxlength="254" placeholder="alex@example.com">
+          </label>
+        </div>
+        <label class="mk-field">
+          <span>Subject</span>
+          <input type="text" name="subject" maxlength="200" placeholder="Question regarding Deeperguard">
+        </label>
+        <label class="mk-field">
+          <span>Message <em class="mk-required">*required</em></span>
+          <textarea name="message" rows="5" required minlength="10" maxlength="5000" placeholder="How can we assist you?"></textarea>
+        </label>
+        <label class="mk-honeypot" aria-hidden="true">
+          <span>Website</span>
+          <input type="text" name="website" tabindex="-1" autocomplete="off">
+        </label>
+        <p id="contact-status" class="mk-contact-status" role="status" hidden></p>
+        <div class="mk-contact-actions">
+          <button type="submit" class="mk-btn mk-btn-lg" id="contact-submit">Send message</button>
+        </div>
+      </form>
+    </section>
+    {% include 'partials/mk-footer.html' %}
+  </main>
+  <script src="/static/js/marketing.js?v={{ build }}" defer></script>
+</body>
+</html>

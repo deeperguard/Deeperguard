@@ -482,6 +482,8 @@ def public_path(path: str) -> bool:
         "/register",
         "/privacy",
         "/terms",
+        "/contact",
+        "/download",
         "/self-host",
         "/api/health",
         "/api/app-shell",

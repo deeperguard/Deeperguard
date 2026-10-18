@@ -37,7 +37,7 @@ class NotesAppTests(unittest.TestCase):
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
 
         for name in list(sys.modules):
-            if name in {"app", "auth", "db", "config", "passwords", "totp", "ocr", "ocr_index", "ocr_jobs", "server_info_cache", "backup_pcloud", "backup_mail", "srp_auth", "webauthn_helper", "admin_api", "admin_notify", "auth_rate_limit", "plans", "ai_relay", "uploads"} or name.startswith("app."):
+            if name in {"app", "auth", "db", "config", "passwords", "totp", "ocr", "ocr_index", "ocr_jobs", "server_info_cache", "backup_pcloud", "backup_mail", "srp_auth", "webauthn_helper", "admin_api", "admin_notify", "auth_rate_limit", "plans", "ai_relay", "uploads", "email_verify", "mailer"} or name.startswith("app."):
                 sys.modules.pop(name, None)
         self.app_mod = importlib.import_module("app")
         self.client = self.app_mod.app.test_client()
@@ -1658,7 +1658,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('id="filter-section"', html)
         self.assertIn('id="filters"', html)
         self.assertIn('class="sn-tags">Tags</span>', html)
-        self.assertNotIn("Folders", html)
+        self.assertIn('id="btn-new-folder"', html)
+        self.assertIn('id="folder-section"', html)
         self.assertIn("function applyFilterSection()", js)
         self.assertIn("viewsCollapsed: false", js)
         self.assertIn("tagsCollapsed: true", js)
@@ -4445,6 +4446,130 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("beta", terms.get_data(as_text=True).lower())
         self.assertIn("zero-knowledge", privacy.get_data(as_text=True).lower())
         self.assertIn("zero-knowledge", terms.get_data(as_text=True).lower())
+        self.assertIn(b"mk-topbar", privacy.data)
+        self.assertIn(b"marketing.css", privacy.data)
+        self.assertIn(b"Open notes app", privacy.data)
+
+    def test_contact_download_and_styled_404(self):
+        contact = self.client.get("/contact")
+        download = self.client.get("/download")
+        missing = self.client.get("/this-page-is-missing")
+        self.assertEqual(contact.status_code, 200)
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(missing.status_code, 404)
+        self.assertIn(b"notes@deeperguard.com", contact.data)
+        self.assertIn(b"id=\"contact-form\"", contact.data)
+        self.assertIn(b"two business days", contact.data)
+        self.assertIn(b"Add to Home Screen", download.data)
+        self.assertIn(b"Install app", download.data)
+        self.assertIn(b"marketing.css", missing.data)
+        self.assertIn(b"Page not found", missing.data)
+        self.assertIn(b"mk-topbar", missing.data)
+        api_missing = self.client.get("/api/does-not-exist")
+        self.assertEqual(api_missing.status_code, 404)
+        self.assertEqual(api_missing.get_json().get("error"), "not found")
+        sm = self.client.get("/sitemap.xml")
+        self.assertIn(b"/contact</loc>", sm.data)
+        self.assertIn(b"/download</loc>", sm.data)
+
+    def test_signed_in_register_explains_instead_of_redirecting(self):
+        email = "already@home.local"
+        self._register_user(email, "already-secure-pass")
+        res = self.client.get("/register", follow_redirects=False)
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("You're already signed in", body)
+        self.assertIn(email, body)
+        self.assertIn("Go to your vault", body)
+        self.assertIn("Sign out and create a new account", body)
+        self.assertNotIn('id="register-form"', body)
+        login = self.client.get("/login")
+        self.assertIn(b"You're already signed in", login.data)
+        self.assertIn(b"Create one", login.data)
+
+    def test_backup_email_waits_for_verification_code(self):
+        import re
+        from unittest.mock import patch
+
+        email = "verify-backup@home.local"
+        sent = []
+        with patch("mailer.send_plain_email", side_effect=lambda *args, **kwargs: sent.append(args)):
+            reg = self._register_user(email, "verify-secure-pass")
+            self.assertEqual(reg.status_code, 200)
+            account = self.client.get("/api/account")
+            self.assertEqual(account.status_code, 200)
+            self.assertFalse(account.get_json().get("email_verified"))
+            blocked = self.client.post(
+                "/api/backup/email",
+                json={"email": email},
+                headers={"X-CSRF-Token": self._csrf()},
+            )
+            self.assertEqual(blocked.status_code, 403)
+            self.assertEqual(blocked.get_json().get("code"), "email_unverified")
+            code = ""
+            for args in sent:
+                match = re.search(r"\b(\d{6})\b", args[2] if len(args) > 2 else "")
+                if match:
+                    code = match.group(1)
+            self.assertTrue(code)
+            bad = self.client.post(
+                "/api/account/email/verify",
+                json={"code": "000000"},
+                headers={"X-CSRF-Token": self._csrf()},
+            )
+            self.assertEqual(bad.status_code, 400)
+            ok = self.client.post(
+                "/api/account/email/verify",
+                json={"code": code},
+                headers={"X-CSRF-Token": self._csrf()},
+            )
+            self.assertEqual(ok.status_code, 200)
+            self.assertTrue(ok.get_json().get("email_verified"))
+
+    def test_vault_password_field_is_not_prefilled_from_state(self):
+        html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
+        app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        self.assertIn('id="password-change-current"', html)
+        self.assertIn('autocomplete="off"', html)
+        self.assertNotIn("currentPw.value = sessionPw", app_js)
+        self.assertIn("armCurrentVaultPasswordField", app_js)
+        self.assertIn("Enter your current vault password.", app_js)
+        self.assertIn("autoLockMin: 15", app_js)
+        self.assertIn('id="btn-new-folder"', html)
+        self.assertIn("queueSearchAsYouType", app_js)
+        self.assertIn("syncWritingTip", app_js)
+        self.assertIn('id="technical-details"', html)
+        register = (APP_DIR / "templates" / "register.html").read_text(encoding="utf-8")
+        self.assertIn('autocomplete="email"', register)
+        self.assertIn('id="register-terms"', register)
+        self.assertIn("unlocks the vault on this device automatically", register)
+        css = (APP_DIR / "static" / "css" / "marketing.css").read_text(encoding="utf-8")
+        self.assertIn("scroll-margin-top: 5.75rem", css)
+        self.assertIn("align-content: start", css)
+        home = self.client.get("/")
+        self.assertIn(b"Free during beta: Pro, 5", home.data)
+        self.assertNotIn("€0".encode(), home.data)
+        self.assertIn(b'class="is-unavailable">Not included: Passkey sign-in', home.data)
+        self.assertIn(b"mk-hash-open", home.data)
+        marketing_js = (APP_DIR / "static" / "js" / "marketing.js").read_text(encoding="utf-8")
+        self.assertIn("settleHashScroll", marketing_js)
+        self.assertIn("scrollRestoration", marketing_js)
+
+    def test_register_retest_copy_strength_and_labels(self):
+        register = (APP_DIR / "templates" / "register.html").read_text(encoding="utf-8")
+        self.assertIn("Creating an account does not ask for a code", register)
+        self.assertIn("you only enter it in Settings before encrypted backups are sent", register)
+        self.assertNotIn("We email a verification code before encrypted backups are sent", register)
+        self.assertIn('id="register-password-label" for="register-password">Password</label>', register)
+        self.assertIn('aria-label="Show password"', register)
+        self.assertIn('id="register-terms" type="checkbox" name="terms" value="yes" required', register)
+        label_at = register.index('id="register-password-label"')
+        button_at = register.index('data-target="register-password"', label_at)
+        self.assertIn("</label>", register[label_at:button_at])
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        self.assertIn(".consent-row input[type=\"checkbox\"]", css)
+        self.assertIn("outline: 2px solid var(--danger)", css)
+        self._run_node_script("test_password_strength.js")
 
     def test_sync_push_quota_hit_does_not_block_other_items_in_batch(self):
         # One over-quota item used to make the whole batch a no-op (and wedge

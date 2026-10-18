@@ -392,7 +392,7 @@
       <div class="brand">
         {% include 'partials/auth-brand.html' %}
         <h1>Unlock your vault</h1>
-        <p id="unlock-email" class="muted">Enter your vault password. Notes decrypt on this device.</p>
+        <p id="unlock-email" class="muted">Enter your vault password. It starts as the password you created the account with, and you can change it in Settings. Notes decrypt on this device.</p>
         {% include 'partials/zk-plain.html' %}
         <p id="unlock-first-hint" class="auth-hint" hidden>Use the vault password you just created.</p>
         <p class="zk-badge">Encrypted on this device</p>
@@ -402,7 +402,7 @@
           <input id="unlock-password" type="password" name="password" autocomplete="current-password" required>
         </label>
         <p id="unlock-error" class="error" hidden></p>
-        <p id="unlock-recovery-hint" class="auth-hint" hidden>This vault password can differ from the password you use to sign in. After your notes open, you can change it in Settings.</p>
+        <p id="unlock-recovery-hint" class="auth-hint" hidden>If you changed it in Settings, the vault password is different from the password you use to sign in. They start as the same password.</p>
         <p id="unlock-session-hint" class="auth-hint" hidden>Your sign-in expired. Enter your vault password to continue and resume sync.</p>
         <p id="unlock-update-hint" class="auth-hint ocr-stale" hidden aria-live="polite"></p>
         <p id="unlock-status" class="unlock-status muted" hidden aria-live="polite"></p>
@@ -596,6 +596,16 @@
       <details class="tag-section folder-section" id="folder-section" open>
         <summary class="section-label"><span>Folders</span></summary>
         <div id="folder-list" class="folder-list"></div>
+        <div class="tag-composer" id="folder-composer" hidden>
+          <input id="folder-name-input" type="text" maxlength="80" placeholder="Folder name" autocomplete="off">
+          <div class="tag-composer-actions">
+            <button type="button" class="btn ghost sm" id="folder-create-cancel">Cancel</button>
+            <button type="button" class="btn primary sm" id="folder-create-confirm">Create</button>
+          </div>
+        </div>
+        <div class="tag-section-actions">
+          <button type="button" id="btn-new-folder" class="btn ghost sm tag-new-btn">+ New folder</button>
+        </div>
       </details>
       <footer class="sidebar-foot">
         <div class="sidebar-foot-actions">
@@ -1180,7 +1190,21 @@
             <p id="account-plan-storage" class="settings-hint"></p>
           </div>
           <p id="account-email" class="settings-account"></p>
+          <p id="account-verify-status" class="settings-hint" hidden></p>
+          <div id="account-verify-wrap" class="settings-nested stack" hidden>
+            <label class="settings-row stacked">Email verification code
+              <input id="account-verify-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+            </label>
+            <div class="settings-actions">
+              <button type="button" id="btn-account-verify" class="btn primary">Verify email</button>
+              <button type="button" id="btn-account-verify-resend" class="btn">Resend code</button>
+            </div>
+          </div>
           <p id="privacy-status" class="settings-hint settings-privacy-status">Checking privacy status…</p>
+          <details class="settings-advanced" id="technical-details">
+            <summary>Technical details</summary>
+            <p id="privacy-technical" class="settings-hint settings-privacy-status"></p>
+          </details>
           <details class="plan-compare" id="plan-compare">
             <summary>Compare Basic &amp; Pro</summary>
             <div id="plan-compare-body" class="plan-compare-grid"></div>
@@ -1272,7 +1296,7 @@
       <section class="settings-group">
         <h3>Privacy &amp; security</h3>
         <div class="settings-card">
-          <p class="settings-hint">Notes are encrypted on this device before sync. Your vault password never leaves this device. Account sign-in uses zero-knowledge SRP — the server stores only a proof, not your password.</p>
+          <p class="settings-hint">Notes are encrypted on this device before sync. Your account password and vault password start as the same password. Sign-in proves who you are. The vault password decrypts notes on this device and never leaves it. You can change the vault password below. We cannot recover it. Account sign-in uses zero-knowledge SRP — the server stores only a proof, not your password.</p>
           <p class="settings-hint">Self-hosting? See the <a href="/self-host">self-host guide</a>.</p>
           <p class="settings-hint">Use <a href="https://www.deeperguard.com/">https://www.deeperguard.com/</a> on iPhone. Passkeys require that hostname.</p>
           <label class="settings-row">Lock after idle
@@ -1301,8 +1325,8 @@
             </div>
           </div>
           <div id="password-change" class="settings-nested stack">
-            <label class="settings-row stacked">Current vault password
-              <input id="password-change-current" type="password" autocomplete="current-password">
+            <label class="settings-row stacked" for="password-change-current">Current vault password
+              <input id="password-change-current" type="password" autocomplete="off" required aria-required="true" readonly>
             </label>
             <label class="settings-row stacked">New vault password
               <span class="password-field-wrap">
@@ -1376,9 +1400,20 @@
         <h3>Backup &amp; import</h3>
         <div class="settings-card">
           <label class="settings-row stacked">Backup email
-            <input id="backup-email" type="email">
+            <input id="backup-email" type="email" autocomplete="email">
           </label>
+          <p id="backup-verify-status" class="settings-hint" hidden></p>
+          <div id="backup-verify-wrap" class="settings-nested stack" hidden>
+            <label class="settings-row stacked">Backup email verification code
+              <input id="backup-verify-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+            </label>
+            <div class="settings-actions">
+              <button type="button" id="btn-backup-verify" class="btn primary">Verify backup email</button>
+              <button type="button" id="btn-backup-verify-resend" class="btn">Resend code</button>
+            </div>
+          </div>
           <label class="settings-row checkbox"><span>Daily encrypted email backup</span><input id="backup-enabled" type="checkbox"></label>
+          <p class="settings-hint">Backups are sent only after this address is verified with a code.</p>
           <div class="settings-actions">
             <button type="button" id="btn-save-backup" class="btn">Save backup settings</button>
             <button type="button" id="btn-backup-now" class="btn">Email backup now</button>
