@@ -482,11 +482,19 @@ const emptyBody = note({
   ocr_text: 'invoice word '.repeat(40),
 });
 assert.deepStrictEqual(noteBodyReading(emptyBody), { words: 0, minutes: 0 });
-assert.deepStrictEqual(noteBodyReading(note({ content: 'one two three' })), { words: 3, minutes: 1 });
+assert.deepStrictEqual(noteBodyReading(note({ content: 'one two three' })), { words: 3, minutes: 0 });
+assert.deepStrictEqual(
+  readingStats('alpha bravo charlie delta echo foxtrot'),
+  { words: 6, minutes: 0 },
+);
 assert.deepStrictEqual(
   readingStats('alpha bravo charlie delta echo foxtrot golf hotel'),
-  { words: 8, minutes: 1 },
+  { words: 8, minutes: 0 },
   'eight words stay eight — the counter must not stop at three',
+);
+assert.deepStrictEqual(
+  readingStats(Array.from({ length: 220 }, () => 'word').join(' ')),
+  { words: 220, minutes: 1 },
 );
 
 assert.strictEqual(fileRowMatches(

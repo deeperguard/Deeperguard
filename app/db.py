@@ -342,9 +342,9 @@ def create_user_srp(
             INSERT INTO users (
                 email, password_hash, kdf_salt, kdf_iterations, vault_kdf_version,
                 auth_method, srp_salt, srp_verifier, storage_quota_bytes, is_admin, plan,
-                email_verified, created_at, updated_at
+                email_verified, pcloud_remote_path, created_at, updated_at
             )
-            VALUES (?, '', ?, ?, 2, 'srp', ?, ?, ?, ?, ?, 0, ?, ?)
+            VALUES (?, '', ?, ?, 2, 'srp', ?, ?, ?, ?, ?, 0, '', ?, ?)
             """,
             (
                 email.strip().lower(),

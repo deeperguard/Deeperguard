@@ -21,4 +21,12 @@ const fromName = suggest('', [], { filename: 'passport-scan.jpg' });
 assert.strictEqual(fromName.existing, false);
 assert.strictEqual(fromName.title, 'Passport');
 
+const shortToken = suggest('Eur', []);
+assert.strictEqual(shortToken, null);
+
+const buried = suggest('The european summit covered trade policy in detail today', [
+  { uuid: 't-eur', content: { title: 'Eur' } },
+]);
+assert.ok(!buried || buried.tagId !== 't-eur');
+
 console.log('ok');

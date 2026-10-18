@@ -4246,7 +4246,7 @@ class NotesAppTests(unittest.TestCase):
         data = account.get_json()
         self.assertFalse(data["pcloud_enabled"])
         self.assertFalse(data["pcloud_password_set"])
-        self.assertEqual(data["pcloud_remote_path"], "Deeperguard/backups")
+        self.assertEqual(data["pcloud_remote_path"], "")
 
         missing = self.client.post(
             "/api/backup/pcloud/settings",
@@ -4290,6 +4290,24 @@ class NotesAppTests(unittest.TestCase):
 
         account3 = self.client.get("/api/account", headers=csrf)
         self.assertEqual(account3.get_json()["pcloud_last_sync_status"], "ok")
+
+    def test_round3_new_user_copy_and_folder_controls(self):
+        app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        store_js = (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8")
+        auth_js = (APP_DIR / "static" / "js" / "auth-pages.js").read_text(encoding="utf-8")
+        css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
+        self.assertIn("probeServerKey", store_js)
+        self.assertIn("VAULT_KEY_UNVERIFIED", store_js)
+        self.assertIn("assertVaultKeyVerified", app_js)
+        self.assertIn("freshLogin", app_js)
+        self.assertIn("id=\"note-folder-select\"", html)
+        self.assertIn("id=\"backup-verified-hint\"", html)
+        self.assertNotIn("Credentials stay in", html)
+        self.assertIn(".tag-section.is-empty:not(#folder-section)", css)
+        self.assertIn("Email or password is incorrect", auth_js)
+        self.assertNotIn("Incorrect password", auth_js)
+        self.assertIn("if (btn.dataset.filter === 'all') currentTag = null", app_js)
 
     def test_email_backup_streams_instead_of_loading_vault(self):
         mail = (APP_DIR / "backup_mail.py").read_text(encoding="utf-8")

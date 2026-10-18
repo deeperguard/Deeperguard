@@ -2187,7 +2187,7 @@
     const note = NotesStore.get(noteId);
     if (!note) return 'edit';
     if (noteSpreadsheetSource(note)) return 'preview';
-    if (noteHasDocs(noteId)) {
+    if (noteHasVisualDocs(noteId)) {
       if (currentSearchQuery()) return 'preview';
       const body = String(note.content.content || '').trim();
       if (!body) return 'preview';
@@ -2226,7 +2226,9 @@
       queueListPreviewBackfill(attId);
       return;
     }
-    if (!thumbObserver) {
+    const kind = attachmentKind(att);
+    const visual = kind === 'image' || kind === 'pdf';
+    if (!thumbObserver || (visual && !forList)) {
       hydrateThumb(noteId, attId, stage, { forList });
       return;
     }
@@ -2234,6 +2236,17 @@
     stage.dataset.noteId = noteId;
     if (forList) stage.dataset.listThumb = '1';
     thumbObserver.observe(stage);
+    if (visual) {
+      requestAnimationFrame(() => {
+        if (!stage.isConnected) return;
+        const rect = stage.getBoundingClientRect();
+        const vh = window.innerHeight || 800;
+        if (rect.height > 1 && rect.bottom > -40 && rect.top < vh + 40) {
+          thumbObserver.unobserve(stage);
+          hydrateThumb(noteId, attId, stage, { forList });
+        }
+      });
+    }
   }
 
   function attachDocZoom(stage, kind) {
@@ -4653,8 +4666,35 @@
     if (!currentId) openPendingDeepLink();
   }
 
+  function vaultKeyProven() {
+    if (!NotesStore.isUnlocked()) return false;
+    if (typeof NotesStore.isKeyVerified !== 'function') return true;
+    return NotesStore.isKeyVerified();
+  }
+
+  async function assertVaultKeyVerified() {
+    if (vaultKeyProven()) return;
+    if (typeof NotesStore.probeServerKey !== 'function') {
+      const missing = new Error('Could not decrypt your notes with this password.');
+      missing.status = 401;
+      missing.code = 'DECRYPT_FAILED';
+      throw missing;
+    }
+    const probe = await NotesStore.probeServerKey();
+    if (probe?.ok && vaultKeyProven()) return;
+    const wrong = new Error('Could not decrypt your notes with this password.');
+    wrong.status = 401;
+    wrong.code = 'DECRYPT_FAILED';
+    throw wrong;
+  }
+
   function revealAppShell() {
+    if (!vaultKeyProven()) return;
     if (!document.body.classList.contains('unlocked')) {
+      const indicator = document.getElementById('sync-indicator');
+      if (indicator && indicator.dataset.state === 'error') {
+        NotesStore.emitSync('idle', '');
+      }
       consumeUnlockGates();
       showApp();
       updateOfflineSetupBanner();
@@ -4665,6 +4705,7 @@
 
   async function revealPrimaryUnlock() {
     if (unlockPrimaryRevealed) return;
+    if (!vaultKeyProven()) return;
     const count = NotesStore.listNotes().length + NotesStore.listTags().length;
     if (count === 0) return;
     unlockPrimaryRevealed = true;
@@ -4727,6 +4768,7 @@
       ? await NotesStore.localCipherCount().catch(() => 0)
       : 0;
     const full = !!(needsReload || (localNoteCount === 0 && localCipher === 0));
+    if (!vaultKeyProven()) return;
     revealAppShell();
     if (!isVaultReadyForSync()) return;
     renderTags();
@@ -4772,12 +4814,14 @@
         if (skipReveal || unlockPrimaryRevealed) {
           if (!unlockPrimaryRevealed) {
             await hydrateVaultUi({ loadLocal: !NotesStore.state.localReady });
+            await assertVaultKeyVerified();
             revealAppShell();
           } else {
             await paintUnlockUi();
           }
         } else {
           await hydrateVaultUi({ loadLocal: !NotesStore.state.localReady });
+          await assertVaultKeyVerified();
           revealAppShell();
         }
         setTimeout(() => flushPendingUpdatePrompt(), 1200);
@@ -4785,9 +4829,9 @@
         await ensureServerSession({ prompt: false }).catch(() => false);
         schedulePostUnlockSync(needsReload);
       } catch (err) {
+        if (!vaultKeyProven() || unlockErrorShouldRelock(err)) throw err;
         revealAppShell();
         setTimeout(() => flushPendingUpdatePrompt(), 1200);
-        if (!NotesStore.isUnlocked() || unlockErrorShouldRelock(err)) throw err;
         console.warn('post-unlock UI hydrate issue', err);
       } finally {
         unlockRevealInFlight = null;
@@ -4823,9 +4867,8 @@
   }
 
   function repairUnlockShellState() {
-    const unlocked = NotesStore.isUnlocked();
+    const unlocked = vaultKeyProven();
     if (unlocked && !isVaultReadyForSync()) {
-      // Vault crypto is open but the shell still shows the lock screen — reveal the app.
       showApp();
     }
     return unlocked;
@@ -5086,8 +5129,9 @@
     if (await NotesStore.verifyVaultPassword(clean)) {
       return { ok: true, via: 'local' };
     }
-    // Vault key is already derived — a failed IndexedDB decrypt is not a login-password mismatch.
-    if (NotesStore.isUnlocked()) {
+    // A derived key or a live session is not proof. Only a decrypt (or an
+    // empty server vault) may skip the typed-password check.
+    if (typeof NotesStore.isKeyVerified === 'function' && NotesStore.isKeyVerified()) {
       return { ok: true, via: 'unlocked' };
     }
     const normalized = String(email || '').trim().toLowerCase();
@@ -5273,40 +5317,18 @@
               NotesStore.lock();
               throw new Error('Could not reach the notes server. Connect to home Wi‑Fi or WireGuard and try again.');
             }
-            vaultRepairedOnline = true;
             sessionValid = true;
             serverResult = { ok: true };
             const nextSalt = NotesStore.cachedAccount().kdf_salt || salt;
             await NotesStore.unlock(clean, nextSalt);
-          } else {
-            const verified = await repairUnlockWithPassword(cached.email, clean, { verifyOnly: true });
-            if (verified.wrongPassword && !NotesStore.isUnlocked()) {
-              clearSavedUnlockSecrets();
-              NotesStore.lock();
-              const wrong = new Error(
-                'Wrong vault password. Use the same password that unlocks Notes on your phone.',
-              );
-              wrong.status = 401;
-              throw wrong;
-            }
-            if (verified.rateLimited) {
-              NotesStore.lock();
-              throw new Error('Too many unlock attempts. Wait a few minutes and try again.');
-            }
-            if (!verified.ok && !NotesStore.isUnlocked()) {
-              NotesStore.lock();
-              if (verified.emptyVault) {
-                throw new Error('No encrypted notes on the server yet. Create a note on your phone, sync, then unlock here.');
-              }
-              throw new Error('Could not reach the notes server. Connect to home Wi‑Fi or WireGuard and try again.');
-            }
-            vaultRepairedOnline = true;
           }
-          if (sessionValid) {
-            await clearUnreadableLocalCache();
-            opened = { opened: 0, failed: 0, cipherOpened: 0 };
-            localAllFailed = false;
-          }
+          // Sign-in and a derived key are not proof. Decrypt server ciphertext
+          // (or confirm the vault is empty) before wiping the local cache.
+          await assertVaultKeyVerified();
+          await clearUnreadableLocalCache();
+          opened = { opened: 0, failed: 0, cipherOpened: 0 };
+          localAllFailed = false;
+          vaultRepairedOnline = true;
         }
         const hasLocalVault = (opened.cipherOpened || 0) > 0 || opened.opened > 0;
         const emptyLocal = opened.opened === 0;
@@ -5396,7 +5418,8 @@
           if (openedNow > 0 || unlockDidSync) {
             passwordProven = true;
           } else if (canProveViaSync) {
-            // Fresh device with an empty cache — sync will fetch ciphertext to decrypt.
+            // Fresh device: prove the key against server ciphertext before the shell opens.
+            await assertVaultKeyVerified();
             passwordProven = true;
           } else {
             const repaired = await repairUnlockWithPassword(cached.email, clean);
@@ -5463,7 +5486,7 @@
     try {
       await verifyAndUnlock(unlockPassword.value);
       repairUnlockShellState();
-      if (NotesStore.isUnlocked() && !isVaultReadyForSync()) showApp();
+      if (vaultKeyProven() && !isVaultReadyForSync()) showApp();
     } catch (err) {
       unlockError.textContent =
         err.status === 401
@@ -5611,15 +5634,20 @@
     let bootSuppress = false;
     try {
       let allowBootUnlock = false;
+      let freshLogin = false;
       try {
-        allowBootUnlock = sessionStorage.getItem('notes_allow_boot_unlock') === '1';
-        if (allowBootUnlock) sessionStorage.removeItem('notes_allow_boot_unlock');
-        if (!allowBootUnlock) sessionStorage.removeItem('notes_user_requested_update');
+        freshLogin = sessionStorage.getItem('notes_allow_boot_unlock') === '1';
+        allowBootUnlock = freshLogin;
+        if (freshLogin) sessionStorage.removeItem('notes_allow_boot_unlock');
+        if (!freshLogin) sessionStorage.removeItem('notes_user_requested_update');
       } catch (err) {
         allowBootUnlock = false;
+        freshLogin = false;
       }
       // Update / leave-app lock must stay on the vault lock screen — remembered
       // password / skip-login must not auto-unlock across a version refresh.
+      // A password just typed on the login form is different: when the vault
+      // password still equals the account password, unlock immediately.
       const hiddenAt = readUnfocusedAt();
       const forceLockAfterUpdate = window.NotesVaultLock?.shouldShowLockScreenOnBoot
         ? NotesVaultLock.shouldShowLockScreenOnBoot({
@@ -5630,18 +5658,18 @@
           now: Date.now(),
         })
         : requireTypedUnlock();
-      if (forceLockAfterUpdate) {
+      if (forceLockAfterUpdate && !freshLogin) {
         allowBootUnlock = false;
         markTypedUnlockRequired();
       }
-      if (allowBootUnlock && typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.consumeBootPassword) {
+      if ((allowBootUnlock || freshLogin) && typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.consumeBootPassword) {
         await NotesVaultSecrets.consumeBootPassword();
       }
       try { sessionStorage.removeItem('notes_boot_password_ready'); } catch (err) { /* ignore */ }
       await refreshDevicePasswordCache();
       let sessionPassword = '';
       try {
-        sessionPassword = forceLockAfterUpdate ? '' : ((typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword()) || '');
+        sessionPassword = (forceLockAfterUpdate && !freshLogin) ? '' : ((typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword()) || '');
       } catch (err) {
         sessionPassword = '';
       }
@@ -5650,9 +5678,9 @@
         || localStorage.getItem('notes_kdf_salt')
         || sessionStorage.getItem('notes_kdf_salt')
         || '';
-      const savedPassword = forceLockAfterUpdate ? '' : savedUnlockPassword();
+      const savedPassword = (forceLockAfterUpdate && !freshLogin) ? '' : savedUnlockPassword();
       const autoUnlockPassword = sessionPassword || savedPassword;
-      const mayAutoUnlock = !forceLockAfterUpdate && !!(autoUnlockPassword && bootSalt);
+      const mayAutoUnlock = (freshLogin || !forceLockAfterUpdate) && !!(autoUnlockPassword && bootSalt);
       if (mayAutoUnlock) {
         bootSuppress = true;
         suppressUnlockScreen = true;
@@ -7252,8 +7280,10 @@
           ? `<span class="attachment-hit-badge" data-att-hits="${hitCount}">${escapeHtml(hitLabel)}</span>`
           : '';
         const rowClass = `attachment-item${busy ? ' is-ocr-busy' : ''}${hitCount ? ' is-search-hit' : ''}`;
+        const thumbKind = attachmentKind(a);
+        const thumbLabel = thumbKind === 'pdf' ? 'PDF' : (thumbKind === 'image' ? 'IMG' : 'FILE');
         return `<div class="${rowClass}" data-att="${escapeAttr(a.uuid)}">
-          <button type="button" class="attachment-thumb" data-preview="${escapeAttr(a.uuid)}" aria-label="Preview ${escapeAttr(a.content.filename || 'document')}">Open</button>
+          <button type="button" class="attachment-thumb" data-preview="${escapeAttr(a.uuid)}" aria-label="Preview ${escapeAttr(a.content.filename || 'document')}">${thumbLabel}</button>
           <div class="attachment-main">
             <strong class="attachment-filename">${escapeHtml(a.content.filename)}</strong>${spinner}
             <span class="muted"> (${sizeKb} KB)</span>
@@ -9401,6 +9431,13 @@
     return NotesStore.listAttachments(noteId || currentId).length > 0;
   }
 
+  function noteHasVisualDocs(noteId) {
+    return NotesStore.listAttachments(noteId || currentId).some((att) => {
+      const kind = attachmentKind(att);
+      return kind === 'image' || kind === 'pdf';
+    });
+  }
+
   function ocrMarkdown(noteId) {
     const atts = NotesStore.listAttachments(noteId || currentId);
     const parts = atts.map((item) => String(item.content.ocr_text || '').trim()).filter(Boolean);
@@ -9845,6 +9882,7 @@
       saveDebounce = null;
     }
     const switchingNote = currentId !== id;
+    if (switchingNote) hideTagSuggest();
     currentId = id;
     listSelectionId = id;
     if (switchingNote) resetNoteTransientChrome({ clearSurfaces: true });
@@ -10088,15 +10126,45 @@
     syncEditorMobileDocActions();
     syncEditorMobileProxies();
     if (note && note.content?.locked && !unlockedNotes.has(note.uuid)) {
-      ['btn-share', 'btn-note-info', 'btn-note-type-menu', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate', 'btn-download-note'].forEach((id) => {
+      ['btn-share', 'btn-note-info', 'btn-note-type-menu', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate', 'btn-download-note', 'note-folder-control'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.hidden = true;
       });
     }
     syncUndoButtons();
+    syncNoteFolderControl(note);
     syncNoteInfoActions(note);
     syncDownloadNoteButton();
     syncRescanOcrButton();
+  }
+
+  function syncNoteFolderControl(note) {
+    const select = document.getElementById('note-folder-select');
+    const wrap = document.getElementById('note-folder-control');
+    if (!select) return;
+    const locked = !!(note?.content?.locked && !unlockedNotes.has(note?.uuid));
+    if (wrap) wrap.hidden = locked;
+    const folders = NotesStore.listFolders?.() || [];
+    const current = note?.content?.folder_id || '';
+    const options = ['<option value="">No folder</option>']
+      .concat(folders.map((folder) => (
+        `<option value="${escapeAttr(folder.uuid)}">${escapeHtml(folder.content?.title || 'Folder')}</option>`
+      )))
+      .concat(['<option value="__new__">New folder…</option>']);
+    select.innerHTML = options.join('');
+    select.value = folders.some((folder) => folder.uuid === current) ? current : '';
+  }
+
+  function assignCurrentNoteFolder(folderId) {
+    if (!currentId || !vaultKeyProven()) return;
+    const note = NotesStore.get(currentId);
+    if (!note || note.content?.type !== 'note') return;
+    const next = String(folderId || '');
+    if ((note.content.folder_id || '') === next) return;
+    NotesStore.upsert(currentId, { ...note.content, folder_id: next });
+    renderFolders();
+    renderNotes();
+    toast(next ? 'Moved to folder' : 'Removed from folder');
   }
 
   function syncNoteInfoActions(note) {
@@ -10132,8 +10200,9 @@
     const { words, minutes } = displayedReading(note);
     const updated = relativeTime(noteEditedAtMs(note));
     const primary = document.createElement('span');
+    const wordLabel = `${words} ${words === 1 ? 'word' : 'words'}`;
     primary.textContent = words
-      ? `${words} ${words === 1 ? 'word' : 'words'} · ${minutes} min read · ${updated}`
+      ? (minutes ? `${wordLabel} · ${minutes} min read · ${updated}` : `${wordLabel} · ${updated}`)
       : `0 words · ${updated}`;
     ui.noteMeta.replaceChildren(primary);
     const scannedWords = scannedTextWordCount(note);
@@ -10381,7 +10450,9 @@
     }
     if (account.pcloud_username !== undefined || account.pcloud_enabled !== undefined) {
       document.getElementById('pcloud-username').value = account.pcloud_username || '';
-      document.getElementById('pcloud-remote-path').value = account.pcloud_remote_path || 'Deeperguard/backups';
+      const remotePath = String(account.pcloud_remote_path || '').trim();
+      const legacyDefault = remotePath === 'HomelabNotes/backups' || remotePath === 'Deeperguard/backups';
+      document.getElementById('pcloud-remote-path').value = (!account.pcloud_enabled && legacyDefault) ? '' : remotePath;
       document.getElementById('pcloud-region').value = account.pcloud_region || 'eu';
       document.getElementById('pcloud-enabled').checked = !!account.pcloud_enabled;
       document.getElementById('pcloud-password').value = '';
@@ -11566,7 +11637,7 @@
     created.textContent = formatDateTime(note.content.created_at);
     updated.textContent = formatDateTime(noteEditedAtMs(note));
     words.textContent = wordCount
-      ? `${wordCount} · ${minutes} min read`
+      ? (minutes ? `${wordCount} · ${minutes} min read` : `${wordCount} ${wordCount === 1 ? 'word' : 'words'}`)
       : '0 words';
     attachments.textContent = String(attCount);
     editor.textContent = EDITOR_LABELS[note.content.editor || 'plain'] || 'Plain text';
@@ -12494,7 +12565,11 @@
         // Queue before the preview paints so a phone does not decode the PDF twice.
         enqueueOcrJob({ attId, noteId: id, file: storeFile, suggestTags: true });
       }
-      editorMode = 'preview';
+      const uploadedKind = (typeof NotesPreview !== 'undefined' && NotesPreview.kindFromMeta)
+        ? NotesPreview.kindFromMeta(storeFile.type, storeFile.name)
+        : '';
+      if (uploadedKind === 'pdf' || uploadedKind === 'image') editorMode = 'preview';
+      else editorMode = 'edit';
       if (currentId === id) {
         renderAttachments(id);
         applyEditorMode();
@@ -14021,6 +14096,15 @@
     toast('Folder created');
   }
 
+  document.getElementById('note-folder-select')?.addEventListener('change', (event) => {
+    const select = event.currentTarget;
+    if (select.value === '__new__') {
+      select.value = NotesStore.get(currentId)?.content?.folder_id || '';
+      document.getElementById('btn-new-folder')?.click();
+      return;
+    }
+    assignCurrentNoteFolder(select.value);
+  });
   document.getElementById('btn-new-folder')?.addEventListener('click', () => {
     if (!NotesStore.isUnlocked()) {
       toast('Unlock the vault first', true);
@@ -14161,6 +14245,7 @@
   ui.filters.querySelectorAll('.filter').forEach((btn) => {
     btn.addEventListener('click', () => {
       currentFolder = null;
+      if (btn.dataset.filter === 'all') currentTag = null;
       setFilter(btn.dataset.filter);
       renderTags();
       renderNotes();
@@ -14171,6 +14256,7 @@
     filterSelect.value = currentFilter;
     filterSelect.addEventListener('change', () => {
       currentFolder = null;
+      if (filterSelect.value === 'all') currentTag = null;
       setFilter(filterSelect.value);
       renderTags();
       renderNotes();
@@ -15678,6 +15764,8 @@
       backupStatus.hidden = ok;
       backupWrap.hidden = ok;
       if (!ok) backupStatus.textContent = 'This backup address is not verified yet. Enter the code from that inbox. Backups are not sent until then.';
+      const hint = document.getElementById('backup-verified-hint');
+      if (hint) hint.hidden = ok;
     }
   }
 
@@ -16625,9 +16713,11 @@
             renderNotes();
             renderVaultStats();
             updateEmptyStateVisibility();
-            toast(noteCount
-              ? `Synced · ${noteCount} active note${noteCount === 1 ? '' : 's'}`
-              : 'Synced · server returned no notes for this password');
+            if (noteCount) {
+              toast(`Synced · ${noteCount} active note${noteCount === 1 ? '' : 's'}`);
+            } else if (vaultSyncError) {
+              toast('Synced · server returned no notes for this password', true);
+            }
           } else if (noteCount > 0) {
             lastNotesRenderKey = '';
             renderNotes();
@@ -16998,7 +17088,7 @@
           renderVaultStats();
           renderNotes();
           updateEmptyStateVisibility();
-          if (NotesStore.listNotes().length === 0) {
+          if (NotesStore.listNotes().length === 0 && vaultSyncError) {
             toast('No notes downloaded — tap Sync or re-enter your vault password', true);
           }
         });

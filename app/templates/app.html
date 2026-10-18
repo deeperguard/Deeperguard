@@ -1005,6 +1005,12 @@
               </svg>
               <span class="editor-menu-label">Pin</span>
             </button>
+            <label class="editor-folder-control editor-toolbar-menu-item" id="note-folder-control">
+              <span class="editor-menu-label">Folder</span>
+              <select id="note-folder-select" aria-label="Folder">
+                <option value="">No folder</option>
+              </select>
+            </label>
             <button type="button" id="btn-archive" class="btn icon toolbar-secondary editor-toolbar-menu-item" role="menuitem" title="Archive" aria-label="Archive">
               <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -1413,7 +1419,7 @@
             </div>
           </div>
           <label class="settings-row checkbox"><span>Daily encrypted email backup</span><input id="backup-enabled" type="checkbox"></label>
-          <p class="settings-hint">Backups are sent only after this address is verified with a code.</p>
+          <p id="backup-verified-hint" class="settings-hint">Backups are sent only after this address is verified with a code.</p>
           <div class="settings-actions">
             <button type="button" id="btn-save-backup" class="btn">Save backup settings</button>
             <button type="button" id="btn-backup-now" class="btn">Email backup now</button>
@@ -1451,7 +1457,7 @@
             <button type="button" id="btn-save-pcloud" class="btn">Save pCloud settings</button>
             <button type="button" id="btn-pcloud-sync" class="btn">Sync to pCloud now</button>
           </div>
-          <p class="settings-hint">Uploads encrypted vault backups via rclone. Password + WebDAV works when pCloud two-factor authentication is off. If 2FA is enabled, run <code>rclone authorize pcloud</code> on your computer (EU: add <code>--pcloud-hostname eapi.pcloud.com</code>) and paste the token here. Credentials stay in <code>keys/</code>, not the database.</p>
+          <p class="settings-hint">Uploads encrypted vault backups via rclone. Password + WebDAV works when pCloud two-factor authentication is off. If 2FA is enabled, run <code>rclone authorize pcloud</code> on your computer (EU: add <code>--pcloud-hostname eapi.pcloud.com</code>) and paste the token here.</p>
         </div>
       </section>
 
