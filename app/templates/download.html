@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Download — Deeperguard</title>
+  <meta name="description" content="Install Deeperguard as a web app on your home screen. No app store.">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+</head>
+<body>
+  {% include 'partials/mk-topbar.html' %}
+  <main class="wrap mk-subpage">
+    <section class="mk-section">
+      <div class="mk-section-head">
+        <span class="mk-badge">Install</span>
+        <h1>Download Deeperguard</h1>
+        <p>Deeperguard is an installable web app. There is no app-store download. Open <a href="{{ app_url }}">{{ app_url }}</a> in your browser, then add it to your home screen.</p>
+      </div>
+      <div class="mk-grid cols-2">
+        <article class="mk-card">
+          <h2>iPhone and iPad</h2>
+          <ol>
+            <li>Open <a href="{{ app_url }}">the notes app</a> in Safari.</li>
+            <li>Tap the Share button.</li>
+            <li>Tap <strong>Add to Home Screen</strong>, then Add.</li>
+          </ol>
+          <p>The icon opens the vault full screen, including offline after you have unlocked it once on that device.</p>
+        </article>
+        <article class="mk-card">
+          <h2>Android</h2>
+          <ol>
+            <li>Open <a href="{{ app_url }}">the notes app</a> in Chrome.</li>
+            <li>Tap the menu, then <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+          </ol>
+          <p>If Chrome offers an install banner, that is the same step.</p>
+        </article>
+        <article class="mk-card">
+          <h2>Mac, Windows, and Linux</h2>
+          <ol>
+            <li>Open <a href="{{ app_url }}">the notes app</a> in Chrome, Edge, or another Chromium browser.</li>
+            <li>Click the install icon in the address bar, or use the browser menu → <strong>Install Deeperguard</strong>.</li>
+          </ol>
+          <p>Safari on Mac can use File → Add to Dock after you open the app.</p>
+        </article>
+        <article class="mk-card">
+          <h2>Already installed?</h2>
+          <p>Open the home-screen icon, or go straight to <a href="{{ app_url }}">{{ app_url }}</a>. Sign in, then unlock the vault with your vault password.</p>
+          <p><a class="mk-btn" href="{{ app_url }}">Open notes app</a></p>
+        </article>
+      </div>
+    </section>
+    {% include 'partials/mk-footer.html' %}
+  </main>
+</body>
+</html>

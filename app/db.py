@@ -167,6 +167,22 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN storage_quota_bytes INTEGER NOT NULL DEFAULT 0")
     if "is_admin" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+    if "email_verified" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1")
+    if "email_verify_hash" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN email_verify_hash TEXT NOT NULL DEFAULT ''")
+    if "email_verify_expires" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN email_verify_expires REAL NOT NULL DEFAULT 0")
+    if "email_verify_attempts" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN email_verify_attempts INTEGER NOT NULL DEFAULT 0")
+    if "backup_email_verified" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN backup_email_verified INTEGER NOT NULL DEFAULT 1")
+    if "backup_verify_hash" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN backup_verify_hash TEXT NOT NULL DEFAULT ''")
+    if "backup_verify_expires" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN backup_verify_expires REAL NOT NULL DEFAULT 0")
+    if "backup_verify_attempts" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN backup_verify_attempts INTEGER NOT NULL DEFAULT 0")
     if "plan" not in cols:
         from plans import PLAN_PRO, plan_storage_quota_bytes
 
@@ -326,9 +342,9 @@ def create_user_srp(
             INSERT INTO users (
                 email, password_hash, kdf_salt, kdf_iterations, vault_kdf_version,
                 auth_method, srp_salt, srp_verifier, storage_quota_bytes, is_admin, plan,
-                created_at, updated_at
+                email_verified, created_at, updated_at
             )
-            VALUES (?, '', ?, ?, 2, 'srp', ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, '', ?, ?, 2, 'srp', ?, ?, ?, ?, ?, 0, ?, ?)
             """,
             (
                 email.strip().lower(),
@@ -879,15 +895,111 @@ def update_user_totp(user_id: int, secret: str, enabled: bool) -> None:
         )
 
 
-def update_backup_settings(user_id: int, email: str, enabled: bool) -> None:
+def update_backup_settings(
+    user_id: int,
+    email: str,
+    enabled: bool,
+    *,
+    backup_email_verified: int | None = None,
+) -> None:
+    with tx() as conn:
+        if backup_email_verified is None:
+            conn.execute(
+                """
+                UPDATE users
+                SET backup_email = ?, backup_enabled = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (email.strip().lower(), 1 if enabled else 0, now(), user_id),
+            )
+            return
+        conn.execute(
+            """
+            UPDATE users
+            SET backup_email = ?, backup_enabled = ?, backup_email_verified = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                email.strip().lower(),
+                1 if enabled else 0,
+                1 if backup_email_verified else 0,
+                now(),
+                user_id,
+            ),
+        )
+
+
+def set_email_verification(user_id: int, code_hash: str, expires_at: float) -> None:
     with tx() as conn:
         conn.execute(
             """
             UPDATE users
-            SET backup_email = ?, backup_enabled = ?, updated_at = ?
+            SET email_verify_hash = ?, email_verify_expires = ?, email_verify_attempts = 0, updated_at = ?
             WHERE id = ?
             """,
-            (email.strip().lower(), 1 if enabled else 0, now(), user_id),
+            (code_hash, float(expires_at), now(), user_id),
+        )
+
+
+def bump_email_verify_attempts(user_id: int) -> None:
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET email_verify_attempts = email_verify_attempts + 1, updated_at = ?
+            WHERE id = ?
+            """,
+            (now(), user_id),
+        )
+
+
+def mark_email_verified(user_id: int) -> None:
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET email_verified = 1, email_verify_hash = '', email_verify_expires = 0,
+                email_verify_attempts = 0, updated_at = ?
+            WHERE id = ?
+            """,
+            (now(), user_id),
+        )
+
+
+def set_backup_verification(user_id: int, code_hash: str, expires_at: float) -> None:
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET backup_verify_hash = ?, backup_verify_expires = ?, backup_verify_attempts = 0, updated_at = ?
+            WHERE id = ?
+            """,
+            (code_hash, float(expires_at), now(), user_id),
+        )
+
+
+def bump_backup_verify_attempts(user_id: int) -> None:
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET backup_verify_attempts = backup_verify_attempts + 1, updated_at = ?
+            WHERE id = ?
+            """,
+            (now(), user_id),
+        )
+
+
+def mark_backup_email_verified(user_id: int) -> None:
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET backup_email_verified = 1, backup_verify_hash = '', backup_verify_expires = 0,
+                backup_verify_attempts = 0, updated_at = ?
+            WHERE id = ?
+            """,
+            (now(), user_id),
         )
 
 

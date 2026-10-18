@@ -67,6 +67,19 @@ def user_admin_payload(user_row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _site_nav(build_id: str) -> dict[str, str]:
+    from config import CONTACT_EMAIL, NOTES_PUBLIC_URL, app_entry_path
+
+    base = NOTES_PUBLIC_URL.rstrip("/")
+    return {
+        "build": build_id,
+        "app_url": f"{base}{app_entry_path()}",
+        "register_url": f"{base}/register",
+        "login_url": f"{base}/login",
+        "contact_email": CONTACT_EMAIL,
+    }
+
+
 def register_admin_routes(app, build_id: str) -> None:
     @app.get("/admin")
     def admin_page():
@@ -78,11 +91,11 @@ def register_admin_routes(app, build_id: str) -> None:
 
     @app.get("/privacy")
     def privacy_page():
-        return render_template("legal.html", build=build_id, page="privacy")
+        return render_template("legal.html", page="privacy", **_site_nav(build_id))
 
     @app.get("/terms")
     def terms_page():
-        return render_template("legal.html", build=build_id, page="terms")
+        return render_template("legal.html", page="terms", **_site_nav(build_id))
 
     @app.get("/self-host")
     def self_host_page():

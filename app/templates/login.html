@@ -10,8 +10,17 @@
       {% include 'partials/auth-brand.html' %}
       <h1>Deeperguard</h1>
       {% include 'partials/zk-plain.html' %}
-      <p class="auth-hint">Sign in with your account password. You will unlock your vault on the next screen with the same password (unless you changed it later).</p>
+      <p class="auth-hint">Sign in with your account password. The vault unlocks with that same password, unless you changed the vault password in Settings. They start as one password. We cannot recover it.</p>
     </div>
+    {% if signed_in_email %}
+    <div class="signed-in-notice" role="status">
+      <p>You're already signed in as <strong>{{ signed_in_email }}</strong>.</p>
+      <div class="signed-in-actions">
+        <a class="btn primary block" href="/app">Go to your vault</a>
+        <button type="button" class="btn block" id="sign-out-create" data-csrf="{{ csrf_token }}">Sign out and create a new account</button>
+      </div>
+    </div>
+    {% endif %}
     <form id="login-form" class="stack" onsubmit="event.preventDefault(); return false;">
       <label>Email
         <input type="email" name="email" autocomplete="username" required>
@@ -19,14 +28,14 @@
       <label>Account password
         <input type="password" name="password" autocomplete="current-password" required>
       </label>
-      <p class="hint">Used to sign in and decrypt notes on this device. It never leaves your browser.</p>
+      <p class="hint">This password signs you in. It also decrypts notes on this device until you change the vault password in Settings. It never leaves your browser.</p>
       <p id="login-error" class="error" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
       <p id="login-status" class="auth-status muted" hidden></p>
       <button type="submit" class="btn primary block">Sign in</button>
       <button type="button" class="btn subtle block" id="webauthn-login">Sign in with passkey</button>
       <p class="hint center">Passkeys sign you in only — you still unlock your vault with your password afterward.</p>
     </form>
-    <p class="muted center auth-switch">No account? <a href="/register">Create one</a></p>
+    <p class="muted center auth-switch">No account? <a href="/register">Create one</a>{% if signed_in_email %} — you'll be asked to confirm before a second account replaces this session.{% endif %}</p>
     {% include 'partials/auth-footer.html' %}
   </main>
   <script src="/static/js/vault-secrets.js?v={{ build }}"></script>

@@ -9,6 +9,7 @@ APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 
 import db  # noqa: E402
+import email_verify  # noqa: E402
 from backup_mail import send_user_backup  # noqa: E402
 from backup_pcloud import run_pcloud_backups  # noqa: E402
 from maintenance_lock import maintenance_lock  # noqa: E402
@@ -33,6 +34,9 @@ def _run_backups_locked() -> tuple[int, int]:
     sent = 0
     for user in db.users_with_backup_enabled():
         recipient = str(user["backup_email"] or user["email"])
+        if not email_verify.recipient_verified(user, recipient):
+            db.log_backup(int(user["id"]), recipient, 0, 0, "skipped", "email not verified")
+            continue
         try:
             send_user_backup(int(user["id"]), recipient)
             sent += 1

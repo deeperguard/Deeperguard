@@ -131,7 +131,7 @@
     compactList: true,
     sort: 'updated',
     autoPreview: false,
-    autoLockMin: 0,
+    autoLockMin: 15,
     lockOnUnfocus: '1min',
     rememberDevice: false,
     lightVault: false,
@@ -653,13 +653,27 @@
     // Scan tips wait until a note has been saved with body text.
   }
 
-  function maybeOfferWritingTip() {
-    if (heroGuideDismissed()) return;
-    const wrote = NotesStore.listNotes().some((note) => String(note?.content?.content || '').trim());
-    if (!wrote) return;
+  function noteHasScanOrAttachment(note) {
+    if (!note?.uuid) return false;
+    const atts = NotesStore.listAttachments(note.uuid);
+    return atts.some((att) => {
+      const content = att?.content || {};
+      if (String(content.ocr_text || '').trim()) return true;
+      if (content.file_enc || content.file_enc_stored || content.preview_enc) return true;
+      const name = String(content.filename || content.original_filename || '');
+      return !!name;
+    });
+  }
+
+  function syncWritingTip(note) {
     const tip = document.getElementById('writing-tip');
     if (!tip) return;
-    tip.hidden = false;
+    const show = !heroGuideDismissed() && noteHasScanOrAttachment(note);
+    tip.hidden = !show;
+  }
+
+  function maybeOfferWritingTip() {
+    syncWritingTip(currentId ? NotesStore.get(currentId) : null);
   }
 
   async function offerDocumentSearch(text) {
@@ -9875,6 +9889,7 @@
     if (!gated) {
       renderTagBar(note);
       renderAttachments(id);
+      syncWritingTip(note);
       applyEditorMode();
       renderHistory(note);
       if (typeof NotesAiChat !== 'undefined') NotesAiChat.onNoteChanged(id);
@@ -10114,7 +10129,7 @@
       ui.noteMeta.textContent = 'Protected note';
       return;
     }
-    const { words, minutes } = NotesSearch.noteBodyReading(note);
+    const { words, minutes } = displayedReading(note);
     const updated = relativeTime(noteEditedAtMs(note));
     const primary = document.createElement('span');
     primary.textContent = words
@@ -10200,6 +10215,23 @@
 
   function safeColor(color) {
     return NotesSanitize.safeColor(color);
+  }
+
+  function editorReadingText() {
+    if (ui.checklist && !ui.checklist.hidden) {
+      return [...ui.checklist.querySelectorAll('.check-text')]
+        .map((el) => String(el.value || '').trim())
+        .filter(Boolean)
+        .join('\n');
+    }
+    return String(ui.body?.value || '');
+  }
+
+  function displayedReading(note) {
+    if (note && note.uuid === currentId && ui.body && !(note.content?.locked && !unlockedNotes.has(note.uuid))) {
+      return NotesSearch.readingStats(editorReadingText());
+    }
+    return NotesSearch.noteBodyReading(note);
   }
 
   function savedVaultPasswordForReveal() {
@@ -10428,11 +10460,8 @@
     if (lightVaultPref) lightVaultPref.checked = !!prefs.lightVault;
     refreshLocalFilesSummary().catch(() => {});
     initAiChatSettings();
-    const currentPw = document.getElementById('password-change-current');
-    if (currentPw && NotesStore.isUnlocked() && !currentPw.value) {
-      const sessionPw = savedVaultPasswordForReveal();
-      if (sessionPw) currentPw.value = sessionPw;
-    }
+    armCurrentVaultPasswordField();
+    renderEmailVerification(account);
     updateVaultPasswordReveal();
     bindPasswordToggles(document.getElementById('attachment-repair'));
   }
@@ -11099,19 +11128,23 @@
       ? 'Vault unlocked — notes encrypted on device before sync'
       : 'Vault locked';
     const lines = [
-      buildStale
-        ? `<strong class="ocr-stale">App v${escapeHtml(build)} · server v${escapeHtml(serverBuild)} — refresh app cache on Wi‑Fi</strong>`
-        : `<strong>Deeperguard v${escapeHtml(build)}</strong>`,
       escapeHtml(zkLine),
       escapeHtml(vaultLine),
       escapeHtml(hostLine),
+    ];
+    const technical = [
+      buildStale
+        ? `<strong class="ocr-stale">App v${escapeHtml(build)} · server v${escapeHtml(serverBuild)} — refresh app cache on Wi‑Fi</strong>`
+        : `<strong>Deeperguard v${escapeHtml(build)}</strong>`,
       escapeHtml(serverLabel),
     ];
+    const technicalEl = document.getElementById('privacy-technical');
+    if (technicalEl) technicalEl.innerHTML = technical.join('<br>');
     if (stale) {
       lines.push(`<span class="ocr-stale">${stale} note${stale === 1 ? '' : 's'} need search index repair (Advanced)</span>`);
     }
     el.innerHTML = lines.join('<br>');
-    lastDiagnosticsText = lines.map((line) => line.replace(/<[^>]+>/g, '')).join('\n');
+    lastDiagnosticsText = lines.concat(technical).map((line) => line.replace(/<[^>]+>/g, '')).join('\n');
     updateAppUpdateBanner(serverBuild);
     const refreshBtn = document.getElementById('btn-refresh-app');
     if (refreshBtn) refreshBtn.classList.toggle('primary', !!buildStale);
@@ -11523,7 +11556,7 @@
     const idText = document.getElementById('note-info-id-text');
     if (!created || !note) return;
     if (note.content?.locked && !unlockedNotes.has(note.uuid)) return;
-    const { words: wordCount, minutes } = NotesSearch.noteBodyReading(note);
+    const { words: wordCount, minutes } = displayedReading(note);
     const attCount = NotesStore.listAttachments(note.uuid).length;
     const tagNames = (note.content.tags || [])
       .map((id) => tagMap().get(id))
@@ -13956,6 +13989,61 @@
     if (currentId) syncTagBarShell(NotesStore.get(currentId));
     layoutFindBarOverDocViewer();
   });
+  function hideFolderComposer() {
+    const composer = document.getElementById('folder-composer');
+    const input = document.getElementById('folder-name-input');
+    if (composer) composer.hidden = true;
+    if (input) input.value = '';
+  }
+
+  function createFolderFromComposer() {
+    if (!NotesStore.isUnlocked()) {
+      toast('Unlock the vault first', true);
+      return;
+    }
+    const input = document.getElementById('folder-name-input');
+    const name = String(input?.value || '').trim();
+    if (!name) {
+      toast('Enter a folder name', true);
+      input?.focus();
+      return;
+    }
+    const folderId = NotesStore.createFolder(name);
+    hideFolderComposer();
+    if (!folderId) return;
+    setFolderOpen(folderId, true);
+    currentFolder = folderId;
+    prefs.foldersCollapsed = false;
+    try { localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs)); } catch (err) { /* ignore */ }
+    applyFolderSection();
+    renderFolders();
+    renderNotes();
+    toast('Folder created');
+  }
+
+  document.getElementById('btn-new-folder')?.addEventListener('click', () => {
+    if (!NotesStore.isUnlocked()) {
+      toast('Unlock the vault first', true);
+      return;
+    }
+    const section = document.getElementById('folder-section');
+    if (section) section.open = true;
+    const composer = document.getElementById('folder-composer');
+    if (composer) composer.hidden = false;
+    document.getElementById('folder-name-input')?.focus();
+  });
+  document.getElementById('folder-create-confirm')?.addEventListener('click', createFolderFromComposer);
+  document.getElementById('folder-create-cancel')?.addEventListener('click', hideFolderComposer);
+  document.getElementById('folder-name-input')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      createFolderFromComposer();
+    }
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      hideFolderComposer();
+    }
+  });
   document.getElementById('tag-create-confirm').addEventListener('click', () => {
     createTag(document.getElementById('tag-name-input').value);
   });
@@ -14026,10 +14114,21 @@
     syncEditorModeForSearch();
     if (currentId) applyEditorMode();
   }
-  ui.search.addEventListener('input', () => {
+  function queueSearchAsYouType() {
     clearTimeout(searchDebounceTimer);
-    searchDebounceTimer = setTimeout(applySearchFilter, 150);
-  });
+    updateSearchClear();
+    // Results update while typing. Enter still runs the same search immediately.
+    searchDebounceTimer = setTimeout(() => {
+      try {
+        renderNotes();
+      } catch (err) {
+        console.error('Search failed', err);
+      }
+      applySearchFilter();
+    }, 180);
+  }
+  ui.search.addEventListener('input', queueSearchAsYouType);
+  ui.search.addEventListener('compositionend', queueSearchAsYouType);
   // iOS Safari "Search" on type=search otherwise navigates / reloads the page.
   // Search field is type=text; still block Enter just in case.
   ui.search.addEventListener('keydown', (event) => {
@@ -15539,6 +15638,87 @@
     btn.classList.add('primary');
   }
 
+  function armCurrentVaultPasswordField() {
+    const input = document.getElementById('password-change-current');
+    if (!input) return;
+    if (input.dataset.userTyped !== '1') {
+      input.value = '';
+      input.setAttribute('autocomplete', 'off');
+      input.setAttribute('readonly', 'readonly');
+    }
+    if (input.dataset.armBound === '1') return;
+    input.dataset.armBound = '1';
+    const arm = () => {
+      input.removeAttribute('readonly');
+      if (input.getAttribute('autocomplete') !== 'current-password') {
+        input.setAttribute('autocomplete', 'current-password');
+      }
+    };
+    input.addEventListener('focus', arm);
+    input.addEventListener('pointerdown', arm);
+    input.addEventListener('input', () => {
+      input.dataset.userTyped = '1';
+      arm();
+    });
+  }
+
+  function renderEmailVerification(account) {
+    const status = document.getElementById('account-verify-status');
+    const wrap = document.getElementById('account-verify-wrap');
+    if (status && wrap) {
+      const verified = account?.email_verified !== false;
+      status.hidden = verified;
+      wrap.hidden = verified;
+      if (!verified) status.textContent = 'Email not verified. Enter the code we sent before backups can use this address.';
+    }
+    const backupStatus = document.getElementById('backup-verify-status');
+    const backupWrap = document.getElementById('backup-verify-wrap');
+    if (backupStatus && backupWrap) {
+      const ok = account?.backup_recipient_verified !== false;
+      backupStatus.hidden = ok;
+      backupWrap.hidden = ok;
+      if (!ok) backupStatus.textContent = 'This backup address is not verified yet. Enter the code from that inbox. Backups are not sent until then.';
+    }
+  }
+
+  async function verifyEmailCode(path, inputId) {
+    const code = String(document.getElementById(inputId)?.value || '').replace(/\D/g, '');
+    if (code.length !== 6) {
+      toast('Enter the 6-digit code from your email', true);
+      return;
+    }
+    try {
+      await NotesStore.api(path, { method: 'POST', body: JSON.stringify({ code }) });
+      toast('Email verified');
+      await initSettings();
+    } catch (err) {
+      toast(err.message || 'Could not verify that code', true);
+    }
+  }
+
+  document.getElementById('btn-account-verify')?.addEventListener('click', () => {
+    verifyEmailCode('/api/account/email/verify', 'account-verify-code');
+  });
+  document.getElementById('btn-account-verify-resend')?.addEventListener('click', async () => {
+    try {
+      await NotesStore.api('/api/account/email/resend', { method: 'POST', body: '{}' });
+      toast('Verification code sent');
+    } catch (err) {
+      toast(err.message || 'Could not send a code', true);
+    }
+  });
+  document.getElementById('btn-backup-verify')?.addEventListener('click', () => {
+    verifyEmailCode('/api/backup/email/verify', 'backup-verify-code');
+  });
+  document.getElementById('btn-backup-verify-resend')?.addEventListener('click', async () => {
+    try {
+      await NotesStore.api('/api/backup/email/resend', { method: 'POST', body: '{}' });
+      toast('Verification code sent');
+    } catch (err) {
+      toast(err.message || 'Could not send a code', true);
+    }
+  });
+
   function bindPasswordToggles(root) {
     const scope = root || document.getElementById('password-change');
     if (!scope) return;
@@ -15566,6 +15746,12 @@
     const next = newEl?.value || '';
     const confirm = confirmEl?.value || '';
     errEl.hidden = true;
+    if (!String(current).trim()) {
+      errEl.textContent = 'Enter your current vault password.';
+      errEl.hidden = false;
+      currentEl?.focus();
+      return;
+    }
     if (!next || next !== confirm) {
       errEl.textContent = 'New passwords do not match.';
       errEl.hidden = false;
@@ -15584,7 +15770,12 @@
         }
       }
       if (prefs.rememberDevice) enableRememberDevice({ auto: true });
-      if (currentEl) currentEl.value = '';
+      if (currentEl) {
+        currentEl.value = '';
+        delete currentEl.dataset.userTyped;
+        currentEl.setAttribute('autocomplete', 'off');
+        currentEl.setAttribute('readonly', 'readonly');
+      }
       if (newEl) newEl.value = '';
       if (confirmEl) confirmEl.value = '';
       vaultSyncError = '';
@@ -15605,6 +15796,8 @@
   });
 
   bindPasswordToggles();
+  armCurrentVaultPasswordField();
+  setTimeout(armCurrentVaultPasswordField, 300);
 
   document.getElementById('btn-repair-attachments')?.addEventListener('click', async () => {
     const errEl = document.getElementById('attachment-repair-error');

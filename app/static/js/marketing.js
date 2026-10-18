@@ -1,4 +1,20 @@
 (function () {
+  function revealHashTarget() {
+    const id = decodeURIComponent((location.hash || '').replace(/^#/, ''));
+    if (!id) return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    document.documentElement.classList.add('mk-hash-open');
+    el.style.opacity = '1';
+    el.style.visibility = 'visible';
+    el.style.transform = 'none';
+    el.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }
+  if (location.hash) {
+    revealHashTarget();
+    window.addEventListener('load', revealHashTarget);
+  }
+
   const form = document.getElementById('contact-form');
   if (!form) return;
   const status = document.getElementById('contact-status');
