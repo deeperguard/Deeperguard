@@ -1246,10 +1246,14 @@ const NotesStore = (() => {
     }
   }
 
+  function searchFolderMap() {
+    return new Map(listFolders().map((folder) => [folder.uuid, folder]));
+  }
+
   function rebuildSearchIndex() {
     if (typeof NotesSearch === 'undefined' || !NotesSearch.indexNotes) return;
     const tagMap = new Map(listTags().map((tag) => [tag.uuid, tag]));
-    NotesSearch.indexNotes(listNotes(), tagMap);
+    NotesSearch.indexNotes(listNotes(), tagMap, searchFolderMap());
   }
 
   function updateSearchIndexFor(uuid) {
@@ -1260,7 +1264,7 @@ const NotesStore = (() => {
     const fresh = state.items.get(uuid);
     if (!fresh || fresh.content?.type !== 'note') return;
     const tagMap = new Map(listTags().map((tag) => [tag.uuid, tag]));
-    NotesSearch.indexNote(fresh, tagMap);
+    NotesSearch.indexNote(fresh, tagMap, searchFolderMap());
   }
 
   function splitAttachmentBlob(content) {

@@ -665,10 +665,30 @@
     });
   }
 
+  function attachmentAlreadySearchable(att) {
+    const content = att?.content || {};
+    if (String(content.ocr_text || '').trim()) return true;
+    if (content.ocr_method === 'text') return true;
+    const method = content.ocr_method || '';
+    if (!att?.uuid || method === 'none' || method === 'failed' || method === 'pending' || !method) return false;
+    try {
+      return !!NotesStore.searchIndexCovers?.(att.uuid);
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function noteUploadsSearchable(note) {
+    if (!note?.uuid) return false;
+    const atts = NotesStore.listAttachments(note.uuid);
+    if (!atts.length) return false;
+    return atts.every(attachmentAlreadySearchable);
+  }
+
   function syncWritingTip(note) {
     const tip = document.getElementById('writing-tip');
     if (!tip) return;
-    const show = !heroGuideDismissed() && noteHasScanOrAttachment(note);
+    const show = !heroGuideDismissed() && noteHasScanOrAttachment(note) && !noteUploadsSearchable(note);
     tip.hidden = !show;
   }
 
@@ -919,6 +939,7 @@
         renderAttachments(attachmentNoteId);
         if (currentSearchQuery() || editorMode === 'ocr') applyEditorMode();
         updateNoteMeta(NotesStore.get(attachmentNoteId));
+        syncWritingTip(NotesStore.get(attachmentNoteId));
       }
       refreshSettingsDiagnostics().catch(() => {});
     }, 150);
@@ -2188,7 +2209,6 @@
     if (!note) return 'edit';
     if (noteSpreadsheetSource(note)) return 'preview';
     if (noteHasVisualDocs(noteId)) {
-      if (currentSearchQuery()) return 'preview';
       const body = String(note.content.content || '').trim();
       if (!body) return 'preview';
       return prefs.autoPreview ? 'preview' : 'edit';
@@ -2228,7 +2248,10 @@
     }
     const kind = attachmentKind(att);
     const visual = kind === 'image' || kind === 'pdf';
-    if (!thumbObserver || (visual && !forList)) {
+    // Photos and PDFs paint immediately. List rows used to wait for an
+    // intersection callback, which left a grey tile when the row was already
+    // on screen. The decode queue stays serial.
+    if (!thumbObserver || visual) {
       hydrateThumb(noteId, attId, stage, { forList });
       return;
     }
@@ -5799,6 +5822,15 @@
     return map;
   }
 
+  function folderMap() {
+    const folders = NotesStore.listFolders?.() || [];
+    const key = folders.map((f) => `${f.uuid}:${f.content?.updated_at || ''}:${f.content?.title || ''}`).join('|');
+    if (folderMap._cache && folderMap._cache.key === key) return folderMap._cache.map;
+    const map = new Map(folders.map((f) => [f.uuid, f]));
+    folderMap._cache = { key, map };
+    return map;
+  }
+
   function invalidateTagMap() {
     tagMap._cache = null;
   }
@@ -6088,6 +6120,7 @@
         });
       });
     });
+    syncNavFilterActive();
   }
 
   function hideTagComposer() {
@@ -6154,16 +6187,21 @@
     }
   }
 
+  function syncNavFilterActive() {
+    if (!ui.filters) return;
+    ui.filters.querySelectorAll('.filter').forEach((btn) => {
+      const name = btn.dataset.filter;
+      const on = name === currentFilter && !(name === 'all' && (currentTag || currentFolder));
+      btn.classList.toggle('active', on);
+    });
+  }
+
   function setFilter(name) {
     if (name === 'documents' && currentFilter !== 'documents') {
       filterBeforeFiles = currentFilter || 'all';
     }
     currentFilter = name;
-    if (ui.filters) {
-      ui.filters.querySelectorAll('.filter').forEach((btn) => {
-        btn.classList.toggle('active', btn.dataset.filter === name);
-      });
-    }
+    syncNavFilterActive();
     const select = document.getElementById('filter-select');
     if (select && select.value !== name) select.value = name;
     if (name === 'untagged' || name === 'trash' || name === 'archived') {
@@ -6620,7 +6658,7 @@
     const active = n.uuid === activeListNoteId() ? 'active' : '';
     const protectedClass = isProtected ? 'is-protected' : '';
     const atts = isLocked ? [] : NotesStore.listAttachments(n.uuid);
-    const match = query && !isLocked ? NotesSearch.describeMatch(n, query, tagMap()) : null;
+    const match = query && !isLocked ? NotesSearch.describeMatch(n, query, tagMap(), { folderMap: folderMap() }) : null;
     const ocr = isLocked ? '' : String(n.content.ocr_text || '').trim();
     const body = isLocked ? '' : String(n.content.content || '').trim();
     const bodyLine = body && body !== ocr
@@ -6818,6 +6856,7 @@
       tagId: currentTag,
       folderId: currentFolder,
       tagMap: tagMap(),
+      folderMap: folderMap(),
       sort: prefs.sort,
       searchOptions,
     });
@@ -6907,7 +6946,7 @@
         }
       }
       ui.noteList.innerHTML = query
-        ? `<div class="note-list-empty"><p class="note-list-empty-title">No matches</p><p class="muted">${listingFiles ? 'Try a filename or the note the file is attached to.' : 'Try another word, a tag name, or text from a scanned document.'}</p></div>`
+        ? `<div class="note-list-empty"><p class="note-list-empty-title">No matches</p><p class="muted">${listingFiles ? 'Try a filename or the note the file is attached to.' : 'Try another word, a tag or folder name, or text from a scanned document.'}</p></div>`
         : currentFilter === 'trash'
           ? '<div class="note-list-empty"><p class="note-list-empty-title">Trash is empty</p><p class="muted">Notes you delete appear here until you empty trash.</p></div>'
         : currentFilter === 'documents'
@@ -7983,13 +8022,15 @@
           return;
         }
         const doc = await NotesPreview.openPdf(entry.bytes);
-        const width = forList ? 56 : 240;
+        const stageWidth = Math.round(stage.clientWidth || stage.parentElement?.clientWidth || 0);
+        const width = forList ? 56 : Math.max(84, stageWidth || 84);
         stage.replaceChildren(await NotesPreview.renderPdfPage(doc, 1, width));
         if (forList && previewingId !== id) forgetPreview(id);
         return;
       }
       if (entry.kind === 'text') {
         clearDocStageLoading(stage);
+        const query = forList ? '' : activeFindNeedle();
         NotesPreview.renderTextPreview(stage, entry.bytes, query);
         if (forList && previewingId !== id) forgetPreview(id);
         return;
@@ -8766,6 +8807,15 @@
     inlineAttIds = '';
   }
 
+  function ensureInlineDocThumbs(noteId, items) {
+    if (!ui.docInline || editorMode !== 'preview' || !items?.length) return;
+    items.forEach((a) => {
+      const stage = ui.docInline.querySelector(`.doc-thumb-stage[data-stage="${a.uuid}"]`);
+      if (!stage || stage.querySelector('img, canvas, pre, .doc-page-wrap')) return;
+      observeThumb(noteId, a.uuid, stage);
+    });
+  }
+
   function renderDocInline(noteId) {
     const listed = NotesStore.listAttachments(noteId);
     if (!ui.docInline) return;
@@ -8780,7 +8830,7 @@
       return;
     }
     const query = activeFindNeedle();
-    const show = editorMode === 'preview' || !!query;
+    const show = editorMode === 'preview';
     ui.docInline.hidden = !show;
     // With a query, the file that contains it takes the main stage so the
     // note opens on the matched document, not on whichever file was stored first.
@@ -8792,12 +8842,14 @@
     if (inlineNoteId === noteId && inlineAttIds === ids && hydrated && inlineSearch !== query) {
       inlineSearch = query;
       if (show) repaintInlineSearch(noteId, first.uuid, stage);
+      ensureInlineDocThumbs(noteId, rest);
       return;
     }
     if (inlineNoteId === noteId && inlineAttIds === ids && inlineSearch === query && hydrated) {
       if (query && stage && !previewHasHits(stage) && !previewHasExcerpt(stage)) {
         repaintInlineSearch(noteId, first.uuid, stage);
       }
+      ensureInlineDocThumbs(noteId, rest);
       return;
     }
     inlineNoteId = noteId;
@@ -8854,9 +8906,7 @@
       return;
     }
     hydrateInlineDoc(noteId, first.uuid, ui.docInline.querySelector(`[data-stage="${first.uuid}"]`));
-    rest.forEach((a) => {
-      observeThumb(noteId, a.uuid, ui.docInline.querySelector(`[data-stage="${a.uuid}"]`));
-    });
+    ensureInlineDocThumbs(noteId, rest);
     syncEditorDocPreviewLayout();
     ensureInlineDocLayoutWatch();
     syncEditorMobileDocActions();
@@ -9171,7 +9221,8 @@
     if (!btn) return;
     const note = currentId ? NotesStore.get(currentId) : null;
     const locked = !!(note?.content?.locked && currentId && !unlockedNotes.has(currentId));
-    const file = !locked && currentId ? openNoteFileAttachment(currentId) : null;
+    const viewingFile = !locked && editorMode === 'preview' && !!inlineDocPreviewAttId();
+    const file = viewingFile && currentId ? openNoteFileAttachment(currentId) : null;
     const label = file ? 'Download file' : 'Download note';
     btn.title = label;
     btn.setAttribute('aria-label', label);
@@ -9204,10 +9255,12 @@
       toast('Unlock this protected note first', true);
       return;
     }
-    const file = openNoteFileAttachment(currentId);
-    if (file) {
-      await downloadAttachment(file.uuid);
-      return;
+    if (editorMode === 'preview') {
+      const file = openNoteFileAttachment(currentId);
+      if (file) {
+        await downloadAttachment(file.uuid);
+        return;
+      }
     }
     downloadNoteMarkdown(note);
   }
@@ -9447,7 +9500,7 @@
   }
 
   function docSearchActive() {
-    return !!currentId && noteHasDocs(currentId) && !!activeFindNeedle();
+    return editorMode === 'preview' && !!currentId && noteHasDocs(currentId) && !!activeFindNeedle();
   }
 
   function syncEditorModeForSearch() {
@@ -9513,8 +9566,9 @@
 
   function mobileDocToolbarActive() {
     if (!currentId || !noteHasDocs(currentId)) return false;
+    if (editorMode !== 'preview') return false;
     if (!inlineDocPreviewAttId()) return false;
-    return editorMode === 'preview' || !!activeFindNeedle();
+    return true;
   }
 
   function applyEditorMode() {
@@ -10787,6 +10841,7 @@
         query: token,
         filter: 'all',
         tagMap: tagMap(),
+        folderMap: folderMap(),
         sort: prefs.sort,
       });
       const found = matches.some((note) => note.uuid === noteId);
@@ -12474,7 +12529,7 @@
     });
   }
 
-  async function ingestDocument(file, { createIfNeeded = false, title, displayName, quiet = false, noteId = '' } = {}) {
+  async function ingestDocument(file, { createIfNeeded = false, title, displayName, quiet = false, noteId = '', preserveEditor = false } = {}) {
     if (!NotesStore.isUnlocked()) {
       toast('Unlock the vault first', true);
       return;
@@ -12568,7 +12623,8 @@
       const uploadedKind = (typeof NotesPreview !== 'undefined' && NotesPreview.kindFromMeta)
         ? NotesPreview.kindFromMeta(storeFile.type, storeFile.name)
         : '';
-      if (uploadedKind === 'pdf' || uploadedKind === 'image') editorMode = 'preview';
+      if (preserveEditor) editorMode = 'edit';
+      else if (uploadedKind === 'pdf' || uploadedKind === 'image') editorMode = 'preview';
       else editorMode = 'edit';
       if (currentId === id) {
         renderAttachments(id);
@@ -12595,7 +12651,7 @@
     return true;
   }
 
-  async function ingestDocumentBatch(files, { createIfNeeded = false, title = '' } = {}) {
+  async function ingestDocumentBatch(files, { createIfNeeded = false, title = '', preserveEditor = false } = {}) {
     const list = [];
     for (const file of toFileArray(files)) {
       const copy = await snapshotPickedFile(file);
@@ -12621,6 +12677,7 @@
         title: noteTitle,
         displayName: file.name,
         quiet: list.length > 1,
+        preserveEditor,
       });
       if (ok) saved += 1;
     }
@@ -14958,7 +15015,7 @@
       return;
     }
     if (list.length > 1) {
-      await ingestDocumentBatch(list, { createIfNeeded: false });
+      await ingestDocumentBatch(list, { createIfNeeded: false, preserveEditor: true });
       return;
     }
     const copy = await snapshotPickedFile(list[0]);
@@ -14970,6 +15027,7 @@
         createIfNeeded: false,
         title,
         displayName: copy.name,
+        preserveEditor: true,
       });
     } catch (err) {
       if (isDuplicateUploadError(err.message)) {
