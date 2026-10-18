@@ -698,6 +698,18 @@ const NotesClientOcr = (() => {
     return null;
   }
 
+  function keepOriginalScanFile(file) {
+    if (!file || isHeic(file)) return false;
+    const mime = String(file.type || '').toLowerCase();
+    const name = String(file.name || '').toLowerCase();
+    return mime === 'image/webp'
+      || mime === 'image/gif'
+      || mime === 'image/bmp'
+      || mime === 'image/png'
+      || mime === 'image/jpeg'
+      || /\.(webp|gif|bmp|png|jpe?g)$/.test(name);
+  }
+
   function needsPrepare(files) {
     const list = (files || []).filter(Boolean);
     if (!list.length) return false;
@@ -736,13 +748,17 @@ const NotesClientOcr = (() => {
       if (total > MAX_BYTES * 2) throw new Error('Those photos are too large to combine.');
     }
     if (!needsPrepare(list)) return list[0];
+    if (list.length === 1 && keepOriginalScanFile(list[0])) return list[0];
     if (list.some(isHeic) && typeof onStatus === 'function') onStatus('Converting HEIC…');
     const canvases = [];
     for (const file of list) {
       const { canvas } = await decodeImageFile(file);
       canvases.push(canvas);
     }
-    if (canvases.length === 1) return canvasToJpegFile(canvases[0]);
+    if (canvases.length === 1) {
+      const stem = String(list[0]?.name || 'scan').replace(/\.[^.]+$/, '') || 'scan';
+      return canvasToJpegFile(canvases[0], `${stem}.jpg`);
+    }
     if (typeof onStatus === 'function') onStatus('Combining pages…');
     return imagesToPdfFile(canvases);
   }

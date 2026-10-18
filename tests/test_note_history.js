@@ -125,6 +125,18 @@ const snapshot = NotesHistory.revisionRows(kept)[0];
 assert.strictEqual(snapshot.title, 'Current');
 assert.strictEqual(snapshot.content, 'unsaved keystrokes');
 
+const burstId = NotesStore.newUuid();
+const burst = NotesStore.defaultNote();
+burst.title = 'Burst';
+burst.content = 'one';
+NotesStore.upsert(burstId, burst);
+NotesStore.upsert(burstId, { ...NotesStore.get(burstId).content, content: 'two' }, { recordRevision: true });
+NotesStore.upsert(burstId, { ...NotesStore.get(burstId).content, content: 'three' }, { recordRevision: true });
+const burstRows = NotesHistory.revisionRows(NotesStore.get(burstId));
+assert.strictEqual(burstRows.length, 2);
+assert.strictEqual(burstRows[0].content, 'two');
+assert.strictEqual(burstRows[1].content, 'one');
+
 const root = path.join(__dirname, '..');
 const appJs = fs.readFileSync(path.join(root, 'app', 'static', 'js', 'app.js'), 'utf8');
 const restoreAt = appJs.indexOf('NotesStore.restoreRevision(currentId, rev)');

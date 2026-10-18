@@ -3870,21 +3870,15 @@ const NotesStore = (() => {
       content.revisions = [...(prev.revisions || [])];
       if (changed) {
         const now = Date.now();
-        const latest = content.revisions[0];
-        const latestAt = latest?.at ? new Date(latest.at).getTime() : 0;
-        // Coalesce rapid edits into one history row (avoid per-keystroke revisions).
-        const REVISION_GAP_MS = 5_000;
-        if (latest && Number.isFinite(latestAt) && now - latestAt < REVISION_GAP_MS) {
-          /* keep the existing revision snapshot from the start of this edit burst */
-        } else {
-          content.revisions.unshift({
-            at: new Date(now).toISOString(),
-            title: prev.title || '',
-            content: prev.content || '',
-          });
-          if (content.revisions.length > MAX_REVISIONS) {
-            content.revisions = content.revisions.slice(0, MAX_REVISIONS);
-          }
+        // Autosave already waits until typing pauses, so each changed save is
+        // its own version. A single burst stays one version.
+        content.revisions.unshift({
+          at: new Date(now).toISOString(),
+          title: prev.title || '',
+          content: prev.content || '',
+        });
+        if (content.revisions.length > MAX_REVISIONS) {
+          content.revisions = content.revisions.slice(0, MAX_REVISIONS);
         }
       }
     }
@@ -4046,7 +4040,7 @@ const NotesStore = (() => {
     }
   }
 
-  async function addAttachment(noteId, file, { displayName, sourceSha256, ocrPending = false, intentionalCopy = false } = {}) {
+  async function addAttachment(noteId, file, { displayName, sourceSha256, ocrPending = false, intentionalCopy = false, originalFilename = '', originalSize = 0 } = {}) {
     if (!state.cryptoKey) throw new Error('Unlock the vault first');
     if (file.size > MAX_ATTACHMENT_BYTES) {
       throw new Error(`File too large (max ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB)`);
@@ -4066,6 +4060,12 @@ const NotesStore = (() => {
     const fileEnc = await NotesCrypto.encryptBytes(state.cryptoKey, raw);
     const id = newUuid();
     const content = defaultAttachment(noteId, file, fileEnc, displayName, contentSha256, sourceHash);
+    const uploadedName = String(originalFilename || '').trim();
+    if (uploadedName) {
+      content.original_filename = uploadedName;
+      content.filename = displayName || uploadedName;
+    }
+    if (originalSize) content.size = Number(originalSize);
     if (intentionalCopy) content.intentional_copy = true;
     if (ocrPending) {
       content.ocr_method = 'pending';

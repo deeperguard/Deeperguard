@@ -161,6 +161,35 @@ const NotesSearch = (() => {
     return Array.isArray(listed) ? listed : null;
   }
 
+  function attachmentLooksTextual(item) {
+    const mime = String(item?.content?.mime || '').toLowerCase();
+    const name = String(item?.content?.filename || item?.content?.original_filename || '').toLowerCase();
+    if (mime.startsWith('image/') || mime === 'application/pdf') return false;
+    if (/\.(pdf|png|jpe?g|gif|webp|bmp|hei[cf]|tif|tiff)$/.test(name)) return false;
+    return mime.startsWith('text/')
+      || mime.includes('json')
+      || mime.includes('csv')
+      || mime.includes('xml')
+      || mime.includes('yaml')
+      || mime.includes('word')
+      || mime.includes('officedocument')
+      || /\.(txt|md|csv|json|log|xml|yaml|yml|docx)$/.test(name);
+  }
+
+  function ocrMatchLabel(note, query) {
+    const atts = visibleAttachments(note);
+    if (!atts || !atts.length) return 'Scanned document';
+    const textual = atts.filter(attachmentLooksTextual);
+    if (!textual.length) return 'Scanned document';
+    const visual = atts.filter((item) => !attachmentLooksTextual(item));
+    if (!visual.length) return 'Attachment text';
+    const q = String(query || '');
+    const textHit = textual.some((item) => textHasQuery(item.content?.ocr_text || '', q));
+    const visualHit = visual.some((item) => textHasQuery(item.content?.ocr_text || '', q));
+    if (textHit && !visualHit) return 'Attachment text';
+    return 'Scanned document';
+  }
+
   function scanTextForSearch(note) {
     if (!note?.content || note.content.locked) return '';
     const atts = visibleAttachments(note);
@@ -375,7 +404,7 @@ const NotesSearch = (() => {
     }
     if (!titlesOnly && !locked) {
       fields.push({ field: 'body', label: 'Note', text: () => searchableBody(note), snippet: (text) => snippetAround(text, query) });
-      fields.push({ field: 'ocr', label: 'Scanned document', text: () => scanTextForSearch(note), snippet: (text) => snippetAround(text, query) });
+      fields.push({ field: 'ocr', label: ocrMatchLabel(note, query), text: () => scanTextForSearch(note), snippet: (text) => snippetAround(text, query) });
       for (const tagTitle of tagTitlesForSearch(note, tagMap)) {
         fields.push({ field: 'tag', label: 'Tag', text: () => tagTitle, snippet: (text) => text });
       }
