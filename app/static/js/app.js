@@ -43,6 +43,30 @@
     if (!att?.content) return 'other';
     return NotesPreview.kindFromMeta(att.content.mime, att.content.filename);
   }
+  function attachmentThumbLabel(kind) {
+    if (kind === 'pdf') return 'PDF';
+    if (kind === 'image') return 'IMG';
+    return 'FILE';
+  }
+  function paintThumbImage(stage, src, label) {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.decoding = 'async';
+    const show = () => {
+      if (!stage.isConnected || !img.naturalWidth) return;
+      stage.replaceChildren(img);
+    };
+    img.onload = show;
+    img.onerror = () => {
+      if (!stage.isConnected) return;
+      stage.textContent = label || 'FILE';
+    };
+    img.src = src;
+    if (img.complete) {
+      if (img.naturalWidth) show();
+      else stage.textContent = label || 'FILE';
+    }
+  }
   function iosDeferPdfPreview(att, { forList = false } = {}) {
     // Only skip PDF canvas work in the note list overview — that path OOM-killed Safari.
     // Inline previews when a note is open use the smaller iOS page budget instead.
@@ -6779,7 +6803,7 @@
     const kind = NotesPreview.kindFromMeta(att.content.mime, name);
     const showThumb = !isLocked && (kind === 'image' || kind === 'pdf') && !prefs.hidePreviews;
     const noteTitle = note.content.title || 'Untitled';
-    const kindLabel = kind === 'pdf' ? 'PDF' : kind === 'image' ? 'Image' : (att.content.mime || 'File');
+    const kindLabel = kind === 'pdf' ? 'PDF' : kind === 'image' ? 'Image' : (att.content.mime || 'FILE');
     const snippet = isLocked ? '' : (noteTitle && noteTitle !== name ? noteTitle : kindLabel);
     const titleHtml = query ? NotesSearch.highlightPlain(name, query) : escapeHtml(name);
     const snippetHtml = isLocked
@@ -7500,7 +7524,7 @@
           : '';
         const rowClass = `attachment-item${busy ? ' is-ocr-busy' : ''}${fileHit ? ' is-search-hit' : ''}`;
         const thumbKind = attachmentKind(a);
-        const thumbLabel = thumbKind === 'pdf' ? 'PDF' : (thumbKind === 'image' ? 'IMG' : 'FILE');
+        const thumbLabel = attachmentThumbLabel(thumbKind);
         return `<div class="${rowClass}" data-att="${escapeAttr(a.uuid)}">
           <button type="button" class="attachment-thumb" data-preview="${escapeAttr(a.uuid)}" aria-label="Preview ${escapeAttr(a.content.filename || 'document')}">${thumbLabel}</button>
           <div class="attachment-main">
@@ -8199,17 +8223,23 @@
       const entry = await cachedPreview(id);
       if (!forList && currentId !== noteId) return;
       if (entry.kind === 'image') {
-        const img = document.createElement('img');
-        img.alt = entry.filename;
+        const label = attachmentThumbLabel('image');
         if (forList) {
-          img.src = await makeListThumbUrl(id, entry);
+          const img = document.createElement('img');
+          img.alt = entry.filename || '';
+          img.decoding = 'async';
           attachListThumbErrorHandler(img, stage, noteId, id);
-          stage.replaceChildren(img);
+          img.onload = () => {
+            if (!stage.isConnected || !img.naturalWidth) return;
+            stage.replaceChildren(img);
+          };
+          img.src = await makeListThumbUrl(id, entry);
+          if (img.complete && img.naturalWidth) stage.replaceChildren(img);
+          else if (img.complete && !img.naturalWidth) stage.textContent = label;
           // Drop the full-size bytes + blob URL right away on the overview.
           if (previewingId !== id) forgetPreview(id);
         } else {
-          img.src = entry.url;
-          stage.replaceChildren(img);
+          paintThumbImage(stage, entry.url, label);
         }
         return;
       }
@@ -8234,7 +8264,7 @@
         if (forList && previewingId !== id) forgetPreview(id);
         return;
       }
-      stage.textContent = 'File';
+      stage.textContent = 'FILE';
     } catch (err) {
       if (forList) {
         const att = NotesStore.get(id);
@@ -9320,6 +9350,7 @@
       if (idx >= 0) docGallery.index = idx;
     }
     previewingId = id;
+    syncDocEnhance(null);
     docViewerReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     ui.docTitle.textContent = item.content.filename || 'Document';
     if (docGallery && refreshDocGalleryIds() && docGallery.ids.length > 1) {
@@ -9349,6 +9380,7 @@
       const query = activeFindNeedle();
       const hitIndex = typeof opts.preserveHitIndex === 'number' ? opts.preserveHitIndex : docSearchHitIndex;
       if (entry.kind === 'image') {
+        syncDocEnhance('image');
         await paintDocumentSearch(id, ui.docStage, entry, query);
         attachDocZoom(ui.docStage, 'image');
         const host = ui.docStage.closest?.('.doc-zoom-host') || ui.docStage;
@@ -9358,6 +9390,7 @@
         return;
       }
       if (entry.kind === 'pdf') {
+        syncDocEnhance('pdf');
         if (previewingId !== id) return;
         await NotesPreview.ensurePdf();
         await paintDocumentSearch(id, ui.docStage, entry, query);
@@ -9366,12 +9399,14 @@
         return;
       }
       if (entry.kind === 'text') {
+        syncDocEnhance('text');
         clearDocStageLoading(ui.docStage);
         NotesPreview.renderTextPreview(ui.docStage, entry.bytes, query);
         attachDocZoom(ui.docStage, 'text');
         if (query) finishDocPreviewFind(ui.docStage, query, hitIndex);
         return;
       }
+      syncDocEnhance(entry.kind);
       clearDocStageLoading(ui.docStage);
       ui.docStage.innerHTML = '<p class="muted">This file type cannot be previewed. Download it instead.</p>';
     } catch (err) {
@@ -9384,6 +9419,17 @@
     if (!ui.docViewer) return [];
     return [...ui.docViewer.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
       .filter((el) => !el.hidden && !el.closest('[hidden]') && !el.disabled);
+  }
+
+  function syncDocEnhance(kind) {
+    const toggle = document.getElementById('doc-enhance-toggle');
+    const panel = document.getElementById('doc-enhance-panel');
+    const image = kind === 'image';
+    if (toggle) {
+      toggle.hidden = !image;
+      if (!image) toggle.setAttribute('aria-expanded', 'false');
+    }
+    if (panel && !image) panel.hidden = true;
   }
 
   function closeDocPreview() {
@@ -9401,6 +9447,7 @@
     if (ui.docViewer) ui.docViewer.style.visibility = '';
     if (ui.docViewer) ui.docViewer.style.paddingTop = '';
     ui.docViewer.hidden = true;
+    syncDocEnhance(null);
     ui.docBackdrop.hidden = true;
     ui.docStage.replaceChildren();
     if (returnFocus && returnFocus.isConnected) returnFocus.focus();
@@ -10025,6 +10072,7 @@
     syncClearCheckedButton(note);
     syncChecklistLinkOverlays(ui.checklist);
     ui.checklist.querySelectorAll('.check-text').forEach((el) => autosizeCheckText(el));
+    syncChecklistSearchHighlights();
   }
 
   function autosizeCheckText(el) {
@@ -10126,7 +10174,39 @@
     applyEditorMode();
   }
 
+  function syncChecklistSearchHighlights() {
+    if (!ui.checklist || ui.checklist.hidden) return;
+    if (typeof findBarOpen === 'function' && findBarOpen() && currentFindQuery()) {
+      syncChecklistFindHighlights(currentFindQuery());
+      return;
+    }
+    const query = String(ui.search?.value || '').trim();
+    if (!query || typeof NotesSearch === 'undefined' || !NotesSearch.highlightPlain) {
+      ui.checklist.querySelectorAll('.check-find-highlights').forEach((el) => el.remove());
+      return;
+    }
+    ui.checklist.querySelectorAll('.check-row').forEach((row) => {
+      const input = row.querySelector('.check-text');
+      const wrap = row.querySelector('.check-text-wrap');
+      if (!input || !wrap) return;
+      const html = NotesSearch.highlightPlain(input.value || '', query);
+      let layer = wrap.querySelector('.check-find-highlights');
+      if (!html.includes('search-hit')) {
+        layer?.remove();
+        return;
+      }
+      if (!layer) {
+        layer = document.createElement('pre');
+        layer.className = 'check-find-highlights';
+        layer.setAttribute('aria-hidden', 'true');
+        wrap.insertBefore(layer, wrap.firstChild);
+      }
+      layer.innerHTML = html;
+    });
+  }
+
   function highlightPreview() {
+    syncChecklistSearchHighlights();
     if (!ui.preview) return;
     if (docHitNoteSuppressed()) return;
     const query = ui.search.value.trim();
@@ -10542,8 +10622,10 @@
       return;
     }
     NotesStore.upsert(currentId, next, { recordRevision: true });
-    captureEditorBaseline(NotesStore.get(currentId), false);
-    updateNoteMeta(NotesStore.get(currentId));
+    const savedNote = NotesStore.get(currentId);
+    captureEditorBaseline(savedNote, false);
+    updateNoteMeta(savedNote);
+    renderHistory(savedNote);
     const displayTitle = NotesSearch.effectiveNoteTitle(NotesStore.get(currentId));
     const rowTitle = ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"] h3`);
     if (rowTitle) {
@@ -13458,6 +13540,7 @@
     else {
       syncFindHighlights('');
       syncChecklistFindHighlights('');
+      syncChecklistSearchHighlights();
     }
   }
 
