@@ -397,7 +397,7 @@
         <p id="unlock-first-hint" class="auth-hint" hidden>Use the vault password you just created.</p>
         <p class="zk-badge">Encrypted on this device</p>
       </div>
-      <form id="unlock-form" class="stack" onsubmit="event.preventDefault(); return false;">
+      <form id="unlock-form" class="stack">
         <label>Vault password
           <input id="unlock-password" type="password" name="password" autocomplete="current-password" required>
         </label>
@@ -507,7 +507,7 @@
               <path d="M8 11V7a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
           </button>
-          <button type="button" id="btn-settings-head" class="btn icon" title="Settings" aria-label="Settings" onclick="window.__notesOpenSettings&&window.__notesOpenSettings(event);return false;">
+          <button type="button" id="btn-settings-head" class="btn icon" title="Settings" aria-label="Settings">
             <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -1727,7 +1727,7 @@
           <button type="button" class="btn ghost sm" id="doc-zoom-reset" aria-label="Reset zoom">100%</button>
           <button type="button" class="btn ghost sm" id="doc-zoom-in" aria-label="Zoom in">+</button>
         </div>
-        <button type="button" class="btn ghost sm" id="doc-enhance-toggle" aria-expanded="false" aria-controls="doc-enhance-panel">Enhance</button>
+        <button type="button" class="btn ghost sm" id="doc-enhance-toggle" hidden aria-expanded="false" aria-controls="doc-enhance-panel">Enhance</button>
         <button type="button" class="btn ghost sm" id="doc-share">Download</button>
         <button type="button" class="btn ghost sm" id="doc-download">Download</button>
       </div>

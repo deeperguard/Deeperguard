@@ -1058,15 +1058,24 @@ html[data-theme="light"] .zk-badge {
 #unlock-error.unlock-notice {
   color: var(--muted);
 }
+.login-progress-track.is-indeterminate,
+.app-login-progress-track.is-indeterminate,
+.unlock-progress.is-indeterminate {
+  height: 8px;
+}
 .login-progress-track.is-indeterminate > span,
 .app-login-progress-track.is-indeterminate > span,
 .unlock-progress.is-indeterminate > span {
-  width: 38% !important;
-  animation: login-indeterminate 1.15s ease-in-out infinite;
+  /* Stay inside the track the whole cycle. A bar that translates fully
+     outside overflow:hidden looks like a static grey track. */
+  width: 42% !important;
+  transition: none;
+  will-change: transform;
+  animation: login-indeterminate 0.9s ease-in-out infinite alternate;
 }
 @keyframes login-indeterminate {
-  0% { transform: translateX(-120%); }
-  100% { transform: translateX(280%); }
+  0% { transform: translateX(0); }
+  100% { transform: translateX(138%); }
 }
 .app-login-progress {
   display: grid;
@@ -2441,6 +2450,7 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   display: block;
 }
 .note-list-thumb {
+  position: relative;
   width: 44px;
   height: 44px;
   border-radius: 10px;
@@ -2452,9 +2462,15 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   justify-content: center;
 }
 .note-list-thumb img,
-.note-list-thumb canvas {
+.note-list-thumb canvas,
+.attachment-thumb img,
+.attachment-thumb canvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  min-width: 100%;
+  min-height: 100%;
   object-fit: cover;
   display: block;
 }
@@ -3117,6 +3133,11 @@ body.scan-dialog-open {
   padding: 18px 18px 14px;
   box-shadow: 0 16px 48px rgba(0,0,0,.35);
 }
+#folder-prompt {
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+}
 .confirm-dialog h2 { margin: 0 0 8px; font-size: 18px; }
 .confirm-dialog p { margin: 0 0 16px; color: var(--muted); line-height: 1.45; }
 .confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -3567,6 +3588,7 @@ body.scan-dialog-open {
   max-width: 100%;
 }
 .attachment-thumb {
+  position: relative;
   width: 72px;
   height: 72px;
   border-radius: 8px;
@@ -3594,8 +3616,8 @@ body.scan-dialog-open {
   object-fit: cover;
 }
 .attachment-thumb img, .attachment-thumb canvas {
-  width: 72px;
-  height: 72px;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
   object-fit: cover;
   display: block;
@@ -4292,6 +4314,8 @@ html[data-theme="light"] .doc-search-hit {
   position: fixed;
   top: 0; right: 0; bottom: 0;
   width: min(420px, 100%);
+  max-width: 100%;
+  min-width: 0;
   background: var(--bg-elevated);
   border-left: 1px solid var(--border);
   z-index: 50;
@@ -4299,6 +4323,7 @@ html[data-theme="light"] .doc-search-hit {
   flex-direction: column;
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
+  overflow-x: clip;
 }
 .settings-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -4306,7 +4331,7 @@ html[data-theme="light"] .doc-search-hit {
   border-bottom: 1px solid var(--border);
 }
 .settings-head h2 { margin: 0; font-size: 18px; font-weight: 650; }
-.settings-body { flex: 1; overflow: auto; padding: 18px 16px 32px; }
+.settings-body { flex: 1; min-width: 0; overflow: auto; overflow-x: hidden; padding: 18px 16px 32px; }
 .settings-account {
   margin: 0;
   padding: 12px 14px 0;
@@ -4373,17 +4398,39 @@ html[data-theme="light"] .doc-search-hit {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin: 0;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
   font-size: 15px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .settings-row:last-child { border-bottom: 0; }
 .settings-row.stacked { flex-direction: column; align-items: stretch; }
+.settings-card,
+.settings-nested,
+.settings-hint,
+.settings-account,
+.settings-group {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.settings-row select,
+.settings-row input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
 .settings-row select {
+  flex: 1 1 9rem;
   width: auto;
-  min-width: 148px;
+  min-width: 0;
+  max-width: 100%;
   padding: 8px 32px 8px 10px;
   font-size: 14px;
 }
@@ -4639,7 +4686,7 @@ body.note-readonly #checklist:not([hidden]) {
   inset: 0;
   z-index: 3;
   margin: 0;
-  padding: 0;
+  padding: 8px 4px;
   border: 0;
   background: transparent;
   color: transparent;
@@ -5057,7 +5104,22 @@ body.search-filters-open .fab-stack,
 .shell.editor-open .fab-stack { display: none !important; }
 
 @media (max-width: 860px) {
-  .settings-panel { width: 100%; }
+  .settings-panel { width: 100%; max-width: 100%; }
+  .settings-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .settings-row select,
+  .settings-row input:not([type="checkbox"]):not([type="radio"]) {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
+  }
+  .settings-actions,
+  .settings-actions .btn {
+    max-width: 100%;
+    white-space: normal;
+  }
   .shell { position: relative; }
   .sidebar {
     position: absolute;
@@ -5099,11 +5161,12 @@ body.search-filters-open .fab-stack,
   .editor-actions-mobile-bar {
     display: flex;
     flex: 0 0 auto;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     min-width: 0;
     width: 100%;
+    max-width: 100%;
     padding: 2px 0 4px;
   }
   .editor-actions-mobile-bar .toolbar-primary {
@@ -5227,7 +5290,7 @@ body.search-filters-open .fab-stack,
   body.editor-toolbar-menu-open .editor-actions-overflow-panel #btn-ai-chat {
     width: 100%;
   }
-  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item:not(.toolbar-desktop):not(.doc-only-control):not(.editor-phone-toolbar-hide),
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item:not(.toolbar-desktop):not(.doc-only-control):not(.editor-phone-toolbar-hide):not(.editor-tools-divider),
   body.editor-toolbar-menu-open .editor-actions-overflow-panel #btn-ai-chat {
     display: flex !important;
     width: 100% !important;
@@ -5561,9 +5624,9 @@ body.search-filters-open .fab-stack,
     display: inline-flex;
   }
   .md-toolbar {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    flex-wrap: wrap;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   /* Dense list chrome — maximize note rows on phone. */
@@ -7164,15 +7227,17 @@ body.vault-pulling .sync-progress {
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
-.editor-meta-row .tag-bar-shell { flex: 1 1 16rem; min-width: 10rem; }
-.editor-meta-row .tag-bar-form { flex: 1 1 12rem; max-width: none; min-width: 9rem; }
+.editor-meta-row .tag-bar-shell { flex: 1 1 12rem; min-width: 0; }
+.editor-meta-row .tag-bar-form { flex: 1 1 8rem; max-width: none; min-width: 0; }
 .editor-meta-row .editor-folder-control {
-  flex: 0 1 auto;
+  flex: 1 1 9rem;
   width: auto;
   max-width: 100%;
-  min-width: min(100%, 13rem);
+  min-width: 0;
   margin: 0;
   padding: 0;
 }
@@ -7180,10 +7245,12 @@ body.vault-pulling .sync-progress {
   display: none;
 }
 .editor-meta-row .editor-folder-control select {
-  width: auto;
-  min-width: min(100%, 13rem);
+  display: block;
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
-  field-sizing: content;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text);
   background-color: var(--bg-elevated);
 }
@@ -7276,8 +7343,8 @@ body.editor-toolbar-menu-open #btn-clear-checked[hidden] {
   body.editor-toolbar-menu-open .editor-actions-overflow-panel [hidden] {
     display: none !important;
   }
-  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item:not([hidden]),
-  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-phone-toolbar-hide:not([hidden]) {
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item:not([hidden]):not(.editor-tools-divider),
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-phone-toolbar-hide:not([hidden]):not(.editor-tools-divider) {
     display: flex !important;
     flex-direction: row;
     align-items: center;
@@ -7320,7 +7387,7 @@ body.editor-toolbar-menu-open #btn-clear-checked[hidden] {
   .editor-meta-row .editor-folder-control {
     flex: 1 1 100%;
     max-width: 100%;
-    min-width: min(100%, 13rem);
+    min-width: 0;
   }
   .editor-folder-control select,
   #note-folder-select {
@@ -7334,8 +7401,30 @@ body.editor-toolbar-menu-open #btn-clear-checked[hidden] {
   body.editor-toolbar-menu-open .editor-actions-overflow-panel #btn-find-desktop,
   body.editor-toolbar-menu-open .editor-actions-overflow-panel #btn-download-note,
   body.editor-toolbar-menu-open .editor-actions-overflow-panel #btn-prevent-edit,
-  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-tools-divider {
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel #btn-editor-overflow-desktop,
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-tools-divider.editor-toolbar-menu-item {
     display: none !important;
+    min-height: 0 !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    overflow: hidden;
+  }
+  body.editor-toolbar-menu-open .editor-actions-overflow-panel {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    top: auto;
+    width: auto;
+    max-width: none;
+    max-height: min(70dvh, calc(100dvh - 24px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    z-index: 40;
+    margin: 0;
+    -webkit-overflow-scrolling: touch;
   }
 }
 @media (max-width: 768px) {
@@ -7379,9 +7468,9 @@ body.editor-toolbar-menu-open .editor-toolbar-menu-item.btn.icon:not([hidden]) {
   width: 100% !important;
   height: auto !important;
   min-width: 0 !important;
-  min-height: 34px;
+  min-height: 40px;
   margin: 0;
-  padding: 7px 10px !important;
+  padding: 8px 10px !important;
   gap: 10px;
   text-align: left;
 }
@@ -7411,6 +7500,23 @@ body.editor-toolbar-menu-open .editor-toolbar-menu-item .editor-menu-label {
 #preview .code-preview {
   max-width: 100%;
   box-sizing: border-box;
+}
+@media (min-width: 861px) {
+  .editor-pane .writing-tip,
+  .editor-pane #tag-suggest,
+  .editor-pane #note-readonly-banner {
+    box-sizing: border-box;
+    width: min(920px, 100%);
+    max-width: min(920px, 100%);
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-toolbar-menu-item.btn.icon:not([hidden]) {
+    min-height: 34px;
+    padding: 7px 10px !important;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .login-progress-track.is-indeterminate > span,
