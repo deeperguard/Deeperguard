@@ -2166,7 +2166,10 @@
   function showUnlockSessionHint() {
     NotesStore.emitSync('pending', 'Sign in to sync');
     const hint = document.getElementById('unlock-session-hint');
-    if (hint) hint.hidden = false;
+    if (hint) {
+      hint.textContent = 'Your sign-in expired. Enter your vault password to continue and resume sync.';
+      hint.hidden = false;
+    }
   }
 
   function hideUnlockSessionHint() {
@@ -4685,10 +4688,12 @@
       }
     }
     if (unlockSubmit && loginProgressActive) {
-      unlockSubmit.textContent = indeterminate ? 'Checking…' : `${pct}%`;
+      // Stay on Checking… for the whole attempt. A percent label (or a
+      // mid-flight reset to Unlock) reads as the button flickering.
+      unlockSubmit.textContent = 'Checking…';
       unlockSubmit.disabled = true;
-      unlockSubmit.setAttribute('aria-busy', indeterminate ? 'true' : 'false');
-      unlockSubmit.classList.toggle('is-checking', indeterminate);
+      unlockSubmit.setAttribute('aria-busy', 'true');
+      unlockSubmit.classList.add('is-checking');
     }
   }
 
@@ -4952,6 +4957,7 @@
 
   function showUnlock(email) {
     if (NotesStore.isUnlocked()) return;
+    if (unlockInFlight || loginProgressActive) return;
     if (suppressUnlockScreen) return;
     syncVaultLockUi(false);
     markVaultShellLocked();
@@ -5025,6 +5031,7 @@
     closeSettings(true);
     restoreAppTab();
     dismissLoginProgress();
+    resetUnlockCardStatus();
     primeUploadPickerStartIn().catch(() => {});
     try { sessionStorage.removeItem('notes_just_registered'); } catch (err) { /* ignore */ }
     requestAnimationFrame(() => {
@@ -5070,6 +5077,34 @@
     if (!currentId) openPendingDeepLink();
   }
 
+  function resetUnlockCardStatus() {
+    hideUnlockSessionHint();
+    const hint = document.getElementById('unlock-session-hint');
+    if (hint) hint.textContent = '';
+    if (unlockError) {
+      unlockError.textContent = '';
+      unlockError.hidden = true;
+    }
+    const recovery = document.getElementById('unlock-recovery-hint');
+    if (recovery) recovery.hidden = true;
+    for (const id of ['unlock-status', 'login-progress-status', 'app-login-status']) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      el.textContent = '';
+      el.hidden = true;
+    }
+    const progress = document.getElementById('unlock-progress');
+    if (progress) {
+      progress.hidden = true;
+      const bar = document.getElementById('unlock-progress-bar');
+      if (bar) bar.style.width = '';
+    }
+    const overlay = document.getElementById('login-progress-overlay');
+    if (overlay) overlay.hidden = true;
+    const overlayBar = document.getElementById('login-progress-bar');
+    if (overlayBar) overlayBar.style.width = '';
+  }
+
   function vaultKeyProven() {
     if (!NotesStore.isUnlocked()) return false;
     if (typeof NotesStore.isKeyVerified !== 'function') return true;
@@ -5094,7 +5129,13 @@
       missing.code = 'DECRYPT_FAILED';
       throw missing;
     }
-    const probe = await NotesStore.probeServerKey();
+    let probe;
+    try {
+      probe = await NotesStore.probeServerKey();
+    } catch (err) {
+      if (isLoginRequiredError(err)) throw sessionExpiredError();
+      throw err;
+    }
     if (probe?.ok && Number(probe.opened) > 0 && vaultKeyProven()) {
       return { via: 'decrypt', opened: Number(probe.opened) };
     }
@@ -5127,11 +5168,13 @@
         throw missing;
       }
     } catch (err) {
+      if (isLoginRequiredError(err)) throw sessionExpiredError();
       if (err?.status === 429) {
         NotesStore.lock();
         throw new Error('Too many unlock attempts. Wait a few minutes and try again.');
       }
       // Any 401 in this chain is a failed unlock, including a proof-less body.
+      // "login required" is a dead session, handled above — not a wrong password.
       if (err?.status === 401 || err?.status === 400) rejectWrongUnlockPassword();
       NotesStore.lock();
       throw new Error('Could not reach the notes server. Connect to home Wi‑Fi or WireGuard and try again.');
@@ -5319,6 +5362,35 @@
     refreshClearSavedButton();
   }
 
+  const SESSION_EXPIRED_MESSAGE = 'Your session expired — please sign in again';
+
+  function isLoginRequiredError(err) {
+    if (!err || err.code === 'session_revoked') return false;
+    if (err.code === 'SESSION_EXPIRED') return true;
+    const status = Number(err.status);
+    if (status !== 401 && status !== 403) return false;
+    return /login required|sign in required/i.test(String(err.message || ''));
+  }
+
+  function sessionExpiredError() {
+    const err = new Error(SESSION_EXPIRED_MESSAGE);
+    err.status = 401;
+    err.code = 'SESSION_EXPIRED';
+    return err;
+  }
+
+  function redirectToExpiredLogin() {
+    const email = String(NotesStore.cachedAccount()?.email || '').trim();
+    const params = new URLSearchParams();
+    if (email) params.set('email', email);
+    params.set('reason', 'session-expired');
+    try {
+      const note = noteIdFromUrl();
+      if (note) params.set('note', note);
+    } catch (err) { /* keep the sign-in url */ }
+    location.assign(`/login?${params.toString()}`);
+  }
+
   function unlockErrorShouldRelock(err) {
     return err?.status === 401
       || err?.code === 'LOCAL_DECRYPT_FAILED'
@@ -5335,6 +5407,13 @@
   }
 
   function abortUnlockAttempt(err) {
+    if (isLoginRequiredError(err)) {
+      resetLoginProgress();
+      try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
+      showUnlockError(SESSION_EXPIRED_MESSAGE);
+      redirectToExpiredLogin();
+      throw err.code === 'SESSION_EXPIRED' ? err : sessionExpiredError();
+    }
     resetLoginProgress();
     const shellOpen = document.body.classList.contains('unlocked')
       && (!unlockScreen || unlockScreen.hidden);
@@ -5852,6 +5931,7 @@
               }
             } else if (!hasLocalVault) {
               NotesStore.lock();
+              if (isLoginRequiredError(err)) throw sessionExpiredError();
               throw err;
             } else {
               vaultSyncError = 'Unlocked on this device. Sign in again or open Settings → Change vault password if sync stays stuck.';
@@ -6022,6 +6102,14 @@
       repairUnlockShellState();
       if (vaultKeyProven() && !isVaultReadyForSync()) showApp();
     } catch (err) {
+      if (isLoginRequiredError(err)) {
+        showUnlockError(SESSION_EXPIRED_MESSAGE);
+        unlockSubmit.disabled = false;
+        unlockSubmit.textContent = 'Unlock';
+        unlockSubmit.removeAttribute('aria-busy');
+        unlockSubmit.classList.remove('is-checking');
+        return;
+      }
       showUnlockError(
         err.status === 401
           ? (err.message || 'Wrong password.')
