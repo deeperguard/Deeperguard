@@ -6874,6 +6874,7 @@
     input.value = tag.content.title || '';
     input.maxLength = 80;
     input.setAttribute('aria-label', 'Rename tag');
+    input.addEventListener('input', () => syncTagLimitHint(input));
     name.replaceWith(input);
     input.focus();
     input.select();
@@ -6936,6 +6937,84 @@
     try { localStorage.setItem('notes_folder_open', JSON.stringify(map)); } catch (err) { /* ignore */ }
   }
 
+  function syncTagLimitHint(input) {
+    if (!input) return;
+    const max = input.maxLength > 0 ? input.maxLength : 80;
+    const anchor = input.closest('form') || input;
+    const host = anchor.parentElement;
+    if (!host) return;
+    let hint = host.querySelector(':scope > .tag-limit-hint');
+    if (!hint) {
+      hint = document.createElement('p');
+      hint.className = 'tag-limit-hint';
+      hint.hidden = true;
+      anchor.insertAdjacentElement('afterend', hint);
+    }
+    const len = String(input.value || '').length;
+    if (len >= max) {
+      hint.hidden = false;
+      hint.textContent = `${len}/${max} — names stop at ${max} characters`;
+    } else if (len >= max - 12) {
+      hint.hidden = false;
+      hint.textContent = `${len}/${max}`;
+    } else {
+      hint.hidden = true;
+      hint.textContent = '';
+    }
+  }
+
+  function beginRenameFolder(uuid) {
+    const block = document.querySelector(`#folder-list [data-folder="${CSS.escape(uuid)}"]`);
+    const folder = NotesStore.get(uuid);
+    const select = block?.querySelector('[data-folder-select]');
+    if (!block || !folder || !select || block.querySelector('.folder-rename-input')) return;
+    const input = document.createElement('input');
+    input.className = 'folder-rename-input';
+    input.value = folder.content.title || '';
+    input.maxLength = 80;
+    input.setAttribute('aria-label', 'Rename folder');
+    select.replaceWith(input);
+    syncTagLimitHint(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const commit = () => {
+      if (done) return;
+      done = true;
+      const title = input.value.trim();
+      const currentName = String(folder.content.title || '').trim();
+      if (!title) {
+        toast('Enter a folder name', true);
+      } else if (title.toLowerCase() !== currentName.toLowerCase()) {
+        const taken = NotesStore.listFolders().some((item) => (
+          item.uuid !== uuid
+          && String(item.content?.title || '').trim().toLowerCase() === title.toLowerCase()
+        ));
+        if (taken) toast('A folder with that name already exists', true);
+        else NotesStore.renameFolder(uuid, title);
+      } else if (title !== currentName) {
+        NotesStore.renameFolder(uuid, title);
+      }
+      renderFolders();
+      renderNotes();
+      syncFilterSelect();
+    };
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commit();
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        done = true;
+        renderFolders();
+      }
+    });
+    input.addEventListener('blur', commit);
+    input.addEventListener('input', () => syncTagLimitHint(input));
+  }
+
   function renderFolders() {
     const host = document.getElementById('folder-list');
     if (!host || !NotesStore.listFolders) return;
@@ -6960,6 +7039,7 @@
           <button type="button" class="folder-toggle" data-folder-toggle="${escapeAttr(folder.uuid)}" aria-expanded="${open ? 'true' : 'false'}" aria-label="${open ? 'Collapse' : 'Expand'} ${escapeAttr(folder.content.title || 'Folder')}">${open ? '▾' : '▸'}</button>
           <button type="button" class="folder-select" data-folder-select="${escapeAttr(folder.uuid)}">${escapeHtml(folder.content.title || 'Folder')}</button>
           <span class="tag-count">${notes.length}</span>
+          <button type="button" class="folder-rename" data-folder-rename="${escapeAttr(folder.uuid)}" aria-label="Rename folder ${escapeAttr(folder.content.title || 'Folder')}">✎</button>
           <button type="button" class="tag-remove folder-remove" data-folder-remove="${escapeAttr(folder.uuid)}" aria-label="Delete folder ${escapeAttr(folder.content.title || 'Folder')}">×</button>
         </div>
         <div class="folder-notes"${open ? '' : ' hidden'}>${kids || '<p class="folder-empty muted">Empty</p>'}</div>
@@ -6975,7 +7055,8 @@
       });
     });
     host.querySelectorAll('[data-folder-select]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (event) => {
+        if (event.detail > 1) return;
         const id = btn.dataset.folderSelect;
         currentFolder = currentFolder === id ? null : id;
         if (currentFolder) {
@@ -6986,6 +7067,24 @@
         renderNotes();
         syncFilterSelect();
         if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
+      });
+      btn.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        beginRenameFolder(btn.dataset.folderSelect);
+      });
+    });
+    host.querySelectorAll('[data-folder]').forEach((block) => {
+      block.addEventListener('contextmenu', (event) => {
+        if (event.target.closest('[data-folder-note], [data-folder-remove], .folder-rename-input')) return;
+        event.preventDefault();
+        beginRenameFolder(block.dataset.folder);
+      });
+    });
+    host.querySelectorAll('[data-folder-rename]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        beginRenameFolder(btn.dataset.folderRename);
       });
     });
     host.querySelectorAll('[data-folder-note]').forEach((btn) => {
@@ -7038,6 +7137,12 @@
   }
 
   function updateTrashToolbar(count = null) {
+    const total = typeof count === 'number' ? count : trashedNotes().length;
+    const settingsBtn = document.getElementById('btn-empty-trash');
+    if (settingsBtn) {
+      settingsBtn.hidden = total === 0;
+      settingsBtn.disabled = total === 0;
+    }
     const bar = document.getElementById('trash-toolbar');
     const meta = document.getElementById('trash-toolbar-meta');
     const btn = document.getElementById('btn-empty-trash-list');
@@ -7045,10 +7150,10 @@
     const show = currentFilter === 'trash';
     bar.hidden = !show;
     if (!show) return;
-    const total = typeof count === 'number' ? count : trashedNotes().length;
     meta.textContent = total
       ? `${total} note${total === 1 ? '' : 's'} in trash`
       : 'Trash is empty';
+    btn.hidden = total === 0;
     btn.disabled = total === 0;
   }
 
@@ -7145,6 +7250,7 @@
     input.value = tag.content.title || '';
     input.maxLength = 80;
     input.setAttribute('aria-label', 'Rename tag');
+    input.addEventListener('input', () => syncTagLimitHint(input));
     row.replaceWith(input);
     input.focus();
     input.select();
@@ -7399,12 +7505,9 @@
         const nb = String(b.att.content.filename || b.att.content.original_filename || b.note.content.title || '');
         return na.localeCompare(nb);
       }
-      const fileMs = (file, useCreated) => {
-        if (useCreated) return noteCreatedAtMs(file.note);
-        const raw = Number(file.att.updated_at);
-        if (Number.isFinite(raw) && raw > 0) return raw < 1e12 ? raw * 1000 : raw;
-        return noteEditedAtMs(file.note);
-      };
+      const fileMs = (file, useCreated) => (
+        useCreated ? noteCreatedAtMs(file.note) : noteEditedAtMs(file.note)
+      );
       const useCreated = sort === 'created';
       return fileMs(b, useCreated) - fileMs(a, useCreated);
     });
@@ -7472,9 +7575,10 @@
   function noteRowStatusGlyphs(note) {
     if (!note?.content) return '';
     const parts = [];
-    if (note.content.starred) {
+    const hidePin = currentFilter === 'trash' || currentFilter === 'archived';
+    if (!hidePin && note.content.starred) {
       parts.push('<span class="note-glyph note-glyph-star" title="Starred" aria-label="Starred">★</span>');
-    } else if (note.content.pinned) {
+    } else if (!hidePin && note.content.pinned) {
       parts.push('<span class="note-glyph note-glyph-pin" title="Pinned" aria-label="Pinned">📌</span>');
     }
     if (note.content.locked) {
@@ -7534,7 +7638,8 @@
     const snippetHtml = isLocked
       ? '<span class="note-preview-locked"><svg class="preview-lock-glyph" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Protected document</span>'
       : (query ? NotesSearch.highlightPlain(snippet, query) : escapeHtml(snippet));
-    const editedMs = Number(att.updated_at) > 0 ? Number(att.updated_at) * (Number(att.updated_at) < 1e12 ? 1000 : 1) : noteEditedAtMs(note);
+    const sortMode = NOTE_SORT_ORDER.includes(prefs.sort) ? prefs.sort : 'updated';
+    const editedMs = noteListSectionMs(note, sortMode);
     const timeTitle = listTimeAbsolute(editedMs);
     const timeLabel = listTimeLabel(editedMs);
     const compact = noteListDensity() === 'compact';
@@ -7912,15 +8017,7 @@
       } else {
         const grouped = new Map();
         files.forEach((file) => {
-          let at;
-          if (sortMode === 'created') {
-            at = noteCreatedAtMs(file.note);
-          } else {
-            const raw = Number(file.att.updated_at);
-            at = Number.isFinite(raw) && raw > 0
-              ? (raw < 1e12 ? raw * 1000 : raw)
-              : noteEditedAtMs(file.note);
-          }
+          let at = noteListSectionMs(file.note, sortMode);
           const key = noteSectionKey(at);
           if (!grouped.has(key)) grouped.set(key, []);
           grouped.get(key).push(file);
@@ -7937,7 +8034,9 @@
       // created day. Always keep them in a Pinned block at the top, including
       // tag filters and sort-by-created. Skip only when the view is already
       // the starred/pinned filter (every row would be in that block).
-      const hoistPinned = currentFilter !== 'pinned';
+      const hoistPinned = currentFilter !== 'pinned'
+        && currentFilter !== 'trash'
+        && currentFilter !== 'archived';
       const splitPinned = typeof NotesSearch.partitionPinnedNotes === 'function'
         ? NotesSearch.partitionPinnedNotes
         : (list) => ({
@@ -8108,8 +8207,8 @@
       .map((t) => {
         const on = selected.has(t.uuid) ? 'active' : '';
         const color = t.content.color || '#4f8cff';
-        return `<button type="button" class="tag-chip ${on}" data-toggle-tag="${escapeAttr(t.uuid)}" aria-pressed="${on ? 'true' : 'false'}" style="--tag-color:${safeColor(color)}">
-          <span class="tag-dot"></span>${escapeHtml(t.content.title)}
+        return `<button type="button" class="tag-chip ${on}" data-toggle-tag="${escapeAttr(t.uuid)}" aria-pressed="${on ? 'true' : 'false'}" title="${escapeAttr(t.content.title || '')}" style="--tag-color:${safeColor(color)}">
+          <span class="tag-dot"></span><span class="tag-chip-label">${escapeHtml(t.content.title)}</span>
         </button>`;
       })
       .join('') + showAllBtn + `<form class="tag-bar-form" id="tag-bar-form">
@@ -8144,6 +8243,8 @@
       });
     }
     if (tagInput) {
+      tagInput.addEventListener('input', () => syncTagLimitHint(tagInput));
+      syncTagLimitHint(tagInput);
       tagInput.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
           event.stopPropagation();
@@ -8236,8 +8337,12 @@
         const { html: status } = attachmentOcrStatus(a);
         const busy = attachmentOcrBusy(a);
         const spinner = busy ? attachmentOcrSpinnerHtml() : '';
-        const retryBtn = attachmentOcrRetryable(a)
+        const succeeded = attachmentOcrSucceeded(a);
+        const retryBtn = !succeeded && attachmentOcrRetryable(a)
           ? `<button type="button" class="btn ghost sm ocr-retry" data-retry-ocr="${escapeAttr(a.uuid)}">Retry OCR</button>`
+          : '';
+        const rerunBtn = succeeded
+          ? `<details class="attachment-overflow"><summary class="btn ghost sm" aria-label="More file actions">⋯</summary><div class="attachment-overflow-menu"><button type="button" class="btn ghost sm ocr-retry" data-retry-ocr="${escapeAttr(a.uuid)}">Re-run OCR</button></div></details>`
           : '';
         const hideAttShare = isPhoneShell() && mobileDocToolbarActive();
         const shareBtn = !hideAttShare && attachmentCanWebShare()
@@ -8262,7 +8367,7 @@
             ${status}
           </div>
           <div class="attachment-item-actions">
-            ${retryBtn}
+            ${retryBtn}${rerunBtn}
             <button type="button" class="btn ghost sm" data-preview="${escapeAttr(a.uuid)}">Preview</button>
             ${shareBtn}
             <button type="button" class="btn ghost sm" data-dl="${escapeAttr(a.uuid)}">Download</button>
@@ -8294,18 +8399,36 @@
     });
     ui.attachmentList.querySelectorAll('[data-rm]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        forgetPreview(btn.dataset.rm);
-        purgeServerOcr(btn.dataset.rm);
-        NotesStore.remove(btn.dataset.rm);
+        const attId = btn.dataset.rm;
+        const existing = NotesStore.get(attId);
+        const snapshot = existing?.content ? { ...existing.content } : null;
         const note = NotesStore.get(noteId);
+        const previousIds = Array.isArray(note?.content?.attachments) ? [...note.content.attachments] : [];
+        forgetPreview(attId);
+        purgeServerOcr(attId);
+        NotesStore.remove(attId);
         if (note) {
-          const ids = Array.isArray(note.content.attachments) ? note.content.attachments : [];
-          note.content.attachments = ids.filter((id) => id !== btn.dataset.rm);
-          NotesStore.upsert(noteId, { ...note.content });
+          const ids = previousIds.filter((id) => id !== attId);
+          NotesStore.upsert(noteId, { ...note.content, attachments: ids });
         }
         NotesStore.refreshNoteSearchText(noteId);
         renderAttachments(noteId);
         renderNotes();
+        if (!snapshot) return;
+        toastWithUndo('Attachment removed', () => {
+          const restored = { ...snapshot };
+          delete restored.deleted;
+          NotesStore.upsert(attId, restored, { touchUpdatedAt: false });
+          const live = NotesStore.get(noteId);
+          if (live) {
+            const ids = Array.isArray(live.content.attachments) ? [...live.content.attachments] : [];
+            if (!ids.includes(attId)) ids.push(attId);
+            NotesStore.upsert(noteId, { ...live.content, attachments: ids });
+          }
+          if (typeof NotesStore.refreshNoteSearchText === 'function') NotesStore.refreshNoteSearchText(noteId);
+          renderAttachments(noteId);
+          renderNotes();
+        });
       });
     });
     ui.attachmentList.querySelectorAll('[data-retry-ocr]').forEach((btn) => {
@@ -8427,6 +8550,12 @@
     } else {
       toast('Search index already up to date');
     }
+  }
+
+  function attachmentOcrSucceeded(att) {
+    const method = String(att?.content?.ocr_method || '');
+    if (!method || method === 'failed' || method === 'none' || method === 'pending' || method === 'unsupported') return false;
+    return !!String(att?.content?.ocr_text || '').trim();
   }
 
   function attachmentOcrRetryable(att) {
@@ -11859,7 +11988,9 @@
     if (totpDisableHint) totpDisableHint.hidden = !srpAccount;
     syncSortControls();
     document.querySelectorAll('[data-theme-opt]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.themeOpt === prefs.theme);
+      const on = btn.dataset.themeOpt === prefs.theme;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
     document.getElementById('pref-compact').checked = !!prefs.compactList;
     document.getElementById('pref-hide-previews').checked = !!prefs.hidePreviews;
@@ -15535,6 +15666,11 @@
     const composer = document.getElementById('tag-composer');
     composer.hidden = false;
     const input = document.getElementById('tag-name-input');
+    if (input && !input.dataset.limitBound) {
+      input.dataset.limitBound = '1';
+      input.addEventListener('input', () => syncTagLimitHint(input));
+    }
+    syncTagLimitHint(input);
     input.focus();
   });
   const tagSection = document.getElementById('tag-section');
@@ -15778,6 +15914,25 @@
     window.scrollTo(0, y);
   }
 
+  function drawerPanelPlacement(menuBox, sideBox, transformed, viewportHeight) {
+    const gap = 8;
+    const spaceBelow = viewportHeight - menuBox.bottom - gap;
+    const spaceAbove = menuBox.top - gap;
+    const belowTop = transformed
+      ? Math.max(0, Math.round(menuBox.bottom - sideBox.top + gap))
+      : Math.max(0, Math.round(menuBox.bottom + gap));
+    // A low menu (zoomed desktop) leaves only a sliver under the button.
+    // Fill from the top of the shell down to just above it. A menu near
+    // the top (phone) still opens underneath so Notes does not cover it.
+    if (spaceAbove > 160 && spaceAbove > spaceBelow) {
+      const bottom = transformed
+        ? Math.max(gap, Math.round(sideBox.bottom - menuBox.top + gap))
+        : Math.max(gap, Math.round(viewportHeight - menuBox.top + gap));
+      return { top: 0, bottom, paddingTop: 8 };
+    }
+    return { top: belowTop, bottom: 0, paddingTop: 8 };
+  }
+
   function setNavDrawer(open) {
     const pinned = window.matchMedia('(min-width: 1000px)').matches
       && !document.documentElement.classList.contains('layout-compact');
@@ -15817,6 +15972,7 @@
     if (panel) {
       if (!show) {
         panel.style.top = '';
+        panel.style.bottom = '';
         panel.style.paddingTop = '';
       } else {
         const menu = document.getElementById('btn-list-menu');
@@ -15826,10 +15982,9 @@
           const menuBox = menu.getBoundingClientRect();
           const sideBox = sidebar.getBoundingClientRect();
           const transformed = getComputedStyle(sidebar).transform !== 'none';
-          const top = transformed
-            ? Math.max(0, Math.round(menuBox.bottom - sideBox.top + 8))
-            : Math.max(0, Math.round(menuBox.bottom + 8));
-          panel.style.top = `${top}px`;
+          const place = drawerPanelPlacement(menuBox, sideBox, transformed, window.innerHeight || 0);
+          panel.style.top = `${place.top}px`;
+          panel.style.bottom = `${place.bottom}px`;
           panel.style.paddingTop = '8px';
         }
       }
@@ -16829,7 +16984,9 @@
     btn.addEventListener('click', () => {
       prefs.theme = btn.dataset.themeOpt;
       document.querySelectorAll('[data-theme-opt]').forEach((other) => {
-        other.classList.toggle('active', other === btn);
+        const on = other === btn;
+        other.classList.toggle('active', on);
+        other.setAttribute('aria-pressed', on ? 'true' : 'false');
       });
       savePrefs();
     });

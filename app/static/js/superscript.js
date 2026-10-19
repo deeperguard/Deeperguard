@@ -539,6 +539,17 @@
     return links;
   }
 
+  function applyUnderscoreEmphasis(html) {
+    const codes = [];
+    let out = String(html || '').replace(/`[^`\n]+`/g, (match) => {
+      codes.push(match);
+      return `@@UCODE${codes.length - 1}@@`;
+    });
+    out = out.replace(/(^|[^\w])__(?!_)([\s\S]+?)__(?!\w)/g, '$1<strong>$2</strong>');
+    out = out.replace(/(^|[^\w])_(?!_)([^_\n]+?)_(?!\w)/g, '$1<em>$2</em>');
+    return out.replace(/@@UCODE(\d+)@@/g, (_, i) => codes[Number(i)] || '');
+  }
+
   function render(md) {
     const source = normalizeContent(md);
     const fences = [];
@@ -554,6 +565,7 @@
     html = html.replace(/\^([^^]+)\^/g, '<sup>$1</sup>');
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/(^|[^*])\*(?!\*)(.+?)\*(?!\*)/g, '$1<em>$2</em>');
+    html = applyUnderscoreEmphasis(html);
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
     html = html.replace(/^\s*[-*] \[([ xX])\] (.*)$/gm, (_, checked, label) => {
       const on = checked !== ' ';
