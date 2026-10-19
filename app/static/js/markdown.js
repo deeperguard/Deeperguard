@@ -26,10 +26,18 @@
       .join('\n');
   }
 
+  function highlightFence(code, lang) {
+    const source = String(code || '').replace(/\n$/, '');
+    if (typeof window !== 'undefined' && window.NotesMarkdownHighlight) {
+      return window.NotesMarkdownHighlight(source, lang);
+    }
+    return escapeHtml(source);
+  }
+
   function render(md) {
     const fences = [];
-    let text = String(md || '').replace(/```([\s\S]*?)```/g, (_, code) => {
-      fences.push(code);
+    let text = String(md || '').replace(/```([^\n`]*)\n?([\s\S]*?)```/g, (_, info, code) => {
+      fences.push({ lang: String(info || '').trim().split(/\s+/)[0] || '', code });
       return `@@FENCE${fences.length - 1}@@`;
     });
     let html = escapeHtml(text);
@@ -50,23 +58,39 @@
     });
     html = html.replace(/^\s*[-*] (.+)$/gm, '<li>$1</li>');
     html = html.replace(/(<li[\s\S]*?<\/li>\n?)+/g, (block) => `<ul>${block}</ul>`);
-    html = html.replace(/@@FENCE(\d+)@@/g, (_, i) => `<pre><code>${escapeHtml(fences[Number(i)])}</code></pre>`);
+    html = html.replace(/@@FENCE(\d+)@@/g, (_, i) => {
+      const fence = fences[Number(i)] || { lang: '', code: '' };
+      const lang = fence.lang ? ` class="language-${escapeHtml(fence.lang)}"` : '';
+      const body = highlightFence(fence.code, fence.lang);
+      return `<pre class="code-preview"${fence.lang ? ` data-lang="${escapeHtml(fence.lang)}"` : ''}><code${lang}>${body}</code></pre>`;
+    });
     return wrapMarkdownBlocks(html);
   }
 
   function wrapMarkdownBlocks(html) {
     const parts = [];
     const blockRe = /(<(?:h\d|ul|ol|pre|blockquote)\b[\s\S]*?<\/(?:h\d|ul|ol|pre|blockquote)>)/ig;
-    String(html || '').split(/\n\n+/).forEach((block) => {
-      const trimmed = block.replace(/^\n+|\n+$/g, '').trim();
-      if (!trimmed) return;
-      trimmed.split(blockRe).forEach((chunk) => {
-        const bit = chunk.trim();
+    // Keep blank-line runs so "a\n\n\nb" still has visible spacing in Preview.
+    const chunks = String(html || '').split(/(\n{2,})/);
+    for (let i = 0; i < chunks.length; i += 1) {
+      const chunk = chunks[i];
+      if (!chunk) continue;
+      if (/^\n+$/.test(chunk)) {
+        // "\n\n" is a normal paragraph break; each extra newline is another
+        // blank line the Preview should keep as <p><br></p>.
+        const blankParas = Math.max(0, chunk.length - 2);
+        for (let n = 0; n < blankParas; n += 1) parts.push('<p><br></p>');
+        continue;
+      }
+      const trimmed = chunk.replace(/^\n+|\n+$/g, '');
+      if (!trimmed) continue;
+      trimmed.split(blockRe).forEach((piece) => {
+        const bit = piece.trim();
         if (!bit) return;
         if (/^<(?:h\d|ul|ol|pre|blockquote)\b/i.test(bit)) parts.push(bit);
         else parts.push(`<p>${bit.replace(/\n/g, '<br>')}</p>`);
       });
-    });
+    }
     return parts.join('');
   }
 

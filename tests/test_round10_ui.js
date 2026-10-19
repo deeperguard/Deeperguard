@@ -21,7 +21,9 @@ assert.ok(!css.includes("content: '▾'"));
 assert.ok(appJs.includes('function attachmentKindName('));
 assert.ok(appJs.includes('note-preview-checked'));
 assert.ok(appJs.includes('highlightListText(`• ${row.text}`, query)'));
-assert.ok(appJs.includes('Math.max(side / sw, side / sh)'));
+// Round 12 switched list thumbs from cover-crop to contain+center so receipts
+// show the whole image instead of a single glyph fragment.
+assert.ok(appJs.includes('Math.min(side / sw, side / sh)'));
 assert.ok(appJs.includes('btn.setAttribute(\'aria-label\', text)'));
 assert.ok(appJs.includes('kdfFastReject'));
 assert.ok(appJs.includes('function noteBrowserZoom('));

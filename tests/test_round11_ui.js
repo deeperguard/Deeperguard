@@ -17,7 +17,7 @@ assert.ok(appJs.includes('class="thumb-paint"'));
 assert.ok(appJs.includes('function thumbOutputPx('));
 assert.ok(appJs.includes("ctx.imageSmoothingQuality = 'high'"));
 assert.ok(appJs.includes('image/jpeg', 0.92) || appJs.includes("'image/jpeg', 0.92"));
-assert.ok(appJs.includes('forList ? LIST_THUMB_PX'));
+assert.ok(appJs.includes('Math.max(LIST_THUMB_PX, thumbOutputPx())') || appJs.includes('forList ? LIST_THUMB_PX'));
 assert.ok(css.includes('.att-kind-badge'));
 assert.ok(appJs.includes('editor-toolbar-tip-suppress'));
 assert.ok(css.includes('editor-toolbar-tip-suppress'));

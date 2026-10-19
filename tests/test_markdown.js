@@ -6,7 +6,7 @@ assert.match(html, /task-toggle/);
 assert.match(html, /data-checked="0"/);
 assert.match(html, /data-checked="1"/);
 assert.match(html, /<strong>bold<\/strong>/);
-assert.match(html, /<pre><code>/);
+assert.match(html, /<pre(?: class="code-preview")?><code/);
 assert.doesNotMatch(html, /<em>not italic<\/em>/);
 
 const linked = render('See [link](https://example.com) and [bad](javascript:alert(1)).');
