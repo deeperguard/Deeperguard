@@ -3287,6 +3287,7 @@ const NotesStore = (() => {
     });
     if (!quiet) emitSync('syncing', 'Syncing…');
     try {
+      const dirtyAtStart = state.dirty.size;
       if (!state.cryptoKey) {
         if (!quiet) emitSync('error', 'Unlock the vault first');
         throw new Error('Unlock the vault first');
@@ -3363,6 +3364,8 @@ const NotesStore = (() => {
         noteCount = listNotes().filter((n) => !n.content?.trashed).length;
       }
       const hasChanges = state.items.size !== sizeBefore;
+      const quietPullTouched = (pull.processed || 0) > 0 || (dirtyAtStart > 0 && state.dirty.size === 0);
+      const announceSync = !quiet || hasChanges || quietPullTouched;
       let notes = listNotes().filter((n) => !n.content?.trashed).length;
       if (notesBefore > 0 && notes === 0) {
         logSync('sync-notes-lost', {
@@ -3412,7 +3415,7 @@ const NotesStore = (() => {
           notes,
           local: state.items.size,
         });
-        if (!quiet || hasChanges) {
+        if (announceSync) {
           emitSync('ok', notes ? `Synced · ${notes} notes (${pull.decryptSkipped} skipped)` : warn);
         }
       } else if (pull.partial) {
@@ -3433,7 +3436,7 @@ const NotesStore = (() => {
             sync({ quiet: true }).catch(() => {});
           }, 1500);
         }
-      } else if (!quiet || hasChanges) {
+      } else if (announceSync) {
         emitSync('ok', notes ? `Synced · ${notes} notes` : 'Synced');
       }
       if (seedSearchIndexFromAttachments()) await pushDirty({ quiet: true });

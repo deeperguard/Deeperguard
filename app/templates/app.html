@@ -865,6 +865,14 @@
     <div id="pane-splitter" class="pane-splitter" role="separator" aria-orientation="vertical" aria-label="Resize note list" tabindex="0" aria-valuemin="200" aria-valuemax="720" aria-valuenow="280"></div>
 
     <main id="editor-pane" class="editor-pane">
+      <div id="editor-sync-banner" class="sync-status-banner editor-sync-banner" hidden role="status">
+        <div class="sync-status-banner-main">
+          <span id="editor-sync-status-text"></span>
+        </div>
+        <div class="sync-status-banner-actions">
+          <a class="btn ghost sm" id="editor-sync-status-signin" hidden href="/login?reason=session-expired">Sign in again</a>
+        </div>
+      </div>
       <div id="empty-state" class="empty-state">
         <div class="empty-state-card">
           <div class="empty-state-mark" aria-hidden="true">{% include 'partials/brand-mark.html' %}</div>
