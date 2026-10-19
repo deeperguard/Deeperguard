@@ -721,6 +721,15 @@ const NotesStore = (() => {
   async function unlock(password, salt, options = {}) {
     emitUnlockProgress('kdf', 0, 3);
     const kdfVersion = await resolveUnlockKdfVersion(password, salt, options);
+    // Both sampled KDF versions already failed. Do not derive a third time —
+    // that extra Argon2 run was most of a slow "Wrong password."
+    if (state.kdfFastReject) {
+      state.cryptoKey = null;
+      state.altCryptoKey = null;
+      state.keyVerified = false;
+      emitUnlockProgress('kdf', 3, 3);
+      return;
+    }
     emitUnlockProgress('kdf', 1, 3);
     const derived = await deriveVaultKey(password, salt, kdfVersion);
     emitUnlockProgress('kdf', 2, 3);

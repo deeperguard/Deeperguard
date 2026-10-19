@@ -104,6 +104,16 @@ body.locked #app { display: none !important; }
 body.locked #toast:not(.error) { display: none !important; }
 body.locked #confirm-backdrop { z-index: 120; }
 body.locked #confirm-dialog { z-index: 121; }
+body.confirm-open #confirm-backdrop {
+  z-index: 200;
+  background: rgba(15, 20, 25, 0.62);
+}
+body.confirm-open #confirm-dialog { z-index: 201; }
+body.confirm-over-unlock #confirm-dialog {
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+}
 html[data-notes-boot="app"] body.locked #unlock-screen { display: none !important; }
 html[data-notes-boot="app"] body.locked #app[hidden] {
   display: flex !important;
@@ -1364,6 +1374,7 @@ html[data-theme="light"] .zk-badge {
 .note-list-tools { display: none; }
 .sn-tags { display: inline; }
 .sidebar-foot { display: none; }
+.sidebar-scroll { display: contents; }
 .brand-inline { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand-stack {
   display: flex;
@@ -2065,6 +2076,14 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   white-space: nowrap;
 }
 .folder-note.active, .folder-note:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.folder-note.is-current {
+  background: transparent;
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 70%, transparent);
+  font-weight: 600;
+}
+.folder-block.has-open-note > .folder-head .folder-select {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 70%, transparent);
+}
 .folder-empty { margin: 0; padding: 2px 8px 6px; font-size: 12px; }
 .tag-list { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; }
 .tag-row { display: inline-flex; align-items: center; max-width: 100%; }
@@ -6070,16 +6089,28 @@ body.search-filters-open .fab-stack,
     overflow: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    scroll-padding-bottom: 12px;
   }
-  /* Folders scroll in the space above the footer so a short desktop window
-     cannot leave the last rows under the icon bar. */
-  .sidebar-nav #folder-section {
+  /* One scroller for Views, Tags, and Folders, above the footer. */
+  .sidebar-nav .sidebar-scroll {
+    display: block;
     flex: 1 1 auto;
-    min-height: 5.5rem;
+    min-height: 0;
     overflow: auto;
-    scroll-padding-bottom: 12px;
+    scroll-padding-bottom: 16px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .sidebar-nav #folder-section {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: visible;
     scroll-margin-bottom: 12px;
+  }
+  .sidebar-nav .sidebar-scroll summary.section-label {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--sn-nav-bg);
   }
   .list-pane {
     grid-column: 2;
@@ -6180,9 +6211,9 @@ body.search-filters-open .fab-stack,
   }
   .filter-section {
     display: block;
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
-    overflow: auto;
+    overflow: visible;
   }
   .filter-bar { padding: 16px 8px 4px; }
   .filter-section > summary.sn-nav-label {
@@ -6308,10 +6339,10 @@ body.search-filters-open .fab-stack,
   }
   .sidebar-nav .tag-section[open] {
     max-height: none;
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
     display: block;
-    overflow: auto;
+    overflow: visible;
   }
   .sidebar-nav .tag-count { color: var(--sn-nav-muted); }
   .tag-new-btn { color: var(--sn-nav-text); border-color: var(--border); }
@@ -7630,7 +7661,8 @@ html.layout-compact .sidebar {
   z-index: 2;
 }
 html.layout-compact .sidebar-nav,
-html.layout-compact .list-pane {
+html.layout-compact .list-pane,
+html.layout-compact .sidebar-scroll {
   display: contents !important;
 }
 html.layout-compact .editor-pane {

@@ -45,8 +45,15 @@ function afterAuthUrl(path) {
 function showError(id, message) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.textContent = message;
-  el.hidden = !message;
+  // Clear first so a repeated "Email or password is incorrect" is announced again.
+  el.hidden = true;
+  el.textContent = '';
+  if (!message) return;
+  window.setTimeout(() => {
+    if (!document.getElementById(id)) return;
+    el.textContent = message;
+    el.hidden = false;
+  }, 20);
 }
 
 function setLoginBusy(busy, message) {

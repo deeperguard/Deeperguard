@@ -44,6 +44,7 @@ from verification_send_limit import (
     backup_attachment_cap_message,
     check_backup_attachment_send,
     record_backup_attachment_send,
+    verification_cooldown_remaining,
     verification_retry_after,
 )
 
@@ -1539,8 +1540,18 @@ def api_account():
             "backup_email": user["backup_email"] or user["email"],
             "backup_enabled": bool(user["backup_enabled"]),
             "email_verified": email_verify.account_verified(user),
+            "email_verify_retry_after": (
+                0
+                if email_verify.account_verified(user)
+                else verification_cooldown_remaining(uid, str(user["email"] or ""))
+            ),
             "backup_recipient_verified": email_verify.recipient_verified(
                 user, user["backup_email"] or user["email"]
+            ),
+            "backup_verify_retry_after": (
+                0
+                if email_verify.recipient_verified(user, user["backup_email"] or user["email"])
+                else verification_cooldown_remaining(uid, str(user["backup_email"] or user["email"] or ""))
             ),
             "pcloud_enabled": bool(user["pcloud_enabled"]),
             "pcloud_username": user["pcloud_username"] or "",

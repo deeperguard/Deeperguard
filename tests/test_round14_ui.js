@@ -62,10 +62,11 @@ assert.ok(login.includes('role="alert"'));
 assert.ok(login.includes('aria-live="assertive"'));
 
 // 8. Desktop folders scroll above the footer instead of under a sticky bar.
+const scrollCss = css.split('.sidebar-nav .sidebar-scroll {')[1].split('}')[0];
+assert.ok(scrollCss.includes('overflow: auto'));
+assert.ok(scrollCss.includes('scroll-padding-bottom: 16px'));
 const folderCss = css.split('.sidebar-nav #folder-section {')[1].split('}')[0];
-assert.ok(folderCss.includes('overflow: auto'));
-assert.ok(folderCss.includes('scroll-padding-bottom: 12px'));
-assert.ok(folderCss.includes('min-height: 5.5rem'));
+assert.ok(folderCss.includes('overflow: visible'));
 const footCss = css.split('.sidebar-foot {').map((part) => part.split('}')[0]).find((part) => part.includes('position: static'));
 assert.ok(footCss);
 
