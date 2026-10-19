@@ -13,6 +13,16 @@ const linked = render('See [link](https://example.com) and [bad](javascript:aler
 assert.match(linked, /<a href="https:\/\/example.com" rel="noopener noreferrer" target="_blank">link<\/a>/);
 assert.doesNotMatch(linked, /<a href="javascript:/);
 
+const brokenHref = render('[x](https://example.com"onmouseover="alert(1))');
+assert.match(brokenHref, /&quot;onmouseover=&quot;/);
+assert.doesNotMatch(brokenHref, /href="https:\/\/example\.com" onmouseover/);
+
+const dataUri = render('[d](data:text/html,hi)');
+assert.doesNotMatch(dataUri, /<a href=/);
+
+const mailto = render('[m](mailto:user@example.com)');
+assert.match(mailto, /<a href="mailto:user@example.com"/);
+
 const flipped = toggleTaskAt('- [ ] one\n- [x] two', 1);
 assert.strictEqual(flipped, '- [ ] one\n- [ ] two');
 assert.strictEqual(toggleTaskAt('- [ ] one', 0), '- [x] one');

@@ -6,6 +6,14 @@
       .replace(/>/g, '&gt;');
   }
 
+  function escapeAttr(text) {
+    return String(text ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   const TASK_RE = /^(\s*[-*]\s+)\[([ xX])\](.*)$/;
 
   function toggleTaskAt(md, index) {
@@ -44,7 +52,7 @@
     html = html.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (full, label, href) => {
       const raw = href.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
       if (!/^(https?:\/\/|mailto:)/i.test(raw)) return full;
-      return `<a href="${href}" rel="noopener noreferrer" target="_blank">${label}</a>`;
+      return `<a href="${escapeAttr(raw)}" rel="noopener noreferrer" target="_blank">${label}</a>`;
     });
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
