@@ -58,4 +58,11 @@ const safe = render('[_x_](javascript:alert(1)) and [_y_](https://example.com)')
 assert.doesNotMatch(safe, /href="javascript:/);
 assert.match(safe, /<a href="https:\/\/example.com"/);
 
+const table = render('# Table test\n\n| Col A | Col B |\n| --- | ---: |\n| **x** | y |\n| a | b |\n');
+assert.match(table, /<div class="md-table-wrap"><table>/);
+assert.match(table, /<th>Col A<\/th>/);
+assert.match(table, /text-align:right/);
+assert.match(table, /<strong>x<\/strong>/);
+assert.doesNotMatch(table, /\| Col A \|/);
+
 console.log('ok');

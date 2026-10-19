@@ -3707,6 +3707,28 @@ body.scan-dialog-open {
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
+.preview .md-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  margin: 0.75em 0;
+}
+.preview table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: 0.95em;
+}
+.preview th,
+.preview td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  vertical-align: top;
+}
+.preview th {
+  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
+  font-weight: 600;
+}
 .preview pre {
   background: var(--bg-elevated);
   border: 1px solid var(--border);

@@ -3336,6 +3336,7 @@
   let totpClock = 0;
   let totpQrTimer = 0;
   let totpQrStream = null;
+  let totpRenderToken = 0;
 
   function normalizeAppTab(name) {
     if (name === 'files') return 'notes';
@@ -3553,8 +3554,10 @@
 
   async function renderTotpList() {
     if (!totpUi.list) return;
+    const token = ++totpRenderToken;
     const rows = filteredTotpEntries();
     if (!rows.length) {
+      if (token !== totpRenderToken) return;
       totpUi.list.replaceChildren();
       if (totpUi.empty) {
         totpUi.empty.hidden = false;
@@ -3571,6 +3574,7 @@
         return { code: '------', remaining: 0, period: item.period || 30, progress: 0 };
       }
     }));
+    if (token !== totpRenderToken) return;
     totpUi.list.innerHTML = rows.map((item, i) => {
       const totp = codes[i];
       const label = item.issuer && item.account && item.issuer !== item.account
@@ -3645,7 +3649,14 @@
       danger: true,
     }))) return;
     NotesStore.removeTotpAccount(id);
+    totpEntries = totpEntries.filter((entry) => entry.id !== id);
     toast('Removed account');
+    if (totpUi.meta) {
+      totpUi.meta.textContent = totpEntries.length
+        ? `${totpEntries.length} account${totpEntries.length === 1 ? '' : 's'} in the vault`
+        : 'Add an account with a QR code or secret';
+    }
+    await renderTotpList();
     refreshTotpVault();
   }
 
@@ -5255,13 +5266,19 @@
     dismissLoginProgress();
     resetUnlockCardStatus();
     primeUploadPickerStartIn().catch(() => {});
-    try { sessionStorage.removeItem('notes_just_registered'); } catch (err) { /* ignore */ }
+    try {
+      if (sessionStorage.getItem('notes_just_registered') === '1') {
+        clearEmptyStateDismissed();
+        sessionStorage.removeItem('notes_just_registered');
+      }
+    } catch (err) { /* ignore */ }
     try {
       if (sessionStorage.getItem('notes_verify_email_hint') === '1') {
         sessionStorage.removeItem('notes_verify_email_hint');
         toast('We emailed a verification code. Enter it in Settings → Account when you want backups to use this address.');
       }
     } catch (err) { /* ignore */ }
+    updateEmptyStateVisibility();
     requestAnimationFrame(() => {
       if (!paneSplitDragging) applyListPaneWidth(readStoredListWidth(), { persist: false });
     });
@@ -5831,19 +5848,43 @@
     }
   }
 
+  function emptyStateDismissKey() {
+    const email = String(NotesStore.cachedAccount()?.email || '').trim().toLowerCase();
+    return email ? `notes_empty_state_dismissed:${email}` : 'notes_empty_state_dismissed';
+  }
+
   function emptyStateDismissed() {
     try {
-      return localStorage.getItem('notes_empty_state_dismissed') === '1'
-        || sessionStorage.getItem('notes_empty_state_dismissed') === '1';
+      const key = emptyStateDismissKey();
+      if (localStorage.getItem(key) === '1' || sessionStorage.getItem(key) === '1') return true;
+      // Legacy unscoped key leaked across accounts — only honor it before we know the email.
+      if (key === 'notes_empty_state_dismissed') {
+        return localStorage.getItem('notes_empty_state_dismissed') === '1'
+          || sessionStorage.getItem('notes_empty_state_dismissed') === '1';
+      }
+      return false;
     } catch (err) {
       return false;
     }
   }
 
+  function clearEmptyStateDismissed() {
+    try {
+      const key = emptyStateDismissKey();
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+      localStorage.removeItem('notes_empty_state_dismissed');
+      sessionStorage.removeItem('notes_empty_state_dismissed');
+    } catch (err) {
+      /* ignore */
+    }
+  }
+
   function dismissEmptyState() {
     try {
-      localStorage.setItem('notes_empty_state_dismissed', '1');
-      sessionStorage.setItem('notes_empty_state_dismissed', '1');
+      const key = emptyStateDismissKey();
+      localStorage.setItem(key, '1');
+      sessionStorage.setItem(key, '1');
     } catch (err) {
       /* ignore quota */
     }
@@ -5854,6 +5895,13 @@
 
   function updateEmptyStateVisibility() {
     if (!ui.empty) return;
+    try {
+      if (sessionStorage.getItem('notes_just_registered') === '1') {
+        clearEmptyStateDismissed();
+      }
+    } catch (err) {
+      /* ignore */
+    }
     if (vaultPullActive && NotesStore.listNotes().length > 0) {
       ui.empty.hidden = true;
       return;
@@ -5877,7 +5925,8 @@
       refreshEmptyStateCopy();
       return;
     }
-    if (NotesStore.listNotes().length === 0 && (emptyStateDismissed())) {
+    // Brand-new empty vault: always show the welcome card unless the user dismissed it.
+    if (NotesStore.listNotes().length === 0 && emptyStateDismissed()) {
       ui.empty.hidden = true;
       return;
     }
@@ -14864,7 +14913,8 @@
       renderTags();
       renderNotes();
       if (currentId) renderTagBar(NotesStore.get(currentId));
-      toast(existing ? 'Tag added' : 'Tag created');
+      if (existing) toast(assignToCurrent ? 'Tag added' : 'Tag already exists');
+      else toast('Tag created');
     } catch (err) {
       toast(err.message || String(err), true);
     }
@@ -19646,10 +19696,7 @@
         stop();
         return;
       }
-      if (ui.empty && !ui.empty.hidden && !currentId && !vaultSyncError) {
-        dismissEmptyState();
-        stop();
-      }
+      // Escape does not dismiss the welcome empty state — use Dismiss.
       // Escape never closes the open note. Back still does.
     }, true);
     document.addEventListener('keydown', (e) => {
@@ -19664,7 +19711,22 @@
         }
         return;
       }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n' && !e.shiftKey) {
+      if (!typing(e.target) && e.key === '/' && !(e.metaKey || e.ctrlKey || e.altKey)) {
+        e.preventDefault();
+        ui.search?.focus();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        ui.search?.focus();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        createNote();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         createNote();
       }

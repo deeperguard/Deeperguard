@@ -1,4 +1,23 @@
 (function () {
+  const navCheck = document.getElementById('mk-nav-check');
+  const navToggle = document.querySelector('.mk-nav-toggle');
+
+  function closePublicNav({ restoreFocus = false } = {}) {
+    if (!navCheck || !navCheck.checked) return false;
+    navCheck.checked = false;
+    if (restoreFocus && navToggle && typeof navToggle.focus === 'function') {
+      try { navToggle.focus(); } catch (err) { /* ignore */ }
+    }
+    return true;
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (closePublicNav({ restoreFocus: true })) {
+      event.preventDefault();
+    }
+  });
+
   function hashTarget() {
     const id = decodeURIComponent((location.hash || '').replace(/^#/, ''));
     if (!id) return null;

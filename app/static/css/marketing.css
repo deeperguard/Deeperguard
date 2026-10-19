@@ -1383,6 +1383,7 @@ a.mk-badge-link:hover {
     display: flex;
     flex-direction: row;
     flex-wrap: nowrap;
+    align-items: center;
     position: static;
     left: auto;
     right: auto;
@@ -1390,14 +1391,18 @@ a.mk-badge-link:hover {
     width: auto;
     max-width: none;
     min-width: 0;
+    flex: 1 1 auto;
     margin-left: 0;
     padding: 0;
     border: 0;
     border-radius: 0;
     background: transparent;
     box-shadow: none;
+    overflow: hidden;
   }
   .mk-nav a { white-space: nowrap; }
+  /* Sign in already opens the app — keep this link in the phone menu only. */
+  .mk-nav .mk-nav-open-app { display: none; }
   .mk-topbar-actions { margin-left: auto; flex-shrink: 0; }
 }
 @media (min-width: 1024px) and (max-width: 1365px) {

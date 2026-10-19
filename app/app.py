@@ -2603,9 +2603,8 @@ def download_page():
 
 @app.get("/pricing")
 def pricing_page():
-    ctx = _marketing_context()
-    ctx["canonical_url"] = f"{NOTES_PUBLIC_URL.rstrip('/')}/pricing"
-    return render_template("marketing.html", **ctx)
+    # Canonical content lives on the homepage pricing section.
+    return redirect("/#pricing", code=302)
 
 
 @app.get("/compare/standard-notes")

@@ -380,10 +380,10 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(res.status_code, 302)
         self.assertIn("/app?note=", res.headers.get("Location", ""))
 
-    def test_pricing_page_serves_marketing(self):
-        res = self.client.get("/pricing")
-        self.assertEqual(res.status_code, 200)
-        self.assertIn(b"id=\"pricing\"", res.data)
+    def test_pricing_page_redirects_to_home_anchor(self):
+        res = self.client.get("/pricing", follow_redirects=False)
+        self.assertEqual(res.status_code, 302)
+        self.assertEqual(res.headers.get("Location"), "/#pricing")
 
     def test_compare_standard_notes_is_public(self):
         res = self.client.get("/compare/standard-notes", follow_redirects=False)
