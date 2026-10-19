@@ -3218,6 +3218,7 @@
     stopTotpClock();
     const cached = NotesStore.cachedAccount?.() || {};
     showUnlock(cached.email || undefined);
+    clearUnlockPasswordField();
     if (message) {
       const neutralLock = message === 'Vault locked.' || /^Locked after\b/.test(message);
       if (unlockError) {
@@ -4185,6 +4186,10 @@
   }
 
   function setSyncIndicator({ state, message } = {}) {
+    if (state === 'session-expired') {
+      showExpiredSessionBanner();
+      return;
+    }
     const el = document.getElementById('sync-indicator');
     if (!el) return;
     const phase = displaySyncPhase(state || 'idle');
@@ -5052,6 +5057,11 @@
     });
   }
 
+  function clearUnlockPasswordField() {
+    if (!unlockPassword) return;
+    unlockPassword.value = '';
+  }
+
   function showUnlock(email) {
     if (NotesStore.isUnlocked()) return;
     if (unlockInFlight || loginProgressActive) return;
@@ -5088,6 +5098,7 @@
     const recovery = document.getElementById('unlock-recovery-hint');
     if (recovery) recovery.hidden = !vaultSyncError;
     hideUnlockSessionHint();
+    clearUnlockPasswordField();
     unlockSubmit.disabled = false;
     unlockSubmit.textContent = 'Unlock';
     const toastEl = document.getElementById('toast');
@@ -5393,6 +5404,7 @@
   }
 
   async function finishUnlocked({ skipReveal = false, deferSync = false } = {}) {
+    clearUnlockPasswordField();
     const needsReload = vaultNeedsReload;
     vaultNeedsReload = false;
 
@@ -6294,6 +6306,7 @@
   );
 
   async function clearLocalVaultAndLeave(next = '/login') {
+    clearUnlockPasswordField();
     try {
       NotesStore.lock();
     } catch (err) {
@@ -15703,6 +15716,21 @@
         delete section.dataset.drawerWasOpen;
       }
     }
+    const panel = document.getElementById('sidebar-scroll');
+    if (panel) {
+      if (!show) {
+        panel.style.paddingTop = '';
+      } else {
+        const menu = document.getElementById('btn-list-menu');
+        const sidebar = document.getElementById('sidebar');
+        if (menu && sidebar) {
+          const menuBox = menu.getBoundingClientRect();
+          const sideBox = sidebar.getBoundingClientRect();
+          const pad = Math.max(12, Math.ceil(menuBox.bottom - sideBox.top + 8));
+          panel.style.paddingTop = `${pad}px`;
+        }
+      }
+    }
   }
 
   document.getElementById('btn-back').addEventListener('click', (event) => {
@@ -18485,6 +18513,10 @@
         .catch((err) => {
           if (err?.code === 'VAULT_LOCKED') {
             NotesStore.logSync?.('sync-aborted', { reason: 'locked', quiet: !!quiet });
+            return;
+          }
+          if (isLoginRequiredError(err)) {
+            showExpiredSessionBanner();
             return;
           }
           console.warn('sync failed', err);

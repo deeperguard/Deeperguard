@@ -265,7 +265,7 @@ const NotesStore = (() => {
     if (!onSyncStatus) return;
     let syncState = phase;
     if (phase === 'ok' && state.dirty.size) syncState = 'pending';
-    if (phase !== 'syncing' && phase !== 'offline') {
+    if (phase !== 'syncing' && phase !== 'offline' && phase !== 'session-expired') {
       const unreachable = typeof window !== 'undefined' && typeof window.notesNetworkReachable === 'function'
         ? !window.notesNetworkReachable()
         : (typeof navigator !== 'undefined' && navigator.onLine === false);
@@ -2630,9 +2630,11 @@ const NotesStore = (() => {
           }
           return false;
         }
-        const sessionGone = /login required|sign in required/i.test(String(e?.message || ''));
+        const sessionGone = /login required|sign in required/i.test(String(e?.message || ''))
+          && e?.code !== 'session_revoked';
         notifyStatus(sessionGone ? 'Not synced — sign in again' : `Save failed: ${e.message}`, !sessionGone);
-        if (!quiet) emitSync('error', e.message || 'Sync failed');
+        if (sessionGone) emitSync('session-expired', 'Not syncing — sign in again');
+        else if (!quiet) emitSync('error', e.message || 'Sync failed');
         return false;
       }
     })();
@@ -3465,6 +3467,10 @@ const NotesStore = (() => {
       });
       if (err?.code === 'VAULT_LOCKED') {
         // Expected when the vault locks mid-sync — not a sync failure.
+        throw err;
+      }
+      if (err?.code !== 'session_revoked' && /login required|sign in required/i.test(String(err?.message || ''))) {
+        emitSync('session-expired', 'Not syncing — sign in again');
         throw err;
       }
       if (!quiet && err?.code !== 'DECRYPT_PARTIAL') {
