@@ -302,6 +302,23 @@
    * Step 1: prove the login password (SRP) before re-encrypting the vault.
    * `proofPassword` must match the stored verifier, not the new vault password.
    */
+  /**
+   * Verify-only SRP proof for /api/account/unlock. Does not rotate the verifier.
+   * A session cookie without A/M1 is rejected by the server.
+   */
+  async function accountUnlock(email, password) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const challenge = await postJson('/api/account/unlock/challenge', { email: normalizedEmail });
+    const client = new SrpClient();
+    client.step1(normalizedEmail, password);
+    const creds = await client.step2(challenge.srp_salt, challenge.B);
+    return postJson('/api/account/unlock', {
+      email: normalizedEmail,
+      A: creds.A,
+      M1: creds.M1,
+    });
+  }
+
   async function passwordChangeProve(email, proofPassword) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const challenge = await postJson('/api/account/password/challenge', { email: normalizedEmail });
@@ -338,6 +355,7 @@
     resync,
     verifyVault,
     vaultRecovery,
+    accountUnlock,
     passwordChangeProve,
     passwordChangeCommit,
     repairLogin,

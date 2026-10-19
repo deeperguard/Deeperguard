@@ -194,6 +194,22 @@ class NotesAppTests(unittest.TestCase):
         m1 = _h(a_hex + b_hex + s_hex)
         return a_hex, m1, rotation_verifier
 
+    def _account_unlock_srp(self, email: str, password: str, csrf: str | None = None):
+        salt_hex, _verifier = self._srp_verifier(email, password)
+        headers = {"X-CSRF-Token": csrf} if csrf else {}
+        a_hex, m1, _rotated = self._srp_credential_proof(
+            email,
+            password,
+            salt_hex,
+            "/api/account/unlock/challenge",
+            headers=headers,
+        )
+        return self.client.post(
+            "/api/account/unlock",
+            json={"A": a_hex, "M1": m1},
+            headers=headers,
+        )
+
     def _account_password_prove_srp(self, email: str, password: str, salt_hex: str, csrf: str):
         a_hex, m1, _ = self._srp_credential_proof(
             email,
@@ -2913,7 +2929,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertGreater(good.get_json().get("password_changed_at", 0), 0)
         unlock = self.client.post(
             "/api/account/unlock",
-            json={},
+            json={"current_password": "new-secure-pass"},
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(unlock.status_code, 200)
@@ -2945,7 +2961,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(align_ok.status_code, 200)
         unlock_aligned = self.client.post(
             "/api/account/unlock",
-            json={},
+            json={"current_password": "aligned-secure-pass"},
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(unlock_aligned.status_code, 200)
@@ -3157,15 +3173,77 @@ class NotesAppTests(unittest.TestCase):
             json={"email": "unlock@home.local", "password": "unlock-secure-pass"},
         )
         csrf = self._csrf()
-        good = self.client.post(
+        missing = self.client.post(
             "/api/account/unlock",
             json={},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(missing.status_code, 401)
+        good = self.client.post(
+            "/api/account/unlock",
+            json={"current_password": "unlock-secure-pass"},
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(good.status_code, 200)
         self.assertTrue(good.get_json()["kdf_salt"])
         self.assertEqual(good.get_json()["vault_kdf_version"], 2)
         self.assertEqual(good.get_json()["auth_method"], "argon2")
+
+    def test_account_unlock_requires_srp_proof_for_empty_vault(self):
+        """A signed-in empty vault must not unlock from the session cookie alone."""
+        import db as notes_db
+
+        email = "empty-unlock@home.local"
+        password = "empty-unlock-pass"
+        wrong = "WrongPass-123"
+        registered = self._register_user(email, password)
+        self.assertEqual(registered.status_code, 200, registered.get_json())
+        user = notes_db.get_user_by_email(email)
+        verifier_before = str(user["srp_verifier"])
+        csrf = self._csrf()
+        headers = {"X-CSRF-Token": csrf}
+        cookie_only = self.client.post("/api/account/unlock", json={}, headers=headers)
+        self.assertEqual(cookie_only.status_code, 401, cookie_only.get_json())
+        salt_hex, _verifier = self._srp_verifier(email, password)
+        bad_a, _bad_m, _rotated = self._srp_credential_proof(
+            email,
+            wrong,
+            salt_hex,
+            "/api/account/unlock/challenge",
+            headers=headers,
+        )
+        # Complete the exchange with a proof that does not match the stored verifier.
+        bad = self.client.post(
+            "/api/account/unlock",
+            json={"A": bad_a, "M1": "ab" * 32},
+            headers=headers,
+        )
+        self.assertEqual(bad.status_code, 401, bad.get_json())
+        user = notes_db.get_user_by_email(email)
+        self.assertEqual(str(user["srp_verifier"]), verifier_before)
+        self.assertEqual(notes_db.connection().execute(
+            "SELECT COUNT(*) FROM items WHERE user_id = ?",
+            (int(user["id"]),),
+        ).fetchone()[0], 0)
+        good = self._account_unlock_srp(email, password, csrf)
+        self.assertEqual(good.status_code, 200, good.get_json())
+        self.assertTrue(good.get_json().get("kdf_salt"))
+        user = notes_db.get_user_by_email(email)
+        self.assertEqual(str(user["srp_verifier"]), verifier_before)
+        # Another device: a fresh client with only the right password proof.
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        login = self._srp_login(email, password, salt_hex)
+        self.assertEqual(login.status_code, 200, login.get_json())
+        other = self._account_unlock_srp(email, password, self._csrf())
+        self.assertEqual(other.status_code, 200, other.get_json())
+        pull = self.client.post(
+            "/api/sync/pull",
+            json={"since": 0, "limit": 8, "cursor": "synced_at"},
+            headers={"X-CSRF-Token": self._csrf()},
+        )
+        self.assertEqual(pull.status_code, 200, pull.get_json())
+        self.assertEqual(pull.get_json().get("total_undeleted"), 0)
 
     def test_legacy_password_login_rate_limited(self):
         os.environ["NOTES_AUTH_RATE_LIMIT"] = "2"
@@ -4047,7 +4125,13 @@ class NotesAppTests(unittest.TestCase):
             sess["csrf"] = "totp-pending-csrf"
         blocked = self.client.get("/api/account")
         self.assertEqual(blocked.status_code, 403)
-        unlock = self.client.post("/api/account/unlock", json={})
+        missing = self.client.post(
+            "/api/account/unlock",
+            json={},
+            headers={"X-CSRF-Token": "totp-pending-csrf"},
+        )
+        self.assertEqual(missing.status_code, 401)
+        unlock = self._account_unlock_srp(email, password, "totp-pending-csrf")
         self.assertEqual(unlock.status_code, 200, unlock.get_json())
         self.assertEqual(unlock.get_json().get("email"), email)
 

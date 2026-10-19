@@ -4993,10 +4993,15 @@ const NotesStore = (() => {
 
       let loginMatchesCurrent = true;
       try {
-        await api('/api/account/unlock', {
-          method: 'POST',
-          body: JSON.stringify({}),
-        });
+        const accountEmail = String(cached.email || state.account?.email || '').trim().toLowerCase();
+        if (String(state.account?.auth_method || '') === 'srp' && typeof NotesSrpAuth !== 'undefined' && NotesSrpAuth.accountUnlock) {
+          await NotesSrpAuth.accountUnlock(accountEmail, current);
+        } else {
+          await api('/api/account/unlock', {
+            method: 'POST',
+            body: JSON.stringify({ current_password: current }),
+          });
+        }
       } catch (err) {
         if (err?.status !== 401) throw err;
         // Vault password may differ from the server login hash (common after a
