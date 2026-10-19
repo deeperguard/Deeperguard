@@ -8003,6 +8003,12 @@ body.editor-toolbar-tip-suppress .find-btn.btn.icon[aria-label]:focus-visible::a
     min-height: 34px;
     padding: 7px 10px !important;
   }
+  /* Pinned three-pane nav is already on screen. .btn.icon beats .narrow-only,
+     so hide these toggles by id. Zoomed compact layout keeps its one toggle. */
+  html:not(.layout-compact) #btn-list-menu,
+  html:not(.layout-compact) #btn-nav-menu {
+    display: none !important;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .login-progress-track.is-indeterminate > span,
@@ -8119,7 +8125,15 @@ html.layout-compact body.nav-drawer-open #btn-list-menu {
 }
 body.nav-drawer-open .sidebar-nav-backdrop {
   display: block !important;
-  z-index: 35;
+  z-index: 30;
+}
+body.nav-drawer-open .sidebar,
+html.layout-compact body.nav-drawer-open .sidebar {
+  z-index: 36 !important;
+}
+html.layout-compact .shell:not(.editor-open) #btn-nav-menu,
+html.layout-compact .shell.editor-open #btn-list-menu {
+  display: none !important;
 }
 body.nav-drawer-open .filter-bar {
   display: flex !important;

@@ -15692,7 +15692,9 @@
   });
 
   function setNavDrawer(open) {
-    const show = !!open;
+    const pinned = window.matchMedia('(min-width: 1000px)').matches
+      && !document.documentElement.classList.contains('layout-compact');
+    const show = !!open && !pinned;
     document.body.classList.toggle('nav-drawer-open', show);
     const backdrop = document.getElementById('sidebar-nav-backdrop');
     if (backdrop) {
@@ -15719,15 +15721,21 @@
     const panel = document.getElementById('sidebar-scroll');
     if (panel) {
       if (!show) {
+        panel.style.top = '';
         panel.style.paddingTop = '';
       } else {
         const menu = document.getElementById('btn-list-menu');
         const sidebar = document.getElementById('sidebar');
-        if (menu && sidebar) {
+        const menuShown = menu && getComputedStyle(menu).display !== 'none';
+        if (menuShown && sidebar) {
           const menuBox = menu.getBoundingClientRect();
           const sideBox = sidebar.getBoundingClientRect();
-          const pad = Math.max(12, Math.ceil(menuBox.bottom - sideBox.top + 8));
-          panel.style.paddingTop = `${pad}px`;
+          const transformed = getComputedStyle(sidebar).transform !== 'none';
+          const top = transformed
+            ? Math.max(0, Math.round(menuBox.bottom - sideBox.top + 8))
+            : Math.max(0, Math.round(menuBox.bottom + 8));
+          panel.style.top = `${top}px`;
+          panel.style.paddingTop = '8px';
         }
       }
     }
@@ -15750,6 +15758,9 @@
   });
   document.getElementById('sidebar-nav-backdrop')?.addEventListener('click', () => {
     setNavDrawer(false);
+  });
+  window.matchMedia('(min-width: 1000px)').addEventListener('change', () => {
+    if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(true);
   });
   document.addEventListener('click', (event) => {
     if (!document.body.classList.contains('nav-drawer-open')) return;
