@@ -5066,20 +5066,47 @@
     return NotesStore.isKeyVerified();
   }
 
+  function rejectWrongUnlockPassword() {
+    clearSavedUnlockSecrets();
+    NotesStore.lock();
+    const wrong = new Error('Wrong password.');
+    wrong.status = 401;
+    wrong.code = 'DECRYPT_FAILED';
+    throw wrong;
+  }
+
   async function assertVaultKeyVerified() {
-    if (vaultKeyProven()) return;
+    if (vaultKeyProven()) return { via: 'decrypt' };
     if (typeof NotesStore.probeServerKey !== 'function') {
-      const missing = new Error('Could not decrypt your notes with this password.');
+      const missing = new Error('Wrong password.');
       missing.status = 401;
       missing.code = 'DECRYPT_FAILED';
       throw missing;
     }
     const probe = await NotesStore.probeServerKey();
-    if (probe?.ok && vaultKeyProven()) return;
-    const wrong = new Error('Could not decrypt your notes with this password.');
+    if (probe?.ok && vaultKeyProven()) return { via: 'decrypt' };
+    // Nothing on the server to decrypt. The caller must prove the account
+    // password before markKeyVerified — an empty pull is not a key.
+    if (probe?.empty) return { via: 'empty' };
+    const wrong = new Error('Wrong password.');
     wrong.status = 401;
     wrong.code = 'DECRYPT_FAILED';
     throw wrong;
+  }
+
+  async function proveEmptyVaultWithAccountPassword(email, password) {
+    const repaired = await repairUnlockWithPassword(email, password);
+    if (repaired.wrongPassword) rejectWrongUnlockPassword();
+    if (repaired.rateLimited) {
+      NotesStore.lock();
+      throw new Error('Too many unlock attempts. Wait a few minutes and try again.');
+    }
+    if (!repaired.ok) {
+      NotesStore.lock();
+      throw new Error('Could not reach the notes server. Connect to home Wi‑Fi or WireGuard and try again.');
+    }
+    if (typeof NotesStore.markKeyVerified === 'function') NotesStore.markKeyVerified();
+    return true;
   }
 
   function revealAppShell() {
@@ -5525,8 +5552,8 @@
     if (await NotesStore.verifyVaultPassword(clean)) {
       return { ok: true, via: 'local' };
     }
-    // A derived key or a live session is not proof. Only a decrypt (or an
-    // empty server vault) may skip the typed-password check.
+    // A derived key or a live session is not proof. Only a decrypt may skip
+    // the typed-password check. An empty vault still has to match the account password.
     if (typeof NotesStore.isKeyVerified === 'function' && NotesStore.isKeyVerified()) {
       return { ok: true, via: 'unlocked' };
     }
@@ -5636,7 +5663,7 @@
   }
 
   async function verifyAndUnlock(password) {
-    if (NotesStore.isUnlocked()) {
+    if (NotesStore.isUnlocked() && vaultKeyProven()) {
       await ensureServerSession().catch(() => false);
       await finishUnlocked();
       return;
@@ -5714,13 +5741,7 @@
           let sessionValid = !!serverResult.ok || await serverSessionLooksValid();
           if (!sessionValid) {
             const repaired = await repairUnlockWithPassword(cached.email, clean);
-            if (repaired.wrongPassword) {
-              clearSavedUnlockSecrets();
-              NotesStore.lock();
-              const wrong = new Error('Wrong password.');
-              wrong.status = 401;
-              throw wrong;
-            }
+            if (repaired.wrongPassword) rejectWrongUnlockPassword();
             if (repaired.rateLimited) {
               NotesStore.lock();
               throw new Error('Too many unlock attempts. Wait a few minutes and try again.');
@@ -5734,15 +5755,16 @@
             const nextSalt = NotesStore.cachedAccount().kdf_salt || salt;
             await NotesStore.unlock(clean, nextSalt);
           }
-          // Sign-in and a derived key are not proof. Decrypt server ciphertext
-          // (or confirm the vault is empty) before wiping the local cache.
-          await assertVaultKeyVerified();
+          // Local ciphertext failed. Continue only when a server row decrypts.
+          // An empty server vault must not wipe the local rows or open the shell.
+          const localProof = await assertVaultKeyVerified();
+          if (localProof?.via !== 'decrypt') rejectWrongUnlockPassword();
           await clearUnreadableLocalCache();
           opened = { opened: 0, failed: 0, cipherOpened: 0 };
           localAllFailed = false;
           vaultRepairedOnline = true;
         }
-        const hasLocalVault = (opened.cipherOpened || 0) > 0 || opened.opened > 0;
+        const hasLocalVault = (opened.cipherOpened || 0) > 0;
         const emptyLocal = opened.opened === 0;
         vaultSyncError = '';
         let passwordProven = hasLocalVault || vaultRepairedOnline;
@@ -5753,13 +5775,8 @@
           }
           markOfflineUnlockVerified();
         } else if (serverResult.ok) {
-          try {
-            if (typeof NotesVaultSecrets !== 'undefined') {
-              NotesVaultSecrets.setAccountPassword(clean);
-            }
-          } catch (err) {
-            /* ignore */
-          }
+          // Session is live. Do not store this password or write until the
+          // vault key is proven below.
         } else {
           const err = serverResult.err || new Error('Could not verify password');
           if (err.status === 401 && (await serverSessionLooksValid())) {
@@ -5771,16 +5788,9 @@
             // Server session expired. Attempt to re-authenticate with the entered password.
             const relogin = await repairUnlockWithPassword(cached.email, clean);
             if (relogin.ok) {
+              // Account password matched. That does not prove the vault key.
               serverResult = { ok: true };
               vaultSyncError = '';
-              passwordProven = true;
-              try {
-                if (typeof NotesVaultSecrets !== 'undefined') {
-                  NotesVaultSecrets.setAccountPassword(clean);
-                }
-              } catch (e) {
-                /* ignore */
-              }
             } else if (relogin.wrongPassword) {
               if (hasLocalVault || opened.cipherOpened > 0) {
                 vaultSyncError = 'Vault unlocked on this device. Sign in with your account password to sync.';
@@ -5810,13 +5820,6 @@
             passwordProven = true;
           }
         }
-        if (skipLogin) {
-          try {
-            localStorage.setItem('notes_test_password', clean);
-          } catch (e) {
-            /* ignore quota */
-          }
-        }
         if (!unlockPrimaryRevealed) {
           stopLoginCreep();
           setLoginProgressTarget('decrypt', 1, 1);
@@ -5827,19 +5830,32 @@
           && (serverResult.ok || serverResult.err?.status === 401);
         if (!passwordProven) {
           const openedNow = NotesStore.listNotes().length + NotesStore.listTags().length;
-          if (openedNow > 0 || unlockDidSync) {
+          if ((openedNow > 0 || unlockDidSync) && vaultKeyProven()) {
             passwordProven = true;
           } else if (canProveViaSync) {
-            // Fresh device: prove the key against server ciphertext before the shell opens.
-            await assertVaultKeyVerified();
-            passwordProven = true;
+            // Fresh device: decrypt server ciphertext, or prove the account
+            // password when the server vault is empty. Never treat empty as a key.
+            const proof = await assertVaultKeyVerified();
+            if (proof?.via === 'empty') {
+              await proveEmptyVaultWithAccountPassword(cached.email, clean);
+            }
+            passwordProven = vaultKeyProven();
           } else {
             const repaired = await repairUnlockWithPassword(cached.email, clean);
             if (repaired.ok) {
-              passwordProven = true;
-              vaultRepairedOnline = true;
-              serverResult = { ok: true };
-              await clearUnreadableLocalCache();
+              const proof = await assertVaultKeyVerified();
+              if (proof?.via === 'decrypt') {
+                passwordProven = true;
+                vaultRepairedOnline = true;
+                serverResult = { ok: true };
+                await clearUnreadableLocalCache();
+              } else if (proof?.via === 'empty' && !hadStaleLocalCipher) {
+                if (typeof NotesStore.markKeyVerified === 'function') NotesStore.markKeyVerified();
+                passwordProven = true;
+                serverResult = { ok: true };
+              } else {
+                rejectWrongUnlockPassword();
+              }
             } else if (repaired.wrongPassword) {
               clearSavedUnlockSecrets();
               NotesStore.lock();
@@ -5857,20 +5873,57 @@
             }
           }
         }
+        if (!vaultKeyProven()) rejectWrongUnlockPassword();
+        if (skipLogin) {
+          try {
+            localStorage.setItem('notes_test_password', clean);
+          } catch (e) {
+            /* ignore quota */
+          }
+        }
+        try {
+          if (typeof NotesVaultSecrets !== 'undefined') {
+            NotesVaultSecrets.setAccountPassword(clean);
+          }
+        } catch (err) {
+          /* ignore */
+        }
         await establishServerSessionAfterVaultUnlock(clean);
         await finishUnlocked({ skipReveal: unlockPrimaryRevealed });
         if (passwordProven) persistDevicePassword(clean);
         return;
       }
       const data = await bootstrapServerSession(cached);
-      if (typeof NotesVaultSecrets !== 'undefined') {
-        NotesVaultSecrets.setAccountPassword(clean);
-      }
       await NotesStore.unlock(clean, data.kdf_salt);
+      if (NotesStore.state.kdfFastReject) rejectWrongUnlockPassword();
+      let loaded = { cipherOpened: 0, opened: 0 };
+      try {
+        loaded = await NotesStore.loadLocal();
+      } catch (err) {
+        loaded = { cipherOpened: 0, opened: 0, failed: 1 };
+      }
+      if ((loaded.cipherOpened || 0) > 0) {
+        /* local ciphertext proved the key */
+      } else if (!vaultKeyProven()) {
+        const proof = await assertVaultKeyVerified();
+        if (proof?.via === 'empty') {
+          await proveEmptyVaultWithAccountPassword(cached.email || data.email, clean);
+        } else if (proof?.via !== 'decrypt') {
+          rejectWrongUnlockPassword();
+        }
+      }
+      if (!vaultKeyProven()) rejectWrongUnlockPassword();
       stopLoginCreep();
       startLoginCreep('decrypt', phaseCeiling('decrypt'));
       setLoginProgressTarget('decrypt', 0, 1);
       await yieldToPaint();
+      try {
+        if (typeof NotesVaultSecrets !== 'undefined') {
+          NotesVaultSecrets.setAccountPassword(clean);
+        }
+      } catch (err) {
+        /* ignore */
+      }
       persistDevicePassword(clean);
       if (skipLogin) {
         try {
@@ -6066,7 +6119,15 @@
   }
 
   async function checkRemoteRevocation() {
-    if (remoteWipeStarted || window.__notesSignedOut) return;
+    if (remoteWipeStarted) return;
+    if (window.__notesAccountPromise) {
+      try { await window.__notesAccountPromise; } catch (err) { /* boot probe owns the first account read */ }
+    }
+    if (window.__notesSessionRevoked) {
+      await wipeAfterRemoteSignOut();
+      return;
+    }
+    if (window.__notesSignedOut) return;
     try {
       await NotesStore.api('/api/account', { timeoutMs: 4000 });
     } catch (err) {
@@ -6141,9 +6202,18 @@
     try {
       let allowBootUnlock = false;
       let freshLogin = false;
+      let justRegistered = false;
       try {
         freshLogin = sessionStorage.getItem('notes_allow_boot_unlock') === '1';
+        justRegistered = sessionStorage.getItem('notes_just_registered') === '1';
         allowBootUnlock = freshLogin;
+        // Hide the lock screen before the first await so registration does not
+        // flash "Unlock your vault" while the boot password is unwrapped.
+        if (freshLogin || justRegistered) {
+          bootSuppress = true;
+          suppressUnlockScreen = true;
+          markRememberedShell(true);
+        }
         if (freshLogin) sessionStorage.removeItem('notes_allow_boot_unlock');
         if (!freshLogin) sessionStorage.removeItem('notes_user_requested_update');
       } catch (err) {
@@ -6198,6 +6268,8 @@
         suppressUnlockScreen = true;
         markRememberedShell(true);
       } else {
+        bootSuppress = false;
+        suppressUnlockScreen = false;
         markRememberedShell(false);
         NotesStore.lock();
       }
@@ -6227,6 +6299,9 @@
           await verifyAndUnlock(autoUnlockPassword);
           return true;
         } catch (err) {
+          bootSuppress = false;
+          suppressUnlockScreen = false;
+          markRememberedShell(false);
           if (skipLogin) {
             try {
               localStorage.removeItem('notes_test_password');
@@ -16906,17 +16981,40 @@
     });
   }
 
+  function sameVerificationRecipient(account) {
+    const cached = account || NotesStore.cachedAccount?.() || {};
+    const email = String(cached.email || document.getElementById('account-email')?.textContent || '').trim().toLowerCase();
+    const typedBackup = String(document.getElementById('backup-email')?.value || '').trim().toLowerCase();
+    const backup = typedBackup || String(cached.backup_email || '').trim().toLowerCase();
+    return !!(email && backup && email === backup);
+  }
+
+  function armSiblingResendCooldown(buttonId, seconds, options) {
+    if (!sameVerificationRecipient()) return;
+    const other = buttonId === 'btn-account-verify-resend'
+      ? 'btn-backup-verify-resend'
+      : 'btn-account-verify-resend';
+    const otherBtn = document.getElementById(other);
+    const wrap = otherBtn?.closest('.settings-nested');
+    if (!otherBtn || (wrap && wrap.hidden)) return;
+    startResendCooldown(other, seconds, options);
+  }
+
   function renderEmailVerification(account) {
     const status = document.getElementById('account-verify-status');
     const wrap = document.getElementById('account-verify-wrap');
+    const shared = sameVerificationRecipient(account);
+    const emailRetry = Number(account?.email_verify_retry_after) || 0;
+    const backupRetry = Number(account?.backup_verify_retry_after) || 0;
+    const accountWait = shared ? Math.max(emailRetry, backupRetry) : emailRetry;
+    const backupWait = shared ? Math.max(emailRetry, backupRetry) : backupRetry;
     if (status && wrap) {
       const verified = account?.email_verified !== false;
       status.hidden = verified;
       wrap.hidden = verified;
       if (!verified) status.textContent = 'Email not verified. Enter the code we sent before backups can use this address.';
-      const retry = Number(account?.email_verify_retry_after) || 0;
-      if (!verified && retry > 0) {
-        startResendCooldown('btn-account-verify-resend', retry, { waiting: true });
+      if (!verified && accountWait > 0) {
+        startResendCooldown('btn-account-verify-resend', accountWait, { waiting: true });
       }
     }
     const backupStatus = document.getElementById('backup-verify-status');
@@ -16926,9 +17024,8 @@
       backupStatus.hidden = ok;
       backupWrap.hidden = ok;
       if (!ok) backupStatus.textContent = 'This backup address is not verified yet. Enter the code from that inbox. Backups are not sent until then.';
-      const backupRetry = Number(account?.backup_verify_retry_after) || 0;
-      if (!ok && backupRetry > 0) {
-        startResendCooldown('btn-backup-verify-resend', backupRetry, { waiting: true });
+      if (!ok && backupWait > 0) {
+        startResendCooldown('btn-backup-verify-resend', backupWait, { waiting: true });
       }
       const hint = document.getElementById('backup-verified-hint');
       if (hint) hint.hidden = ok;
@@ -17024,6 +17121,7 @@
       showResendStatus(buttonId, sent, false);
       toast(sent);
       startResendCooldown(buttonId, wait);
+      armSiblingResendCooldown(buttonId, wait);
     } catch (err) {
       const wait = Number(err.retryAfter) || 0;
       if (err.status === 429 && wait > 0) {
@@ -17035,6 +17133,7 @@
         showResendStatus(buttonId, msg, false);
         toast(msg);
         startResendCooldown(buttonId, wait, { waiting: true });
+        armSiblingResendCooldown(buttonId, wait, { waiting: true });
         return;
       }
       btn.disabled = false;

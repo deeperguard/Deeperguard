@@ -476,6 +476,12 @@ def _gate():
             if wipe:
                 return jsonify({"error": "session revoked", "code": "session_revoked"}), 401
             return None
+        if request.path == "/api/boot-account" and request.method == "GET":
+            # Signed-out shell probe. 200 so the console does not log a 401.
+            # A revoked session still has to surface so this device can wipe.
+            if wipe:
+                return jsonify({"error": "session revoked", "code": "session_revoked"}), 401
+            return jsonify({"signed_out": True})
         if request.path.startswith("/api/"):
             if wipe:
                 return jsonify({"error": "session revoked", "code": "session_revoked"}), 401
@@ -1520,6 +1526,14 @@ def _pcloud_path_for_client(user) -> str:
     if not user["pcloud_enabled"] and path in {"", "HomelabNotes/backups", "Deeperguard/backups"}:
         return ""
     return path
+
+
+@app.get("/api/boot-account")
+def api_boot_account():
+    """Account payload for the shell, or a quiet signed-out marker."""
+    if not auth.authenticated():
+        return jsonify({"signed_out": True})
+    return api_account()
 
 
 @app.get("/api/account")

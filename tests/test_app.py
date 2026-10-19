@@ -4023,6 +4023,13 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("ensureServerSession({ prompt: false })", app_js)
         self.assertIn("markJustUnlocked()", app_js)
 
+    def test_boot_account_signed_out_is_quiet(self):
+        quiet = self.client.get("/api/boot-account")
+        self.assertEqual(quiet.status_code, 200)
+        self.assertTrue(quiet.get_json().get("signed_out"))
+        noisy = self.client.get("/api/account")
+        self.assertEqual(noisy.status_code, 401)
+
     def test_account_unlock_allowed_when_totp_pending(self):
         import db as notes_db
 

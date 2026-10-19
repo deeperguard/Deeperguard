@@ -22,6 +22,11 @@ assert.doesNotMatch(dataUri, /<a href=/);
 
 const mailto = render('[m](mailto:user@example.com)');
 assert.match(mailto, /<a href="mailto:user@example.com"/);
+const samePage = render('[jump](#title)');
+assert.match(samePage, /<a href="#title">jump<\/a>/);
+assert.doesNotMatch(samePage, /target="_blank"/);
+const hashScheme = render('[bad](#javascript:alert(1))');
+assert.doesNotMatch(hashScheme, /<a /);
 
 const bare = render('See http://example.com and <https://example.com/a> today.');
 assert.match(bare, /<a href="http:\/\/example.com" rel="noopener noreferrer" target="_blank">http:\/\/example.com<\/a>/);
