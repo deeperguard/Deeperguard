@@ -341,6 +341,11 @@ const NotesStore = (() => {
       const err = new Error(data.error || `HTTP ${res.status}`);
       err.status = res.status;
       err.code = data.code || '';
+      const headerWait = Number(res.headers.get('Retry-After'));
+      const bodyWait = Number(data.retry_after);
+      err.retryAfter = (Number.isFinite(bodyWait) && bodyWait > 0)
+        ? bodyWait
+        : ((Number.isFinite(headerWait) && headerWait > 0) ? headerWait : 0);
       if (err.code === 'session_revoked') notifySessionRevoked(err);
       throw err;
     }
@@ -2136,7 +2141,32 @@ const NotesStore = (() => {
   }
 
   async function loadAccount() {
-    state.account = await api('/api/account', { timeoutMs: 4000 });
+    if (typeof window !== 'undefined' && window.__notesSignedOut) {
+      const err = new Error('login required');
+      err.status = 401;
+      throw err;
+    }
+    if (typeof window !== 'undefined' && window.__notesAccountPromise && !state.account) {
+      const account = await window.__notesAccountPromise;
+      window.__notesAccountPromise = null;
+      if (window.__notesSignedOut || !account) {
+        window.__notesSignedOut = true;
+        const err = new Error('login required');
+        err.status = 401;
+        throw err;
+      }
+      state.account = account;
+      cacheAccount(account);
+      return account;
+    }
+    try {
+      state.account = await api('/api/account', { timeoutMs: 4000 });
+    } catch (err) {
+      if (typeof window !== 'undefined' && err && (err.status === 401 || err.status === 403) && err.code !== 'session_revoked') {
+        window.__notesSignedOut = true;
+      }
+      throw err;
+    }
     cacheAccount(state.account);
     return state.account;
   }

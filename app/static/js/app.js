@@ -350,8 +350,24 @@
   const EDITOR_PANE_MIN = 320;
   let paneSplitDragging = false;
 
+  function cssViewportWidth() {
+    const layout = document.documentElement?.clientWidth || window.innerWidth || 0;
+    const visual = window.visualViewport && window.visualViewport.width;
+    if (visual && visual > 0 && layout > 0) return Math.min(layout, visual);
+    return layout || visual || 0;
+  }
+
+  function compactLayoutActive() {
+    try {
+      if (document.documentElement.classList.contains('layout-compact')) return true;
+    } catch (err) { /* ignore */ }
+    const width = cssViewportWidth();
+    if (width > 0 && width < 1000) return true;
+    return !!(window.matchMedia && window.matchMedia('(max-width: 999px)').matches);
+  }
+
   function splitLayoutActive() {
-    return !!(window.matchMedia && window.matchMedia('(min-width: 1000px)').matches);
+    return !compactLayoutActive();
   }
 
   function readStoredListWidth() {
@@ -3632,7 +3648,7 @@
     stopTotpQrScan();
     setTotpAddError('');
     if (!navigator.mediaDevices?.getUserMedia) {
-      totpUi.qrInput?.click();
+      openHiddenFileInput(totpUi.qrInput);
       return;
     }
     try {
@@ -3650,7 +3666,7 @@
       }
       tickTotpQrScan().catch(() => {});
     } catch (err) {
-      totpUi.qrInput?.click();
+      openHiddenFileInput(totpUi.qrInput);
     }
   }
 
@@ -3726,12 +3742,15 @@
       okBtn.textContent = okLabel;
       okBtn.classList.remove('danger');
       cancelBtn.hidden = true;
+      const extraBtn = document.getElementById('confirm-extra');
+      if (extraBtn) extraBtn.hidden = true;
       backdrop.hidden = false;
       dialog.hidden = false;
       const cleanup = () => {
         backdrop.hidden = true;
         dialog.hidden = true;
         cancelBtn.hidden = false;
+        if (extraBtn) extraBtn.hidden = true;
         okBtn.removeEventListener('click', onOk);
         backdrop.removeEventListener('click', onOk);
         document.removeEventListener('keydown', onKey);
@@ -3765,16 +3784,20 @@
     }
     return confirmAction(info.message, {
       title: 'Duplicate file',
-      confirmLabel: 'Open note',
-      cancelLabel: 'OK',
-    }).then((open) => {
-      if (!open) return false;
-      if (info.trashed) setFilter('trash');
-      else if (info.archived) setFilter('archived');
-      else setFilter('all');
-      renderNotes();
-      openNote(info.noteId);
-      return true;
+      confirmLabel: info.noteId ? 'Open note' : 'OK',
+      extraLabel: 'Attach anyway',
+      cancelLabel: 'Cancel',
+    }).then((choice) => {
+      if (choice === 'extra') return 'keep';
+      if (choice === true && info.noteId) {
+        if (info.trashed) setFilter('trash');
+        else if (info.archived) setFilter('archived');
+        else setFilter('all');
+        renderNotes();
+        openNote(info.noteId);
+        return 'open';
+      }
+      return 'cancel';
     });
   }
 
@@ -3862,6 +3885,7 @@
     title = 'Confirm',
     confirmLabel = 'Confirm',
     cancelLabel = 'Cancel',
+    extraLabel = '',
     danger = false,
   } = {}) {
     return new Promise((resolve) => {
@@ -3871,11 +3895,16 @@
       const messageEl = document.getElementById('confirm-message');
       const okBtn = document.getElementById('confirm-ok');
       const cancelBtn = document.getElementById('confirm-cancel');
+      const extraBtn = document.getElementById('confirm-extra');
       if (!backdrop || !dialog || !titleEl || !messageEl || !okBtn || !cancelBtn) {
         resolve(window.confirm(String(message || title)));
         return;
       }
       cancelBtn.hidden = false;
+      if (extraBtn) {
+        extraBtn.hidden = !extraLabel;
+        extraBtn.textContent = extraLabel || 'Attach anyway';
+      }
       titleEl.id = 'confirm-title';
       titleEl.textContent = title;
       titleEl.removeAttribute('aria-hidden');
@@ -3889,6 +3918,10 @@
       const cleanup = (value) => {
         backdrop.hidden = true;
         dialog.hidden = true;
+        if (extraBtn) {
+          extraBtn.hidden = true;
+          extraBtn.removeEventListener('click', onExtra);
+        }
         okBtn.removeEventListener('click', onOk);
         cancelBtn.removeEventListener('click', onCancel);
         backdrop.removeEventListener('click', onCancel);
@@ -3897,6 +3930,7 @@
       };
       const onOk = () => cleanup(true);
       const onCancel = () => cleanup(false);
+      const onExtra = () => cleanup('extra');
       const onKey = (event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -3905,6 +3939,7 @@
       };
       okBtn.addEventListener('click', onOk);
       cancelBtn.addEventListener('click', onCancel);
+      if (extraBtn && extraLabel) extraBtn.addEventListener('click', onExtra);
       backdrop.addEventListener('click', onCancel);
       document.addEventListener('keydown', onKey);
       cancelBtn.focus();
@@ -3918,7 +3953,7 @@
     ui.saveStatus.classList.toggle('error', !!isError);
   });
   function isPhoneShell() {
-    return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 999px)').matches;
+    return compactLayoutActive();
   }
 
   function formatSyncTime(unixSeconds) {
@@ -4897,6 +4932,7 @@
     closeSettings(true);
     updateSecureContextHint();
     refreshUnlockEmail().catch(() => {});
+    refreshDevicePasswordCache().then(() => refreshClearSavedButton()).catch(() => refreshClearSavedButton());
     if (email) document.getElementById('unlock-email').textContent = email;
     const firstHint = document.getElementById('unlock-first-hint');
     if (firstHint) {
@@ -5183,6 +5219,11 @@
     } catch (err) {
       /* ignore quota */
     }
+    devicePasswordCache = '';
+    if (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.clearDevicePassword) {
+      try { NotesVaultSecrets.clearDevicePassword(); } catch (err) { /* ignore */ }
+    }
+    refreshClearSavedButton();
   }
 
   function unlockErrorShouldRelock(err) {
@@ -5918,19 +5959,37 @@
     return remoteWipePromise;
   }
 
+  function stopRemoteRevokeWatch() {
+    if (!remoteRevokeTimer) return;
+    clearInterval(remoteRevokeTimer);
+    remoteRevokeTimer = 0;
+  }
+
   async function checkRemoteRevocation() {
-    if (remoteWipeStarted) return;
+    if (remoteWipeStarted || window.__notesSignedOut) return;
     try {
       await NotesStore.api('/api/account', { timeoutMs: 4000 });
     } catch (err) {
-      if (isSessionRevokedError(err)) await wipeAfterRemoteSignOut();
+      if (isSessionRevokedError(err)) {
+        await wipeAfterRemoteSignOut();
+        return;
+      }
+      if (err && (err.status === 401 || err.status === 403)) {
+        window.__notesSignedOut = true;
+        stopRemoteRevokeWatch();
+      }
     }
   }
 
   function startRemoteRevokeWatch() {
+    if (window.__notesSignedOut) return;
     if (remoteRevokeTimer) return;
     checkRemoteRevocation().catch(() => {});
     remoteRevokeTimer = window.setInterval(() => {
+      if (window.__notesSignedOut) {
+        stopRemoteRevokeWatch();
+        return;
+      }
       checkRemoteRevocation().catch(() => {});
     }, 10000);
   }
@@ -5966,6 +6025,14 @@
     refreshUnlockEmail().catch(() => {});
     unlockPassword.focus();
   });
+
+  function refreshClearSavedButton() {
+    const btn = document.getElementById('unlock-clear-saved');
+    const hint = document.getElementById('unlock-saved-hint');
+    const saved = !!(prefs.rememberDevice && savedDevicePassword());
+    if (btn) btn.hidden = !saved;
+    if (hint) hint.hidden = !saved;
+  }
 
   async function ensureUnlocked() {
     // Vault password stays in memory only; same-tab refetch uses boot unlock flag.
@@ -7437,11 +7504,11 @@
   let tagBarShowAll = false;
 
   function isMobileLayout() {
-    return window.matchMedia && window.matchMedia('(max-width: 999px)').matches;
+    return compactLayoutActive();
   }
 
   function isDesktopLayout() {
-    return window.matchMedia && window.matchMedia('(min-width: 1000px)').matches;
+    return !compactLayoutActive();
   }
 
   function defaultTagBarExpanded() {
@@ -7726,7 +7793,7 @@
       });
     });
     ui.attachmentList.querySelectorAll('[data-pending-add]').forEach((btn) => {
-      btn.addEventListener('click', () => ui.attachmentInput?.click());
+      btn.addEventListener('click', () => openHiddenFileInput(ui.attachmentInput));
     });
     if (vaultPullActive) {
       if (ui.docInline) {
@@ -8370,7 +8437,7 @@
     return Math.max(LIST_THUMB_PX, Math.round(LIST_THUMB_PX * dpr));
   }
 
-  function fitThumbCanvas(source) {
+  function fitThumbCanvas(source, { cropInk = false } = {}) {
     const box = thumbInkBox(source);
     if (!box) return null;
     const srcW = source.naturalWidth || source.videoWidth || source.width || box.scan.width;
@@ -8385,16 +8452,26 @@
     ctx.imageSmoothingQuality = 'high';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, side, side);
-    // Always contain + center the whole page/image. Cover-cropping short ink
-    // strips made receipts look like a single letter fragment.
-    const sw = Math.max(1, srcW);
-    const sh = Math.max(1, srcH);
+    let sx = 0;
+    let sy = 0;
+    let sw = Math.max(1, srcW);
+    let sh = Math.max(1, srcH);
+    // PDF list thumbs contain the ink of page 1 so a letter page is not a
+    // blank tile. Images stay whole-frame. Never cover-crop a short strip.
+    if (cropInk && !box.full && box.scan && box.scan.width && box.scan.height) {
+      const scaleX = srcW / box.scan.width;
+      const scaleY = srcH / box.scan.height;
+      sx = Math.max(0, Math.floor(box.x * scaleX));
+      sy = Math.max(0, Math.floor(box.y * scaleY));
+      sw = Math.max(1, Math.min(srcW - sx, Math.ceil(box.w * scaleX)));
+      sh = Math.max(1, Math.min(srcH - sy, Math.ceil(box.h * scaleY)));
+    }
     const scale = Math.min(side / sw, side / sh);
     const dw = Math.max(1, Math.round(sw * scale));
     const dh = Math.max(1, Math.round(sh * scale));
     const dx = Math.round((side - dw) / 2);
     const dy = Math.round((side - dh) / 2);
-    ctx.drawImage(source, 0, 0, sw, sh, dx, dy, dw, dh);
+    ctx.drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh);
     return out;
   }
 
@@ -8504,13 +8581,25 @@
         }
         const doc = await NotesPreview.openPdf(entry.bytes);
         const stageWidth = Math.round(stage.clientWidth || stage.parentElement?.clientWidth || 0);
-        // List thumbs need a larger render width so DPR downscale stays sharp.
+        // List thumbs render wide, then contain the ink of page 1. The CSS
+        // tile is small; a full letter page at that size reads as a blank box.
         const width = forList
-          ? Math.max(LIST_THUMB_PX, thumbOutputPx())
+          ? Math.max(720, thumbOutputPx() * 2)
           : Math.max(84, stageWidth || 84);
         const page = await NotesPreview.renderPdfPage(doc, 1, width);
-        paintFittedThumb(page);
-        paint.replaceChildren(page);
+        if (forList) {
+          const canvas = page?.tagName === 'CANVAS' ? page : page?.querySelector?.('canvas');
+          const fitted = canvas ? fitThumbCanvas(canvas, { cropInk: true }) : null;
+          if (fitted) {
+            fitted.className = 'doc-page';
+            paint.replaceChildren(fitted);
+          } else {
+            paint.replaceChildren(page);
+          }
+        } else {
+          paintFittedThumb(page);
+          paint.replaceChildren(page);
+        }
         if (forList && previewingId !== id) forgetPreview(id);
         return;
       }
@@ -12652,6 +12741,21 @@
     return false;
   }
 
+  function openHiddenFileInput(input) {
+    if (!input || typeof input.click !== 'function') return;
+    const x = window.scrollX || window.pageXOffset || 0;
+    const y = window.scrollY || window.pageYOffset || 0;
+    const restore = () => {
+      try { window.scrollTo(x, y); } catch (err) { /* ignore */ }
+    };
+    try {
+      input.click();
+    } finally {
+      restore();
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(restore);
+    }
+  }
+
   function useNativeFileInput() {
     if (typeof window.showOpenFilePicker !== 'function') return true;
     const ua = navigator.userAgent || '';
@@ -13153,7 +13257,7 @@
     });
   }
 
-  async function ingestDocument(file, { createIfNeeded = false, title, displayName, quiet = false, noteId = '', preserveEditor = false } = {}) {
+  async function ingestDocument(file, { createIfNeeded = false, title, displayName, quiet = false, noteId = '', preserveEditor = false, allowDuplicate = false } = {}) {
     if (!NotesStore.isUnlocked()) {
       toast('Unlock the vault first', true);
       return;
@@ -13204,14 +13308,17 @@
     } catch (_) {
       contentSha256 = '';
     }
-    const duplicate = await NotesStore.findDuplicateAttachment({
-      contentSha256,
-      sourceSha256,
-    });
-    if (duplicate) {
-      const targetNoteId = (!createIfNeeded && currentId) ? currentId : null;
-      await showDuplicateDialog(duplicate, storeFile, targetNoteId);
-      return;
+    if (!allowDuplicate) {
+      const duplicate = await NotesStore.findDuplicateAttachment({
+        contentSha256,
+        sourceSha256,
+      });
+      if (duplicate) {
+        const targetNoteId = (!createIfNeeded && currentId) ? currentId : null;
+        const choice = await showDuplicateDialog(duplicate, storeFile, targetNoteId);
+        if (choice !== 'keep') return;
+        allowDuplicate = true;
+      }
     }
     let created = false;
     let id = noteId || currentId;
@@ -13253,6 +13360,7 @@
         originalSize,
         sourceSha256,
         ocrPending: indexable,
+        intentionalCopy: !!allowDuplicate,
       });
       if (indexable) {
         // Queue before the preview paints so a phone does not decode the PDF twice.
@@ -13273,9 +13381,21 @@
       }
       renderNotes();
     } catch (err) {
-      if (isDuplicateUploadError(err.message)) {
-        await showDuplicateDialog(null, storeFile, id, err.message);
-      } else {
+      if (isDuplicateUploadError(err.message) && !allowDuplicate) {
+        const choice = await showDuplicateDialog(null, storeFile, id, err.message);
+        if (choice === 'keep') {
+          const retry = await ingestDocument(storeFile, {
+            createIfNeeded: false,
+            title: docName,
+            displayName,
+            quiet,
+            noteId: id,
+            preserveEditor,
+            allowDuplicate: true,
+          });
+          if (retry) return true;
+        }
+      } else if (!isDuplicateUploadError(err.message)) {
         toast(err.message || 'Upload failed', true);
       }
       if (created && id && !NotesStore.listAttachments(id).length) {
@@ -14498,7 +14618,7 @@
   }
   document.getElementById('btn-empty-scan').addEventListener('click', pickScanFile);
   document.getElementById('scan-take-photo').addEventListener('click', () => {
-    document.getElementById('scan-camera').click();
+    openHiddenFileInput(document.getElementById('scan-camera'));
   });
 
   async function ingestPickedScanFiles(fileList, { createIfNeeded = true, sourceRemoval = null } = {}) {
@@ -14570,7 +14690,7 @@
     } catch (err) {
       endNotesPicker();
       if (err && err.name === 'AbortError') return;
-      document.getElementById('scan-input')?.click();
+      openHiddenFileInput(document.getElementById('scan-input'));
       return;
     }
     void (async () => {
@@ -15891,7 +16011,7 @@
     } catch (err) {
       endNotesPicker();
       if (err && err.name === 'AbortError') return;
-      ui.attachmentInput?.click();
+      openHiddenFileInput(ui.attachmentInput);
       return;
     }
     void (async () => {
@@ -16393,7 +16513,7 @@
   document.getElementById('btn-totp-scan-qr')?.addEventListener('click', () => {
     startTotpQrScan().catch((err) => setTotpAddError(err.message || 'Camera unavailable'));
   });
-  document.getElementById('btn-totp-pick-qr')?.addEventListener('click', () => totpUi.qrInput?.click());
+  document.getElementById('btn-totp-pick-qr')?.addEventListener('click', () => openHiddenFileInput(totpUi.qrInput));
   totpUi.qrInput?.addEventListener('change', (event) => {
     const file = event.target.files && event.target.files[0];
     event.target.value = '';
@@ -16685,27 +16805,68 @@
     }
   }
 
+  const resendCooldownTimers = new Map();
+
+  function startResendCooldown(buttonId, seconds) {
+    const btn = document.getElementById(buttonId);
+    if (!btn) return;
+    const wait = Math.max(1, Math.ceil(Number(seconds) || 60));
+    const until = Date.now() + wait * 1000;
+    const prev = resendCooldownTimers.get(buttonId);
+    if (prev) clearInterval(prev);
+    if (!btn.dataset.resendLabel) btn.dataset.resendLabel = btn.textContent || 'Resend code';
+    const tick = () => {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      if (left <= 0) {
+        clearInterval(timer);
+        resendCooldownTimers.delete(buttonId);
+        btn.disabled = false;
+        btn.textContent = btn.dataset.resendLabel || 'Resend code';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = `Resend in ${left}s`;
+    };
+    const timer = setInterval(tick, 250);
+    resendCooldownTimers.set(buttonId, timer);
+    tick();
+  }
+
+  async function resendVerificationCode(path, buttonId) {
+    const btn = document.getElementById(buttonId);
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    try {
+      await NotesStore.api(path, { method: 'POST', body: '{}' });
+      toast('Verification code sent');
+      startResendCooldown(buttonId, 60);
+    } catch (err) {
+      const wait = Number(err.retryAfter) || 0;
+      if (err.status === 429 && wait > 0) {
+        toast(`Please wait ${Math.ceil(wait)} s before requesting another code`, true);
+        startResendCooldown(buttonId, wait);
+        return;
+      }
+      if (err.status === 429) {
+        toast(err.message || 'Too many verification emails sent today. Try again tomorrow or use the code already emailed.', true);
+        return;
+      }
+      btn.disabled = false;
+      toast(err.message || 'Could not send a code', true);
+    }
+  }
+
   document.getElementById('btn-account-verify')?.addEventListener('click', () => {
     verifyEmailCode('/api/account/email/verify', 'account-verify-code');
   });
-  document.getElementById('btn-account-verify-resend')?.addEventListener('click', async () => {
-    try {
-      await NotesStore.api('/api/account/email/resend', { method: 'POST', body: '{}' });
-      toast('Verification code sent');
-    } catch (err) {
-      toast(err.message || 'Could not send a code', true);
-    }
+  document.getElementById('btn-account-verify-resend')?.addEventListener('click', () => {
+    resendVerificationCode('/api/account/email/resend', 'btn-account-verify-resend');
   });
   document.getElementById('btn-backup-verify')?.addEventListener('click', () => {
     verifyEmailCode('/api/backup/email/verify', 'backup-verify-code');
   });
-  document.getElementById('btn-backup-verify-resend')?.addEventListener('click', async () => {
-    try {
-      await NotesStore.api('/api/backup/email/resend', { method: 'POST', body: '{}' });
-      toast('Verification code sent');
-    } catch (err) {
-      toast(err.message || 'Could not send a code', true);
-    }
+  document.getElementById('btn-backup-verify-resend')?.addEventListener('click', () => {
+    resendVerificationCode('/api/backup/email/resend', 'btn-backup-verify-resend');
   });
 
   function bindPasswordToggles(root) {

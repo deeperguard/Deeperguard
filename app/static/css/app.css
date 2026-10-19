@@ -2489,8 +2489,8 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
 }
 .note-list-thumb {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 72px;
+  height: 72px;
   border-radius: 10px;
   overflow: hidden;
   background: var(--bg-hover);
@@ -5904,8 +5904,8 @@ body.search-filters-open .fab-stack,
   }
   .note-item h3 { margin: 0; }
   .note-list-thumb {
-    width: 36px;
-    height: 36px;
+    width: 64px;
+    height: 64px;
   }
   .note-kind,
   .note-kind-icon {
@@ -6201,6 +6201,11 @@ body.search-filters-open .fab-stack,
     font-size: 14px;
     text-align: left;
     transition: background 0.15s ease, color 0.15s ease;
+  }
+  .sidebar-nav .folder-select,
+  .sidebar-nav .folder-note {
+    font-size: 14px;
+    font-weight: 400;
   }
   .filter-icon {
     width: 16px;
@@ -6616,8 +6621,8 @@ body.search-filters-open .fab-stack,
   #btn-new { display: none; }
   #btn-totp-add { display: inline-flex; }
   .note-list-thumb {
-    width: 40px;
-    height: 40px;
+    width: 72px;
+    height: 72px;
     border-radius: 8px;
   }
   /* Editor — title, then every note action on one row. */
@@ -7587,6 +7592,48 @@ body.editor-toolbar-menu-open #btn-clear-checked[hidden] {
     background: var(--bg-elevated);
   }
 }
+/* Browser zoom with maximum-scale=1 can leave the layout viewport ≥1000px
+   while the visual viewport is already narrower. html.layout-compact is set
+   from min(layout, visualViewport) so the compact shell wins over the
+   min-width:1000px three-pane grid. */
+html.layout-compact .shell {
+  display: block !important;
+  position: relative !important;
+  grid-template-columns: none !important;
+}
+html.layout-compact .sidebar {
+  display: flex !important;
+  flex-direction: column !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+  z-index: 2;
+}
+html.layout-compact .sidebar-nav,
+html.layout-compact .list-pane {
+  display: contents !important;
+}
+html.layout-compact .editor-pane {
+  display: none !important;
+}
+html.layout-compact .shell.editor-open .sidebar {
+  display: none !important;
+}
+html.layout-compact .shell.editor-open .editor-pane {
+  display: flex !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  min-height: 0;
+}
+html.layout-compact .pane-splitter {
+  display: none !important;
+}
+html.layout-compact .narrow-only:not([hidden]) {
+  display: inline-flex !important;
+}
+
 body.editor-toolbar-menu-open .editor-toolbar-menu-item.btn.icon:not([hidden]) {
   display: flex !important;
   flex-direction: row;

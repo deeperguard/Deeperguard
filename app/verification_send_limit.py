@@ -1,6 +1,7 @@
 """SQLite-backed limits for outbound verification and backup emails."""
 from __future__ import annotations
 
+import math
 import os
 import time
 
@@ -15,9 +16,11 @@ _BACKUP_ATTACHMENT_DAILY_CAP = 12
 
 
 class VerificationSendLimited(Exception):
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, *, retry_after: int | None = None, code: str = "") -> None:
         super().__init__(message)
         self.message = message
+        self.retry_after = retry_after
+        self.code = code
 
 
 def _cooldown_seconds() -> float:
@@ -81,11 +84,33 @@ def record_verification_send(user_id: int, recipient: str) -> None:
     db.log_email_send(int(user_id), str(recipient or "").strip().lower(), KIND_VERIFY)
 
 
-def assert_verification_send_allowed(user_id: int, recipient: str) -> str:
-    """Raise VerificationSendLimited on cap; return 'send' or 'skip'."""
+def verification_retry_after(user_id: int, recipient: str) -> int:
+    """Seconds until another verification email to this address is allowed."""
+    target = str(recipient or "").strip().lower()
+    last = db.last_email_send(int(user_id), target, KIND_VERIFY) if target else 0.0
+    if not last:
+        return max(1, int(math.ceil(_cooldown_seconds())))
+    remaining = _cooldown_seconds() - (time.time() - float(last))
+    return max(1, int(math.ceil(remaining)))
+
+
+def assert_verification_send_allowed(user_id: int, recipient: str, *, strict: bool = False) -> str:
+    """Raise VerificationSendLimited on cap; return 'send' or 'skip'.
+
+    strict=True is for an explicit Resend click: the cooldown is a 429 with
+    retry_after instead of a silent skip that the UI would report as sent.
+    Settings saves stay non-strict so a repeat save within the cooldown is 200.
+    """
     status = check_verification_send(user_id, recipient)
     if status == "blocked":
-        raise VerificationSendLimited(daily_cap_message())
+        raise VerificationSendLimited(daily_cap_message(), code="daily_cap")
+    if status == "skip" and strict:
+        wait = verification_retry_after(user_id, recipient)
+        raise VerificationSendLimited(
+            f"Please wait {wait} s before requesting another code",
+            retry_after=wait,
+            code="cooldown",
+        )
     return status
 
 
