@@ -84,6 +84,18 @@ def record_verification_send(user_id: int, recipient: str) -> None:
     db.log_email_send(int(user_id), str(recipient or "").strip().lower(), KIND_VERIFY)
 
 
+def verification_cooldown_remaining(user_id: int, recipient: str) -> int:
+    """Seconds left in the cooldown, or 0 when another code may be sent now."""
+    target = str(recipient or "").strip().lower()
+    last = db.last_email_send(int(user_id), target, KIND_VERIFY) if target else 0.0
+    if not last:
+        return 0
+    remaining = _cooldown_seconds() - (time.time() - float(last))
+    if remaining <= 0:
+        return 0
+    return max(1, int(math.ceil(remaining)))
+
+
 def verification_retry_after(user_id: int, recipient: str) -> int:
     """Seconds until another verification email to this address is allowed."""
     target = str(recipient or "").strip().lower()

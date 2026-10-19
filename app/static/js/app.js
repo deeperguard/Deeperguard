@@ -3936,9 +3936,14 @@
       okBtn.classList.toggle('danger', !!danger);
       backdrop.hidden = false;
       dialog.hidden = false;
+      const unlockVisible = !!(document.getElementById('unlock-screen') && !document.getElementById('unlock-screen').hidden);
+      document.body.classList.add('confirm-open');
+      document.body.classList.toggle('confirm-over-unlock', unlockVisible);
+      dialog.setAttribute('tabindex', '-1');
       const cleanup = (value) => {
         backdrop.hidden = true;
         dialog.hidden = true;
+        document.body.classList.remove('confirm-open', 'confirm-over-unlock');
         if (extraBtn) {
           extraBtn.hidden = true;
           extraBtn.removeEventListener('click', onExtra);
@@ -3946,24 +3951,26 @@
         okBtn.removeEventListener('click', onOk);
         cancelBtn.removeEventListener('click', onCancel);
         backdrop.removeEventListener('click', onCancel);
-        document.removeEventListener('keydown', onKey);
+        document.removeEventListener('keydown', onKey, true);
         resolve(value);
       };
       const onOk = () => cleanup(true);
       const onCancel = () => cleanup(false);
       const onExtra = () => cleanup('extra');
       const onKey = (event) => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          onCancel();
-        }
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        event.stopPropagation();
+        onCancel();
       };
       okBtn.addEventListener('click', onOk);
       cancelBtn.addEventListener('click', onCancel);
       if (extraBtn && extraLabel) extraBtn.addEventListener('click', onExtra);
       backdrop.addEventListener('click', onCancel);
-      document.addEventListener('keydown', onKey);
-      cancelBtn.focus();
+      document.addEventListener('keydown', onKey, true);
+      window.setTimeout(() => {
+        if (!dialog.hidden) cancelBtn.focus();
+      }, 0);
     });
   }
 
@@ -5277,12 +5284,7 @@
       const msg = err?.status === 401
         ? (err.message || 'Wrong password.')
         : (err.message || 'Could not unlock.');
-      if (unlockError && msg) {
-        unlockError.textContent = msg;
-        unlockError.hidden = false;
-        unlockError.classList.add('error');
-        unlockError.classList.remove('unlock-notice');
-      }
+      if (unlockError && msg) showUnlockError(msg);
     } else if (NotesStore.isUnlocked()) {
       repairUnlockShellState();
     }
@@ -5876,8 +5878,30 @@
     }
   }
 
-  async function submitUnlockForm() {
+  let unlockErrorAnnounce = 0;
+
+  function showUnlockError(message) {
+    if (!unlockError) return;
+    const text = String(message || '');
+    const token = ++unlockErrorAnnounce;
+    unlockError.classList.add('error');
+    unlockError.classList.remove('unlock-notice');
+    unlockError.setAttribute('role', 'alert');
+    unlockError.setAttribute('aria-live', 'assertive');
+    unlockError.setAttribute('aria-atomic', 'true');
+    // Hide and clear so a second "Wrong password." is announced, not ignored.
     unlockError.hidden = true;
+    unlockError.textContent = '';
+    if (!text) return;
+    window.setTimeout(() => {
+      if (token !== unlockErrorAnnounce || !unlockError) return;
+      unlockError.textContent = text;
+      unlockError.hidden = false;
+    }, 20);
+  }
+
+  async function submitUnlockForm() {
+    showUnlockError('');
     unlockSubmit.disabled = true;
     unlockSubmit.textContent = 'Unlocking…';
     try {
@@ -5885,13 +5909,11 @@
       repairUnlockShellState();
       if (vaultKeyProven() && !isVaultReadyForSync()) showApp();
     } catch (err) {
-      unlockError.textContent =
+      showUnlockError(
         err.status === 401
           ? (err.message || 'Wrong password.')
-          : err.message || 'Could not unlock.';
-      unlockError.hidden = false;
-      unlockError.classList.add('error');
-      unlockError.classList.remove('unlock-notice');
+          : err.message || 'Could not unlock.',
+      );
       const recovery = document.getElementById('unlock-recovery-hint');
       if (recovery) recovery.hidden = false;
       unlockSubmit.disabled = false;
@@ -6513,10 +6535,15 @@
       const open = !!openMap[folder.uuid];
       const active = currentFolder === folder.uuid ? ' active' : '';
       const kids = notes.map((note) => {
-        const on = (editorNoteOpen() && currentId === note.uuid && currentFolder === folder.uuid) ? ' active' : '';
-        return `<button type="button" class="folder-note${on}" data-folder-note="${escapeAttr(note.uuid)}">${escapeHtml(NotesSearch.effectiveNoteTitle(note) || 'Title')}</button>`;
+        const noteOpen = editorNoteOpen() && currentId === note.uuid;
+        const inThisView = currentFolder === folder.uuid;
+        const on = (noteOpen && inThisView) ? ' active' : '';
+        // All Notes stays the active view. The folder only gets a quiet marker.
+        const current = (noteOpen && !inThisView) ? ' is-current' : '';
+        return `<button type="button" class="folder-note${on}${current}" data-folder-note="${escapeAttr(note.uuid)}">${escapeHtml(NotesSearch.effectiveNoteTitle(note) || 'Title')}</button>`;
       }).join('');
-      return `<div class="folder-block${active}${open ? ' is-open' : ''}" data-folder="${escapeAttr(folder.uuid)}">
+      const holdsOpen = notes.some((note) => editorNoteOpen() && currentId === note.uuid && currentFolder !== folder.uuid);
+      return `<div class="folder-block${active}${open ? ' is-open' : ''}${holdsOpen ? ' has-open-note' : ''}" data-folder="${escapeAttr(folder.uuid)}">
         <div class="folder-head">
           <button type="button" class="folder-toggle" data-folder-toggle="${escapeAttr(folder.uuid)}" aria-expanded="${open ? 'true' : 'false'}" aria-label="${open ? 'Collapse' : 'Expand'} ${escapeAttr(folder.content.title || 'Folder')}">${open ? '▾' : '▸'}</button>
           <button type="button" class="folder-select" data-folder-select="${escapeAttr(folder.uuid)}">${escapeHtml(folder.content.title || 'Folder')}</button>
@@ -15226,12 +15253,12 @@
     if (clear) clear.hidden = !ui.search.value;
   }
 
-  function clearSearch() {
+  function clearSearch({ blur = true } = {}) {
     ui.search.value = '';
     updateSearchClear();
     renderNotes();
     if (currentId) applyEditorMode();
-    ui.search.blur();
+    if (blur) ui.search.blur();
   }
 
   function repairSearchIndexesForQuery() {
@@ -15288,6 +15315,16 @@
   // iOS Safari "Search" on type=search otherwise navigates / reloads the page.
   // Search field is type=text; still block Enter just in case.
   ui.search.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      if (String(ui.search.value || '')) {
+        clearSearch({ blur: false });
+        return;
+      }
+      ui.search.blur();
+      return;
+    }
     if (event.key !== 'Enter') return;
     event.preventDefault();
     event.stopPropagation();
@@ -16860,6 +16897,10 @@
       status.hidden = verified;
       wrap.hidden = verified;
       if (!verified) status.textContent = 'Email not verified. Enter the code we sent before backups can use this address.';
+      const retry = Number(account?.email_verify_retry_after) || 0;
+      if (!verified && retry > 0) {
+        startResendCooldown('btn-account-verify-resend', retry, { waiting: true });
+      }
     }
     const backupStatus = document.getElementById('backup-verify-status');
     const backupWrap = document.getElementById('backup-verify-wrap');
@@ -16868,6 +16909,10 @@
       backupStatus.hidden = ok;
       backupWrap.hidden = ok;
       if (!ok) backupStatus.textContent = 'This backup address is not verified yet. Enter the code from that inbox. Backups are not sent until then.';
+      const backupRetry = Number(account?.backup_verify_retry_after) || 0;
+      if (!ok && backupRetry > 0) {
+        startResendCooldown('btn-backup-verify-resend', backupRetry, { waiting: true });
+      }
       const hint = document.getElementById('backup-verified-hint');
       if (hint) hint.hidden = ok;
     }
@@ -16890,7 +16935,7 @@
 
   const resendCooldownTimers = new Map();
 
-  function startResendCooldown(buttonId, seconds) {
+  function startResendCooldown(buttonId, seconds, { waiting = false } = {}) {
     const btn = document.getElementById(buttonId);
     if (!btn) return;
     const wait = Math.max(1, Math.ceil(Number(seconds) || 60));
@@ -16900,15 +16945,25 @@
     if (!btn.dataset.resendLabel) btn.dataset.resendLabel = btn.textContent || 'Resend code';
     const tick = () => {
       const left = Math.ceil((until - Date.now()) / 1000);
+      const status = waiting ? resendStatusElement(buttonId) : null;
       if (left <= 0) {
         clearInterval(timer);
         resendCooldownTimers.delete(buttonId);
         btn.disabled = false;
         btn.textContent = btn.dataset.resendLabel || 'Resend code';
+        if (status) {
+          status.textContent = '';
+          status.hidden = true;
+        }
         return;
       }
       btn.disabled = true;
       btn.textContent = `Resend in ${left}s`;
+      if (status) {
+        status.hidden = false;
+        status.classList.add('error');
+        status.textContent = `Please wait ${left} s before requesting another code`;
+      }
     };
     const timer = setInterval(tick, 250);
     resendCooldownTimers.set(buttonId, timer);
@@ -16946,12 +17001,14 @@
     } catch (err) {
       const wait = Number(err.retryAfter) || 0;
       if (err.status === 429 && wait > 0) {
+        // Expected cooldown. The button and the inline sentence count down
+        // together. Do not console.error — the next click is blocked until it ends.
         const msg = (err.message && /Please wait/i.test(err.message))
           ? err.message
           : `Please wait ${Math.ceil(wait)} s before requesting another code`;
         showResendStatus(buttonId, msg, true);
         toast(msg, true);
-        startResendCooldown(buttonId, wait);
+        startResendCooldown(buttonId, wait, { waiting: true });
         return;
       }
       btn.disabled = false;

@@ -418,7 +418,7 @@
         <label>Vault password
           <input id="unlock-password" type="password" name="password" autocomplete="current-password" required>
         </label>
-        <p id="unlock-error" class="error" hidden></p>
+        <p id="unlock-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" hidden></p>
         <p id="unlock-recovery-hint" class="auth-hint" hidden>If you changed it in Settings, the vault password is different from the password you use to sign in. They start as the same password.</p>
         <p id="unlock-session-hint" class="auth-hint" hidden>Your sign-in expired. Enter your vault password to continue and resume sync.</p>
         <p id="unlock-update-hint" class="auth-hint ocr-stale" hidden aria-live="polite"></p>
@@ -575,6 +575,7 @@
           <button type="button" id="btn-offline-setup-dismiss" class="btn ghost sm">Not now</button>
         </div>
       </div>
+      <div class="sidebar-scroll" id="sidebar-scroll">
       <div class="filter-bar">
         <details class="filter-section" id="filter-section" open>
           <summary class="section-label sn-nav-label">Views<span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
@@ -637,6 +638,7 @@
           <button type="button" id="btn-new-folder" class="btn ghost sm tag-new-btn">+ New folder</button>
         </div>
       </details>
+      </div>
       <footer class="sidebar-foot">
         <div class="sidebar-foot-actions">
         <button type="button" id="btn-settings-nav" class="btn icon" title="Settings" aria-label="Settings">
