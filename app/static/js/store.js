@@ -1341,6 +1341,28 @@ const NotesStore = (() => {
 
   const CONFLICT_SUFFIX = ' (conflict copy)';
   let onConflictCopy = null;
+  // Recent note title+body fingerprints per uuid. Used to skip conflict copies
+  // when the "remote" text is one of our own earlier local saves (same device).
+  const recentNoteFingerprints = new Map();
+
+  function noteTextFingerprint(content) {
+    return `${String(content?.title || '')}\n${String(content?.content || '')}`;
+  }
+
+  function rememberNoteFingerprint(uuid, content) {
+    if (!uuid || !content || content.type !== 'note') return;
+    const fp = noteTextFingerprint(content);
+    const list = recentNoteFingerprints.get(uuid) || [];
+    if (list[0] === fp) return;
+    list.unshift(fp);
+    recentNoteFingerprints.set(uuid, list.slice(0, 12));
+  }
+
+  function isRecentLocalNoteText(uuid, content) {
+    if (!uuid || !content) return false;
+    const list = recentNoteFingerprints.get(uuid) || [];
+    return list.includes(noteTextFingerprint(content));
+  }
 
   function setConflictCopyCallback(fn) {
     onConflictCopy = typeof fn === 'function' ? fn : null;
@@ -2243,6 +2265,17 @@ const NotesStore = (() => {
     return `${label} did not sync${more}`;
   }
 
+  // When a push lands while the user kept typing, only take the new revision.
+  // Do not rewrite IndexedDB with the stale ciphertext that just went to the
+  // server — the in-memory note already moved on and must stay the source of truth.
+  function adoptPushedRevision(uuid, result) {
+    const item = state.items.get(uuid);
+    if (!item) return;
+    if (result?.rev != null && Number.isFinite(Number(result.rev))) {
+      item.rev = Number(result.rev);
+    }
+  }
+
   // After the server stored a row, remember exactly what it stored: the hash it
   // will echo in known_hashes / unchanged stubs and the revision our next push
   // builds on. Writing the pushed ciphertext (not a fresh encryption of the same
@@ -2362,7 +2395,13 @@ const NotesStore = (() => {
     }
     const type = local.content?.type;
     if (type === 'note' && remote.content?.type === 'note') {
-      keepConflictCopy(uuid, remote.content, { source: 'sync', winnerContent: local.content });
+      // Same-device rapid saves: the server copy is an earlier revision we wrote.
+      // Rebase onto its rev without spawning a conflict sibling.
+      if (!isRecentLocalNoteText(uuid, remote.content)) {
+        keepConflictCopy(uuid, remote.content, { source: 'sync', winnerContent: local.content });
+      } else {
+        logSync('conflict-rebase-local', { uuid, rev: serverRev });
+      }
       const { changed, content } = mergeCrossDeviceProtection(local.content, remote.content);
       if (changed) {
         local.content = content;
@@ -2437,7 +2476,20 @@ const NotesStore = (() => {
           counts[status] = (counts[status] || 0) + 1;
           // Edits typed while this request was on the wire replaced the item or
           // bumped its clock; they must stay dirty and go out with the next push.
+          // Still adopt the server revision from this successful push — otherwise
+          // the next push keeps a stale base_rev and conflicts with our own write.
           if (editedSincePush(uuid, snap)) {
+            if (status === 'ok' || status === 'unchanged') {
+              adoptPushedRevision(uuid, result);
+            } else if (status === 'conflict' || status === 'stale') {
+              try {
+                if (await resolvePushConflict(uuid, result)) needsAnotherPass = true;
+              } catch (err) {
+                logSync('conflict-resolve-failed', { uuid, error: err?.message || String(err) });
+              }
+            } else if (status === 'quota_exceeded' || status === 'too_large') {
+              blockItem(uuid, result);
+            }
             needsAnotherPass = true;
             continue;
           }
@@ -3926,6 +3978,7 @@ const NotesStore = (() => {
     if (existing?.rev != null) item.rev = existing.rev;
     state.items.set(uuid, item);
     state.blocked.delete(uuid);
+    if (content.type === 'note') rememberNoteFingerprint(uuid, content);
     if (!skipDirty) {
       state.dirty.add(uuid);
       schedulePush();

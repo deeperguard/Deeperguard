@@ -28,7 +28,8 @@ assert.ok(!appJs.includes("kind === 'image' ? 'Image'"));
 
 const thumbRule = css.split('.note-list-thumb img,')[1].split('}')[0];
 assert.ok(thumbRule.includes('object-fit: contain'));
-assert.ok(thumbRule.includes('object-position: left top'));
+// Round 12 centers contained thumbs so the whole receipt is visible.
+assert.ok(thumbRule.includes('object-position: center'));
 assert.ok(!thumbRule.includes('object-fit: cover'));
 assert.ok(css.includes('overflow-anchor: none'));
 assert.ok(css.includes('.editor-head-main .editor-meta-row'));

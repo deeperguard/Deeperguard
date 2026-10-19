@@ -1592,7 +1592,7 @@ class NotesAppTests(unittest.TestCase):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
         self.assertIn('id="tag-bar-shell"', html)
         self.assertLess(html.index('id="note-title"'), html.index('id="tag-bar-shell"'))
         self.assertLess(html.index('id="tag-bar-shell"'), html.index('id="editor-actions"') if 'id="editor-actions"' in html else html.index('class="editor-actions"'))
@@ -1613,7 +1613,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_phone_tag_section_shows_all_tags(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
         self.assertNotIn("max-height: 16vh", mobile)
         self.assertIn("Do not flex or 16vh-cap <details> on iOS", mobile)
         self.assertIn(".tag-section[open] {\n    max-height: none;\n    display: block;", mobile)
@@ -1623,7 +1623,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_desktop_folder_section_scrolls(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        desktop = css.split("@media (min-width: 861px)")[-1]
+        desktop = css.split("@media (min-width: 1000px)")[-1]
         self.assertIn("grid-template-rows: minmax(0, 1fr)", desktop)
         self.assertIn(".sidebar-nav {\n    grid-column: 1;", desktop)
         self.assertIn("overflow-y: auto;\n    -webkit-overflow-scrolling: touch;", desktop)
@@ -1652,7 +1652,7 @@ class NotesAppTests(unittest.TestCase):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
         self.assertIn('id="filter-section"', html)
         self.assertIn('id="filters"', html)
         self.assertIn('class="sn-tags">Tags</span>', html)
@@ -1667,7 +1667,7 @@ class NotesAppTests(unittest.TestCase):
     def test_mobile_list_chrome_quiets_header_and_sync_banner(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
         self.assertLess(html.index('id="sync-status-banner"'), html.index('id="note-list-head"'))
         self.assertIn('class="sync-status-banner list-sync-banner"', html)
         self.assertIn(".sidebar-head .app-version { display: none; }", mobile)
@@ -2753,7 +2753,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("padding-bottom: calc(72px + var(--safe-bottom))", css)
         self.assertIn("padding: 8px 16px 4px", css)
         self.assertIn(".tag-section:not([open]) > :not(summary)", css)
-        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
         self.assertIn(".note-list-head {\n    display: flex;", mobile)
         self.assertIn("sidebar-update", html)
         self.assertIn("body.settings-open #settings-panel", (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8"))
@@ -4774,7 +4774,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_tablet_desktop_tabs_safe_area_and_sidebar_foot_sync(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        desktop = css.split("@media (min-width: 861px)")[-1]
+        desktop = css.split("@media (min-width: 1000px)")[-1]
         tabs_block = desktop[desktop.index("  .app-tabs {") : desktop.index("  .app-tab {", desktop.index("  .app-tabs {"))]
         self.assertIn("padding-top: calc(6px + var(--safe-top))", tabs_block)
         self.assertIn("padding-left: calc(12px + var(--safe-left))", tabs_block)
@@ -5149,7 +5149,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_doc_immersive_toolbar_respects_safe_area(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
         self.assertIn(
             "body.doc-preview-open.doc-immersive.doc-chrome-reveal .doc-viewer,\n"
             "body.doc-preview-open.doc-immersive .doc-viewer:has(.doc-enhance-panel:not([hidden]))",
@@ -5167,7 +5167,7 @@ class NotesAppTests(unittest.TestCase):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
         self.assertIn('id="editor-actions-overflow-panel"', html)
         self.assertIn('class="editor-actions-mobile-bar"', html)
         self.assertIn('class="editor-actions-overflow-panel editor-phone-toolbar"', html)
@@ -5201,7 +5201,7 @@ class NotesAppTests(unittest.TestCase):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 860px)")[1].split("@media (min-width: 861px)")[0]
+        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
         self.assertIn(".doc-inline-tools {\n  display: none !important;\n}", css)
         self.assertIn(".doc-inline-tools {\n    display: none !important;\n  }", mobile)
         self.assertIn("min-height: min(52vh, 50dvh);", mobile)
@@ -5247,9 +5247,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('openNoteFileAttachment', js)
         self.assertIn("const label = file ? 'Download file' : 'Download note';", js)
         self.assertIn('id="btn-desktop-doc-fullscreen"', html)
-        self.assertIn("@media (min-width: 861px)", css)
+        self.assertIn("@media (min-width: 1000px)", css)
         self.assertIn(".btn.icon.find-btn {", css)
-        self.assertRegex(css, r"@media \(min-width: 861px\)[\s\S]*\.doc-inline-tools \{\s*display: none !important;")
+        self.assertRegex(css, r"@media \(min-width: 1000px\)[\s\S]*\.doc-inline-tools \{\s*display: none !important;")
         self.assertIn("function inlineDocPreviewAttId()", js)
         self.assertIn("function setEditorToolbarMenuOpen(", js)
         inline_fn = js[js.find("function renderDocInline("):js.find("function scheduleSearchHitRepaint(")]
@@ -5430,8 +5430,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(".pane-splitter { display: none; }", css)
         self.assertIn("cursor: col-resize", css)
         self.assertIn("touch-action: none", css)
-        self.assertLess(css.index(".pane-splitter { display: none; }"), css.index("@media (min-width: 861px)"))
-        desktop = css.split("@media (min-width: 861px)", 1)[1]
+        self.assertLess(css.index(".pane-splitter { display: none; }"), css.index("@media (min-width: 1000px)"))
+        desktop = css.split("@media (min-width: 1000px)", 1)[1]
         self.assertIn(".pane-splitter {\n    display: block;", desktop)
         self.assertIn("border-right: 0;", desktop)
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")

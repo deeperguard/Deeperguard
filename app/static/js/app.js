@@ -351,7 +351,7 @@
   let paneSplitDragging = false;
 
   function splitLayoutActive() {
-    return !!(window.matchMedia && window.matchMedia('(min-width: 861px)').matches);
+    return !!(window.matchMedia && window.matchMedia('(min-width: 1000px)').matches);
   }
 
   function readStoredListWidth() {
@@ -1102,6 +1102,10 @@
       const next = listTimeLabel(ms);
       if (next && el.textContent !== next) el.textContent = next;
     });
+    if (currentId && NotesStore.isUnlocked()) {
+      const open = NotesStore.get(currentId);
+      if (open) updateNoteMeta(open);
+    }
   }
   setInterval(refreshRelativeTimes, 30000);
 
@@ -1294,6 +1298,7 @@
       return parts.join('');
     }).join('\n');
   }
+  if (typeof window !== 'undefined') window.NotesMarkdownHighlight = highlightCode;
 
   function noteUsesRenderedBody(type) {
     return type === 'plain' || type === 'markdown' || type === 'superscript';
@@ -1511,7 +1516,7 @@
     const panel = document.getElementById('editor-actions-overflow-panel');
     const inner = panel?.querySelector('.editor-toolbar-menu-panel');
     const narrow = typeof window.matchMedia === 'function'
-      && window.matchMedia('(max-width: 860px)').matches;
+      && window.matchMedia('(max-width: 999px)').matches;
     if (panel) {
       if (on && narrow) {
         panel.setAttribute('role', 'menu');
@@ -1529,16 +1534,26 @@
       if (on && narrow) el.setAttribute('role', 'menuitem');
       else el.removeAttribute('role');
     });
-    if (!on) {
-      document.body.classList.add('editor-toolbar-tip-suppress');
-      releaseToolbarTipWhenPointerLeaves();
-    }
+    if (!on) suppressToolbarTips();
   }
+  function toolbarTipButtons() {
+    return [
+      ...document.querySelectorAll('.editor-toolbar-overflow-toggle'),
+      ...document.querySelectorAll('.find-btn'),
+    ];
+  }
+
   function toolbarTipStillHot() {
-    return [...document.querySelectorAll('.editor-toolbar-overflow-toggle')].some((btn) => {
+    return toolbarTipButtons().some((btn) => {
       if (document.activeElement === btn) btn.blur();
       return btn.matches(':hover') || document.activeElement === btn;
     });
+  }
+
+  function suppressToolbarTips() {
+    document.body.classList.add('editor-toolbar-tip-suppress');
+    toolbarTipButtons().forEach((btn) => btn.blur());
+    releaseToolbarTipWhenPointerLeaves();
   }
   let toolbarTipReleaseBound = false;
   function releaseToolbarTipWhenPointerLeaves() {
@@ -2375,8 +2390,7 @@
       const kind = NotesPreview.kindFromMeta(first.mime, attachmentKindName(first));
       if (kind === 'pdf') return { icon: '📄', label: 'PDF', tone: 'note', svg: kindIconSvg('note') };
       if (kind === 'image') return { icon: '🖼', label: 'IMG', tone: 'note' };
-      if (kind === 'text') return { icon: '📃', label: 'FILE', tone: 'note', svg: kindIconSvg('note') };
-      return { icon: '📎', label: 'FILE', tone: 'note' };
+      return { icon: '📎', label: 'FILE', tone: 'note', svg: kindIconSvg('note') };
     }
     const editor = note.content.editor || 'plain';
     if (editor === 'checklist' || editor === 'super') return { icon: '☑', label: 'Checklist', tone: 'checklist', svg: kindIconSvg('checklist') };
@@ -3904,7 +3918,7 @@
     ui.saveStatus.classList.toggle('error', !!isError);
   });
   function isPhoneShell() {
-    return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 860px)').matches;
+    return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 999px)').matches;
   }
 
   function formatSyncTime(unixSeconds) {
@@ -6939,7 +6953,9 @@
     const compact = noteListDensity() === 'compact';
     const icon = kind === 'image'
       ? { icon: '🖼', tone: 'note' }
-      : { icon: '📄', tone: 'note', svg: kindIconSvg('note') };
+      : kind === 'pdf'
+        ? { icon: '📄', tone: 'note', svg: kindIconSvg('note') }
+        : { icon: '📎', tone: 'note', svg: kindIconSvg('note') };
     return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(note.uuid)}">
       ${noteRowSwipeDeleteHtml(note)}
       ${noteRowRestoreBtnHtml(note)}
@@ -7421,11 +7437,11 @@
   let tagBarShowAll = false;
 
   function isMobileLayout() {
-    return window.matchMedia && window.matchMedia('(max-width: 860px)').matches;
+    return window.matchMedia && window.matchMedia('(max-width: 999px)').matches;
   }
 
   function isDesktopLayout() {
-    return window.matchMedia && window.matchMedia('(min-width: 861px)').matches;
+    return window.matchMedia && window.matchMedia('(min-width: 1000px)').matches;
   }
 
   function defaultTagBarExpanded() {
@@ -8359,8 +8375,6 @@
     if (!box) return null;
     const srcW = source.naturalWidth || source.videoWidth || source.width || box.scan.width;
     const srcH = source.naturalHeight || source.videoHeight || source.height || box.scan.height;
-    const scanW = box.scan.width || srcW;
-    const scanH = box.scan.height || srcH;
     const side = thumbOutputPx();
     const out = document.createElement('canvas');
     out.width = side;
@@ -8371,27 +8385,16 @@
     ctx.imageSmoothingQuality = 'high';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, side, side);
-    let sx = 0;
-    let sy = 0;
-    let sw = srcW;
-    let sh = srcH;
-    if (!box.full) {
-      const mapX = srcW / scanW;
-      const mapY = srcH / scanH;
-      sx = box.x * mapX;
-      sy = box.y * mapY;
-      sw = Math.max(1, box.w * mapX);
-      sh = Math.max(1, box.h * mapY);
-    }
-    // Full scans stay contained. A short ink strip (one receipt line) is
-    // scaled to fill the tile from the top-left so the glyphs stay readable.
-    // Draw from the original bitmap at devicePixelRatio, not the 160px scan.
-    const scale = box.full
-      ? Math.min(side / sw, side / sh)
-      : Math.max(side / sw, side / sh);
+    // Always contain + center the whole page/image. Cover-cropping short ink
+    // strips made receipts look like a single letter fragment.
+    const sw = Math.max(1, srcW);
+    const sh = Math.max(1, srcH);
+    const scale = Math.min(side / sw, side / sh);
     const dw = Math.max(1, Math.round(sw * scale));
     const dh = Math.max(1, Math.round(sh * scale));
-    ctx.drawImage(source, sx, sy, sw, sh, 0, 0, dw, dh);
+    const dx = Math.round((side - dw) / 2);
+    const dy = Math.round((side - dh) / 2);
+    ctx.drawImage(source, 0, 0, sw, sh, dx, dy, dw, dh);
     return out;
   }
 
@@ -8501,7 +8504,10 @@
         }
         const doc = await NotesPreview.openPdf(entry.bytes);
         const stageWidth = Math.round(stage.clientWidth || stage.parentElement?.clientWidth || 0);
-        const width = forList ? LIST_THUMB_PX : Math.max(84, stageWidth || 84);
+        // List thumbs need a larger render width so DPR downscale stays sharp.
+        const width = forList
+          ? Math.max(LIST_THUMB_PX, thumbOutputPx())
+          : Math.max(84, stageWidth || 84);
         const page = await NotesPreview.renderPdfPage(doc, 1, width);
         paintFittedThumb(page);
         paint.replaceChildren(page);
@@ -10905,10 +10911,18 @@
     updateNoteMeta(savedNote);
     renderHistory(savedNote);
     const displayTitle = NotesSearch.effectiveNoteTitle(NotesStore.get(currentId));
-    const rowTitle = ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"] h3`);
+    const row = ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"]`);
+    const rowTitle = row?.querySelector('h3');
     if (rowTitle) {
       rowTitle.textContent = displayTitle || 'Title';
       rowTitle.classList.toggle('note-title-placeholder', !displayTitle);
+    }
+    const rowTime = row?.querySelector('.note-modified[data-edited], .note-modified');
+    if (rowTime && savedNote) {
+      const editedMs = noteEditedAtMs(savedNote);
+      rowTime.dataset.edited = String(editedMs || '');
+      rowTime.title = listTimeAbsolute(editedMs);
+      rowTime.textContent = listTimeLabel(editedMs);
     }
     if (String(next.content || '').trim()) maybeOfferWritingTip();
   }
@@ -12591,6 +12605,24 @@
     return String(name || 'Scanned document').replace(/\.[^.]+$/, '').trim() || 'Scanned document';
   }
 
+  function fileTitleWithExt(name) {
+    const base = String(name || '').split(/[/\\]/).pop().trim();
+    return base || 'Document';
+  }
+
+  function noteHasUsableTitle(note) {
+    if (!note?.content) return false;
+    const stored = String(note.content.title || '').trim();
+    if (stored && !NotesSearch.isPlaceholderTitle?.(stored)) return true;
+    const effective = String(NotesSearch.effectiveNoteTitle?.(note) || '').trim();
+    if (effective && !NotesSearch.isPlaceholderTitle?.(effective)) return true;
+    if (currentId === note.uuid) {
+      const typed = String(ui.title?.value || '').trim();
+      if (typed && !NotesSearch.isPlaceholderTitle?.(typed)) return true;
+    }
+    return false;
+  }
+
   function namedDocument(name, original) {
     const ext = (String(original || '').match(/\.[^.]+$/) || [''])[0];
     const cleaned = String(name || '').trim();
@@ -13196,9 +13228,17 @@
       created = true;
     } else {
       const note = NotesStore.get(id);
-      if (note && (!note.content.title || note.content.title === 'Untitled')) {
-        ui.title.value = docName;
-        flushSave();
+      // Keep an existing title (including body-derived ones). Only auto-title
+      // a truly untitled note, and prefer the filename with its extension.
+      if (note && !noteHasUsableTitle(note)) {
+        const autoTitle = fileTitleWithExt(originalName || displayName || docName);
+        if (currentId === id && ui.title) {
+          ui.title.value = autoTitle;
+          note.content.title_manual = true;
+          flushSave();
+        } else {
+          NotesStore.upsert(id, { ...note.content, title: autoTitle, title_manual: true });
+        }
       }
     }
     toast('Saving document…');
@@ -15818,7 +15858,13 @@
     const copy = await snapshotPickedFile(list[0]);
     if (!copy) return;
     const note = NotesStore.get(currentId);
-    const title = String(note?.content?.title || '').trim() || fileStem(copy.name) || 'Document';
+    // Pass a stable title so ingestDocument does not open the scan dialog.
+    // Prefer the note's existing title; only fall back to the filename.
+    const title = noteHasUsableTitle(note)
+      ? (String(note.content.title || '').trim()
+        || NotesSearch.effectiveNoteTitle(note)
+        || String(ui.title?.value || '').trim())
+      : fileTitleWithExt(copy.name);
     try {
       await ingestDocument(copy, {
         createIfNeeded: false,
@@ -15950,7 +15996,7 @@
   const sidebarNav = document.querySelector('.sidebar-nav');
   const sidebarNavBackdrop = document.getElementById('sidebar-nav-backdrop');
   function navViewsShouldDrawer() {
-    return window.matchMedia && window.matchMedia('(min-width: 861px) and (max-width: 1099px)').matches && !prefs.navPinned;
+    return window.matchMedia && window.matchMedia('(min-width: 1000px) and (max-width: 1099px)').matches && !prefs.navPinned;
   }
   sidebarNav?.addEventListener('pointerenter', () => {
     if (!navViewsShouldDrawer()) return;
@@ -18029,6 +18075,7 @@
         return;
       }
       if (event.key !== 'Escape') return;
+      suppressToolbarTips();
       const stop = () => {
         event.preventDefault();
         event.stopPropagation();
