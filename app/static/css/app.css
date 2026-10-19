@@ -8157,9 +8157,41 @@ body.nav-drawer-open .filter {
   justify-content: flex-start !important;
   gap: 10px;
   width: 100% !important;
+  height: 44px;
   min-height: 44px;
-  padding: 8px 12px !important;
+  max-height: 44px;
+  margin: 0;
+  padding: 0 12px !important;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 20px;
   box-sizing: border-box;
+  flex: 0 0 auto;
+}
+body.nav-drawer-open .filter-icon {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px;
+  max-width: 20px;
+  min-height: 20px;
+  max-height: 20px;
+  flex: 0 0 20px !important;
+}
+body.nav-drawer-open .filter-section > summary.section-label,
+html.layout-compact body.nav-drawer-open .filter-section > summary.sn-nav-label {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100% !important;
+  box-sizing: border-box;
+  min-height: 44px !important;
+  margin: 0;
+  padding: 12px 14px !important;
+  font-size: 16px;
+  line-height: 20px;
 }
 body.nav-drawer-open .filter > span,
 body.nav-drawer-open .sn-nav-label,
