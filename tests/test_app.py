@@ -761,6 +761,56 @@ class NotesAppTests(unittest.TestCase):
         self.assertTrue(gone.get_json()["current"])
         self.assertEqual(self.client.get("/api/sessions").status_code, 401)
 
+    def test_this_device_is_the_request_session(self):
+        import db as notes_db
+
+        email = "sessions-r27@home.local"
+        self._register_user(email, "device-secure-pass")
+        user = notes_db.get_user_by_email(email)
+        uid = int(user["id"])
+        listed = self.client.get("/api/sessions")
+        cookie = next(item for item in listed.get_json()["sessions"] if item["current"])
+        conn = notes_db.connection()
+        conn.execute(
+            "UPDATE user_sessions SET device_label = ?, user_agent = ? WHERE id = ?",
+            ("iPhone · Safari", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", cookie["id"]),
+        )
+        conn.commit()
+        self.client.environ_base["HTTP_USER_AGENT"] = (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        refreshed = self.client.get("/api/sessions").get_json()["sessions"]
+        current = next(item for item in refreshed if item["current"])
+        self.assertEqual(current["id"], cookie["id"])
+        self.assertEqual(current["device"], "Linux · Chrome")
+
+        linux = notes_db.create_user_session(
+            uid,
+            device_label="Linux · Chrome",
+            user_agent="Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0.0.0",
+            device_id="linux-device-r27",
+            ip="203.0.113.40",
+        )
+        self.assertTrue(linux)
+        rebound = self.client.get(
+            "/api/sessions",
+            headers={"X-Device-Id": "linux-device-r27"},
+        ).get_json()["sessions"]
+        marked = [item for item in rebound if item["current"]]
+        self.assertEqual(len(marked), 1)
+        self.assertNotEqual(marked[0]["id"], cookie["id"])
+        self.assertEqual(marked[0]["device"], "Linux · Chrome")
+        # A mismatched user agent must not move the badge onto a different row.
+        self.client.environ_base["HTTP_USER_AGENT"] = (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        )
+        stolen = self.client.get("/api/sessions").get_json()["sessions"]
+        still = next(item for item in stolen if item["current"])
+        self.assertEqual(still["id"], marked[0]["id"])
+        self.assertEqual(still["device"], "Linux · Chrome")
+
     def test_remote_sign_out_tells_device_to_wipe(self):
         import secrets
         import time

@@ -814,6 +814,20 @@
   }
 
   const TAG_COLORS = ['#4f8cff', '#7c5cff', '#2ec4b6', '#ff9f1c', '#e71d36', '#8b98a5', '#f4d35e', '#ee964b'];
+  const TAG_COLOR_NAMES = {
+    '#4f8cff': 'blue',
+    '#7c5cff': 'purple',
+    '#2ec4b6': 'teal',
+    '#ff9f1c': 'orange',
+    '#e71d36': 'red',
+    '#8b98a5': 'gray',
+    '#f4d35e': 'yellow',
+    '#ee964b': 'amber',
+  };
+
+  function tagColorName(color) {
+    return TAG_COLOR_NAMES[String(color || '').toLowerCase()] || 'custom';
+  }
 
   let currentId = null;
   let listSelectionId = null;
@@ -1910,7 +1924,7 @@
       return;
     }
     el.hidden = false;
-    text.innerHTML = `<strong>Offline</strong> — ${escapeHtml(OFFLINE_LAN_HINT)}`;
+    text.innerHTML = offlineBannerHtml();
   }
 
   function updateUnlockUpdateHint({ stale, locked, serverBuild, build, dismissed }) {
@@ -3316,6 +3330,8 @@
   };
   let appTab = 'notes';
   let totpEntries = [];
+  let totpEditingId = '';
+  let totpDialogTrigger = null;
   let totpClock = 0;
   let totpQrTimer = 0;
   let totpQrStream = null;
@@ -3575,6 +3591,7 @@
             ${totpRingSvg(totp.progress, totp.remaining <= 5)}
           </span>
         </button>
+        <button type="button" class="totp-item-edit" data-totp-edit aria-label="Edit ${escapeAttr(label)}">Edit</button>
         <button type="button" class="totp-item-remove" data-totp-remove aria-label="Remove ${escapeAttr(label)}">×</button>
       </div>`;
     }).join('');
@@ -3654,23 +3671,72 @@
     if (totpUi.qrStatus) totpUi.qrStatus.hidden = true;
   }
 
+  function syncTotpDialogMode() {
+    const editing = !!totpEditingId;
+    const title = document.getElementById('totp-add-title');
+    const save = document.getElementById('totp-add-save');
+    const secret = totpUi.secret;
+    if (title) title.textContent = editing ? 'Edit 2FA account' : 'Add 2FA account';
+    if (save) save.textContent = editing ? 'Save' : 'Add';
+    if (secret) {
+      secret.readOnly = editing;
+      secret.required = !editing;
+      secret.placeholder = editing
+        ? 'Secret stays in the vault'
+        : 'JBSW Y3DP EHPK 3PXP';
+      if (editing) secret.value = '';
+    }
+    document.querySelectorAll('#totp-add-dialog .scan-add-actions, #totp-add-dialog .scan-dialog-lead').forEach((el) => {
+      el.hidden = editing;
+    });
+  }
+
   function hideTotpAddDialog() {
     stopTotpQrScan();
+    totpEditingId = '';
     if (totpUi.dialog) totpUi.dialog.hidden = true;
     if (totpUi.backdrop) totpUi.backdrop.hidden = true;
     document.body.classList.remove('scan-dialog-open');
     if (totpUi.issuer) totpUi.issuer.value = '';
     if (totpUi.account) totpUi.account.value = '';
-    if (totpUi.secret) totpUi.secret.value = '';
+    if (totpUi.secret) {
+      totpUi.secret.value = '';
+      totpUi.secret.readOnly = false;
+    }
+    syncTotpDialogMode();
     setTotpAddError('');
+    const trigger = totpDialogTrigger;
+    totpDialogTrigger = null;
+    if (trigger && document.contains(trigger)) trigger.focus();
+    else totpUi.add?.focus();
   }
 
   function showTotpAddDialog() {
+    totpEditingId = '';
+    totpDialogTrigger = totpUi.add;
     closeSettings(true);
     hideScanDialog();
     if (totpUi.issuer) totpUi.issuer.value = '';
     if (totpUi.account) totpUi.account.value = '';
     if (totpUi.secret) totpUi.secret.value = '';
+    syncTotpDialogMode();
+    setTotpAddError('');
+    if (totpUi.backdrop) totpUi.backdrop.hidden = false;
+    if (totpUi.dialog) totpUi.dialog.hidden = false;
+    document.body.classList.add('scan-dialog-open');
+    totpUi.issuer?.focus();
+  }
+
+  function showTotpEditDialog(id) {
+    const item = totpEntries.find((entry) => entry.id === id);
+    if (!item) return;
+    totpEditingId = id;
+    totpDialogTrigger = document.querySelector(`[data-totp-id="${CSS.escape(id)}"] [data-totp-edit]`);
+    closeSettings(true);
+    hideScanDialog();
+    if (totpUi.issuer) totpUi.issuer.value = item.issuer || '';
+    if (totpUi.account) totpUi.account.value = item.account || '';
+    syncTotpDialogMode();
     setTotpAddError('');
     if (totpUi.backdrop) totpUi.backdrop.hidden = false;
     if (totpUi.dialog) totpUi.dialog.hidden = false;
@@ -3797,13 +3863,31 @@
   }
 
   async function saveTotpAddDialog() {
+    if (totpEditingId) {
+      const issuer = String(totpUi.issuer?.value || '').trim();
+      const account = String(totpUi.account?.value || '').trim();
+      if (!issuer && !account) {
+        setTotpAddError('Enter an issuer or account name.');
+        totpUi.issuer?.focus();
+        return;
+      }
+      const saved = NotesStore.updateTotpAccount(totpEditingId, { issuer, account });
+      if (!saved) {
+        setTotpAddError('That account is no longer in the vault.');
+        return;
+      }
+      hideTotpAddDialog();
+      refreshTotpVault();
+      toast('Account updated');
+      return;
+    }
     const entry = NotesTotp.entryFromFields({
       issuer: totpUi.issuer?.value || '',
       account: totpUi.account?.value || '',
       secret: totpUi.secret?.value || '',
     });
     if (!entry) {
-      setTotpAddError('Enter a valid authenticator secret or otpauth URL.');
+      setTotpAddError('Enter a valid authenticator secret or otpauth URL. Use Base32 letters A–Z and digits 2–7. Spaces are OK.');
       totpUi.secret?.focus();
       return;
     }
@@ -4080,9 +4164,14 @@
   }
 
   function displaySyncPhase(phase) {
+    const raw = phase || 'idle';
+    const dirty = NotesStore.state?.dirty?.size || 0;
+    if (dirty > 0 && raw !== 'syncing' && raw !== 'offline' && raw !== 'error' && raw !== 'session-expired') {
+      return 'pending';
+    }
     const last = Number(NotesStore.state.lastSync) || 0;
-    if ((phase === 'idle' || !phase) && last > 0) return 'ok';
-    return phase || 'idle';
+    if ((raw === 'idle' || !raw) && last > 0) return 'ok';
+    return raw;
   }
 
   function refreshSyncMeta({ state, message } = {}) {
@@ -6740,7 +6829,7 @@
       <div class="tag-colors">
         ${TAG_COLORS.map((color) => {
           const on = (tag.content.color || '#4f8cff') === color ? 'active' : '';
-          return `<button type="button" class="tag-color ${on}" data-tag-color="${color}" style="background:${color}" aria-label="Set tag color"></button>`;
+          return `<button type="button" class="tag-color ${on}" data-tag-color="${color}" style="background:${color}" aria-label="Set ${tagColorName(color)} color"></button>`;
         }).join('')}
       </div>
       <button type="button" class="btn ghost sm" data-tag-rename="${escapeAttr(currentTag)}">Rename</button>
@@ -6808,6 +6897,7 @@
         applyTagSection();
         renderTags();
         renderNotes();
+        closeEditorIfNoteLeftView();
         if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
       });
       bindTagLongPress(btn, btn.dataset.tag);
@@ -6837,7 +6927,7 @@
       const count = NotesStore.noteCountForTag(tag.uuid);
       const swatches = TAG_COLORS.map((swatch) => {
         const on = color === swatch ? 'active' : '';
-        return `<button type="button" class="tag-color ${on}" data-manage-color="${swatch}" style="background:${swatch}" aria-label="Set color"></button>`;
+        return `<button type="button" class="tag-color ${on}" data-manage-color="${swatch}" style="background:${swatch}" aria-label="Set ${tagColorName(swatch)} color"></button>`;
       }).join('');
       return `<div class="tag-manage-row" data-manage-tag="${escapeAttr(tag.uuid)}">
         <div class="tag-manage-main">
@@ -6998,6 +7088,7 @@
       renderFolders();
       renderNotes();
       syncFilterSelect();
+      if (currentId) syncNoteFolderControl(NotesStore.get(currentId));
     };
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
@@ -7066,6 +7157,7 @@
         renderTags();
         renderNotes();
         syncFilterSelect();
+        closeEditorIfNoteLeftView();
         if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
       });
       btn.addEventListener('dblclick', (event) => {
@@ -7136,6 +7228,25 @@
     return NotesStore.listNotes().filter((n) => n.content.trashed);
   }
 
+  function emptyNotesCopy() {
+    if (currentFilter === 'pinned') {
+      return {
+        title: 'No starred notes yet',
+        body: 'Tap ☆ on a note to star it.',
+      };
+    }
+    if (currentFilter === 'archived') {
+      return {
+        title: 'No archived notes yet',
+        body: 'Archive a note and it will show up here.',
+      };
+    }
+    return {
+      title: 'No notes here yet',
+      body: 'Create a note or scan a document, or pull down to sync from your other devices.',
+    };
+  }
+
   function updateTrashToolbar(count = null) {
     const total = typeof count === 'number' ? count : trashedNotes().length;
     const settingsBtn = document.getElementById('btn-empty-trash');
@@ -7152,7 +7263,8 @@
     if (!show) return;
     meta.textContent = total
       ? `${total} note${total === 1 ? '' : 's'} in trash`
-      : 'Trash is empty';
+      : '';
+    bar.hidden = !show || total === 0;
     btn.hidden = total === 0;
     btn.disabled = total === 0;
   }
@@ -7216,6 +7328,25 @@
     if (select.value !== currentFilter) select.value = currentFilter;
   }
 
+  function closeEditorIfNoteLeftView() {
+    if (!currentId || typeof NotesSearch === 'undefined') return;
+    const note = NotesStore.get(currentId);
+    if (!note) {
+      closeEditor();
+      return;
+    }
+    const matched = NotesSearch.filterNotes([note], {
+      query: '',
+      filter: currentFilter,
+      tagId: currentTag,
+      folderId: currentFolder,
+      tagMap: tagMap(),
+      folderMap: folderMap(),
+      sort: prefs.sort,
+    });
+    if (!matched.some((item) => item.uuid === currentId)) closeEditor();
+  }
+
   function setFilter(name) {
     if (name === 'documents' && currentFilter !== 'documents') {
       filterBeforeFiles = currentFilter || 'all';
@@ -7228,6 +7359,7 @@
       applyTagSection();
     }
     updateTrashToolbar();
+    closeEditorIfNoteLeftView();
     if (appTab !== '2fa') {
       const nextTab = name === 'documents' ? 'files' : 'notes';
       if (appTab !== nextTab) {
@@ -7449,7 +7581,8 @@
       if (wasOffline) {
         NotesStore.emitSync('idle', '');
         if (syncOnRecovery && vaultReady) {
-          syncNow({ quiet: true });
+          const pending = NotesStore.state?.dirty?.size || 0;
+          syncNow({ quiet: true, force: pending > 0 });
           resumePendingOcr().catch(() => {});
           listPreviewBackfillFailed.clear();
           resumePendingListPreviews().catch(() => {});
@@ -7476,7 +7609,21 @@
   }
   window.notesMarkNetworkReachable = markNetworkReachable;
 
-  const OFFLINE_LAN_HINT = 'Can\'t reach the notes server. Join home Wi‑Fi or WireGuard, then try again.';
+  function selfHostNotes() {
+    return document.getElementById('app')?.dataset.selfHost === '1';
+  }
+
+  function offlineStatusCopy() {
+    if (selfHostNotes()) return 'Can\'t reach the notes server. Join home Wi‑Fi or WireGuard, then try again.';
+    return 'You\'re offline. Changes are saved on this device and will sync when you\'re back online.';
+  }
+
+  function offlineBannerHtml() {
+    if (selfHostNotes()) return `<strong>Offline</strong> — ${escapeHtml(offlineStatusCopy())}`;
+    return escapeHtml(offlineStatusCopy());
+  }
+
+  const OFFLINE_LAN_HINT = offlineStatusCopy();
 
   function scheduleNetworkProbe() {
     clearTimeout(networkProbeTimer);
@@ -7971,7 +8118,7 @@
         }
       }
       ui.noteList.innerHTML = query
-        ? `<div class="note-list-empty"><p class="note-list-empty-title">No matches</p><p class="muted">${listingFiles ? 'Try a filename or the note the file is attached to.' : 'Try another word, a tag or folder name, or text from a scanned document.'}</p></div>`
+        ? `<div class="note-list-empty"><p class="note-list-empty-title">No ${listingFiles ? 'files' : 'notes'} match “${escapeHtml(query)}”</p><p class="muted">${listingFiles ? 'Try a filename or the note the file is attached to.' : 'Clear the search or filters to see every note.'}</p></div>`
         : currentFilter === 'trash'
           ? '<div class="note-list-empty"><p class="note-list-empty-title">Trash is empty</p><p class="muted">Notes you delete appear here until you empty trash.</p></div>'
         : currentFilter === 'documents'
@@ -7991,8 +8138,8 @@
               </div>
             </div>`
           : `<div class="note-list-empty">
-              <p class="note-list-empty-title">No notes here yet</p>
-              <p class="muted">Create a note or scan a document, or pull down to sync from your other devices.</p>
+              <p class="note-list-empty-title">${escapeHtml(emptyNotesCopy().title)}</p>
+              <p class="muted">${escapeHtml(emptyNotesCopy().body)}</p>
               <div class="note-list-empty-actions">
                 <button type="button" class="btn primary sm" data-empty-sync>Sync notes</button>
                 <button type="button" class="btn sm" data-empty-new>New note</button>
@@ -10972,6 +11119,7 @@
       ui.preview.innerHTML = text
         ? NotesMarkdown.render(text)
         : '<p class="muted">OCR is still running, or no text was found. Stay on the document preview in the meantime.</p>';
+      markAutoDir(ui.preview);
       highlightPreview();
       if (previewBtn) setEditorMenuLabel(previewBtn, 'Document');
       if (ocrBtn) setEditorMenuLabel(ocrBtn, 'Edit');
@@ -11284,6 +11432,14 @@
     });
   }
 
+  function markAutoDir(root) {
+    if (!root) return;
+    root.setAttribute('dir', 'auto');
+    root.querySelectorAll('p, li, h1, h2, h3, h4, blockquote, pre, td, th').forEach((el) => {
+      el.setAttribute('dir', 'auto');
+    });
+  }
+
   function highlightPreview() {
     syncChecklistSearchHighlights();
     if (!ui.preview) return;
@@ -11305,6 +11461,7 @@
     }
     const editor = NotesStore.get(currentId)?.content?.editor || ui.editorType.value || 'plain';
     ui.preview.innerHTML = renderNoteBodyPreview(ui.body.value, editor);
+    markAutoDir(ui.preview);
     highlightPreview();
     bindPreviewTaskToggles();
   }
@@ -14616,7 +14773,7 @@
     }
   }
 
-  function createTag(title, { assignToCurrent = false } = {}) {
+  function createTag(title, { assignToCurrent = false, navigate = true } = {}) {
     const name = String(title || '').trim();
     if (!name) return;
     if (!NotesStore.isUnlocked()) {
@@ -14629,7 +14786,7 @@
       if (!existing) NotesStore.upsert(id, NotesStore.defaultTag(name));
       if (assignToCurrent && currentId) {
         assignTagToCurrent(id);
-      } else if (!assignToCurrent) {
+      } else if (!assignToCurrent && navigate) {
         setFilter('all');
         currentTag = id;
       }
@@ -14779,8 +14936,10 @@
           ? `<p>${NotesSearch.highlightPlain(text.replace(/\n+/g, ' ').trim(), needle, findMatchOptions())}</p>`
           : `<p>${NotesSanitize.escapeHtml(text)}</p>`)
         : '<p class="muted">OCR is still running, or no text was found.</p>';
+      markAutoDir(ui.preview);
     } else {
       ui.preview.innerHTML = renderNoteBodyPreview(ui.body.value, editor);
+    markAutoDir(ui.preview);
       bindPreviewTaskToggles();
       if (needle) NotesSearch.applyHighlights(ui.preview, needle, findMatchOptions());
       else highlightPreview();
@@ -15649,6 +15808,29 @@
     }
     openTagManage();
   });
+  function createTagFromManage() {
+    const input = document.getElementById('tag-manage-name');
+    const name = String(input?.value || '').trim();
+    if (!name) {
+      input?.focus();
+      return;
+    }
+    createTag(name, { navigate: false });
+    if (input) input.value = '';
+    renderTagManageList();
+    input?.focus();
+  }
+  document.getElementById('tag-manage-add')?.addEventListener('click', createTagFromManage);
+  document.getElementById('tag-manage-name')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      createTagFromManage();
+    }
+  });
+  document.getElementById('tag-manage-create')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    createTagFromManage();
+  });
   document.getElementById('tag-manage-close')?.addEventListener('click', closeTagManage);
   document.getElementById('tag-manage-backdrop')?.addEventListener('click', closeTagManage);
   document.getElementById('tag-manage-dialog')?.addEventListener('keydown', (event) => {
@@ -15663,6 +15845,8 @@
       toast('Unlock the vault first', true);
       return;
     }
+    const section = document.getElementById('tag-section');
+    if (section) section.open = true;
     const composer = document.getElementById('tag-composer');
     composer.hidden = false;
     const input = document.getElementById('tag-name-input');
@@ -15974,6 +16158,7 @@
         panel.style.top = '';
         panel.style.bottom = '';
         panel.style.paddingTop = '';
+        document.body.classList.remove('drawer-over-menu');
       } else {
         const menu = document.getElementById('btn-list-menu');
         const sidebar = document.getElementById('sidebar');
@@ -15986,6 +16171,9 @@
           panel.style.top = `${place.top}px`;
           panel.style.bottom = `${place.bottom}px`;
           panel.style.paddingTop = '8px';
+          document.body.classList.toggle('drawer-over-menu', place.top === 0);
+        } else {
+          document.body.classList.remove('drawer-over-menu');
         }
       }
     }
@@ -16002,6 +16190,7 @@
     closeEditor();
     setNavDrawer(true);
   });
+  document.getElementById('btn-drawer-close')?.addEventListener('click', () => setNavDrawer(false));
   document.getElementById('btn-list-menu')?.addEventListener('click', (event) => {
     event.stopPropagation();
     setNavDrawer(!document.body.classList.contains('nav-drawer-open'));
@@ -17398,6 +17587,10 @@
       removeTotpEntry(row.dataset.totpId);
       return;
     }
+    if (event.target.closest('[data-totp-edit]')) {
+      showTotpEditDialog(row.dataset.totpId);
+      return;
+    }
     copyTotpEntry(row.dataset.totpId);
   });
   totpUi.add?.addEventListener('click', () => showTotpAddDialog());
@@ -17705,9 +17898,12 @@
     const backupWrap = document.getElementById('backup-verify-wrap');
     if (backupStatus && backupWrap) {
       const ok = account?.backup_recipient_verified !== false;
+      const accountUnverified = account?.email_verified === false;
       backupStatus.hidden = ok;
-      backupWrap.hidden = ok;
-      if (!ok) backupStatus.textContent = 'This backup address is not verified yet. Enter the code from that inbox. Backups are not sent until then.';
+      backupWrap.hidden = ok || (shared && accountUnverified);
+      if (!ok && shared && accountUnverified) {
+        backupStatus.innerHTML = '<a href="#account-verify-wrap">Verify this address in Account</a>';
+      } else if (!ok) backupStatus.textContent = 'This backup address is not verified yet. Enter the code from that inbox. Backups are not sent until then.';
       if (!ok && backupWait > 0) {
         startResendCooldown('btn-backup-verify-resend', backupWait, { waiting: true });
       }
@@ -18704,7 +18900,8 @@
       // Throttle on the local clock only. lastSync is a server cursor; comparing
       // it with Date.now() skipped every quiet sync on devices whose clock ran behind.
       const lastAt = Number(NotesStore.state.lastSyncAt) || 0;
-      if (!force && quiet && !full && lastAt && Date.now() - lastAt < 90000) {
+      const dirtyCount = NotesStore.state?.dirty?.size || 0;
+      if (!force && dirtyCount === 0 && quiet && !full && lastAt && Date.now() - lastAt < 90000) {
         NotesStore.logSync?.('sync-skip', {
           quiet: true,
           reason: 'recent',
@@ -18840,6 +19037,15 @@
     if (!vaultReady && !NotesStore.isUnlocked()) return;
     if (!isVaultReadyForSync() && !quiet) return;
     if (syncInFlight || vaultPullActive || !networkReachable) return;
+    if ((NotesStore.state?.dirty?.size || 0) > 0) {
+      changePollInFlight = true;
+      try {
+        await syncNow({ quiet: true, force: true });
+      } finally {
+        changePollInFlight = false;
+      }
+      return;
+    }
     if (iosTune()?.isTypingInField?.()) return;
     if (typeof NotesStore.hasRemoteChanges !== 'function') return;
     changePollInFlight = true;
@@ -19000,7 +19206,10 @@
     }
     onAppForeground('pageshow');
   });
-  window.addEventListener('online', () => onAppForeground('online'));
+  window.addEventListener('online', () => {
+    onAppForeground('online');
+    if ((NotesStore.state?.dirty?.size || 0) > 0) syncNow({ quiet: true, force: true });
+  });
   window.addEventListener('offline', () => {
     probeNetwork().then((ok) => {
       if (!ok) {
@@ -19254,6 +19463,19 @@
       const tagManage = document.getElementById('tag-manage-dialog');
       if (tagManage && !tagManage.hidden) {
         closeTagManage();
+        stop();
+        return;
+      }
+      const totpDialog = document.getElementById('totp-add-dialog');
+      if (totpDialog && !totpDialog.hidden) {
+        hideTotpAddDialog();
+        stop();
+        return;
+      }
+      const attachmentMenu = document.querySelector('details.attachment-overflow[open]');
+      if (attachmentMenu) {
+        attachmentMenu.open = false;
+        attachmentMenu.querySelector('summary')?.focus();
         stop();
         return;
       }

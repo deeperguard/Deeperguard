@@ -564,7 +564,7 @@
         });
     })();
   </script>
-  <div id="app" class="app-root" data-csrf="{{ csrf_token }}" data-skip-login="{{ '1' if skip_login else '0' }}" hidden aria-hidden="true">
+  <div id="app" class="app-root" data-csrf="{{ csrf_token }}" data-skip-login="{{ '1' if skip_login else '0' }}" data-self-host="{{ '1' if self_host else '0' }}" hidden aria-hidden="true">
     <nav class="app-tabs" role="tablist" aria-label="App sections">
       <button type="button" class="app-tab active" id="app-tab-notes" data-app-tab="notes" role="tab" aria-selected="true" aria-controls="notes-shell">Notes</button>
       <button type="button" class="app-tab" id="app-tab-2fa" data-app-tab="2fa" role="tab" aria-selected="false" aria-controls="totp-pane">2FA</button>
@@ -646,6 +646,7 @@
         </div>
       </div>
       <div class="sidebar-scroll" id="sidebar-scroll">
+        <button type="button" id="btn-drawer-close" class="btn ghost sm drawer-close">Close</button>
       <div class="filter-bar">
         <details class="filter-section" id="filter-section" open>
           <summary class="section-label sn-nav-label">Views<span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
@@ -896,7 +897,7 @@
           </button>
           <button type="button" id="btn-back" class="btn icon mobile-only" title="Back to notes" aria-label="Back to notes">←</button>
           <div class="editor-head-main">
-            <input id="note-title" class="title-input" placeholder="Title" aria-label="Title">
+            <input id="note-title" class="title-input" placeholder="Title" aria-label="Title" dir="auto">
             <div class="editor-meta-row">
             <div id="tag-bar-shell" class="tag-bar-shell is-collapsed">
               <button type="button" id="tag-bar-toggle" class="tag-bar-toggle" aria-expanded="false" aria-controls="tag-bar">
@@ -1224,9 +1225,9 @@
         <div id="note-body-wrap" class="note-body-wrap">
           <pre id="note-body-links" class="note-body-links" aria-hidden="true"></pre>
           <pre id="note-body-highlights" class="note-body-highlights" aria-hidden="true"></pre>
-          <textarea id="note-body" class="note-body" placeholder="Write…"></textarea>
+          <textarea id="note-body" class="note-body" placeholder="Write…" dir="auto"></textarea>
         </div>
-        <div id="preview" class="preview" hidden tabindex="-1"></div>
+        <div id="preview" class="preview" hidden tabindex="-1" dir="auto"></div>
         <div id="note-lock-gate" class="note-lock-gate" hidden>
           <p>This note is protected.</p>
           <label>Account password
@@ -1364,7 +1365,7 @@
       <section class="settings-group">
         <h3>Appearance</h3>
         <div class="settings-card">
-          <div class="theme-toggle" role="radiogroup" aria-label="Theme">
+          <div class="theme-toggle" aria-label="Theme">
             <button type="button" class="theme-opt" data-theme-opt="dark" aria-pressed="false">Dark</button>
             <button type="button" class="theme-opt" data-theme-opt="light" aria-pressed="false">Light</button>
             <button type="button" class="theme-opt" data-theme-opt="system" aria-pressed="false">Auto</button>
@@ -1752,7 +1753,7 @@
       <label class="scan-name-field">Secret or otpauth URL
         <input id="totp-add-secret" type="text" maxlength="512" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="JBSW Y3DP EHPK 3PXP">
       </label>
-      <p id="totp-add-error" class="error" hidden>Enter a valid authenticator secret.</p>
+      <p id="totp-add-error" class="error" hidden>Enter a valid authenticator secret or otpauth URL. Use Base32 letters A–Z and digits 2–7. Spaces are OK.</p>
     </div>
     <footer class="scan-dialog-foot">
       <button type="button" class="btn ghost" id="totp-add-cancel">Cancel</button>
@@ -1763,6 +1764,10 @@
   <div id="tag-manage-backdrop" class="settings-backdrop" hidden></div>
   <div id="tag-manage-dialog" class="confirm-dialog tag-manage-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="tag-manage-title">
     <h2 id="tag-manage-title">Manage tags</h2>
+    <form id="tag-manage-create" class="tag-manage-create">
+      <input id="tag-manage-name" type="text" maxlength="80" placeholder="New tag" autocomplete="off" aria-label="New tag name">
+      <button type="button" class="btn primary sm" id="tag-manage-add">Create</button>
+    </form>
     <div id="tag-manage-list" class="tag-manage-list"></div>
     <div class="confirm-dialog-actions">
       <button type="button" class="btn ghost" id="tag-manage-close">Done</button>
