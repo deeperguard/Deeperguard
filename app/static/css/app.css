@@ -7706,6 +7706,38 @@ html.layout-compact .pane-splitter {
 html.layout-compact .narrow-only:not([hidden]) {
   display: inline-flex !important;
 }
+/* Zoom can leave the layout viewport wider than the visual one. Size the
+   shell to the visual width so search and the 2FA tab stay on screen. */
+html.layout-compact .app-root {
+  width: var(--vv-width, 100%);
+  max-width: var(--vv-width, 100%);
+  overflow-x: hidden;
+}
+html.layout-compact .app-tabs {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+html.layout-compact .app-tab {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+}
+html.layout-compact .search-wrap,
+html.layout-compact .search-row,
+html.layout-compact .search-field {
+  min-width: 0;
+  max-width: 100%;
+}
+html.layout-compact .search-wrap input[type="search"],
+html.layout-compact .search-wrap input[type="text"] {
+  min-width: 0;
+  max-width: 100%;
+}
+html.layout-compact .settings-panel {
+  right: max(0px, calc(100vw - var(--vv-width, 100vw)));
+  width: min(420px, var(--vv-width, 100vw));
+  max-width: var(--vv-width, 100vw);
+}
 
 body.editor-toolbar-menu-open .editor-toolbar-menu-item.btn.icon:not([hidden]) {
   display: flex !important;
@@ -7807,4 +7839,11 @@ body.editor-toolbar-tip-suppress .find-btn.btn.icon[aria-label]:focus-visible::a
     width: 100% !important;
     opacity: 0.85;
   }
+}
+/* Sticky section titles stick inside their own <details>, so the previous
+   header scrolls away instead of stacking under the next one. */
+.sidebar-nav .sidebar-scroll > #filter-section,
+.sidebar-nav .sidebar-scroll > #tag-section,
+.sidebar-nav .sidebar-scroll > #folder-section {
+  overflow: clip;
 }

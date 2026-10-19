@@ -121,8 +121,8 @@ const NotesStore = (() => {
     kdfProbeMixed: false,
     kdfVersionsMissed: false,
     kdfFastReject: false,
-    // True only after ciphertext decrypts, or the server vault is empty.
-    // A derived key alone is not proof — the KDF always "succeeds".
+    // True only after ciphertext decrypts, or an empty vault's account
+    // password is proven. A derived key alone is not proof.
     keyVerified: false,
     // Light vault: keep note text local, download attachment files only when a note is opened.
     lightVault: false,
@@ -749,7 +749,8 @@ const NotesStore = (() => {
     emitUnlockProgress('kdf', 3, 3);
     state.keyVerified = false;
     // Node unit tests unlock a harness vault with no server probe. Browsers
-    // stay unverified until ciphertext decrypts or the server vault is empty.
+    // stay unverified until ciphertext decrypts, or an empty vault's account
+    // password is proven. An empty pull is not proof.
     if (typeof process !== 'undefined' && process.release && process.release.name === 'node') {
       state.keyVerified = true;
     }
@@ -2099,7 +2100,7 @@ const NotesStore = (() => {
   }
 
   // Decrypt a few server rows before the app shell opens. A derived key is
-  // not proof. An empty vault (nothing to decrypt) is proof.
+  // not proof. An empty vault has nothing to decrypt, so it is not proof.
   async function probeServerKey() {
     if (!state.cryptoKey) return { ok: false, locked: true };
     if (state.keyVerified) return { ok: true, already: true };
@@ -2127,8 +2128,7 @@ const NotesStore = (() => {
     const total = Number(data.total_undeleted) || 0;
     const rows = (data.items || []).filter((row) => row && row.ciphertext && !row.deleted);
     if (total === 0 && rows.length === 0) {
-      markKeyVerified();
-      return { ok: true, empty: true, opened: 0 };
+      return { ok: false, empty: true, opened: 0 };
     }
     let opened = 0;
     for (const row of rows.slice(0, 3)) {

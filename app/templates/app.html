@@ -34,8 +34,12 @@
       }
       function syncCompactLayout() {
         var width = cssViewportWidth();
+        var visual = window.visualViewport && window.visualViewport.width;
         // Width 0 means layout has not happened yet — leave the media query in charge.
         document.documentElement.classList.toggle('layout-compact', width > 0 && width < 1000);
+        if (visual && visual > 0) {
+          document.documentElement.style.setProperty('--vv-width', Math.floor(visual) + 'px');
+        }
       }
       syncCompactLayout();
       window.addEventListener('resize', syncCompactLayout);
@@ -138,19 +142,22 @@
         var unfocusedAt = Number(localStorage.getItem('notes_unfocused_at') || sessionStorage.getItem('notes_unfocused_at') || 0);
         var awayLock = (lockMode === 'immediate' && unfocusedAt > 0)
           || (lockMode === '1min' && unfocusedAt > 0 && (Date.now() - unfocusedAt >= 60000));
-        if (sessionStorage.getItem('notes_require_unlock_after_update') === '1'
+        var freshPassword = sessionStorage.getItem('notes_allow_boot_unlock') === '1'
+          && sessionStorage.getItem('notes_boot_password_ready') === '1';
+        var justRegistered = sessionStorage.getItem('notes_just_registered') === '1';
+        var blockBoot = !(freshPassword || justRegistered) && (
+          sessionStorage.getItem('notes_require_unlock_after_update') === '1'
             || localStorage.getItem('notes_require_unlock_after_update') === '1'
             || sessionStorage.getItem('notes_require_typed_unlock') === '1'
             || localStorage.getItem('notes_require_typed_unlock') === '1'
-            || awayLock) {
+            || awayLock);
+        if (blockBoot) {
           document.documentElement.removeAttribute('data-notes-boot');
         } else {
           var remembered = prefsBoot.rememberDevice
             && (localStorage.getItem('notes_device_password_enc') || localStorage.getItem('notes_device_password'));
           var salt = localStorage.getItem('notes_kdf_salt') || sessionStorage.getItem('notes_kdf_salt') || '';
-          if ((sessionStorage.getItem('notes_allow_boot_unlock') === '1'
-                && sessionStorage.getItem('notes_boot_password_ready') === '1')
-              || (remembered && salt)) {
+          if (freshPassword || justRegistered || (remembered && salt)) {
             document.documentElement.setAttribute('data-notes-boot', 'app');
           } else {
             document.documentElement.removeAttribute('data-notes-boot');
@@ -455,13 +462,26 @@
       }
       var support = document.getElementById('unlock-support-email');
       if (support) support.textContent = ['notes', '@', 'deeperguard.com'].join('');
-      window.__notesAccountPromise = fetch('/api/account', { cache: 'no-store', credentials: 'same-origin' })
+      window.__notesAccountPromise = fetch('/api/boot-account', { cache: 'no-store', credentials: 'same-origin' })
         .then(function (res) {
           if (res.status === 401 || res.status === 403) {
+            return res.json().catch(function () { return {}; }).then(function (data) {
+              if (data && data.code === 'session_revoked') {
+                window.__notesSessionRevoked = true;
+                return null;
+              }
+              window.__notesSignedOut = true;
+              return null;
+            });
+          }
+          return res.ok ? res.json() : null;
+        })
+        .then(function (account) {
+          if (account && account.signed_out) {
             window.__notesSignedOut = true;
             return null;
           }
-          return res.ok ? res.json() : null;
+          return account;
         });
       window.__notesAccountPromise
         .then(function (account) {

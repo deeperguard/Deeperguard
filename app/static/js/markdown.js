@@ -51,8 +51,12 @@
     let html = escapeHtml(text);
     html = html.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (full, label, href) => {
       const raw = href.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-      if (!/^(https?:\/\/|mailto:)/i.test(raw)) return full;
-      return `<a href="${escapeAttr(raw)}" rel="noopener noreferrer" target="_blank">${label}</a>`;
+      if (/^(https?:\/\/|mailto:)/i.test(raw)) {
+        return `<a href="${escapeAttr(raw)}" rel="noopener noreferrer" target="_blank">${label}</a>`;
+      }
+      const hash = safeHashHref(raw);
+      if (hash) return `<a href="${escapeAttr(hash)}">${label}</a>`;
+      return full;
     });
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
@@ -74,6 +78,13 @@
     });
     html = autolinkOutsideTags(html);
     return wrapMarkdownBlocks(html);
+  }
+
+  function safeHashHref(raw) {
+    const href = String(raw || '').trim();
+    if (!href.startsWith('#') || href.length < 2) return '';
+    if (/[\s<>"']/.test(href) || href.includes(':')) return '';
+    return href;
   }
 
   function safeAutolinkHref(raw) {
