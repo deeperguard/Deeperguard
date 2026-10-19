@@ -3331,8 +3331,9 @@
   }
 
   function syncAppTabButtons(tab) {
+    const shown = normalizeAppTab(tab);
     document.querySelectorAll('.app-tab').forEach((btn) => {
-      const on = btn.dataset.appTab === tab;
+      const on = btn.dataset.appTab === shown;
       btn.classList.toggle('active', on);
       btn.setAttribute('aria-selected', on ? 'true' : 'false');
     });
@@ -4414,6 +4415,7 @@
       banner.dataset.mode = 'ready';
       if (signin) signin.hidden = true;
       setSyncBannerProgress({ visible: false });
+      mirrorEditorSessionBanner(false);
       return;
     }
     if (mode === 'session') {
@@ -4424,8 +4426,10 @@
       if (relock) relock.hidden = true;
       if (signin) signin.hidden = false;
       setSyncBannerProgress({ visible: false });
+      mirrorEditorSessionBanner(true, text || 'Not syncing — sign in again');
       return;
     }
+    mirrorEditorSessionBanner(false);
     banner.hidden = false;
     banner.dataset.mode = mode;
     const labelText = mode === 'downloading'
@@ -4447,6 +4451,17 @@
     if (retry) retry.hidden = !actionable;
     if (relock) relock.hidden = !actionable;
     if (signin) signin.hidden = true;
+  }
+
+  function mirrorEditorSessionBanner(show, text) {
+    const banner = document.getElementById('editor-sync-banner');
+    if (!banner) return;
+    const label = document.getElementById('editor-sync-status-text');
+    const signin = document.getElementById('editor-sync-status-signin');
+    banner.hidden = !show;
+    banner.dataset.mode = show ? 'session' : 'ready';
+    if (label) label.textContent = show ? (text || 'Not syncing — sign in again') : '';
+    if (signin) signin.hidden = !show;
   }
 
   function clearVaultDownloadTimeout() {
@@ -5510,7 +5525,7 @@
       if (note) params.set('note', note);
     } catch (err) { /* keep the sign-in url */ }
     const href = `/login?${params.toString()}`;
-    for (const id of ['unlock-session-signin', 'sync-status-signin']) {
+    for (const id of ['unlock-session-signin', 'sync-status-signin', 'editor-sync-status-signin']) {
       const el = document.getElementById(id);
       if (!el) continue;
       el.href = href;
@@ -6969,6 +6984,7 @@
         }
         renderTags();
         renderNotes();
+        syncFilterSelect();
         if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
       });
     });
@@ -7074,14 +7090,34 @@
     });
   }
 
+  function syncFilterSelect() {
+    const select = document.getElementById('filter-select');
+    if (!select) return;
+    let extra = select.querySelector('option[data-folder-option]');
+    if (currentFolder) {
+      const folder = NotesStore.get(currentFolder);
+      const title = folder?.content?.title || 'Folder';
+      if (!extra) {
+        extra = document.createElement('option');
+        extra.dataset.folderOption = '1';
+        extra.value = 'folder';
+        select.appendChild(extra);
+      }
+      extra.textContent = title;
+      if (select.value !== 'folder') select.value = 'folder';
+      return;
+    }
+    if (extra) extra.remove();
+    if (select.value !== currentFilter) select.value = currentFilter;
+  }
+
   function setFilter(name) {
     if (name === 'documents' && currentFilter !== 'documents') {
       filterBeforeFiles = currentFilter || 'all';
     }
     currentFilter = name;
     syncNavFilterActive();
-    const select = document.getElementById('filter-select');
-    if (select && select.value !== name) select.value = name;
+    syncFilterSelect();
     if (name === 'untagged' || name === 'trash' || name === 'archived') {
       currentTag = null;
       applyTagSection();
@@ -7789,6 +7825,7 @@
       // Note-list count only. PDF highlight totals stay on the document banner.
       listCount.textContent = countLabel;
       listCount.title = countLabel;
+      syncFilterSelect();
     }
     updateTrashToolbar(currentFilter === 'trash' ? notes.length : undefined);
     const renderKey = listingFiles
@@ -15691,11 +15728,69 @@
     }
   });
 
+  let navDrawerScrollY = 0;
+
+  function reserveDrawerFlow(panel) {
+    let spacer = document.getElementById('nav-drawer-spacer');
+    if (!spacer) {
+      spacer = document.createElement('div');
+      spacer.id = 'nav-drawer-spacer';
+      spacer.setAttribute('aria-hidden', 'true');
+      spacer.style.order = '8';
+      spacer.style.flex = '0 0 auto';
+      spacer.style.width = '100%';
+      panel.insertAdjacentElement('afterend', spacer);
+    }
+    const kids = [...panel.children].filter((el) => {
+      const style = getComputedStyle(el);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    });
+    if (!kids.length) {
+      spacer.style.height = '0px';
+      return;
+    }
+    const top = kids[0].getBoundingClientRect().top;
+    const bottom = kids[kids.length - 1].getBoundingClientRect().bottom;
+    spacer.style.height = `${Math.max(0, Math.round(bottom - top))}px`;
+  }
+
+  function releaseDrawerFlow() {
+    const spacer = document.getElementById('nav-drawer-spacer');
+    if (spacer) spacer.style.height = '0px';
+  }
+
+  function lockDrawerScroll() {
+    navDrawerScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${navDrawerScrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+  }
+
+  function unlockDrawerScroll() {
+    const y = navDrawerScrollY;
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    window.scrollTo(0, y);
+  }
+
   function setNavDrawer(open) {
     const pinned = window.matchMedia('(min-width: 1000px)').matches
       && !document.documentElement.classList.contains('layout-compact');
     const show = !!open && !pinned;
+    const wasOpen = document.body.classList.contains('nav-drawer-open');
+    const flowPanel = document.getElementById('sidebar-scroll');
+    if (show && !wasOpen && flowPanel) reserveDrawerFlow(flowPanel);
+    if (show && !wasOpen) lockDrawerScroll();
     document.body.classList.toggle('nav-drawer-open', show);
+    if (!show && wasOpen) {
+      releaseDrawerFlow();
+      unlockDrawerScroll();
+    }
     const backdrop = document.getElementById('sidebar-nav-backdrop');
     if (backdrop) {
       backdrop.hidden = !show;
@@ -15888,6 +15983,7 @@
   if (filterSelect) {
     filterSelect.value = currentFilter;
     filterSelect.addEventListener('change', () => {
+      if (filterSelect.value === 'folder') return;
       currentFolder = null;
       if (filterSelect.value === 'all') currentTag = null;
       setFilter(filterSelect.value);
