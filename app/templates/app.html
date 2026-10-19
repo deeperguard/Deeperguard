@@ -113,18 +113,28 @@
           reveal();
         }
       };
-      var probeHealth = function () {
-        fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
+      // One health read per page load. Later callers share this promise
+      // for a few seconds instead of each firing their own GET.
+      window.__notesFetchHealth = function (force) {
+        var now = Date.now();
+        if (!force && window.__notesHealthPromise && (now - (window.__notesHealthAt || 0)) < 8000) {
+          return window.__notesHealthPromise;
+        }
+        window.__notesHealthAt = now;
+        window.__notesHealthPromise = fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
           .then(function (res) { return res.ok ? res.json() : null; })
-          .then(function (data) {
-            if (!data || !data.ok || !data.build || !localBuild) return;
-            if (data.build === localBuild) {
-              try { sessionStorage.removeItem('notes_pending_update_build'); } catch (e) {}
-              return;
-            }
-            showUpdateBanner(data.build);
-          })
-          .catch(function () {});
+          .catch(function () { return null; });
+        return window.__notesHealthPromise;
+      };
+      var probeHealth = function () {
+        window.__notesFetchHealth().then(function (data) {
+          if (!data || !data.ok || !data.build || !localBuild) return;
+          if (data.build === localBuild) {
+            try { sessionStorage.removeItem('notes_pending_update_build'); } catch (e) {}
+            return;
+          }
+          showUpdateBanner(data.build);
+        });
       };
       if (localBuild) probeHealth();
     })();
@@ -383,8 +393,10 @@
         });
       }
       if (!localBuild) return;
-      fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
-        .then(function (res) { return res.ok ? res.json() : null; })
+      var healthRead = (typeof window.__notesFetchHealth === 'function')
+        ? window.__notesFetchHealth()
+        : fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' }).then(function (res) { return res.ok ? res.json() : null; });
+      healthRead
         .then(function (data) {
           if (!data || !data.ok || !data.build || data.build === localBuild) return;
           var dismissed = '';

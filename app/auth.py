@@ -48,6 +48,7 @@ SRP_PURPOSE_LOGIN = "login"
 SRP_PURPOSE_REPAIR_LOGIN = "repair-login"
 SRP_PURPOSE_VAULT_RECOVERY = "vault-recovery"
 SRP_PURPOSE_PASSWORD_CHANGE = "password-change"
+SRP_PURPOSE_UNLOCK = "account-unlock"
 SESSION_PW_ROTATION = "pw_rotation"
 SESSION_SID = "sid"
 

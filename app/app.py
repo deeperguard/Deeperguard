@@ -504,6 +504,7 @@ def _gate():
         "/totp",
         "/api/totp/verify",
         "/api/account/unlock",
+        "/api/account/unlock/challenge",
     }:
         if request.path.startswith("/api/"):
             return jsonify({"error": "2FA required"}), 403
@@ -1361,8 +1362,7 @@ def api_totp_verify():
     return jsonify({"ok": True})
 
 
-@app.post("/api/account/unlock")
-def api_account_unlock():
+def _account_unlock_user():
     uid = auth.current_user_id()
     user = db.get_user_by_id(uid) if uid else None
     if not user and skip_login():
@@ -1370,9 +1370,57 @@ def api_account_unlock():
         if user:
             auth.login_user(int(user["id"]), totp_ok=not bool(user["totp_enabled"]))
     if not user:
-        return jsonify({"error": "sign in required"}), 401
+        return None
     if not auth.authenticated() or auth.current_user_id() != int(user["id"]):
+        return None
+    return user
+
+
+@app.post("/api/account/unlock/challenge")
+def api_account_unlock_challenge():
+    """SRP step-1 for vault unlock. Binds to the stored verifier; does not rotate it."""
+    user = _account_unlock_user()
+    if not user:
         return jsonify({"error": "sign in required"}), 401
+    if not db.user_has_srp(user):
+        return jsonify({"error": "not applicable"}), 404
+    email = str(user["email"] or "").strip().lower()
+    if _auth_rate_limited("account-unlock", email):
+        return jsonify({"error": "too many attempts"}), 429
+    try:
+        b_hex = _stored_srp_challenge(email, user, auth.SRP_PURPOSE_UNLOCK)
+    except ValueError:
+        return jsonify({"error": "invalid credentials"}), 401
+    return jsonify({"srp_salt": str(user["srp_salt"]), "B": b_hex})
+
+
+@app.post("/api/account/unlock")
+def api_account_unlock():
+    """Prove the typed password. A live session cookie is not a password."""
+    user = _account_unlock_user()
+    if not user:
+        return jsonify({"error": "sign in required"}), 401
+    body = request.get_json(silent=True) or {}
+    email = str(user["email"] or "").strip().lower()
+    a_hex = str(body.get("A") or "").strip().lower()
+    m1 = str(body.get("M1") or "").strip().lower()
+    current = str(body.get("current_password") or "")
+    if _auth_rate_limited("account-unlock", email):
+        return jsonify({"error": "too many attempts"}), 429
+    if db.user_has_srp(user):
+        if current and strict_zk():
+            return jsonify({"error": "password must not be sent to the server"}), 400
+        if not a_hex or not m1:
+            return jsonify({"error": "missing srp proof"}), 401
+        if not _verify_stored_srp_proof(email, user, a_hex, m1, auth.SRP_PURPOSE_UNLOCK):
+            return jsonify({"error": "invalid credentials"}), 401
+    elif db.user_has_legacy_password(user):
+        if a_hex or m1:
+            return jsonify({"error": "invalid credentials"}), 400
+        if not current or not verify_password(user["password_hash"], current):
+            return jsonify({"error": "invalid password"}), 401
+    else:
+        return jsonify({"error": "invalid credentials"}), 401
     return jsonify(_unlock_payload(user))
 
 

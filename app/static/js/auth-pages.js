@@ -381,8 +381,17 @@ if (registerForm) {
       const data = await NotesSrpAuth.register(email, password);
       await stashLoginSession(data, email, password);
       try { sessionStorage.setItem('notes_just_registered', '1'); } catch (err) { /* ignore */ }
+      // One Argon2 run, in the worker, stashed so /app adoptDerivedVaultKey
+      // skips a second derive. Paint before it so "Creating account…" is only SRP.
       if (data?.kdf_salt && window.NotesCrypto?.deriveKey && window.NotesVaultSecrets?.stashBootDerivedKey) {
         if (submitBtn) submitBtn.textContent = 'Preparing your vault…';
+        await new Promise((resolve) => {
+          if (typeof requestAnimationFrame !== 'function') {
+            setTimeout(resolve, 0);
+            return;
+          }
+          requestAnimationFrame(() => requestAnimationFrame(resolve));
+        });
         const version = Number(data.vault_kdf_version) === 1 ? 1 : 2;
         let derived;
         if (NotesCrypto.workerEnabled?.()) {

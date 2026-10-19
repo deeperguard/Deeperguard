@@ -1953,9 +1953,17 @@
     /* removed — banner only */
   }
 
-  function flushPendingUpdatePrompt() {
-    fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
+  function fetchHealthJson() {
+    // Probe /api/health through the shared boot cache (one request, then reuse).
+    if (typeof window.__notesFetchHealth === 'function') return window.__notesFetchHealth();
+    return fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
       .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null);
+  }
+
+  function flushPendingUpdatePrompt() {
+    // /api/health via the shared boot cache, not a second request.
+    fetchHealthJson()
       .then((data) => {
         if (data?.build) {
           applyServerBuildStatus(String(data.build));
@@ -2106,21 +2114,13 @@
   async function serverUnreachableNow() {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
     if (typeof window.notesNetworkReachable === 'function' && !window.notesNetworkReachable()) return true;
-    // Probe /api/health — iOS may keep navigator.onLine=true with Wi‑Fi off, which made
-    // NotesOcr.serverReachable() optimistically return true and skip offline unlock marking.
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 2500);
+    // Share the page-load /api/health read. A second probe here used to fan out
+    // before the user had even typed a password.
     try {
-      const res = await fetch('/api/health', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-        signal: ctrl.signal,
-      });
-      return !res.ok;
+      const data = await fetchHealthJson();
+      return !(data && data.ok);
     } catch (err) {
       return true;
-    } finally {
-      clearTimeout(timer);
     }
   }
 
@@ -2241,11 +2241,9 @@
       }
     }
     try {
-      const data = await NotesStore.api('/api/account/unlock', {
-        method: 'POST',
-        body: JSON.stringify({}),
-        timeoutMs: 4000,
-      });
+      // Session refresh is GET /api/account. /api/account/unlock requires a
+      // password proof and must not be called with an empty body.
+      const data = await NotesStore.loadAccount();
       NotesStore.cacheAccount({
         email: data.email,
         kdf_salt: data.kdf_salt,
@@ -5076,7 +5074,8 @@
   }
 
   async function assertVaultKeyVerified() {
-    if (vaultKeyProven()) return { via: 'decrypt' };
+    // Do not return early just because keyVerified is already set. An empty
+    // vault used to take that shortcut and skip the password proof.
     if (typeof NotesStore.probeServerKey !== 'function') {
       const missing = new Error('Wrong password.');
       missing.status = 401;
@@ -5084,7 +5083,10 @@
       throw missing;
     }
     const probe = await NotesStore.probeServerKey();
-    if (probe?.ok && vaultKeyProven()) return { via: 'decrypt' };
+    if (probe?.ok && Number(probe.opened) > 0 && vaultKeyProven()) {
+      return { via: 'decrypt', opened: Number(probe.opened) };
+    }
+    if (probe?.already && vaultKeyProven()) return { via: 'decrypt', already: true, opened: 0 };
     // Nothing on the server to decrypt. The caller must prove the account
     // password before markKeyVerified — an empty pull is not a key.
     if (probe?.empty) return { via: 'empty' };
@@ -5095,16 +5097,36 @@
   }
 
   async function proveEmptyVaultWithAccountPassword(email, password) {
-    const repaired = await repairUnlockWithPassword(email, password);
-    if (repaired.wrongPassword) rejectWrongUnlockPassword();
-    if (repaired.rateLimited) {
-      NotesStore.lock();
-      throw new Error('Too many unlock attempts. Wait a few minutes and try again.');
-    }
-    if (!repaired.ok) {
+    const normalized = String(email || '').trim().toLowerCase();
+    const method = String(NotesStore.cachedAccount()?.auth_method || '');
+    let data;
+    try {
+      if (method && method !== 'srp') {
+        data = await NotesStore.api('/api/account/unlock', {
+          method: 'POST',
+          body: JSON.stringify({ current_password: password }),
+          timeoutMs: 20000,
+        });
+      } else if (window.NotesSrpAuth?.accountUnlock) {
+        data = await NotesSrpAuth.accountUnlock(normalized, password);
+      } else {
+        const missing = new Error('Wrong password.');
+        missing.status = 401;
+        throw missing;
+      }
+    } catch (err) {
+      if (err?.status === 429) {
+        NotesStore.lock();
+        throw new Error('Too many unlock attempts. Wait a few minutes and try again.');
+      }
+      // Any 401 in this chain is a failed unlock, including a proof-less body.
+      if (err?.status === 401 || err?.status === 400) rejectWrongUnlockPassword();
       NotesStore.lock();
       throw new Error('Could not reach the notes server. Connect to home Wi‑Fi or WireGuard and try again.');
     }
+    if (!data || data.ok === false) rejectWrongUnlockPassword();
+    NotesStore.cacheAccount(data);
+    if (data.password_changed_at) NotesStore.ackPasswordChanged(data.password_changed_at);
     if (typeof NotesStore.markKeyVerified === 'function') NotesStore.markKeyVerified();
     return true;
   }
@@ -5500,13 +5522,9 @@
   }
 
   async function bootstrapServerSession(cached) {
-    const data = await NotesStore.api('/api/account/unlock', {
-      method: 'POST',
-      body: JSON.stringify({}),
-      timeoutMs: 20000,
-    });
+    const data = await NotesStore.loadAccount();
     NotesStore.cacheAccount({
-      email: data.email,
+      email: data.email || cached?.email,
       kdf_salt: data.kdf_salt,
       vault_kdf_version: data.vault_kdf_version,
       csrf: data.csrf,
@@ -5759,6 +5777,7 @@
           // An empty server vault must not wipe the local rows or open the shell.
           const localProof = await assertVaultKeyVerified();
           if (localProof?.via !== 'decrypt') rejectWrongUnlockPassword();
+          if (!(Number(localProof.opened) > 0)) rejectWrongUnlockPassword();
           await clearUnreadableLocalCache();
           opened = { opened: 0, failed: 0, cipherOpened: 0 };
           localAllFailed = false;
@@ -5768,6 +5787,20 @@
         const emptyLocal = opened.opened === 0;
         vaultSyncError = '';
         let passwordProven = hasLocalVault || vaultRepairedOnline;
+        // No local ciphertext and no repaired server row: a session cookie is
+        // not a key. Prove the typed password, or a server row must decrypt.
+        if (!hasLocalVault && !vaultRepairedOnline) {
+          if (serverResult.offline) {
+            NotesStore.lock();
+            throw new Error('Connect once online while signed in to unlock an empty device with the vault password.');
+          }
+          const freshProof = await assertVaultKeyVerified();
+          if (!(freshProof?.via === 'decrypt' && Number(freshProof.opened) > 0)) {
+            await proveEmptyVaultWithAccountPassword(cached.email, clean);
+          }
+          passwordProven = vaultKeyProven();
+          if (passwordProven) serverResult = { ok: true };
+        }
         if (serverResult.offline) {
           if (emptyLocal && !hasLocalVault) {
             NotesStore.lock();
@@ -5850,9 +5883,9 @@
                 serverResult = { ok: true };
                 await clearUnreadableLocalCache();
               } else if (proof?.via === 'empty' && !hadStaleLocalCipher) {
-                if (typeof NotesStore.markKeyVerified === 'function') NotesStore.markKeyVerified();
-                passwordProven = true;
-                serverResult = { ok: true };
+                await proveEmptyVaultWithAccountPassword(cached.email, clean);
+                passwordProven = vaultKeyProven();
+                serverResult = { ok: passwordProven };
               } else {
                 rejectWrongUnlockPassword();
               }
@@ -5904,12 +5937,12 @@
       }
       if ((loaded.cipherOpened || 0) > 0) {
         /* local ciphertext proved the key */
-      } else if (!vaultKeyProven()) {
+      } else {
         const proof = await assertVaultKeyVerified();
-        if (proof?.via === 'empty') {
+        if (proof?.via === 'decrypt' && Number(proof.opened) > 0) {
+          /* a server row decrypted */
+        } else {
           await proveEmptyVaultWithAccountPassword(cached.email || data.email, clean);
-        } else if (proof?.via !== 'decrypt') {
-          rejectWrongUnlockPassword();
         }
       }
       if (!vaultKeyProven()) rejectWrongUnlockPassword();
@@ -6990,16 +7023,9 @@
   async function probeNetwork({ syncOnRecovery = false } = {}) {
     // iOS LAN-only Wi‑Fi may report navigator.onLine=false while homelab is reachable.
     // Cellular without WireGuard cannot reach 192.168.x — expect failures there.
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5000);
     try {
-      const res = await fetch('/api/health', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error('health failed');
-      const data = await res.json().catch(() => ({}));
+      const data = await fetchHealthJson();
+      if (!data || !data.ok) throw new Error('health failed');
       if (data.build) applyServerBuildStatus(data.build);
       const wasOffline = !networkReachable;
       networkReachable = true;
@@ -7023,8 +7049,6 @@
       }
       updateNetworkStatusBanner();
       return false;
-    } finally {
-      clearTimeout(timer);
     }
   }
 
@@ -17881,8 +17905,7 @@
     const current = document.querySelector('meta[name="notes-build"]');
     const localBuild = current && current.getAttribute('content');
     try {
-      const res = await fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' });
-      const data = await res.json().catch(() => ({}));
+      const data = await fetchHealthJson() || {};
       if (!data.build || !localBuild) return false;
       // Never auto-reload. Notify via banner/sidebar chip; user taps Update.
       applyServerBuildStatus(String(data.build));
@@ -18323,8 +18346,7 @@
     if (!pageBuild) return false;
     let serverBuild = '';
     try {
-      const res = await fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' });
-      const data = await res.json().catch(() => ({}));
+      const data = await fetchHealthJson();
       serverBuild = data && data.build ? String(data.build) : '';
     } catch (err) {
       return false;
@@ -18351,9 +18373,8 @@
     startRemoteRevokeWatch();
     if (await checkAppUpdate()) return;
     try {
-      const res = await fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' });
-      const data = await res.json().catch(() => ({}));
-      if (data.build) applyServerBuildStatus(String(data.build));
+      const data = await fetchHealthJson();
+      if (data && data.build) applyServerBuildStatus(String(data.build));
     } catch (err) {
       /* offline — banner stays hidden */
     }
@@ -18631,6 +18652,12 @@
       if (tagBarExpanded && tagShell && !tagShell.classList.contains('is-collapsed')) {
         tagBarExpanded = false;
         syncTagBarShell(currentId ? NotesStore.get(currentId) : null);
+        stop();
+        return;
+      }
+      if (ui.search && (event.target === ui.search || document.activeElement === ui.search)) {
+        if (String(ui.search.value || '')) clearSearch({ blur: false });
+        else ui.search.blur();
         stop();
         return;
       }
