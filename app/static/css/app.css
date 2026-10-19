@@ -2550,6 +2550,7 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   min-height: 100%;
   object-fit: contain;
   object-position: center;
+  image-rendering: auto;
   background: #fff;
   display: block;
 }
@@ -3709,6 +3710,7 @@ body.scan-dialog-open {
   height: 100% !important;
   object-fit: contain;
   object-position: center;
+  image-rendering: auto;
   background: #fff;
 }
 .attachment-thumb img, .attachment-thumb canvas {
@@ -3965,11 +3967,14 @@ mark.search-hit-current {
 .doc-inline-share { justify-self: start; }
 .doc-inline-stage img,
 .doc-inline-stage canvas,
-.doc-inline-stage .doc-page {
+.doc-inline-stage .doc-page,
+.doc-stage img {
   display: block;
   width: 100%;
   height: auto;
+  max-width: 100%;
   object-fit: contain;
+  image-rendering: auto;
 }
 .doc-page-wrap {
   position: relative;
