@@ -1050,6 +1050,24 @@ html[data-theme="light"] .zk-badge {
   cursor: wait;
 }
 #unlock-form .btn.primary { width: 100%; min-height: var(--touch); font-weight: 600; }
+#unlock-submit.is-checking {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+#unlock-submit.is-checking::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: unlock-checking-spin 0.7s linear infinite;
+}
+@keyframes unlock-checking-spin {
+  to { transform: rotate(360deg); }
+}
 #unlock-form .btn.block { margin-top: 0; }
 .unlock-status {
   margin: 0;
@@ -6110,7 +6128,11 @@ body.search-filters-open .fab-stack,
     position: sticky;
     top: 0;
     z-index: 3;
+    margin: 0;
+    padding: 12px 8px 10px;
     background: var(--sn-nav-bg);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 8px 10px -8px rgba(0, 0, 0, 0.22);
   }
   .list-pane {
     grid-column: 2;

@@ -4675,8 +4675,10 @@
       }
     }
     if (unlockSubmit && loginProgressActive) {
-      unlockSubmit.textContent = indeterminate ? '…' : `${pct}%`;
+      unlockSubmit.textContent = indeterminate ? 'Checking…' : `${pct}%`;
       unlockSubmit.disabled = true;
+      unlockSubmit.setAttribute('aria-busy', indeterminate ? 'true' : 'false');
+      unlockSubmit.classList.toggle('is-checking', indeterminate);
     }
   }
 
@@ -4799,6 +4801,8 @@
     if (unlockSubmit) {
       unlockSubmit.disabled = false;
       unlockSubmit.textContent = 'Unlock';
+      unlockSubmit.removeAttribute('aria-busy');
+      unlockSubmit.classList.remove('is-checking');
     }
   }
 
@@ -5640,6 +5644,15 @@
     if (unlockInFlight) return unlockInFlight;
     unlockPrimaryRevealed = false;
     beginLoginProgress();
+    if (unlockSubmit) {
+      unlockSubmit.disabled = true;
+      unlockSubmit.textContent = 'Checking…';
+      unlockSubmit.setAttribute('aria-busy', 'true');
+      unlockSubmit.classList.add('is-checking');
+    }
+    // Argon2 blocks the main thread. Paint Checking… before the first derive
+    // or the button stays on Unlock until the rejection is already done.
+    await yieldToPaint();
     unlockInFlight = (async () => {
       const clean = String(password || '').trim();
       if (!clean) throw new Error('Enter your password');
@@ -5903,7 +5916,9 @@
   async function submitUnlockForm() {
     showUnlockError('');
     unlockSubmit.disabled = true;
-    unlockSubmit.textContent = 'Unlocking…';
+    unlockSubmit.textContent = 'Checking…';
+    unlockSubmit.setAttribute('aria-busy', 'true');
+    unlockSubmit.classList.add('is-checking');
     try {
       await verifyAndUnlock(unlockPassword.value);
       repairUnlockShellState();
@@ -5918,6 +5933,8 @@
       if (recovery) recovery.hidden = false;
       unlockSubmit.disabled = false;
       unlockSubmit.textContent = 'Unlock';
+      unlockSubmit.removeAttribute('aria-busy');
+      unlockSubmit.classList.remove('is-checking');
     }
   }
 
@@ -16954,14 +16971,18 @@
         if (status) {
           status.textContent = '';
           status.hidden = true;
+          status.classList.remove('error');
         }
         return;
       }
       btn.disabled = true;
       btn.textContent = `Resend in ${left}s`;
+      btn.removeAttribute('aria-busy');
       if (status) {
         status.hidden = false;
-        status.classList.add('error');
+        status.classList.remove('error');
+        status.setAttribute('role', 'status');
+        status.setAttribute('aria-live', 'polite');
         status.textContent = `Please wait ${left} s before requesting another code`;
       }
     };
@@ -16990,7 +17011,12 @@
   async function resendVerificationCode(path, buttonId) {
     const btn = document.getElementById(buttonId);
     if (!btn || btn.disabled) return;
+    if (!btn.dataset.resendLabel || btn.dataset.resendLabel === 'Sending…') {
+      btn.dataset.resendLabel = 'Resend code';
+    }
     btn.disabled = true;
+    btn.textContent = 'Sending…';
+    btn.setAttribute('aria-busy', 'true');
     try {
       const data = await NotesStore.api(path, { method: 'POST', body: '{}' });
       const wait = Number(data && data.retry_after) || 60;
@@ -17006,12 +17032,14 @@
         const msg = (err.message && /Please wait/i.test(err.message))
           ? err.message
           : `Please wait ${Math.ceil(wait)} s before requesting another code`;
-        showResendStatus(buttonId, msg, true);
-        toast(msg, true);
+        showResendStatus(buttonId, msg, false);
+        toast(msg);
         startResendCooldown(buttonId, wait, { waiting: true });
         return;
       }
       btn.disabled = false;
+      btn.textContent = btn.dataset.resendLabel || 'Resend code';
+      btn.removeAttribute('aria-busy');
       const msg = err.status === 429
         ? (err.message || 'Too many verification emails sent today. Try again tomorrow or use the code already emailed.')
         : (err.message || 'Could not send a code');

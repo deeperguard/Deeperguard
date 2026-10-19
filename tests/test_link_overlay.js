@@ -11,4 +11,21 @@ assert.match(bare, /<a class="edit-link" href="https:\/\/cursor\.com\/agents"[^>
 const http = NotesLinkOverlay.renderHtml('http://192.168.178.152');
 assert.match(http, />http:\/\/192\.168\.178\.152<\/a>/);
 
+const unsafe = NotesLinkOverlay.renderHtml('[bad](javascript:alert(1))');
+assert.doesNotMatch(unsafe, /<a[\s>]/i);
+assert.doesNotMatch(unsafe, /href=/i);
+assert.doesNotMatch(unsafe, /edit-link/);
+assert.doesNotMatch(unsafe, /#javascript/);
+assert.match(unsafe, /\[bad\]\(javascript:alert\(1\)\)/);
+
+const dataUrl = NotesLinkOverlay.renderHtml('[x](data:text/html,hi)');
+assert.doesNotMatch(dataUrl, /<a[\s>]/i);
+
+const inDoc = NotesLinkOverlay.renderHtml('[Go](#intro) and [Heading](Introduction)');
+assert.match(inDoc, /<a class="edit-link in-doc-link" href="#intro">/);
+assert.match(inDoc, /<a class="edit-link in-doc-link" href="#introduction">/);
+
+const mail = NotesLinkOverlay.renderHtml('[Mail](mailto:a@example.com)');
+assert.match(mail, /<a class="edit-link" href="mailto:a@example.com"/);
+
 console.log('ok');
