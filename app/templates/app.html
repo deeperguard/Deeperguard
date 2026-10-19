@@ -879,6 +879,11 @@
           <div class="empty-state-mark" aria-hidden="true">{% include 'partials/brand-mark.html' %}</div>
           <h2 id="empty-state-title">Start writing</h2>
           <p id="empty-state-message">Notes stay encrypted on this device. Start with a blank note.</p>
+          <ul id="empty-state-tips" class="empty-state-tips" hidden>
+            <li>Create a note — it is encrypted on this device before it syncs.</li>
+            <li>Upload or scan a document to search it with on-device OCR.</li>
+            <li>Open the 2FA tab for sign-in codes kept in your vault.</li>
+          </ul>
           <div class="empty-state-actions">
             <button type="button" id="btn-empty-scan" class="btn primary" hidden>Scan document</button>
             <button type="button" id="btn-empty-new" class="btn primary">New note</button>
@@ -1026,6 +1031,14 @@
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>
               </svg>
               <span class="editor-phone-strip-label desktop-only">Ask AI</span>
+            </button>
+            <button type="button" class="btn icon toolbar-primary editor-mobile-proxy editor-desktop-star editor-toolbar-row-item" data-editor-proxy="btn-star" title="Star" aria-label="Star">
+              <svg class="ui-icon icon-star-outline" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              <svg class="ui-icon icon-star-filled" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
+                <polygon fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
             </button>
             <button type="button" id="btn-download-note" class="btn icon toolbar-primary editor-phone-toolbar-hide editor-toolbar-row-item" title="Download" aria-label="Download">
               <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -1325,6 +1338,7 @@
             <p id="account-plan-storage" class="settings-hint"></p>
           </div>
           <p id="account-email" class="settings-account"></p>
+          <p class="settings-hint">Your password is the only key. Deeperguard can't recover your notes if you forget it.</p>
           <p id="account-verify-status" class="settings-hint" hidden></p>
           <div id="account-verify-wrap" class="settings-nested stack" hidden>
             <label class="settings-row stacked">Email verification code

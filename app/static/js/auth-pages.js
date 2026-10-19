@@ -322,6 +322,7 @@ if (registerForm) {
   const passwordInput = document.getElementById('register-password');
   const confirmInput = document.getElementById('register-password2');
   const termsInput = document.getElementById('register-terms');
+  const recoverInput = document.getElementById('register-recover-ack');
 
   function syncConfirmError() {
     const password = String(passwordInput?.value || '');
@@ -346,6 +347,9 @@ if (registerForm) {
   });
   termsInput?.addEventListener('change', () => {
     if (termsInput.checked) setFieldError('register-terms', 'register-terms-error', '');
+  });
+  recoverInput?.addEventListener('change', () => {
+    if (recoverInput.checked) setFieldError('register-recover-ack', 'register-recover-error', '');
   });
 
   registerForm.addEventListener('submit', async (e) => {
@@ -379,6 +383,12 @@ if (registerForm) {
     } else {
       setFieldError('register-terms', 'register-terms-error', '');
     }
+    if (!recoverInput?.checked) {
+      setFieldError('register-recover-ack', 'register-recover-error', 'Confirm you understand this password cannot be recovered');
+      invalid = true;
+    } else {
+      setFieldError('register-recover-ack', 'register-recover-error', '');
+    }
     if (invalid) return;
     const submitBtn = registerForm.querySelector('[type="submit"]');
     if (submitBtn) {
@@ -389,6 +399,7 @@ if (registerForm) {
       const data = await NotesSrpAuth.register(email, password);
       await stashLoginSession(data, email, password);
       try { sessionStorage.setItem('notes_just_registered', '1'); } catch (err) { /* ignore */ }
+      try { sessionStorage.setItem('notes_verify_email_hint', '1'); } catch (err) { /* ignore */ }
       // One Argon2 run, in the worker, stashed so /app adoptDerivedVaultKey
       // skips a second derive. Paint before it so "Creating account…" is only SRP.
       if (data?.kdf_salt && window.NotesCrypto?.deriveKey && window.NotesVaultSecrets?.stashBootDerivedKey) {

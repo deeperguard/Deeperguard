@@ -806,7 +806,7 @@ const NotesSearch = (() => {
           return false;
         }
 
-        if (filter === 'pinned' && !noteIsPinned(n)) return false;
+        if (filter === 'pinned' && !c.starred) return false;
         if (filter === 'all' && !context && (c.archived || c.trashed)) return false;
         if (filter === 'untagged') {
           if (c.archived || c.trashed) return false;

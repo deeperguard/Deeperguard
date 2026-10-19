@@ -182,7 +182,9 @@ const NotesStore = (() => {
       .map((entry) => entry.row);
   }
 
+  let lastStatusText = '';
   function notifyStatus(text, isError = false) {
+    lastStatusText = String(text || '');
     state.lastError = isError ? text : '';
     if (onSaveStatus) onSaveStatus(text, isError);
   }
@@ -2488,7 +2490,10 @@ const NotesStore = (() => {
     // leaving them dirty until the next keystroke or timer.
     let needsAnotherPass = false;
     const finishStatus = () => {
-      if (quiet) return;
+      if (quiet) {
+        if (!state.dirty.size && /will sync when online/.test(lastStatusText)) notifyStatus('Saved');
+        return;
+      }
       const blockedText = describeBlocked();
       if (blockedText) {
         notifyStatus(`Saved on this device · ${blockedText}`, true);
