@@ -5,7 +5,9 @@ const NotesPreview = (() => {
   // iOS Safari enforces a hard total canvas budget. Each page stays inside
   // MAX_CANVAS_PIXELS; the PDF itself is not cut off after a page count.
   const MAX_PDF_PAGES = Number.POSITIVE_INFINITY;
-  const MAX_PAGE_DPR = IS_IOS ? 1.25 : 3;
+  // Backing store is CSS size × this scale: at least 2×, 3× on hi-DPI.
+  // MAX_CANVAS_PIXELS still clamps a single page so a long PDF cannot OOM.
+  const MAX_PAGE_DPR = 3;
   const MAX_CANVAS_PIXELS = IS_IOS ? 1800000 : 9000000;
   const MAX_SNAPSHOT_PIXELS = IS_IOS ? 1200000 : 6000000;
   const PDF_SRC = '/static/js/vendor/pdfjs/pdf.min.js?v=8';
@@ -978,10 +980,16 @@ const NotesPreview = (() => {
     return wrap;
   }
 
+  function pageBitmapScale() {
+    const raw = Number(globalThis.devicePixelRatio);
+    const dpr = Number.isFinite(raw) && raw > 0 ? raw : 1;
+    return Math.min(MAX_PAGE_DPR, Math.max(2, dpr));
+  }
+
   async function renderPdfPage(doc, pageNum, maxWidth = 900, query = '', boxes = []) {
     const page = await doc.getPage(pageNum);
     const base = page.getViewport({ scale: 1 });
-    const dpr = Math.min(MAX_PAGE_DPR, Math.max(1, globalThis.devicePixelRatio || 1));
+    const dpr = pageBitmapScale();
     const fitScale = Math.min(4, Math.max(0.2, (maxWidth || 900) / (base.width || 1)));
     let scale = fitScale * dpr;
     // Keep every page canvas under the platform pixel budget.
@@ -1045,22 +1053,23 @@ const NotesPreview = (() => {
     return true;
   }
 
-  async function renderPdfDocument(bytes, container, { maxPages = MAX_PDF_PAGES, maxWidth, query, ocrText, ocrBoxes, showExcerpt = true } = {}) {
+  async function renderPdfDocument(bytes, container, { maxPages = MAX_PDF_PAGES, maxWidth, query, ocrText, ocrBoxes, showExcerpt = true, deferSwap = false, keepBaseWidth = false } = {}) {
     const needle = String(query || '').trim();
     const host = container?.closest?.('.doc-zoom-host') || container;
     const target = container?.matches?.('.doc-zoom-layer')
       ? container
       : (container?.querySelector?.('.doc-zoom-layer') || container);
     if (!target) return { pages: 0, embeddedHits: 0, renderedWidth: 0 };
-    target.replaceChildren();
+    const sink = document.createElement('div');
     let doc;
     try {
       doc = await openPdf(bytes);
     } catch (err) {
+      if (deferSwap) return { pages: 0, embeddedHits: 0, renderedWidth: 0 };
       const p = document.createElement('p');
       p.className = 'error';
       p.textContent = err.message || 'Preview failed';
-      target.appendChild(p);
+      target.replaceChildren(p);
       return { pages: 0, embeddedHits: 0, renderedWidth: 0 };
     }
     const pages = Number.isFinite(maxPages) ? Math.min(doc.numPages, maxPages) : doc.numPages;
@@ -1069,18 +1078,20 @@ const NotesPreview = (() => {
     for (let i = 1; i <= pages; i += 1) {
       const page = await renderPdfPage(doc, i, width, needle, ocrBoxes);
       if (page.querySelector('.doc-search-hit')) embeddedHits += 1;
-      target.appendChild(page);
+      sink.appendChild(page);
     }
-    if (showExcerpt && needle && !target.querySelector('.doc-search-hit')) {
-      appendSearchExcerpt(target, ocrText, needle);
+    if (showExcerpt && needle && !sink.querySelector('.doc-search-hit')) {
+      appendSearchExcerpt(sink, ocrText, needle);
     }
+    target.replaceChildren(...sink.childNodes);
     if (host && typeof host === 'object') {
+      const previousBase = keepBaseWidth ? host._pdfPaint?.baseWidth : 0;
       host._pdfPaint = {
         bytes,
         query: needle,
         ocrText,
         ocrBoxes: Array.isArray(ocrBoxes) ? ocrBoxes : [],
-        baseWidth: width,
+        baseWidth: previousBase || width,
         renderedWidth: width,
         showExcerpt: showExcerpt !== false,
       };
@@ -1102,69 +1113,48 @@ const NotesPreview = (() => {
 
   async function upgradeImageQuality(container, scale) {
     const host = container?.closest?.('.doc-zoom-host') || container;
-    const state = host?._imagePaint;
     const img = host?.querySelector?.('img');
-    if (!host || !img || state?.upgrading || scale < 1.25) return false;
-    if (!state?.naturalWidth) rememberImagePaint(host, img);
+    if (!host || !img?.naturalWidth || scale < 1.25) return false;
+    if (!host._imagePaint?.naturalWidth) rememberImagePaint(host, img);
     const paint = host._imagePaint;
     if (!paint?.naturalWidth) return false;
-    const targetWidth = Math.min(
-      paint.naturalWidth,
-      Math.round(paint.baseWidth * Math.min(scale, 4)),
-    );
-    if (targetWidth <= (paint.renderedWidth || paint.baseWidth) * 1.2) return false;
-    paint.upgrading = true;
-    try {
-      const canvas = document.createElement('canvas');
-      const aspect = paint.naturalHeight / paint.naturalWidth;
-      canvas.width = targetWidth;
-      canvas.height = Math.max(1, Math.round(targetWidth * aspect));
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return false;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const mime = img.src.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-      const quality = mime === 'image/png' ? undefined : 0.92;
-      img.src = canvas.toDataURL(mime, quality);
-      paint.renderedWidth = targetWidth;
-      const zoom = host._docZoom;
-      if (img.decode) {
-        img.decode().then(() => {
-          if (zoom?.refresh) zoom.refresh();
-        }).catch(() => {
-          if (zoom?.refresh) zoom.refresh();
-        });
-      } else {
-        img.addEventListener('load', () => {
-          if (zoom?.refresh) zoom.refresh();
-        }, { once: true });
-      }
-      return true;
-    } finally {
-      if (host._imagePaint) host._imagePaint.upgrading = false;
-    }
+    // The viewer img is the decrypted original. Re-encoding it (especially
+    // PNG/WebP receipts to JPEG) only softens text. CSS zoom uses those pixels.
+    paint.renderedWidth = paint.naturalWidth;
+    const needed = Math.round((paint.baseWidth || img.clientWidth || 1) * Math.min(scale, 4) * pageBitmapScale());
+    return paint.naturalWidth >= needed;
   }
 
   async function upgradePdfQuality(container, scale) {
     const host = container?.closest?.('.doc-zoom-host') || container;
     const state = host?._pdfPaint;
-    if (!host || !state || state.upgrading || scale < 1.25) return false;
-    const targetWidth = Math.min(4096, Math.round(state.baseWidth * Math.min(scale, 4)));
-    if (targetWidth <= state.renderedWidth * 1.2) return false;
+    if (!host || !state || state.upgrading) return false;
+    const cssWidth = Math.max(240, Math.round(host.clientWidth || state.baseWidth || 900));
+    const zoom = Math.max(1, Number(scale) || 1);
+    const widthChanged = Math.abs(cssWidth - (state.baseWidth || cssWidth)) > 48;
+    if (!widthChanged && zoom < 1.25) return false;
+    const targetWidth = Math.min(4096, Math.round(cssWidth * Math.min(zoom, 4)));
+    if (targetWidth <= (state.renderedWidth || 0) * 1.12) return false;
     state.upgrading = true;
     try {
       const layer = host.querySelector('.doc-zoom-layer') || host;
       const scrollTop = host.scrollTop || 0;
       const scrollLeft = host.scrollLeft || 0;
-      const zoom = host._docZoom;
+      const zoomCtl = host._docZoom;
       await renderPdfDocument(state.bytes, layer, {
         maxWidth: targetWidth,
         query: state.query,
         ocrText: state.ocrText,
         ocrBoxes: state.ocrBoxes,
         showExcerpt: state.showExcerpt,
+        deferSwap: true,
+        keepBaseWidth: true,
       });
-      host._pdfPaint.renderedWidth = targetWidth;
-      if (zoom && typeof zoom.refresh === 'function') zoom.refresh();
+      if (host._pdfPaint) {
+        host._pdfPaint.baseWidth = cssWidth;
+        host._pdfPaint.renderedWidth = targetWidth;
+      }
+      if (zoomCtl && typeof zoomCtl.refresh === 'function') zoomCtl.refresh();
       host.scrollTop = scrollTop;
       host.scrollLeft = scrollLeft;
       if (state.query) repaintAllSearchHits(layer, state.ocrBoxes, state.query);
@@ -1564,6 +1554,7 @@ const NotesPreview = (() => {
     fileFromBytes,
     ensurePdf,
     openPdf,
+    pageBitmapScale,
     renderPdfPage,
     renderPdfDocument,
     upgradePdfQuality,

@@ -8,9 +8,9 @@ const NotesClientOcr = (() => {
   // Every page of a PDF is read. Highlight boxes stop at MAX_BOXES; text does not.
   const MAX_PDF_PAGES = Number.POSITIVE_INFINITY;
   const MAX_BOXES = 1500;
-  const LIST_PREVIEW_PX = 224;
-  const LIST_PREVIEW_QUALITY = 0.78;
-  const MAX_LIST_PREVIEW_BYTES = 96 * 1024;
+  const LIST_PREVIEW_PX = 432;
+  const LIST_PREVIEW_QUALITY = 0.92;
+  const MAX_LIST_PREVIEW_BYTES = 160 * 1024;
   const ASSET_VER = '1';
   const TESS_BASE = '/static/js/vendor/tesseract';
   const PDF_SRC = '/static/js/vendor/pdfjs/pdf.min.js?v=8';
@@ -666,7 +666,10 @@ const NotesClientOcr = (() => {
     const doc = await pdfjs.getDocument({ data: bytes, useWorkerFetch: false }).promise;
     try {
       const page = await doc.getPage(1);
-      const canvas = await rasterizePdfPage(page, Math.min(96 / 72, rasterScaleFor(page)));
+      const base = page.getViewport({ scale: 1 });
+      const longEdge = Math.max(base.width, base.height) || 1;
+      const previewScale = Math.min(3, Math.max(1, (LIST_PREVIEW_PX * 2) / longEdge));
+      const canvas = await rasterizePdfPage(page, previewScale);
       if (typeof page.cleanup === 'function') page.cleanup();
       return canvas;
     } finally {

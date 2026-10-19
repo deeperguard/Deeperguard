@@ -2534,6 +2534,19 @@
         docChromeTapTimer = null;
       },
     });
+    if (stage._previewResize) stage._previewResize.disconnect();
+    if (typeof ResizeObserver === 'function') {
+      let lastWidth = stage.clientWidth || 0;
+      stage._previewResize = new ResizeObserver(() => {
+        const width = stage.clientWidth || 0;
+        if (!width || Math.abs(width - lastWidth) < 48) return;
+        lastWidth = width;
+        if (stage._docZoomKind === 'pdf') {
+          NotesPreview.upgradePdfQuality(stage, stage._docZoom?.getScale?.() || 1).catch(() => {});
+        }
+      });
+      stage._previewResize.observe(stage);
+    }
     updateDocZoomLabel();
     applyDocViewEnhance();
   }
@@ -2719,10 +2732,9 @@
     const stage = ui.docStage;
     if (!stage?._docZoom) return;
     const kind = stage._docZoomKind;
-    // PDF uses CSS transform zoom only — re-rendering on pinch blanks the canvas on iOS WebKit.
-    if (kind === 'pdf') return;
     const scale = stage._docZoom.getScale();
-    if (scale < 1.25) return;
+    // PDF re-renders at the zoomed CSS size × dpr after the new canvas is ready,
+    // so the page on screen is not cleared first. Images stay the decrypted original.
     const work = kind === 'pdf'
       ? NotesPreview.upgradePdfQuality(stage, scale)
       : kind === 'image'
@@ -8495,7 +8507,9 @@
   // 56px row made iOS decode every 12MP image in RAM on the overview — the tab
   // got OOM-killed exactly when going back to "All notes".
   const listThumbCache = new Map(); // attId -> small blob URL
+  const listThumbPx = new Map(); // attId -> pixel size that URL was built at
   const LIST_THUMB_PX = 112;
+  const THUMB_CSS_PX = 72;
   let thumbQueue = Promise.resolve();
   const listPreviewBackfill = new Set();
   const listPreviewBackfillFailed = new Set();
@@ -8554,13 +8568,30 @@
     missing.slice(0, 24).forEach((att) => queueListPreviewBackfill(att.uuid, { force: true }));
   }
 
+  function takeListThumb(id) {
+    const url = listThumbCache.get(id);
+    if (!url) return '';
+    if (listThumbPx.get(id) !== thumbOutputPx()) {
+      try { URL.revokeObjectURL(url); } catch (err) { /* ignore */ }
+      listThumbCache.delete(id);
+      listThumbPx.delete(id);
+      return '';
+    }
+    return url;
+  }
+
+  function putListThumb(id, url) {
+    listThumbCache.set(id, url);
+    listThumbPx.set(id, thumbOutputPx());
+  }
+
   async function paintListThumbFromPreviewEnc(id, stage) {
     const bytes = await NotesStore.getAttachmentPreviewBytes(id);
     if (!bytes?.length) return false;
-    let url = listThumbCache.get(id);
+    let url = takeListThumb(id);
     if (!url) {
       url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
-      listThumbCache.set(id, url);
+      putListThumb(id, url);
     }
     const img = document.createElement('img');
     img.alt = '';
@@ -8584,6 +8615,7 @@
       try { URL.revokeObjectURL(url); } catch (err) { /* ignore */ }
     }
     listThumbCache.clear();
+    listThumbPx.clear();
   }
 
   function thumbInkBox(source) {
@@ -8644,7 +8676,8 @@
 
   function thumbOutputPx() {
     const dpr = Math.min(3, Math.max(1, (typeof window !== 'undefined' && window.devicePixelRatio) || 1));
-    return Math.max(LIST_THUMB_PX, Math.round(LIST_THUMB_PX * dpr));
+    const scale = Math.min(3, Math.max(2, dpr));
+    return Math.max(LIST_THUMB_PX, Math.round(LIST_THUMB_PX * dpr), Math.round(THUMB_CSS_PX * scale));
   }
 
   function fitThumbCanvas(source, { cropInk = false } = {}) {
@@ -8676,9 +8709,20 @@
       sw = Math.max(1, Math.min(srcW - sx, Math.ceil(box.w * scaleX)));
       sh = Math.max(1, Math.min(srcH - sy, Math.ceil(box.h * scaleY)));
     }
-    const scale = Math.min(side / sw, side / sh);
-    const dw = Math.max(1, Math.round(sw * scale));
-    const dh = Math.max(1, Math.round(sh * scale));
+    const fit = Math.min(side / sw, side / sh);
+    // A stored preview smaller than the tile must not be blown up in software.
+    if (fit >= 1) {
+      out.width = Math.max(1, Math.round(sw));
+      out.height = Math.max(1, Math.round(sh));
+      const nativeCtx = out.getContext('2d');
+      if (!nativeCtx) return null;
+      nativeCtx.imageSmoothingEnabled = true;
+      nativeCtx.imageSmoothingQuality = 'high';
+      nativeCtx.drawImage(source, sx, sy, sw, sh, 0, 0, out.width, out.height);
+      return out;
+    }
+    const dw = Math.max(1, Math.round(sw * fit));
+    const dh = Math.max(1, Math.round(sh * fit));
     const dx = Math.round((side - dw) / 2);
     const dy = Math.round((side - dh) / 2);
     ctx.drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh);
@@ -8694,8 +8738,35 @@
     canvas.replaceWith(fitted);
   }
 
+  function thumbLooksTexty(canvas) {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx || canvas.width < 8 || canvas.height < 8) return false;
+    let pixels;
+    try {
+      pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    } catch (err) {
+      return false;
+    }
+    const step = Math.max(1, Math.floor((canvas.width * canvas.height) / 2500));
+    let paper = 0;
+    let ink = 0;
+    let n = 0;
+    for (let i = 0; i < pixels.length; i += 4 * step) {
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      n += 1;
+      if (min > 220 && max > 230) paper += 1;
+      else if (max < 90) ink += 1;
+    }
+    return n > 0 && paper / n > 0.45 && ink / n > 0.02;
+  }
+
   async function makeListThumbUrl(id, entry) {
-    if (listThumbCache.has(id)) return listThumbCache.get(id);
+    const cached = takeListThumb(id);
+    if (cached) return cached;
     const img = new Image();
     img.decoding = 'async';
     await new Promise((resolve, reject) => {
@@ -8718,9 +8789,13 @@
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     }
     img.src = '';
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    const scan = thumbLooksTexty(canvas);
+    const blob = await new Promise((resolve) => {
+      if (scan) canvas.toBlob(resolve, 'image/png');
+      else canvas.toBlob(resolve, 'image/jpeg', 0.92);
+    });
     const url = blob ? URL.createObjectURL(blob) : entry.url;
-    listThumbCache.set(id, url);
+    putListThumb(id, url);
     return url;
   }
 
@@ -8735,11 +8810,12 @@
   async function hydrateThumbNow(noteId, id, stage, { forList = false } = {}) {
     try {
       const paint = thumbPaintRoot(stage);
-      if (forList && listThumbCache.has(id)) {
+      const cachedThumb = forList ? takeListThumb(id) : '';
+      if (cachedThumb) {
         const img = document.createElement('img');
         img.alt = '';
         img.decoding = 'async';
-        img.src = listThumbCache.get(id);
+        img.src = cachedThumb;
         attachListThumbErrorHandler(img, stage, noteId, id);
         paint.replaceChildren(img);
         return;
@@ -8795,7 +8871,7 @@
         // tile is small; a full letter page at that size reads as a blank box.
         const width = forList
           ? Math.max(720, thumbOutputPx() * 2)
-          : Math.max(84, stageWidth || 84);
+          : Math.max(thumbOutputPx(), stageWidth || THUMB_CSS_PX);
         const page = await NotesPreview.renderPdfPage(doc, 1, width);
         if (forList) {
           const canvas = page?.tagName === 'CANVAS' ? page : page?.querySelector?.('canvas');
@@ -9196,6 +9272,8 @@
         const img = document.createElement('img');
         img.src = entry.url;
         img.alt = entry.filename;
+        img.decoding = 'async';
+        img.dataset.fullResolution = '1';
         stage.replaceChildren(img);
         markDocStagePainted(stage);
         return;
@@ -9207,6 +9285,8 @@
       const img = document.createElement('img');
       img.src = entry.url;
       img.alt = entry.filename;
+      img.decoding = 'async';
+      img.dataset.fullResolution = '1';
       if (typeof img.decode === 'function') {
         try { await img.decode(); } catch (_) { /* paint after load instead */ }
       }

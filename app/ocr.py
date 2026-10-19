@@ -16,9 +16,9 @@ from PIL import Image, ImageEnhance, ImageOps
 MAX_BYTES = 50 * 1024 * 1024
 MAX_SCAN_PAGES = 6
 MAX_BOXES = 1500
-LIST_PREVIEW_PX = 224
-LIST_PREVIEW_JPEG_QUALITY = 78
-MAX_LIST_PREVIEW_BYTES = 96 * 1024
+LIST_PREVIEW_PX = 432
+LIST_PREVIEW_JPEG_QUALITY = 92
+MAX_LIST_PREVIEW_BYTES = 160 * 1024
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
 HEIC_SUFFIXES = {".heic", ".heif"}
 HEIC_MIMES = {"image/heic", "image/heif", "image/heic-sequence"}
@@ -146,7 +146,7 @@ def _pdf_list_preview(data: bytes) -> bytes:
                     "-jpegopt",
                     f"quality={LIST_PREVIEW_JPEG_QUALITY}",
                     "-r",
-                    "96",
+                    "144",
                     "-f",
                     "1",
                     "-l",
