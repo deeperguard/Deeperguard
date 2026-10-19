@@ -23,6 +23,23 @@
   <script src="/static/js/vaultlock.js?v={{ build }}"></script>
   <script nonce="{{ csp_nonce }}">
     (function () {
+      // Media queries use the layout viewport. Browser zoom with
+      // maximum-scale=1 can leave that wide while the visual viewport is
+      // already under 1000 CSS px — force the compact shell from both.
+      function cssViewportWidth() {
+        var layout = document.documentElement.clientWidth || window.innerWidth || 0;
+        var visual = window.visualViewport && window.visualViewport.width;
+        if (visual && visual > 0 && layout > 0) return Math.min(layout, visual);
+        return layout || visual || 0;
+      }
+      function syncCompactLayout() {
+        var width = cssViewportWidth();
+        // Width 0 means layout has not happened yet — leave the media query in charge.
+        document.documentElement.classList.toggle('layout-compact', width > 0 && width < 1000);
+      }
+      syncCompactLayout();
+      window.addEventListener('resize', syncCompactLayout);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', syncCompactLayout);
       // Apply theme before first paint so Update / reload does not flash dark.
       try {
         var prefs = JSON.parse(localStorage.getItem('deeperguard-prefs') || '{}');
@@ -410,7 +427,8 @@
           <span id="unlock-progress-bar"></span>
         </div>
         <button type="submit" id="unlock-submit" class="btn primary block">Unlock</button>
-        <button type="button" id="unlock-clear-saved" class="btn ghost block">Clear saved password</button>
+        <p id="unlock-saved-hint" class="auth-hint" hidden>A password is saved on this device for offline unlock. You still enter it each time Notes opens.</p>
+        <button type="button" id="unlock-clear-saved" class="btn ghost block" hidden>Clear saved password</button>
         <button type="button" id="unlock-signout" class="btn ghost block"{% if skip_login %} hidden{% endif %}>Sign out</button>
         <details class="auth-hint unlock-help">
           <summary>Having trouble on iPhone?</summary>
@@ -437,8 +455,15 @@
       }
       var support = document.getElementById('unlock-support-email');
       if (support) support.textContent = ['notes', '@', 'deeperguard.com'].join('');
-      fetch('/api/account', { cache: 'no-store', credentials: 'same-origin' })
-        .then(function (res) { return res.ok ? res.json() : null; })
+      window.__notesAccountPromise = fetch('/api/account', { cache: 'no-store', credentials: 'same-origin' })
+        .then(function (res) {
+          if (res.status === 401 || res.status === 403) {
+            window.__notesSignedOut = true;
+            return null;
+          }
+          return res.ok ? res.json() : null;
+        });
+      window.__notesAccountPromise
         .then(function (account) {
           if (!account || !account.email) return;
           var el = document.getElementById('unlock-email');
@@ -1339,7 +1364,7 @@
             </select>
           </label>
           <label class="settings-row checkbox"><span>Remember password on this device</span><input id="pref-remember-device" type="checkbox"></label>
-          <p class="settings-hint">Stores your vault password on this trusted device for offline unlock. Disable on shared devices.</p>
+          <p class="settings-hint">Saves the vault password on this device so offline unlock can use it after you type it. Opening Notes still asks for the password every time — it is not filled in for you. Disable on shared devices.</p>
           <p id="totp-status" class="settings-hint" hidden></p>
           <div id="passkey-settings" class="settings-nested stack" data-plan-feature="passkeys">
             <p class="settings-hint">Passkeys sign you into your account without typing your password. Vault unlock still requires your master password locally.</p>
@@ -1704,6 +1729,7 @@
     <p id="confirm-message"></p>
     <div class="confirm-dialog-actions">
       <button type="button" class="btn ghost" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn" id="confirm-extra" hidden>Attach anyway</button>
       <button type="button" class="btn primary" id="confirm-ok">Confirm</button>
     </div>
   </div>

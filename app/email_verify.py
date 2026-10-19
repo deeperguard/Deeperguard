@@ -123,10 +123,10 @@ def _send(recipient: str, subject: str, body: str) -> None:
         log.warning("verification email failed recipient=%s: %s", recipient, exc)
 
 
-def send_account_code(user) -> str | None:
+def send_account_code(user, *, strict: bool = False) -> str | None:
     uid = int(user["id"])
     email = str(user["email"] or "").strip().lower()
-    if assert_verification_send_allowed(uid, email) == "skip":
+    if assert_verification_send_allowed(uid, email, strict=strict) == "skip":
         return None
     code = issue_code(uid, "account", email)
     _send(
@@ -146,10 +146,10 @@ def send_account_code(user) -> str | None:
     return code
 
 
-def send_backup_code(user, recipient: str) -> str | None:
+def send_backup_code(user, recipient: str, *, strict: bool = False) -> str | None:
     uid = int(user["id"])
     target = str(recipient or "").strip().lower()
-    if assert_verification_send_allowed(uid, target) == "skip":
+    if assert_verification_send_allowed(uid, target, strict=strict) == "skip":
         return None
     code = issue_code(uid, "backup", target)
     _send(

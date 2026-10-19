@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <script>
+  <script nonce="{{ csp_nonce }}">
     if (location.hash) document.documentElement.classList.add('mk-hash-open');
   </script>
   <title>Deeperguard (encrypted notes) — Private notes you cannot leak</title>
@@ -20,7 +20,7 @@
   <meta name="twitter:image" content="{{ og_image }}">
   <meta name="notes-build" content="{{ build }}">
   <link rel="canonical" href="{{ canonical_url }}">
-  <script type="application/ld+json">{{ json_ld | tojson }}</script>
+  <script type="application/ld+json" nonce="{{ csp_nonce }}">{{ json_ld | tojson }}</script>
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
   <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
 </head>

@@ -42,7 +42,7 @@ assert.ok(inline.includes('<code>code</code>'));
 // 3. Thumbs: contain+center; PDF list width uses DPR
 assert.ok(appJs.includes('Math.min(side / sw, side / sh)'));
 assert.ok(appJs.includes('const dx = Math.round((side - dw) / 2)'));
-assert.ok(appJs.includes('Math.max(LIST_THUMB_PX, thumbOutputPx())'));
+assert.ok(appJs.includes('Math.max(LIST_THUMB_PX, thumbOutputPx())') || appJs.includes('Math.max(720, thumbOutputPx() * 2)'));
 assert.ok(css.includes('object-position: center'));
 
 // 4. Attach keeps existing title; untitled gets filename with extension

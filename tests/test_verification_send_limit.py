@@ -151,6 +151,33 @@ class VerificationSendLimitTests(unittest.TestCase):
         self.assertEqual(res.status_code, 429)
         self.assertIn("Too many verification emails", res.get_json().get("error", ""))
 
+    def test_explicit_resend_cooldown_returns_429(self):
+        sent = []
+        with patch("mailer.send_plain_email", side_effect=lambda *a, **k: sent.append(a)):
+            self._register("resend@home.local")
+            user = self.db.get_user_by_email("resend@home.local")
+            self.db.connection().execute(
+                "UPDATE users SET email_verified = 0 WHERE id = ?",
+                (int(user["id"]),),
+            )
+            self.db.connection().commit()
+            # Signup already emailed one code. An explicit resend inside the
+            # cooldown must say so instead of claiming another email was sent.
+            self.assertEqual(len(sent), 1)
+            csrf = self._csrf()
+            second = self.client.post(
+                "/api/account/email/resend",
+                json={},
+                headers={"X-CSRF-Token": csrf},
+            )
+        self.assertEqual(second.status_code, 429)
+        body = second.get_json()
+        self.assertIn("Please wait", body.get("error", ""))
+        self.assertEqual(body.get("code"), "cooldown")
+        self.assertGreaterEqual(int(body.get("retry_after") or 0), 1)
+        self.assertEqual(second.headers.get("Retry-After"), str(int(body["retry_after"])))
+        self.assertEqual(len(sent), 1)
+
     def test_backup_resend_skips_when_already_verified(self):
         sent = []
         with patch("mailer.send_plain_email", side_effect=lambda *a, **k: sent.append(a)):

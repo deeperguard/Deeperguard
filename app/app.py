@@ -2437,6 +2437,22 @@ def api_account_email_verify():
     return jsonify({"ok": True, "email_verified": True})
 
 
+def _verification_limited_response(exc: VerificationSendLimited):
+    payload = {"error": exc.message}
+    code = getattr(exc, "code", "") or ""
+    if code:
+        payload["code"] = code
+    retry_after = getattr(exc, "retry_after", None)
+    if retry_after:
+        seconds = max(1, int(retry_after))
+        payload["retry_after"] = seconds
+    response = jsonify(payload)
+    response.status_code = 429
+    if retry_after:
+        response.headers["Retry-After"] = str(max(1, int(retry_after)))
+    return response
+
+
 @app.post("/api/account/email/resend")
 def api_account_email_resend():
     uid = auth.current_user_id()
@@ -2448,9 +2464,9 @@ def api_account_email_resend():
     if _auth_rate_limited("email-verify-resend", str(user["email"])):
         return jsonify({"error": "too many attempts"}), 429
     try:
-        email_verify.send_account_code(user)
+        email_verify.send_account_code(user, strict=True)
     except VerificationSendLimited as exc:
-        return jsonify({"error": exc.message}), 429
+        return _verification_limited_response(exc)
     return jsonify({"ok": True, "sent": True})
 
 
@@ -2482,11 +2498,11 @@ def api_backup_email_resend():
         return jsonify({"error": "too many attempts"}), 429
     try:
         if recipient == str(user["email"]).strip().lower():
-            email_verify.send_account_code(user)
+            email_verify.send_account_code(user, strict=True)
         else:
-            email_verify.send_backup_code(user, recipient)
+            email_verify.send_backup_code(user, recipient, strict=True)
     except VerificationSendLimited as exc:
-        return jsonify({"error": exc.message}), 429
+        return _verification_limited_response(exc)
     return jsonify({"ok": True, "sent": True})
 
 
