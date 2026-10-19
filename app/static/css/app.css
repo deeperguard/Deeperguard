@@ -8021,3 +8021,191 @@ body.editor-toolbar-tip-suppress .find-btn.btn.icon[aria-label]:focus-visible::a
 .sidebar-nav .sidebar-scroll > #folder-section {
   overflow: clip;
 }
+/* Phone Open sidebar. .sidebar-scroll is display:contents until the drawer
+   opens, so the hamburger had no panel to show. .sidebar's transform keeps
+   fixed descendants in its stacking context, so the dimmer is ::before. */
+@media (max-width: 999px) {
+  body.nav-drawer-open .sidebar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    background: rgba(0, 0, 0, 0.28);
+  }
+  body.nav-drawer-open .sidebar-scroll {
+    display: flex !important;
+    flex-direction: column;
+    position: fixed;
+    z-index: 40;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(320px, 88vw);
+    max-width: 88vw;
+    margin: 0;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    box-sizing: border-box;
+    background: var(--bg-elevated);
+    color: var(--text);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.18);
+  }
+  body.nav-drawer-open #btn-list-menu {
+    position: relative;
+    z-index: 50;
+  }
+  .sidebar .tag-section,
+  .sidebar .folder-section {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    flex: 0 0 auto;
+    align-self: stretch;
+    box-sizing: border-box;
+  }
+  .sidebar .tag-section > summary.section-label,
+  .sidebar .folder-section > summary.section-label {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-start;
+    width: 100% !important;
+    box-sizing: border-box;
+    min-height: 44px !important;
+    margin: 0;
+    padding: 12px 14px !important;
+    font-size: 16px;
+    line-height: 20px;
+  }
+  #totp-pane #btn-totp-add {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+html.layout-compact body.nav-drawer-open .sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.28);
+}
+html.layout-compact body.nav-drawer-open .sidebar-scroll {
+  display: flex !important;
+  flex-direction: column;
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(320px, 88vw);
+  max-width: 88vw;
+  margin: 0;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: var(--bg-elevated);
+  color: var(--text);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 8px 0 28px rgba(0, 0, 0, 0.18);
+}
+html.layout-compact body.nav-drawer-open #btn-list-menu {
+  position: relative;
+  z-index: 50;
+}
+body.nav-drawer-open .sidebar-nav-backdrop {
+  display: block !important;
+  z-index: 35;
+}
+body.nav-drawer-open .filter-bar {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch;
+  width: 100%;
+  padding: 0;
+}
+body.nav-drawer-open .filter-select-wrap,
+body.nav-drawer-open .sort-select-wrap--sidebar {
+  display: none !important;
+}
+body.nav-drawer-open .filter-section,
+body.nav-drawer-open .filters,
+html.layout-compact body.nav-drawer-open .filter-section,
+html.layout-compact body.nav-drawer-open .filters {
+  display: flex !important;
+  flex-direction: column;
+  width: 100%;
+  overflow: visible;
+}
+body.nav-drawer-open .filter-section {
+  display: block !important;
+}
+html.layout-compact body.nav-drawer-open .filter-section {
+  display: block !important;
+}
+body.nav-drawer-open .filters {
+  gap: 2px;
+  padding: 0 0 8px;
+}
+body.nav-drawer-open .filter {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start !important;
+  gap: 10px;
+  width: 100% !important;
+  min-height: 44px;
+  padding: 8px 12px !important;
+  box-sizing: border-box;
+}
+body.nav-drawer-open .filter > span,
+body.nav-drawer-open .sn-nav-label,
+html.layout-compact body.nav-drawer-open .sn-nav-label {
+  display: flex !important;
+}
+body.nav-drawer-open .filter > span {
+  display: inline !important;
+}
+body.nav-drawer-open #sidebar-scroll > #tag-section,
+body.nav-drawer-open #sidebar-scroll > #folder-section,
+html.layout-compact body.nav-drawer-open .tag-section,
+html.layout-compact body.nav-drawer-open .folder-section {
+  display: block !important;
+  overflow: visible;
+  max-height: none;
+  width: 100%;
+}
+html.layout-compact .sidebar .tag-section,
+html.layout-compact .sidebar .folder-section {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100%;
+  flex: 0 0 auto;
+  align-self: stretch;
+  box-sizing: border-box;
+}
+html.layout-compact .sidebar .tag-section > summary.section-label,
+html.layout-compact .sidebar .folder-section > summary.section-label {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100% !important;
+  box-sizing: border-box;
+  min-height: 44px !important;
+  margin: 0;
+  padding: 12px 14px !important;
+  font-size: 16px;
+  line-height: 20px;
+}
+html.layout-compact #totp-pane #btn-totp-add {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
