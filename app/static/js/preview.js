@@ -1013,6 +1013,9 @@ const NotesPreview = (() => {
     await page.render({ canvasContext: canvas.getContext('2d', { alpha: false }), viewport }).promise;
     const wrap = document.createElement('div');
     wrap.className = 'doc-page-wrap';
+    wrap.dataset.page = String(pageNum);
+    wrap.dataset.pdfWidth = String(base.width || 0);
+    wrap.dataset.pdfHeight = String(base.height || 0);
     sizeWrap(wrap, layoutWidth, layoutHeight);
     wrap.appendChild(canvas);
     const needle = String(query || '').trim();
@@ -1090,6 +1093,7 @@ const NotesPreview = (() => {
       appendSearchExcerpt(sink, ocrText, needle);
     }
     target.replaceChildren(...sink.childNodes);
+    const previousDoc = host && host._pdfPaint ? host._pdfPaint.pdfDoc : null;
     if (host && typeof host === 'object') {
       const previousBase = keepBaseWidth ? host._pdfPaint?.baseWidth : 0;
       host._pdfPaint = {
@@ -1100,7 +1104,11 @@ const NotesPreview = (() => {
         baseWidth: previousBase || width,
         renderedWidth: width,
         showExcerpt: showExcerpt !== false,
+        pdfDoc: doc,
       };
+    }
+    if (previousDoc && previousDoc !== doc) {
+      try { previousDoc.destroy(); } catch (err) { /* replaced */ }
     }
     return { pages, embeddedHits, renderedWidth: width };
   }
@@ -1131,6 +1139,170 @@ const NotesPreview = (() => {
     return paint.naturalWidth >= needed;
   }
 
+  function visiblePdfTile(page, view, bitmapScale) {
+    const bitmap = Math.max(2, Number(bitmapScale) || 2);
+    const pageLeft = Number(page?.left) || 0;
+    const pageTop = Number(page?.top) || 0;
+    const pageWidth = Math.max(1, Number(page?.width) || 1);
+    const pageHeight = Math.max(1, Number(page?.height) || 1);
+    const viewLeft = Number(view?.left) || 0;
+    const viewTop = Number(view?.top) || 0;
+    const viewRight = viewLeft + Math.max(0, Number(view?.width) || 0);
+    const viewBottom = viewTop + Math.max(0, Number(view?.height) || 0);
+    const left = Math.max(pageLeft, viewLeft);
+    const top = Math.max(pageTop, viewTop);
+    const right = Math.min(pageLeft + pageWidth, viewRight);
+    const bottom = Math.min(pageTop + pageHeight, viewBottom);
+    const visualWidth = Math.max(0, right - left);
+    const visualHeight = Math.max(0, bottom - top);
+    if (visualWidth < 1 || visualHeight < 1) {
+      return {
+        visualWidth: 0,
+        visualHeight: 0,
+        backingWidth: 0,
+        backingHeight: 0,
+        ratio: bitmap,
+        scale: bitmap,
+        offsetX: 0,
+        offsetY: 0,
+        localLeft: 0,
+        localTop: 0,
+      };
+    }
+    let backingWidth = Math.round(visualWidth * bitmap);
+    let backingHeight = Math.round(visualHeight * bitmap);
+    const cap = 16000000;
+    if (backingWidth * backingHeight > cap) {
+      const shrink = Math.sqrt(cap / (backingWidth * backingHeight));
+      backingWidth = Math.max(1, Math.floor(backingWidth * shrink));
+      backingHeight = Math.max(1, Math.floor(backingHeight * shrink));
+    }
+    const pdfWidth = Math.max(1, Number(page?.pdfWidth) || pageWidth);
+    const pdfHeight = Math.max(1, Number(page?.pdfHeight) || pageHeight);
+    const usedBitmap = backingWidth / visualWidth;
+    const scale = (pageWidth * usedBitmap) / pdfWidth;
+    const offsetX = -((left - pageLeft) / pageWidth) * pdfWidth * scale;
+    const offsetY = -((top - pageTop) / pageHeight) * pdfHeight * scale;
+    return {
+      visualWidth,
+      visualHeight,
+      backingWidth,
+      backingHeight,
+      ratio: backingWidth / visualWidth,
+      scale,
+      offsetX,
+      offsetY,
+      localLeft: left - pageLeft,
+      localTop: top - pageTop,
+    };
+  }
+
+  function pageBackingWidth(host) {
+    const canvas = host?.querySelector?.('canvas.doc-page');
+    return Number(canvas?.width) || 0;
+  }
+
+  function fullPageFitsSharpCap(host, targetWidth, bitmap) {
+    const canvas = host?.querySelector?.('canvas.doc-page');
+    if (!canvas?.width || !canvas?.height) return false;
+    const fullW = targetWidth * bitmap;
+    const fullH = fullW * (canvas.height / canvas.width);
+    return fullW <= 8192 && fullH <= 8192 && fullW * fullH <= 16000000;
+  }
+
+  function baseCoversVisible(host, bitmap) {
+    const canvas = host?.querySelector?.('canvas.doc-page');
+    if (!canvas?.width || !canvas.getBoundingClientRect) return false;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || rect.width < 8) return false;
+    return canvas.width / rect.width >= bitmap * 0.9;
+  }
+
+  async function paintOnePdfTile(host, wrap, doc, pageNum, bitmap, generation) {
+    const pageRect = wrap.getBoundingClientRect();
+    const viewRect = host.getBoundingClientRect();
+    if (pageRect.width < 8 || viewRect.width < 8) return;
+    const pdfPage = await doc.getPage(pageNum);
+    if (host._pdfPaint?.tileGeneration !== generation) return;
+    const base = pdfPage.getViewport({ scale: 1 });
+    const tile = visiblePdfTile(
+      {
+        left: pageRect.left,
+        top: pageRect.top,
+        width: pageRect.width,
+        height: pageRect.height,
+        pdfWidth: Number(wrap.dataset.pdfWidth) || base.width,
+        pdfHeight: Number(wrap.dataset.pdfHeight) || base.height,
+      },
+      {
+        left: viewRect.left,
+        top: viewRect.top,
+        width: viewRect.width,
+        height: viewRect.height,
+      },
+      bitmap,
+    );
+    const existing = wrap.querySelector('canvas.doc-page-tile');
+    if (tile.backingWidth < 2 || tile.backingHeight < 2) {
+      if (existing) existing.remove();
+      return;
+    }
+    const viewport = pdfPage.getViewport({
+      scale: tile.scale,
+      offsetX: tile.offsetX,
+      offsetY: tile.offsetY,
+    });
+    const canvas = existing || document.createElement('canvas');
+    canvas.className = 'doc-page-tile';
+    canvas.width = tile.backingWidth;
+    canvas.height = tile.backingHeight;
+    const zoom = Math.max(0.4, Number(host._docZoom?.getScale?.()) || 1);
+    canvas.style.left = `${tile.localLeft / zoom}px`;
+    canvas.style.top = `${tile.localTop / zoom}px`;
+    canvas.style.width = `${tile.visualWidth / zoom}px`;
+    canvas.style.height = `${tile.visualHeight / zoom}px`;
+    if (!existing) wrap.appendChild(canvas);
+    if (host._pdfPaint?.tileGeneration !== generation) return;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+  }
+
+  async function paintPdfViewportTiles(container, bitmapScale) {
+    const host = container?.closest?.('.doc-zoom-host') || container;
+    const state = host?._pdfPaint;
+    const doc = state?.pdfDoc;
+    if (!host || !doc) return false;
+    const bitmap = Math.max(2, Number(bitmapScale) || pageBitmapScale());
+    if (baseCoversVisible(host, bitmap)) {
+      host.querySelectorAll('canvas.doc-page-tile').forEach((el) => el.remove());
+      return false;
+    }
+    const generation = (state.tileGeneration = (state.tileGeneration || 0) + 1);
+    const wraps = [...host.querySelectorAll('.doc-page-wrap')];
+    for (const wrap of wraps) {
+      if (state.tileGeneration !== generation) return false;
+      const pageNum = Number(wrap.dataset.page) || 0;
+      if (!pageNum) continue;
+      try {
+        await paintOnePdfTile(host, wrap, doc, pageNum, bitmap, generation);
+      } catch (err) {
+        /* keep the capped page underneath */
+      }
+    }
+    return true;
+  }
+
+  function schedulePdfViewportTiles(container) {
+    const host = container?.closest?.('.doc-zoom-host') || container;
+    const state = host?._pdfPaint;
+    if (!host || !state) return;
+    clearTimeout(state.tileTimer);
+    state.tileTimer = setTimeout(() => {
+      state.tileTimer = 0;
+      paintPdfViewportTiles(host).catch(() => {});
+    }, 80);
+  }
+
   async function upgradePdfQuality(container, scale) {
     const host = container?.closest?.('.doc-zoom-host') || container;
     const state = host?._pdfPaint;
@@ -1138,13 +1310,18 @@ const NotesPreview = (() => {
     const cssWidth = Math.max(240, Math.round(host.clientWidth || state.baseWidth || 900));
     const zoom = Math.max(1, Number(scale) || 1);
     const widthChanged = Math.abs(cssWidth - (state.baseWidth || cssWidth)) > 48;
-    if (!widthChanged && zoom < 1.25) return false;
     // Backing store follows the zoomed CSS size × pageBitmapScale (at least 2).
     // renderPdfPage multiplies maxWidth by that scale, then clamps the long
-    // edge to 8192px and the bitmap to 16M pixels.
+    // edge to 8192px and the bitmap to 16M pixels. When the full page cannot
+    // stay at 2× inside that cap, the visible region is tiled instead.
     const bitmap = pageBitmapScale();
     const targetWidth = Math.round(cssWidth * Math.min(zoom, 4));
-    if (!widthChanged && targetWidth * bitmap <= (state.renderedWidth || 0) * bitmap * 1.12) return false;
+    if (!fullPageFitsSharpCap(host, targetWidth, bitmap)) {
+      await paintPdfViewportTiles(host, bitmap);
+      return true;
+    }
+    if (!widthChanged && zoom < 1.25 && pageBackingWidth(host) >= targetWidth * bitmap * 0.9) return false;
+    if (!widthChanged && targetWidth * bitmap <= pageBackingWidth(host) * 1.12) return false;
     state.upgrading = true;
     try {
       const layer = host.querySelector('.doc-zoom-layer') || host;
@@ -1210,7 +1387,7 @@ const NotesPreview = (() => {
     return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
   }
 
-  function enablePinchZoom(viewport, { onScaleSettled, onPinch, onDoubleTap } = {}) {
+  function enablePinchZoom(viewport, { onScaleSettled, onPinch, onDoubleTap, onScroll } = {}) {
     if (!viewport || typeof document === 'undefined') {
       return {
         reset() {},
@@ -1290,6 +1467,7 @@ const NotesPreview = (() => {
     }
 
     let settleTimer = null;
+    let scrollTimer = null;
 
     function notifySettled() {
       if (typeof onScaleSettled !== 'function') return;
@@ -1431,6 +1609,15 @@ const NotesPreview = (() => {
       lastTap = now;
     });
 
+    on(viewport, 'scroll', () => {
+      if (typeof onScroll !== 'function') return;
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        scrollTimer = null;
+        onScroll(scale);
+      }, 80);
+    }, { passive: true });
+
     on(viewport, 'wheel', (event) => {
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
@@ -1447,6 +1634,8 @@ const NotesPreview = (() => {
     function destroy() {
       clearTimeout(settleTimer);
       settleTimer = null;
+      clearTimeout(scrollTimer);
+      scrollTimer = null;
       listeners.forEach(([el, type, fn, opts]) => el.removeEventListener(type, fn, opts));
       listeners.length = 0;
       reset();
@@ -1567,6 +1756,9 @@ const NotesPreview = (() => {
     ensurePdf,
     openPdf,
     pageBitmapScale,
+    visiblePdfTile,
+    schedulePdfViewportTiles,
+    paintPdfViewportTiles,
     renderPdfPage,
     renderPdfDocument,
     upgradePdfQuality,

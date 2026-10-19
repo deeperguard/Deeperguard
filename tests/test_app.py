@@ -5449,6 +5449,40 @@ class NotesAppTests(unittest.TestCase):
             self.assertGreater(exp, time.time() + SESSION_SECONDS - 10)
             self.assertTrue(session.permanent)
 
+    def test_deleted_session_cookie_then_unlock_is_sign_in_required(self):
+        """Deleting only the session cookie must not look like a live unlock."""
+        email = "cookie-gone@home.local"
+        res = self._register_user(email, "cookie-gone-pass")
+        self.assertEqual(res.status_code, 200, res.get_data(as_text=True))
+        alive = self.client.get("/api/account")
+        self.assertEqual(alive.status_code, 200)
+        self.client.set_cookie("dg_sw_fix", "1")
+        self.client.delete_cookie("session")
+        cases = (
+            ("GET", "/api/account", None),
+            ("GET", "/api/sync/watermark", None),
+            ("POST", "/api/sync/pull", {}),
+            ("POST", "/api/account/unlock/challenge", {"email": email}),
+            ("POST", "/api/auth/vault-recovery/challenge", {"email": email}),
+            ("POST", "/api/auth/vault-recovery", {
+                "email": email,
+                "srp_salt": "ab",
+                "srp_verifier": "cd",
+                "A": "11",
+                "M1": "22",
+            }),
+            ("POST", "/api/account/unlock", {"current_password": "cookie-gone-pass"}),
+        )
+        for method, path, body in cases:
+            if method == "GET":
+                response = self.client.get(path)
+            else:
+                response = self.client.post(path, json=body)
+            payload = response.get_json(silent=True) or {}
+            self.assertEqual(response.status_code, 401, f"{path} {payload}")
+            self.assertIn(payload.get("error"), ("login required", "sign in required"), path)
+        self.assertEqual(self.client.get_cookie("dg_sw_fix").value, "1")
+
     def test_register_sets_persistent_session_cookie(self):
         res = self._register_user("persist-cookie@home.local", "persist-cookie-pass")
         self.assertEqual(res.status_code, 200)

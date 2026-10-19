@@ -4007,6 +4007,16 @@ mark.search-hit-current {
 .doc-page-wrap canvas.doc-page {
   image-rendering: auto;
 }
+.doc-page-wrap canvas.doc-page-tile {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  max-width: none;
+  width: auto;
+  height: auto;
+  image-rendering: auto;
+  background: transparent;
+}
 body.is-offline .sync-meta::before {
   content: '● ';
   color: var(--warning, #ff9f1c);
