@@ -23,6 +23,7 @@ for (const page of [home, topbar, compare]) {
   assert.ok(page.includes('href="/download">Download</a>'));
   assert.ok(page.includes('href="/contact">Contact</a>'));
   assert.ok(page.includes('Open notes app</a>'));
+  assert.ok(page.includes('class="mk-nav-open-app"') || page.includes('mk-nav-open-app'));
 }
 assert.ok(marketing.includes('.mk-nav-check:checked ~ .mk-nav'));
 assert.ok(marketing.includes('min-width: 1024px'));
