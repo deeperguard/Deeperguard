@@ -3029,6 +3029,21 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   background: var(--bg-hover);
   box-shadow: 0 8px 24px rgba(0,0,0,.35);
 }
+/* 2FA reserves a slot under the code list so a toast never covers an OTP. */
+html.totp-toast-open .totp-pane {
+  padding-bottom: calc(56px + var(--safe-bottom));
+}
+html.totp-toast-open #toast {
+  left: max(12px, var(--safe-left));
+  right: max(12px, var(--safe-right));
+  width: auto;
+  max-width: none;
+  transform: none;
+  bottom: calc(8px + var(--safe-bottom));
+  padding: 8px 12px;
+  font-size: 13px;
+  justify-content: center;
+}
 .toast.error { border-color: var(--danger); color: var(--danger); }
 .scan-backdrop {
   position: fixed;
@@ -4693,6 +4708,18 @@ html[data-theme="light"] .doc-search-hit {
   border-right-color: transparent;
   border-radius: 50%;
   position: relative;
+  flex: 0 0 auto;
+}
+.sync-caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .sync-glyph::after {
   content: "";
@@ -5757,17 +5784,34 @@ body.search-filters-open .fab-stack,
     flex-shrink: 0;
   }
   .sidebar-actions .sync-indicator {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: auto;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 8px;
+    gap: 4px;
     border-radius: 10px;
   }
+  .sidebar-actions .sync-caption {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0;
+    text-transform: none;
+  }
   .sidebar-actions .btn.icon {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
   .sidebar-nav,
   .list-pane { display: contents; }
@@ -5881,8 +5925,16 @@ body.search-filters-open .fab-stack,
     font-size: 18px;
   }
   .filters { display: none; }
-  .sort-select-wrap--list { display: flex; }
-  .list-pane #btn-list-sort { display: none !important; }
+  .sort-select-wrap--list { display: none !important; }
+  .list-pane #btn-list-sort {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
   .filter-section { display: none; }
   .tag-section {
     padding: 0 14px;
@@ -5897,17 +5949,32 @@ body.search-filters-open .fab-stack,
   }
   .tag-section:not([open]) .section-label,
   .folder-section:not([open]) .section-label {
+    min-height: 44px;
     padding-top: 0;
-    padding-bottom: 2px;
+    padding-bottom: 0;
   }
   /* iOS Safari can keep <details> body in layout when closed inside flex + display:contents. */
   .tag-section:not([open]) > :not(summary) {
     display: none !important;
   }
-  .tag-section .section-label {
+  .tag-section summary.section-label,
+  .folder-section summary.section-label {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 44px;
     margin: 0;
-    padding: 2px 0 4px;
-    font-size: 11px;
+    padding: 0 4px;
+    font-size: 13px;
+    line-height: 1.2;
+  }
+  .tag-section .section-chevron,
+  .folder-section .section-chevron {
+    float: none;
+    margin-left: 0;
+    font-size: 16px;
+    line-height: 1;
   }
   /* Do not flex or 16vh-cap <details> on iOS — Safari clips the tag chips. */
   .tag-section[open] {
@@ -5979,10 +6046,10 @@ body.search-filters-open .fab-stack,
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
     flex-shrink: 0;
     border: 1px solid var(--border);
@@ -5995,6 +6062,13 @@ body.search-filters-open .fab-stack,
     -webkit-appearance: none;
     appearance: none;
     transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .note-list-tools .btn.icon,
+  #btn-list-menu {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
   .note-list-tools .sn-add:hover {
     color: var(--text);
@@ -6021,13 +6095,19 @@ body.search-filters-open .fab-stack,
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--muted);
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .note-list-count {
     flex: 0 0 auto;
     min-width: max-content;
     overflow: visible;
     text-overflow: clip;
   }
   .sort-select-wrap--list {
-    display: flex;
+    display: none !important;
     max-width: 6.5rem;
   }
   .sort-select-wrap--list .sort-select {
@@ -7448,24 +7528,34 @@ html[data-theme="light"] .tok-kw { color: #0369a1; }
 html[data-theme="light"] .tok-str { color: #166534; }
 html[data-theme="light"] .tok-comment { color: #64748b; }
 .btn.icon[aria-label] { position: relative; }
-.btn.icon[aria-label]:hover::after,
-.btn.icon[aria-label]:focus-visible::after {
-  content: attr(aria-label);
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--bg-elevated);
-  color: var(--text);
-  border: 1px solid var(--border);
-  font-size: 12px;
-  line-height: 1.2;
-  white-space: nowrap;
-  pointer-events: none;
-  box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,.2));
+/* Touch devices stick in :hover after a tap. Only pointer devices get tooltips. */
+@media (hover: hover) and (pointer: fine) {
+  .btn.icon[aria-label]:hover::after,
+  .btn.icon[aria-label]:focus-visible::after {
+    content: attr(aria-label);
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: auto;
+    transform: none;
+    z-index: 40;
+    max-width: min(240px, calc(100vw - 16px));
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,.2));
+  }
+  .editor-toolbar-overflow-toggle.btn.icon[aria-label]:hover::after,
+  .editor-toolbar-overflow-toggle.btn.icon[aria-label]:focus-visible::after {
+    left: auto;
+    right: 0;
+  }
 }
 body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item,
 body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-folder-control,
@@ -7678,6 +7768,11 @@ html.layout-compact .shell {
   position: relative !important;
   grid-template-columns: none !important;
 }
+/* The compact shell rule above beats [hidden]. The 2FA tab sets hidden on
+   #notes-shell; without this, the notes list stays painted over the codes. */
+html.layout-compact .shell[hidden] {
+  display: none !important;
+}
 html.layout-compact .sidebar {
   display: flex !important;
   flex-direction: column !important;
@@ -7742,6 +7837,70 @@ html.layout-compact .settings-panel {
   right: max(0px, calc(100vw - var(--vv-width, 100vw)));
   width: min(420px, var(--vv-width, 100vw));
   max-width: var(--vv-width, 100vw);
+}
+html.layout-compact .tag-section summary.section-label,
+html.layout-compact .folder-section summary.section-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 4px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+html.layout-compact .tag-section .section-chevron,
+html.layout-compact .folder-section .section-chevron {
+  float: none;
+  font-size: 16px;
+}
+html.layout-compact .note-list-tools .sn-add,
+html.layout-compact .note-list-tools .btn.icon,
+html.layout-compact #btn-list-menu {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+html.layout-compact .note-list-count {
+  flex: 0 0 auto;
+  min-width: max-content;
+}
+html.layout-compact .sort-select-wrap--list {
+  display: none !important;
+}
+html.layout-compact .list-pane #btn-list-sort {
+  display: inline-flex !important;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+html.layout-compact .sidebar-actions .sync-indicator {
+  width: auto;
+  min-width: 44px;
+  min-height: 44px;
+  height: 44px;
+  padding: 0 8px;
+  gap: 4px;
+}
+html.layout-compact .sidebar-actions .sync-caption {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+}
+html.layout-compact .sidebar-actions .btn.icon {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 body.editor-toolbar-menu-open .editor-toolbar-menu-item.btn.icon:not([hidden]) {

@@ -320,8 +320,11 @@
       if (el && el.value !== mode) el.value = mode;
     });
     const cycleBtn = document.getElementById('btn-list-sort');
+    const sortLabel = sortModeLabel(mode);
     if (cycleBtn) {
-      cycleBtn.title = `Sort: ${sortModeLabel(mode).replace(/^Sorted by /, '')} (tap to change)`;
+      const sortName = `Sort: ${sortLabel}. Tap to change.`;
+      cycleBtn.title = sortName;
+      cycleBtn.setAttribute('aria-label', sortName);
       cycleBtn.classList.toggle('is-custom-sorted', mode !== 'updated');
     }
   }
@@ -504,15 +507,26 @@
   }
 
   function applyTagSection() {
+    collapseMobileNavOnce();
     const section = document.getElementById('tag-section');
     if (!section) return;
     section.open = !prefs.tagsCollapsed;
   }
 
   function applyFolderSection() {
+    collapseMobileNavOnce();
     const section = document.getElementById('folder-section');
     if (!section) return;
     section.open = !prefs.foldersCollapsed;
+  }
+
+  function collapseMobileNavOnce() {
+    if (!compactLayoutActive()) return;
+    if (prefs.mobileNavCollapsed === 1) return;
+    prefs.mobileNavCollapsed = 1;
+    prefs.tagsCollapsed = true;
+    prefs.foldersCollapsed = true;
+    try { localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs)); } catch (e) { /* ignore quota */ }
   }
 
   function applyFilterSection() {
@@ -547,6 +561,7 @@
     applyFolderSection();
     applyFilterSection();
     applyNavRail();
+    syncSortControls();
     bumpIdle();
   }
 
@@ -566,6 +581,10 @@
     if (prefs.navPinned) setNavViewsOpen(false);
   }
   applyTheme();
+  collapseMobileNavOnce();
+  applyTagSection();
+  applyFolderSection();
+  syncSortControls();
   if (window.matchMedia) {
     const scheme = window.matchMedia('(prefers-color-scheme: light)');
     const onScheme = () => {
@@ -3218,6 +3237,14 @@
   function toast(message, isError = false) {
     const el = document.getElementById('toast');
     if (!el) return;
+    const on2fa = currentAppTab() === '2fa';
+    const syncStatus = window.NotesVaultLock?.isBackgroundSyncToast?.(message);
+    if (on2fa && syncStatus) {
+      el.hidden = true;
+      el.textContent = '';
+      document.documentElement.classList.remove('totp-toast-open');
+      return;
+    }
     const locked = document.body.classList.contains('locked') || isUnlockScreenVisible();
     const VL = window.NotesVaultLock;
     const allow = VL?.shouldShowLockScreenToast
@@ -3227,6 +3254,7 @@
       if (!isError || VL?.isBackgroundSyncToast?.(message)) {
         el.hidden = true;
         el.textContent = '';
+        document.documentElement.classList.remove('totp-toast-open');
       }
       return;
     }
@@ -3234,10 +3262,12 @@
     el.textContent = message;
     el.classList.toggle('error', !!isError);
     el.hidden = false;
+    document.documentElement.classList.toggle('totp-toast-open', on2fa);
     clearTimeout(toastTimer);
     const linger = message === 'New note' ? 1400 : 3200;
     toastTimer = setTimeout(() => {
       el.hidden = true;
+      document.documentElement.classList.remove('totp-toast-open');
     }, linger);
   }
 
@@ -3294,6 +3324,18 @@
     syncAppTabButtons(appTab);
     if (ui.shell) ui.shell.hidden = appTab === '2fa';
     if (totpUi.pane) totpUi.pane.hidden = appTab !== '2fa';
+    if (appTab === '2fa') {
+      const toastEl = document.getElementById('toast');
+      if (toastEl && window.NotesVaultLock?.isBackgroundSyncToast?.(toastEl.textContent)) {
+        toastEl.hidden = true;
+        toastEl.textContent = '';
+        document.documentElement.classList.remove('totp-toast-open');
+      } else if (toastEl && !toastEl.hidden) {
+        document.documentElement.classList.add('totp-toast-open');
+      }
+    } else {
+      document.documentElement.classList.remove('totp-toast-open');
+    }
     if (persist) {
       try { sessionStorage.setItem('notes_app_tab', appTab); } catch (err) { /* ignore */ }
     }
@@ -4131,6 +4173,16 @@
     };
     el.title = labels[phase] || message || 'Sync';
     el.setAttribute('aria-label', el.title);
+    const captions = {
+      idle: 'Sync',
+      syncing: 'Syncing',
+      ok: 'Synced',
+      pending: 'Waiting',
+      offline: 'Offline',
+      error: 'Failed',
+    };
+    const caption = document.getElementById('sync-caption');
+    if (caption) caption.textContent = captions[phase] || 'Sync';
     refreshSyncMeta({ state: phase, message });
   }
   NotesStore.setSyncStatusCallback(setSyncIndicator);
@@ -4940,8 +4992,8 @@
   }
 
   function syncVaultLockUi(unlocked = NotesStore.isUnlocked()) {
-    const title = unlocked ? 'Lock vault' : 'Vault locked';
-    const label = unlocked ? 'Vault unlocked' : 'Vault locked';
+    const title = unlocked ? 'Vault unlocked. Tap to lock.' : 'Vault locked. Tap after you unlock.';
+    const label = title;
     ['btn-lock-nav', 'btn-lock-head'].forEach((id) => {
       const btn = document.getElementById(id);
       if (!btn) return;
@@ -15352,6 +15404,7 @@
     applyTagSection();
     applyFolderSection();
     applyFilterSection();
+    syncSortControls();
     if (
       zoomed
       && popstateClosedAt
