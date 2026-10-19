@@ -2144,6 +2144,7 @@
   }
 
   let sessionExpiredAlertShown = false;
+  let sessionExpiredHold = false;
 
   function markJustUnlocked() {
     try {
@@ -2250,10 +2251,15 @@
       try {
         await NotesStore.loadAccount();
         sessionExpiredAlertShown = false;
+        sessionExpiredHold = false;
         return true;
       } catch (err) {
         if (isSessionRevokedError(err)) {
           await wipeAfterRemoteSignOut();
+          return false;
+        }
+        if (isLoginRequiredError(err)) {
+          showExpiredSessionBanner();
           return false;
         }
         if (isTotpRequiredError(err)) totpPending = true;
@@ -2273,10 +2279,15 @@
         csrf: data.csrf,
       });
       sessionExpiredAlertShown = false;
+      sessionExpiredHold = false;
       return true;
     } catch (err) {
       if (isSessionRevokedError(err)) {
         await wipeAfterRemoteSignOut();
+        return false;
+      }
+      if (isLoginRequiredError(err)) {
+        showExpiredSessionBanner();
         return false;
       }
       if (isTotpRequiredError(err)) totpPending = true;
@@ -2551,6 +2562,11 @@
         updateDocZoomLabel();
         maybeUpgradePreviewQuality();
       },
+      onScroll: () => {
+        if (stage._docZoomKind === 'pdf' && NotesPreview.schedulePdfViewportTiles) {
+          NotesPreview.schedulePdfViewportTiles(stage);
+        }
+      },
       onDoubleTap: () => {
         clearTimeout(docChromeTapTimer);
         docChromeTapTimer = null;
@@ -2728,7 +2744,9 @@
   function applyDocWhiteBorders() {
     const stage = ui.docStage;
     if (!stage) return;
-    const media = [...stage.querySelectorAll('canvas, img')].filter((el) => !el.classList.contains('doc-hit-canvas'));
+    const media = [...stage.querySelectorAll('canvas, img')].filter((el) => (
+      !el.classList.contains('doc-hit-canvas') && !el.classList.contains('doc-page-tile')
+    ));
     media.forEach((el) => {
       if (docViewEnhance.whiteBorders) {
         if (el.tagName === 'CANVAS') whitenDocCanvas(el);
@@ -2844,6 +2862,10 @@
     try {
       return await NotesStore.syncWhileLocked({ quiet });
     } catch (err) {
+      if (isLoginRequiredError(err)) {
+        showExpiredSessionBanner();
+        return false;
+      }
       if (err && (err.status === 401 || err.status === 403)) {
         NotesStore.emitSync('pending', 'Sign in to sync');
       } else if (NotesStore.isProbablyOffline?.(err)) {
@@ -2856,6 +2878,7 @@
   }
 
   function runBackgroundSync() {
+    if (sessionExpiredHold) return;
     if (NotesStore.isUnlocked()) {
       syncNow({ quiet: true, force: true }).catch(() => {});
       return;
@@ -2864,6 +2887,7 @@
   }
 
   function kickBackgroundSync() {
+    if (sessionExpiredHold) return;
     if (NotesStore.isUnlocked() && isVaultReadyForSync()) {
       syncNow({ quiet: true, force: true }).catch(() => {});
       return;
@@ -4149,7 +4173,9 @@
       return;
     }
     if (phase === 'pending') {
-      meta.textContent = when ? `Waiting · last ${when}` : 'Waiting to sync';
+      meta.textContent = sessionExpiredHold
+        ? 'Not syncing — sign in again'
+        : (when ? `Waiting · last ${when}` : 'Waiting to sync');
       return;
     }
     if (phase === 'ok') endVaultPull();
@@ -4370,10 +4396,26 @@
     const label = document.getElementById('sync-status-text');
     const retry = document.getElementById('sync-status-retry');
     const relock = document.getElementById('sync-status-relock');
+    const signin = document.getElementById('sync-status-signin');
     if (!banner) return;
+    if ((!mode || mode === 'ready') && sessionExpiredHold) {
+      mode = 'session';
+      text = 'Not syncing — sign in again';
+    }
     if (!mode || mode === 'ready') {
       banner.hidden = true;
       banner.dataset.mode = 'ready';
+      if (signin) signin.hidden = true;
+      setSyncBannerProgress({ visible: false });
+      return;
+    }
+    if (mode === 'session') {
+      banner.hidden = false;
+      banner.dataset.mode = 'session';
+      if (label) label.textContent = text || 'Not syncing — sign in again';
+      if (retry) retry.hidden = true;
+      if (relock) relock.hidden = true;
+      if (signin) signin.hidden = false;
       setSyncBannerProgress({ visible: false });
       return;
     }
@@ -4397,6 +4439,7 @@
     const actionable = mode === 'error' || mode === 'timeout';
     if (retry) retry.hidden = !actionable;
     if (relock) relock.hidden = !actionable;
+    if (signin) signin.hidden = true;
   }
 
   function clearVaultDownloadTimeout() {
@@ -5133,6 +5176,8 @@
     hideUnlockSessionHint();
     const hint = document.getElementById('unlock-session-hint');
     if (hint) hint.textContent = '';
+    const signIn = document.getElementById('unlock-session-signin');
+    if (signIn) signIn.hidden = true;
     if (unlockError) {
       unlockError.textContent = '';
       unlockError.hidden = true;
@@ -5431,8 +5476,18 @@
     return err;
   }
 
-  function redirectToExpiredLogin() {
-    const email = String(NotesStore.cachedAccount()?.email || '').trim();
+  function expiredSessionEmail() {
+    const cached = String(NotesStore.cachedAccount()?.email || '').trim();
+    if (cached) return cached;
+    try {
+      return String(localStorage.getItem('notes_email') || '').trim();
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function armExpiredLoginLinks() {
+    const email = expiredSessionEmail();
     const params = new URLSearchParams();
     if (email) params.set('email', email);
     params.set('reason', 'session-expired');
@@ -5440,6 +5495,34 @@
       const note = noteIdFromUrl();
       if (note) params.set('note', note);
     } catch (err) { /* keep the sign-in url */ }
+    const href = `/login?${params.toString()}`;
+    for (const id of ['unlock-session-signin', 'sync-status-signin']) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      el.href = href;
+      el.hidden = false;
+    }
+    return href;
+  }
+
+  function showExpiredSessionBanner() {
+    sessionExpiredHold = true;
+    stopChangePoll();
+    armExpiredLoginLinks();
+    showSyncBanner('session', 'Not syncing — sign in again');
+    NotesStore.emitSync('pending', 'Not syncing — sign in again');
+  }
+
+  function redirectToExpiredLogin() {
+    const email = expiredSessionEmail();
+    const params = new URLSearchParams();
+    if (email) params.set('email', email);
+    params.set('reason', 'session-expired');
+    try {
+      const note = noteIdFromUrl();
+      if (note) params.set('note', note);
+    } catch (err) { /* keep the sign-in url */ }
+    armExpiredLoginLinks();
     location.assign(`/login?${params.toString()}`);
   }
 
@@ -5460,6 +5543,8 @@
 
   function abortUnlockAttempt(err) {
     if (isLoginRequiredError(err)) {
+      sessionExpiredHold = true;
+      stopChangePoll();
       resetLoginProgress();
       try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
       showUnlockError(SESSION_EXPIRED_MESSAGE);
@@ -5748,6 +5833,7 @@
         if (data.password_changed_at) NotesStore.ackPasswordChanged(data.password_changed_at);
         return { ok: true, via: 'vault', totpRequired: !!data.totp_required };
       } catch (err) {
+        if (isLoginRequiredError(err)) return { ok: false, sessionExpired: true };
         if (err?.status === 401) {
           return { ok: false, wrongPassword: true };
         }
@@ -5762,6 +5848,7 @@
         const via = data.login_repaired ? 'login' : 'srp';
         return { ok: true, via, totpRequired: !!data.totp_required };
       } catch (err) {
+        if (isLoginRequiredError(err)) return { ok: false, sessionExpired: true };
         if (err?.status === 429) return { ok: false, rateLimited: true };
         if (err?.status === 401 || err?.repairExhausted || /invalid credentials/i.test(String(err?.message || ''))) {
           return { ok: false, wrongPassword: true };
@@ -5870,7 +5957,13 @@
         })();
         const loadVaultLocal = async () => {
           try {
-            const result = await NotesStore.loadLocal({ onPrimaryReady: revealPrimaryUnlock });
+            const result = await NotesStore.loadLocal({
+              onPrimaryReady: async () => {
+                const server = await serverCheck;
+                if (server?.err && isLoginRequiredError(server.err)) return;
+                await revealPrimaryUnlock();
+              },
+            });
             return {
               ...result,
               localAllFailed: !!(result.failed && !result.opened),
@@ -5899,9 +5992,17 @@
           }
         }
         if (localAllFailed) {
+          if (isLoginRequiredError(serverResult.err)) {
+            NotesStore.lock();
+            throw sessionExpiredError();
+          }
           let sessionValid = !!serverResult.ok || await serverSessionLooksValid();
           if (!sessionValid) {
             const repaired = await repairUnlockWithPassword(cached.email, clean);
+            if (repaired.sessionExpired) {
+              NotesStore.lock();
+              throw sessionExpiredError();
+            }
             if (repaired.wrongPassword) rejectWrongUnlockPassword();
             if (repaired.rateLimited) {
               NotesStore.lock();
@@ -5955,6 +6056,7 @@
           // vault key is proven below.
         } else {
           const err = serverResult.err || new Error('Could not verify password');
+          if (isLoginRequiredError(err)) throw sessionExpiredError();
           if (err.status === 401 && (await serverSessionLooksValid())) {
             // Already signed in with the login password. Unlock password may
             // be the older phone vault password — allow crypto unlock + sync.
@@ -6065,6 +6167,7 @@
         } catch (err) {
           /* ignore */
         }
+        sessionExpiredHold = false;
         await establishServerSessionAfterVaultUnlock(clean);
         await finishUnlocked({ skipReveal: unlockPrimaryRevealed });
         if (passwordProven) persistDevicePassword(clean);
@@ -6109,6 +6212,7 @@
           /* ignore quota */
         }
       }
+      sessionExpiredHold = false;
       await establishServerSessionAfterVaultUnlock(clean);
       await finishUnlocked();
     })();
@@ -10171,6 +10275,7 @@
         await NotesPreview.ensurePdf();
         await paintDocumentSearch(id, ui.docStage, entry, query);
         attachDocZoom(ui.docStage, 'pdf');
+        maybeUpgradePreviewQuality();
         if (query) finishDocPreviewFind(ui.docStage, query, hitIndex);
         return;
       }
@@ -18191,6 +18296,10 @@
   }
 
   function syncNow({ quiet = false, full = false, force = false } = {}) {
+    if (sessionExpiredHold) {
+      showExpiredSessionBanner();
+      return Promise.resolve(false);
+    }
     repairUnlockShellState();
     if (!NotesStore.isUnlocked()) {
       if (!quiet) return handleLockedManualSync();
@@ -18282,6 +18391,10 @@
           return account;
         })
         .catch((err) => {
+          if (isLoginRequiredError(err)) {
+            showExpiredSessionBanner();
+            return false;
+          }
           if (err && (err.status === 401 || err.status === 403) && !skipLogin) {
             // Account session expired: do not sync until signed in again.
             return ensureServerSession()
@@ -18375,6 +18488,7 @@
   // pull when another device pushed something — keeps devices side by side in
   // step within ~CHANGE_POLL_MS without re-sending known hashes every time.
   async function pollRemoteChanges() {
+    if (sessionExpiredHold) return;
     if (changePollInFlight) return;
     if (!NotesStore.isUnlocked()) {
       changePollInFlight = true;
@@ -18398,13 +18512,17 @@
         await syncNow({ quiet: true, force: true });
       }
     } catch (err) {
-      /* offline or session expired — the regular sync path reports that */
+      if (isLoginRequiredError(err)) showExpiredSessionBanner();
     } finally {
       changePollInFlight = false;
     }
   }
 
   function scheduleChangePoll({ background = false } = {}) {
+    if (sessionExpiredHold) {
+      stopChangePoll();
+      return;
+    }
     const nextBackground = !!background;
     const ms = nextBackground ? BACKGROUND_CHANGE_POLL_MS : CHANGE_POLL_MS;
     if (changePollTimer && changePollBackground === nextBackground) return;
@@ -18434,7 +18552,9 @@
     if (NotesStore.isUnlocked()) {
       NotesStore.loadAccount()
         .then((account) => checkRemoteVaultPasswordChange(account))
-        .catch(() => {});
+        .catch((err) => {
+          if (isLoginRequiredError(err)) showExpiredSessionBanner();
+        });
     }
     // Skip heavy work while the user is typing in search or any field.
     if (iosTune()?.isTypingInField?.()) {
@@ -18446,7 +18566,7 @@
     // Indexing waits until that sync lands so a file already read on another
     // device is not read again here (that second pass was crashing the PWA).
     const synced = syncNow({ quiet: true, force: true });
-    scheduleChangePoll();
+    if (!sessionExpiredHold) scheduleChangePoll();
     ensureServerSession().catch(() => {});
     Promise.resolve(synced).finally(() => {
       if (iosTune()?.isTypingInField?.()) return;

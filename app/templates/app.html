@@ -459,6 +459,7 @@
         <p id="unlock-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" hidden></p>
         <p id="unlock-recovery-hint" class="auth-hint" hidden>If you changed it in Settings, the vault password is different from the password you use to sign in. They start as the same password.</p>
         <p id="unlock-session-hint" class="auth-hint" hidden>Your sign-in expired. Enter your vault password to continue and resume sync.</p>
+        <a id="unlock-session-signin" class="btn ghost block" hidden href="/login?reason=session-expired">Sign in again</a>
         <p id="unlock-update-hint" class="auth-hint ocr-stale" hidden aria-live="polite"></p>
         <p id="unlock-status" class="unlock-status muted" hidden aria-live="polite"></p>
         <div id="unlock-progress" class="unlock-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Unlock progress">
@@ -758,6 +759,7 @@
         <div class="sync-status-banner-actions">
           <button type="button" class="btn ghost sm" id="sync-status-retry" hidden>Retry</button>
           <button type="button" class="btn ghost sm" id="sync-status-relock" hidden>Unlock again</button>
+          <a class="btn ghost sm" id="sync-status-signin" hidden href="/login?reason=session-expired">Sign in again</a>
         </div>
       </div>
       <div class="note-list-head" id="note-list-head" hidden>
