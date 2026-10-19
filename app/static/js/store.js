@@ -3596,7 +3596,7 @@ const NotesStore = (() => {
     if (!folder || folder.content?.type !== 'folder') return false;
     for (const note of listNotes()) {
       if (note.content.folder_id !== uuid) continue;
-      upsert(note.uuid, { ...note.content, folder_id: '' });
+      upsert(note.uuid, { ...note.content, folder_id: '' }, { touchUpdatedAt: false, touchSyncOnly: true });
     }
     remove(uuid);
     return true;
@@ -3961,7 +3961,7 @@ const NotesStore = (() => {
     return state.items.get(uuid);
   }
 
-  function upsert(uuid, content, { recordRevision = false, touchUpdatedAt = true, skipDirty = false } = {}) {
+  function upsert(uuid, content, { recordRevision = false, touchUpdatedAt = true, touchSyncOnly = false, skipDirty = false } = {}) {
     if (state.cryptoKey && !state.keyVerified) throw unverifiedKeyError();
     const existing = state.items.get(uuid);
     if (recordRevision && existing?.content?.type === 'note') {
@@ -3983,14 +3983,16 @@ const NotesStore = (() => {
       }
     }
     if (content.type === 'note') attachLiveIds(content, uuid);
-    if (touchUpdatedAt) {
+    if (touchUpdatedAt && !touchSyncOnly) {
       content.updated_at = new Date().toISOString();
     } else if (!content.updated_at) {
       content.updated_at = existing?.content?.updated_at
         || existing?.content?.created_at
         || new Date().toISOString();
     }
-    const itemTs = touchUpdatedAt
+    const itemTs = touchSyncOnly
+      ? Math.max(Date.now() / 1000, (Number(existing?.updated_at) || 0) + 0.001)
+      : touchUpdatedAt
       ? Date.now() / 1000
       : Math.max(
         Number(existing?.updated_at) || 0,

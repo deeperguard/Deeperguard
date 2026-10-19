@@ -1609,7 +1609,28 @@
     if (!NotesSearch.noteIsEmptyStub?.(note)) return false;
     NotesStore.remove(id, { force: true });
     if (currentId === id) currentId = null;
+    if (listSelectionId === id) listSelectionId = null;
     return true;
+  }
+
+  function abandonEmptyUploadDraft(noteId) {
+    if (!discardEmptyDraftNote(noteId)) return false;
+    if (!currentId) {
+      ui.shell?.classList.remove('editor-open');
+      if (ui.editor) ui.editor.hidden = true;
+      updateEmptyStateVisibility();
+    }
+    renderNotes();
+    renderFolders();
+    return true;
+  }
+
+  function listedActiveNoteCount() {
+    return NotesStore.listNotes().filter((note) => {
+      const content = note?.content || {};
+      if (content.trashed || content.archived) return false;
+      return noteShouldList(note);
+    }).length;
   }
 
   function handleEditorUndoShortcut(event) {
@@ -5925,16 +5946,56 @@
     location.replace(next);
   }
 
+  async function refreshCsrfFromAccount() {
+    let account = null;
+    try {
+      if (window.__notesAccountPromise) account = await window.__notesAccountPromise;
+    } catch (err) {
+      account = null;
+    }
+    if (!account?.csrf && window.__notesCsrf) {
+      NotesStore.setCsrf(window.__notesCsrf);
+      return window.__notesCsrf;
+    }
+    if (!account?.csrf) {
+      try {
+        const res = await fetch('/api/account', { cache: 'no-store', credentials: 'same-origin' });
+        if (res.ok) account = await res.json();
+      } catch (err) {
+        account = null;
+      }
+    }
+    if (account?.csrf) {
+      window.__notesCsrf = account.csrf;
+      NotesStore.setCsrf(account.csrf);
+      return account.csrf;
+    }
+    return NotesStore.csrf() || '';
+  }
+
   async function signOutCompletely() {
     try {
       await NotesStore.flush();
     } catch (err) {
       /* still leave */
     }
-    try {
-      await NotesStore.api('/api/auth/logout', { method: 'POST', body: '{}' });
-    } catch (err) {
-      /* still leave */
+    // /app is a cacheable shell with an empty CSRF attribute. A locked reload
+    // still has the session cookie, so logout must use the token from /api/account.
+    await refreshCsrfFromAccount();
+    let loggedOut = false;
+    for (let attempt = 0; attempt < 2 && !loggedOut; attempt += 1) {
+      try {
+        await NotesStore.api('/api/auth/logout', { method: 'POST', body: '{}' });
+        loggedOut = true;
+      } catch (err) {
+        if (attempt === 0 && err && (err.status === 400 || err.status === 403)) {
+          try { NotesStore.setCsrf(''); } catch (e) { /* ignore */ }
+          window.__notesCsrf = '';
+          await refreshCsrfFromAccount();
+          continue;
+        }
+        break;
+      }
     }
     await clearLocalVaultAndLeave('/login');
   }
@@ -6452,7 +6513,7 @@
       const open = !!openMap[folder.uuid];
       const active = currentFolder === folder.uuid ? ' active' : '';
       const kids = notes.map((note) => {
-        const on = currentId === note.uuid ? ' active' : '';
+        const on = (editorNoteOpen() && currentId === note.uuid && currentFolder === folder.uuid) ? ' active' : '';
         return `<button type="button" class="folder-note${on}" data-folder-note="${escapeAttr(note.uuid)}">${escapeHtml(NotesSearch.effectiveNoteTitle(note) || 'Title')}</button>`;
       }).join('');
       return `<div class="folder-block${active}${open ? ' is-open' : ''}" data-folder="${escapeAttr(folder.uuid)}">
@@ -6786,8 +6847,14 @@
     return `${currentFilter}:${currentTag || ''}:${currentFolder || ''}:${query}:${sfKey}:${prefs.sort}:${activeListNoteId()}:${ids}`;
   }
 
+  function editorNoteOpen() {
+    return !!(currentId && ui.editor && !ui.editor.hidden);
+  }
+
   function activeListNoteId() {
-    return listSelectionId || currentId || '';
+    // Highlight only the note that is actually open. A folder click or a
+    // closed editor must not leave a stale row selected in another view.
+    return editorNoteOpen() ? currentId : '';
   }
 
   function markActiveNoteRow() {
@@ -10900,9 +10967,15 @@
     if (!note || note.content?.type !== 'note') return;
     const next = String(folderId || '');
     if ((note.content.folder_id || '') === next) return;
-    NotesStore.upsert(currentId, { ...note.content, folder_id: next });
+    // Folder membership is not an edit. Keep content.updated_at so the list
+    // and the editor keep showing the same relative time.
+    NotesStore.upsert(currentId, { ...note.content, folder_id: next }, {
+      touchUpdatedAt: false,
+      touchSyncOnly: true,
+    });
     renderFolders();
     renderNotes();
+    updateNoteMeta(NotesStore.get(currentId));
     toast(next ? 'Moved to folder' : 'Removed from folder');
   }
 
@@ -13313,10 +13386,13 @@
         contentSha256,
         sourceSha256,
       });
-      if (duplicate) {
+        if (duplicate) {
         const targetNoteId = (!createIfNeeded && currentId) ? currentId : null;
         const choice = await showDuplicateDialog(duplicate, storeFile, targetNoteId);
-        if (choice !== 'keep') return;
+        if (choice !== 'keep') {
+          if (choice !== 'open') abandonEmptyUploadDraft(targetNoteId);
+          return;
+        }
         allowDuplicate = true;
       }
     }
@@ -13381,9 +13457,10 @@
       }
       renderNotes();
     } catch (err) {
+      let duplicateChoice = '';
       if (isDuplicateUploadError(err.message) && !allowDuplicate) {
-        const choice = await showDuplicateDialog(null, storeFile, id, err.message);
-        if (choice === 'keep') {
+        duplicateChoice = await showDuplicateDialog(null, storeFile, id, err.message);
+        if (duplicateChoice === 'keep') {
           const retry = await ingestDocument(storeFile, {
             createIfNeeded: false,
             title: docName,
@@ -13402,6 +13479,8 @@
         NotesStore.remove(id);
         if (currentId === id) closeEditor();
         else renderNotes();
+      } else if (duplicateChoice && duplicateChoice !== 'keep' && duplicateChoice !== 'open') {
+        abandonEmptyUploadDraft(id);
       }
       return;
     } finally {
@@ -13445,6 +13524,8 @@
       NotesStore.remove(noteId);
       if (currentId === noteId) closeEditor();
       else renderNotes();
+    } else if (noteId && !NotesStore.listAttachments(noteId).length) {
+      abandonEmptyUploadDraft(noteId);
     }
     if (list.length > 1) {
       toast(saved ? `Saved ${saved} file${saved === 1 ? '' : 's'} on one note` : 'No documents saved', !saved);
@@ -14497,6 +14578,7 @@
     unbindEditorKeyboardInset();
     ui.shell.classList.remove('editor-open');
     currentId = null;
+    listSelectionId = null;
     deferredOpenNoteId = null;
     rememberOpen(null);
     ui.editor.hidden = true;
@@ -14504,6 +14586,7 @@
     closeDocPreview();
     markActiveNoteRow();
     renderNotes();
+    renderFolders();
     requestAnimationFrame(() => markActiveNoteRow());
     // Never history.back() here — on iOS that restores bfcache and fires pageshow,
     // which re-runs foreground sync and feels like a full app reload.
@@ -16832,27 +16915,51 @@
     tick();
   }
 
+  function resendStatusElement(buttonId) {
+    const statusId = buttonId === 'btn-backup-verify-resend'
+      ? 'backup-verify-resend-status'
+      : 'account-verify-resend-status';
+    return document.getElementById(statusId);
+  }
+
+  function showResendStatus(buttonId, message, isError) {
+    const el = resendStatusElement(buttonId);
+    if (!el) return;
+    el.textContent = message || '';
+    el.hidden = !message;
+    el.classList.toggle('error', !!isError);
+    el.setAttribute('role', isError ? 'alert' : 'status');
+    el.setAttribute('aria-live', isError ? 'assertive' : 'polite');
+  }
+
   async function resendVerificationCode(path, buttonId) {
     const btn = document.getElementById(buttonId);
     if (!btn || btn.disabled) return;
     btn.disabled = true;
     try {
-      await NotesStore.api(path, { method: 'POST', body: '{}' });
-      toast('Verification code sent');
-      startResendCooldown(buttonId, 60);
+      const data = await NotesStore.api(path, { method: 'POST', body: '{}' });
+      const wait = Number(data && data.retry_after) || 60;
+      const sent = 'Verification code sent';
+      showResendStatus(buttonId, sent, false);
+      toast(sent);
+      startResendCooldown(buttonId, wait);
     } catch (err) {
       const wait = Number(err.retryAfter) || 0;
       if (err.status === 429 && wait > 0) {
-        toast(`Please wait ${Math.ceil(wait)} s before requesting another code`, true);
+        const msg = (err.message && /Please wait/i.test(err.message))
+          ? err.message
+          : `Please wait ${Math.ceil(wait)} s before requesting another code`;
+        showResendStatus(buttonId, msg, true);
+        toast(msg, true);
         startResendCooldown(buttonId, wait);
         return;
       }
-      if (err.status === 429) {
-        toast(err.message || 'Too many verification emails sent today. Try again tomorrow or use the code already emailed.', true);
-        return;
-      }
       btn.disabled = false;
-      toast(err.message || 'Could not send a code', true);
+      const msg = err.status === 429
+        ? (err.message || 'Too many verification emails sent today. Try again tomorrow or use the code already emailed.')
+        : (err.message || 'Could not send a code');
+      showResendStatus(buttonId, msg, true);
+      toast(msg, true);
     }
   }
 
@@ -17768,7 +17875,7 @@
           if (synced === false) return;
           markNetworkReachable();
           pullGlobalPrefs();
-          const noteCount = NotesSearch.countLibraryNotes(NotesStore.listNotes());
+          const noteCount = listedActiveNoteCount();
           if (noteCount > 0) clearVaultSyncError();
           vaultDownloadStalled = false;
           showSyncBanner('ready');

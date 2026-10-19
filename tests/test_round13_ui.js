@@ -57,7 +57,7 @@ assert.ok(!/\son[a-z]+\s*=/i.test(html));
 // 6. Duplicate upload can attach anyway or cancel.
 assert.ok(html.includes('id="confirm-extra"'));
 assert.ok(appJs.includes("extraLabel: 'Attach anyway'"));
-assert.ok(appJs.includes("if (choice !== 'keep') return;"));
+assert.ok(appJs.includes("if (choice !== 'keep')"));
 assert.ok(appJs.includes('intentionalCopy: !!allowDuplicate'));
 assert.ok(appJs.includes("cancelLabel: 'Cancel'"));
 

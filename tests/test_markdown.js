@@ -23,6 +23,17 @@ assert.doesNotMatch(dataUri, /<a href=/);
 const mailto = render('[m](mailto:user@example.com)');
 assert.match(mailto, /<a href="mailto:user@example.com"/);
 
+const bare = render('See http://example.com and <https://example.com/a> today.');
+assert.match(bare, /<a href="http:\/\/example.com" rel="noopener noreferrer" target="_blank">http:\/\/example.com<\/a>/);
+assert.match(bare, /<a href="https:\/\/example.com\/a" rel="noopener noreferrer" target="_blank">https:\/\/example.com\/a<\/a>/);
+const jsAutolink = render('javascript:alert(1) and <javascript:alert(1)>');
+assert.doesNotMatch(jsAutolink, /<a href="javascript:/);
+const coded = render('`http://example.com` stays code');
+assert.match(coded, /<code>http:\/\/example.com<\/code>/);
+assert.doesNotMatch(coded, /<code><a /);
+const blanks = render('a\n\n\nb');
+assert.match(blanks, /<p><br><\/p>/);
+
 const flipped = toggleTaskAt('- [ ] one\n- [x] two', 1);
 assert.strictEqual(flipped, '- [ ] one\n- [ ] two');
 assert.strictEqual(toggleTaskAt('- [ ] one', 0), '- [x] one');
