@@ -476,6 +476,10 @@
             }
             localStorage.setItem('notes_email', nextEmail);
             if (window.NotesIDB && NotesIDB.setAccount) NotesIDB.setAccount(nextEmail);
+            if (account.csrf) {
+              window.__notesCsrf = account.csrf;
+              sessionStorage.setItem('notes_csrf', account.csrf);
+            }
             if (account.kdf_salt) localStorage.setItem('notes_kdf_salt', account.kdf_salt);
             if (account.vault_kdf_version) localStorage.setItem('notes_vault_kdf_version', String(account.vault_kdf_version));
           } catch (e) {}
@@ -1248,6 +1252,7 @@
               <button type="button" id="btn-account-verify" class="btn primary">Verify email</button>
               <button type="button" id="btn-account-verify-resend" class="btn">Resend code</button>
             </div>
+            <p id="account-verify-resend-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
           </div>
           <p id="privacy-status" class="settings-hint settings-privacy-status">Checking privacy status…</p>
           <details class="settings-advanced" id="technical-details">
@@ -1460,6 +1465,7 @@
               <button type="button" id="btn-backup-verify" class="btn primary">Verify backup email</button>
               <button type="button" id="btn-backup-verify-resend" class="btn">Resend code</button>
             </div>
+            <p id="backup-verify-resend-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
           </div>
           <label class="settings-row checkbox"><span>Daily encrypted email backup</span><input id="backup-enabled" type="checkbox"></label>
           <p id="backup-verified-hint" class="settings-hint">Backups are sent only after this address is verified with a code.</p>

@@ -545,10 +545,12 @@ const NotesSearch = (() => {
 
   /** Last modified time (ms), newest-first lists — prefers content.updated_at, then sync row updated_at. */
   function updatedStamp(note) {
+    // content.updated_at is the user-visible edit time. A folder move bumps
+    // the sync row only, and must not make the list say "just now".
     const edited = parseNoteTime(note?.content?.updated_at);
+    if (edited > 0) return edited;
     const item = parseNoteTime(note?.updated_at);
-    const best = Math.max(edited, item);
-    if (best > 0) return best;
+    if (item > 0) return item;
     return parseNoteTime(note?.content?.created_at);
   }
 

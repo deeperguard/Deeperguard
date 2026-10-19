@@ -44,6 +44,7 @@ from verification_send_limit import (
     backup_attachment_cap_message,
     check_backup_attachment_send,
     record_backup_attachment_send,
+    verification_retry_after,
 )
 
 class DynamicDomainSessionInterface(SecureCookieSessionInterface):
@@ -2437,6 +2438,14 @@ def api_account_email_verify():
     return jsonify({"ok": True, "email_verified": True})
 
 
+def _verification_sent_response(user, recipient: str | None = None):
+    """Successful explicit resend. retry_after is the server cooldown the button should show."""
+    target = str(recipient or (user["email"] if user else "") or "").strip().lower()
+    uid = int(user["id"]) if user else 0
+    wait = verification_retry_after(uid, target) if uid and target else 60
+    return jsonify({"ok": True, "sent": True, "retry_after": wait})
+
+
 def _verification_limited_response(exc: VerificationSendLimited):
     payload = {"error": exc.message}
     code = getattr(exc, "code", "") or ""
@@ -2467,7 +2476,7 @@ def api_account_email_resend():
         email_verify.send_account_code(user, strict=True)
     except VerificationSendLimited as exc:
         return _verification_limited_response(exc)
-    return jsonify({"ok": True, "sent": True})
+    return _verification_sent_response(user)
 
 
 @app.post("/api/backup/email/verify")
@@ -2503,7 +2512,7 @@ def api_backup_email_resend():
             email_verify.send_backup_code(user, recipient, strict=True)
     except VerificationSendLimited as exc:
         return _verification_limited_response(exc)
-    return jsonify({"ok": True, "sent": True})
+    return _verification_sent_response(user, recipient)
 
 
 @app.get("/contact")

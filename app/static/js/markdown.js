@@ -72,7 +72,52 @@
       const body = highlightFence(fence.code, fence.lang);
       return `<pre class="code-preview"${fence.lang ? ` data-lang="${escapeHtml(fence.lang)}"` : ''}><code${lang}>${body}</code></pre>`;
     });
+    html = autolinkOutsideTags(html);
     return wrapMarkdownBlocks(html);
+  }
+
+  function safeAutolinkHref(raw) {
+    const href = String(raw || '').replace(/&amp;/g, '&').trim();
+    if (!/^(https?:\/\/|mailto:)/i.test(href)) return '';
+    if (/[\s<>"]/.test(href)) return '';
+    return href;
+  }
+
+  function autolinkAnchor(href) {
+    const safe = safeAutolinkHref(href);
+    if (!safe) return '';
+    return `<a href="${escapeAttr(safe)}" rel="noopener noreferrer" target="_blank">${escapeHtml(safe)}</a>`;
+  }
+
+  function linkifyPlain(text) {
+    const chunks = String(text || '').split(/(&lt;(?:https?:\/\/|mailto:)[^&\s]+&gt;)/gi);
+    return chunks.map((chunk, index) => {
+      if (index % 2 === 1) {
+        const raw = chunk.slice(4, -4);
+        return autolinkAnchor(raw) || chunk;
+      }
+      return chunk.replace(/(^|[\s(])((?:https?:\/\/|mailto:)[^\s<]+)/gi, (full, lead, url) => {
+        const trimmed = url.replace(/[.,;:!?)]+$/, '');
+        const anchor = autolinkAnchor(trimmed);
+        if (!anchor) return full;
+        return `${lead}${anchor}${url.slice(trimmed.length)}`;
+      });
+    }).join('');
+  }
+
+  function autolinkOutsideTags(html) {
+    const parts = String(html || '').split(/(<[^>]+>)/g);
+    let skip = 0;
+    return parts.map((part) => {
+      if (part.startsWith('<')) {
+        const name = part.slice(1).trim();
+        if (/^\/(code|pre|a)\b/i.test(name)) skip = Math.max(0, skip - 1);
+        else if (/^(code|pre|a)\b/i.test(name) && !/\/\s*>$/.test(part)) skip += 1;
+        return part;
+      }
+      if (skip) return part;
+      return linkifyPlain(part);
+    }).join('');
   }
 
   function wrapMarkdownBlocks(html) {
