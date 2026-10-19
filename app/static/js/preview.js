@@ -986,16 +986,22 @@ const NotesPreview = (() => {
     return Math.min(MAX_PAGE_DPR, Math.max(2, dpr));
   }
 
-  async function renderPdfPage(doc, pageNum, maxWidth = 900, query = '', boxes = []) {
+  async function renderPdfPage(doc, pageNum, maxWidth = 900, query = '', boxes = [], limits = {}) {
     const page = await doc.getPage(pageNum);
     const base = page.getViewport({ scale: 1 });
     const dpr = pageBitmapScale();
     const fitScale = Math.min(4, Math.max(0.2, (maxWidth || 900) / (base.width || 1)));
     let scale = fitScale * dpr;
+    const pixelCap = Number(limits.maxPixels) > 0 ? Number(limits.maxPixels) : MAX_CANVAS_PIXELS;
+    const edgeCap = Number(limits.maxEdge) > 0 ? Number(limits.maxEdge) : 0;
+    if (edgeCap > 0) {
+      const longEdge = Math.max(base.width || 1, base.height || 1) * scale;
+      if (longEdge > edgeCap) scale *= edgeCap / longEdge;
+    }
     // Keep every page canvas under the platform pixel budget.
     const rawPixels = (base.width * scale) * (base.height * scale);
-    if (rawPixels > MAX_CANVAS_PIXELS) {
-      scale *= Math.sqrt(MAX_CANVAS_PIXELS / rawPixels);
+    if (rawPixels > pixelCap) {
+      scale *= Math.sqrt(pixelCap / rawPixels);
     }
     const viewport = page.getViewport({ scale });
     const layoutWidth = Math.max(1, Math.ceil(base.width * fitScale));
@@ -1053,7 +1059,7 @@ const NotesPreview = (() => {
     return true;
   }
 
-  async function renderPdfDocument(bytes, container, { maxPages = MAX_PDF_PAGES, maxWidth, query, ocrText, ocrBoxes, showExcerpt = true, deferSwap = false, keepBaseWidth = false } = {}) {
+  async function renderPdfDocument(bytes, container, { maxPages = MAX_PDF_PAGES, maxWidth, query, ocrText, ocrBoxes, showExcerpt = true, deferSwap = false, keepBaseWidth = false, maxPixels = 0, maxEdge = 0 } = {}) {
     const needle = String(query || '').trim();
     const host = container?.closest?.('.doc-zoom-host') || container;
     const target = container?.matches?.('.doc-zoom-layer')
@@ -1076,7 +1082,7 @@ const NotesPreview = (() => {
     const width = Math.max(240, maxWidth || target.clientWidth || container?.clientWidth || 900);
     let embeddedHits = 0;
     for (let i = 1; i <= pages; i += 1) {
-      const page = await renderPdfPage(doc, i, width, needle, ocrBoxes);
+      const page = await renderPdfPage(doc, i, width, needle, ocrBoxes, { maxPixels, maxEdge });
       if (page.querySelector('.doc-search-hit')) embeddedHits += 1;
       sink.appendChild(page);
     }
@@ -1133,8 +1139,12 @@ const NotesPreview = (() => {
     const zoom = Math.max(1, Number(scale) || 1);
     const widthChanged = Math.abs(cssWidth - (state.baseWidth || cssWidth)) > 48;
     if (!widthChanged && zoom < 1.25) return false;
-    const targetWidth = Math.min(4096, Math.round(cssWidth * Math.min(zoom, 4)));
-    if (targetWidth <= (state.renderedWidth || 0) * 1.12) return false;
+    // Backing store follows the zoomed CSS size × pageBitmapScale (at least 2).
+    // renderPdfPage multiplies maxWidth by that scale, then clamps the long
+    // edge to 8192px and the bitmap to 16M pixels.
+    const bitmap = pageBitmapScale();
+    const targetWidth = Math.round(cssWidth * Math.min(zoom, 4));
+    if (!widthChanged && targetWidth * bitmap <= (state.renderedWidth || 0) * bitmap * 1.12) return false;
     state.upgrading = true;
     try {
       const layer = host.querySelector('.doc-zoom-layer') || host;
@@ -1143,6 +1153,8 @@ const NotesPreview = (() => {
       const zoomCtl = host._docZoom;
       await renderPdfDocument(state.bytes, layer, {
         maxWidth: targetWidth,
+        maxPixels: 16000000,
+        maxEdge: 8192,
         query: state.query,
         ocrText: state.ocrText,
         ocrBoxes: state.ocrBoxes,

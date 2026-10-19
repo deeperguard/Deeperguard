@@ -11,6 +11,7 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="notes-build" content="{{ build }}">
   <title>Deeperguard</title>
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png?v={{ build }}">
   <link rel="manifest" href="/manifest.json">
@@ -172,12 +173,30 @@
           } else {
             document.documentElement.removeAttribute('data-notes-boot');
           }
+          if (freshPassword || justRegistered) {
+            document.documentElement.setAttribute('data-notes-session', 'boot');
+          } else if (salt) {
+            document.documentElement.setAttribute('data-notes-session', 'ready');
+          }
         }
       } catch (e) {}
     })();
   </script>
+  <style>
+    html:not([data-notes-session]) #unlock-screen,
+    html:not([data-notes-session]) #app { display: none !important; }
+    html[data-notes-session] #session-gate { display: none !important; }
+    #session-gate {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font: 600 15px/1.4 system-ui, sans-serif;
+    }
+  </style>
 </head>
 <body class="locked">
+  <div id="session-gate" role="status" aria-live="polite">Loading…</div>
   <div id="app-update-banner" class="app-update-banner" hidden>
     <p id="app-update-banner-text"><strong>Update available</strong> — refresh to get the latest Notes build.</p>
     <div class="offline-setup-actions">
@@ -489,10 +508,26 @@
           return res.ok ? res.json() : null;
         })
         .then(function (account) {
-          if (account && account.signed_out) {
+          if (window.__notesSessionRevoked) return null;
+          var signedOut = !!(window.__notesSignedOut || (account && account.signed_out));
+          if (signedOut) {
             window.__notesSignedOut = true;
+            var salt = '';
+            try {
+              salt = localStorage.getItem('notes_kdf_salt') || sessionStorage.getItem('notes_kdf_salt') || '';
+            } catch (e) { salt = ''; }
+            if (!salt) {
+              var email = '';
+              try { email = localStorage.getItem('notes_email') || ''; } catch (e2) { email = ''; }
+              var q = new URLSearchParams();
+              if (email) q.set('email', email);
+              location.replace('/login' + (q.toString() ? ('?' + q.toString()) : ''));
+              return null;
+            }
+            document.documentElement.setAttribute('data-notes-session', 'ready');
             return null;
           }
+          document.documentElement.setAttribute('data-notes-session', 'ready');
           return account;
         });
       window.__notesAccountPromise
@@ -517,6 +552,7 @@
           } catch (e) {}
         })
         .catch(function () {
+          document.documentElement.setAttribute('data-notes-session', 'ready');
           try {
             var email = localStorage.getItem('notes_email');
             if (email) {

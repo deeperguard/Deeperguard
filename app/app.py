@@ -2686,6 +2686,18 @@ def ca_certificate():
     )
 
 
+@app.get("/favicon.ico")
+def favicon():
+    """Browsers request /favicon.ico even when a PNG icon link is present."""
+    response = send_from_directory(
+        Path(app.static_folder) / "icons",
+        "favicon-32.png",
+        mimetype="image/png",
+    )
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
 @app.get("/manifest.json")
 def manifest():
     manifest_path = Path(app.static_folder) / "manifest.json"

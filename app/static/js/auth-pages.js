@@ -145,8 +145,16 @@ async function signInWithPassword(email, password) {
 const loginForm = document.getElementById('login-form');
 if (loginForm) {
   try {
-    const reason = new URLSearchParams(location.search).get('reason') || '';
-    if (reason === 'signed-out') {
+    const params = new URLSearchParams(location.search);
+    const prefill = String(params.get('email') || '').trim();
+    if (prefill) {
+      const emailInput = loginForm.querySelector('[name="email"]');
+      if (emailInput && !emailInput.value) emailInput.value = prefill;
+    }
+    const reason = params.get('reason') || '';
+    if (reason === 'session-expired') {
+      showError('login-error', 'Your session expired — please sign in again.');
+    } else if (reason === 'signed-out') {
       showError(
         'login-error',
         'This device was signed out remotely. Local vault data on this device was deleted. Sign in again to download your notes.',

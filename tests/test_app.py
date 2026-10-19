@@ -420,6 +420,14 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b"<loc>", sm.data)
         self.assertIn(b"/api/promo</loc>", sm.data)
 
+    def test_favicon_ico_is_the_shield(self):
+        res = self.client.get("/favicon.ico")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("image/png", res.content_type)
+        self.assertTrue(res.data.startswith(b"\x89PNG"))
+        page = self.client.get("/app")
+        self.assertIn(b'rel="icon" href="/favicon.ico"', page.data)
+
     def test_api_promo_returns_outreach_copy(self):
         res = self.client.get("/api/promo")
         self.assertEqual(res.status_code, 200)

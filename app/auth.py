@@ -489,6 +489,7 @@ def public_path(path: str) -> bool:
         "/api/health",
         "/api/app-shell",
         "/ca.crt",
+        "/favicon.ico",
     } or base.startswith("/static/"):
         return True
     if base in {"/manifest.json", "/sw.js"}:
@@ -509,7 +510,7 @@ def cacheable_shell(path: str) -> bool:
     from config import app_entry_path
 
     base = path.split("?", 1)[0]
-    return base in {"/", app_entry_path(), "/manifest.json", "/sw.js", "/ca.crt", "/api/app-shell"} or base.startswith("/static/")
+    return base in {"/", app_entry_path(), "/manifest.json", "/sw.js", "/ca.crt", "/favicon.ico", "/api/app-shell"} or base.startswith("/static/")
 
 
 def bootstrap_path(path: str, method: str) -> bool:
