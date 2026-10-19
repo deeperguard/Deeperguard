@@ -2514,6 +2514,7 @@
   let lastListContextKey = '';
   let networkReachable = typeof navigator === 'undefined' || navigator.onLine !== false;
   let networkProbeTimer = null;
+  let onlineRecoveryTimer = null;
 
   const thumbObserver = typeof IntersectionObserver === 'function'
     ? new IntersectionObserver((entries) => {
@@ -3692,6 +3693,7 @@
   }
 
   function hideTotpAddDialog() {
+    const returnTo = totpEditingId ? totpDialogTrigger : totpUi.add;
     stopTotpQrScan();
     totpEditingId = '';
     if (totpUi.dialog) totpUi.dialog.hidden = true;
@@ -3705,10 +3707,13 @@
     }
     syncTotpDialogMode();
     setTotpAddError('');
-    const trigger = totpDialogTrigger;
     totpDialogTrigger = null;
-    if (trigger && document.contains(trigger)) trigger.focus();
-    else totpUi.add?.focus();
+    const focusReturn = () => {
+      const target = (returnTo && document.contains(returnTo)) ? returnTo : totpUi.add;
+      if (target && document.contains(target)) target.focus();
+    };
+    focusReturn();
+    requestAnimationFrame(focusReturn);
   }
 
   function showTotpAddDialog() {
@@ -4306,6 +4311,11 @@
     };
     const caption = document.getElementById('sync-caption');
     if (caption) caption.textContent = captions[phase] || 'Sync';
+    if (phase === 'ok' && ui.saveStatus && !(NotesStore.state?.dirty?.size)
+      && /will sync when online/.test(ui.saveStatus.textContent || '')) {
+      ui.saveStatus.textContent = 'Saved';
+      ui.saveStatus.classList.remove('error');
+    }
     refreshSyncMeta({ state: phase, message });
   }
   NotesStore.setSyncStatusCallback(setSyncIndicator);
@@ -4637,7 +4647,7 @@
     vaultPullActive = true;
     vaultPullExpected = Math.max(vaultPullExpected, Number(expectedTotal) || 0);
     document.body.classList.add('vault-pulling');
-    if (ui.empty) ui.empty.hidden = true;
+    if (ui.empty && NotesStore.listNotes().length > 0) ui.empty.hidden = true;
     lastNotesRenderKey = '';
     scheduleVaultPullRender(true);
   }
@@ -5246,6 +5256,12 @@
     resetUnlockCardStatus();
     primeUploadPickerStartIn().catch(() => {});
     try { sessionStorage.removeItem('notes_just_registered'); } catch (err) { /* ignore */ }
+    try {
+      if (sessionStorage.getItem('notes_verify_email_hint') === '1') {
+        sessionStorage.removeItem('notes_verify_email_hint');
+        toast('We emailed a verification code. Enter it in Settings → Account when you want backups to use this address.');
+      }
+    } catch (err) { /* ignore */ }
     requestAnimationFrame(() => {
       if (!paneSplitDragging) applyListPaneWidth(readStoredListWidth(), { persist: false });
     });
@@ -5726,6 +5742,8 @@
     const dismissBtn = document.getElementById('btn-empty-dismiss');
     const relockBtn = document.getElementById('btn-empty-relock');
     if (!title || !message) return;
+    const tips = document.getElementById('empty-state-tips');
+    if (tips) tips.hidden = true;
     const syncing = document.getElementById('sync-indicator')?.dataset?.state === 'syncing';
     if (vaultDownloadStalled && NotesStore.listNotes().length === 0 && !vaultSyncError) {
       title.textContent = 'Download paused';
@@ -5772,6 +5790,26 @@
       }
       return;
     }
+    const vaultEmpty = NotesStore.listNotes().length === 0;
+    if (vaultEmpty) {
+      title.textContent = 'Welcome to Deeperguard';
+      message.textContent = 'Your vault is empty. Notes stay encrypted on this device.';
+      if (tips) tips.hidden = false;
+      if (newBtn) {
+        newBtn.hidden = false;
+        newBtn.textContent = 'New note';
+        newBtn.classList.add('primary');
+      }
+      if (scanBtn) scanBtn.hidden = true;
+      if (syncBtn) syncBtn.hidden = true;
+      if (dismissBtn) {
+        dismissBtn.hidden = false;
+        dismissBtn.textContent = 'Dismiss';
+      }
+      if (relockBtn) relockBtn.hidden = true;
+      return;
+    }
+    if (tips) tips.hidden = true;
     title.textContent = 'Start writing';
     message.textContent = 'Notes stay encrypted on this device. Start with a blank note.';
     if (newBtn) {
@@ -7247,6 +7285,23 @@
     };
   }
 
+  function emptyListActionsHtml() {
+    if (currentFilter === 'pinned' || currentFilter === 'archived') return '';
+    const vaultEmpty = !NotesStore.listNotes().some((n) => !n.content?.trashed && !n.deleted);
+    if (vaultEmpty) {
+      return `<div class="note-list-empty-actions">
+                <button type="button" class="btn primary sm" data-empty-new>New note</button>
+                <button type="button" class="btn sm" data-empty-scan>Scan document</button>
+                <button type="button" class="btn sm" data-empty-sync>Sync notes</button>
+              </div>`;
+    }
+    return `<div class="note-list-empty-actions">
+                <button type="button" class="btn primary sm" data-empty-sync>Sync notes</button>
+                <button type="button" class="btn sm" data-empty-new>New note</button>
+                <button type="button" class="btn sm" data-empty-scan>Scan document</button>
+              </div>`;
+  }
+
   function updateTrashToolbar(count = null) {
     const total = typeof count === 'number' ? count : trashedNotes().length;
     const settingsBtn = document.getElementById('btn-empty-trash');
@@ -7630,6 +7685,24 @@
     networkProbeTimer = setTimeout(() => {
       probeNetwork({ syncOnRecovery: true }).catch(() => {});
     }, 30000);
+  }
+
+  function scheduleOnlineRecovery(attempt = 0) {
+    clearTimeout(onlineRecoveryTimer);
+    const delays = [500, 1000, 2000, 4000];
+    if (attempt >= delays.length) return;
+    onlineRecoveryTimer = setTimeout(() => {
+      const dirty = NotesStore.state?.dirty?.size || 0;
+      if (networkReachable && dirty === 0) return;
+      probeNetwork({ syncOnRecovery: true }).then((ok) => {
+        const stillDirty = NotesStore.state?.dirty?.size || 0;
+        if (ok && stillDirty > 0) return syncNow({ quiet: true, force: true });
+        return ok;
+      }).finally(() => {
+        const stillDirty = NotesStore.state?.dirty?.size || 0;
+        if (!networkReachable || stillDirty > 0) scheduleOnlineRecovery(attempt + 1);
+      });
+    }, delays[attempt]);
   }
 
   function listStoredFiles({ query = '', tagId = null, folderId = null, titlesOnly = false, includeProtected = false } = {}) {
@@ -8140,11 +8213,7 @@
           : `<div class="note-list-empty">
               <p class="note-list-empty-title">${escapeHtml(emptyNotesCopy().title)}</p>
               <p class="muted">${escapeHtml(emptyNotesCopy().body)}</p>
-              <div class="note-list-empty-actions">
-                <button type="button" class="btn primary sm" data-empty-sync>Sync notes</button>
-                <button type="button" class="btn sm" data-empty-new>New note</button>
-                <button type="button" class="btn sm" data-empty-scan>Scan document</button>
-              </div>
+              ${emptyListActionsHtml()}
             </div>`;
       ui.noteList.querySelector('[data-relock-unlock]')?.addEventListener('click', () => {
         lockVault('Enter the vault password from your phone.');
@@ -14789,6 +14858,7 @@
       } else if (!assignToCurrent && navigate) {
         setFilter('all');
         currentTag = id;
+        closeEditorIfNoteLeftView();
       }
       hideTagComposer();
       renderTags();
@@ -19209,6 +19279,7 @@
   window.addEventListener('online', () => {
     onAppForeground('online');
     if ((NotesStore.state?.dirty?.size || 0) > 0) syncNow({ quiet: true, force: true });
+    scheduleOnlineRecovery(0);
   });
   window.addEventListener('offline', () => {
     probeNetwork().then((ok) => {

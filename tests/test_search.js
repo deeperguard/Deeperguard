@@ -319,6 +319,8 @@ const newerStarred = note({
 assert.strictEqual(noteIsPinned(olderPinned), true);
 assert.strictEqual(noteIsPinned(newerStarred), true);
 assert.strictEqual(noteIsPinned(loose), false);
+const starredView = filterNotes([olderPinned, newerStarred, loose], { filter: 'pinned', tagMap });
+assert.deepStrictEqual(starredView.map((n) => n.uuid), ['newer-starred']);
 
 const pinnedFirstUpdated = filterNotes(
   [loose, olderPinned, newerStarred, editedOld],

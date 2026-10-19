@@ -3012,8 +3012,32 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   padding: 24px;
   display: grid;
   justify-items: center;
+  align-content: center;
   gap: 12px;
   width: 100%;
+  flex: 1;
+}
+.empty-state-tips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  width: min(360px, 100%);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+.empty-state-tips li {
+  margin: 0;
+  padding-left: 1.1rem;
+  position: relative;
+}
+.empty-state-tips li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
 }
 .empty-state-card {
   width: min(420px, 100%);
@@ -7407,13 +7431,15 @@ body.search-filters-open .fab-stack,
     flex-wrap: nowrap;
     row-gap: 4px;
   }
-  .editor-actions-overflow-panel .editor-phone-toolbar-hide {
+  .editor-actions-overflow-panel .editor-phone-toolbar-hide,
+  .editor-desktop-star {
     display: inline-flex !important;
   }
   .editor-actions-overflow-panel .editor-toolbar-panel-lock {
     display: inline-flex !important;
   }
 }
+.editor-desktop-star { display: none; }
 @media (min-width: 1100px) {
   body.nav-pinned {
     --sn-nav-width: 240px;

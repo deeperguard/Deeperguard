@@ -40,10 +40,12 @@ assert.ok(storeJs.includes('function updateTotpAccount'));
 assert.ok(appJs.includes('data-totp-edit'));
 assert.ok(appJs.includes('Base32 letters A–Z and digits 2–7'));
 
-assert.ok(home.includes('class="mk-nav-menu"'));
-assert.ok(topbar.includes('class="mk-nav-menu"'));
+assert.ok(home.includes('class="mk-nav-check"'));
+assert.ok(topbar.includes('class="mk-nav-check"'));
+assert.ok(!home.includes('mk-nav-menu'));
+assert.ok(!marketing.includes('display: contents'));
 assert.ok(home.includes('aria-label="Menu"'));
-assert.ok(marketing.includes('min-width: 1400px'));
+assert.ok(marketing.includes('min-width: 1024px'));
 assert.ok(marketing.includes('.mk-nav a { white-space: nowrap;'));
 assert.ok(marketing.includes('min-height: 44px'));
 
