@@ -29,6 +29,17 @@ def connection() -> sqlite3.Connection:
     return conn
 
 
+def reset_connection() -> None:
+    """Close the thread-local connection (used by tests and after DATA_DIR moves)."""
+    conn = getattr(_local, "conn", None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    _local.conn = None
+
+
 def db_path() -> Path:
     return DATA_DIR / "notes.db"
 
@@ -287,6 +298,21 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_srp_challenges_expires
             ON srp_challenges(expires_at);
+
+        CREATE TABLE IF NOT EXISTS email_send_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            recipient TEXT NOT NULL COLLATE NOCASE,
+            kind TEXT NOT NULL,
+            sent_at REAL NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_email_send_log_user_kind_sent
+            ON email_send_log(user_id, kind, sent_at);
+        CREATE INDEX IF NOT EXISTS idx_email_send_log_recipient_kind_sent
+            ON email_send_log(recipient, kind, sent_at);
+        CREATE INDEX IF NOT EXISTS idx_email_send_log_user_recipient_kind_sent
+            ON email_send_log(user_id, recipient, kind, sent_at);
         """
     )
     conn.commit()
@@ -1001,6 +1027,57 @@ def mark_backup_email_verified(user_id: int) -> None:
             """,
             (now(), user_id),
         )
+
+
+def log_email_send(user_id: int, recipient: str, kind: str) -> None:
+    with tx() as conn:
+        conn.execute(
+            """
+            INSERT INTO email_send_log (user_id, recipient, kind, sent_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (int(user_id), recipient.strip().lower(), kind, now()),
+        )
+
+
+def last_email_send(user_id: int, recipient: str, kind: str) -> float:
+    row = connection().execute(
+        """
+        SELECT sent_at FROM email_send_log
+        WHERE user_id = ? AND recipient = ? COLLATE NOCASE AND kind = ?
+        ORDER BY sent_at DESC
+        LIMIT 1
+        """,
+        (int(user_id), recipient.strip().lower(), kind),
+    ).fetchone()
+    if not row:
+        return 0.0
+    try:
+        return float(row[0] or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def count_email_sends_for_user(user_id: int, kind: str, since: float) -> int:
+    row = connection().execute(
+        """
+        SELECT COUNT(*) FROM email_send_log
+        WHERE user_id = ? AND kind = ? AND sent_at >= ?
+        """,
+        (int(user_id), kind, float(since)),
+    ).fetchone()
+    return int(row[0] if row else 0)
+
+
+def count_email_sends_for_recipient(recipient: str, kind: str, since: float) -> int:
+    row = connection().execute(
+        """
+        SELECT COUNT(*) FROM email_send_log
+        WHERE recipient = ? COLLATE NOCASE AND kind = ? AND sent_at >= ?
+        """,
+        (recipient.strip().lower(), kind, float(since)),
+    ).fetchone()
+    return int(row[0] if row else 0)
 
 
 def update_pcloud_settings(

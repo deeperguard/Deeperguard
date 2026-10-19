@@ -39,6 +39,12 @@ from vault_crypto import password_unlocks_samples
 import webauthn_helper as webauthn_mod
 from auth_rate_limit import allow as auth_rate_allow
 from plans import FEATURE_CATALOG, PLAN_BASIC, PLAN_CATALOG, PLAN_PRO, account_plan_payload, plan_has, plan_required_error
+from verification_send_limit import (
+    VerificationSendLimited,
+    backup_attachment_cap_message,
+    check_backup_attachment_send,
+    record_backup_attachment_send,
+)
 
 class DynamicDomainSessionInterface(SecureCookieSessionInterface):
     def get_cookie_domain(self, app: Flask) -> str | None:
@@ -1697,11 +1703,14 @@ def api_backup_settings():
         verified = False
     db.update_backup_settings(uid, email, enabled, backup_email_verified=1 if verified else 0)
     if user and email and not verified:
-        if email == account_email:
-            email_verify.send_account_code(db.get_user_by_id(uid))
-        else:
-            fresh = db.get_user_by_id(uid)
-            email_verify.send_backup_code(fresh, email)
+        try:
+            if email == account_email:
+                email_verify.send_account_code(db.get_user_by_id(uid))
+            else:
+                fresh = db.get_user_by_id(uid)
+                email_verify.send_backup_code(fresh, email)
+        except VerificationSendLimited as exc:
+            return jsonify({"error": exc.message}), 429
     return jsonify({
         "ok": True,
         "email": email,
@@ -1722,19 +1731,25 @@ def api_backup_email():
     if not EMAIL_RE.match(recipient):
         return jsonify({"error": "invalid email"}), 400
     if not email_verify.recipient_verified(user, recipient):
-        if recipient == str(user["email"] or "").strip().lower():
-            email_verify.send_account_code(user)
-        else:
-            email_verify.send_backup_code(user, recipient)
+        try:
+            if recipient == str(user["email"] or "").strip().lower():
+                email_verify.send_account_code(user)
+            else:
+                email_verify.send_backup_code(user, recipient)
+        except VerificationSendLimited as exc:
+            return jsonify({"error": exc.message}), 429
         return jsonify({
             "error": "Verify this email before backups can be sent. We sent a code.",
             "code": "email_unverified",
         }), 403
+    if not check_backup_attachment_send(uid):
+        return jsonify({"error": backup_attachment_cap_message()}), 429
     try:
         meta = send_user_backup(uid, recipient)
     except Exception as exc:
         db.log_backup(uid, recipient, 0, 0, "error", str(exc))
         return jsonify({"error": f"email failed: {exc}"}), 502
+    record_backup_attachment_send(uid, recipient)
     return jsonify(
         {
             "ok": True,
@@ -2432,7 +2447,10 @@ def api_account_email_resend():
         return jsonify({"ok": True, "email_verified": True})
     if _auth_rate_limited("email-verify-resend", str(user["email"])):
         return jsonify({"error": "too many attempts"}), 429
-    email_verify.send_account_code(user)
+    try:
+        email_verify.send_account_code(user)
+    except VerificationSendLimited as exc:
+        return jsonify({"error": exc.message}), 429
     return jsonify({"ok": True, "sent": True})
 
 
@@ -2442,7 +2460,8 @@ def api_backup_email_verify():
     user = db.get_user_by_id(uid) if uid else None
     if not user:
         return jsonify({"error": "not found"}), 404
-    if _auth_rate_limited("backup-verify", str(user["email"])):
+    recipient = str(user["backup_email"] or user["email"]).strip().lower()
+    if _auth_rate_limited("backup-verify", recipient):
         return jsonify({"error": "too many attempts"}), 429
     body = request.get_json(silent=True) or {}
     if not email_verify.check_code(uid, "backup", str(body.get("code") or "")):
@@ -2457,12 +2476,17 @@ def api_backup_email_resend():
     if not user:
         return jsonify({"error": "not found"}), 404
     recipient = str(user["backup_email"] or user["email"]).strip().lower()
+    if email_verify.recipient_verified(user, recipient):
+        return jsonify({"ok": True, "verified": True})
     if _auth_rate_limited("backup-verify-resend", recipient):
         return jsonify({"error": "too many attempts"}), 429
-    if recipient == str(user["email"]).strip().lower():
-        email_verify.send_account_code(user)
-    else:
-        email_verify.send_backup_code(user, recipient)
+    try:
+        if recipient == str(user["email"]).strip().lower():
+            email_verify.send_account_code(user)
+        else:
+            email_verify.send_backup_code(user, recipient)
+    except VerificationSendLimited as exc:
+        return jsonify({"error": exc.message}), 429
     return jsonify({"ok": True, "sent": True})
 
 

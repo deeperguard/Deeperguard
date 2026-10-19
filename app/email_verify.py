@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import secrets
 import time
 
 import db
 import mailer
+from config import ensure_flask_secret
+from verification_send_limit import (
+    assert_verification_send_allowed,
+    record_verification_send,
+)
 
 log = logging.getLogger("deeperguard.email_verify")
 
@@ -15,8 +21,14 @@ CODE_TTL_SECONDS = 30 * 60
 MAX_ATTEMPTS = 8
 
 
-def _hash(user_id: int, purpose: str, code: str) -> str:
-    return hashlib.sha256(f"{int(user_id)}:{purpose}:{code}".encode("utf-8")).hexdigest()
+def _pepper() -> bytes:
+    return ensure_flask_secret().encode("utf-8")
+
+
+def _hash(user_id: int, purpose: str, code: str, recipient: str) -> str:
+    target = str(recipient or "").strip().lower()
+    msg = f"{int(user_id)}:{purpose}:{target}:{code}"
+    return hmac.new(_pepper(), msg.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def _row_has(row, key: str) -> bool:
@@ -37,10 +49,10 @@ def _flag(row, key: str, default: int = 1) -> int:
         return default
 
 
-def issue_code(user_id: int, purpose: str) -> str:
+def issue_code(user_id: int, purpose: str, recipient: str) -> str:
     code = f"{secrets.randbelow(1_000_000):06d}"
     expires = time.time() + CODE_TTL_SECONDS
-    digest = _hash(user_id, purpose, code)
+    digest = _hash(user_id, purpose, code, recipient)
     if purpose == "backup":
         db.set_backup_verification(user_id, digest, expires)
     else:
@@ -55,17 +67,21 @@ def check_code(user_id: int, purpose: str, code: str) -> bool:
     digits = "".join(ch for ch in str(code or "") if ch.isdigit())
     if len(digits) != 6:
         return False
+    account = str(user["email"] or "").strip().lower() if _row_has(user, "email") else ""
     if purpose == "backup":
         attempts = _flag(user, "backup_verify_attempts", 0)
         expires = float(user["backup_verify_expires"] or 0) if _row_has(user, "backup_verify_expires") else 0
         stored = str(user["backup_verify_hash"] or "") if _row_has(user, "backup_verify_hash") else ""
+        recipient = str(user["backup_email"] or "").strip().lower() if _row_has(user, "backup_email") else ""
     else:
         attempts = _flag(user, "email_verify_attempts", 0)
         expires = float(user["email_verify_expires"] or 0) if _row_has(user, "email_verify_expires") else 0
         stored = str(user["email_verify_hash"] or "") if _row_has(user, "email_verify_hash") else ""
+        recipient = account
     if not stored or attempts >= MAX_ATTEMPTS or time.time() > expires:
         return False
-    if _hash(user_id, purpose, digits) != stored:
+    expected = _hash(user_id, purpose, digits, recipient)
+    if not hmac.compare_digest(stored, expected):
         if purpose == "backup":
             db.bump_backup_verify_attempts(user_id)
         else:
@@ -107,9 +123,12 @@ def _send(recipient: str, subject: str, body: str) -> None:
         log.warning("verification email failed recipient=%s: %s", recipient, exc)
 
 
-def send_account_code(user) -> str:
-    code = issue_code(int(user["id"]), "account")
+def send_account_code(user) -> str | None:
+    uid = int(user["id"])
     email = str(user["email"] or "").strip().lower()
+    if assert_verification_send_allowed(uid, email) == "skip":
+        return None
+    code = issue_code(uid, "account", email)
     _send(
         email,
         "Verify your Deeperguard email",
@@ -123,12 +142,16 @@ def send_account_code(user) -> str:
             "If you did not create a Deeperguard account, you can ignore this message.",
         ]),
     )
+    record_verification_send(uid, email)
     return code
 
 
-def send_backup_code(user, recipient: str) -> str:
-    code = issue_code(int(user["id"]), "backup")
+def send_backup_code(user, recipient: str) -> str | None:
+    uid = int(user["id"])
     target = str(recipient or "").strip().lower()
+    if assert_verification_send_allowed(uid, target) == "skip":
+        return None
+    code = issue_code(uid, "backup", target)
     _send(
         target,
         "Verify your Deeperguard backup email",
@@ -140,4 +163,5 @@ def send_backup_code(user, recipient: str) -> str:
             "The code expires in 30 minutes. Backups are not sent until you confirm the code.",
         ]),
     )
+    record_verification_send(uid, target)
     return code
