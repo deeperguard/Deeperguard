@@ -4056,8 +4056,10 @@
   NotesStore.setCsrf(ui.csrf || NotesStore.csrf());
   window.notesNetworkReachable = () => networkReachable;
   NotesStore.setSaveStatusCallback((text, isError) => {
-    ui.saveStatus.textContent = text;
-    ui.saveStatus.classList.toggle('error', !!isError);
+    const raw = String(text || '');
+    const sessionGone = /login required|sign in required/i.test(raw);
+    ui.saveStatus.textContent = sessionGone ? 'Not synced — sign in again' : raw;
+    ui.saveStatus.classList.toggle('error', !!isError && !sessionGone);
   });
   function isPhoneShell() {
     return compactLayoutActive();
@@ -6778,6 +6780,7 @@
         applyTagSection();
         renderTags();
         renderNotes();
+        if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
       });
       bindTagLongPress(btn, btn.dataset.tag);
     });
@@ -6953,6 +6956,7 @@
         }
         renderTags();
         renderNotes();
+        if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
       });
     });
     host.querySelectorAll('[data-folder-note]').forEach((btn) => {
@@ -6960,6 +6964,7 @@
         const folderId = btn.closest('[data-folder]')?.dataset.folder || '';
         if (folderId) currentFolder = folderId;
         openNote(btn.dataset.folderNote);
+        if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
       });
     });
     host.querySelectorAll('[data-folder-remove]').forEach((btn) => {
@@ -15673,21 +15678,57 @@
     }
   });
 
+  function setNavDrawer(open) {
+    const show = !!open;
+    document.body.classList.toggle('nav-drawer-open', show);
+    const backdrop = document.getElementById('sidebar-nav-backdrop');
+    if (backdrop) {
+      backdrop.hidden = !show;
+      backdrop.setAttribute('aria-hidden', show ? 'false' : 'true');
+    }
+    for (const id of ['btn-list-menu', 'btn-nav-menu']) {
+      const btn = document.getElementById(id);
+      if (btn) btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+    }
+    for (const id of ['filter-section', 'tag-section', 'folder-section']) {
+      const section = document.getElementById(id);
+      if (!section) continue;
+      if (show) {
+        if (section.dataset.drawerWasOpen == null) {
+          section.dataset.drawerWasOpen = section.open ? '1' : '0';
+        }
+        section.open = true;
+      } else if (section.dataset.drawerWasOpen != null) {
+        section.open = section.dataset.drawerWasOpen === '1';
+        delete section.dataset.drawerWasOpen;
+      }
+    }
+  }
+
   document.getElementById('btn-back').addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    document.body.classList.remove('nav-drawer-open');
+    setNavDrawer(false);
     closeEditor();
   });
-  document.getElementById('btn-nav-menu')?.addEventListener('click', () => {
+  document.getElementById('btn-nav-menu')?.addEventListener('click', (event) => {
+    event.stopPropagation();
     closeEditor();
-    document.body.classList.add('nav-drawer-open');
+    setNavDrawer(true);
   });
-  document.getElementById('btn-list-menu')?.addEventListener('click', () => {
-    document.body.classList.toggle('nav-drawer-open');
+  document.getElementById('btn-list-menu')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setNavDrawer(!document.body.classList.contains('nav-drawer-open'));
   });
   document.getElementById('sidebar-nav-backdrop')?.addEventListener('click', () => {
-    document.body.classList.remove('nav-drawer-open');
+    setNavDrawer(false);
+  });
+  document.addEventListener('click', (event) => {
+    if (!document.body.classList.contains('nav-drawer-open')) return;
+    const panel = document.getElementById('sidebar-scroll');
+    if (panel && (event.target === panel || panel.contains(event.target))) return;
+    if (event.target.closest && event.target.closest('#btn-list-menu, #btn-nav-menu')) return;
+    setNavDrawer(false);
   });
 
   function updateSearchClear() {
@@ -15801,6 +15842,7 @@
       renderTags();
       renderFolders();
       renderNotes();
+      if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
     });
   });
   const filterSelect = document.getElementById('filter-select');
@@ -18955,7 +18997,7 @@
         return;
       }
       if (document.body.classList.contains('nav-drawer-open')) {
-        document.body.classList.remove('nav-drawer-open');
+        setNavDrawer(false);
         stop();
         return;
       }

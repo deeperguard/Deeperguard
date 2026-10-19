@@ -2630,7 +2630,8 @@ const NotesStore = (() => {
           }
           return false;
         }
-        notifyStatus(`Save failed: ${e.message}`, true);
+        const sessionGone = /login required|sign in required/i.test(String(e?.message || ''));
+        notifyStatus(sessionGone ? 'Not synced — sign in again' : `Save failed: ${e.message}`, !sessionGone);
         if (!quiet) emitSync('error', e.message || 'Sync failed');
         return false;
       }
