@@ -18,12 +18,14 @@ from db import (
     consume_srp_challenge,
     create_srp_challenge,
     create_user_session,
+    get_active_session_for_device,
     get_first_user,
     get_latest_session_for_device,
     get_session_by_token,
-    get_user_by_email,
     get_user_by_id,
+    get_user_by_email,
     revoke_session_by_token,
+    rotate_session_token,
     touch_user_session,
 )
 from passwords import verify_password
@@ -170,6 +172,53 @@ def _record_device_session(user_id: int, *, login: bool = True) -> str:
     )
 
 
+def _align_session_with_request(user_id: int, row) -> str:
+    """Keep THIS DEVICE on the browser that holds the cookie.
+
+    A later login on this browser can leave the cookie pointing at an older
+    row (often still labeled with a previous user agent). When the request
+    names a device id, adopt that device's live session. Otherwise refresh
+    the cookie row's label so it describes this request, and never steal a
+    different row just because the user-agent string matches.
+    """
+    ua = str(request.headers.get("User-Agent") or "")
+    label = device_label(ua)
+    device_id = request_device_id()
+    ip = client_ip()
+    loc = ip_location(ip)
+    owner = get_active_session_for_device(user_id, device_id) if device_id else None
+    if owner and int(owner["id"]) != int(row["id"]):
+        rebound = rotate_session_token(int(owner["id"]), int(user_id))
+        if rebound:
+            touch_user_session(
+                int(owner["id"]),
+                ip=ip,
+                ip_location=loc,
+                user_agent=ua,
+                device_label=label,
+            )
+            return rebound
+    cookie_device = str(row["device_id"] or "")
+    if cookie_device and cookie_device != device_id:
+        # This cookie belongs to a known device the request did not name.
+        # Keep its label; a user-agent string must not retitle another browser.
+        touch_user_session(int(row["id"]), ip=ip, ip_location=loc)
+        return ""
+    stored_label = str(row["device_label"] or "")
+    stored_ua = str(row["user_agent"] or "")
+    if stored_label != label or (ua and stored_ua != ua[:300]):
+        touch_user_session(
+            int(row["id"]),
+            ip=ip,
+            ip_location=loc,
+            user_agent=ua,
+            device_label=label,
+        )
+    else:
+        touch_user_session(int(row["id"]), ip=ip, ip_location=loc)
+    return ""
+
+
 def ensure_device_session() -> None:
     if not session.get(SESSION_AUTH):
         return
@@ -181,8 +230,10 @@ def ensure_device_session() -> None:
     if token:
         row = get_session_by_token(token)
         if row and not row["revoked_at"] and int(row["user_id"]) == uid:
-            ip = client_ip()
-            touch_user_session(int(row["id"]), ip=ip, ip_location=ip_location(ip))
+            rebound = _align_session_with_request(uid, row)
+            if rebound:
+                session[SESSION_SID] = rebound
+                session.modified = True
             return
         session.pop(SESSION_SID, None)
     try:

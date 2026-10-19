@@ -771,27 +771,65 @@ def list_user_sessions(user_id: int, *, active_since: float = 0.0) -> list[sqlit
     ).fetchall()
 
 
+def get_active_session_for_device(user_id: int, device_id: str) -> sqlite3.Row | None:
+    device_id = normalize_device_id(device_id)
+    if not device_id:
+        return None
+    return connection().execute(
+        """
+        SELECT * FROM user_sessions
+        WHERE user_id = ? AND device_id = ? AND revoked_at = 0
+        ORDER BY last_seen_at DESC, id DESC
+        LIMIT 1
+        """,
+        (int(user_id), device_id),
+    ).fetchone()
+
+
+def rotate_session_token(session_id: int, user_id: int) -> str:
+    """Issue a new secret for an existing row. The previous cookie stops matching."""
+    raw = secrets.token_urlsafe(32)
+    with tx() as conn:
+        cur = conn.execute(
+            """
+            UPDATE user_sessions
+            SET token_hash = ?, last_seen_at = ?
+            WHERE id = ? AND user_id = ? AND revoked_at = 0
+            """,
+            (_session_token_hash(raw), now(), int(session_id), int(user_id)),
+        )
+        if int(cur.rowcount or 0) < 1:
+            return ""
+    return raw
+
+
 def touch_user_session(
     session_id: int,
     *,
     ip: str = "",
     ip_location: str = "",
+    user_agent: str = "",
+    device_label: str = "",
 ) -> None:
+    sets = ["last_seen_at = ?"]
+    params: list[Any] = [now()]
+    if ip:
+        sets.append("ip = ?")
+        params.append(str(ip)[:80])
+        sets.append("ip_location = ?")
+        params.append(str(ip_location or "")[:120])
+    if user_agent:
+        sets.append("user_agent = ?")
+        params.append(str(user_agent)[:300])
+    if device_label:
+        sets.append("device_label = ?")
+        params.append(str(device_label)[:80])
+    params.append(int(session_id))
     with tx() as conn:
-        if ip:
-            conn.execute(
-                """
-                UPDATE user_sessions
-                SET last_seen_at = ?, ip = ?, ip_location = ?
-                WHERE id = ? AND revoked_at = 0
-                """,
-                (now(), str(ip)[:80], str(ip_location or "")[:120], int(session_id)),
-            )
-        else:
-            conn.execute(
-                "UPDATE user_sessions SET last_seen_at = ? WHERE id = ? AND revoked_at = 0",
-                (now(), int(session_id)),
-            )
+        conn.execute(
+            f"UPDATE user_sessions SET {', '.join(sets)} WHERE id = ? AND revoked_at = 0",
+            params,
+        )
 
 
 def revoke_user_session(session_id: int, user_id: int, *, reason: str = "user") -> bool:

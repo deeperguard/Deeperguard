@@ -2446,11 +2446,14 @@ def _render_notes_app():
     host = _request_host()
     if request.scheme != "https" and host not in {"localhost", "127.0.0.1", "::1"}:
         return render_template("https-setup.html", host=_lan_https_host(), build=NOTES_BUILD)
+    from config import cidr_gate_enabled
+
     return render_template(
         "app.html",
         csrf_token="",
         skip_login=skip_login(),
         build=NOTES_BUILD,
+        self_host=cidr_gate_enabled(),
     )
 
 

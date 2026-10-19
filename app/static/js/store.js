@@ -3576,6 +3576,15 @@ const NotesStore = (() => {
     return { uuid: id, created: true, item: get(id) };
   }
 
+  function updateTotpAccount(uuid, { issuer = '', account = '' } = {}) {
+    const item = get(uuid);
+    if (!item || item.content?.type !== 'totp') return false;
+    const nextIssuer = String(issuer || '').trim();
+    const nextAccount = String(account || '').trim() || nextIssuer || 'Account';
+    upsert(uuid, { ...item.content, issuer: nextIssuer, account: nextAccount });
+    return true;
+  }
+
   function removeTotpAccount(uuid) {
     const item = get(uuid);
     if (!item || item.content?.type !== 'totp') return false;
@@ -5454,6 +5463,7 @@ const NotesStore = (() => {
     countTotpItems,
     listTotpAccounts,
     addTotpAccount,
+    updateTotpAccount,
     removeTotpAccount,
     dedupeTotpAccounts,
     listFolders,
