@@ -12,6 +12,13 @@ const NotesLinkOverlay = (() => {
       .replace(/"/g, '&quot;');
   }
 
+  function overlayHrefKind(href) {
+    const value = String(href || '').trim();
+    if (/^https?:\/\//i.test(value) || /^mailto:/i.test(value)) return 'web';
+    if (/^#/.test(value) && !/^#[a-z][a-z0-9+.-]*:/i.test(value)) return 'doc';
+    return '';
+  }
+
   function renderHtml(text) {
     const src = String(text || '');
     const superscript = (typeof globalThis !== 'undefined' && globalThis.NotesSuperscript)
@@ -23,11 +30,15 @@ const NotesLinkOverlay = (() => {
     ranges.forEach((range) => {
       html += escapeHtml(src.slice(cursor, range.start));
       const chunk = src.slice(range.start, range.end);
-      const href = escapeAttr(range.href);
-      const inDoc = String(range.href || '').trim().startsWith('#');
-      html += inDoc
-        ? `<a class="edit-link in-doc-link" href="${href}">${escapeHtml(chunk)}</a>`
-        : `<a class="edit-link" href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(chunk)}</a>`;
+      const kind = overlayHrefKind(range.href);
+      if (!kind) {
+        html += escapeHtml(chunk);
+      } else {
+        const href = escapeAttr(range.href);
+        html += kind === 'doc'
+          ? `<a class="edit-link in-doc-link" href="${href}">${escapeHtml(chunk)}</a>`
+          : `<a class="edit-link" href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(chunk)}</a>`;
+      }
       cursor = range.end;
     });
     html += escapeHtml(src.slice(cursor));

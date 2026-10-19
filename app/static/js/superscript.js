@@ -16,6 +16,9 @@
     if (/^https?:\/\//i.test(href)) return href;
     if (/^mailto:/i.test(href)) return href;
     if (/^www\./i.test(href)) return `https://${href}`;
+    // Preview only links http(s) and mailto. Other schemes (javascript:, data:)
+    // must stay plain text, not an in-document slug that looks clickable.
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return '';
     if (href && !/[\s<>"']/.test(href)) {
       const nav = (typeof globalThis !== 'undefined' && globalThis.NotesInDocNav)
         || (typeof window !== 'undefined' && window.NotesInDocNav);
