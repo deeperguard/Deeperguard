@@ -3604,10 +3604,16 @@ const NotesStore = (() => {
 
   function renameFolder(uuid, title) {
     const folder = get(uuid);
-    if (!folder || folder.content?.type !== 'folder') return;
+    if (!folder || folder.content?.type !== 'folder') return false;
     const name = String(title || '').trim();
-    if (!name) return;
+    if (!name) return false;
+    const taken = listFolders().some((item) => (
+      item.uuid !== uuid
+      && String(item.content?.title || '').trim().toLowerCase() === name.toLowerCase()
+    ));
+    if (taken) return false;
     upsert(uuid, { ...folder.content, title: name });
+    return true;
   }
 
   function deleteFolder(uuid) {

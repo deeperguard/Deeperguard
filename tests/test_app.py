@@ -731,6 +731,16 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(other["device"], "iPhone · Safari")
         self.assertEqual(other["ip"], "203.0.113.10")
         self.assertEqual(other["ip_location"], "Vienna, AT")
+        # THIS DEVICE is the session cookie, not a guess from the request UA.
+        self.client.environ_base["HTTP_USER_AGENT"] = (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        )
+        ua_rows = self.client.get("/api/sessions").get_json()["sessions"]
+        current = next(item for item in ua_rows if item["current"])
+        iphone = next(item for item in ua_rows if item["device"] == "iPhone · Safari")
+        self.assertNotEqual(current["id"], iphone["id"])
+        self.assertFalse(iphone["current"])
 
         revoked = self.client.delete(
             f"/api/sessions/{other['id']}",

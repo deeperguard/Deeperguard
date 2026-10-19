@@ -43,4 +43,19 @@ const flipped = toggleTaskAt('- [ ] one\n- [x] two', 1);
 assert.strictEqual(flipped, '- [ ] one\n- [ ] two');
 assert.strictEqual(toggleTaskAt('- [ ] one', 0), '- [x] one');
 
+const emphasis = render('This is _italic_ and __bold__ and *still* **works**.');
+assert.match(emphasis, /<em>italic<\/em>/);
+assert.match(emphasis, /<strong>bold<\/strong>/);
+assert.match(emphasis, /<em>still<\/em>/);
+assert.match(emphasis, /<strong>works<\/strong>/);
+const intraword = render('leave foo_bar_baz and foo__bar__baz alone');
+assert.doesNotMatch(intraword, /<em>/);
+assert.doesNotMatch(intraword, /<strong>/);
+const codedEm = render('`_not italic_` stays code');
+assert.match(codedEm, /<code>_not italic_<\/code>/);
+assert.doesNotMatch(codedEm, /<em>not italic<\/em>/);
+const safe = render('[_x_](javascript:alert(1)) and [_y_](https://example.com)');
+assert.doesNotMatch(safe, /href="javascript:/);
+assert.match(safe, /<a href="https:\/\/example.com"/);
+
 console.log('ok');

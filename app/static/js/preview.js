@@ -1501,8 +1501,10 @@ const NotesPreview = (() => {
 
     function zoomBy(factor) {
       const rect = viewport.getBoundingClientRect();
-      const clientX = rect.left + viewport.clientWidth / 2;
-      const clientY = rect.top + viewport.clientHeight / 2;
+      // Button zoom keeps the left and top edges in place so the page
+      // margin stays on screen. Pinch zoom still anchors to the fingers.
+      const clientX = rect.left;
+      const clientY = rect.top;
       const point = contentPoint(clientX, clientY);
       scale = clamp(scale * factor, 0.4, 5);
       apply();

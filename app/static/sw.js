@@ -216,6 +216,9 @@ async function networkFirstNavigate(request) {
       await putBoth(key, safe);
       return safe;
     }
+    // A real 404 (or any HTTP error) is the page. Only a failed fetch
+    // — offline or timed out — may fall back to the cached app shell.
+    if (fresh && fresh.status >= 400) return fresh;
   } catch (err) {
     if (hard) {
       try {
@@ -225,6 +228,7 @@ async function networkFirstNavigate(request) {
           await putBoth(APP_SHELL, safe);
           return safe;
         }
+        if (forced && forced.status >= 400) return forced;
       } catch (e2) {
         /* fall through */
       }
