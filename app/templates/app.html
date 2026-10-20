@@ -1654,9 +1654,30 @@
           <p id="backup-file-help" class="settings-hint">Downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code> (on iPhone: Save to Files → iCloud Drive).</p>
 
           <div class="settings-actions">
-            <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not configured"{% endif %}>Back up to Google Drive</button>
+            <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not set up yet"{% endif %}>Back up to Google Drive</button>
           </div>
-          <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not configured on this server.</p>
+          <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not set up yet — add your own key</p>
+          <div id="google-drive-configure" class="settings-nested stack cloud-provider-configure">
+            <label class="settings-row stacked">Google OAuth Client ID
+              <input id="google-oauth-client-id-input" type="text" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com" inputmode="url">
+            </label>
+            <div class="settings-actions">
+              <button type="button" id="btn-google-key-save" class="btn">Save</button>
+              <button type="button" id="btn-google-key-remove" class="btn ghost">Remove</button>
+            </div>
+            <p id="google-key-status" class="settings-hint" role="status" aria-live="polite"></p>
+            <details class="cloud-howto">
+              <summary>How to get this</summary>
+              <ol class="settings-hint cloud-howto-steps">
+                <li>Open the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a> and create (or select) a project.</li>
+                <li>Enable the <strong>Google Drive API</strong> for that project.</li>
+                <li>Create an OAuth client of type <strong>Web application</strong>.</li>
+                <li>Add authorized JavaScript origin: <code>https://www.deeperguard.com</code></li>
+                <li>Use scope <code>drive.file</code> (the app requests only that). If the consent screen is in Testing, add yourself as a test user.</li>
+                <li>Copy the Client ID (ends with <code>.apps.googleusercontent.com</code>). No client secret is used.</li>
+              </ol>
+            </details>
+          </div>
           <p id="google-drive-status" class="settings-hint" role="status" aria-live="polite"{% if not google_drive_configured %} hidden{% endif %}></p>
           <div id="google-drive-controls" class="settings-nested stack" {% if not google_drive_configured %}hidden{% endif %}>
             <p class="settings-hint">Uploads the same client-encrypted blob to a Drive folder you authorize in the browser.</p>
@@ -1669,9 +1690,29 @@
           </div>
 
           <div class="settings-actions">
-            <button type="button" id="btn-backup-dropbox" class="btn"{% if not dropbox_configured %} disabled title="Not configured"{% endif %}>Back up to Dropbox</button>
+            <button type="button" id="btn-backup-dropbox" class="btn"{% if not dropbox_configured %} disabled title="Not set up yet"{% endif %}>Back up to Dropbox</button>
           </div>
-          <p id="dropbox-not-configured" class="settings-hint"{% if dropbox_configured %} hidden{% endif %}>Dropbox: Not configured on this server.</p>
+          <p id="dropbox-not-configured" class="settings-hint"{% if dropbox_configured %} hidden{% endif %}>Dropbox: Not set up yet — add your own key</p>
+          <div id="dropbox-configure" class="settings-nested stack cloud-provider-configure">
+            <label class="settings-row stacked">Dropbox App key
+              <input id="dropbox-app-key-input" type="text" autocomplete="off" spellcheck="false" placeholder="App key (not the secret)" inputmode="text">
+            </label>
+            <div class="settings-actions">
+              <button type="button" id="btn-dropbox-key-save" class="btn">Save</button>
+              <button type="button" id="btn-dropbox-key-remove" class="btn ghost">Remove</button>
+            </div>
+            <p id="dropbox-key-status" class="settings-hint" role="status" aria-live="polite"></p>
+            <details class="cloud-howto">
+              <summary>How to get this</summary>
+              <ol class="settings-hint cloud-howto-steps">
+                <li>Open the <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">Dropbox App Console</a> and create an app.</li>
+                <li>Choose <strong>Scoped access</strong> and <strong>App folder</strong>.</li>
+                <li>Add redirect URI: <code>https://www.deeperguard.com/app</code></li>
+                <li>Permissions: <code>files.content.write</code> and <code>files.content.read</code>.</li>
+                <li>Copy the <strong>App key</strong> only — never the app secret (browser PKCE does not use it).</li>
+              </ol>
+            </details>
+          </div>
           <p id="dropbox-status" class="settings-hint" role="status" aria-live="polite"{% if not dropbox_configured %} hidden{% endif %}></p>
           <div id="dropbox-controls" class="settings-nested stack" {% if not dropbox_configured %}hidden{% endif %}>
             <p class="settings-hint">Uploads the same client-encrypted blob to Apps/Deeperguard via OAuth 2 PKCE.</p>

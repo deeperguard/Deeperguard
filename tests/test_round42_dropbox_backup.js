@@ -22,15 +22,22 @@ assert.ok(authPy.includes('content.dropboxapi.com'));
 assert.ok(authPy.includes('www.dropbox.com'));
 assert.ok(appHtml.includes('btn-backup-dropbox'));
 assert.ok(appHtml.includes('dropbox-not-configured'));
-assert.ok(appHtml.includes('Dropbox: Not configured on this server.'));
+assert.ok(
+  appHtml.includes('Dropbox: Not set up yet')
+  || appHtml.includes('Dropbox: Not configured on this server.'),
+);
 assert.ok(appHtml.includes('dropbox_configured') || appHtml.includes('dropbox_app_key'));
 assert.ok(/btn-backup-dropbox[\s\S]*?disabled/.test(appHtml) || appHtml.includes('if not dropbox_configured'));
 assert.ok(appHtml.includes('meta name="dropbox-app-key"') || appHtml.includes('dropbox-app-key'));
+assert.ok(appHtml.includes('dropbox-configure') || appHtml.includes('dropbox-app-key-input'));
 assert.ok(appJs.includes('isDropboxConfigured'));
 assert.ok(appJs.includes('refreshDropboxBackupUi'));
 assert.ok(appJs.includes('uploadDropboxBackupBlob'));
 assert.ok(appJs.includes('consumeDropboxOAuthRedirect') || appJs.includes('finishDropboxOAuthIfPresent'));
-assert.ok(appJs.includes("missing.textContent = 'Dropbox: Not configured on this server.'"));
+assert.ok(
+  appJs.includes('Not set up yet — add your own key')
+  || appJs.includes("missing.textContent = 'Dropbox: Not configured on this server.'"),
+);
 assert.ok(legal.includes('Dropbox'));
 // Existing backup paths must remain.
 assert.ok(appHtml.includes('btn-save-backup-file'));
