@@ -91,11 +91,13 @@ def _escape_html(text: str) -> str:
 
 
 def _inline_md(text: str) -> str:
-    """Escape then apply simple `code` spans."""
+    """Escape then apply simple `code` and **bold** spans."""
     import re
 
     out = _escape_html(text)
-    return re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+    out = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", out)
+    out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+    return out
 
 
 def render_simple_markdown(src: str) -> str:

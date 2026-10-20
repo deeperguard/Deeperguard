@@ -4701,8 +4701,17 @@ class NotesAppTests(unittest.TestCase):
                 json={"email": email},
                 headers={"X-CSRF-Token": self._csrf()},
             )
-            self.assertEqual(blocked.status_code, 403)
-            self.assertEqual(blocked.get_json().get("code"), "email_unverified")
+            # Signup already emailed a code: cooldown is 429. Otherwise 403
+            # "We sent a code" / email_unverified. Either way backups stay blocked.
+            self.assertIn(blocked.status_code, (403, 429))
+            body = blocked.get_json() or {}
+            if blocked.status_code == 403:
+                self.assertEqual(body.get("code"), "email_unverified")
+            else:
+                self.assertTrue(
+                    body.get("retry_after") or "already sent" in str(body.get("error") or "").lower()
+                    or "please wait" in str(body.get("error") or "").lower()
+                )
             code = ""
             for args in sent:
                 match = re.search(r"\b(\d{6})\b", args[2] if len(args) > 2 else "")

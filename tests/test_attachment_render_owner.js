@@ -302,13 +302,14 @@ function hitsFor(query) {
   const html = fs.readFileSync(path.join(__dirname, '..', 'app', 'templates', 'app.html'), 'utf8');
   const tagSection = html.match(/<details class="tag-section" id="tag-section"([^>]*)>/);
   assert.ok(tagSection, 'tag section markup missing');
-  assert.ok(!/\sopen(\s|=|>|$)/.test(tagSection[0]), 'Tags must not be open in the initial HTML');
+  // Tags start expanded on first paint; JS keeps that via tagsExpandedDefault.
+  assert.ok(/\sopen(\s|=|>|$)/.test(tagSection[0]), 'Tags should be open in the initial HTML');
   const boot = appJs.slice(appJs.indexOf('Object.assign(prefs, savedPrefs)'), appJs.indexOf('const GLOBAL_PREF_KEYS'));
-  const everyLaunch = boot.indexOf('Tags start collapsed on every launch');
-  assert.ok(everyLaunch > boot.indexOf('listChromeDense'), 'collapsed Tags must be applied on every launch, after the one-time migration');
-  const force = boot.slice(everyLaunch, everyLaunch + 320);
-  assert.ok(force.includes('prefs.tagsCollapsed = true'));
-  assert.ok(force.includes('savedPrefs.tagsCollapsed === false'));
+  const expanded = boot.indexOf('Tags start expanded');
+  assert.ok(expanded > boot.indexOf('listChromeDense'), 'expanded Tags default follows the dense-list migration');
+  const force = boot.slice(expanded, expanded + 320);
+  assert.ok(force.includes('prefs.tagsExpandedDefault = 1'));
+  assert.ok(force.includes('prefs.tagsCollapsed = false'));
   assert.ok(!force.includes('listChromeDense'));
 
   console.log('test_attachment_render_owner.js: ok');

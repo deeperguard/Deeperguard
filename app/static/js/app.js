@@ -7307,7 +7307,7 @@
         const on = (noteOpen && inThisView) ? ' active' : '';
         // All Notes stays the active view. The folder only gets a quiet marker.
         const current = (noteOpen && !inThisView) ? ' is-current' : '';
-        return `<button type="button" class="folder-note${on}${current}" data-folder-note="${escapeAttr(note.uuid)}">${escapeHtml(NotesSearch.effectiveNoteTitle(note) || 'Title')}</button>`;
+        return `<button type="button" class="folder-note${on}${current}" data-folder-note="${escapeAttr(note.uuid)}">${escapeHtml(NotesSearch.effectiveNoteTitle(note) || 'Untitled')}</button>`;
       }).join('');
       const holdsOpen = notes.some((note) => editorNoteOpen() && currentId === note.uuid && currentFolder !== folder.uuid);
       return `<div class="folder-block${active}${open ? ' is-open' : ''}${holdsOpen ? ' has-open-note' : ''}" data-folder="${escapeAttr(folder.uuid)}">
@@ -8182,7 +8182,7 @@
     const titleAttr = displayTitle ? ` title="${escapeAttr(displayTitle)}"` : '';
     const titleHtml = displayTitle
       ? (query ? NotesSearch.highlightPlain(displayTitle, query) : escapeHtml(displayTitle))
-      : '<span class="note-title-placeholder">Title</span>';
+      : '<span class="note-title-placeholder">Untitled</span>';
     const editedMs = noteEditedAtMs(n);
     const timeTitle = listTimeAbsolute(editedMs);
     const timeLabel = listTimeLabel(editedMs);
@@ -11815,8 +11815,9 @@
   function openNote(id, { skipGate = false, skipFlush = false } = {}) {
     const note = NotesStore.get(id);
     if (!note) return;
-    if (currentId && currentId !== id) {
-      unlockedNotes.delete(currentId);
+    const previousId = currentId && currentId !== id ? currentId : null;
+    if (previousId) {
+      unlockedNotes.delete(previousId);
     }
     const gated = !!note.content.locked && !unlockedNotes.has(id) && !skipGate;
     const alreadyEditing = !!currentId && ui.editor && !ui.editor.hidden;
@@ -11829,6 +11830,8 @@
       clearTimeout(saveDebounce);
       saveDebounce = null;
     }
+    // Switching notes must drop brand-new empty drafts (closeEditor already does).
+    if (previousId) discardEmptyDraftNote(previousId);
     const switchingNote = currentId !== id;
     if (switchingNote) hideTagSuggest();
     currentId = id;
@@ -12213,23 +12216,28 @@
       next.content = body;
       next.editor = ui.editorType.value || 'plain';
     }
-    if (NotesSearch.sameNoteContent(note.content, next)) {
-      updateNoteMeta(note);
-      return;
-    }
-    const draft = { uuid: currentId, content: next };
-    // Never hard-delete a note that has already been saved. Brand-new empty
-    // drafts are removed; ever-saved notes that were cleared to whitespace stay.
     const existing = NotesStore.get(currentId);
-    if (!live.length && NotesSearch.noteMayHardDiscard?.({
-      ...draft,
+    const discardProbe = {
+      ...existing,
+      uuid: currentId,
       rev: existing?.rev,
       content: {
         ...next,
         revisions: existing?.content?.revisions || next.revisions || [],
+        tags: next.tags || existing?.content?.tags || [],
+        folder_id: next.folder_id || existing?.content?.folder_id || '',
+        attachments: next.attachments || [],
       },
-    })) {
+    };
+    // Brand-new never-saved empty drafts are removed (including when content
+    // is unchanged). Ever-saved notes that were cleared to whitespace stay.
+    if (!live.length && NotesSearch.noteMayHardDiscard?.(discardProbe)) {
       NotesStore.remove(currentId, { force: true });
+      if (listSelectionId === currentId) listSelectionId = null;
+      return;
+    }
+    if (NotesSearch.sameNoteContent(note.content, next)) {
+      updateNoteMeta(note);
       return;
     }
     NotesStore.upsert(currentId, next, { recordRevision: true });
@@ -12241,7 +12249,7 @@
     const row = ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"]`);
     const rowTitle = row?.querySelector('h3');
     if (rowTitle) {
-      rowTitle.textContent = displayTitle || 'Title';
+      rowTitle.textContent = displayTitle || 'Untitled';
       rowTitle.classList.toggle('note-title-placeholder', !displayTitle);
     }
     const rowTime = row?.querySelector('.note-modified[data-edited], .note-modified');
@@ -16733,9 +16741,9 @@
       const rowTitle = ui.noteList.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"] h3`);
       if (rowTitle) {
         const typed = String(ui.title.value || '').trim();
-        const display = typed || NotesSearch.derivedTitleFromBody?.(ui.body?.value) || 'Title';
+        const display = typed || NotesSearch.derivedTitleFromBody?.(ui.body?.value) || 'Untitled';
         rowTitle.textContent = display;
-        rowTitle.classList.toggle('note-title-placeholder', !typed && display === 'Title');
+        rowTitle.classList.toggle('note-title-placeholder', !typed && display === 'Untitled');
       }
     }
     scheduleSave();
@@ -18554,9 +18562,47 @@
     }
   });
 
+  let backupNowCooldownTimer = null;
+  let backupNowCooldownUntil = 0;
+
+  function backupNowCooldownLeft() {
+    return Math.max(0, Math.ceil((backupNowCooldownUntil - Date.now()) / 1000));
+  }
+
+  function armBackupNowCooldown(seconds) {
+    const btn = document.getElementById('btn-backup-now');
+    const wait = Math.max(1, Math.ceil(Number(seconds) || 60));
+    backupNowCooldownUntil = Date.now() + wait * 1000;
+    if (!btn) return;
+    if (backupNowCooldownTimer) clearInterval(backupNowCooldownTimer);
+    if (!btn.dataset.backupLabel) btn.dataset.backupLabel = btn.textContent || 'Email backup now';
+    const tick = () => {
+      const left = backupNowCooldownLeft();
+      if (left <= 0) {
+        clearInterval(backupNowCooldownTimer);
+        backupNowCooldownTimer = null;
+        backupNowCooldownUntil = 0;
+        btn.disabled = false;
+        btn.textContent = btn.dataset.backupLabel || 'Email backup now';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = `Resend in ${left}s`;
+    };
+    tick();
+    backupNowCooldownTimer = setInterval(tick, 1000);
+  }
+
   document.getElementById('btn-backup-now').addEventListener('click', async () => {
     const btn = document.getElementById('btn-backup-now');
-    if (btn?.disabled) return;
+    const cooling = backupNowCooldownLeft();
+    if (cooling > 0 || btn?.disabled) {
+      const left = cooling || Number((/Resend in (\d+)s/.exec(btn?.textContent || '') || [])[1]) || 0;
+      if (left > 0) {
+        toast(`Code already sent — resend in ${left}s`, true);
+      }
+      return;
+    }
     try {
       await NotesStore.flush();
       const email = document.getElementById('backup-email').value;
@@ -18565,37 +18611,28 @@
     } catch (err) {
       const wait = Number(err.retryAfter) || 0;
       if (err.status === 429 && wait > 0) {
-        const msg = (err.message && /Please wait|already sent|resend in/i.test(err.message))
+        const msg = (err.message && /Code already sent — resend in/i.test(err.message))
           ? err.message
-          : `Code already sent — check your inbox, resend in ${Math.ceil(wait)}s`;
+          : `Code already sent — resend in ${Math.ceil(wait)}s`;
         toast(msg, true);
-        if (btn) {
-          btn.disabled = true;
-          const label = btn.textContent || 'Email backup now';
-          let left = Math.ceil(wait);
-          btn.textContent = `Resend in ${left}s`;
-          const timer = setInterval(() => {
-            left -= 1;
-            if (left <= 0) {
-              clearInterval(timer);
-              btn.disabled = false;
-              btn.textContent = label;
-              return;
-            }
-            btn.textContent = `Resend in ${left}s`;
-          }, 1000);
-        }
+        armBackupNowCooldown(wait);
         return;
       }
-      if (err.status === 403 && /verify/i.test(String(err.message || ''))) {
+      if (err.status === 403 && /verify|We sent a code/i.test(String(err.message || ''))) {
         const account = NotesStore.cachedAccount?.() || {};
         const retry = Math.max(
           Number(account.email_verify_retry_after) || 0,
           Number(account.backup_verify_retry_after) || 0,
           Number(err.retryAfter) || 0,
         );
+        // First unverified send: arm the button countdown so later clicks
+        // toast "Code already sent — resend in Ns" instead of repeating.
+        const justSent = /We sent a code/i.test(String(err.message || ''));
+        if (retry > 0 || justSent) {
+          armBackupNowCooldown(retry > 0 ? retry : 60);
+        }
         if (retry > 0) {
-          toast(`Code already sent — check your inbox, resend in ${Math.ceil(retry)}s`, true);
+          toast(`Code already sent — resend in ${Math.ceil(retry)}s`, true);
           return;
         }
       }

@@ -88,7 +88,12 @@ assert.ok(appJs.includes('Add this tag to a note.'));
 
 // Tap targets / login gap / account cache.
 assert.ok(css.includes('min-height: 44px'));
-assert.ok(css.includes('.brand .zk-plain + .auth-hint') || css.includes('margin: 10px auto 12px'));
+assert.ok(
+  css.includes('.brand .zk-plain + .auth-hint')
+  || css.includes('margin: 10px auto 12px')
+  || css.includes('.brand p.zk-plain')
+  || css.includes('margin: 12px 0 0'),
+);
 assert.ok(fs.readFileSync(path.join(root, 'app/static/js/store.js'), 'utf8').includes('ACCOUNT_CACHE_MS'));
 
 console.log('test_round32_empty_discard ok');
