@@ -728,16 +728,36 @@ const NotesSearch = (() => {
     return true;
   }
 
-  // A note that has ever been autosaved (revision history) or synced must never
-  // be hard-discarded when the editor is later cleared to whitespace.
-  function noteHasBeenSaved(note) {
-    if (!note?.content || note.content.type !== 'note') return false;
-    if (Array.isArray(note.content.revisions) && note.content.revisions.length > 0) return true;
-    if (Number(note.rev) > 0) return true;
+  // True when a revision snapshot includes real user input (title/body).
+  // Sync rev alone does not count — empty New-note drafts often push with rev>0.
+  function snapshotHasUserContent(snap) {
+    if (!snap || typeof snap !== 'object') return false;
+    if (String(snap.content || '').trim()) return true;
+    const title = String(snap.title || '').trim();
+    if (title && !isPlaceholderTitle(title)) return true;
     return false;
   }
 
-  // Brand-new drafts only: empty title+body+attachments+tags+folder and never saved.
+  // Ever had user content (title/body/attachment/tag/folder). Empty drafts that
+  // were only auto-created or synced without typing are not "saved".
+  function noteHasBeenSaved(note) {
+    if (!note?.content || note.content.type !== 'note') return false;
+    if (note.content.folder_id) return true;
+    if ((note.content.tags || []).length) return true;
+    if ((note.content.attachments || []).length) return true;
+    if (String(note.content.ocr_text || '').trim()) return true;
+    const title = String(note.content.title || '').trim();
+    if (title && !isPlaceholderTitle(title)) return true;
+    if (String(note.content.content || '').trim()) return true;
+    const revs = Array.isArray(note.content.revisions) ? note.content.revisions : [];
+    for (const rev of revs) {
+      if (snapshotHasUserContent(rev)) return true;
+    }
+    return false;
+  }
+
+  // Brand-new empty drafts only (no user content ever). Synced empty shells may
+  // still be discarded — remove() tombstones them on the server.
   function noteMayHardDiscard(note) {
     if (!noteIsEmptyStub(note)) return false;
     if (noteHasBeenSaved(note)) return false;

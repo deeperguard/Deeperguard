@@ -28,11 +28,13 @@ function note(content, extra = {}) {
   return { uuid: 'n1', rev: extra.rev || 0, content: { type: 'note', tags: [], attachments: [], revisions: [], ...content } };
 }
 
-// Brand-new empty draft may be discarded.
+// Brand-new empty draft may be discarded (including after a sync rev).
 assert.strictEqual(noteMayHardDiscard(note({ title: '', content: '' })), true);
 assert.strictEqual(noteMayHardDiscard(note({ title: '   ', content: '  \n  ' })), true);
+assert.strictEqual(noteMayHardDiscard(note({ title: '', content: '' }, { rev: 5 })), true);
+assert.strictEqual(noteHasBeenSaved(note({ title: '', content: '' }, { rev: 5 })), false);
 
-// After a save (revision history), clearing to whitespace must NOT hard-discard.
+// After user content was saved (revision with body), clearing must NOT hard-discard.
 const savedThenCleared = note({
   title: '   ',
   content: '   \n  ',
