@@ -175,6 +175,8 @@
     lightVault: false,
     navPinned: false,
     aiChat: null,
+    googleOauthClientId: '',
+    dropboxAppKey: '',
     tagsCollapsed: false,
     foldersCollapsed: false,
     viewsCollapsed: false,
@@ -247,9 +249,10 @@
   const GLOBAL_PREF_KEYS = [
     'theme', 'fontSize', 'monospace', 'spellcheck', 'hidePreviews', 'compactList',
     'sort', 'autoPreview', 'autoLockMin', 'lockOnUnfocus', 'aiChat',
+    'googleOauthClientId', 'dropboxAppKey',
   ];
-  // Vault-only prefs never touch localStorage (they hold secrets such as API keys).
-  const VAULT_ONLY_PREF_KEYS = ['aiChat'];
+  // Vault-only prefs never touch localStorage (API keys / per-account OAuth app IDs).
+  const VAULT_ONLY_PREF_KEYS = ['aiChat', 'googleOauthClientId', 'dropboxAppKey'];
   // Device-only prefs (storage/offline behaviour differs per device).
   const DEVICE_PREF_KEYS = ['rememberDevice', 'lightVault', 'tagsCollapsed', 'foldersCollapsed', 'viewsCollapsed', 'searchFilters', 'listPaneWidth'];
   let globalPrefsAppliedAt = 0;
@@ -296,6 +299,7 @@
     }
     try { localStorage.setItem('deeperguard-prefs', localPrefsJson()); } catch (err) { /* ignore quota */ }
     applyPrefs();
+    try { syncCloudProviderKeysFromPrefs(); } catch (err) { /* ignore */ }
     if (render) {
       renderNotes();
       if (!ui.settings?.hidden) initSettings().catch(() => {});
@@ -3300,6 +3304,8 @@
     clearPreviewCache();
     if (typeof NotesAiChat !== 'undefined') NotesAiChat.reset();
     prefs.aiChat = null;
+    prefs.googleOauthClientId = '';
+    prefs.dropboxAppKey = '';
     globalPrefsAppliedAt = 0;
     NotesStore.lock();
     sessionExpiredAlertShown = false;
@@ -19133,23 +19139,52 @@
     }
   });
 
+  function syncCloudProviderKeysFromPrefs() {
+    const Cloud = window.NotesCloudBackup;
+    if (!Cloud?.setUserProviderKeys) return;
+    try {
+      const account = NotesStore.cachedAccount?.() || {};
+      Cloud.setAccountScope?.(account.email || '');
+    } catch (err) { /* ignore */ }
+    Cloud.setUserProviderKeys({
+      googleClientId: String(prefs.googleOauthClientId || '').trim(),
+      dropboxAppKey: String(prefs.dropboxAppKey || '').trim(),
+    });
+  }
+
   function refreshGoogleDriveBackupUi() {
     const Cloud = window.NotesCloudBackup;
+    syncCloudProviderKeysFromPrefs();
     const status = document.getElementById('google-drive-status');
     const controls = document.getElementById('google-drive-controls');
     const missing = document.getElementById('google-drive-not-configured');
     const driveBtn = document.getElementById('btn-backup-google-drive');
     const autoDaily = document.getElementById('backup-drive-auto-daily');
+    const keyInput = document.getElementById('google-oauth-client-id-input');
+    const keyStatus = document.getElementById('google-key-status');
     const configured = !!(Cloud && Cloud.isGoogleConfigured && Cloud.isGoogleConfigured());
+    const source = Cloud?.googleKeySource?.() || '';
+    if (keyInput && document.activeElement !== keyInput) {
+      keyInput.value = String(prefs.googleOauthClientId || '');
+    }
+    if (keyStatus) {
+      if (prefs.googleOauthClientId) {
+        keyStatus.textContent = 'Using your Google Client ID (synced in your vault).';
+      } else if (source === 'server') {
+        keyStatus.textContent = 'Using this server’s Google Client ID. You can still add your own below.';
+      } else {
+        keyStatus.textContent = '';
+      }
+    }
     if (missing) {
       missing.hidden = configured;
       if (!configured) {
-        missing.textContent = 'Google Drive: Not configured on this server.';
+        missing.textContent = 'Google Drive: Not set up yet — add your own key';
       }
     }
     if (driveBtn) {
       driveBtn.disabled = !configured;
-      driveBtn.title = configured ? '' : 'Not configured';
+      driveBtn.title = configured ? '' : 'Not set up yet';
     }
     if (controls) controls.hidden = !configured;
     if (!configured) {
@@ -19161,24 +19196,26 @@
     }
     if (status) status.hidden = false;
     if (!Cloud) return;
-    const prefs = Cloud.readPrefs();
-    if (autoDaily) autoDaily.checked = !!prefs.autoDailyDrive;
+    const cloudPrefs = Cloud.readPrefs();
+    if (autoDaily) autoDaily.checked = !!cloudPrefs.autoDailyDrive;
     if (status) {
-      if (prefs.lastDriveBackupAt) {
-        const when = new Date(prefs.lastDriveBackupAt);
-        status.textContent = `Last Google Drive backup: ${Number.isNaN(when.getTime()) ? prefs.lastDriveBackupAt : when.toLocaleString()}`;
+      const account = cloudPrefs.driveAccountLabel ? `Connected as ${cloudPrefs.driveAccountLabel}. ` : '';
+      if (cloudPrefs.lastDriveBackupAt) {
+        const when = new Date(cloudPrefs.lastDriveBackupAt);
+        status.textContent = `${account}Last Google Drive backup: ${Number.isNaN(when.getTime()) ? cloudPrefs.lastDriveBackupAt : when.toLocaleString()}`;
       } else {
-        status.textContent = prefs.driveConnected
-          ? 'Google Drive connected — no backup uploaded yet.'
-          : 'Google Drive uses a short-lived browser token (drive.file). Nothing is stored on our server.';
+        status.textContent = cloudPrefs.driveConnected
+          ? `${account}Google Drive connected — no backup uploaded yet.`
+          : `${account}Google Drive uses a short-lived browser token (drive.file). Nothing is stored on our server.`;
       }
     }
   }
 
   async function runGoogleDriveBackup() {
     const Cloud = window.NotesCloudBackup;
+    syncCloudProviderKeysFromPrefs();
     if (!Cloud?.isGoogleConfigured?.()) {
-      toast('Google Drive is not configured on this server', true);
+      toast('Google Drive is not set up yet — add your own Client ID', true);
       return;
     }
     await runFileDownloadTask({
@@ -19210,6 +19247,37 @@
       if (btn) btn.disabled = !window.NotesCloudBackup?.isGoogleConfigured?.();
       refreshGoogleDriveBackupUi();
     }
+  });
+
+  document.getElementById('btn-google-key-save')?.addEventListener('click', async () => {
+    const Cloud = window.NotesCloudBackup;
+    const input = document.getElementById('google-oauth-client-id-input');
+    const raw = String(input?.value || '').trim();
+    if (!Cloud?.isValidGoogleClientId?.(raw)) {
+      toast('Google Client ID must end with .apps.googleusercontent.com', true);
+      return;
+    }
+    const prev = String(prefs.googleOauthClientId || '').trim();
+    if (raw !== prev) {
+      try { await Cloud.disconnectGoogle?.(); } catch (err) { /* ignore */ }
+    }
+    prefs.googleOauthClientId = raw;
+    pushGlobalPrefs();
+    syncCloudProviderKeysFromPrefs();
+    refreshGoogleDriveBackupUi();
+    toast('Google Client ID saved');
+  });
+
+  document.getElementById('btn-google-key-remove')?.addEventListener('click', async () => {
+    const Cloud = window.NotesCloudBackup;
+    try { await Cloud.disconnectGoogle?.(); } catch (err) { /* ignore */ }
+    prefs.googleOauthClientId = '';
+    const input = document.getElementById('google-oauth-client-id-input');
+    if (input) input.value = '';
+    pushGlobalPrefs();
+    syncCloudProviderKeysFromPrefs();
+    refreshGoogleDriveBackupUi();
+    toast('Google Client ID removed');
   });
 
   document.getElementById('backup-drive-auto-daily')?.addEventListener('change', (event) => {
@@ -19281,21 +19349,37 @@
 
   function refreshDropboxBackupUi() {
     const Cloud = window.NotesCloudBackup;
+    syncCloudProviderKeysFromPrefs();
     const status = document.getElementById('dropbox-status');
     const controls = document.getElementById('dropbox-controls');
     const missing = document.getElementById('dropbox-not-configured');
     const dropboxBtn = document.getElementById('btn-backup-dropbox');
     const autoDaily = document.getElementById('backup-dropbox-auto-daily');
+    const keyInput = document.getElementById('dropbox-app-key-input');
+    const keyStatus = document.getElementById('dropbox-key-status');
     const configured = !!(Cloud && Cloud.isDropboxConfigured && Cloud.isDropboxConfigured());
+    const source = Cloud?.dropboxKeySource?.() || '';
+    if (keyInput && document.activeElement !== keyInput) {
+      keyInput.value = String(prefs.dropboxAppKey || '');
+    }
+    if (keyStatus) {
+      if (prefs.dropboxAppKey) {
+        keyStatus.textContent = 'Using your Dropbox App key (synced in your vault).';
+      } else if (source === 'server') {
+        keyStatus.textContent = 'Using this server’s Dropbox App key. You can still add your own below.';
+      } else {
+        keyStatus.textContent = '';
+      }
+    }
     if (missing) {
       missing.hidden = configured;
       if (!configured) {
-        missing.textContent = 'Dropbox: Not configured on this server.';
+        missing.textContent = 'Dropbox: Not set up yet — add your own key';
       }
     }
     if (dropboxBtn) {
       dropboxBtn.disabled = !configured;
-      dropboxBtn.title = configured ? '' : 'Not configured';
+      dropboxBtn.title = configured ? '' : 'Not set up yet';
     }
     if (controls) controls.hidden = !configured;
     if (!configured) {
@@ -19307,24 +19391,26 @@
     }
     if (status) status.hidden = false;
     if (!Cloud) return;
-    const prefs = Cloud.readPrefs();
-    if (autoDaily) autoDaily.checked = !!prefs.autoDailyDropbox;
+    const cloudPrefs = Cloud.readPrefs();
+    if (autoDaily) autoDaily.checked = !!cloudPrefs.autoDailyDropbox;
     if (status) {
-      if (prefs.lastDropboxBackupAt) {
-        const when = new Date(prefs.lastDropboxBackupAt);
-        status.textContent = `Last Dropbox backup: ${Number.isNaN(when.getTime()) ? prefs.lastDropboxBackupAt : when.toLocaleString()}`;
+      const account = cloudPrefs.dropboxAccountLabel ? `Connected as ${cloudPrefs.dropboxAccountLabel}. ` : '';
+      if (cloudPrefs.lastDropboxBackupAt) {
+        const when = new Date(cloudPrefs.lastDropboxBackupAt);
+        status.textContent = `${account}Last Dropbox backup: ${Number.isNaN(when.getTime()) ? cloudPrefs.lastDropboxBackupAt : when.toLocaleString()}`;
       } else {
-        status.textContent = prefs.dropboxConnected
-          ? 'Dropbox connected — no backup uploaded yet.'
-          : 'Dropbox uses OAuth 2 PKCE in the browser (App folder). Nothing is stored on our server.';
+        status.textContent = cloudPrefs.dropboxConnected
+          ? `${account}Dropbox connected — no backup uploaded yet.`
+          : `${account}Dropbox uses OAuth 2 PKCE in the browser (App folder). Nothing is stored on our server.`;
       }
     }
   }
 
   async function runDropboxBackup() {
     const Cloud = window.NotesCloudBackup;
+    syncCloudProviderKeysFromPrefs();
     if (!Cloud?.isDropboxConfigured?.()) {
-      toast('Dropbox is not configured on this server', true);
+      toast('Dropbox is not set up yet — add your own App key', true);
       return;
     }
     const token = await Cloud.ensureDropboxToken({ interactive: false });
@@ -19359,6 +19445,37 @@
       if (btn) btn.disabled = !window.NotesCloudBackup?.isDropboxConfigured?.();
       refreshDropboxBackupUi();
     }
+  });
+
+  document.getElementById('btn-dropbox-key-save')?.addEventListener('click', async () => {
+    const Cloud = window.NotesCloudBackup;
+    const input = document.getElementById('dropbox-app-key-input');
+    const raw = String(input?.value || '').trim();
+    if (!Cloud?.isValidDropboxAppKey?.(raw)) {
+      toast('Dropbox App key should be 10–25 letters or digits', true);
+      return;
+    }
+    const prev = String(prefs.dropboxAppKey || '').trim();
+    if (raw !== prev) {
+      try { await Cloud.disconnectDropbox?.(); } catch (err) { /* ignore */ }
+    }
+    prefs.dropboxAppKey = raw;
+    pushGlobalPrefs();
+    syncCloudProviderKeysFromPrefs();
+    refreshDropboxBackupUi();
+    toast('Dropbox App key saved');
+  });
+
+  document.getElementById('btn-dropbox-key-remove')?.addEventListener('click', async () => {
+    const Cloud = window.NotesCloudBackup;
+    try { await Cloud.disconnectDropbox?.(); } catch (err) { /* ignore */ }
+    prefs.dropboxAppKey = '';
+    const input = document.getElementById('dropbox-app-key-input');
+    if (input) input.value = '';
+    pushGlobalPrefs();
+    syncCloudProviderKeysFromPrefs();
+    refreshDropboxBackupUi();
+    toast('Dropbox App key removed');
   });
 
   document.getElementById('backup-dropbox-auto-daily')?.addEventListener('change', (event) => {

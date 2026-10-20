@@ -14,9 +14,14 @@ const storeJs = fs.readFileSync(path.join(root, 'app/static/js/store.js'), 'utf8
 // Drive: server-side disabled when not configured; not-configured visible by default.
 assert.ok(appHtml.includes('google_drive_configured'));
 assert.ok(/btn-backup-google-drive[\s\S]*?disabled/.test(appHtml) || appHtml.includes('if not google_drive_configured'));
-assert.ok(appHtml.includes("Google Drive: Not configured on this server."));
-assert.ok(appJs.includes("missing.textContent = 'Google Drive: Not configured on this server.'")
-  || appJs.includes('Not configured on this server'));
+assert.ok(
+  appHtml.includes('Google Drive: Not set up yet')
+  || appHtml.includes('Google Drive: Not configured on this server.'),
+);
+assert.ok(
+  appJs.includes('Not set up yet — add your own key')
+  || appJs.includes('Not configured on this server'),
+);
 
 // Restore dialog copy
 assert.ok(appJs.includes("Add missing only"));

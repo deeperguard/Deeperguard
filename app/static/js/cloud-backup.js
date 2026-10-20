@@ -23,10 +23,35 @@ const NotesCloudBackup = (() => {
   let gisLoading = null;
   let dropboxAccessToken = '';
   let dropboxTokenExpiresAt = 0;
+  // Per-account OAuth app IDs from encrypted vault settings (not secrets).
+  let userGoogleClientId = '';
+  let userDropboxAppKey = '';
+  let accountScopeId = '';
+
+  function accountScope() {
+    try {
+      const fromStore = (typeof NotesStore !== 'undefined' && NotesStore.cachedAccount)
+        ? String(NotesStore.cachedAccount()?.email || '').trim().toLowerCase()
+        : '';
+      if (fromStore) return fromStore;
+      return String(accountScopeId || sessionStorage.getItem('notes_email') || '').trim().toLowerCase();
+    } catch (err) {
+      return String(accountScopeId || '').trim().toLowerCase();
+    }
+  }
+
+  function prefsStorageKey() {
+    const scope = accountScope();
+    return scope ? `${PREFS_KEY}:${scope}` : PREFS_KEY;
+  }
+
+  function setAccountScope(email) {
+    accountScopeId = String(email || '').trim().toLowerCase();
+  }
 
   function readPrefs() {
     try {
-      return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') || {};
+      return JSON.parse(localStorage.getItem(prefsStorageKey()) || '{}') || {};
     } catch (err) {
       return {};
     }
@@ -35,9 +60,57 @@ const NotesCloudBackup = (() => {
   function writePrefs(patch) {
     const next = { ...readPrefs(), ...patch };
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+      localStorage.setItem(prefsStorageKey(), JSON.stringify(next));
     } catch (err) { /* ignore */ }
     return next;
+  }
+
+  function isValidGoogleClientId(value) {
+    const id = String(value || '').trim();
+    return /^[a-z0-9-]+\.apps\.googleusercontent\.com$/i.test(id);
+  }
+
+  function isValidDropboxAppKey(value) {
+    const key = String(value || '').trim();
+    return /^[a-z0-9]{10,25}$/i.test(key);
+  }
+
+  function serverGoogleClientId() {
+    const meta = document.querySelector('meta[name="google-oauth-client-id"]');
+    const fromMeta = (meta && meta.getAttribute('content') || '').trim();
+    if (fromMeta) return fromMeta;
+    const root = document.getElementById('app');
+    return String(root?.dataset?.googleOauthClientId || '').trim();
+  }
+
+  function serverDropboxAppKey() {
+    const meta = document.querySelector('meta[name="dropbox-app-key"]');
+    const fromMeta = (meta && meta.getAttribute('content') || '').trim();
+    if (fromMeta) return fromMeta;
+    const root = document.getElementById('app');
+    return String(root?.dataset?.dropboxAppKey || '').trim();
+  }
+
+  function setUserProviderKeys({ googleClientId = undefined, dropboxAppKey = undefined } = {}) {
+    if (googleClientId !== undefined) {
+      const next = String(googleClientId || '').trim();
+      if (next !== userGoogleClientId) {
+        userGoogleClientId = next;
+      }
+    }
+    if (dropboxAppKey !== undefined) {
+      const next = String(dropboxAppKey || '').trim();
+      if (next !== userDropboxAppKey) {
+        userDropboxAppKey = next;
+      }
+    }
+  }
+
+  function userProviderKeys() {
+    return {
+      googleClientId: userGoogleClientId,
+      dropboxAppKey: userDropboxAppKey,
+    };
   }
 
   function sessionGet(key) {
@@ -61,11 +134,15 @@ const NotesCloudBackup = (() => {
   }
 
   function googleClientId() {
-    const meta = document.querySelector('meta[name="google-oauth-client-id"]');
-    const fromMeta = (meta && meta.getAttribute('content') || '').trim();
-    if (fromMeta) return fromMeta;
-    const root = document.getElementById('app');
-    return String(root?.dataset?.googleOauthClientId || '').trim();
+    // Resolution: user vault key → server env → none.
+    if (userGoogleClientId) return userGoogleClientId;
+    return serverGoogleClientId();
+  }
+
+  function googleKeySource() {
+    if (userGoogleClientId) return 'user';
+    if (serverGoogleClientId()) return 'server';
+    return '';
   }
 
   function isGoogleConfigured() {
@@ -73,11 +150,14 @@ const NotesCloudBackup = (() => {
   }
 
   function dropboxAppKey() {
-    const meta = document.querySelector('meta[name="dropbox-app-key"]');
-    const fromMeta = (meta && meta.getAttribute('content') || '').trim();
-    if (fromMeta) return fromMeta;
-    const root = document.getElementById('app');
-    return String(root?.dataset?.dropboxAppKey || '').trim();
+    if (userDropboxAppKey) return userDropboxAppKey;
+    return serverDropboxAppKey();
+  }
+
+  function dropboxKeySource() {
+    if (userDropboxAppKey) return 'user';
+    if (serverDropboxAppKey()) return 'server';
+    return '';
   }
 
   function isDropboxConfigured() {
@@ -191,6 +271,7 @@ const NotesCloudBackup = (() => {
           const expiresIn = Number(resp.expires_in) || 3600;
           tokenExpiresAt = Date.now() + (expiresIn * 1000) - 15000;
           writePrefs({ driveConnected: true });
+          refreshGoogleAccountLabel().catch(() => {});
           resolve(accessToken);
         },
         error_callback: (err) => {
@@ -310,6 +391,23 @@ const NotesCloudBackup = (() => {
     return res.text();
   }
 
+  async function refreshGoogleAccountLabel() {
+    try {
+      const token = accessToken || await ensureAccessToken();
+      if (!token) return '';
+      const res = await fetch('https://www.googleapis.com/drive/v3/about?fields=user', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return '';
+      const data = await res.json();
+      const label = String(data?.user?.emailAddress || data?.user?.displayName || '').trim();
+      if (label) writePrefs({ driveAccountLabel: label });
+      return label;
+    } catch (err) {
+      return '';
+    }
+  }
+
   function disconnectGoogle() {
     const revoke = () => {
       accessToken = '';
@@ -318,6 +416,7 @@ const NotesCloudBackup = (() => {
         driveConnected: false,
         driveFolderId: '',
         lastDriveFileId: '',
+        driveAccountLabel: '',
       });
     };
     if (accessToken && window.google?.accounts?.oauth2?.revoke) {
@@ -399,7 +498,27 @@ const NotesCloudBackup = (() => {
       dropboxRefreshToken: '',
       dropboxTokenExpiresAt: 0,
       lastDropboxFilePath: '',
+      dropboxAccountLabel: '',
     });
+  }
+
+  async function refreshDropboxAccountLabel() {
+    try {
+      const token = dropboxAccessToken || await ensureDropboxToken({ interactive: false });
+      if (!token) return '';
+      const res = await fetch(`${DROPBOX_API}/users/get_current_account`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: 'null',
+      });
+      if (!res.ok) return '';
+      const data = await res.json();
+      const label = String(data?.email || data?.name?.display_name || '').trim();
+      if (label) writePrefs({ dropboxAccountLabel: label });
+      return label;
+    } catch (err) {
+      return '';
+    }
   }
 
   function loadCachedDropboxToken() {
@@ -524,6 +643,7 @@ const NotesCloudBackup = (() => {
     const payload = await res.json();
     if (!payload.access_token) throw new Error('Dropbox token response missing access_token');
     rememberDropboxTokens(payload);
+    refreshDropboxAccountLabel().catch(() => {});
     return { ok: true, pending: pending || '' };
   }
 
@@ -659,6 +779,15 @@ const NotesCloudBackup = (() => {
     canShareFiles,
     saveBackupFile,
     triggerDownload,
+    isValidGoogleClientId,
+    isValidDropboxAppKey,
+    setAccountScope,
+    setUserProviderKeys,
+    userProviderKeys,
+    serverGoogleClientId,
+    serverDropboxAppKey,
+    googleKeySource,
+    dropboxKeySource,
     isGoogleConfigured,
     googleClientId,
     requestAccessToken,
@@ -667,6 +796,7 @@ const NotesCloudBackup = (() => {
     listDriveBackups,
     downloadDriveBackup,
     disconnectGoogle,
+    refreshGoogleAccountLabel,
     readPrefs,
     writePrefs,
     shouldAutoBackupDaily,
@@ -683,6 +813,7 @@ const NotesCloudBackup = (() => {
     listDropboxBackups,
     downloadDropboxBackup,
     disconnectDropbox,
+    refreshDropboxAccountLabel,
     shouldAutoBackupDropboxDaily,
     setAutoDailyDropbox,
     dueForDailyDropboxBackup,

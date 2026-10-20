@@ -4836,6 +4836,30 @@ html[data-theme="light"] .doc-search-hit {
   align-items: center;
   justify-content: center;
 }
+.cloud-provider-configure {
+  gap: 8px;
+}
+.cloud-howto {
+  margin: 4px 0 0;
+}
+.cloud-howto > summary {
+  cursor: pointer;
+  min-height: var(--touch);
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  list-style: none;
+}
+.cloud-howto > summary::-webkit-details-marker { display: none; }
+.cloud-howto-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 6px;
+}
+.cloud-howto-steps code {
+  word-break: break-all;
+}
 .settings-nested { padding: 0 14px 14px; }
 .settings-advanced { margin-top: 12px; }
 .settings-advanced > summary {
