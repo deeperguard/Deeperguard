@@ -8,7 +8,8 @@
   </script>
   <title>Deeperguard (encrypted notes) — Private notes you cannot leak</title>
   <meta name="description" content="Deeperguard is a zero-knowledge encrypted notes PWA — not DeepGuard deepfake software. AES-GCM on your device, free Pro in public beta. Create a vault at deeperguard.com.">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Deeperguard (encrypted notes) — Zero-knowledge notes PWA">
   <meta property="og:description" content="Private encrypted notes in your browser. Ciphertext-only sync, on-device OCR, offline PWA. Full Pro free during public beta — unrelated to DeepGuard AI video tools.">
   <meta property="og:type" content="website">
@@ -31,7 +32,7 @@
     <span class="mk-beta-copy mk-beta-copy--desktop">
       <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups. No payment details yet.
     </span>
-    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta · Pro included · No payment yet</span>
+    <span class="mk-beta-copy mk-beta-copy--mobile"><span class="mk-nowrap">Public beta ·</span> <span class="mk-nowrap">Pro included ·</span> <span class="mk-nowrap">No payment yet</span></span>
   </div>
 
   <header class="mk-topbar">
@@ -45,6 +46,7 @@
       </a>
       <input id="mk-nav-check" class="mk-nav-check" type="checkbox">
       <label class="mk-nav-toggle" for="mk-nav-check" aria-label="Menu"><span aria-hidden="true">☰</span></label>
+      <label class="mk-nav-backdrop" for="mk-nav-check" aria-hidden="true"></label>
       <nav class="mk-nav" aria-label="Sections">
         <a href="#use-cases">Use cases</a>
         <a href="#features">Features</a>
@@ -53,7 +55,6 @@
         <a href="#faq">FAQ</a>
         <a href="/download">Download</a>
         <a href="/contact">Contact</a>
-        <a class="mk-nav-open-app" href="{{ app_url }}">Open notes app</a>
       </nav>
       <div class="mk-topbar-actions">
         <a class="mk-btn ghost mk-topbar-signin" href="{{ login_url }}">Sign in</a>
@@ -123,6 +124,15 @@
       </aside>
     </section>
 
+    <section class="mk-oss-callout" aria-labelledby="mk-oss-callout-heading">
+      <div class="mk-oss-callout-inner">
+        <span class="mk-badge ok">Open source</span>
+        <h2 class="mk-oss-callout-title" id="mk-oss-callout-heading">Open source on GitHub — inspect the encryption and client code yourself.</h2>
+        <p class="mk-oss-callout-lede">The full application source is published for independent review. Verify how notes are encrypted, how sync works, and what the server actually stores.</p>
+        <a class="mk-btn secondary mk-oss-callout-btn" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">View source on GitHub</a>
+      </div>
+    </section>
+
     <!--
       TODO(dennis): Enable after unlock→notes reliability gate passes.
       Silent ~10s demo: unlock vault → type first line → calm writing canvas (no voiceover).
@@ -139,17 +149,7 @@
         <h2>Zero-knowledge notes PWA for work you cannot leak</h2>
         <p>
           Deeperguard is a <strong>zero-knowledge notes PWA</strong> for <strong>encrypted notes</strong>: ciphertext-only sync and on-device OCR.
-          <a href="/compare/standard-notes">Full Standard Notes comparison →</a>
         </p>
-      </div>
-    </section>
-
-    <section class="mk-oss-callout" aria-labelledby="mk-oss-callout-heading">
-      <div class="mk-oss-callout-inner">
-        <span class="mk-badge ok">Open source</span>
-        <h2 class="mk-oss-callout-title" id="mk-oss-callout-heading">Open source on GitHub — inspect the encryption and client code yourself.</h2>
-        <p class="mk-oss-callout-lede">The full application source is published for independent review. Verify how notes are encrypted, how sync works, and what the server actually stores.</p>
-        <a class="mk-btn secondary mk-oss-callout-btn" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">View source on GitHub</a>
       </div>
     </section>
 
@@ -300,7 +300,6 @@
           </div>
         </article>
       </div>
-      <p class="mk-section-head"><a href="/compare/standard-notes">Full Standard Notes comparison →</a></p>
     </section>
 
     <!-- Key Features Grid -->
@@ -443,7 +442,7 @@
       <!-- Feature Comparison Breakdown -->
       <div style="margin-top: 2rem;">
         <div class="mk-card mk-compare-wrap">
-          <table class="mk-compare" aria-label="Detailed Plan Feature Comparison">
+          <table class="mk-compare mk-compare-stack mk-compare-plans" aria-label="Detailed Plan Feature Comparison">
             <thead>
               <tr>
                 <th scope="col" style="width: 50%;">Feature</th>
