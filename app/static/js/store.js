@@ -321,13 +321,18 @@ const NotesStore = (() => {
   const inflightApiControllers = new Set();
 
   function abortInflightApi(reason = 'online') {
+    const count = inflightApiControllers.size;
+    // No-op when nothing is in flight — avoids DevTools console floods of
+    // api-abort logs on every recovery tick with an empty controller set.
+    if (!count) return 0;
     for (const ctrl of [...inflightApiControllers]) {
-      try { ctrl.abort(); } catch (err) { /* ignore */ }
+      try { ctrl.abort(reason); } catch (err) { /* ignore */ }
     }
     inflightApiControllers.clear();
     try {
-      console.debug('[notes-sync]', new Date().toISOString(), 'api-abort', { reason });
+      console.debug('[notes-sync]', new Date().toISOString(), 'api-abort', { reason, count });
     } catch (err) { /* ignore */ }
+    return count;
   }
 
   async function api(path, options = {}) {
@@ -340,13 +345,23 @@ const NotesStore = (() => {
     const device = deviceId();
     if (device) headers['X-Device-Id'] = device;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), options.timeoutMs || 8000);
+    const timer = setTimeout(() => {
+      try { ctrl.abort('timeout'); } catch (err) { /* ignore */ }
+    }, options.timeoutMs || 8000);
     inflightApiControllers.add(ctrl);
     let res;
     try {
       res = await fetch(path, { ...options, headers, signal: ctrl.signal });
     } catch (err) {
       if (err && err.name === 'AbortError') {
+        const why = (typeof ctrl.signal?.reason === 'string') ? ctrl.signal.reason : '';
+        // Intentional aborts (online-recovery / offline) are not timeouts.
+        if (why && why !== 'timeout') {
+          const aborted = new Error('Request aborted');
+          aborted.code = 'aborted';
+          aborted.reason = why;
+          throw aborted;
+        }
         throw new Error('Request timed out. Check the LAN connection and try again.');
       }
       throw err;

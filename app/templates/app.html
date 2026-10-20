@@ -127,9 +127,13 @@
       window.__notesHealthInflight = null;
       window.__notesHealthCtrl = null;
       window.__notesHealthGen = 0;
-      window.__notesResetHealthBackoff = function () {
+      window.__notesResetHealthBackoff = function (opts) {
         window.__notesHealthBackoffMs = 0;
         window.__notesHealthNextAt = 0;
+        // Passive 'online' listeners only clear the gate. Aborting here and
+        // again from recovery canceled fresh probes (1–6ms canceled rows).
+        var doAbort = !opts || opts.abort !== false;
+        if (!doAbort) return;
         window.__notesHealthGen = (window.__notesHealthGen || 0) + 1;
         // Drop hung offline probe so the next caller can start fresh.
         var old = window.__notesHealthCtrl;
@@ -200,7 +204,8 @@
       };
       try {
         window.addEventListener('online', function () {
-          window.__notesResetHealthBackoff();
+          // Open the backoff gate only — recovery owns a single abort+probe.
+          window.__notesResetHealthBackoff({ abort: false });
         });
       } catch (e) { /* ignore */ }
       var probeHealth = function () {
