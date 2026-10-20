@@ -2457,7 +2457,7 @@ def _render_notes_app():
         return render_template("https-setup.html", host=_lan_https_host(), build=NOTES_BUILD)
     from config import cidr_gate_enabled
 
-    from config import GOOGLE_OAUTH_CLIENT_ID
+    from config import DROPBOX_APP_KEY, GOOGLE_OAUTH_CLIENT_ID
 
     return render_template(
         "app.html",
@@ -2466,6 +2466,7 @@ def _render_notes_app():
         build=NOTES_BUILD,
         self_host=cidr_gate_enabled(),
         google_oauth_client_id=GOOGLE_OAUTH_CLIENT_ID,
+        dropbox_app_key=DROPBOX_APP_KEY,
     )
 
 

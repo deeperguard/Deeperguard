@@ -11,6 +11,7 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="notes-build" content="{{ build }}">
   <meta name="google-oauth-client-id" content="{{ google_oauth_client_id|default('', true) }}">
+  <meta name="dropbox-app-key" content="{{ dropbox_app_key|default('', true) }}">
   <title>Deeperguard</title>
   <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
@@ -650,7 +651,7 @@
         });
     })();
   </script>
-  <div id="app" class="app-root" data-csrf="{{ csrf_token }}" data-skip-login="{{ '1' if skip_login else '0' }}" data-self-host="{{ '1' if self_host else '0' }}" data-google-oauth-client-id="{{ google_oauth_client_id|default('', true) }}" hidden aria-hidden="true">
+  <div id="app" class="app-root" data-csrf="{{ csrf_token }}" data-skip-login="{{ '1' if skip_login else '0' }}" data-self-host="{{ '1' if self_host else '0' }}" data-google-oauth-client-id="{{ google_oauth_client_id|default('', true) }}" data-dropbox-app-key="{{ dropbox_app_key|default('', true) }}" hidden aria-hidden="true">
     <nav class="app-tabs" role="tablist" aria-label="App sections">
       <button type="button" class="app-tab active" id="app-tab-notes" data-app-tab="notes" role="tab" aria-selected="true" aria-controls="notes-shell">Notes</button>
       <button type="button" class="app-tab" id="app-tab-2fa" data-app-tab="2fa" role="tab" aria-selected="false" aria-controls="totp-pane">2FA</button>
@@ -1641,6 +1642,7 @@
       <section class="settings-group" data-plan-feature="email_backup">
         <h3>Backup &amp; import</h3>
         {% set google_drive_configured = (google_oauth_client_id|default('', true)|trim|length) > 0 %}
+        {% set dropbox_configured = (dropbox_app_key|default('', true)|trim|length) > 0 %}
         <div class="settings-card">
           <h4 class="settings-subtitle">Back up</h4>
           <p class="settings-hint">Encrypted on this device with your vault key. Google, Apple, Dropbox, and Deeperguard never see plaintext or keys.</p>
@@ -1648,9 +1650,10 @@
             <button type="button" id="btn-save-backup-file" class="btn primary">Save backup file</button>
             <button type="button" id="btn-download-backup" class="btn" hidden aria-hidden="true" tabindex="-1">Download encrypted vault</button>
             <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not configured"{% endif %}>Back up to Google Drive</button>
+            <button type="button" id="btn-backup-dropbox" class="btn"{% if not dropbox_configured %} disabled title="Not configured"{% endif %}>Back up to Dropbox</button>
             <button type="button" id="btn-backup-now" class="btn">Email backup now</button>
           </div>
-          <p id="backup-file-help" class="settings-hint">Save backup file downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code> (on iPhone: Save to Files → iCloud Drive). Email backup now sends the same encrypted format to your verified backup address.</p>
+          <p id="backup-file-help" class="settings-hint">Save backup file downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code> (on iPhone: Save to Files → iCloud Drive). Email backup now sends the same encrypted format to your verified backup address. Google Drive and Dropbox upload the same client-encrypted blob to an app folder you authorize in the browser.</p>
           <p id="google-drive-status" class="settings-hint" role="status" aria-live="polite"{% if not google_drive_configured %} hidden{% endif %}></p>
           <div id="google-drive-controls" class="settings-nested stack" {% if not google_drive_configured %}hidden{% endif %}>
             <label class="settings-row checkbox"><span>Automatic daily Google Drive backup when the app is open and online</span><input id="backup-drive-auto-daily" type="checkbox"></label>
@@ -1661,6 +1664,16 @@
             <ul id="google-drive-backup-list" class="settings-hint" hidden></ul>
           </div>
           <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not configured on this server.</p>
+          <p id="dropbox-status" class="settings-hint" role="status" aria-live="polite"{% if not dropbox_configured %} hidden{% endif %}></p>
+          <div id="dropbox-controls" class="settings-nested stack" {% if not dropbox_configured %}hidden{% endif %}>
+            <label class="settings-row checkbox"><span>Automatic daily Dropbox backup when the app is open and online</span><input id="backup-dropbox-auto-daily" type="checkbox"></label>
+            <div class="settings-actions">
+              <button type="button" id="btn-dropbox-list" class="btn ghost sm">Show Dropbox backups</button>
+              <button type="button" id="btn-dropbox-disconnect" class="btn ghost sm">Disconnect Dropbox</button>
+            </div>
+            <ul id="dropbox-backup-list" class="settings-hint" hidden></ul>
+          </div>
+          <p id="dropbox-not-configured" class="settings-hint"{% if dropbox_configured %} hidden{% endif %}>Dropbox: Not configured on this server.</p>
           <label class="settings-row stacked">Backup email
             <input id="backup-email" type="email" autocomplete="email">
           </label>

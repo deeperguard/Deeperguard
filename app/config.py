@@ -76,6 +76,9 @@ INDEXNOW_KEY = os.environ.get("NOTES_INDEXNOW_KEY", "deeperguard-notes-indexnow-
 # Browser Google Identity Services client ID for optional Drive backups (drive.file).
 # Empty = Google Drive button disabled in Settings. Never put a client secret here.
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+# Public Dropbox app key for optional App-folder backups (OAuth 2 PKCE in the browser).
+# Empty = Dropbox button disabled. No app secret — tokens stay client-side only.
+DROPBOX_APP_KEY = os.environ.get("DROPBOX_APP_KEY", "").strip()
 
 
 def app_entry_path() -> str:
