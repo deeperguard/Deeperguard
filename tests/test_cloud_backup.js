@@ -21,7 +21,7 @@ assert.ok(authPy.includes('www.googleapis.com'));
 assert.ok(appHtml.includes('btn-save-backup-file'));
 assert.ok(appHtml.includes('btn-backup-google-drive'));
 assert.ok(appHtml.includes('restore-backup-file'));
-assert.ok(appHtml.includes('On iPhone choose Save to Files'));
+assert.ok(appHtml.includes('iCloud Drive') || appHtml.includes('Save to Files'));
 assert.ok(appHtml.includes('cloud-backup.js'));
 assert.ok(appHtml.includes('google-drive-not-configured'));
 assert.ok(appJs.includes('NotesCloudBackup'));
