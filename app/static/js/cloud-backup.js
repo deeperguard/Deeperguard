@@ -271,6 +271,21 @@ const NotesCloudBackup = (() => {
     return gisLoading;
   }
 
+  function mapGoogleAuthError(err) {
+    const type = String(err?.type || '').toLowerCase();
+    const raw = String(err?.message || err?.type || err || '');
+    if (type === 'popup_failed_to_open' || (/popup/i.test(raw) && /block|failed.?to.?open/i.test(raw))) {
+      return 'Popup was blocked — allow popups for deeperguard.com.';
+    }
+    if (type === 'popup_closed' || /popup.*closed|window closed/i.test(raw)) {
+      return 'Google sign-in didn’t complete. Check your Client ID and try again.';
+    }
+    if (/invalid|unknown.?client|not configured/i.test(raw)) {
+      return 'Google sign-in didn’t complete. Check your Client ID and try again.';
+    }
+    return raw || 'Google sign-in didn’t complete. Check your Client ID and try again.';
+  }
+
   function requestAccessToken({ prompt = '' } = {}) {
     const clientId = googleClientId();
     if (!clientId) return Promise.reject(new Error('Google Drive is not configured'));
@@ -280,7 +295,10 @@ const NotesCloudBackup = (() => {
         scope: DRIVE_SCOPE,
         callback: (resp) => {
           if (resp.error) {
-            reject(new Error(resp.error_description || resp.error || 'Google auth failed'));
+            reject(new Error(mapGoogleAuthError({
+              type: resp.error,
+              message: resp.error_description || resp.error || 'Google auth failed',
+            })));
             return;
           }
           accessToken = resp.access_token || '';
@@ -291,7 +309,7 @@ const NotesCloudBackup = (() => {
           resolve(accessToken);
         },
         error_callback: (err) => {
-          reject(new Error(err?.message || 'Google auth cancelled'));
+          reject(new Error(mapGoogleAuthError(err)));
         },
       });
       tokenClient.requestAccessToken({ prompt });
@@ -589,14 +607,25 @@ const NotesCloudBackup = (() => {
         return;
       }
       let settled = false;
+      let focusTimer = null;
+      const openedAt = Date.now();
+      // Do not poll popup.closed — COOP on Dropbox's authorize page logs red
+      // "policy would block the window.closed call" console errors. Rely on
+      // same-origin postMessage after redirect, opener focus + grace, and timeout.
+      const DROPBOX_OAUTH_TIMEOUT_MS = 5 * 60 * 1000;
+      const FOCUS_IGNORE_MS = 1500;
+      const FOCUS_CANCEL_GRACE_MS = 900;
       const finish = (fn, value) => {
         if (settled) return;
         settled = true;
         window.removeEventListener('message', onMessage);
-        clearInterval(poll);
-        try { if (!popup.closed) popup.close(); } catch (err) { /* ignore */ }
+        window.removeEventListener('focus', onFocus);
+        clearTimeout(hardTimeout);
+        if (focusTimer) clearTimeout(focusTimer);
+        try { popup.close(); } catch (err) { /* ignore COOP / already closed */ }
         fn(value);
       };
+      const cancelMsg = 'Dropbox sign-in didn’t complete. Check your App key and try again.';
       const onMessage = (event) => {
         try {
           if (event.origin !== window.location.origin) return;
@@ -606,12 +635,20 @@ const NotesCloudBackup = (() => {
           finish(reject, err);
         }
       };
-      const poll = setInterval(() => {
-        if (popup.closed) {
-          finish(reject, new Error('Dropbox sign-in didn’t complete. Check your App key and try again.'));
-        }
-      }, 400);
+      const onFocus = () => {
+        if (settled) return;
+        if (Date.now() - openedAt < FOCUS_IGNORE_MS) return;
+        if (focusTimer) clearTimeout(focusTimer);
+        // User returned to this tab; give a late postMessage a moment, then cancel.
+        focusTimer = setTimeout(() => {
+          finish(reject, new Error(cancelMsg));
+        }, FOCUS_CANCEL_GRACE_MS);
+      };
+      const hardTimeout = setTimeout(() => {
+        finish(reject, new Error(cancelMsg));
+      }, DROPBOX_OAUTH_TIMEOUT_MS);
       window.addEventListener('message', onMessage);
+      window.addEventListener('focus', onFocus);
     });
   }
 
