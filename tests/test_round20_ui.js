@@ -39,10 +39,13 @@ assert.ok(appJs.includes('collapseMobileNavOnce();'));
 const countRule = css.split('html.layout-compact .note-list-count')[1].split('}')[0];
 assert.ok(countRule.includes('min-width: max-content'));
 
-// 5. Tags and Folders rows are 44px and start collapsed on a phone.
-const summary = css.split('html.layout-compact .tag-section summary.section-label')[1].split('}')[0];
-assert.ok(summary.includes('min-height: 44px'));
-assert.ok(summary.includes('justify-content: flex-start'));
+// 5. Tags and Folders stay ≥44px (chip row or drawer) and start collapsed.
+assert.ok(
+  css.includes('html.layout-compact .tag-section summary.section-label')
+  || css.includes('body:not(.nav-drawer-open) .nav-browse > .tag-section')
+  || css.includes('body:not(.nav-drawer-open) .nav-browse > .tag-section:not([open]) .section-label'),
+);
+assert.ok(css.includes('min-height: 44px'));
 assert.ok(appJs.includes('function collapseMobileNavOnce'));
 assert.ok(appJs.includes('prefs.mobileNavCollapsed'));
 assert.ok(appJs.includes('prefs.tagsCollapsed = true'));

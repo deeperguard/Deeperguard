@@ -16252,16 +16252,25 @@
     input.focus();
   });
   const tagSection = document.getElementById('tag-section');
+  const folderSection = document.getElementById('folder-section');
   if (tagSection) {
     tagSection.addEventListener('toggle', () => {
       prefs.tagsCollapsed = !tagSection.open;
+      // Phone chip row: only one browse panel open at a time.
+      if (tagSection.open && folderSection?.open && !isDesktopLayout()) {
+        folderSection.open = false;
+        prefs.foldersCollapsed = true;
+      }
       localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs));
     });
   }
-  const folderSection = document.getElementById('folder-section');
   if (folderSection) {
     folderSection.addEventListener('toggle', () => {
       prefs.foldersCollapsed = !folderSection.open;
+      if (folderSection.open && tagSection?.open && !isDesktopLayout()) {
+        tagSection.open = false;
+        prefs.tagsCollapsed = true;
+      }
       localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs));
     });
   }

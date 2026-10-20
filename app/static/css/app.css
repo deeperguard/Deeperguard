@@ -5988,12 +5988,114 @@ body.search-filters-open .fab-stack,
   .search-wrap { order: 4; }
   .filter-bar { order: 5; }
   .trash-toolbar { order: 6; }
+  .nav-browse { order: 7; }
   .tag-section,
   .folder-section { order: 7; }
   .list-sync-banner { order: 8; }
   .note-list-head { order: 9; }
   .note-list { order: 10; }
   .tag-section.is-empty:not(#folder-section) { display: none; }
+  /* Phone list: Tags + Folders share one 44px chip row (saves ≥80px). */
+  body:not(.nav-drawer-open) .nav-browse {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+    padding: 0 14px 4px;
+    margin: 0;
+    position: relative;
+    z-index: 6;
+    flex-shrink: 0;
+  }
+  body:not(.nav-drawer-open) .nav-browse > .tag-section,
+  body:not(.nav-drawer-open) .nav-browse > .folder-section {
+    order: unset;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    margin: 0;
+    position: static;
+  }
+  body:not(.nav-drawer-open) .nav-browse > .tag-section.is-empty:not(#folder-section) {
+    display: none;
+  }
+  body:not(.nav-drawer-open) .nav-browse > .tag-section.is-empty:not(#folder-section) ~ .folder-section {
+    flex: 1 1 100%;
+  }
+  body:not(.nav-drawer-open) .nav-browse > .tag-section:not([open]) .section-label,
+  body:not(.nav-drawer-open) .nav-browse > .folder-section:not([open]) .section-label,
+  body:not(.nav-drawer-open) .nav-browse > .tag-section summary.section-label,
+  body:not(.nav-drawer-open) .nav-browse > .folder-section summary.section-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 44px;
+    height: 44px;
+    margin: 0;
+    padding: 0 12px;
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius: 999px;
+    background: var(--sn-search, var(--bg-elevated));
+    box-sizing: border-box;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    line-height: 1.2;
+    color: var(--text);
+  }
+  body:not(.nav-drawer-open) .nav-browse > .tag-section[open] summary.section-label,
+  body:not(.nav-drawer-open) .nav-browse > .folder-section[open] summary.section-label {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+    color: var(--accent);
+  }
+  body:not(.nav-drawer-open) .nav-browse .section-chevron {
+    float: none;
+    margin: 0;
+    font-size: 12px;
+    opacity: 0.7;
+  }
+  /* Expanded panel overlays the list — chip row stays one line high. */
+  body:not(.nav-drawer-open) .nav-browse > .tag-section[open],
+  body:not(.nav-drawer-open) .nav-browse > .folder-section[open] {
+    z-index: 8;
+  }
+  body:not(.nav-drawer-open) .nav-browse > .tag-section:not([open]) > .nav-browse-panel,
+  body:not(.nav-drawer-open) .nav-browse > .folder-section:not([open]) > .nav-browse-panel {
+    display: none !important;
+  }
+  body:not(.nav-drawer-open) .nav-browse > .tag-section[open] > .nav-browse-panel,
+  body:not(.nav-drawer-open) .nav-browse > .folder-section[open] > .nav-browse-panel {
+    display: flex !important;
+    flex-direction: column;
+    gap: 8px;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(44px + 6px);
+    z-index: 12;
+    margin: 0;
+    padding: 10px 12px;
+    max-height: min(42dvh, 320px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-elevated);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+    box-sizing: border-box;
+  }
+  body:not(.nav-drawer-open) .nav-browse > .tag-section[open] .tag-list,
+  body:not(.nav-drawer-open) .nav-browse > .folder-section[open] .folder-list {
+    max-height: none;
+    overflow: visible;
+  }
   .sidebar-foot { display: none; }
   .list-toolbar {
     display: flex;
@@ -6378,6 +6480,10 @@ body.search-filters-open .fab-stack,
     scroll-padding-bottom: 16px;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+  }
+  /* Desktop: wrapper is transparent so Tags/Folders keep their stacked layout. */
+  .sidebar-nav .nav-browse {
+    display: contents;
   }
   .sidebar-nav #folder-section {
     flex: 0 0 auto;
@@ -7269,7 +7375,8 @@ body.search-filters-open .fab-stack,
     min-height: 0;
     padding-bottom: 4px;
   }
-  .tag-section.is-empty:not(#folder-section) > :not(summary):not(.tag-section-actions):not(#tag-composer) {
+  .tag-section.is-empty:not(#folder-section) > :not(summary):not(.tag-section-actions):not(#tag-composer),
+  .tag-section.is-empty:not(#folder-section) > .nav-browse-panel {
     display: none;
   }
   .note-item h3 {
@@ -8253,7 +8360,9 @@ body.editor-toolbar-tip-suppress .find-btn.btn.icon[aria-label]:focus-visible::a
    header scrolls away instead of stacking under the next one. */
 .sidebar-nav .sidebar-scroll > #filter-section,
 .sidebar-nav .sidebar-scroll > #tag-section,
-.sidebar-nav .sidebar-scroll > #folder-section {
+.sidebar-nav .sidebar-scroll > #folder-section,
+.sidebar-nav .sidebar-scroll > .nav-browse > #tag-section,
+.sidebar-nav .sidebar-scroll > .nav-browse > #folder-section {
   overflow: clip;
 }
 /* Phone Open sidebar. .sidebar-scroll is display:contents until the drawer
@@ -8458,8 +8567,15 @@ html.layout-compact body.nav-drawer-open .sn-nav-label {
 body.nav-drawer-open .filter > span {
   display: inline !important;
 }
-body.nav-drawer-open #sidebar-scroll > #tag-section,
-body.nav-drawer-open #sidebar-scroll > #folder-section,
+body.nav-drawer-open #sidebar-scroll > .nav-browse,
+body.nav-drawer-open #sidebar-scroll .nav-browse {
+  display: block !important;
+  width: 100%;
+}
+body.nav-drawer-open #sidebar-scroll > .nav-browse > #tag-section,
+body.nav-drawer-open #sidebar-scroll > .nav-browse > #folder-section,
+body.nav-drawer-open #sidebar-scroll #tag-section,
+body.nav-drawer-open #sidebar-scroll #folder-section,
 html.layout-compact body.nav-drawer-open .tag-section,
 html.layout-compact body.nav-drawer-open .folder-section {
   display: block !important;
@@ -8467,8 +8583,16 @@ html.layout-compact body.nav-drawer-open .folder-section {
   max-height: none;
   width: 100%;
 }
-html.layout-compact .sidebar .tag-section,
-html.layout-compact .sidebar .folder-section {
+body.nav-drawer-open .nav-browse-panel,
+html.layout-compact body.nav-drawer-open .nav-browse-panel {
+  display: contents;
+}
+/* Drawer / zoom: keep full-width stacked Tags & Folders. Main phone list uses
+   the compact .nav-browse chip row instead (see max-width: 999px rules). */
+html.layout-compact body.nav-drawer-open .sidebar .tag-section,
+html.layout-compact body.nav-drawer-open .sidebar .folder-section,
+html.layout-compact body.nav-drawer-open .sidebar .nav-browse > .tag-section,
+html.layout-compact body.nav-drawer-open .sidebar .nav-browse > .folder-section {
   display: block !important;
   width: 100% !important;
   max-width: 100%;
@@ -8476,8 +8600,8 @@ html.layout-compact .sidebar .folder-section {
   align-self: stretch;
   box-sizing: border-box;
 }
-html.layout-compact .sidebar .tag-section > summary.section-label,
-html.layout-compact .sidebar .folder-section > summary.section-label {
+html.layout-compact body.nav-drawer-open .sidebar .tag-section > summary.section-label,
+html.layout-compact body.nav-drawer-open .sidebar .folder-section > summary.section-label {
   display: flex !important;
   align-items: center;
   justify-content: flex-start;
@@ -8488,6 +8612,23 @@ html.layout-compact .sidebar .folder-section > summary.section-label {
   padding: 12px 14px !important;
   font-size: 16px;
   line-height: 20px;
+}
+html.layout-compact body:not(.nav-drawer-open) .nav-browse {
+  display: flex !important;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 14px 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+html.layout-compact body:not(.nav-drawer-open) .nav-browse > .tag-section,
+html.layout-compact body:not(.nav-drawer-open) .nav-browse > .folder-section {
+  display: block !important;
+  flex: 1 1 0 !important;
+  width: auto !important;
+  max-width: none !important;
+  padding: 0 !important;
 }
 html.layout-compact #totp-pane #btn-totp-add {
   display: inline-flex !important;

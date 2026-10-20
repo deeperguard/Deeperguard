@@ -48,8 +48,14 @@ assert.ok(css.includes('html.layout-compact .search-wrap'));
 
 // 5. Only the current sidebar section can keep its sticky header.
 assert.ok(css.includes('.sidebar-nav .sidebar-scroll > #filter-section'));
-assert.ok(css.includes('.sidebar-nav .sidebar-scroll > #folder-section'));
-const clip = css.split('.sidebar-nav .sidebar-scroll > #folder-section')[1].split('}')[0];
+assert.ok(
+  css.includes('.sidebar-nav .sidebar-scroll > #folder-section')
+  || css.includes('.sidebar-nav .sidebar-scroll > .nav-browse > #folder-section'),
+);
+const clipNeedle = css.includes('.sidebar-nav .sidebar-scroll > .nav-browse > #folder-section')
+  ? '.sidebar-nav .sidebar-scroll > .nav-browse > #folder-section'
+  : '.sidebar-nav .sidebar-scroll > #folder-section';
+const clip = css.split(clipNeedle)[1].split('}')[0];
 assert.ok(clip.includes('overflow: clip'));
 const tagOpen = css.split('.sidebar-nav .tag-section[open] {')[1].split('}')[0];
 assert.ok(tagOpen.includes('overflow: visible'));
