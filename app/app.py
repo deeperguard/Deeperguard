@@ -1815,7 +1815,7 @@ def api_backup_email():
         except VerificationSendLimited as exc:
             wait = int(getattr(exc, "retry_after", 0) or 0)
             msg = (
-                f"Code already sent — check your inbox, resend in {wait}s"
+                f"Code already sent — resend in {wait}s"
                 if wait > 0
                 else (exc.message or "Please wait before requesting another code")
             )

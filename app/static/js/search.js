@@ -737,9 +737,12 @@ const NotesSearch = (() => {
     return false;
   }
 
-  // Brand-new drafts only: empty title+body+attachments and never saved.
+  // Brand-new drafts only: empty title+body+attachments+tags+folder and never saved.
   function noteMayHardDiscard(note) {
-    return noteIsEmptyStub(note) && !noteHasBeenSaved(note);
+    if (!noteIsEmptyStub(note)) return false;
+    if (noteHasBeenSaved(note)) return false;
+    if (note.content?.folder_id) return false;
+    return true;
   }
 
   function compareNotesForSort(a, b, sort) {

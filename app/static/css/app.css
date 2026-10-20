@@ -918,13 +918,30 @@ html[data-theme="light"] .zk-badge {
 .brand h1 { margin: 14px 0 8px; font-size: 26px; font-weight: 650; letter-spacing: -0.02em; }
 .brand p { margin: 0 auto; max-width: 22em; color: var(--muted); font-size: 14px; line-height: 1.45; }
 .brand p strong { color: var(--text); font-weight: 600; }
+/* Match the form column width (.brand p max-width must not shrink these). */
+.brand p.zk-plain,
 .zk-plain {
-  margin: 10px auto 12px;
+  margin: 10px 0 0;
   max-width: none;
   width: 100%;
   font-size: 13px;
   line-height: 1.45;
   color: var(--muted);
+}
+.brand .auth-hint,
+.auth-hint {
+  margin: 12px 0 0;
+  max-width: none;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--warning, #ff9f1c) 45%, var(--border));
+  background: color-mix(in srgb, var(--warning, #ff9f1c) 12%, var(--bg-elevated));
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+  box-sizing: border-box;
 }
 .doc-pre {
   margin: 0;
@@ -1021,22 +1038,6 @@ html[data-theme="light"] .zk-badge {
   color: var(--accent);
   border: 1px solid var(--border);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-}
-.auth-hint {
-  margin: 0 auto 0;
-  max-width: none;
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--warning, #ff9f1c) 45%, var(--border));
-  background: color-mix(in srgb, var(--warning, #ff9f1c) 12%, var(--bg-elevated));
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.45;
-  text-align: left;
-}
-.brand .zk-plain + .auth-hint {
-  margin-top: 0;
 }
 .auth-hint a { color: var(--accent); font-weight: 500; }
 .unlock-help {
@@ -2027,11 +2028,13 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 .tag-section #btn-new-tag,
 .tag-section .tag-new-btn {
   margin: 8px 0 0;
-  padding: 6px 12px;
+  padding: 10px 14px;
+  min-height: 44px;
   font-size: 12px;
   border-style: dashed;
   border-radius: 999px;
   color: var(--muted);
+  box-sizing: border-box;
 }
 .tag-section .tag-new-btn:hover { color: var(--text); border-color: var(--accent); }
 .scan-save-as {
@@ -3795,6 +3798,12 @@ body.scan-dialog-open {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 10px 12px; border-radius: 10px; background: var(--bg-hover);
   font-size: 14px;
+}
+.history-item .btn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 14px;
+  box-sizing: border-box;
 }
 .attachment-item {
   display: grid;
@@ -5693,7 +5702,7 @@ body.search-filters-open .fab-stack,
   }
   .editor-head {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-columns: 44px minmax(0, 1fr);
     grid-template-areas:
       "back title"
       "tags tags"
@@ -5702,10 +5711,13 @@ body.search-filters-open .fab-stack,
     gap: 2px 8px;
     padding: 2px 12px 4px;
   }
-  .editor-head .mobile-only {
+  .editor-head .mobile-only,
+  .editor-head #btn-back {
     grid-area: back;
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
   .editor-head .editor-head-main { grid-area: title; min-width: 0; }
   .editor-head .tag-bar-shell {
@@ -5724,12 +5736,13 @@ body.search-filters-open .fab-stack,
   .editor-head .tag-bar-toggle {
     width: 100%;
     margin: 0;
-    padding: 2px 0;
+    padding: 10px 4px;
     border: 0;
-    border-radius: 0;
+    border-radius: 6px;
     background: transparent;
     font-size: 13px;
-    min-height: 0;
+    min-height: 44px;
+    box-sizing: border-box;
   }
   .editor-scroll > .editor-foot,
   .editor-scroll > .attachments {
