@@ -720,18 +720,25 @@ def csp_nonce() -> str:
 
 def content_security_policy() -> str:
     nonce = csp_nonce()
+    # Optional Google Drive backups (GIS token client + drive.file). Allowed
+    # only so the client can load the GIS script and call Google APIs — no
+    # vault keys or plaintext ever leave the browser.
+    google_script = " https://accounts.google.com"
+    google_connect = " https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com"
+    google_frame = " https://accounts.google.com"
     return "; ".join(
         (
             "default-src 'self'",
-            f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'",
+            f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'{google_script}",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
             "font-src 'self'",
-            "connect-src 'self'",
+            f"connect-src 'self'{google_connect}",
             "media-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'self'",
             "frame-ancestors 'none'",
+            f"frame-src 'self'{google_frame}",
             "worker-src 'self' blob:",
             "manifest-src 'self'",
             "form-action 'self'",

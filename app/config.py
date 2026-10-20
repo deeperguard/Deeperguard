@@ -73,6 +73,9 @@ NOTES_PUBLIC_URL = (
     or f"https://{NOTES_PUBLIC_HOST}"
 )
 INDEXNOW_KEY = os.environ.get("NOTES_INDEXNOW_KEY", "deeperguard-notes-indexnow-8f3a").strip()
+# Browser Google Identity Services client ID for optional Drive backups (drive.file).
+# Empty = Google Drive button disabled in Settings. Never put a client secret here.
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
 
 
 def app_entry_path() -> str:
