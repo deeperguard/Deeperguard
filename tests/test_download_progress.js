@@ -29,7 +29,7 @@ assert.deepStrictEqual(parseVaultSyncProgressMessage('Sync (3/10) · 30%'), {
   isDownload: false,
 });
 assert.deepStrictEqual(parseVaultSyncProgressMessage('Downloading notes… 799 / 800 · 550 notes'), {
-  pct: null,
+  pct: 99,
   done: 799,
   total: 800,
   notes: 550,
@@ -42,14 +42,21 @@ assert.deepStrictEqual(parseVaultSyncProgressMessage('Downloading… 40% (12/800
   notes: 550,
   isDownload: true,
 });
+assert.deepStrictEqual(parseVaultSyncProgressMessage('Downloading 120 of 555 notes'), {
+  pct: 22,
+  done: 120,
+  total: 555,
+  notes: null,
+  isDownload: true,
+});
 
 assert.strictEqual(
   formatVaultSyncDownloadProgress({ processed: 799, total: 800, notes: 550 }),
-  'Downloading… 799 / 800 items · 550 notes ready',
+  'Downloading 550 of 800 notes',
 );
 assert.strictEqual(
   formatVaultSyncDownloadProgress({ processed: 1, total: 5, notes: 0 }),
-  'Downloading… 1 / 5 items',
+  'Downloading 1 of 5 notes',
 );
 assert.strictEqual(
   formatVaultSyncDownloadProgress({ pct: 55 }),
@@ -62,15 +69,15 @@ assert.strictEqual(
 );
 assert.strictEqual(
   syncBannerProgressText('Sync (2/5) · 40%', 'Downloading notes…'),
-  'Downloading… 2 / 5 items',
+  'Downloading 2 of 5 notes',
 );
 assert.strictEqual(
   syncBannerProgressText('Downloading… 40% (799/800) · 550 notes', 'Downloading…'),
-  'Downloading… 799 / 800 items · 550 notes ready',
+  'Downloading 550 of 800 notes',
 );
 assert.strictEqual(
   syncBannerProgressText('Downloading notes… 799 / 800 · 550 notes', 'Downloading notes…'),
-  'Downloading… 799 / 800 items · 550 notes ready',
+  'Downloading 550 of 800 notes',
 );
 
 const root = path.join(__dirname, '..');
