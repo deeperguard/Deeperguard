@@ -114,17 +114,43 @@
           reveal();
         }
       };
-      // One health read per page load. Later callers share this promise
-      // for a few seconds instead of each firing their own GET.
-      window.__notesFetchHealth = function (force) {
+      // Share a successful health read briefly. Never cache failures — offline
+      // nulls used to stick for 8s and delay online recovery past 5s.
+      window.__notesFetchHealth = function (force, timeoutMs) {
         var now = Date.now();
-        if (!force && window.__notesHealthPromise && (now - (window.__notesHealthAt || 0)) < 8000) {
+        var ttl = 1500;
+        if (!force && window.__notesHealthOk && window.__notesHealthPromise
+          && (now - (window.__notesHealthAt || 0)) < ttl) {
           return window.__notesHealthPromise;
         }
         window.__notesHealthAt = now;
-        window.__notesHealthPromise = fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
+        window.__notesHealthOk = false;
+        var ms = Math.max(500, Number(timeoutMs) || 1500);
+        var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, ms);
+        if (window.__notesHealthCtrl) {
+          try { window.__notesHealthCtrl.abort(); } catch (e) {}
+        }
+        window.__notesHealthCtrl = ctrl;
+        window.__notesHealthPromise = fetch('/api/health', {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          signal: ctrl ? ctrl.signal : undefined,
+        })
           .then(function (res) { return res.ok ? res.json() : null; })
-          .catch(function () { return null; });
+          .then(function (data) {
+            if (data && data.ok) window.__notesHealthOk = true;
+            else window.__notesHealthPromise = null;
+            return data;
+          })
+          .catch(function () {
+            window.__notesHealthPromise = null;
+            return null;
+          })
+          .finally(function () {
+            if (timer) clearTimeout(timer);
+            if (window.__notesHealthCtrl === ctrl) window.__notesHealthCtrl = null;
+          });
         return window.__notesHealthPromise;
       };
       var probeHealth = function () {

@@ -316,6 +316,20 @@ const NotesStore = (() => {
     }
   }
 
+  // Track in-flight API fetches so online recovery can abort hung offline
+  // requests instead of waiting out their full timeout.
+  const inflightApiControllers = new Set();
+
+  function abortInflightApi(reason = 'online') {
+    for (const ctrl of [...inflightApiControllers]) {
+      try { ctrl.abort(); } catch (err) { /* ignore */ }
+    }
+    inflightApiControllers.clear();
+    try {
+      console.debug('[notes-sync]', new Date().toISOString(), 'api-abort', { reason });
+    } catch (err) { /* ignore */ }
+  }
+
   async function api(path, options = {}) {
     const headers = { ...(options.headers || {}) };
     if (options.body && !headers['Content-Type']) {
@@ -327,6 +341,7 @@ const NotesStore = (() => {
     if (device) headers['X-Device-Id'] = device;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), options.timeoutMs || 8000);
+    inflightApiControllers.add(ctrl);
     let res;
     try {
       res = await fetch(path, { ...options, headers, signal: ctrl.signal });
@@ -337,6 +352,7 @@ const NotesStore = (() => {
       throw err;
     } finally {
       clearTimeout(timer);
+      inflightApiControllers.delete(ctrl);
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -5575,6 +5591,7 @@ const NotesStore = (() => {
     abandonLocalForPasswordRotation,
     passwordChangeInFlight: () => passwordChangeInFlight,
     maxAttachmentBytes: MAX_ATTACHMENT_BYTES,
+    abortInflightApi,
     state,
   };
 })();

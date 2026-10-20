@@ -742,6 +742,8 @@ const NotesSearch = (() => {
   // were only auto-created or synced without typing are not "saved".
   function noteHasBeenSaved(note) {
     if (!note?.content || note.content.type !== 'note') return false;
+    // Sticky flag set on first real edit — survives clearing title+body.
+    if (note.content.user_edited) return true;
     if (note.content.folder_id) return true;
     if ((note.content.tags || []).length) return true;
     if ((note.content.attachments || []).length) return true;

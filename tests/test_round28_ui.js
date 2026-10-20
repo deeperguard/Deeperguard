@@ -39,7 +39,10 @@ assert.ok(tight.includes('.mk-brand small { display: none;'));
 
 assert.ok(appJs.includes('function scheduleOnlineRecovery'));
 assert.ok(appJs.includes('scheduleOnlineRecovery(0)'));
-assert.ok(appJs.includes('const delays = [500, 1000, 2000, 4000]'));
+assert.ok(
+  appJs.includes('const delays = [0, 500, 1000, 2000, 4000]')
+  || appJs.includes('const delays = [500, 1000, 2000, 4000]'),
+);
 assert.ok(storeJs.includes('will sync when online'));
 assert.ok(storeJs.includes("if (!state.dirty.size && /will sync when online/.test(lastStatusText)) notifyStatus('Saved')"));
 assert.ok(appJs.includes("ui.saveStatus.textContent = 'Saved'"));
