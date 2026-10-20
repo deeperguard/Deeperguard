@@ -2,6 +2,19 @@ const NotesOcr = (() => {
   const MAX_SCAN_PAGES = NotesClientOcr.MAX_SCAN_PAGES;
 
   async function probeHealth() {
+    // Share the page's single health-probe owner (backoff + one in-flight).
+    if (typeof window !== 'undefined' && typeof window.__notesFetchHealth === 'function') {
+      try {
+        const data = await window.__notesFetchHealth(false, 5000);
+        if (!data || !data.ok) return false;
+        if (typeof window.notesMarkNetworkReachable === 'function') {
+          window.notesMarkNetworkReachable();
+        }
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
     if (typeof fetch !== 'function') return false;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);

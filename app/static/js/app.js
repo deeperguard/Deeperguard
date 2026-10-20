@@ -2039,21 +2039,48 @@
   }
 
   function fetchHealthJson({ force = false, timeoutMs = 1500 } = {}) {
-    // Short timeout + optional force so online recovery never waits on a hung
-    // or cached-failed probe from the offline window.
+    // Single owner lives on window.__notesFetchHealth (app.html). All callers
+    // share one in-flight promise and a global 2s→5s→10s failure backoff.
     if (typeof window.__notesFetchHealth === 'function') {
       return window.__notesFetchHealth(force, timeoutMs);
     }
+    // Fallback when the boot helper is missing — still share + back off.
+    if (fetchHealthJson._inflight) return fetchHealthJson._inflight;
+    const now = Date.now();
+    if (!force && fetchHealthJson._nextAt && now < fetchHealthJson._nextAt) {
+      return Promise.resolve(null);
+    }
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch (err) { /* ignore */ } }, timeoutMs) : 0;
-    return fetch('/api/health', {
+    const inflight = fetch('/api/health', {
       cache: 'no-store',
       credentials: 'same-origin',
       signal: ctrl?.signal,
     })
       .then((res) => (res.ok ? res.json() : null))
-      .catch(() => null)
-      .finally(() => { if (timer) clearTimeout(timer); });
+      .then((data) => {
+        if (data?.ok) {
+          fetchHealthJson._backoff = 0;
+          fetchHealthJson._nextAt = 0;
+          return data;
+        }
+        const prev = fetchHealthJson._backoff || 0;
+        fetchHealthJson._backoff = prev < 2000 ? 2000 : (prev < 5000 ? 5000 : 10000);
+        fetchHealthJson._nextAt = Date.now() + fetchHealthJson._backoff;
+        return null;
+      })
+      .catch(() => {
+        const prev = fetchHealthJson._backoff || 0;
+        fetchHealthJson._backoff = prev < 2000 ? 2000 : (prev < 5000 ? 5000 : 10000);
+        fetchHealthJson._nextAt = Date.now() + fetchHealthJson._backoff;
+        return null;
+      })
+      .finally(() => {
+        if (timer) clearTimeout(timer);
+        if (fetchHealthJson._inflight === inflight) fetchHealthJson._inflight = null;
+      });
+    fetchHealthJson._inflight = inflight;
+    return inflight;
   }
 
   function flushPendingUpdatePrompt() {
@@ -7939,6 +7966,8 @@
     });
   }
 
+  let onlineRecoveryActive = false;
+
   async function probeNetwork({ syncOnRecovery = false, forceHealth = false } = {}) {
     // iOS LAN-only Wi‑Fi may report navigator.onLine=false while homelab is reachable.
     // Cellular without WireGuard cannot reach 192.168.x — expect failures there.
@@ -7975,7 +8004,8 @@
         NotesStore.emitSync('offline', 'Offline');
       }
       updateNetworkStatusBanner();
-      startOfflineWatch();
+      // Don't nest offline-watch probes while the online-recovery chain owns retries.
+      if (!onlineRecoveryActive) startOfflineWatch();
       return false;
     }
   }
@@ -8030,11 +8060,11 @@
   }
 
   function startOfflineWatch() {
-    if (offlineWatchTimer) return;
+    if (offlineWatchTimer || onlineRecoveryActive) return;
     offlineWatchDelayMs = 2000;
     const tick = () => {
       offlineWatchTimer = 0;
-      if (networkReachable) {
+      if (networkReachable || onlineRecoveryActive) {
         offlineWatchDelayMs = 2000;
         return;
       }
@@ -8047,14 +8077,15 @@
         offlineWatchDelayMs = nextOfflineWatchDelay(offlineWatchDelayMs);
         offlineWatchTimer = setTimeout(tick, offlineWatchDelayMs);
       };
-      // Only start recovery when the browser says online AND a probe succeeds.
-      // Do not treat connection-change / navigator.onLine alone as online.
+      // Quiet probe through the shared owner (respects global backoff). Only
+      // escalate to recovery when the browser reports online AND health succeeds.
       if (typeof navigator !== 'undefined' && navigator.onLine) {
-        probeNetwork({ syncOnRecovery: false, forceHealth: true }).then((ok) => {
+        probeNetwork({ syncOnRecovery: false, forceHealth: false }).then((ok) => {
           finish(ok);
         }).catch(() => finish(false));
         return;
       }
+      // Still offline — no /api/health call; just wait out the backoff window.
       finish(false);
     };
     offlineWatchTimer = setTimeout(tick, offlineWatchDelayMs);
@@ -8062,22 +8093,27 @@
 
   function scheduleOnlineRecovery(attempt = 0) {
     clearTimeout(onlineRecoveryTimer);
-    // First probe immediately (0ms); then 0.5/1/2/4s. Never blocked behind a
-    // hung offline fetch — those are aborted when recovery starts.
+    // First probe immediately (0ms); then 0.5/1/2/4s. Health probes share one
+    // in-flight request and global backoff — never abort-storm.
     const delays = [0, 500, 1000, 2000, 4000];
     if (attempt === 0) {
       stopOfflineWatch();
+      onlineRecoveryActive = true;
       onlineRecoveryGeneration += 1;
+      try { window.__notesResetHealthBackoff?.(); } catch (err) { /* ignore */ }
       NotesStore.abortInflightApi?.('online-recovery');
     }
     const generation = onlineRecoveryGeneration;
     if (attempt >= delays.length) {
+      onlineRecoveryActive = false;
       if (!networkReachable) startOfflineWatch();
       return;
     }
     onlineRecoveryTimer = setTimeout(() => {
       if (generation !== onlineRecoveryGeneration) return;
       // Always probe — even when dirty is empty — so the Offline caption clears.
+      // forceHealth skips the success cache after online reset; backoff still
+      // applies if probes keep failing (no abort of in-flight requests).
       probeNetwork({ syncOnRecovery: true, forceHealth: true }).then((ok) => {
         if (generation !== onlineRecoveryGeneration) return ok;
         const stillDirty = NotesStore.state?.dirty?.size || 0;
@@ -8097,6 +8133,7 @@
         if (!networkReachable || (NotesStore.state?.dirty?.size || 0) > 0) {
           scheduleOnlineRecovery(attempt + 1);
         } else {
+          onlineRecoveryActive = false;
           stopOfflineWatch();
         }
       });
@@ -13335,9 +13372,8 @@
     let serverLabel = 'Checking server…';
     let serverBuild = '';
     try {
-      const res = await fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) {
+      const data = await fetchHealthJson();
+      if (data?.ok) {
         serverBuild = String(data.build || '');
         serverLabel = serverReachableCopy();
       }
@@ -13474,9 +13510,8 @@
     let serverOk = !!serverOkHint;
     if (!serverOkHint) {
       try {
-        const res = await fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.ok) {
+        const data = await fetchHealthJson();
+        if (data?.ok) {
           serverOk = true;
           serverBuild = String(data.build || '');
         }
@@ -18366,9 +18401,8 @@
       try { e.stopPropagation(); } catch (err) { /* ignore */ }
       let serverBuild = '';
       try {
-        const res = await fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' });
-        const data = await res.json().catch(() => ({}));
-        serverBuild = String(data.build || '');
+        const data = await fetchHealthJson();
+        serverBuild = String(data?.build || '');
       } catch (err) {
         /* ignore */
       }
@@ -19374,9 +19408,8 @@
     if (!window.isSecureContext || typeof caches === 'undefined') return;
     const build = document.querySelector('meta[name="notes-build"]')?.content || '';
     try {
-      const res = await fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' });
-      const data = await res.json().catch(() => ({}));
-      if (data.build && build && String(data.build) !== build) {
+      const data = await fetchHealthJson();
+      if (data?.build && build && String(data.build) !== build) {
         preseedLatestShell(String(data.build)).catch(() => {});
         return;
       }
@@ -19448,8 +19481,8 @@
     const currentBuild = document.querySelector('meta[name="notes-build"]')?.content || '';
     let serverBuild = '';
     try {
-      const res = await fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' });
-      const data = await res.json().catch(() => ({}));
+      try { window.__notesResetHealthBackoff?.(); } catch (err) { /* ignore */ }
+      const data = await fetchHealthJson({ force: true, timeoutMs: 3000 });
       serverBuild = data && data.build ? String(data.build) : '';
     } catch (err) {
       serverBuild = '';
@@ -20009,6 +20042,7 @@
     } catch (err) { /* ignore */ }
     // Drop the offline-watch fallback + abort hung offline fetches immediately.
     stopOfflineWatch();
+    try { window.__notesResetHealthBackoff?.(); } catch (err) { /* ignore */ }
     NotesStore.abortInflightApi?.(source);
     onAppForeground('online');
     // Restart the backoff chain even if a probe is already in flight.
