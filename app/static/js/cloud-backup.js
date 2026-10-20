@@ -585,7 +585,7 @@ const NotesCloudBackup = (() => {
         'width=640,height=720,menubar=no,toolbar=no,status=no,resizable=yes,scrollbars=yes',
       );
       if (!popup) {
-        reject(new Error('Allow popups to connect Dropbox, then try again'));
+        reject(new Error('Popup was blocked — allow popups for deeperguard.com.'));
         return;
       }
       let settled = false;
@@ -608,7 +608,7 @@ const NotesCloudBackup = (() => {
       };
       const poll = setInterval(() => {
         if (popup.closed) {
-          finish(reject, new Error('Dropbox sign-in cancelled'));
+          finish(reject, new Error('Dropbox sign-in didn’t complete. Check your App key and try again.'));
         }
       }, 400);
       window.addEventListener('message', onMessage);

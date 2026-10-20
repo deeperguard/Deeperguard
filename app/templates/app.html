@@ -1654,7 +1654,7 @@
           <p id="backup-file-help" class="settings-hint">Downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code> (on iPhone: Save to Files → iCloud Drive).</p>
 
           <div class="settings-actions">
-            <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not set up yet"{% endif %}>Back up to Google Drive</button>
+            <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not set up yet"{% endif %}>Connect Google Drive</button>
           </div>
           <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not set up yet — add your own key</p>
           <div id="google-drive-configure" class="settings-nested stack cloud-provider-configure">
@@ -1682,7 +1682,7 @@
             </details>
           </div>
           <p id="google-drive-status" class="settings-hint" role="status" aria-live="polite"{% if not google_drive_configured %} hidden{% endif %}></p>
-          <div id="google-drive-controls" class="settings-nested stack" {% if not google_drive_configured %}hidden{% endif %}>
+          <div id="google-drive-controls" class="settings-nested stack" hidden>
             <p class="settings-hint">Uploads the same client-encrypted blob to a Drive folder you authorize in the browser.</p>
             <label class="settings-row checkbox"><span>Automatic daily Google Drive backup when the app is open and online</span><input id="backup-drive-auto-daily" type="checkbox"></label>
             <div class="settings-actions">
@@ -1693,7 +1693,7 @@
           </div>
 
           <div class="settings-actions">
-            <button type="button" id="btn-backup-dropbox" class="btn"{% if not dropbox_configured %} disabled title="Not set up yet"{% endif %}>Back up to Dropbox</button>
+            <button type="button" id="btn-backup-dropbox" class="btn"{% if not dropbox_configured %} disabled title="Not set up yet"{% endif %}>Connect Dropbox</button>
           </div>
           <p id="dropbox-not-configured" class="settings-hint"{% if dropbox_configured %} hidden{% endif %}>Dropbox: Not set up yet — add your own key</p>
           <div id="dropbox-configure" class="settings-nested stack cloud-provider-configure">
@@ -1719,7 +1719,7 @@
             </details>
           </div>
           <p id="dropbox-status" class="settings-hint" role="status" aria-live="polite"{% if not dropbox_configured %} hidden{% endif %}></p>
-          <div id="dropbox-controls" class="settings-nested stack" {% if not dropbox_configured %}hidden{% endif %}>
+          <div id="dropbox-controls" class="settings-nested stack" hidden>
             <p class="settings-hint">Uploads the same client-encrypted blob to Apps/Deeperguard via OAuth 2 PKCE.</p>
             <label class="settings-row checkbox"><span>Automatic daily Dropbox backup when the app is open and online</span><input id="backup-dropbox-auto-daily" type="checkbox"></label>
             <div class="settings-actions">
