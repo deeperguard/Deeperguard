@@ -149,6 +149,71 @@ async function testOfflineCapsHealthCalls() {
   assert.strictEqual(window.__notesHealthBackoffMs, 10000);
 }
 
+/**
+ * Count ALL /api/health fetches from every source while offline for 30s:
+ * boot probe, OCR, connection-change, offline-watch quiet probes, progress UI,
+ * and a misguided recovery wave that must WAIT OUT backoff (not clear it).
+ */
+async function testAllSourcesOfflineCap() {
+  const nowRef = { t: 5_000_000 };
+  let healthCalls = 0;
+  const urls = [];
+  const fetchImpl = (url) => {
+    healthCalls += 1;
+    urls.push(url);
+    return Promise.reject(new Error('offline'));
+  };
+  const window = installHealthOwner({ fetchImpl, nowRef });
+  const delays = [0, 500, 1000, 2000, 4000];
+  let recoveryAttempt = 0;
+  let watchDelay = 2000;
+  let nextRecoveryAt = nowRef.t; // start one recovery wave at t0 (like onLine flicker)
+  let nextWatchAt = nowRef.t + 2000;
+
+  const end = nowRef.t + 30_000;
+  // Boot probe once.
+  await window.__notesFetchHealth(false, 1500);
+
+  while (nowRef.t <= end) {
+    // Inline dismiss / banner / hardRefresh fallbacks all go through owner.
+    await window.__notesFetchHealth(false, 1500); // progress UI / diagnostics
+    await window.__notesFetchHealth(false, 5000); // OCR probeHealth
+    // connection-change: force but respects gate (no reset).
+    await window.__notesFetchHealth(true, 1500);
+
+    // Offline watch quiet probe on its schedule (navigator.onLine true quirk).
+    if (nowRef.t >= nextWatchAt) {
+      await window.__notesFetchHealth(false, 1500);
+      watchDelay = watchDelay < 5000 ? 5000 : 10000;
+      nextWatchAt = nowRef.t + watchDelay;
+    }
+
+    // Recovery wave: attempt 0 resets once; later attempts wait out NextAt.
+    if (recoveryAttempt < delays.length && nowRef.t >= nextRecoveryAt) {
+      if (recoveryAttempt === 0) {
+        window.__notesResetHealthBackoff(); // one abort+reset per wave
+      }
+      await window.__notesFetchHealth(true, 1500);
+      recoveryAttempt += 1;
+      if (recoveryAttempt < delays.length) {
+        const gateWait = Math.max(0, (window.__notesHealthNextAt || 0) - nowRef.t);
+        nextRecoveryAt = nowRef.t + Math.max(delays[recoveryAttempt], gateWait);
+      } else {
+        // Exhausted — do not immediately start another wave (that was the storm).
+        nextRecoveryAt = end + 1;
+      }
+    }
+
+    nowRef.t += 100;
+  }
+
+  assert.ok(urls.every((u) => u === '/api/health'));
+  assert.ok(
+    healthCalls <= 6,
+    `all-sources offline 30s must make ≤6 /api/health calls, got ${healthCalls}`,
+  );
+}
+
 async function testReconnectSyncWithin1s() {
   const nowRef = { t: 2_000_000 };
   let healthCalls = 0;
@@ -226,6 +291,7 @@ async function testShareInflightNoAbortStorm() {
 (async () => {
   await testShareInflightNoAbortStorm();
   await testOfflineCapsHealthCalls();
+  await testAllSourcesOfflineCap();
   await testReconnectSyncWithin1s();
   console.log('test_round38_health_probe ok');
 })().catch((err) => {

@@ -8088,12 +8088,15 @@
         offlineWatchDelayMs = nextOfflineWatchDelay(offlineWatchDelayMs);
         offlineWatchTimer = setTimeout(tick, offlineWatchDelayMs);
       };
-      // Browser reports online while we still think we are offline — hand off
-      // to the single recovery owner (reset backoff, probe, sync). Do not poke
-      // health here (that fought the backoff gate and never recovered).
+      // DevTools Offline often leaves navigator.onLine true while fetch fails.
+      // Quiet probe through the shared gate (no reset) — only escalate to
+      // recovery on success. Handing off to recovery here reopened the gate
+      // every 0.5–4s and caused ~18 health GETs / 30s.
       if (typeof navigator !== 'undefined' && navigator.onLine) {
-        offlineWatchDelayMs = 2000;
-        scheduleOnlineRecovery(0);
+        offlineWatchTickActive = true;
+        probeNetwork({ syncOnRecovery: false, forceHealth: false }).then((ok) => {
+          finish(ok);
+        }).catch(() => finish(false));
         return;
       }
       // Still offline — no /api/health call; just wait out the backoff window.
@@ -8133,12 +8136,12 @@
       }
       return;
     }
+    // Wait out the shared health backoff instead of clearing it on every
+    // attempt (clearing caused an offline health storm when onLine flickered).
+    const gateWait = Math.max(0, (Number(window.__notesHealthNextAt) || 0) - Date.now());
+    const wait = Math.max(delays[attempt], gateWait);
     onlineRecoveryTimer = setTimeout(() => {
       if (generation !== onlineRecoveryGeneration) return;
-      // Always open the backoff gate before a recovery probe. Attempt 0 already
-      // aborted hung work; later attempts must not no-op for 2–10s after a
-      // single failure (that left the UI stuck Offline after DevTools Online).
-      try { window.__notesResetHealthBackoff?.({ abort: false }); } catch (err) { /* ignore */ }
       // Always probe — even when dirty is empty — so the Offline caption clears.
       probeNetwork({ syncOnRecovery: true, forceHealth: true }).then((ok) => {
         if (generation !== onlineRecoveryGeneration) return ok;
@@ -8163,7 +8166,7 @@
           stopOfflineWatch();
         }
       });
-    }, delays[attempt]);
+    }, wait);
   }
 
   function listStoredFiles({ query = '', tagId = null, folderId = null, titlesOnly = false, includeProtected = false } = {}) {
@@ -20101,7 +20104,8 @@
         // a quick health probe succeeds — never sync on the offline transition.
         if (typeof navigator === 'undefined' || !navigator.onLine) return;
         if (networkReachable) return;
-        try { window.__notesResetHealthBackoff?.({ abort: false }); } catch (err) { /* ignore */ }
+        // Respect the shared backoff gate — do not reset here (that caused
+        // burst /api/health while DevTools Offline left onLine true).
         probeNetwork({ syncOnRecovery: false, forceHealth: true }).then((ok) => {
           if (!ok || !navigator.onLine) return;
           onNetworkOnline('connection-change');
