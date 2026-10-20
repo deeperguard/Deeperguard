@@ -1,7 +1,7 @@
 /**
- * Round 40: offline→online must reach sync-done within 1s; Retry recovers;
- * recovery probes open the backoff gate each attempt; no offline auto-reload;
- * offline watch must not stack 2s health probes.
+ * Round 40 (+41): offline→online reaches sync-done; Retry recovers;
+ * no offline auto-reload; offline watch must not stack 2s health probes.
+ * Round 41: recovery waits out the shared backoff (no gate-clear storm).
  */
 const assert = require('assert');
 const fs = require('fs');
@@ -15,15 +15,14 @@ const appHtml = fs.readFileSync(path.join(root, 'app/templates/app.html'), 'utf8
 assert.ok(appJs.includes("onNetworkOnline('retry')") || appJs.includes('onNetworkOnline("retry")'));
 assert.ok(appJs.includes('offlineWatchTickActive'));
 assert.ok(appJs.includes('!offlineWatchTickActive'));
-assert.ok(appJs.includes("__notesResetHealthBackoff?.({ abort: false })"));
-// Each recovery attempt opens the gate (not only attempt 0).
+assert.ok(appJs.includes('gateWait') || appJs.includes('__notesHealthNextAt'));
 const recovery = appJs.split('function scheduleOnlineRecovery')[1].split('function listStoredFiles')[0];
-assert.ok(recovery.includes('Always open the backoff gate') || recovery.includes('abort: false'));
 assert.ok(recovery.includes('forceHealth: true'));
-// Offline watch hands off to recovery when navigator.onLine — no nested probe.
+assert.ok(recovery.includes('Math.max(delays[attempt], gateWait)') || recovery.includes('gateWait'));
+// Offline watch quiet-probes when onLine (respects gate); recovery only on success.
 const watch = appJs.split('function startOfflineWatch')[1].split('function scheduleOnlineRecovery')[0];
 assert.ok(watch.includes('scheduleOnlineRecovery(0)'));
-assert.ok(!watch.includes('probeNetwork({ syncOnRecovery: false'));
+assert.ok(watch.includes('probeNetwork({ syncOnRecovery: false'));
 // No auto-reload while offline.
 const stale = appJs.split('async function reloadIfShellStale')[1].split('async function boot')[0];
 assert.ok(stale.includes('navigator.onLine === false'));
@@ -37,10 +36,11 @@ const connBlock = appJs.split("conn.addEventListener('change'")[1].split('window
 assert.ok(connBlock.includes('probeNetwork'));
 assert.ok(connBlock.includes("onNetworkOnline('connection-change')"));
 assert.ok(connBlock.indexOf('probeNetwork') < connBlock.indexOf("onNetworkOnline('connection-change')"));
+assert.ok(!connBlock.includes('__notesResetHealthBackoff'));
 
 /**
- * Simulate the stuck-offline bug: first recovery probe fails (sets 2s backoff),
- * later attempts must still probe (gate reopened) and sync within 1s of online.
+ * First recovery probe fails (2s backoff); later attempts wait out the gate
+ * (no clear) and still sync within 2s of online.
  */
 function simulateOfflineOnlineCycle() {
   return new Promise((resolve, reject) => {
@@ -85,9 +85,10 @@ function simulateOfflineOnlineCycle() {
       }
       const gen = generation;
       if (attempt >= delays.length) return;
+      const gateWait = Math.max(0, nextAt - Date.now());
+      const wait = Math.max(delays[attempt], gateWait);
       setTimeout(async () => {
         if (gen !== generation) return;
-        resetGate(); // Round 40: open gate every attempt
         const data = await fetchHealth();
         if (gen !== generation) return;
         if (data?.ok) {
@@ -97,7 +98,7 @@ function simulateOfflineOnlineCycle() {
           networkReachable = false;
         }
         if (!networkReachable || dirty > 0) scheduleRecovery(attempt + 1);
-      }, delays[attempt]);
+      }, wait);
     }
 
     onlineAt = Date.now();
@@ -108,16 +109,15 @@ function simulateOfflineOnlineCycle() {
       try {
         const done = log.find((e) => e.kind === 'sync-done');
         assert.ok(done, 'sync-done must fire after online');
-        assert.ok(done.t <= 1000, `sync-done ${done.t}ms must be ≤1s of online`);
+        assert.ok(done.t <= 2500, `sync-done ${done.t}ms must be ≤2.5s of online (2s backoff + probe)`);
         assert.ok(networkReachable);
-        // First probe failed; second must not be gated away.
         assert.ok(healthCalls >= 2, `expected ≥2 health probes, got ${healthCalls}`);
-        assert.ok(!log.some((e) => e.kind === 'gated'), 'recovery must not no-op inside backoff');
+        assert.ok(!log.some((e) => e.kind === 'gated'), 'recovery must wait out backoff, not no-op');
         resolve();
       } catch (err) {
         reject(err);
       }
-    }, 1200);
+    }, 2500);
   });
 }
 
