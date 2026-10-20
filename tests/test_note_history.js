@@ -85,9 +85,13 @@ assert.doesNotMatch(
   NotesHistory.revisionLabel({ title: 'Title', content: '' }, noteForLabels),
   /Current note/,
 );
-assert.match(
+assert.strictEqual(
   NotesHistory.revisionLabel({ at: '2024-06-01T12:30:00.000Z', title: 'Title', content: '' }, noteForLabels),
-  /2024|Jun|6/,
+  'Untitled',
+);
+assert.strictEqual(
+  NotesHistory.revisionLabel({ at: '2024-06-01T12:30:00.000Z', title: '', content: '' }, noteForLabels),
+  'Untitled',
 );
 assert.strictEqual(
   NotesHistory.revisionLabel({ title: 'Saved snapshot', content: '' }, noteForLabels),

@@ -7308,6 +7308,7 @@
       btn.addEventListener('click', () => {
         const id = btn.dataset.folderRemove;
         const folder = NotesStore.get(id);
+        if (!folder) return;
         const name = folder?.content?.title || 'this folder';
         confirmAction(`Remove “${name}”? Notes in it stay in your list.`, {
           title: 'Remove folder',
@@ -7315,10 +7316,33 @@
           danger: true,
         }).then((ok) => {
           if (!ok) return;
+          const snapshot = {
+            uuid: id,
+            content: { ...folder.content },
+            noteIds: NotesStore.listNotes()
+              .filter((n) => n.content?.folder_id === id)
+              .map((n) => n.uuid),
+            wasCurrent: currentFolder === id,
+          };
           if (currentFolder === id) currentFolder = null;
           NotesStore.deleteFolder(id);
           renderFolders();
           renderNotes();
+          toastWithUndo('Folder removed', () => {
+            NotesStore.upsert(snapshot.uuid, { ...snapshot.content });
+            snapshot.noteIds.forEach((noteId) => {
+              const note = NotesStore.get(noteId);
+              if (!note || note.deleted) return;
+              NotesStore.upsert(noteId, { ...note.content, folder_id: snapshot.uuid }, {
+                touchUpdatedAt: false,
+                touchSyncOnly: true,
+              });
+            });
+            if (snapshot.wasCurrent) currentFolder = snapshot.uuid;
+            renderFolders();
+            renderNotes();
+            toast('Folder restored');
+          });
         });
       });
     });
@@ -7560,13 +7584,36 @@
       danger: true,
     }).then((ok) => {
       if (!ok) return;
+      const snapshot = {
+        uuid,
+        content: { ...tag.content },
+        noteIds: NotesStore.listNotes()
+          .filter((n) => (n.content?.tags || []).includes(uuid))
+          .map((n) => n.uuid),
+        wasCurrent: currentTag === uuid,
+      };
       NotesStore.deleteTag(uuid);
       invalidateTagMap();
       if (currentTag === uuid) currentTag = null;
       renderTags();
       renderNotes();
       if (currentId) renderTagBar(NotesStore.get(currentId));
-      toast('Tag deleted');
+      toastWithUndo('Tag deleted', () => {
+        NotesStore.upsert(snapshot.uuid, { ...snapshot.content });
+        snapshot.noteIds.forEach((noteId) => {
+          const note = NotesStore.get(noteId);
+          if (!note || note.deleted) return;
+          const tags = new Set(note.content.tags || []);
+          tags.add(snapshot.uuid);
+          NotesStore.upsert(noteId, { ...note.content, tags: [...tags] });
+        });
+        invalidateTagMap();
+        if (snapshot.wasCurrent) currentTag = snapshot.uuid;
+        renderTags();
+        renderNotes();
+        if (currentId) renderTagBar(NotesStore.get(currentId));
+        toast('Tag restored');
+      });
     });
   }
 
@@ -12959,6 +13006,16 @@
     }
   }
 
+  function serverReachableCopy() {
+    return selfHostNotes() ? 'Server reachable on LAN' : 'Server reachable';
+  }
+
+  function serverUnreachableCopy() {
+    return selfHostNotes()
+      ? 'Server unreachable — join home Wi‑Fi or WireGuard'
+      : 'Server unreachable';
+  }
+
   async function refreshSettingsDiagnostics() {
     const el = document.getElementById('privacy-status');
     if (!el) return;
@@ -12969,7 +13026,7 @@
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
         serverBuild = String(data.build || '');
-        serverLabel = 'Server reachable on LAN';
+        serverLabel = serverReachableCopy();
       }
     } catch (err) {
       /* fall through to OCR probe */
@@ -12977,12 +13034,12 @@
     if (serverLabel === 'Checking server…') {
       if (window.NotesOcr && typeof NotesOcr.serverReachable === 'function') {
         serverLabel = (await NotesOcr.serverReachable())
-          ? 'Server reachable on LAN'
-          : 'Server unreachable — join home Wi‑Fi or WireGuard';
+          ? serverReachableCopy()
+          : serverUnreachableCopy();
       } else if (!networkReachable) {
-        serverLabel = 'Server unreachable — join home Wi‑Fi or WireGuard';
+        serverLabel = serverUnreachableCopy();
       } else {
-        serverLabel = 'Server reachable on LAN';
+        serverLabel = serverReachableCopy();
       }
     }
     const sessionLabel = NotesStore.csrf()
@@ -14641,10 +14698,17 @@
     for (const att of atts) {
       if (await NotesStore.hasLocalAttachmentBytes(att.uuid)) local += 1;
     }
-    const mode = prefs.lightVault ? 'Files download when you open their note.' : 'All files are kept on this device.';
-    el.textContent = atts.length
-      ? `${local} of ${atts.length} file${atts.length === 1 ? '' : 's'} stored on this device. ${mode}`
-      : mode;
+    if (!atts.length) {
+      el.textContent = prefs.lightVault
+        ? 'Files download when you open their note.'
+        : 'No files yet.';
+    } else if (local >= atts.length) {
+      el.textContent = `${atts.length} file${atts.length === 1 ? '' : 's'} stored on this device. All files are kept on this device.`;
+    } else if (prefs.lightVault) {
+      el.textContent = `${local} of ${atts.length} file${atts.length === 1 ? '' : 's'} stored on this device. Remaining files download when you open their note.`;
+    } else {
+      el.textContent = `${local} of ${atts.length} file${atts.length === 1 ? '' : 's'} stored on this device. Missing files download when you open their note.`;
+    }
     const purgeBtn = document.getElementById('btn-purge-local-files');
     if (purgeBtn) purgeBtn.disabled = !local;
   }
@@ -19188,11 +19252,16 @@
           } else if (NotesStore.isProbablyOffline?.(err)) {
             networkReachable = false;
             NotesStore.emitSync('offline', 'Offline');
+            updateNetworkStatusBanner();
+            startOfflineWatch();
             if (!quiet) toast(OFFLINE_LAN_HINT, true);
+          } else if (quiet) {
+            // Background / online-recovery: never flash "Failed to fetch" mid-retry.
+            console.warn('quiet sync failed', err);
           } else {
             vaultDownloadStalled = true;
             showSyncBanner('error', err?.message || 'Sync failed');
-            if (!quiet) toast(err?.message || 'Sync failed', true);
+            toast(err?.message || 'Sync failed', true);
           }
         })
         .finally(() => {
