@@ -1640,19 +1640,19 @@
 
       <section class="settings-group" data-plan-feature="email_backup">
         <h3>Backup &amp; import</h3>
+        {% set google_drive_configured = (google_oauth_client_id|default('', true)|trim|length) > 0 %}
         <div class="settings-card">
-          <h4 class="settings-subtitle">Backups</h4>
-          <p class="settings-hint">Backups are encrypted on this device with your vault key. Google, Apple, and Deeperguard never see plaintext or keys.</p>
+          <h4 class="settings-subtitle">Back up</h4>
+          <p class="settings-hint">Encrypted on this device with your vault key. Google, Apple, Dropbox, and Deeperguard never see plaintext or keys.</p>
           <div class="settings-actions">
             <button type="button" id="btn-save-backup-file" class="btn primary">Save backup file</button>
-            <button type="button" id="btn-backup-google-drive" class="btn">Back up to Google Drive</button>
-            <label class="file-label btn">Restore from backup file
-              <input id="restore-backup-file" type="file" accept=".dgbackup,.json,.enc.json,.gz,.json.gz,.enc.json.gz,.zip,application/json,application/gzip,application/zip" hidden>
-            </label>
+            <button type="button" id="btn-download-backup" class="btn" hidden aria-hidden="true" tabindex="-1">Download encrypted vault</button>
+            <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not configured"{% endif %}>Back up to Google Drive</button>
+            <button type="button" id="btn-backup-now" class="btn">Email backup now</button>
           </div>
-          <p id="backup-file-help" class="settings-hint">On iPhone choose Save to Files → iCloud Drive. Desktop downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code>.</p>
-          <p id="google-drive-status" class="settings-hint" role="status" aria-live="polite"></p>
-          <div id="google-drive-controls" class="settings-nested stack" hidden>
+          <p id="backup-file-help" class="settings-hint">Save backup file downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code> (on iPhone: Save to Files → iCloud Drive). Email backup now sends the same encrypted format to your verified backup address.</p>
+          <p id="google-drive-status" class="settings-hint" role="status" aria-live="polite"{% if not google_drive_configured %} hidden{% endif %}></p>
+          <div id="google-drive-controls" class="settings-nested stack" {% if not google_drive_configured %}hidden{% endif %}>
             <label class="settings-row checkbox"><span>Automatic daily Google Drive backup when the app is open and online</span><input id="backup-drive-auto-daily" type="checkbox"></label>
             <div class="settings-actions">
               <button type="button" id="btn-drive-list" class="btn ghost sm">Show Drive backups</button>
@@ -1660,9 +1660,7 @@
             </div>
             <ul id="google-drive-backup-list" class="settings-hint" hidden></ul>
           </div>
-          <p id="google-drive-not-configured" class="settings-hint" hidden>Google Drive: Not configured on this server.</p>
-        </div>
-        <div class="settings-card">
+          <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not configured on this server.</p>
           <label class="settings-row stacked">Backup email
             <input id="backup-email" type="email" autocomplete="email">
           </label>
@@ -1678,17 +1676,23 @@
             <p id="backup-verify-resend-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
           </div>
           <label class="settings-row checkbox"><span>Daily encrypted email backup</span><input id="backup-enabled" type="checkbox"></label>
-          <p id="backup-verified-hint" class="settings-hint">Backups are sent only after this address is verified with a code.</p>
+          <p id="backup-verified-hint" class="settings-hint">Email backups are sent only after this address is verified with a code.</p>
           <div class="settings-actions">
-            <button type="button" id="btn-save-backup" class="btn">Save backup settings</button>
-            <button type="button" id="btn-backup-now" class="btn">Email backup now</button>
-            <button type="button" id="btn-download-backup" class="btn">Download encrypted vault</button>
-            <button type="button" id="btn-export-note" class="btn">Export current note</button>
-            <label class="file-label btn">Import Standard Notes or Deeperguard backup
+            <button type="button" id="btn-save-backup" class="btn">Save email backup settings</button>
+          </div>
+        </div>
+        <div class="settings-card">
+          <h4 class="settings-subtitle">Restore &amp; import</h4>
+          <div class="settings-actions">
+            <label class="file-label btn primary">Restore Deeperguard backup
+              <input id="restore-backup-file" type="file" accept=".dgbackup,.json,.enc.json,.gz,.json.gz,.enc.json.gz,.zip,application/json,application/gzip,application/zip" hidden>
+            </label>
+            <label class="file-label btn">Import from Standard Notes
               <input id="import-file" type="file" accept=".txt,.json,.enc.json,.dgbackup,.gz,.json.gz,.enc.json.gz,.zip,text/plain,application/json,application/gzip,application/zip" hidden>
             </label>
+            <button type="button" id="btn-export-note" class="btn">Export current note</button>
           </div>
-          <p class="settings-hint">Import encrypted Deeperguard backups, or Standard Notes exports (encrypted or decrypted) from zip or .txt.</p>
+          <p class="settings-hint">Restore accepts <code>.dgbackup</code> (and legacy <code>.enc.json</code>) Deeperguard backups. Import from Standard Notes accepts encrypted or decrypted SN exports (zip or .txt).</p>
         </div>
         <div class="settings-card" data-plan-feature="pcloud_backup">
           <h4 class="settings-subtitle">pCloud backup</h4>

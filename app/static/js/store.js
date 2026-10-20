@@ -5428,19 +5428,39 @@ const NotesStore = (() => {
       json = parsed.data;
     }
     const data = typeof json === 'string' ? JSON.parse(json) : json;
-    let imported = 0;
+    let created = 0;
+    let updated = 0;
+    let unchanged = 0;
     for (const row of data.items || []) {
-      if (!merge && state.items.has(row.item_uuid)) continue;
+      const existing = state.items.get(row.item_uuid);
+      if (!merge && existing) {
+        unchanged += 1;
+        continue;
+      }
+      const incomingHash = String(row.content_hash || '');
+      const existingHash = existing ? String(existing.content_hash || '') : '';
+      if (existing && incomingHash && existingHash && incomingHash === existingHash) {
+        unchanged += 1;
+        continue;
+      }
       const item = await unwrapItem(row);
       state.items.set(row.item_uuid, item);
       state.dirty.add(row.item_uuid);
       await persistLocal(row.item_uuid, item);
       const light = strippedAttachmentContent(item.content);
       if (light) item.content = light;
-      imported += 1;
+      if (existing) updated += 1;
+      else created += 1;
     }
     await pushDirty();
-    return { imported, tags: 0, skipped: 0 };
+    return {
+      imported: created + updated,
+      created,
+      updated,
+      unchanged,
+      tags: 0,
+      skipped: unchanged,
+    };
   }
 
   async function flush() {

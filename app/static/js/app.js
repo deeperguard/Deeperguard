@@ -19139,18 +19139,27 @@
     const missing = document.getElementById('google-drive-not-configured');
     const driveBtn = document.getElementById('btn-backup-google-drive');
     const autoDaily = document.getElementById('backup-drive-auto-daily');
-    if (!Cloud) return;
-    const configured = Cloud.isGoogleConfigured();
-    if (missing) missing.hidden = configured;
+    const configured = !!(Cloud && Cloud.isGoogleConfigured && Cloud.isGoogleConfigured());
+    if (missing) {
+      missing.hidden = configured;
+      if (!configured) {
+        missing.textContent = 'Google Drive: Not configured on this server.';
+      }
+    }
     if (driveBtn) {
       driveBtn.disabled = !configured;
       driveBtn.title = configured ? '' : 'Not configured';
     }
     if (controls) controls.hidden = !configured;
     if (!configured) {
-      if (status) status.textContent = '';
+      if (status) {
+        status.hidden = true;
+        status.textContent = '';
+      }
       return;
     }
+    if (status) status.hidden = false;
+    if (!Cloud) return;
     const prefs = Cloud.readPrefs();
     if (autoDaily) autoDaily.checked = !!prefs.autoDailyDrive;
     if (status) {
@@ -19253,7 +19262,7 @@
             const result = await NotesStore.importBackup(text, ok.merge);
             renderTags();
             renderNotes();
-            toast(importResultToast(result) || 'Restore complete');
+            toast(importResultToast(result, { restore: true }) || 'Restore complete');
           } catch (err) {
             toast(err.message || 'Restore failed', true);
           }
@@ -19271,11 +19280,11 @@
 
   async function confirmRestoreBackupChoice() {
     const choice = await confirmAction(
-      'Restore will import encrypted items from the backup. Merge keeps existing notes and adds or updates from the file. Replace skips items that already exist on this device (safer against silent overwrite of local edits — prefer Merge if unsure).',
+      'Merge: add new items and update changed ones. Add missing only: only add items you don\'t have; never changes existing notes.',
       {
         title: 'Restore from backup',
         confirmLabel: 'Merge',
-        extraLabel: 'Replace missing only',
+        extraLabel: 'Add missing only',
         cancelLabel: 'Cancel',
         danger: false,
       },
@@ -19309,7 +19318,7 @@
         applyEditorMode();
       }
       await enqueueImportedAttachmentOcr(result.attachmentIds);
-      toast(importResultToast(result) || 'Restore complete');
+      toast(importResultToast(result, { restore: true }) || 'Restore complete');
     } catch (err) {
       toast(err.message || 'Restore failed', true);
     }
@@ -19324,7 +19333,13 @@
     });
   }
 
-  function importResultToast(result) {
+  function importResultToast(result, { restore = false } = {}) {
+    if (restore && result && (result.created != null || result.updated != null || result.unchanged != null)) {
+      const created = Number(result.created) || 0;
+      const updated = Number(result.updated) || 0;
+      const unchanged = Number(result.unchanged) || 0;
+      return `Restore complete: ${created} new, ${updated} updated, ${unchanged} already up to date`;
+    }
     const notes = result && result.imported != null ? result.imported : 0;
     const tags = result && result.tags ? result.tags : 0;
     const files = result && result.files ? result.files : 0;
