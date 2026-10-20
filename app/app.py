@@ -1806,12 +1806,21 @@ def api_backup_email():
         return jsonify({"error": "invalid email"}), 400
     if not email_verify.recipient_verified(user, recipient):
         try:
+            # strict=True so a second click within the cooldown returns 429
+            # instead of silently skipping and still claiming "We sent a code".
             if recipient == str(user["email"] or "").strip().lower():
-                email_verify.send_account_code(user)
+                email_verify.send_account_code(user, strict=True)
             else:
-                email_verify.send_backup_code(user, recipient)
+                email_verify.send_backup_code(user, recipient, strict=True)
         except VerificationSendLimited as exc:
-            return jsonify({"error": exc.message}), 429
+            wait = int(getattr(exc, "retry_after", 0) or 0)
+            msg = (
+                f"Code already sent — check your inbox, resend in {wait}s"
+                if wait > 0
+                else (exc.message or "Please wait before requesting another code")
+            )
+            limited = VerificationSendLimited(msg, retry_after=wait or None, code=getattr(exc, "code", "") or "cooldown")
+            return _verification_limited_response(limited)
         return jsonify({
             "error": "Verify this email before backups can be sent. We sent a code.",
             "code": "email_unverified",

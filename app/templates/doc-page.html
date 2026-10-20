@@ -1,18 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{{ title }} — Deeperguard</title>
-  {% include 'partials/auth-head.html' %}
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+  <style>
+    .mk-doc-body { max-width: 44rem; }
+    .mk-doc-body h2 { margin: 1.6em 0 0.5em; font-size: 1.25rem; }
+    .mk-doc-body h3 { margin: 1.2em 0 0.4em; font-size: 1.05rem; }
+    .mk-doc-body p, .mk-doc-body li { line-height: 1.55; }
+    .mk-doc-body ul, .mk-doc-body ol { padding-left: 1.25em; }
+    .mk-doc-body code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--mk-text, #111) 6%, transparent);
+    }
+    .mk-doc-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.75em 0 1.25em;
+      font-size: 0.95rem;
+    }
+    .mk-doc-body th, .mk-doc-body td {
+      border: 1px solid color-mix(in srgb, var(--mk-text, #111) 14%, transparent);
+      padding: 0.45em 0.65em;
+      text-align: left;
+      vertical-align: top;
+    }
+    .mk-doc-body th { background: color-mix(in srgb, var(--mk-text, #111) 5%, transparent); }
+  </style>
 </head>
-<body class="auth-page legal-page">
-  <main class="auth-card legal-card">
-    <div class="brand">
-      {% include 'partials/brand-mark.html' %}
+<body>
+  {% include 'partials/mk-topbar.html' %}
+  <main class="wrap mk-subpage mk-legal">
+    <div class="mk-section-head">
+      <span class="mk-badge">Docs</span>
       <h1>{{ title }}</h1>
     </div>
-    <pre class="doc-pre">{{ body }}</pre>
-    <p class="center"><a href="/app">← Back to app</a></p>
-    {% include 'partials/auth-footer.html' %}
+    <article class="mk-doc-body legal-section">
+      {{ body_html | safe }}
+    </article>
+    {% include 'partials/mk-footer.html' %}
   </main>
 </body>
 </html>

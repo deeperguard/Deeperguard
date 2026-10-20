@@ -617,7 +617,8 @@
     if (n <= 0) return '0 KB';
     if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
     if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(n % (1024 * 1024) === 0 ? 0 : 1)} MB`;
-    return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    const gb = n / (1024 * 1024 * 1024);
+    return `${gb % 1 === 0 ? gb.toFixed(0) : gb.toFixed(2)} GB`;
   }
 
   function accountStorageParts(account) {
@@ -681,7 +682,7 @@
         rows.push(`<div class="plan-compare-card${key === plan ? ' is-current' : ''}">
           <h4>${escapeHtml(meta.label)}</h4>
           <p class="plan-compare-price"><span class="plan-compare-free">€0 now</span> · suggested €${suggested.toFixed(2)}/mo</p>
-          <p class="muted">${escapeHtml(String(meta.storage_quota_mb))} MB storage</p>
+          <p class="muted">${escapeHtml(formatPlanBytes((Number(meta.storage_quota_mb) || 0) * 1024 * 1024))} storage</p>
           <ul>${(meta.features || []).map((f) => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
         </div>`);
       });
@@ -1640,6 +1641,8 @@
     if (!note) return false;
     if (note.uuid === currentId) return true;
     if (NotesStore.listAttachments(note.uuid).length) return true;
+    // Ever-saved notes stay listed even when the body is cleared to whitespace.
+    if (NotesSearch.noteHasBeenSaved?.(note)) return true;
     return !(NotesSearch.noteIsEmptyStub?.(note));
   }
 
@@ -1649,7 +1652,8 @@
     const note = NotesStore.get(id);
     if (!note || note.deleted) return false;
     if (NotesStore.listAttachments(id).length) return false;
-    if (!NotesSearch.noteIsEmptyStub?.(note)) return false;
+    // Only brand-new never-saved empty drafts may be hard-deleted.
+    if (!NotesSearch.noteMayHardDiscard?.(note)) return false;
     NotesStore.remove(id, { force: true });
     if (currentId === id) currentId = null;
     if (listSelectionId === id) listSelectionId = null;
@@ -7115,8 +7119,8 @@
           <span class="tag-dot" style="background:${color}"></span>
           <span class="tag-manage-name">${escapeHtml(tag.content.title || 'Tag')}</span>
           <span class="tag-count">${count}</span>
-          <button type="button" class="btn ghost sm" data-manage-rename>Rename</button>
-          <button type="button" class="btn ghost sm" data-manage-delete>Delete</button>
+          <button type="button" class="btn ghost sm" data-manage-rename aria-label="Rename tag ${escapeAttr(tag.content.title || 'Tag')}">Rename</button>
+          <button type="button" class="btn ghost sm" data-manage-delete aria-label="Delete tag ${escapeAttr(tag.content.title || 'Tag')}">Delete</button>
         </div>
         <div class="tag-colors">${swatches}</div>
       </div>`;
@@ -7434,6 +7438,22 @@
   }
 
   function emptyNotesCopy() {
+    if (currentTag) {
+      const tag = NotesStore.get(currentTag);
+      const name = String(tag?.content?.title || 'this tag').trim() || 'this tag';
+      return {
+        title: `No notes in ${name} yet`,
+        body: `Add this tag to a note.`,
+      };
+    }
+    if (currentFolder) {
+      const folder = NotesStore.get(currentFolder);
+      const name = String(folder?.content?.title || 'this folder').trim() || 'this folder';
+      return {
+        title: `No notes in ${name} yet`,
+        body: 'Move a note into this folder, or create a new note.',
+      };
+    }
     if (currentFilter === 'pinned') {
       return {
         title: 'No starred notes yet',
@@ -7454,6 +7474,12 @@
 
   function emptyListActionsHtml() {
     if (currentFilter === 'pinned' || currentFilter === 'archived') return '';
+    // Tag/folder filters: never imply a sync problem for a brand-new empty view.
+    if (currentTag || currentFolder) {
+      return `<div class="note-list-empty-actions">
+                <button type="button" class="btn primary sm" data-empty-new>New note</button>
+              </div>`;
+    }
     const vaultEmpty = !NotesStore.listNotes().some((n) => !n.content?.trashed && !n.deleted);
     if (vaultEmpty) {
       return `<div class="note-list-empty-actions">
@@ -7472,9 +7498,21 @@
   function updateTrashToolbar(count = null) {
     const total = typeof count === 'number' ? count : trashedNotes().length;
     const settingsBtn = document.getElementById('btn-empty-trash');
+    const dangerSection = document.getElementById('settings-danger-zone');
+    const dangerHint = document.getElementById('settings-danger-hint');
     if (settingsBtn) {
-      settingsBtn.hidden = total === 0;
+      settingsBtn.hidden = false;
       settingsBtn.disabled = total === 0;
+      settingsBtn.textContent = total === 0 ? 'Empty trash' : 'Empty trash';
+      settingsBtn.title = total === 0 ? 'Trash is empty' : 'Permanently delete notes in trash';
+    }
+    if (dangerHint) {
+      dangerHint.hidden = total > 0;
+      dangerHint.textContent = 'Trash is empty';
+    }
+    if (dangerSection) {
+      // Keep the section visible with a disabled Empty trash + hint when empty.
+      dangerSection.hidden = false;
     }
     const bar = document.getElementById('trash-toolbar');
     const meta = document.getElementById('trash-toolbar-meta');
@@ -8005,19 +8043,22 @@
     const id = escapeAttr(note.uuid);
     const action = trashed ? 'restore' : 'trash';
     const tone = trashed ? ' is-restore' : '';
-    return `<button type="button" class="note-swipe-delete${tone}" data-id="${id}" data-action="${action}" aria-label="${label} note">${label}</button>`;
+    const title = escapeAttr(NotesSearch.effectiveNoteTitle?.(note) || 'Untitled');
+    return `<button type="button" class="note-swipe-delete${tone}" data-id="${id}" data-action="${action}" aria-label="${label} note ${title}">${label}</button>`;
   }
 
   function noteRowRestoreBtnHtml(note) {
     if (!note?.content?.trashed) return '';
     const id = escapeAttr(note.uuid);
-    return `<button type="button" class="note-row-restore" data-id="${id}" data-action="restore" aria-label="Restore note" title="Restore">Restore</button>`;
+    const title = escapeAttr(NotesSearch.effectiveNoteTitle?.(note) || 'Untitled');
+    return `<button type="button" class="note-row-restore" data-id="${id}" data-action="restore" aria-label="Restore note ${title}" title="Restore">Restore</button>`;
   }
 
   function noteRowDeleteBtnHtml(note) {
     const label = noteRowDeleteLabel(note);
     const id = escapeAttr(note.uuid);
-    return `<button type="button" class="note-row-delete" data-id="${id}" aria-label="${label} note" title="${label}">×</button>`;
+    const title = escapeAttr(NotesSearch.effectiveNoteTitle?.(note) || 'Untitled');
+    return `<button type="button" class="note-row-delete" data-id="${id}" aria-label="${label} note ${title}" title="${label}">×</button>`;
   }
 
   function noteRowStatusGlyphs(note) {
@@ -12177,7 +12218,17 @@
       return;
     }
     const draft = { uuid: currentId, content: next };
-    if (!live.length && NotesSearch.noteIsEmptyStub?.(draft)) {
+    // Never hard-delete a note that has already been saved. Brand-new empty
+    // drafts are removed; ever-saved notes that were cleared to whitespace stay.
+    const existing = NotesStore.get(currentId);
+    if (!live.length && NotesSearch.noteMayHardDiscard?.({
+      ...draft,
+      rev: existing?.rev,
+      content: {
+        ...next,
+        revisions: existing?.content?.revisions || next.revisions || [],
+      },
+    })) {
       NotesStore.remove(currentId, { force: true });
       return;
     }
@@ -16677,6 +16728,16 @@
     if (note?.content?.prevent_edit) return;
     if (note?.content?.locked && !unlockedNotes.has(currentId)) return;
     if (!applyingDerivedTitle && note?.content) note.content.title_manual = true;
+    // Keep the list row in sync while typing (don't leave a stale derived title).
+    if (currentId && ui.noteList) {
+      const rowTitle = ui.noteList.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"] h3`);
+      if (rowTitle) {
+        const typed = String(ui.title.value || '').trim();
+        const display = typed || NotesSearch.derivedTitleFromBody?.(ui.body?.value) || 'Title';
+        rowTitle.textContent = display;
+        rowTitle.classList.toggle('note-title-placeholder', !typed && display === 'Title');
+      }
+    }
     scheduleSave();
   });
   ui.body.addEventListener('input', () => {
@@ -18494,12 +18555,50 @@
   });
 
   document.getElementById('btn-backup-now').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-backup-now');
+    if (btn?.disabled) return;
     try {
       await NotesStore.flush();
       const email = document.getElementById('backup-email').value;
       await NotesStore.api('/api/backup/email', { method: 'POST', body: JSON.stringify({ email }) });
       toast('Encrypted backup emailed');
     } catch (err) {
+      const wait = Number(err.retryAfter) || 0;
+      if (err.status === 429 && wait > 0) {
+        const msg = (err.message && /Please wait|already sent|resend in/i.test(err.message))
+          ? err.message
+          : `Code already sent — check your inbox, resend in ${Math.ceil(wait)}s`;
+        toast(msg, true);
+        if (btn) {
+          btn.disabled = true;
+          const label = btn.textContent || 'Email backup now';
+          let left = Math.ceil(wait);
+          btn.textContent = `Resend in ${left}s`;
+          const timer = setInterval(() => {
+            left -= 1;
+            if (left <= 0) {
+              clearInterval(timer);
+              btn.disabled = false;
+              btn.textContent = label;
+              return;
+            }
+            btn.textContent = `Resend in ${left}s`;
+          }, 1000);
+        }
+        return;
+      }
+      if (err.status === 403 && /verify/i.test(String(err.message || ''))) {
+        const account = NotesStore.cachedAccount?.() || {};
+        const retry = Math.max(
+          Number(account.email_verify_retry_after) || 0,
+          Number(account.backup_verify_retry_after) || 0,
+          Number(err.retryAfter) || 0,
+        );
+        if (retry > 0) {
+          toast(`Code already sent — check your inbox, resend in ${Math.ceil(retry)}s`, true);
+          return;
+        }
+      }
       toast(err.message || 'Email backup failed', true);
     }
   });
@@ -19910,6 +20009,7 @@
       if (tagBarExpanded && tagShell && !tagShell.classList.contains('is-collapsed')) {
         tagBarExpanded = false;
         syncTagBarShell(currentId ? NotesStore.get(currentId) : null);
+        document.getElementById('tag-bar-toggle')?.focus({ preventScroll: true });
         stop();
         return;
       }

@@ -64,7 +64,11 @@ assert.ok(hoist.includes("currentFilter !== 'archived'"));
 assert.ok(appJs.includes('const hidePin = currentFilter === \'trash\' || currentFilter === \'archived\''));
 
 assert.ok(appJs.includes('btn.hidden = total === 0'));
-assert.ok(appJs.includes('settingsBtn.hidden = total === 0'));
+// Round 32: Empty trash stays visible (disabled) when trash is empty.
+assert.ok(
+  appJs.includes('settingsBtn.hidden = total === 0')
+  || appJs.includes('settingsBtn.disabled = total === 0'),
+);
 
 assert.ok(html.includes('data-theme-opt="dark" aria-pressed="false"'));
 assert.ok(appJs.includes("btn.setAttribute('aria-pressed', on ? 'true' : 'false')"));

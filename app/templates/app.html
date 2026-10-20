@@ -1259,7 +1259,7 @@
           <h3 class="section-label">Attachments</h3>
           <div id="attachment-list" class="attachment-list"></div>
           <label class="file-label btn sm" id="attachment-add-label">Add file
-            <input id="attachment-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,.json,.csv,.zip,.xml,.yaml,.yml,.docx,application/pdf,text/plain,text/csv,application/json,application/zip,application/xml,application/yaml" multiple>
+            <input id="attachment-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,.json,.csv,.zip,.xml,.yaml,.yml,.docx,application/pdf,text/plain,text/csv,application/json,application/zip,application/xml,application/yaml" multiple tabindex="-1" aria-hidden="true">
           </label>
         </section>
         <section class="history">
@@ -1574,7 +1574,7 @@
               <input id="import-file" type="file" accept=".txt,.json,.enc.json,.gz,.json.gz,.enc.json.gz,.zip,text/plain,application/json,application/gzip,application/zip" hidden>
             </label>
           </div>
-          <p class="settings-hint">Encrypted backups only. Standard Notes decrypted exports can be imported from zip or .txt.</p>
+          <p class="settings-hint">Import encrypted Deeperguard backups, or Standard Notes exports (encrypted or decrypted) from zip or .txt.</p>
         </div>
         <div class="settings-card" data-plan-feature="pcloud_backup">
           <h4 class="settings-subtitle">pCloud backup</h4>
@@ -1606,11 +1606,12 @@
         </div>
       </section>
 
-      <section class="settings-group">
+      <section class="settings-group" id="settings-danger-zone">
         <h3>Danger zone</h3>
         <div class="settings-card">
+          <p id="settings-danger-hint" class="settings-hint" hidden>Trash is empty</p>
           <div class="settings-actions">
-            <button type="button" id="btn-empty-trash" class="btn danger">Empty trash</button>
+            <button type="button" id="btn-empty-trash" class="btn danger" disabled title="Trash is empty">Empty trash</button>
           </div>
         </div>
       </section>
@@ -1707,8 +1708,8 @@
     </section>
   </div>
   <!-- File pickers live outside .sidebar so mobile editor-open (pointer-events:none) cannot block iOS/Safari. -->
-  <input id="scan-camera" class="sr-file" type="file" accept="image/*" capture="environment">
-  <input id="scan-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,application/pdf,text/plain" multiple>
+  <input id="scan-camera" class="sr-file" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
+  <input id="scan-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,application/pdf,text/plain" multiple tabindex="-1" aria-hidden="true">
   <div id="scan-backdrop" class="scan-backdrop" hidden></div>
   <div id="scan-dialog" class="scan-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="scan-dialog-title">
     <div class="scan-dialog-handle" aria-hidden="true"></div>
@@ -1742,7 +1743,7 @@
       <button type="button" class="btn primary" id="scan-confirm">Save</button>
     </footer>
   </div>
-  <input id="totp-qr-input" class="sr-file" type="file" accept="image/*" capture="environment">
+  <input id="totp-qr-input" class="sr-file" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
   <div id="totp-add-backdrop" class="scan-backdrop" hidden></div>
   <div id="totp-add-dialog" class="scan-dialog totp-add-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="totp-add-title">
     <div class="scan-dialog-handle" aria-hidden="true"></div>
