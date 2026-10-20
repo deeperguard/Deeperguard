@@ -1216,17 +1216,20 @@ const NotesStore = (() => {
   }
 
   function cachedAccount() {
+    const live = state.account && typeof state.account === 'object' ? { ...state.account } : {};
     try {
       return {
-        email: localStorage.getItem('notes_email') || '',
-        kdf_salt: localStorage.getItem('notes_kdf_salt') || sessionStorage.getItem('notes_kdf_salt') || '',
-        vault_kdf_version: vaultKdfVersionFromAccount(state.account),
+        ...live,
+        email: live.email || localStorage.getItem('notes_email') || '',
+        kdf_salt: live.kdf_salt || localStorage.getItem('notes_kdf_salt') || sessionStorage.getItem('notes_kdf_salt') || '',
+        vault_kdf_version: vaultKdfVersionFromAccount(live),
       };
     } catch (e) {
       return {
-        email: '',
-        kdf_salt: sessionStorage.getItem('notes_kdf_salt') || '',
-        vault_kdf_version: vaultKdfVersionFromAccount(state.account),
+        ...live,
+        email: live.email || '',
+        kdf_salt: live.kdf_salt || sessionStorage.getItem('notes_kdf_salt') || '',
+        vault_kdf_version: vaultKdfVersionFromAccount(live),
       };
     }
   }
@@ -2629,10 +2632,8 @@ const NotesStore = (() => {
           dirty: state.dirty.size,
         });
         if (isProbablyOffline(e)) {
-          if (!quiet) {
-            notifyStatus('Saved on this device · will sync when online');
-            emitSync('offline', 'Offline');
-          }
+          notifyStatus('Saved on this device · will sync when online');
+          emitSync('offline', 'Offline');
           return false;
         }
         const sessionGone = /login required|sign in required/i.test(String(e?.message || ''))

@@ -65,8 +65,9 @@ rows.forEach((rev) => {
   const when = NotesHistory.revisionTimestamp(rev);
   assert.ok(when === 0 || when > 0);
 });
-assert.strictEqual(NotesHistory.revisionTimestamp(rows[0]), 0);
-assert.ok(NotesHistory.revisionTimestamp(rows[1]) > 0);
+// Newest-first: dated revision before undated.
+assert.ok(NotesHistory.revisionTimestamp(rows[0]) > 0);
+assert.strictEqual(NotesHistory.revisionTimestamp(rows[1]), 0);
 assert.deepStrictEqual(NotesHistory.revisionRows(null), []);
 assert.deepStrictEqual(NotesHistory.revisionRows({ content: { revisions: 'nope' } }), []);
 assert.strictEqual(NotesHistory.shouldFlushOnOpen(false), true);
@@ -79,22 +80,35 @@ assert.strictEqual(
   NotesHistory.revisionLabel({ title: '', content: 'First line\nmore' }, noteForLabels),
   'First line',
 );
-assert.strictEqual(
+// Never fall back to the live note title after a rename.
+assert.doesNotMatch(
   NotesHistory.revisionLabel({ title: 'Title', content: '' }, noteForLabels),
-  'Current note',
+  /Current note/,
 );
 assert.match(
   NotesHistory.revisionLabel({ at: '2024-06-01T12:30:00.000Z', title: 'Title', content: '' }, noteForLabels),
-  /Current note/,
+  /2024|Jun|6/,
 );
 assert.strictEqual(
   NotesHistory.revisionLabel({ title: 'Saved snapshot', content: '' }, noteForLabels),
   'Saved snapshot',
 );
 assert.strictEqual(
-  NotesHistory.revisionLabel({ title: 'Current note', content: '' }, noteForLabels),
-  'Current note',
+  NotesHistory.revisionLabel({ title: 'Zebrafish renamed', content: 'old body' }, noteForLabels),
+  'Zebrafish renamed',
 );
+const renamedRows = NotesHistory.revisionRows({
+  content: {
+    title: 'MD table test',
+    revisions: [
+      { at: '2024-01-01T00:00:00.000Z', title: 'Zebrafish renamed', content: 'v1' },
+      { at: '2024-01-03T00:00:00.000Z', title: 'MD table test', content: 'v3' },
+      { at: '2024-01-02T00:00:00.000Z', title: 'MD table test', content: 'v2' },
+    ],
+  },
+});
+assert.strictEqual(renamedRows[0].content, 'v3');
+assert.strictEqual(NotesHistory.revisionLabel(renamedRows[2]), 'Zebrafish renamed');
 
 const id = NotesStore.newUuid();
 const payload = NotesStore.defaultNote();

@@ -1,13 +1,16 @@
 const NotesHistory = (() => {
-  function revisionRows(note) {
-    const list = note?.content?.revisions;
-    if (!Array.isArray(list)) return [];
-    return list.filter((rev) => rev && typeof rev === 'object');
-  }
-
   function revisionTimestamp(rev) {
     const at = Date.parse(rev?.at);
     return Number.isFinite(at) ? at : 0;
+  }
+
+  function revisionRows(note) {
+    const list = note?.content?.revisions;
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter((rev) => rev && typeof rev === 'object')
+      .slice()
+      .sort((a, b) => revisionTimestamp(b) - revisionTimestamp(a));
   }
 
   // Version restore writes the store first. Flushing the still-open editor
@@ -16,7 +19,10 @@ const NotesHistory = (() => {
     return !skipFlush;
   }
 
-  function revisionLabel(rev, note) {
+  function revisionLabel(rev) {
+    // Always label a version with the title it had then — never the live note title.
+    const stored = String(rev?.title || '').trim();
+    if (stored && stored !== 'Untitled' && stored !== 'Title') return stored;
     const snap = {
       content: {
         title: rev?.title || '',
@@ -26,24 +32,13 @@ const NotesHistory = (() => {
       },
     };
     const derived = typeof NotesSearch !== 'undefined' && NotesSearch.effectiveNoteTitle
-      ? NotesSearch.effectiveNoteTitle(snap)
+      ? String(NotesSearch.effectiveNoteTitle(snap) || '').trim()
       : '';
-    if (derived) return derived;
-    const stored = String(rev?.title || '').trim();
-    if (stored && stored !== 'Untitled' && stored !== 'Title') return stored;
-    const currentTitle = typeof NotesSearch !== 'undefined' && NotesSearch.effectiveNoteTitle && note
-      ? NotesSearch.effectiveNoteTitle(note)
-      : String(note?.content?.title || '').trim();
-    if (stored && currentTitle && stored === currentTitle) return stored;
+    if (derived && derived !== 'Untitled' && derived !== 'Title') return derived;
     const at = revisionTimestamp(rev);
-    const when = at
-      ? new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-      : '';
-    const fallbackTitle = (currentTitle && currentTitle !== 'Untitled' && currentTitle !== 'Title')
-      ? currentTitle
-      : (derived && derived !== 'Title' ? derived : 'Note');
-    if (when && fallbackTitle && fallbackTitle !== 'Note') return fallbackTitle;
-    if (fallbackTitle && fallbackTitle !== 'Note') return fallbackTitle;
+    if (at) {
+      return new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    }
     return 'Untitled version';
   }
 

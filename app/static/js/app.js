@@ -614,9 +614,21 @@
 
   function formatPlanBytes(bytes) {
     const n = Number(bytes) || 0;
+    if (n <= 0) return '0 KB';
     if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
     if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(n % (1024 * 1024) === 0 ? 0 : 1)} MB`;
     return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+
+  function accountStorageParts(account) {
+    const used = Number(account?.storage_used_bytes) || 0;
+    const quota = account?.storage_quota_effective;
+    const quotaText = quota ? formatPlanBytes(quota) : 'Unlimited';
+    return { used, quota, usedText: formatPlanBytes(used), quotaText };
+  }
+
+  function vaultActiveNoteCount() {
+    return NotesStore.listNotes().filter((n) => !n.deleted && !n.content?.trashed && !n.content?.archived).length;
   }
 
   function updatePlanBadge(badge, account) {
@@ -659,10 +671,8 @@
     }
     if (tagline) tagline.textContent = account.plan_tagline || '';
     if (storage) {
-      const used = Number(account.storage_used_bytes) || 0;
-      const quota = account.storage_quota_effective;
-      const quotaText = quota ? formatPlanBytes(quota) : 'Unlimited';
-      storage.textContent = `Encrypted storage: ${formatPlanBytes(used)} used of ${quotaText}`;
+      const { usedText, quotaText } = accountStorageParts(account);
+      storage.textContent = `Encrypted storage: ${usedText} used of ${quotaText}`;
     }
     if (compareBody && account.plan_catalog) {
       const rows = [];
@@ -4025,19 +4035,20 @@
 
   function applyAccountInfoData(account) {
     if (!account) return;
-    const plan = String(account.plan || 'pro').toLowerCase();
-    const label = account.plan_label || (plan === 'pro' ? 'Pro' : 'Basic');
-    setAccountInfoRow('account-info-email', account.email || '—');
+    // Prefer the full in-memory account (quota/usage) over the slim salt cache.
+    const full = (NotesStore.state?.account && NotesStore.state.account.email)
+      ? { ...NotesStore.state.account, ...account }
+      : account;
+    const plan = String(full.plan || 'pro').toLowerCase();
+    const label = full.plan_label || (plan === 'pro' ? 'Pro' : 'Basic');
+    setAccountInfoRow('account-info-email', full.email || '—');
     setAccountInfoRow('account-info-plan', label);
-    const used = Number(account.storage_used_bytes) || 0;
-    const quota = account.storage_quota_effective;
-    const quotaText = quota ? formatPlanBytes(quota) : 'Unlimited';
-    setAccountInfoRow('account-info-storage', `${formatPlanBytes(used)} of ${quotaText}`);
-    setAccountInfoRow('account-info-2fa', account.totp_enabled ? 'Enabled' : 'Off');
-    setAccountInfoRow('account-info-passkeys', account.webauthn_enabled ? 'Registered' : 'None');
+    const { usedText, quotaText } = accountStorageParts(full);
+    setAccountInfoRow('account-info-storage', `${usedText} of ${quotaText}`);
+    setAccountInfoRow('account-info-2fa', full.totp_enabled ? 'Enabled' : 'Off');
+    setAccountInfoRow('account-info-passkeys', full.webauthn_enabled ? 'Registered' : 'None');
     if (NotesStore.isUnlocked()) {
-      const notes = NotesStore.listNotes().filter((n) => !n.content.trashed && !n.content.archived);
-      setAccountInfoRow('account-info-notes', String(notes.length));
+      setAccountInfoRow('account-info-notes', String(vaultActiveNoteCount()));
       setAccountInfoRow('account-info-attachments', String(NotesStore.listAttachments().length));
       setAccountInfoRow('account-info-tags', String(NotesStore.listTags().length));
     } else {
@@ -4322,6 +4333,13 @@
     };
     const caption = document.getElementById('sync-caption');
     if (caption) caption.textContent = captions[phase] || 'Sync';
+    if (phase === 'offline' && ui.saveStatus) {
+      const cur = ui.saveStatus.textContent || '';
+      if (!/will sync when online|Not synced|sign in again/i.test(cur)) {
+        ui.saveStatus.textContent = 'Saved on this device · will sync when online';
+        ui.saveStatus.classList.remove('error');
+      }
+    }
     if (phase === 'ok' && ui.saveStatus && !(NotesStore.state?.dirty?.size)
       && /will sync when online/.test(ui.saveStatus.textContent || '')) {
       ui.saveStatus.textContent = 'Saved';
@@ -6453,13 +6471,25 @@
   }
 
   async function submitUnlockForm() {
+    const typed = String(unlockPassword?.value || '').trim();
+    if (!typed) {
+      if (unlockSubmit) {
+        unlockSubmit.disabled = false;
+        unlockSubmit.textContent = 'Unlock';
+        unlockSubmit.removeAttribute('aria-busy');
+        unlockSubmit.classList.remove('is-checking');
+      }
+      showUnlockError('Enter your password');
+      try { unlockPassword?.focus(); } catch (err) { /* ignore */ }
+      return;
+    }
     showUnlockError('');
     unlockSubmit.disabled = true;
     unlockSubmit.textContent = 'Checking…';
     unlockSubmit.setAttribute('aria-busy', 'true');
     unlockSubmit.classList.add('is-checking');
     try {
-      await verifyAndUnlock(unlockPassword.value);
+      await verifyAndUnlock(typed);
       repairUnlockShellState();
       if (vaultKeyProven() && !isVaultReadyForSync()) showApp();
     } catch (err) {
@@ -7681,6 +7711,7 @@
       if (data.build) applyServerBuildStatus(data.build);
       const wasOffline = !networkReachable;
       networkReachable = true;
+      stopOfflineWatch();
       updateNetworkStatusBanner();
       if (wasOffline) {
         NotesStore.emitSync('idle', '');
@@ -7701,6 +7732,7 @@
         NotesStore.emitSync('offline', 'Offline');
       }
       updateNetworkStatusBanner();
+      startOfflineWatch();
       return false;
     }
   }
@@ -7736,20 +7768,56 @@
     }, 30000);
   }
 
+  let offlineWatchTimer = 0;
+  let onlineRecoveryGeneration = 0;
+
+  function stopOfflineWatch() {
+    if (offlineWatchTimer) {
+      clearInterval(offlineWatchTimer);
+      offlineWatchTimer = 0;
+    }
+  }
+
+  function startOfflineWatch() {
+    if (offlineWatchTimer) return;
+    offlineWatchTimer = setInterval(() => {
+      if (networkReachable) {
+        stopOfflineWatch();
+        return;
+      }
+      probeNetwork({ syncOnRecovery: true }).then((ok) => {
+        if (ok) {
+          stopOfflineWatch();
+          scheduleOnlineRecovery(0);
+        }
+      }).catch(() => {});
+    }, 10000);
+  }
+
   function scheduleOnlineRecovery(attempt = 0) {
     clearTimeout(onlineRecoveryTimer);
     const delays = [500, 1000, 2000, 4000];
-    if (attempt >= delays.length) return;
+    if (attempt === 0) onlineRecoveryGeneration += 1;
+    const generation = onlineRecoveryGeneration;
+    if (attempt >= delays.length) {
+      if (!networkReachable) startOfflineWatch();
+      return;
+    }
     onlineRecoveryTimer = setTimeout(() => {
-      const dirty = NotesStore.state?.dirty?.size || 0;
-      if (networkReachable && dirty === 0) return;
+      if (generation !== onlineRecoveryGeneration) return;
+      // Always probe — even when dirty is empty — so the Offline caption clears.
       probeNetwork({ syncOnRecovery: true }).then((ok) => {
+        if (generation !== onlineRecoveryGeneration) return ok;
         const stillDirty = NotesStore.state?.dirty?.size || 0;
         if (ok && stillDirty > 0) return syncNow({ quiet: true, force: true });
         return ok;
       }).finally(() => {
-        const stillDirty = NotesStore.state?.dirty?.size || 0;
-        if (!networkReachable || stillDirty > 0) scheduleOnlineRecovery(attempt + 1);
+        if (generation !== onlineRecoveryGeneration) return;
+        if (!networkReachable || (NotesStore.state?.dirty?.size || 0) > 0) {
+          scheduleOnlineRecovery(attempt + 1);
+        } else {
+          stopOfflineWatch();
+        }
       });
     }, delays[attempt]);
   }
@@ -8443,7 +8511,7 @@
         renderTags();
         renderNotes();
         renderTagBar(NotesStore.get(currentId));
-        toast('Tag added');
+        toast('Tag already exists');
         return;
       }
       createTag(name, { assignToCurrent: true });
@@ -11046,11 +11114,19 @@
           const label = typeof NotesHistory !== 'undefined' && NotesHistory.revisionLabel
             ? NotesHistory.revisionLabel(rev, note)
             : (rev.title || 'Untitled version');
+          // Newest first: Version N … Version 1
           const version = `Version ${revisions.length - idx}`;
+          const whenMs = typeof NotesHistory !== 'undefined' && NotesHistory.revisionTimestamp
+            ? NotesHistory.revisionTimestamp(rev)
+            : 0;
+          const when = whenMs
+            ? new Date(whenMs).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+            : '';
           const preview = String(rev.content || '').trim().split('\n').find((line) => line.trim()) || '';
           const previewBit = preview && preview !== label ? ` · ${preview.slice(0, 48)}` : '';
+          const whenBit = when ? ` · ${when}` : '';
           return `<div class="history-item">
-          <span><strong>${escapeHtml(version)}</strong> · ${escapeHtml(label)}${escapeHtml(previewBit)}</span>
+          <span><strong>${escapeHtml(version)}</strong> · ${escapeHtml(label)}${escapeHtml(whenBit)}${escapeHtml(previewBit)}</span>
           <button class="btn ghost sm" data-rev="${idx}">Restore</button>
         </div>`;
         })
@@ -13358,13 +13434,13 @@
   function renderVaultStats() {
     const el = document.getElementById('vault-stats');
     if (!el || !vaultReady) return;
-    const notes = NotesStore.listNotes().filter((n) => !n.content.trashed && !n.content.archived);
+    const notes = vaultActiveNoteCount();
     const docs = NotesStore.listAttachments().filter((att) => {
       const parent = NotesStore.get(att.content.note_id);
       return parent && !parent.deleted && !parent.content?.trashed && !parent.content?.archived;
     }).length;
     const tags = NotesStore.listTags().length;
-    const statsText = `${notes.length} note${notes.length === 1 ? '' : 's'} · ${docs} document${docs === 1 ? '' : 's'} · ${tags} tag${tags === 1 ? '' : 's'}`;
+    const statsText = `${notes} note${notes === 1 ? '' : 's'} · ${docs} document${docs === 1 ? '' : 's'} · ${tags} tag${tags === 1 ? '' : 's'}`;
     el.textContent = statsText;
     el.title = statsText;
   }
@@ -14913,7 +14989,7 @@
       renderTags();
       renderNotes();
       if (currentId) renderTagBar(NotesStore.get(currentId));
-      if (existing) toast(assignToCurrent ? 'Tag added' : 'Tag already exists');
+      if (existing) toast('Tag already exists');
       else toast('Tag created');
     } catch (err) {
       toast(err.message || String(err), true);
@@ -19328,20 +19404,29 @@
   });
   window.addEventListener('online', () => {
     onAppForeground('online');
-    if ((NotesStore.state?.dirty?.size || 0) > 0) syncNow({ quiet: true, force: true });
+    // Restart the backoff chain even if a probe is already in flight.
     scheduleOnlineRecovery(0);
+    if ((NotesStore.state?.dirty?.size || 0) > 0) syncNow({ quiet: true, force: true });
   });
   window.addEventListener('offline', () => {
+    networkReachable = false;
+    NotesStore.emitSync('offline', 'Offline');
+    updateNetworkStatusBanner();
+    startOfflineWatch();
     probeNetwork().then((ok) => {
       if (!ok) {
         networkReachable = false;
         NotesStore.emitSync('offline', 'Offline');
         updateNetworkStatusBanner();
+        startOfflineWatch();
+      } else {
+        stopOfflineWatch();
       }
     }).catch(() => {
       networkReachable = false;
       NotesStore.emitSync('offline', 'Offline');
       updateNetworkStatusBanner();
+      startOfflineWatch();
     });
   });
   // Block accidental native form submits (iOS autofill / password managers).
