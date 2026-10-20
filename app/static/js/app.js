@@ -506,10 +506,19 @@
     if (themeMeta) themeMeta.setAttribute('content', theme === 'light' ? '#ffffff' : '#0f1419');
   }
 
+  // Phone chip overlays are ephemeral — never share state with desktop sidebar
+  // collapse prefs (tagsCollapsed / foldersCollapsed).
+  let phoneBrowseOpen = null; // null | 'tags' | 'folders'
+  let lastCompactLayout = compactLayoutActive();
+
   function applyTagSection() {
     collapseMobileNavOnce();
     const section = document.getElementById('tag-section');
     if (!section) return;
+    if (compactLayoutActive()) {
+      section.open = phoneBrowseOpen === 'tags';
+      return;
+    }
     section.open = !prefs.tagsCollapsed;
   }
 
@@ -517,15 +526,39 @@
     collapseMobileNavOnce();
     const section = document.getElementById('folder-section');
     if (!section) return;
+    if (compactLayoutActive()) {
+      section.open = phoneBrowseOpen === 'folders';
+      return;
+    }
     section.open = !prefs.foldersCollapsed;
+  }
+
+  function closePhoneBrowseOverlay({ focusChip = false } = {}) {
+    if (!compactLayoutActive()) return false;
+    const which = phoneBrowseOpen;
+    if (!which) {
+      const tagOpen = document.getElementById('tag-section')?.open;
+      const folderOpen = document.getElementById('folder-section')?.open;
+      if (!tagOpen && !folderOpen) return false;
+    }
+    phoneBrowseOpen = null;
+    const tagSection = document.getElementById('tag-section');
+    const folderSection = document.getElementById('folder-section');
+    if (tagSection) tagSection.open = false;
+    if (folderSection) folderSection.open = false;
+    if (focusChip) {
+      const chip = (which === 'folders' ? folderSection : tagSection)?.querySelector('summary');
+      try { chip?.focus?.({ preventScroll: true }); } catch (err) { /* ignore */ }
+    }
+    return true;
   }
 
   function collapseMobileNavOnce() {
     if (!compactLayoutActive()) return;
     if (prefs.mobileNavCollapsed === 1) return;
     prefs.mobileNavCollapsed = 1;
-    prefs.tagsCollapsed = true;
-    prefs.foldersCollapsed = true;
+    // Close phone overlays only — do not overwrite desktop collapse prefs.
+    phoneBrowseOpen = null;
     try { localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs)); } catch (e) { /* ignore quota */ }
   }
 
@@ -3270,6 +3303,25 @@
     else sessionStorage.removeItem('notes_open_id');
   }
 
+  function dialogBlocksToastFooter() {
+    const open = (id) => {
+      const el = document.getElementById(id);
+      return !!(el && !el.hidden);
+    };
+    return open('tag-manage-dialog')
+      || open('confirm-dialog')
+      || open('account-info-dialog')
+      || open('folder-prompt')
+      || open('totp-add-dialog')
+      || open('scan-dialog');
+  }
+
+  function syncToastDialogLift() {
+    const el = document.getElementById('toast');
+    const lift = !!(el && !el.hidden && dialogBlocksToastFooter());
+    document.documentElement.classList.toggle('toast-above-dialog', lift);
+  }
+
   function toastWithUndo(message, onUndo) {
     const el = document.getElementById('toast');
     if (!el) return;
@@ -3283,13 +3335,16 @@
     undo.textContent = 'Undo';
     undo.addEventListener('click', () => {
       el.hidden = true;
+      syncToastDialogLift();
       if (typeof onUndo === 'function') onUndo();
     });
     el.append(label, undo);
     el.hidden = false;
+    syncToastDialogLift();
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       el.hidden = true;
+      syncToastDialogLift();
     }, 6000);
   }
 
@@ -3302,6 +3357,7 @@
       el.hidden = true;
       el.textContent = '';
       document.documentElement.classList.remove('totp-toast-open');
+      syncToastDialogLift();
       return;
     }
     const locked = document.body.classList.contains('locked') || isUnlockScreenVisible();
@@ -3314,6 +3370,7 @@
         el.hidden = true;
         el.textContent = '';
         document.documentElement.classList.remove('totp-toast-open');
+        syncToastDialogLift();
       }
       return;
     }
@@ -3322,11 +3379,13 @@
     el.classList.toggle('error', !!isError);
     el.hidden = false;
     document.documentElement.classList.toggle('totp-toast-open', on2fa);
+    syncToastDialogLift();
     clearTimeout(toastTimer);
     const linger = message === 'New note' ? 1400 : 3200;
     toastTimer = setTimeout(() => {
       el.hidden = true;
       document.documentElement.classList.remove('totp-toast-open');
+      syncToastDialogLift();
     }, linger);
   }
 
@@ -7193,6 +7252,7 @@
     dialog.hidden = false;
     if (backdrop) backdrop.hidden = false;
     renderTagManageList();
+    syncToastDialogLift();
   }
 
   function closeTagManage() {
@@ -7200,6 +7260,7 @@
     const backdrop = document.getElementById('tag-manage-backdrop');
     if (dialog) dialog.hidden = true;
     if (backdrop) backdrop.hidden = true;
+    syncToastDialogLift();
   }
 
   function folderOpenMap() {
@@ -7263,6 +7324,7 @@
       done = true;
       const title = input.value.trim();
       const currentName = String(folder.content.title || '').trim();
+      let renamedTo = null;
       if (!title) {
         toast('Enter a folder name', true);
       } else if (title.toLowerCase() !== currentName.toLowerCase()) {
@@ -7271,9 +7333,14 @@
           && String(item.content?.title || '').trim().toLowerCase() === title.toLowerCase()
         ));
         if (taken) toast('A folder with that name already exists', true);
-        else NotesStore.renameFolder(uuid, title);
+        else if (NotesStore.renameFolder(uuid, title)) renamedTo = title;
       } else if (title !== currentName) {
-        NotesStore.renameFolder(uuid, title);
+        if (NotesStore.renameFolder(uuid, title)) renamedTo = title;
+      }
+      // Phone list header must update immediately — don't wait on rAF renderNotes.
+      if (renamedTo && currentFolder === uuid) {
+        const listTitle = document.getElementById('note-list-title');
+        if (listTitle) listTitle.textContent = renamedTo;
       }
       renderFolders();
       renderNotes();
@@ -7556,6 +7623,7 @@
     }
     if (currentId && !NotesStore.get(currentId)) closeEditor();
     renderNotes();
+    renderTags();
     if (protectedCount > 0) {
       toast('Protected notes were not deleted', true);
     } else {
@@ -7939,6 +8007,12 @@
         stopOfflineWatch();
         return;
       }
+      // If the browser already flipped online but the event was missed, start
+      // the 0.5/1/2/4s chain now instead of waiting another 10s tick.
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        scheduleOnlineRecovery(0);
+        return;
+      }
       probeNetwork({ syncOnRecovery: true }).then((ok) => {
         if (ok) {
           stopOfflineWatch();
@@ -7951,7 +8025,11 @@
   function scheduleOnlineRecovery(attempt = 0) {
     clearTimeout(onlineRecoveryTimer);
     const delays = [500, 1000, 2000, 4000];
-    if (attempt === 0) onlineRecoveryGeneration += 1;
+    if (attempt === 0) {
+      // Never wait on the 10s offline-watch tick once recovery starts.
+      stopOfflineWatch();
+      onlineRecoveryGeneration += 1;
+    }
     const generation = onlineRecoveryGeneration;
     if (attempt >= delays.length) {
       if (!networkReachable) startOfflineWatch();
@@ -16255,22 +16333,32 @@
   const folderSection = document.getElementById('folder-section');
   if (tagSection) {
     tagSection.addEventListener('toggle', () => {
-      prefs.tagsCollapsed = !tagSection.open;
-      // Phone chip row: only one browse panel open at a time.
-      if (tagSection.open && folderSection?.open && !isDesktopLayout()) {
-        folderSection.open = false;
-        prefs.foldersCollapsed = true;
+      if (!isDesktopLayout()) {
+        // Phone overlays are ephemeral — never write desktop collapse prefs.
+        if (tagSection.open) {
+          phoneBrowseOpen = 'tags';
+          if (folderSection?.open) folderSection.open = false;
+        } else if (phoneBrowseOpen === 'tags') {
+          phoneBrowseOpen = null;
+        }
+        return;
       }
+      prefs.tagsCollapsed = !tagSection.open;
       localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs));
     });
   }
   if (folderSection) {
     folderSection.addEventListener('toggle', () => {
-      prefs.foldersCollapsed = !folderSection.open;
-      if (folderSection.open && tagSection?.open && !isDesktopLayout()) {
-        tagSection.open = false;
-        prefs.tagsCollapsed = true;
+      if (!isDesktopLayout()) {
+        if (folderSection.open) {
+          phoneBrowseOpen = 'folders';
+          if (tagSection?.open) tagSection.open = false;
+        } else if (phoneBrowseOpen === 'folders') {
+          phoneBrowseOpen = null;
+        }
+        return;
       }
+      prefs.foldersCollapsed = !folderSection.open;
       localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs));
     });
   }
@@ -16284,6 +16372,12 @@
   }
   window.addEventListener('resize', () => {
     const zoomed = noteBrowserZoom();
+    const compact = compactLayoutActive();
+    if (compact !== lastCompactLayout) {
+      // Layout switch: phone overlays always start closed; desktop prefs untouched.
+      phoneBrowseOpen = null;
+      lastCompactLayout = compact;
+    }
     applyTagSection();
     applyFolderSection();
     applyFilterSection();
@@ -16302,6 +16396,22 @@
     if (currentId) syncTagBarShell(NotesStore.get(currentId));
     layoutFindBarOverDocViewer();
   });
+  // Phone Tags/Folders overlay: tap/click outside closes and returns focus to the chip.
+  document.addEventListener('pointerdown', (event) => {
+    if (!compactLayoutActive() || document.body.classList.contains('nav-drawer-open')) return;
+    const which = phoneBrowseOpen
+      || (tagSection?.open ? 'tags' : null)
+      || (folderSection?.open ? 'folders' : null);
+    if (!which) return;
+    const section = which === 'tags' ? tagSection : folderSection;
+    if (!section?.open) return;
+    const target = event.target;
+    if (section.contains(target)) return;
+    if (target?.closest?.('#toast, #tag-manage-dialog, #tag-manage-backdrop, #confirm-dialog, #confirm-backdrop, #folder-prompt, #account-info-dialog, .scan-dialog, #totp-add-dialog')) {
+      return;
+    }
+    closePhoneBrowseOverlay({ focusChip: true });
+  }, true);
   function hideFolderComposer() {
     const composer = document.getElementById('folder-composer');
     const input = document.getElementById('folder-name-input');
@@ -17235,6 +17345,8 @@
     cancelNoteReminder(id);
     if (id === currentId) closeEditor();
     else renderNotes();
+    // Tag counts exclude trashed notes — refresh chips immediately.
+    renderTags();
     toastWithUndo('Moved to trash', () => restoreNote(id));
   }
 
@@ -19752,6 +19864,8 @@
     onAppForeground('pageshow');
   });
   window.addEventListener('online', () => {
+    // Drop the 10s fallback immediately — recovery chain owns reconnect.
+    stopOfflineWatch();
     onAppForeground('online');
     // Restart the backoff chain even if a probe is already in flight.
     scheduleOnlineRecovery(0);
@@ -20066,6 +20180,10 @@
       }
       if (document.body.classList.contains('search-filters-open')) {
         setSearchFilterPanelOpen(false);
+        stop();
+        return;
+      }
+      if (closePhoneBrowseOverlay({ focusChip: true })) {
         stop();
         return;
       }
