@@ -622,7 +622,9 @@ const NotesCloudBackup = (() => {
         window.removeEventListener('focus', onFocus);
         clearTimeout(hardTimeout);
         if (focusTimer) clearTimeout(focusTimer);
-        try { popup.close(); } catch (err) { /* ignore COOP / already closed */ }
+        // Never call popup.close() from the opener: while the popup is on
+        // dropbox.com, COOP logs red "would block the window.close call" errors.
+        // On success the /app redirect page postMessages then window.close()s itself.
         fn(value);
       };
       const cancelMsg = 'Dropbox sign-in didn’t complete. Check your App key and try again.';
