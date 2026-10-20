@@ -4,6 +4,22 @@
  * upload (OAuth 2 PKCE). Tokens stay in the browser — never sent to our server.
  */
 const NotesCloudBackup = (() => {
+  // Dropbox PKCE popup callback: hand code/state to the opener and close so the
+  // main tab (and unlocked vault) never navigates away.
+  try {
+    if (typeof window !== 'undefined' && window.opener && window.opener !== window) {
+      const params = new URLSearchParams(window.location.search || '');
+      const state = String(params.get('state') || '');
+      if (state.startsWith('dg-dropbox:')) {
+        window.opener.postMessage(
+          { type: 'dg-dropbox-oauth', search: window.location.search },
+          window.location.origin,
+        );
+        try { window.close(); } catch (err) { /* ignore */ }
+      }
+    }
+  } catch (err) { /* ignore */ }
+
   const PREFS_KEY = 'deeperguard-cloud-backup';
   const DRIVE_FOLDER = 'Deeperguard Backups';
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
@@ -557,9 +573,54 @@ const NotesCloudBackup = (() => {
     return rememberDropboxTokens({ ...payload, refresh_token: refresh });
   }
 
+  function openDropboxOAuthPopup(url) {
+    return new Promise((resolve, reject) => {
+      if (typeof window === 'undefined' || typeof window.open !== 'function') {
+        reject(new Error('Dropbox sign-in requires a browser window'));
+        return;
+      }
+      const popup = window.open(
+        url,
+        'dg-dropbox-oauth',
+        'width=640,height=720,menubar=no,toolbar=no,status=no,resizable=yes,scrollbars=yes',
+      );
+      if (!popup) {
+        reject(new Error('Allow popups to connect Dropbox, then try again'));
+        return;
+      }
+      let settled = false;
+      const finish = (fn, value) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('message', onMessage);
+        clearInterval(poll);
+        try { if (!popup.closed) popup.close(); } catch (err) { /* ignore */ }
+        fn(value);
+      };
+      const onMessage = (event) => {
+        try {
+          if (event.origin !== window.location.origin) return;
+          if (!event.data || event.data.type !== 'dg-dropbox-oauth') return;
+          finish(resolve, String(event.data.search || ''));
+        } catch (err) {
+          finish(reject, err);
+        }
+      };
+      const poll = setInterval(() => {
+        if (popup.closed) {
+          finish(reject, new Error('Dropbox sign-in cancelled'));
+        }
+      }, 400);
+      window.addEventListener('message', onMessage);
+    });
+  }
+
   async function beginDropboxOAuth({ pending = '' } = {}) {
     const key = dropboxAppKey();
     if (!key) throw new Error('Dropbox is not configured');
+    if (!isValidDropboxAppKey(key)) {
+      throw new Error('Dropbox App key should be 10–25 letters or digits');
+    }
     const verifier = randomVerifier();
     const challenge = await sha256Base64Url(verifier);
     const state = `dg-dropbox:${randomVerifier()}`;
@@ -577,10 +638,10 @@ const NotesCloudBackup = (() => {
       scope: DROPBOX_SCOPES,
     });
     const url = `${DROPBOX_AUTH_URL}?${params.toString()}`;
-    if (typeof location !== 'undefined' && location.assign) {
-      location.assign(url);
-    }
-    return url;
+    // Popup keeps the vault tab in place (full-page redirect stranded users on
+    // Dropbox authorize_error and re-locked the vault).
+    const search = await openDropboxOAuthPopup(url);
+    return consumeDropboxOAuthRedirect({ search });
   }
 
   function peekDropboxOAuthParams(search = '') {
@@ -655,7 +716,7 @@ const NotesCloudBackup = (() => {
     if (refreshed) return refreshed;
     if (!interactive) return '';
     await beginDropboxOAuth({ pending: '' });
-    return '';
+    return dropboxAccessToken || loadCachedDropboxToken() || '';
   }
 
   async function dropboxRpc(path, bodyObj, { content = false } = {}) {
@@ -820,6 +881,7 @@ const NotesCloudBackup = (() => {
   };
 })();
 
+if (typeof window !== 'undefined') window.NotesCloudBackup = NotesCloudBackup;
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = NotesCloudBackup;
 }

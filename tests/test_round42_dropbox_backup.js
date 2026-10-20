@@ -65,6 +65,8 @@ function loadCloud({
     JSON,
     setTimeout,
     clearTimeout,
+    setInterval,
+    clearInterval,
     TextEncoder,
     URLSearchParams,
     Buffer,
@@ -177,19 +179,18 @@ function loadCloud({
 }
 
 (async () => {
-  // PKCE begin + consume redirect
+  // PKCE begin via popup + consume redirect (Round 45: no full-page assign)
   {
     const calls = [];
-    let assigned = '';
     const Cloud = loadCloud({
-      dropboxKey: 'test-app-key',
+      dropboxKey: 'testappkey12',
       fetchImpl: async (url, opts = {}) => {
         calls.push({ url: String(url), method: (opts.method || 'GET').toUpperCase(), body: opts.body });
         if (String(url).includes('/oauth2/token')) {
           const body = String(opts.body || '');
           assert.ok(body.includes('grant_type=authorization_code'));
           assert.ok(body.includes('code_verifier='));
-          assert.ok(body.includes('client_id=test-app-key'));
+          assert.ok(body.includes('client_id=testappkey12'));
           assert.ok(body.includes(encodeURIComponent('https://www.deeperguard.com/app')) || body.includes('redirect_uri='));
           return {
             ok: true,
@@ -204,27 +205,33 @@ function loadCloud({
         return { ok: false, status: 404, json: async () => ({}) };
       },
     });
-    Cloud.__sandbox.location.assign = (url) => { assigned = String(url); };
-    // Capture verifier/state without navigating away permanently
-    const origAssign = Cloud.__sandbox.location.assign;
     let authUrl = '';
-    Cloud.__sandbox.location.assign = (url) => { authUrl = String(url); };
-    await Cloud.beginDropboxOAuth({ pending: 'backup' });
-    Cloud.__sandbox.location.assign = origAssign;
+    const messageHandlers = [];
+    Cloud.__sandbox.window.addEventListener = (type, fn) => {
+      if (type === 'message') messageHandlers.push(fn);
+    };
+    Cloud.__sandbox.window.removeEventListener = () => {};
+    Cloud.__sandbox.window.open = (url) => {
+      authUrl = String(url);
+      const popup = { closed: false, close() { popup.closed = true; } };
+      // Simulate popup callback posting code/state back to opener.
+      setTimeout(() => {
+        const authParams = new URLSearchParams(authUrl.split('?')[1]);
+        const state = authParams.get('state');
+        const search = `?code=authcode1&state=${encodeURIComponent(state)}`;
+        messageHandlers.forEach((fn) => fn({
+          origin: 'https://www.deeperguard.com',
+          data: { type: 'dg-dropbox-oauth', search },
+        }));
+      }, 5);
+      return popup;
+    };
+    const result = await Cloud.beginDropboxOAuth({ pending: 'backup' });
     assert.ok(authUrl.includes('https://www.dropbox.com/oauth2/authorize'));
     assert.ok(authUrl.includes('code_challenge_method=S256'));
     assert.ok(authUrl.includes('token_access_type=offline'));
     assert.ok(authUrl.includes('files.content.write'));
     assert.ok(authUrl.includes('files.content.read'));
-    const authParams = new URLSearchParams(authUrl.split('?')[1]);
-    const state = authParams.get('state');
-    assert.ok(state && state.startsWith('dg-dropbox:'));
-    assert.ok(Cloud.__session.get('dg-dropbox-pkce-verifier'));
-    assert.strictEqual(Cloud.__session.get('dg-dropbox-pending-action'), 'backup');
-
-    const result = await Cloud.consumeDropboxOAuthRedirect({
-      search: `?code=authcode1&state=${encodeURIComponent(state)}`,
-    });
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.pending, 'backup');
     assert.strictEqual(Cloud.readPrefs().dropboxAccessToken, 'sl.access');
@@ -236,7 +243,7 @@ function loadCloud({
   {
     const files = new Map();
     const Cloud = loadCloud({
-      dropboxKey: 'test-app-key',
+      dropboxKey: 'testappkey12',
       fetchImpl: async (url, opts = {}) => {
         const u = String(url);
         const method = (opts.method || 'GET').toUpperCase();

@@ -19162,13 +19162,18 @@
     const autoDaily = document.getElementById('backup-drive-auto-daily');
     const keyInput = document.getElementById('google-oauth-client-id-input');
     const keyStatus = document.getElementById('google-key-status');
+    const keyConfigured = document.getElementById('google-key-configured');
+    const keyRemove = document.getElementById('btn-google-key-remove');
     const configured = !!(Cloud && Cloud.isGoogleConfigured && Cloud.isGoogleConfigured());
     const source = Cloud?.googleKeySource?.() || '';
+    const hasUserKey = !!String(prefs.googleOauthClientId || '').trim();
     if (keyInput && document.activeElement !== keyInput) {
       keyInput.value = String(prefs.googleOauthClientId || '');
     }
+    if (keyConfigured) keyConfigured.hidden = !hasUserKey;
+    if (keyRemove) keyRemove.hidden = !hasUserKey;
     if (keyStatus) {
-      if (prefs.googleOauthClientId) {
+      if (hasUserKey) {
         keyStatus.textContent = 'Using your Google Client ID (synced in your vault).';
       } else if (source === 'server') {
         keyStatus.textContent = 'Using this server’s Google Client ID. You can still add your own below.';
@@ -19249,12 +19254,45 @@
     }
   });
 
+  function setGoogleKeyError(message) {
+    const el = document.getElementById('google-key-error');
+    if (!el) return;
+    if (message) {
+      el.hidden = false;
+      el.textContent = message;
+    } else {
+      el.hidden = true;
+      el.textContent = '';
+    }
+  }
+
+  function setDropboxKeyError(message) {
+    const el = document.getElementById('dropbox-key-error');
+    if (!el) return;
+    if (message) {
+      el.hidden = false;
+      el.textContent = message;
+    } else {
+      el.hidden = true;
+      el.textContent = '';
+    }
+  }
+
   document.getElementById('btn-google-key-save')?.addEventListener('click', async () => {
     const Cloud = window.NotesCloudBackup;
     const input = document.getElementById('google-oauth-client-id-input');
     const raw = String(input?.value || '').trim();
-    if (!Cloud?.isValidGoogleClientId?.(raw)) {
-      toast('Google Client ID must end with .apps.googleusercontent.com', true);
+    setGoogleKeyError('');
+    if (!Cloud?.isValidGoogleClientId) {
+      const msg = 'Cloud backup module failed to load. Refresh the page and try again.';
+      setGoogleKeyError(msg);
+      toast(msg, true);
+      return;
+    }
+    if (!Cloud.isValidGoogleClientId(raw)) {
+      const msg = 'Google Client ID must end with .apps.googleusercontent.com';
+      setGoogleKeyError(msg);
+      toast(msg, true);
       return;
     }
     const prev = String(prefs.googleOauthClientId || '').trim();
@@ -19270,6 +19308,7 @@
 
   document.getElementById('btn-google-key-remove')?.addEventListener('click', async () => {
     const Cloud = window.NotesCloudBackup;
+    setGoogleKeyError('');
     try { await Cloud.disconnectGoogle?.(); } catch (err) { /* ignore */ }
     prefs.googleOauthClientId = '';
     const input = document.getElementById('google-oauth-client-id-input');
@@ -19357,13 +19396,18 @@
     const autoDaily = document.getElementById('backup-dropbox-auto-daily');
     const keyInput = document.getElementById('dropbox-app-key-input');
     const keyStatus = document.getElementById('dropbox-key-status');
+    const keyConfigured = document.getElementById('dropbox-key-configured');
+    const keyRemove = document.getElementById('btn-dropbox-key-remove');
     const configured = !!(Cloud && Cloud.isDropboxConfigured && Cloud.isDropboxConfigured());
     const source = Cloud?.dropboxKeySource?.() || '';
+    const hasUserKey = !!String(prefs.dropboxAppKey || '').trim();
     if (keyInput && document.activeElement !== keyInput) {
       keyInput.value = String(prefs.dropboxAppKey || '');
     }
+    if (keyConfigured) keyConfigured.hidden = !hasUserKey;
+    if (keyRemove) keyRemove.hidden = !hasUserKey;
     if (keyStatus) {
-      if (prefs.dropboxAppKey) {
+      if (hasUserKey) {
         keyStatus.textContent = 'Using your Dropbox App key (synced in your vault).';
       } else if (source === 'server') {
         keyStatus.textContent = 'Using this server’s Dropbox App key. You can still add your own below.';
@@ -19413,10 +19457,12 @@
       toast('Dropbox is not set up yet — add your own App key', true);
       return;
     }
-    const token = await Cloud.ensureDropboxToken({ interactive: false });
+    let token = await Cloud.ensureDropboxToken({ interactive: false });
     if (!token) {
+      // Popup OAuth — vault tab stays put. Continues after success.
       await Cloud.beginDropboxOAuth({ pending: 'backup' });
-      return;
+      token = await Cloud.ensureDropboxToken({ interactive: false });
+      if (!token) throw new Error('Dropbox sign-in did not complete');
     }
     await runFileDownloadTask({
       title: 'Dropbox backup',
@@ -19451,8 +19497,17 @@
     const Cloud = window.NotesCloudBackup;
     const input = document.getElementById('dropbox-app-key-input');
     const raw = String(input?.value || '').trim();
-    if (!Cloud?.isValidDropboxAppKey?.(raw)) {
-      toast('Dropbox App key should be 10–25 letters or digits', true);
+    setDropboxKeyError('');
+    if (!Cloud?.isValidDropboxAppKey) {
+      const msg = 'Cloud backup module failed to load. Refresh the page and try again.';
+      setDropboxKeyError(msg);
+      toast(msg, true);
+      return;
+    }
+    if (!Cloud.isValidDropboxAppKey(raw)) {
+      const msg = 'Dropbox App key should be 10–25 letters or digits';
+      setDropboxKeyError(msg);
+      toast(msg, true);
       return;
     }
     const prev = String(prefs.dropboxAppKey || '').trim();
@@ -19468,6 +19523,7 @@
 
   document.getElementById('btn-dropbox-key-remove')?.addEventListener('click', async () => {
     const Cloud = window.NotesCloudBackup;
+    setDropboxKeyError('');
     try { await Cloud.disconnectDropbox?.(); } catch (err) { /* ignore */ }
     prefs.dropboxAppKey = '';
     const input = document.getElementById('dropbox-app-key-input');
@@ -19503,10 +19559,11 @@
     const Cloud = window.NotesCloudBackup;
     if (!list || !Cloud) return;
     try {
-      const token = await Cloud.ensureDropboxToken({ interactive: false });
+      let token = await Cloud.ensureDropboxToken({ interactive: false });
       if (!token) {
         await Cloud.beginDropboxOAuth({ pending: 'list' });
-        return;
+        token = await Cloud.ensureDropboxToken({ interactive: false });
+        if (!token) throw new Error('Dropbox sign-in did not complete');
       }
       list.hidden = false;
       list.innerHTML = '<li>Loading…</li>';
