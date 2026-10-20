@@ -13853,6 +13853,7 @@
       refreshBtn.removeAttribute('disabled');
     }
     refreshSettingsDiagnostics().catch(() => {});
+    try { refreshGoogleDriveBackupUi(); } catch (err) { /* ignore */ }
     startSignedInDevicesRefresh();
   }
 
@@ -19059,35 +19060,269 @@
     }
   });
 
-  document.getElementById('btn-download-backup').addEventListener('click', async () => {
+  async function prepareEncryptedBackupBlob(report) {
+    await NotesStore.flush();
+    const backup = await buildLocalBackup(report);
+    const Cloud = window.NotesCloudBackup;
+    const filename = Cloud?.backupFilename?.() || `deeperguard-backup-${new Date().toISOString().slice(0, 10)}.dgbackup`;
+    const blob = Cloud?.backupBlobFromObject
+      ? Cloud.backupBlobFromObject(backup)
+      : new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    return { backup, blob, filename };
+  }
+
+  async function saveEncryptedBackupFile() {
+    await runFileDownloadTask({
+      title: 'Encrypted vault backup',
+      prepareLabel: 'Preparing backup…',
+      run: async (report) => {
+        const { blob, filename } = await prepareEncryptedBackupBlob(report);
+        report({ status: 'Saving backup…', pct: 96, indeterminate: false });
+        const Cloud = window.NotesCloudBackup;
+        if (Cloud?.saveBackupFile) {
+          const result = await Cloud.saveBackupFile(blob, { filename });
+          if (result.method === 'share-cancelled') {
+            report({ status: 'Cancelled', pct: 100, indeterminate: false });
+            return { cancelled: true };
+          }
+          report({
+            status: result.method === 'share' ? 'Shared — pick Save to Files' : 'Download started',
+            pct: 100,
+            indeterminate: false,
+          });
+          return result;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        report({ status: 'Download started', pct: 100, indeterminate: false });
+        return { method: 'download', filename };
+      },
+    });
+  }
+
+  document.getElementById('btn-download-backup')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-download-backup');
     if (btn?.disabled) return;
     if (btn) btn.disabled = true;
     try {
-      await runFileDownloadTask({
-        title: 'Encrypted vault backup',
-        prepareLabel: 'Preparing backup…',
-        run: async (report) => {
-          await NotesStore.flush();
-          const backup = await buildLocalBackup(report);
-          report({ status: 'Starting download…', pct: 96, indeterminate: false });
-          const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'deeperguard-backup.enc.json';
-          a.click();
-          URL.revokeObjectURL(url);
-          report({ status: 'Download started', pct: 100, indeterminate: false });
-        },
-      });
-      toast('Encrypted vault downloaded');
+      await saveEncryptedBackupFile();
+      toast('Encrypted vault saved');
     } catch (err) {
       toast(err.message || 'Download failed', true);
     } finally {
       if (btn) btn.disabled = false;
     }
   });
+
+  document.getElementById('btn-save-backup-file')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-save-backup-file');
+    if (btn?.disabled) return;
+    if (btn) btn.disabled = true;
+    try {
+      const result = await saveEncryptedBackupFile();
+      if (!result?.cancelled) toast('Encrypted backup ready');
+    } catch (err) {
+      toast(err.message || 'Could not save backup', true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+
+  function refreshGoogleDriveBackupUi() {
+    const Cloud = window.NotesCloudBackup;
+    const status = document.getElementById('google-drive-status');
+    const controls = document.getElementById('google-drive-controls');
+    const missing = document.getElementById('google-drive-not-configured');
+    const driveBtn = document.getElementById('btn-backup-google-drive');
+    const autoDaily = document.getElementById('backup-drive-auto-daily');
+    if (!Cloud) return;
+    const configured = Cloud.isGoogleConfigured();
+    if (missing) missing.hidden = configured;
+    if (driveBtn) {
+      driveBtn.disabled = !configured;
+      driveBtn.title = configured ? '' : 'Not configured';
+    }
+    if (controls) controls.hidden = !configured;
+    if (!configured) {
+      if (status) status.textContent = '';
+      return;
+    }
+    const prefs = Cloud.readPrefs();
+    if (autoDaily) autoDaily.checked = !!prefs.autoDailyDrive;
+    if (status) {
+      if (prefs.lastDriveBackupAt) {
+        const when = new Date(prefs.lastDriveBackupAt);
+        status.textContent = `Last Google Drive backup: ${Number.isNaN(when.getTime()) ? prefs.lastDriveBackupAt : when.toLocaleString()}`;
+      } else {
+        status.textContent = prefs.driveConnected
+          ? 'Google Drive connected — no backup uploaded yet.'
+          : 'Google Drive uses a short-lived browser token (drive.file). Nothing is stored on our server.';
+      }
+    }
+  }
+
+  async function runGoogleDriveBackup() {
+    const Cloud = window.NotesCloudBackup;
+    if (!Cloud?.isGoogleConfigured?.()) {
+      toast('Google Drive is not configured on this server', true);
+      return;
+    }
+    await runFileDownloadTask({
+      title: 'Google Drive backup',
+      prepareLabel: 'Preparing encrypted backup…',
+      run: async (report) => {
+        const { blob, filename } = await prepareEncryptedBackupBlob(report);
+        report({ status: 'Signing in to Google…', pct: 94, indeterminate: true });
+        await Cloud.requestAccessToken({ prompt: '' });
+        report({ status: 'Uploading encrypted backup…', pct: 96, indeterminate: true });
+        const file = await Cloud.uploadBackupBlob(blob, { filename });
+        report({ status: 'Uploaded', pct: 100, indeterminate: false });
+        return file;
+      },
+    });
+    refreshGoogleDriveBackupUi();
+    toast('Encrypted backup uploaded to Google Drive');
+  }
+
+  document.getElementById('btn-backup-google-drive')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-backup-google-drive');
+    if (btn?.disabled) return;
+    if (btn) btn.disabled = true;
+    try {
+      await runGoogleDriveBackup();
+    } catch (err) {
+      toast(err.message || 'Google Drive backup failed', true);
+    } finally {
+      if (btn) btn.disabled = !window.NotesCloudBackup?.isGoogleConfigured?.();
+      refreshGoogleDriveBackupUi();
+    }
+  });
+
+  document.getElementById('backup-drive-auto-daily')?.addEventListener('change', (event) => {
+    window.NotesCloudBackup?.setAutoDailyDrive?.(!!event.target.checked);
+    refreshGoogleDriveBackupUi();
+  });
+
+  document.getElementById('btn-drive-disconnect')?.addEventListener('click', async () => {
+    try {
+      await window.NotesCloudBackup?.disconnectGoogle?.();
+      const list = document.getElementById('google-drive-backup-list');
+      if (list) {
+        list.hidden = true;
+        list.innerHTML = '';
+      }
+      refreshGoogleDriveBackupUi();
+      toast('Google Drive disconnected');
+    } catch (err) {
+      toast(err.message || 'Could not disconnect', true);
+    }
+  });
+
+  document.getElementById('btn-drive-list')?.addEventListener('click', async () => {
+    const list = document.getElementById('google-drive-backup-list');
+    const Cloud = window.NotesCloudBackup;
+    if (!list || !Cloud) return;
+    try {
+      list.hidden = false;
+      list.innerHTML = '<li>Loading…</li>';
+      await Cloud.requestAccessToken({ prompt: '' });
+      const files = await Cloud.listDriveBackups({ limit: 8 });
+      if (!files.length) {
+        list.innerHTML = '<li>No backups in Deeperguard Backups yet.</li>';
+        return;
+      }
+      list.innerHTML = '';
+      for (const file of files) {
+        const li = document.createElement('li');
+        const when = file.modifiedTime || file.createdTime || '';
+        li.textContent = `${file.name || 'backup'} · ${when ? new Date(when).toLocaleString() : ''}`;
+        const restoreBtn = document.createElement('button');
+        restoreBtn.type = 'button';
+        restoreBtn.className = 'btn ghost sm';
+        restoreBtn.textContent = 'Restore';
+        restoreBtn.addEventListener('click', async () => {
+          try {
+            const ok = await confirmRestoreBackupChoice();
+            if (!ok) return;
+            toast('Downloading backup…');
+            const text = await Cloud.downloadDriveBackup(file.id);
+            const result = await NotesStore.importBackup(text, ok.merge);
+            renderTags();
+            renderNotes();
+            toast(importResultToast(result) || 'Restore complete');
+          } catch (err) {
+            toast(err.message || 'Restore failed', true);
+          }
+        });
+        li.appendChild(document.createTextNode(' '));
+        li.appendChild(restoreBtn);
+        list.appendChild(li);
+      }
+    } catch (err) {
+      list.innerHTML = '';
+      list.hidden = true;
+      toast(err.message || 'Could not list Drive backups', true);
+    }
+  });
+
+  async function confirmRestoreBackupChoice() {
+    const choice = await confirmAction(
+      'Restore will import encrypted items from the backup. Merge keeps existing notes and adds or updates from the file. Replace skips items that already exist on this device (safer against silent overwrite of local edits — prefer Merge if unsure).',
+      {
+        title: 'Restore from backup',
+        confirmLabel: 'Merge',
+        extraLabel: 'Replace missing only',
+        cancelLabel: 'Cancel',
+        danger: false,
+      },
+    );
+    if (choice === true) return { merge: true };
+    if (choice === 'extra') return { merge: false };
+    return null;
+  }
+
+  document.getElementById('restore-backup-file')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const choice = await confirmRestoreBackupChoice();
+      if (!choice) return;
+      toast('Restoring…');
+      const opened = await NotesSnImport.openBackupFile(file);
+      let result;
+      if (opened.kind === 'files-only') {
+        result = await NotesStore.importLooseSnFiles(opened.blobs);
+        result.imported = 0;
+        result.tags = 0;
+      } else {
+        result = await NotesStore.importBackup(opened.text, choice.merge, { blobs: opened.blobs });
+      }
+      renderTags();
+      renderNotes();
+      if (currentId) {
+        renderAttachments(currentId);
+        applyEditorMode();
+      }
+      await enqueueImportedAttachmentOcr(result.attachmentIds);
+      toast(importResultToast(result) || 'Restore complete');
+    } catch (err) {
+      toast(err.message || 'Restore failed', true);
+    }
+  });
+
+  function maybeAutoGoogleDriveBackup() {
+    const Cloud = window.NotesCloudBackup;
+    if (!Cloud?.isGoogleConfigured?.() || !Cloud.dueForDailyDriveBackup?.()) return;
+    if (!networkReachable || !NotesStore.isUnlocked?.()) return;
+    runGoogleDriveBackup().catch((err) => {
+      console.warn('auto Google Drive backup skipped', err);
+    });
+  }
 
   function importResultToast(result) {
     const notes = result && result.imported != null ? result.imported : 0;
@@ -19961,6 +20196,7 @@
           .catch((err) => {
             if (isLoginRequiredError(err)) showExpiredSessionBanner();
           });
+        setTimeout(() => maybeAutoGoogleDriveBackup(), 4000);
       }
       if (!sessionExpiredHold) scheduleChangePoll();
       ensureServerSession().catch(() => {});
@@ -20235,6 +20471,7 @@
     initPullToSync();
     initEditorEdgeSwipeBack();
     initPaneSplitter();
+    try { refreshGoogleDriveBackupUi(); } catch (err) { /* ignore */ }
     document.getElementById('btn-network-retry')?.addEventListener('click', () => {
       // Same path as the online event — reset backoff, probe, sync. A bare
       // probeNetwork() used to no-op inside the failure backoff gate.
