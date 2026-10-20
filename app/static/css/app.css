@@ -4834,6 +4834,20 @@ html[data-theme="light"] .doc-search-hit {
 .plan-locked-tab { opacity: 0.45; }
 .settings-hint.settings-diagnostics strong { color: var(--ok, #2f9a68); }
 .settings-actions { display: grid; gap: 8px; padding: 12px 14px; }
+/* All Settings action buttons ≥44px (exclude icon close + inline password toggles). */
+.settings-panel .btn:not(.icon):not(.password-toggle),
+.settings-panel .file-label.btn,
+.settings-panel .theme-opt {
+  min-height: var(--touch);
+  box-sizing: border-box;
+}
+.settings-panel .settings-actions .btn,
+.settings-panel .settings-actions .file-label.btn,
+.settings-panel .theme-opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 /* Backup / restore / export / pCloud actions: at least 44px touch target. */
 .settings-backup-card .settings-actions .btn,
 .settings-backup-card .settings-actions .file-label.btn {

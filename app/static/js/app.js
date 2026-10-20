@@ -19235,6 +19235,25 @@
     }
   }
 
+  function mapGoogleAuthError(err) {
+    const raw = String(err?.message || err || '');
+    if (/popup/i.test(raw) && /block|failed.?to.?open/i.test(raw)) {
+      return 'Popup was blocked — allow popups for deeperguard.com.';
+    }
+    if (/popup.*closed|window closed/i.test(raw)) {
+      return 'Google sign-in didn’t complete. Check your Client ID and try again.';
+    }
+    if (/invalid|unknown.?client|not configured/i.test(raw)) {
+      return 'Google sign-in didn’t complete. Check your Client ID and try again.';
+    }
+    if (/didn’t complete|did not complete|sign-in/i.test(raw)) {
+      return raw.includes('Client ID')
+        ? raw
+        : 'Google sign-in didn’t complete. Check your Client ID and try again.';
+    }
+    return raw || 'Google sign-in didn’t complete. Check your Client ID and try again.';
+  }
+
   async function connectGoogleDrive() {
     const Cloud = window.NotesCloudBackup;
     syncCloudProviderKeysFromPrefs();
@@ -19249,10 +19268,12 @@
       toast('Google Drive connected');
     } catch (err) {
       try { await Cloud.disconnectGoogle?.(); } catch (e) { /* ignore */ }
-      const msg = err?.message || 'Google sign-in didn’t complete. Check your Client ID and try again.';
+      const msg = mapGoogleAuthError(err);
       setGoogleKeyError(msg);
       refreshGoogleDriveBackupUi();
-      throw err;
+      const wrapped = new Error(msg);
+      wrapped.cause = err;
+      throw wrapped;
     }
   }
 
@@ -19288,11 +19309,14 @@
     const btn = document.getElementById('btn-backup-google-drive');
     if (btn?.disabled) return;
     if (btn) btn.disabled = true;
+    setRestoreResultStatus('');
     try {
       if (!isGoogleDriveConnected()) await connectGoogleDrive();
       else await runGoogleDriveBackup();
     } catch (err) {
-      toast(err.message || 'Google Drive backup failed', true);
+      const msg = mapGoogleAuthError(err);
+      setGoogleKeyError(msg);
+      toast(msg, true);
     } finally {
       if (btn) btn.disabled = !window.NotesCloudBackup?.isGoogleConfigured?.();
       refreshGoogleDriveBackupUi();
@@ -19410,12 +19434,13 @@
           try {
             const ok = await confirmRestoreBackupChoice();
             if (!ok) return;
+            setRestoreResultStatus('');
             toast('Downloading backup…');
             const text = await Cloud.downloadDriveBackup(file.id);
             const result = await NotesStore.importBackup(text, ok.merge);
             renderTags();
             renderNotes();
-            toast(importResultToast(result, { restore: true }) || 'Restore complete');
+            showRestoreResult(result);
           } catch (err) {
             toast(err.message || 'Restore failed', true);
           }
@@ -19577,6 +19602,7 @@
     const btn = document.getElementById('btn-backup-dropbox');
     if (btn?.disabled) return;
     if (btn) btn.disabled = true;
+    setRestoreResultStatus('');
     try {
       if (!isDropboxConnected()) await connectDropbox();
       else await runDropboxBackup();
@@ -19682,13 +19708,14 @@
           try {
             const ok = await confirmRestoreBackupChoice();
             if (!ok) return;
+            setRestoreResultStatus('');
             toast('Downloading backup…');
             const path = file.path_display || file.path_lower || `/${file.name}`;
             const text = await Cloud.downloadDropboxBackup(path);
             const result = await NotesStore.importBackup(text, ok.merge);
             renderTags();
             renderNotes();
-            toast(importResultToast(result, { restore: true }) || 'Restore complete');
+            showRestoreResult(result);
           } catch (err) {
             toast(err.message || 'Restore failed', true);
           }
@@ -19731,6 +19758,7 @@
     try {
       const choice = await confirmRestoreBackupChoice();
       if (!choice) return;
+      setRestoreResultStatus('');
       toast('Restoring…');
       const opened = await NotesSnImport.openBackupFile(file);
       let result;
@@ -19748,7 +19776,7 @@
         applyEditorMode();
       }
       await enqueueImportedAttachmentOcr(result.attachmentIds);
-      toast(importResultToast(result, { restore: true }) || 'Restore complete');
+      showRestoreResult(result);
     } catch (err) {
       toast(err.message || 'Restore failed', true);
     }
@@ -19789,6 +19817,25 @@
       toast(err.message || 'Dropbox sign-in failed', true);
       refreshDropboxBackupUi();
     }
+  }
+
+  function setRestoreResultStatus(message) {
+    const el = document.getElementById('restore-result-status');
+    if (!el) return;
+    if (message) {
+      el.hidden = false;
+      el.textContent = message;
+    } else {
+      el.hidden = true;
+      el.textContent = '';
+    }
+  }
+
+  function showRestoreResult(result) {
+    const msg = importResultToast(result, { restore: true }) || 'Restore complete';
+    setRestoreResultStatus(msg);
+    toast(msg);
+    return msg;
   }
 
   function importResultToast(result, { restore = false } = {}) {
@@ -19836,6 +19883,7 @@
     e.target.value = '';
     if (!file) return;
     try {
+      setRestoreResultStatus('');
       toast('Importing…');
       const opened = await NotesSnImport.openBackupFile(file);
       let result;
