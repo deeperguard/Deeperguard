@@ -2706,8 +2706,10 @@ const NotesStore = (() => {
   function schedulePush() {
     emitSync('pending', 'Waiting to sync');
     clearTimeout(state.saveTimer);
+    // Quiet: local save already showed Saved / offline caption. Don't flash
+    // "Saving…" again for the background push (that looked like a 6s hang).
     state.saveTimer = setTimeout(() => {
-      pushDirty();
+      pushDirty({ quiet: true });
     }, 400);
   }
 

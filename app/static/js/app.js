@@ -8014,33 +8014,50 @@
   let offlineWatchTimer = 0;
   let onlineRecoveryGeneration = 0;
 
+  let offlineWatchDelayMs = 2000;
+
   function stopOfflineWatch() {
     if (offlineWatchTimer) {
-      clearInterval(offlineWatchTimer);
+      clearTimeout(offlineWatchTimer);
       offlineWatchTimer = 0;
     }
   }
 
+  function nextOfflineWatchDelay(current) {
+    // Back off while offline: 2s → 5s → 10s (cap). Avoid ~1/s /api/health spam.
+    if (current < 5000) return 5000;
+    return 10000;
+  }
+
   function startOfflineWatch() {
     if (offlineWatchTimer) return;
-    offlineWatchTimer = setInterval(() => {
+    offlineWatchDelayMs = 2000;
+    const tick = () => {
+      offlineWatchTimer = 0;
       if (networkReachable) {
-        stopOfflineWatch();
+        offlineWatchDelayMs = 2000;
         return;
       }
-      // If the browser already flipped online but the event was missed, start
-      // the 0.5/1/2/4s chain now instead of waiting another 10s tick.
-      if (typeof navigator !== 'undefined' && navigator.onLine) {
-        scheduleOnlineRecovery(0);
-        return;
-      }
-      probeNetwork({ syncOnRecovery: true }).then((ok) => {
+      const finish = (ok) => {
         if (ok) {
-          stopOfflineWatch();
+          offlineWatchDelayMs = 2000;
           scheduleOnlineRecovery(0);
+          return;
         }
-      }).catch(() => {});
-    }, 10000);
+        offlineWatchDelayMs = nextOfflineWatchDelay(offlineWatchDelayMs);
+        offlineWatchTimer = setTimeout(tick, offlineWatchDelayMs);
+      };
+      // Only start recovery when the browser says online AND a probe succeeds.
+      // Do not treat connection-change / navigator.onLine alone as online.
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        probeNetwork({ syncOnRecovery: false, forceHealth: true }).then((ok) => {
+          finish(ok);
+        }).catch(() => finish(false));
+        return;
+      }
+      finish(false);
+    };
+    offlineWatchTimer = setTimeout(tick, offlineWatchDelayMs);
   }
 
   function scheduleOnlineRecovery(attempt = 0) {
@@ -11992,12 +12009,22 @@
       tagBarExpanded = defaultTagBarExpanded();
     }
     if (!gated) {
+      // Critical path: paint title/body chrome + tag bar + editor mode first so
+      // the click handler stays short (avoid 183–434ms Violation warnings).
       renderTagBar(note);
-      renderAttachments(id);
       syncWritingTip(note);
       applyEditorMode();
-      renderHistory(note);
-      if (typeof NotesAiChat !== 'undefined') NotesAiChat.onNoteChanged(id);
+      const deferHeavy = () => {
+        if (currentId !== id) return;
+        renderAttachments(id);
+        renderHistory(note);
+        if (typeof NotesAiChat !== 'undefined') NotesAiChat.onNoteChanged(id);
+      };
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(deferHeavy, { timeout: 120 });
+      } else {
+        requestAnimationFrame(deferHeavy);
+      }
     } else {
       if (ui.attachmentList) ui.attachmentList.innerHTML = '';
       if (ui.attachments) ui.attachments.hidden = true;
@@ -12012,18 +12039,24 @@
         }
       }).catch(() => {});
     }
+    markActiveNoteRow();
     if (syncing) {
-      markActiveNoteRow();
       deferOpenNoteHeavyWork(id);
     } else {
-      markActiveNoteRow();
-      renderNotes();
-      if (!gated) pullNoteOcrFromServer(id).catch(() => {});
+      // Defer list rebuild — the active row marker already painted.
+      requestAnimationFrame(() => {
+        if (currentId !== id) return;
+        renderNotes();
+        if (!gated) pullNoteOcrFromServer(id).catch(() => {});
+      });
     }
     updateActionButtons(note);
     updateNoteMeta(note);
     bindEditorKeyboardInset();
-    renderFolders();
+    requestAnimationFrame(() => {
+      if (currentId !== id) return;
+      renderFolders();
+    });
     scrollOpenNoteToTop();
     try {
       const state = { notesView: 'editor', noteId: id };
@@ -12368,6 +12401,7 @@
       if (prevBody || (prevTitle && !NotesSearch.isPlaceholderTitle?.(prevTitle))
         || note.content?.user_edited) {
         NotesStore.upsert(currentId, next, { recordRevision: true });
+        ackLocalSaveStatus();
         const savedNote = NotesStore.get(currentId);
         captureEditorBaseline(savedNote, false);
         updateNoteMeta(savedNote);
@@ -12386,6 +12420,7 @@
       return;
     }
     NotesStore.upsert(currentId, next, { recordRevision: true });
+    ackLocalSaveStatus();
     const savedNote = NotesStore.get(currentId);
     captureEditorBaseline(savedNote, false);
     updateNoteMeta(savedNote);
@@ -12405,6 +12440,16 @@
       rowTime.textContent = listTimeLabel(editedMs);
     }
     if (String(next.content || '').trim()) maybeOfferWritingTip();
+  }
+
+  function ackLocalSaveStatus() {
+    if (!ui.saveStatus) return;
+    // Local upsert already landed — don't leave "Saving…" until a push finishes
+    // (that hung ~6s when a false-online probe blocked behind a request timeout).
+    ui.saveStatus.textContent = networkReachable
+      ? 'Saved'
+      : 'Saved on this device · will sync when online';
+    ui.saveStatus.classList.remove('error');
   }
 
   function scheduleSave() {
@@ -19962,7 +20007,7 @@
         navigatorOnline: typeof navigator !== 'undefined' ? navigator.onLine : null,
       });
     } catch (err) { /* ignore */ }
-    // Drop the 10s fallback + abort hung offline fetches immediately.
+    // Drop the offline-watch fallback + abort hung offline fetches immediately.
     stopOfflineWatch();
     NotesStore.abortInflightApi?.(source);
     onAppForeground('online');
@@ -19975,9 +20020,15 @@
     const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     if (conn && typeof conn.addEventListener === 'function') {
       conn.addEventListener('change', () => {
-        if (typeof navigator !== 'undefined' && navigator.onLine && !networkReachable) {
+        // DevTools Offline toggles often fire connection 'change' with
+        // navigator.onLine still true while going offline. Only recover after
+        // a quick health probe succeeds — never sync on the offline transition.
+        if (typeof navigator === 'undefined' || !navigator.onLine) return;
+        if (networkReachable) return;
+        probeNetwork({ syncOnRecovery: false, forceHealth: true }).then((ok) => {
+          if (!ok || !navigator.onLine) return;
           onNetworkOnline('connection-change');
-        }
+        }).catch(() => {});
       });
     }
   } catch (err) { /* ignore */ }
@@ -19985,22 +20036,9 @@
     networkReachable = false;
     NotesStore.emitSync('offline', 'Offline');
     updateNetworkStatusBanner();
+    // Do not force an immediate health probe here — that spams console errors
+    // while DevTools Offline is on. The backoff watch + 'online' event recover.
     startOfflineWatch();
-    probeNetwork({ forceHealth: true }).then((ok) => {
-      if (!ok) {
-        networkReachable = false;
-        NotesStore.emitSync('offline', 'Offline');
-        updateNetworkStatusBanner();
-        startOfflineWatch();
-      } else {
-        stopOfflineWatch();
-      }
-    }).catch(() => {
-      networkReachable = false;
-      NotesStore.emitSync('offline', 'Offline');
-      updateNetworkStatusBanner();
-      startOfflineWatch();
-    });
   });
   // Block accidental native form submits (iOS autofill / password managers).
   // preventDefault only — do not stopPropagation or unlock/login handlers never run.
