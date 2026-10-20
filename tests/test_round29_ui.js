@@ -30,7 +30,7 @@ assert.ok(appJs.includes('// Escape does not dismiss the welcome empty state'));
 assert.ok(!appJs.includes('if (ui.empty && !ui.empty.hidden && !currentId && !vaultSyncError)'));
 
 const createTag = appJs.split('function createTag(')[1].split('function layoutFindBarOverDocViewer')[0];
-assert.ok(createTag.includes("toast(assignToCurrent ? 'Tag added' : 'Tag already exists')"));
+assert.ok(createTag.includes("toast('Tag already exists')"));
 
 assert.ok(appJs.includes('let totpRenderToken = 0'));
 assert.ok(appJs.includes('const token = ++totpRenderToken'));
