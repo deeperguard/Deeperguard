@@ -1,17 +1,28 @@
 /**
- * Client-only encrypted backup helpers: save/share file (iCloud via Web Share)
- * and optional Google Drive upload (drive.file). Tokens stay in the browser.
+ * Client-only encrypted backup helpers: save/share file (iCloud via Web Share),
+ * optional Google Drive upload (drive.file), and optional Dropbox App-folder
+ * upload (OAuth 2 PKCE). Tokens stay in the browser — never sent to our server.
  */
 const NotesCloudBackup = (() => {
   const PREFS_KEY = 'deeperguard-cloud-backup';
   const DRIVE_FOLDER = 'Deeperguard Backups';
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
   const GIS_SRC = 'https://accounts.google.com/gsi/client';
+  const DROPBOX_SCOPES = 'files.content.write files.content.read';
+  const DROPBOX_AUTH_URL = 'https://www.dropbox.com/oauth2/authorize';
+  const DROPBOX_TOKEN_URL = 'https://api.dropboxapi.com/oauth2/token';
+  const DROPBOX_API = 'https://api.dropboxapi.com/2';
+  const DROPBOX_CONTENT = 'https://content.dropboxapi.com/2';
+  const DROPBOX_PKCE_VERIFIER_KEY = 'dg-dropbox-pkce-verifier';
+  const DROPBOX_PKCE_STATE_KEY = 'dg-dropbox-pkce-state';
+  const DROPBOX_PENDING_KEY = 'dg-dropbox-pending-action';
 
   let tokenClient = null;
   let accessToken = '';
   let tokenExpiresAt = 0;
   let gisLoading = null;
+  let dropboxAccessToken = '';
+  let dropboxTokenExpiresAt = 0;
 
   function readPrefs() {
     try {
@@ -29,6 +40,26 @@ const NotesCloudBackup = (() => {
     return next;
   }
 
+  function sessionGet(key) {
+    try {
+      return sessionStorage.getItem(key) || '';
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function sessionSet(key, value) {
+    try {
+      sessionStorage.setItem(key, value);
+    } catch (err) { /* ignore */ }
+  }
+
+  function sessionClear(...keys) {
+    try {
+      keys.forEach((k) => sessionStorage.removeItem(k));
+    } catch (err) { /* ignore */ }
+  }
+
   function googleClientId() {
     const meta = document.querySelector('meta[name="google-oauth-client-id"]');
     const fromMeta = (meta && meta.getAttribute('content') || '').trim();
@@ -39,6 +70,24 @@ const NotesCloudBackup = (() => {
 
   function isGoogleConfigured() {
     return !!googleClientId();
+  }
+
+  function dropboxAppKey() {
+    const meta = document.querySelector('meta[name="dropbox-app-key"]');
+    const fromMeta = (meta && meta.getAttribute('content') || '').trim();
+    if (fromMeta) return fromMeta;
+    const root = document.getElementById('app');
+    return String(root?.dataset?.dropboxAppKey || '').trim();
+  }
+
+  function isDropboxConfigured() {
+    return !!dropboxAppKey();
+  }
+
+  /** Exact redirect URI registered in the Dropbox App Console. */
+  function dropboxRedirectUri() {
+    const origin = (typeof location !== 'undefined' && location.origin) || '';
+    return `${origin}/app`;
   }
 
   function backupFilename(date = new Date()) {
@@ -297,9 +346,314 @@ const NotesCloudBackup = (() => {
     return !last || (now - last) > 20 * 60 * 60 * 1000;
   }
 
+  // --- Dropbox (OAuth 2 PKCE, App folder) ---
+
+  function base64UrlEncode(bytes) {
+    let binary = '';
+    const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    for (let i = 0; i < arr.length; i += 1) binary += String.fromCharCode(arr[i]);
+    const b64 = (typeof btoa === 'function' ? btoa(binary) : Buffer.from(arr).toString('base64'));
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function randomVerifier() {
+    const bytes = new Uint8Array(32);
+    const cryptoObj = (typeof crypto !== 'undefined' && crypto.getRandomValues)
+      ? crypto
+      : (typeof globalThis !== 'undefined' && globalThis.crypto);
+    if (!cryptoObj?.getRandomValues) throw new Error('Secure random unavailable for Dropbox PKCE');
+    cryptoObj.getRandomValues(bytes);
+    return base64UrlEncode(bytes);
+  }
+
+  async function sha256Base64Url(text) {
+    const cryptoObj = (typeof crypto !== 'undefined' && crypto.subtle)
+      ? crypto
+      : (typeof globalThis !== 'undefined' && globalThis.crypto);
+    if (!cryptoObj?.subtle) throw new Error('Web Crypto unavailable for Dropbox PKCE');
+    const data = new TextEncoder().encode(text);
+    const digest = await cryptoObj.subtle.digest('SHA-256', data);
+    return base64UrlEncode(new Uint8Array(digest));
+  }
+
+  function rememberDropboxTokens(payload) {
+    const expiresIn = Number(payload.expires_in) || 14400;
+    dropboxAccessToken = payload.access_token || '';
+    dropboxTokenExpiresAt = Date.now() + (expiresIn * 1000) - 30000;
+    const patch = {
+      dropboxConnected: true,
+      dropboxAccessToken,
+      dropboxTokenExpiresAt,
+    };
+    if (payload.refresh_token) patch.dropboxRefreshToken = payload.refresh_token;
+    writePrefs(patch);
+    return dropboxAccessToken;
+  }
+
+  function clearDropboxTokensLocal() {
+    dropboxAccessToken = '';
+    dropboxTokenExpiresAt = 0;
+    writePrefs({
+      dropboxConnected: false,
+      dropboxAccessToken: '',
+      dropboxRefreshToken: '',
+      dropboxTokenExpiresAt: 0,
+      lastDropboxFilePath: '',
+    });
+  }
+
+  function loadCachedDropboxToken() {
+    const prefs = readPrefs();
+    if (prefs.dropboxAccessToken) {
+      dropboxAccessToken = prefs.dropboxAccessToken;
+      dropboxTokenExpiresAt = Number(prefs.dropboxTokenExpiresAt) || 0;
+    }
+    return dropboxAccessToken;
+  }
+
+  async function refreshDropboxAccessToken() {
+    const prefs = readPrefs();
+    const refresh = prefs.dropboxRefreshToken || '';
+    const key = dropboxAppKey();
+    if (!refresh || !key) return '';
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refresh,
+      client_id: key,
+    });
+    const res = await fetch(DROPBOX_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    if (!res.ok) {
+      clearDropboxTokensLocal();
+      return '';
+    }
+    const payload = await res.json();
+    if (!payload.access_token) {
+      clearDropboxTokensLocal();
+      return '';
+    }
+    return rememberDropboxTokens({ ...payload, refresh_token: refresh });
+  }
+
+  async function beginDropboxOAuth({ pending = '' } = {}) {
+    const key = dropboxAppKey();
+    if (!key) throw new Error('Dropbox is not configured');
+    const verifier = randomVerifier();
+    const challenge = await sha256Base64Url(verifier);
+    const state = `dg-dropbox:${randomVerifier()}`;
+    sessionSet(DROPBOX_PKCE_VERIFIER_KEY, verifier);
+    sessionSet(DROPBOX_PKCE_STATE_KEY, state);
+    sessionSet(DROPBOX_PENDING_KEY, pending || '');
+    const params = new URLSearchParams({
+      client_id: key,
+      response_type: 'code',
+      token_access_type: 'offline',
+      code_challenge_method: 'S256',
+      code_challenge: challenge,
+      state,
+      redirect_uri: dropboxRedirectUri(),
+      scope: DROPBOX_SCOPES,
+    });
+    const url = `${DROPBOX_AUTH_URL}?${params.toString()}`;
+    if (typeof location !== 'undefined' && location.assign) {
+      location.assign(url);
+    }
+    return url;
+  }
+
+  function peekDropboxOAuthParams(search = '') {
+    const q = new URLSearchParams(
+      search
+      || (typeof location !== 'undefined' ? location.search : '')
+      || '',
+    );
+    const code = (q.get('code') || '').trim();
+    const state = (q.get('state') || '').trim();
+    const error = (q.get('error') || '').trim();
+    if (!code && !error) return null;
+    if (state && !state.startsWith('dg-dropbox:')) return null;
+    return { code, state, error, errorDescription: (q.get('error_description') || '').trim() };
+  }
+
+  function stripDropboxOAuthParamsFromUrl() {
+    try {
+      if (typeof history === 'undefined' || typeof location === 'undefined') return;
+      const url = new URL(location.href);
+      ['code', 'state', 'error', 'error_description'].forEach((k) => url.searchParams.delete(k));
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    } catch (err) { /* ignore */ }
+  }
+
+  async function consumeDropboxOAuthRedirect({ search } = {}) {
+    const params = peekDropboxOAuthParams(search);
+    if (!params) return null;
+    const expectedState = sessionGet(DROPBOX_PKCE_STATE_KEY);
+    const verifier = sessionGet(DROPBOX_PKCE_VERIFIER_KEY);
+    const pending = sessionGet(DROPBOX_PENDING_KEY);
+    sessionClear(DROPBOX_PKCE_STATE_KEY, DROPBOX_PKCE_VERIFIER_KEY, DROPBOX_PENDING_KEY);
+    stripDropboxOAuthParamsFromUrl();
+    if (params.error) {
+      throw new Error(params.errorDescription || params.error || 'Dropbox auth failed');
+    }
+    if (!params.code) throw new Error('Dropbox auth missing code');
+    if (!expectedState || params.state !== expectedState) {
+      throw new Error('Dropbox auth state mismatch');
+    }
+    if (!verifier) throw new Error('Dropbox PKCE verifier missing');
+    const key = dropboxAppKey();
+    if (!key) throw new Error('Dropbox is not configured');
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: params.code,
+      client_id: key,
+      redirect_uri: dropboxRedirectUri(),
+      code_verifier: verifier,
+    });
+    const res = await fetch(DROPBOX_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error_description || errBody.error || `Dropbox token HTTP ${res.status}`);
+    }
+    const payload = await res.json();
+    if (!payload.access_token) throw new Error('Dropbox token response missing access_token');
+    rememberDropboxTokens(payload);
+    return { ok: true, pending: pending || '' };
+  }
+
+  async function ensureDropboxToken({ interactive = true } = {}) {
+    if (!isDropboxConfigured()) throw new Error('Dropbox is not configured');
+    loadCachedDropboxToken();
+    if (dropboxAccessToken && Date.now() < dropboxTokenExpiresAt) return dropboxAccessToken;
+    const refreshed = await refreshDropboxAccessToken();
+    if (refreshed) return refreshed;
+    if (!interactive) return '';
+    await beginDropboxOAuth({ pending: '' });
+    return '';
+  }
+
+  async function dropboxRpc(path, bodyObj, { content = false } = {}) {
+    const token = await ensureDropboxToken({ interactive: true });
+    if (!token) throw new Error('Dropbox sign-in required');
+    const url = `${content ? DROPBOX_CONTENT : DROPBOX_API}${path}`;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(bodyObj == null ? null : bodyObj),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error_summary || errBody.error || `Dropbox HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  async function uploadDropboxBackupBlob(blob, { filename } = {}) {
+    const name = filename || backupFilename();
+    const path = `/${name}`;
+    const token = await ensureDropboxToken({ interactive: true });
+    if (!token) throw new Error('Dropbox sign-in required');
+    const arg = JSON.stringify({
+      path,
+      mode: 'overwrite',
+      autorename: false,
+      mute: true,
+      strict_conflict: false,
+    });
+    const res = await fetch(`${DROPBOX_CONTENT}/files/upload`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/octet-stream',
+        'Dropbox-API-Arg': arg,
+      },
+      body: blob,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error_summary || errBody.error || `Dropbox upload failed (${res.status})`);
+    }
+    const file = await res.json();
+    writePrefs({
+      lastDropboxBackupAt: file.server_modified || file.client_modified || new Date().toISOString(),
+      lastDropboxFilePath: file.path_display || file.path_lower || path,
+      lastDropboxFileId: file.id || '',
+    });
+    return file;
+  }
+
+  async function listDropboxBackups({ limit = 10 } = {}) {
+    const data = await dropboxRpc('/files/list_folder', {
+      path: '',
+      recursive: false,
+      include_deleted: false,
+      limit: Math.max(1, Math.min(100, limit * 3)),
+    });
+    const entries = (data.entries || [])
+      .filter((e) => e['.tag'] === 'file' && /\.dgbackup$/i.test(e.name || ''))
+      .sort((a, b) => String(b.server_modified || '').localeCompare(String(a.server_modified || '')))
+      .slice(0, Math.max(1, Math.min(50, limit)));
+    return entries;
+  }
+
+  async function downloadDropboxBackup(path) {
+    const token = await ensureDropboxToken({ interactive: true });
+    if (!token) throw new Error('Dropbox sign-in required');
+    const res = await fetch(`${DROPBOX_CONTENT}/files/download`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Dropbox-API-Arg': JSON.stringify({ path }),
+      },
+    });
+    if (!res.ok) throw new Error(`Dropbox download failed (${res.status})`);
+    return res.text();
+  }
+
+  async function disconnectDropbox() {
+    loadCachedDropboxToken();
+    const token = dropboxAccessToken || readPrefs().dropboxAccessToken || '';
+    try {
+      if (token) {
+        await fetch(`${DROPBOX_API}/auth/token/revoke`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+    } catch (err) {
+      /* still clear local */
+    }
+    clearDropboxTokensLocal();
+  }
+
+  function shouldAutoBackupDropboxDaily() {
+    return !!readPrefs().autoDailyDropbox;
+  }
+
+  function setAutoDailyDropbox(on) {
+    return writePrefs({ autoDailyDropbox: !!on });
+  }
+
+  function dueForDailyDropboxBackup(now = Date.now()) {
+    if (!shouldAutoBackupDropboxDaily()) return false;
+    const last = Date.parse(readPrefs().lastDropboxBackupAt || '') || 0;
+    return !last || (now - last) > 20 * 60 * 60 * 1000;
+  }
+
   return {
     PREFS_KEY,
     DRIVE_FOLDER,
+    DROPBOX_SCOPES,
     backupFilename,
     backupBlobFromObject,
     canShareFiles,
@@ -318,6 +672,20 @@ const NotesCloudBackup = (() => {
     shouldAutoBackupDaily,
     setAutoDailyDrive,
     dueForDailyDriveBackup,
+    isDropboxConfigured,
+    dropboxAppKey,
+    dropboxRedirectUri,
+    beginDropboxOAuth,
+    peekDropboxOAuthParams,
+    consumeDropboxOAuthRedirect,
+    ensureDropboxToken,
+    uploadDropboxBackupBlob,
+    listDropboxBackups,
+    downloadDropboxBackup,
+    disconnectDropbox,
+    shouldAutoBackupDropboxDaily,
+    setAutoDailyDropbox,
+    dueForDailyDropboxBackup,
   };
 })();
 

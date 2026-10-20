@@ -13854,6 +13854,7 @@
     }
     refreshSettingsDiagnostics().catch(() => {});
     try { refreshGoogleDriveBackupUi(); } catch (err) { /* ignore */ }
+    try { refreshDropboxBackupUi(); } catch (err) { /* ignore */ }
     startSignedInDevicesRefresh();
   }
 
@@ -19278,6 +19279,160 @@
     }
   });
 
+  function refreshDropboxBackupUi() {
+    const Cloud = window.NotesCloudBackup;
+    const status = document.getElementById('dropbox-status');
+    const controls = document.getElementById('dropbox-controls');
+    const missing = document.getElementById('dropbox-not-configured');
+    const dropboxBtn = document.getElementById('btn-backup-dropbox');
+    const autoDaily = document.getElementById('backup-dropbox-auto-daily');
+    const configured = !!(Cloud && Cloud.isDropboxConfigured && Cloud.isDropboxConfigured());
+    if (missing) {
+      missing.hidden = configured;
+      if (!configured) {
+        missing.textContent = 'Dropbox: Not configured on this server.';
+      }
+    }
+    if (dropboxBtn) {
+      dropboxBtn.disabled = !configured;
+      dropboxBtn.title = configured ? '' : 'Not configured';
+    }
+    if (controls) controls.hidden = !configured;
+    if (!configured) {
+      if (status) {
+        status.hidden = true;
+        status.textContent = '';
+      }
+      return;
+    }
+    if (status) status.hidden = false;
+    if (!Cloud) return;
+    const prefs = Cloud.readPrefs();
+    if (autoDaily) autoDaily.checked = !!prefs.autoDailyDropbox;
+    if (status) {
+      if (prefs.lastDropboxBackupAt) {
+        const when = new Date(prefs.lastDropboxBackupAt);
+        status.textContent = `Last Dropbox backup: ${Number.isNaN(when.getTime()) ? prefs.lastDropboxBackupAt : when.toLocaleString()}`;
+      } else {
+        status.textContent = prefs.dropboxConnected
+          ? 'Dropbox connected — no backup uploaded yet.'
+          : 'Dropbox uses OAuth 2 PKCE in the browser (App folder). Nothing is stored on our server.';
+      }
+    }
+  }
+
+  async function runDropboxBackup() {
+    const Cloud = window.NotesCloudBackup;
+    if (!Cloud?.isDropboxConfigured?.()) {
+      toast('Dropbox is not configured on this server', true);
+      return;
+    }
+    const token = await Cloud.ensureDropboxToken({ interactive: false });
+    if (!token) {
+      await Cloud.beginDropboxOAuth({ pending: 'backup' });
+      return;
+    }
+    await runFileDownloadTask({
+      title: 'Dropbox backup',
+      prepareLabel: 'Preparing encrypted backup…',
+      run: async (report) => {
+        const { blob, filename } = await prepareEncryptedBackupBlob(report);
+        report({ status: 'Uploading encrypted backup…', pct: 96, indeterminate: true });
+        const file = await Cloud.uploadDropboxBackupBlob(blob, { filename });
+        report({ status: 'Uploaded', pct: 100, indeterminate: false });
+        return file;
+      },
+    });
+    refreshDropboxBackupUi();
+    toast('Encrypted backup uploaded to Dropbox');
+  }
+
+  document.getElementById('btn-backup-dropbox')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-backup-dropbox');
+    if (btn?.disabled) return;
+    if (btn) btn.disabled = true;
+    try {
+      await runDropboxBackup();
+    } catch (err) {
+      toast(err.message || 'Dropbox backup failed', true);
+    } finally {
+      if (btn) btn.disabled = !window.NotesCloudBackup?.isDropboxConfigured?.();
+      refreshDropboxBackupUi();
+    }
+  });
+
+  document.getElementById('backup-dropbox-auto-daily')?.addEventListener('change', (event) => {
+    window.NotesCloudBackup?.setAutoDailyDropbox?.(!!event.target.checked);
+    refreshDropboxBackupUi();
+  });
+
+  document.getElementById('btn-dropbox-disconnect')?.addEventListener('click', async () => {
+    try {
+      await window.NotesCloudBackup?.disconnectDropbox?.();
+      const list = document.getElementById('dropbox-backup-list');
+      if (list) {
+        list.hidden = true;
+        list.innerHTML = '';
+      }
+      refreshDropboxBackupUi();
+      toast('Dropbox disconnected');
+    } catch (err) {
+      toast(err.message || 'Could not disconnect', true);
+    }
+  });
+
+  document.getElementById('btn-dropbox-list')?.addEventListener('click', async () => {
+    const list = document.getElementById('dropbox-backup-list');
+    const Cloud = window.NotesCloudBackup;
+    if (!list || !Cloud) return;
+    try {
+      const token = await Cloud.ensureDropboxToken({ interactive: false });
+      if (!token) {
+        await Cloud.beginDropboxOAuth({ pending: 'list' });
+        return;
+      }
+      list.hidden = false;
+      list.innerHTML = '<li>Loading…</li>';
+      const files = await Cloud.listDropboxBackups({ limit: 8 });
+      if (!files.length) {
+        list.innerHTML = '<li>No backups in Apps/Deeperguard yet.</li>';
+        return;
+      }
+      list.innerHTML = '';
+      for (const file of files) {
+        const li = document.createElement('li');
+        const when = file.server_modified || file.client_modified || '';
+        li.textContent = `${file.name || 'backup'} · ${when ? new Date(when).toLocaleString() : ''}`;
+        const restoreBtn = document.createElement('button');
+        restoreBtn.type = 'button';
+        restoreBtn.className = 'btn ghost sm';
+        restoreBtn.textContent = 'Restore';
+        restoreBtn.addEventListener('click', async () => {
+          try {
+            const ok = await confirmRestoreBackupChoice();
+            if (!ok) return;
+            toast('Downloading backup…');
+            const path = file.path_display || file.path_lower || `/${file.name}`;
+            const text = await Cloud.downloadDropboxBackup(path);
+            const result = await NotesStore.importBackup(text, ok.merge);
+            renderTags();
+            renderNotes();
+            toast(importResultToast(result, { restore: true }) || 'Restore complete');
+          } catch (err) {
+            toast(err.message || 'Restore failed', true);
+          }
+        });
+        li.appendChild(document.createTextNode(' '));
+        li.appendChild(restoreBtn);
+        list.appendChild(li);
+      }
+    } catch (err) {
+      list.innerHTML = '';
+      list.hidden = true;
+      toast(err.message || 'Could not list Dropbox backups', true);
+    }
+  });
+
   async function confirmRestoreBackupChoice() {
     const choice = await confirmAction(
       'Merge: add new items and update changed ones. Add missing only: only add items you don\'t have; never changes existing notes.',
@@ -19331,6 +19486,34 @@
     runGoogleDriveBackup().catch((err) => {
       console.warn('auto Google Drive backup skipped', err);
     });
+  }
+
+  function maybeAutoDropboxBackup() {
+    const Cloud = window.NotesCloudBackup;
+    if (!Cloud?.isDropboxConfigured?.() || !Cloud.dueForDailyDropboxBackup?.()) return;
+    if (!networkReachable || !NotesStore.isUnlocked?.()) return;
+    runDropboxBackup().catch((err) => {
+      console.warn('auto Dropbox backup skipped', err);
+    });
+  }
+
+  async function finishDropboxOAuthIfPresent() {
+    const Cloud = window.NotesCloudBackup;
+    if (!Cloud?.consumeDropboxOAuthRedirect || !Cloud.peekDropboxOAuthParams?.()) return;
+    try {
+      const result = await Cloud.consumeDropboxOAuthRedirect();
+      if (!result?.ok) return;
+      refreshDropboxBackupUi();
+      toast('Dropbox connected');
+      if (result.pending === 'backup') {
+        await runDropboxBackup();
+      } else if (result.pending === 'list') {
+        document.getElementById('btn-dropbox-list')?.click();
+      }
+    } catch (err) {
+      toast(err.message || 'Dropbox sign-in failed', true);
+      refreshDropboxBackupUi();
+    }
   }
 
   function importResultToast(result, { restore = false } = {}) {
@@ -20211,7 +20394,10 @@
           .catch((err) => {
             if (isLoginRequiredError(err)) showExpiredSessionBanner();
           });
-        setTimeout(() => maybeAutoGoogleDriveBackup(), 4000);
+        setTimeout(() => {
+          maybeAutoGoogleDriveBackup();
+          maybeAutoDropboxBackup();
+        }, 4000);
       }
       if (!sessionExpiredHold) scheduleChangePoll();
       ensureServerSession().catch(() => {});
@@ -20487,6 +20673,8 @@
     initEditorEdgeSwipeBack();
     initPaneSplitter();
     try { refreshGoogleDriveBackupUi(); } catch (err) { /* ignore */ }
+    try { refreshDropboxBackupUi(); } catch (err) { /* ignore */ }
+    finishDropboxOAuthIfPresent().catch(() => {});
     document.getElementById('btn-network-retry')?.addEventListener('click', () => {
       // Same path as the online event — reset backoff, probe, sync. A bare
       // probeNetwork() used to no-op inside the failure backoff gate.

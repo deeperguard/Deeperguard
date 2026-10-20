@@ -726,6 +726,9 @@ def content_security_policy() -> str:
     google_script = " https://accounts.google.com"
     google_connect = " https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com"
     google_frame = " https://accounts.google.com"
+    # Optional Dropbox App-folder backups (OAuth 2 PKCE + files API). Browser
+    # talks to Dropbox directly; encrypted .dgbackup blobs only.
+    dropbox_connect = " https://api.dropboxapi.com https://content.dropboxapi.com https://www.dropbox.com"
     return "; ".join(
         (
             "default-src 'self'",
@@ -733,7 +736,7 @@ def content_security_policy() -> str:
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
             "font-src 'self'",
-            f"connect-src 'self'{google_connect}",
+            f"connect-src 'self'{google_connect}{dropbox_connect}",
             "media-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'self'",

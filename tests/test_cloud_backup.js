@@ -16,19 +16,25 @@ const configPy = fs.readFileSync(path.join(root, 'app/config.py'), 'utf8');
 const legal = fs.readFileSync(path.join(root, 'app/templates/legal.html'), 'utf8');
 
 assert.ok(configPy.includes('GOOGLE_OAUTH_CLIENT_ID'));
+assert.ok(configPy.includes('DROPBOX_APP_KEY'));
 assert.ok(authPy.includes('accounts.google.com'));
 assert.ok(authPy.includes('www.googleapis.com'));
+assert.ok(authPy.includes('api.dropboxapi.com'));
 assert.ok(appHtml.includes('btn-save-backup-file'));
 assert.ok(appHtml.includes('btn-backup-google-drive'));
+assert.ok(appHtml.includes('btn-backup-dropbox'));
 assert.ok(appHtml.includes('restore-backup-file'));
 assert.ok(appHtml.includes('iCloud Drive') || appHtml.includes('Save to Files'));
 assert.ok(appHtml.includes('cloud-backup.js'));
 assert.ok(appHtml.includes('google-drive-not-configured'));
+assert.ok(appHtml.includes('dropbox-not-configured'));
 assert.ok(appJs.includes('NotesCloudBackup'));
 assert.ok(appJs.includes('confirmRestoreBackupChoice'));
 assert.ok(appJs.includes('prepareEncryptedBackupBlob'));
 assert.ok(appJs.includes('isGoogleConfigured'));
+assert.ok(appJs.includes('isDropboxConfigured'));
 assert.ok(legal.includes('Google Drive'));
+assert.ok(legal.includes('Dropbox'));
 assert.ok(legal.includes('iCloud Drive') || legal.includes('Files / iCloud'));
 
 function loadCloud({ clientId = '', canShare = false, shareImpl = null, fetchImpl = null } = {}) {
