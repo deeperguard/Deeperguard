@@ -7967,6 +7967,7 @@
   }
 
   let onlineRecoveryActive = false;
+  let offlineWatchTickActive = false;
 
   async function probeNetwork({ syncOnRecovery = false, forceHealth = false } = {}) {
     // iOS LAN-only Wi‑Fi may report navigator.onLine=false while homelab is reachable.
@@ -7989,7 +7990,9 @@
               pending,
             });
           } catch (err) { /* ignore */ }
-          syncNow({ quiet: true, force: pending > 0 });
+          // Always force after offline so a dirty note is not skipped by the
+          // "synced recently" throttle.
+          syncNow({ quiet: true, force: true });
           resumePendingOcr().catch(() => {});
           listPreviewBackfillFailed.clear();
           resumePendingListPreviews().catch(() => {});
@@ -7999,13 +8002,17 @@
       }
       return true;
     } catch (err) {
+      const wasReachable = networkReachable;
       if (networkReachable) {
         networkReachable = false;
         NotesStore.emitSync('offline', 'Offline');
       }
       updateNetworkStatusBanner();
-      // Don't nest offline-watch probes while the online-recovery chain owns retries.
-      if (!onlineRecoveryActive) startOfflineWatch();
+      // Never start a second watch from inside an offline-watch tick — that
+      // reset the 2s delay and stacked timers (health every 2–3s).
+      if (!onlineRecoveryActive && !offlineWatchTickActive) {
+        if (wasReachable || !offlineWatchTimer) startOfflineWatch();
+      }
       return false;
     }
   }
@@ -8061,7 +8068,10 @@
 
   function startOfflineWatch() {
     if (offlineWatchTimer || onlineRecoveryActive) return;
-    offlineWatchDelayMs = 2000;
+    // Keep the current backoff delay when already offline; only the offline
+    // event resets it to 2s. Restarting at 2s on every failed probe caused a
+    // /api/health hit every 2–3s.
+    if (!offlineWatchDelayMs || offlineWatchDelayMs < 2000) offlineWatchDelayMs = 2000;
     const tick = () => {
       offlineWatchTimer = 0;
       if (networkReachable || onlineRecoveryActive) {
@@ -8069,6 +8079,7 @@
         return;
       }
       const finish = (ok) => {
+        offlineWatchTickActive = false;
         if (ok) {
           offlineWatchDelayMs = 2000;
           scheduleOnlineRecovery(0);
@@ -8077,12 +8088,12 @@
         offlineWatchDelayMs = nextOfflineWatchDelay(offlineWatchDelayMs);
         offlineWatchTimer = setTimeout(tick, offlineWatchDelayMs);
       };
-      // Quiet probe through the shared owner (respects global backoff). Only
-      // escalate to recovery when the browser reports online AND health succeeds.
+      // Browser reports online while we still think we are offline — hand off
+      // to the single recovery owner (reset backoff, probe, sync). Do not poke
+      // health here (that fought the backoff gate and never recovered).
       if (typeof navigator !== 'undefined' && navigator.onLine) {
-        probeNetwork({ syncOnRecovery: false, forceHealth: false }).then((ok) => {
-          finish(ok);
-        }).catch(() => finish(false));
+        offlineWatchDelayMs = 2000;
+        scheduleOnlineRecovery(0);
         return;
       }
       // Still offline — no /api/health call; just wait out the backoff window.
@@ -8116,14 +8127,19 @@
     const generation = onlineRecoveryGeneration;
     if (attempt >= delays.length) {
       onlineRecoveryActive = false;
-      if (!networkReachable) startOfflineWatch();
+      if (!networkReachable) {
+        offlineWatchDelayMs = 2000;
+        startOfflineWatch();
+      }
       return;
     }
     onlineRecoveryTimer = setTimeout(() => {
       if (generation !== onlineRecoveryGeneration) return;
+      // Always open the backoff gate before a recovery probe. Attempt 0 already
+      // aborted hung work; later attempts must not no-op for 2–10s after a
+      // single failure (that left the UI stuck Offline after DevTools Online).
+      try { window.__notesResetHealthBackoff?.({ abort: false }); } catch (err) { /* ignore */ }
       // Always probe — even when dirty is empty — so the Offline caption clears.
-      // forceHealth skips the success cache after online reset; backoff still
-      // applies if probes keep failing (no abort of in-flight requests).
       probeNetwork({ syncOnRecovery: true, forceHealth: true }).then((ok) => {
         if (generation !== onlineRecoveryGeneration) return ok;
         const stillDirty = NotesStore.state?.dirty?.size || 0;
@@ -20070,8 +20086,7 @@
         navigatorOnline: typeof navigator !== 'undefined' ? navigator.onLine : null,
       });
     } catch (err) { /* ignore */ }
-    // Single recovery owner: one health reset+abort inside scheduleOnlineRecovery(0).
-    // Do not reset/abort here — that canceled fresh probes and flooded api-abort logs.
+    // Single recovery owner: reset backoff, probe, sync (Retry + online + watch).
     stopOfflineWatch();
     scheduleOnlineRecovery(0);
     onAppForeground('online');
@@ -20086,6 +20101,7 @@
         // a quick health probe succeeds — never sync on the offline transition.
         if (typeof navigator === 'undefined' || !navigator.onLine) return;
         if (networkReachable) return;
+        try { window.__notesResetHealthBackoff?.({ abort: false }); } catch (err) { /* ignore */ }
         probeNetwork({ syncOnRecovery: false, forceHealth: true }).then((ok) => {
           if (!ok || !navigator.onLine) return;
           onNetworkOnline('connection-change');
@@ -20100,6 +20116,7 @@
     // Cancel hung API work so it does not sit for 8s → "Request timed out".
     // Do not start sync or force a health probe on the offline transition.
     NotesStore.abortInflightApi?.('offline');
+    offlineWatchDelayMs = 2000;
     startOfflineWatch();
   });
   // Block accidental native form submits (iOS autofill / password managers).
@@ -20109,6 +20126,9 @@
   }, true);
 
   async function reloadIfShellStale() {
+    // Never auto-reload while offline — that re-locked the vault mid-edit.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+    if (!networkReachable) return false;
     const pageBuild = document.querySelector('meta[name="notes-build"]')?.content || '';
     if (!pageBuild) return false;
     let serverBuild = '';
@@ -20212,12 +20232,9 @@
     initEditorEdgeSwipeBack();
     initPaneSplitter();
     document.getElementById('btn-network-retry')?.addEventListener('click', () => {
-      probeNetwork({ syncOnRecovery: true })
-        .then((ok) => {
-          if (ok) syncNow({ quiet: false }).catch(() => {});
-          else toast(OFFLINE_LAN_HINT, true);
-        })
-        .catch(() => toast(OFFLINE_LAN_HINT, true));
+      // Same path as the online event — reset backoff, probe, sync. A bare
+      // probeNetwork() used to no-op inside the failure backoff gate.
+      onNetworkOnline('retry');
     });
     document.addEventListener('focusin', () => scrollFocusedFieldIntoView(), true);
     try {
