@@ -70,6 +70,29 @@ async function main() {
     colorScheme: 'dark',
   });
 
+  await shot(page, `${prefix}-dark-compare-featured-1280.png`, `${baseUrl}/#compare`, {
+    width: 1280,
+    height: 900,
+    colorScheme: 'dark',
+    scrollTo: '.mk-distinction-card.featured',
+  });
+  await shot(page, `${prefix}-dark-pricing-1280.png`, `${baseUrl}/#pricing`, {
+    width: 1280,
+    height: 900,
+    colorScheme: 'dark',
+    scrollTo: 'table.mk-compare',
+  });
+  await shot(page, `${prefix}-dark-sn-compare-393.png`, `${baseUrl}/compare/standard-notes`, {
+    width: 393,
+    colorScheme: 'dark',
+    scrollTo: '.mk-compare-sn, #compare-table table.mk-compare',
+  });
+  await shot(page, `${prefix}-dark-oss-hero-393.png`, `${baseUrl}/`, {
+    width: 393,
+    colorScheme: 'dark',
+    scrollTo: '.mk-oss-callout, .mk-hero',
+  });
+
   await browser.close();
   console.log('Screenshots written to', outDir);
 }
