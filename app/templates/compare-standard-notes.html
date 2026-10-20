@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Deeperguard vs Standard Notes — encrypted notes alternative (PWA + OCR)</title>
   <meta name="description" content="Zero-knowledge Standard Notes alternative with a browser PWA, on-device OCR, and full Pro free during public beta. Not DeepGuard deepfake software — encrypted notes at deeperguard.com.">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Deeperguard vs Standard Notes — encrypted notes alternative (PWA + OCR)">
   <meta property="og:description" content="Same privacy class as Standard Notes: AES-GCM on your device, SRP-6a sign-in, Standard Notes import, and on-device OCR. Full Pro free in public beta.">
   <meta property="og:type" content="website">
@@ -26,7 +27,7 @@
     <span class="mk-beta-copy mk-beta-copy--desktop">
       <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups. No payment details yet.
     </span>
-    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta · Pro included · No payment yet</span>
+    <span class="mk-beta-copy mk-beta-copy--mobile"><span class="mk-nowrap">Public beta ·</span> <span class="mk-nowrap">Pro included ·</span> <span class="mk-nowrap">No payment yet</span></span>
   </div>
 
   <header class="mk-topbar">
@@ -40,13 +41,13 @@
       </a>
       <input id="mk-nav-check" class="mk-nav-check" type="checkbox">
       <label class="mk-nav-toggle" for="mk-nav-check" aria-label="Menu"><span aria-hidden="true">☰</span></label>
+      <label class="mk-nav-backdrop" for="mk-nav-check" aria-hidden="true"></label>
       <nav class="mk-nav" aria-label="Sections">
         <a href="/#compare">All comparisons</a>
         <a href="/#pricing">Pricing</a>
         <a href="#faq">FAQ</a>
         <a href="/download">Download</a>
         <a href="/contact">Contact</a>
-        <a class="mk-nav-open-app" href="{{ app_url }}">Open notes app</a>
       </nav>
       <div class="mk-topbar-actions">
         <a class="mk-btn ghost mk-topbar-signin" href="{{ login_url }}">Sign in</a>
@@ -99,7 +100,7 @@
         <p>Both products aim for zero-knowledge encrypted notes. This table stays factual; prices for Standard Notes are approximate USD list prices and change on their site.</p>
       </div>
       <div class="mk-card mk-compare-wrap">
-        <table class="mk-compare mk-compare-sn" aria-label="Deeperguard vs Standard Notes">
+        <table class="mk-compare mk-compare-stack mk-compare-sn" aria-label="Deeperguard vs Standard Notes">
           <thead>
             <tr>
               <th scope="col" class="mk-compare-feature-col">Topic</th>

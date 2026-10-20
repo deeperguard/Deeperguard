@@ -22,11 +22,11 @@ for (const page of [home, topbar, compare]) {
   assert.ok(!page.includes('mk-nav-menu'));
   assert.ok(page.includes('href="/download">Download</a>'));
   assert.ok(page.includes('href="/contact">Contact</a>'));
-  assert.ok(page.includes('Open notes app</a>'));
-  assert.ok(page.includes('class="mk-nav-open-app"') || page.includes('mk-nav-open-app'));
+  assert.ok(page.includes('mk-nav-backdrop'));
 }
+assert.ok(home.includes('Open notes app</a>'));
 assert.ok(marketing.includes('.mk-nav-check:checked ~ .mk-nav'));
-assert.ok(marketing.includes('min-width: 1024px'));
+assert.ok(marketing.includes('min-width: 768px'));
 assert.ok(!marketing.includes('min-width: 1400px'));
 assert.ok(!marketing.includes('display: contents'));
 assert.ok(marketing.includes('right: 0'));
@@ -34,7 +34,7 @@ assert.ok(marketing.includes('max-width: 100%'));
 assert.ok(marketing.includes('min-height: 44px'));
 assert.ok(!marketing.includes('min-height: 36px'));
 assert.ok(marketing.includes('white-space: nowrap'));
-const tight = marketing.split('@media (min-width: 1024px) and (max-width: 1365px)')[1].split('@media')[0];
+const tight = marketing.split('@media (min-width: 768px) and (max-width: 1365px)')[1].split('@media')[0];
 assert.ok(tight.includes('.mk-brand small { display: none;'));
 
 assert.ok(appJs.includes('function scheduleOnlineRecovery'));

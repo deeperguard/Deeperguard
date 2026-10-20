@@ -45,7 +45,7 @@ assert.ok(topbar.includes('class="mk-nav-check"'));
 assert.ok(!home.includes('mk-nav-menu'));
 assert.ok(!marketing.includes('display: contents'));
 assert.ok(home.includes('aria-label="Menu"'));
-assert.ok(marketing.includes('min-width: 1024px'));
+assert.ok(marketing.includes('min-width: 768px'));
 assert.ok(marketing.includes('.mk-nav a { white-space: nowrap;'));
 assert.ok(marketing.includes('min-height: 44px'));
 

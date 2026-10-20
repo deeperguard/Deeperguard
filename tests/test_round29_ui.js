@@ -13,11 +13,16 @@ const topbar = fs.readFileSync(path.join(root, 'app/templates/partials/mk-topbar
 const compare = fs.readFileSync(path.join(root, 'app/templates/compare-standard-notes.html'), 'utf8');
 const appPy = fs.readFileSync(path.join(root, 'app/app.py'), 'utf8');
 
-for (const page of [home, topbar, compare]) {
-  assert.ok(page.includes('class="mk-nav-open-app"'));
-  assert.ok(page.includes('Open notes app</a>'));
-}
-assert.ok(marketingCss.includes('.mk-nav .mk-nav-open-app { display: none; }'));
+assert.ok(home.includes('mk-nav-backdrop'));
+assert.ok(topbar.includes('mk-nav-backdrop'));
+assert.ok(compare.includes('mk-nav-backdrop'));
+assert.ok(!home.includes('class="mk-nav-open-app"'));
+assert.ok(home.includes('Open notes app</a>'));
+assert.ok(home.includes('mk-compare-stack mk-compare-plans'));
+assert.ok(compare.includes('mk-compare-stack mk-compare-sn'));
+assert.ok(marketingCss.includes('@media (min-width: 768px)'));
+assert.ok(marketingCss.includes('.mk-compare-stack'));
+assert.ok(marketingCss.includes('prefers-color-scheme: dark'));
 assert.ok(marketingCss.includes('flex: 1 1 auto'));
 
 assert.ok(appPy.includes('return redirect("/#pricing", code=302)'));
