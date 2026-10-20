@@ -146,8 +146,8 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   font-size: 15px;
   flex: 1 1 0;
   text-align: center;
-  padding: 8px 10px;
-  min-height: 36px;
+  padding: 10px 12px;
+  min-height: 44px;
   border-radius: 999px;
   cursor: pointer;
   transition: background 0.18s var(--ease-out), color 0.18s ease, box-shadow 0.18s ease;
@@ -919,8 +919,9 @@ html[data-theme="light"] .zk-badge {
 .brand p { margin: 0 auto; max-width: 22em; color: var(--muted); font-size: 14px; line-height: 1.45; }
 .brand p strong { color: var(--text); font-weight: 600; }
 .zk-plain {
-  margin: 10px auto 0;
-  max-width: 24em;
+  margin: 10px auto 12px;
+  max-width: none;
+  width: 100%;
   font-size: 13px;
   line-height: 1.45;
   color: var(--muted);
@@ -1022,8 +1023,9 @@ html[data-theme="light"] .zk-badge {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 .auth-hint {
-  margin: 10px auto 0;
-  max-width: 100%;
+  margin: 0 auto 0;
+  max-width: none;
+  width: 100%;
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--warning, #ff9f1c) 45%, var(--border));
@@ -1032,6 +1034,9 @@ html[data-theme="light"] .zk-badge {
   font-size: 13px;
   line-height: 1.45;
   text-align: left;
+}
+.brand .zk-plain + .auth-hint {
+  margin-top: 0;
 }
 .auth-hint a { color: var(--accent); font-weight: 500; }
 .unlock-help {
@@ -2074,8 +2079,10 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2903,8 +2910,8 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   gap: 6px;
   border: 0;
   border-radius: 0;
-  padding: 5px 4px 5px 10px;
-  min-height: 30px;
+  padding: 10px 8px 10px 10px;
+  min-height: 44px;
   font-size: 12px;
   line-height: 1.2;
   background: transparent;
@@ -2936,8 +2943,10 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   border: 0;
   border-left: 1px solid color-mix(in srgb, var(--tag-color, var(--border)) 25%, var(--border));
@@ -3524,7 +3533,8 @@ body.scan-dialog-open {
   gap: 6px;
   width: 100%;
   margin: 0;
-  padding: 2px 4px;
+  padding: 10px 4px;
+  min-height: 44px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -5504,10 +5514,10 @@ body.search-filters-open .fab-stack,
   .editor-actions-mobile-bar .btn.icon,
   .editor-actions-mobile-bar .editor-mobile-proxy,
   .editor-actions-mobile-bar .editor-mobile-doc-action {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    min-height: 38px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     flex-shrink: 0;
     justify-content: center;
     align-items: center;
@@ -5913,7 +5923,7 @@ body.search-filters-open .fab-stack,
   .app-tabs {
     padding-top: calc(6px + var(--safe-top));
   }
-  .app-tab { padding: 8px 12px; }
+  .app-tab { padding: 10px 12px; min-height: 44px; }
   .brand-mark.sm { width: 32px; height: 32px; border-radius: 8px; }
   .brand-mark.sm .brand-mark-monogram-sm { font-size: 25px; letter-spacing: -1.2px; }
   .brand-copy strong { font-size: 15px; }

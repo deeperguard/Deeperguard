@@ -1023,6 +1023,7 @@ a.mk-badge-link:hover {
   justify-content: center;
   gap: 0.35rem;
 }
+.mk-pricing-beta-highlight h3,
 .mk-pricing-beta-highlight h4 {
   margin: 0;
   font-size: 1.05rem;

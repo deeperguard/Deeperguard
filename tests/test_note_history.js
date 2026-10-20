@@ -87,11 +87,11 @@ assert.doesNotMatch(
 );
 assert.strictEqual(
   NotesHistory.revisionLabel({ at: '2024-06-01T12:30:00.000Z', title: 'Title', content: '' }, noteForLabels),
-  'Untitled',
+  'Untitled (first save)',
 );
 assert.strictEqual(
   NotesHistory.revisionLabel({ at: '2024-06-01T12:30:00.000Z', title: '', content: '' }, noteForLabels),
-  'Untitled',
+  'Untitled (first save)',
 );
 assert.strictEqual(
   NotesHistory.revisionLabel({ title: 'Saved snapshot', content: '' }, noteForLabels),

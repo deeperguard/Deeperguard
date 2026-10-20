@@ -35,7 +35,8 @@ const NotesHistory = (() => {
       ? String(NotesSearch.effectiveNoteTitle(snap) || '').trim()
       : '';
     if (derived && derived !== 'Untitled' && derived !== 'Title') return derived;
-    return 'Untitled';
+    // First snapshot often has no title yet — say so instead of a bare Untitled.
+    return 'Untitled (first save)';
   }
 
   const api = { revisionRows, revisionTimestamp, shouldFlushOnOpen, revisionLabel };

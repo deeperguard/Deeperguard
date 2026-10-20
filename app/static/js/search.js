@@ -73,6 +73,10 @@ const NotesSearch = (() => {
       if (match[1] !== undefined) {
         const phrase = match[1].replace(/\s+/g, ' ').trim();
         if (phrase) terms.push(compileTerm(phrase, { phrase: true }));
+        else if (match[0] === '"') {
+          // Lone/unmatched quote — treat as a literal character, not "match all".
+          terms.push(compileTerm('"'));
+        }
       } else {
         const word = match[2].replace(/"/g, '');
         if (word) terms.push(compileTerm(word));
@@ -437,7 +441,9 @@ const NotesSearch = (() => {
 
   function matches(note, query, tagMap, options = {}) {
     const terms = parseQueryTerms(query);
-    if (!terms.length) return true;
+    // Empty query → show all. Non-empty query that yields no terms (e.g. lone
+    // punctuation after parsing) → match nothing, same as other special chars.
+    if (!terms.length) return !String(query || '').trim();
     if (options.titlesOnly || note.content?.locked) {
       // The switch is titled "Search titles only" — filenames stay on the normal search.
       return matchesNoteOrFileName(note, query, { includeFileNames: false });
@@ -452,7 +458,7 @@ const NotesSearch = (() => {
   // count, and a protected parent gives up no more than it does in the note list.
   function fileRowMatches(att, note, query, { titlesOnly = false, includeProtected = false } = {}) {
     const terms = parseQueryTerms(query);
-    if (!terms.length) return true;
+    if (!terms.length) return !String(query || '').trim();
     const title = effectiveNoteTitle(note);
     if (titlesOnly || note?.content?.locked) return allTermsIn(terms, [title]);
     const content = att?.content || att || {};
@@ -722,6 +728,20 @@ const NotesSearch = (() => {
     return true;
   }
 
+  // A note that has ever been autosaved (revision history) or synced must never
+  // be hard-discarded when the editor is later cleared to whitespace.
+  function noteHasBeenSaved(note) {
+    if (!note?.content || note.content.type !== 'note') return false;
+    if (Array.isArray(note.content.revisions) && note.content.revisions.length > 0) return true;
+    if (Number(note.rev) > 0) return true;
+    return false;
+  }
+
+  // Brand-new drafts only: empty title+body+attachments and never saved.
+  function noteMayHardDiscard(note) {
+    return noteIsEmptyStub(note) && !noteHasBeenSaved(note);
+  }
+
   function compareNotesForSort(a, b, sort) {
     const aPinned = noteIsPinned(a);
     const bPinned = noteIsPinned(b);
@@ -987,6 +1007,7 @@ const NotesSearch = (() => {
     filterNotes,
     findMatches,
     replaceAll,
+    matches,
     describeMatch,
     matchesNoteOrFileName,
     textHasQuery,
@@ -1025,6 +1046,8 @@ const NotesSearch = (() => {
     derivedTitleFromBody,
     effectiveNoteTitle,
     noteIsEmptyStub,
+    noteHasBeenSaved,
+    noteMayHardDiscard,
     isPlaceholderTitle,
     looksLikeSpreadsheetJson,
     looksLikeSpreadsheetPayload,

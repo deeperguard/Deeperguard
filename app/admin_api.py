@@ -80,6 +80,84 @@ def _site_nav(build_id: str) -> dict[str, str]:
     }
 
 
+def _escape_html(text: str) -> str:
+    return (
+        str(text or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _inline_md(text: str) -> str:
+    """Escape then apply simple `code` spans."""
+    import re
+
+    out = _escape_html(text)
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+
+
+def render_simple_markdown(src: str) -> str:
+    """Minimal Markdown → HTML for docs/SELF_HOST.md (headings, lists, tables, code)."""
+    import re
+
+    lines = str(src or "").splitlines()
+    html: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if not line.strip():
+            i += 1
+            continue
+        if line.startswith("# "):
+            html.append(f"<h1>{_inline_md(line[2:].strip())}</h1>")
+            i += 1
+            continue
+        if line.startswith("## "):
+            html.append(f"<h2>{_inline_md(line[3:].strip())}</h2>")
+            i += 1
+            continue
+        if line.startswith("### "):
+            html.append(f"<h3>{_inline_md(line[4:].strip())}</h3>")
+            i += 1
+            continue
+        if line.strip().startswith("|") and i + 1 < len(lines) and re.match(r"^\s*\|?\s*[-:| ]+\|", lines[i + 1] or ""):
+            rows = []
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                rows.append(lines[i])
+                i += 1
+            if len(rows) >= 2:
+                def cells(row: str) -> list[str]:
+                    parts = [c.strip() for c in row.strip().strip("|").split("|")]
+                    return parts
+                head = cells(rows[0])
+                body_rows = [cells(r) for r in rows[2:]]
+                html.append("<table><thead><tr>" + "".join(f"<th>{_inline_md(c)}</th>" for c in head) + "</tr></thead><tbody>")
+                for br in body_rows:
+                    html.append("<tr>" + "".join(f"<td>{_inline_md(c)}</td>" for c in br) + "</tr>")
+                html.append("</tbody></table>")
+            continue
+        if re.match(r"^\d+\.\s+", line.strip()):
+            html.append("<ol>")
+            while i < len(lines) and re.match(r"^\d+\.\s+", (lines[i] or "").strip()):
+                item = re.sub(r"^\d+\.\s+", "", lines[i].strip())
+                html.append(f"<li>{_inline_md(item)}</li>")
+                i += 1
+            html.append("</ol>")
+            continue
+        if line.strip().startswith("- "):
+            html.append("<ul>")
+            while i < len(lines) and lines[i].strip().startswith("- "):
+                html.append(f"<li>{_inline_md(lines[i].strip()[2:])}</li>")
+                i += 1
+            html.append("</ul>")
+            continue
+        html.append(f"<p>{_inline_md(line.strip())}</p>")
+        i += 1
+    return "\n".join(html)
+
+
 def register_admin_routes(app, build_id: str) -> None:
     @app.get("/admin")
     def admin_page():
@@ -102,7 +180,12 @@ def register_admin_routes(app, build_id: str) -> None:
         from pathlib import Path
         doc = Path(__file__).resolve().parent.parent / "docs" / "SELF_HOST.md"
         body = doc.read_text(encoding="utf-8") if doc.is_file() else "Self-host guide not found."
-        return render_template("doc-page.html", build=build_id, title="Self-host guide", body=body)
+        return render_template(
+            "doc-page.html",
+            title="Self-host guide",
+            body_html=render_simple_markdown(body),
+            **_site_nav(build_id),
+        )
 
     @app.get("/api/admin/overview")
     def api_admin_overview():

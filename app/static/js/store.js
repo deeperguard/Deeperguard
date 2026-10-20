@@ -2158,7 +2158,11 @@ const NotesStore = (() => {
     return { ok: false, wrongKey: true, empty: false, opened: 0 };
   }
 
-  async function loadAccount() {
+  let accountInFlight = null;
+  let accountFetchedAt = 0;
+  const ACCOUNT_CACHE_MS = 5000;
+
+  async function loadAccount({ force = false } = {}) {
     if (typeof window !== 'undefined' && window.__notesSignedOut) {
       const err = new Error('login required');
       err.status = 401;
@@ -2174,19 +2178,30 @@ const NotesStore = (() => {
         throw err;
       }
       state.account = account;
+      accountFetchedAt = Date.now();
       cacheAccount(account);
       return account;
     }
-    try {
-      state.account = await api('/api/account', { timeoutMs: 4000 });
-    } catch (err) {
-      if (typeof window !== 'undefined' && err && (err.status === 401 || err.status === 403) && err.code !== 'session_revoked') {
-        window.__notesSignedOut = true;
-      }
-      throw err;
+    if (!force && state.account && accountFetchedAt && (Date.now() - accountFetchedAt) < ACCOUNT_CACHE_MS) {
+      return state.account;
     }
-    cacheAccount(state.account);
-    return state.account;
+    if (accountInFlight) return accountInFlight;
+    accountInFlight = (async () => {
+      try {
+        state.account = await api('/api/account', { timeoutMs: 4000 });
+        accountFetchedAt = Date.now();
+        cacheAccount(state.account);
+        return state.account;
+      } catch (err) {
+        if (typeof window !== 'undefined' && err && (err.status === 401 || err.status === 403) && err.code !== 'session_revoked') {
+          window.__notesSignedOut = true;
+        }
+        throw err;
+      } finally {
+        accountInFlight = null;
+      }
+    })();
+    return accountInFlight;
   }
 
   const PUSH_CHUNK_BYTES = 6 * 1024 * 1024;

@@ -20,13 +20,13 @@ assert.ok(authJs.includes("showError('login-error', 'Enter your email')"));
 assert.ok(authJs.includes("showError('login-error', 'Enter your password')"));
 
 // 2. Untitled — never use the date as the version title.
-assert.ok(historyJs.includes("return 'Untitled'"));
+assert.ok(historyJs.includes("Untitled (first save)") || historyJs.includes("return 'Untitled'"));
 assert.ok(!/if \(at\) \{\s*return new Date\(at\)/.test(historyJs));
 
 const { revisionLabel } = require('../app/static/js/note-history.js');
 assert.strictEqual(
   revisionLabel({ at: '2024-06-01T12:30:00.000Z', title: '', content: '' }),
-  'Untitled',
+  'Untitled (first save)',
 );
 
 // 3. Files summary no longer claims "All files" when some are missing.
