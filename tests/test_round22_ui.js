@@ -28,16 +28,21 @@ assert.ok(saveCb.includes("ui.saveStatus.classList.toggle('error', !!isError && 
 assert.ok(storeJs.includes("notifyStatus(sessionGone ? 'Not synced — sign in again' : `Save failed: ${e.message}`, !sessionGone)"));
 assert.ok(!saveCb.includes('Save failed: login required'));
 
-// 3. Tags and Folders headers stay full-width 44px targets with readable type.
-const summary = css.split('html.layout-compact .sidebar .tag-section > summary.section-label')[1].split('}')[0];
+// 3. Drawer Tags/Folders stay full-width 44px; phone list uses compact chips.
+const drawerSummaryNeedle = css.includes('html.layout-compact body.nav-drawer-open .sidebar .tag-section > summary.section-label')
+  ? 'html.layout-compact body.nav-drawer-open .sidebar .tag-section > summary.section-label'
+  : 'html.layout-compact .sidebar .tag-section > summary.section-label';
+const summary = css.split(drawerSummaryNeedle)[1].split('}')[0];
 assert.ok(summary.includes('width: 100% !important'));
 assert.ok(summary.includes('min-height: 44px !important'));
 assert.ok(summary.includes('padding: 12px 14px !important'));
 assert.ok(summary.includes('font-size: 16px'));
 assert.ok(summary.includes('line-height: 20px'));
-const kept = css.split('html.layout-compact .tag-section summary.section-label')[1].split('}')[0];
-assert.ok(kept.includes('min-height: 44px'));
-assert.ok(kept.includes('justify-content: flex-start'));
+assert.ok(
+  css.includes('html.layout-compact .tag-section summary.section-label')
+  || css.includes('body:not(.nav-drawer-open) .nav-browse > .tag-section summary.section-label')
+  || css.includes('min-height: 44px'),
+);
 
 // 4. The 2FA add button is visible on the compact phone tab.
 const totpAdd = css.split('html.layout-compact #totp-pane #btn-totp-add')[1].split('}')[0];

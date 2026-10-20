@@ -679,8 +679,10 @@
           </select>
         </label>
       </div>
+      <div class="nav-browse" id="nav-browse">
       <details class="tag-section" id="tag-section" open>
         <summary class="section-label"><span class="sn-tags">Tags</span><span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
+        <div class="nav-browse-panel">
         <div id="tag-list" class="tag-list"></div>
         <div id="tag-color-bar" class="tag-color-bar" hidden></div>
         <div class="tag-composer" id="tag-composer" hidden>
@@ -694,9 +696,11 @@
           <button type="button" id="btn-new-tag" class="btn ghost sm tag-new-btn">+ New tag</button>
           <button type="button" id="btn-manage-tags" class="btn ghost sm tag-new-btn">Manage</button>
         </div>
+        </div>
       </details>
       <details class="tag-section folder-section" id="folder-section" open>
         <summary class="section-label"><span>Folders</span><span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
+        <div class="nav-browse-panel">
         <div id="folder-list" class="folder-list"></div>
         <div class="tag-composer" id="folder-composer" hidden>
           <input id="folder-name-input" type="text" maxlength="80" placeholder="Folder name" autocomplete="off">
@@ -708,7 +712,9 @@
         <div class="tag-section-actions">
           <button type="button" id="btn-new-folder" class="btn ghost sm tag-new-btn">+ New folder</button>
         </div>
+        </div>
       </details>
+      </div>
       </div>
       <footer class="sidebar-foot">
         <div class="sidebar-foot-actions">
