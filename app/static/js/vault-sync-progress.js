@@ -12,11 +12,19 @@ const NotesVaultSyncProgress = (() => {
   function parseVaultSyncProgressMessage(message) {
     const s = String(message || '');
     const pctMatch = s.match(/(\d+)\s*%/);
-    const countMatch = s.match(/\((\d+)\/(\d+)\)/) || s.match(/(?:Downloading[^0-9]*)?(\d+)\s*\/\s*(\d+)/i);
+    const countMatch = s.match(/\((\d+)\/(\d+)\)/)
+      || s.match(/(?:Downloading[^0-9]*)?(\d+)\s*\/\s*(\d+)/i)
+      || s.match(/(\d+)\s+of\s+(\d+)/i);
+    const done = countMatch ? Number(countMatch[1]) : null;
+    const total = countMatch ? Number(countMatch[2]) : null;
+    let pct = pctMatch ? Number(pctMatch[1]) : null;
+    if (pct == null && done != null && total > 0) {
+      pct = Math.max(1, Math.min(99, Math.round((done / total) * 100)));
+    }
     return {
-      pct: pctMatch ? Number(pctMatch[1]) : null,
-      done: countMatch ? Number(countMatch[1]) : null,
-      total: countMatch ? Number(countMatch[2]) : null,
+      pct,
+      done,
+      total,
       notes: parseNotesReadyCount(s),
       isDownload: /Downloading/i.test(s),
     };
@@ -27,16 +35,17 @@ const NotesVaultSyncProgress = (() => {
     const expected = Number(total);
     const noteCount = Number(notes);
     const hasItems = Number.isFinite(expected) && expected > 0 && Number.isFinite(done) && done >= 0;
-    let text = DOWNLOAD_BASE;
     if (hasItems) {
-      text += ` ${done} / ${expected} items`;
-    } else if (pct != null && Number.isFinite(Number(pct))) {
-      text += ` ${Number(pct)}%`;
+      // Prefer live notes-ready when present; otherwise items processed.
+      const shown = Number.isFinite(noteCount) && noteCount > 0
+        ? Math.min(noteCount, expected)
+        : done;
+      return `Downloading ${shown} of ${expected} notes`;
     }
-    if (Number.isFinite(noteCount) && noteCount > 0) {
-      text += ` · ${noteCount} note${noteCount === 1 ? '' : 's'} ready`;
+    if (pct != null && Number.isFinite(Number(pct))) {
+      return `Downloading… ${Number(pct)}%`;
     }
-    return text;
+    return DOWNLOAD_BASE;
   }
 
   function syncBannerProgressText(message, fallback) {

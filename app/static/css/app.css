@@ -7486,10 +7486,22 @@ body.search-filters-open .fab-stack,
   color: var(--text);
   font-size: 13px;
 }
+/* Long downloads: one compact row overlay — height 0 so the note list does not reflow. */
 .sync-status-banner[data-mode="downloading"] {
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: stretch;
-  gap: 6px;
+  gap: 0;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  overflow: visible !important;
+  z-index: 16;
+  pointer-events: none;
 }
 .sync-status-banner-main {
   display: flex;
@@ -7498,6 +7510,35 @@ body.search-filters-open .fab-stack,
   min-width: 0;
   flex: 1 1 auto;
 }
+.sync-status-banner[data-mode="downloading"] .sync-status-banner-main {
+  pointer-events: auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  max-height: 44px;
+  min-height: 36px;
+  margin: 4px 14px 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+  color: var(--text);
+}
+.sync-status-banner[data-mode="downloading"] #sync-status-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.sync-status-banner[data-mode="downloading"] .sync-status-progress {
+  flex: 0 0 4.5rem;
+  width: 4.5rem;
+  margin: 0;
+}
 .sync-status-banner-actions {
   display: flex;
   flex-wrap: wrap;
@@ -7505,7 +7546,7 @@ body.search-filters-open .fab-stack,
   flex-shrink: 0;
 }
 .sync-status-banner[data-mode="downloading"] .sync-status-banner-actions {
-  align-self: flex-end;
+  display: none;
 }
 .sync-status-progress-track,
 .file-download-progress-track {
@@ -7622,7 +7663,13 @@ body.vault-pulling .sync-progress {
     border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
   }
   .list-sync-banner[data-mode="downloading"] {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    padding: 0 !important;
+    border-bottom: none !important;
+  }
+  .list-sync-banner[data-mode="downloading"] .sync-status-banner-main {
+    margin-left: 14px;
+    margin-right: 14px;
   }
   .list-sync-banner #sync-status-text {
     flex: 1 1 8rem;

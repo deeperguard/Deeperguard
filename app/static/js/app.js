@@ -4356,6 +4356,60 @@
   let vaultDownloadStalled = false;
   let vaultDownloadTimer = 0;
   const UNLOCK_DOWNLOAD_TIMEOUT_MS = 20000;
+  // Routine "Checking for changes…" stays header-only. Show a compact overlay
+  // only after a real download has been running longer than this delay.
+  const SYNC_PROGRESS_BANNER_DELAY_MS = 2000;
+  let syncProgressBannerTimer = 0;
+  let syncProgressBannerPending = null;
+  let syncProgressStartedAt = 0;
+
+  function cancelDelayedSyncProgressBanner() {
+    clearTimeout(syncProgressBannerTimer);
+    syncProgressBannerTimer = 0;
+    syncProgressBannerPending = null;
+  }
+
+  function resetSyncProgressBannerState() {
+    cancelDelayedSyncProgressBanner();
+    syncProgressStartedAt = 0;
+  }
+
+  function revealSyncProgressBanner(text, message) {
+    const label = text || 'Downloading notes…';
+    showSyncBanner('downloading', label, { message: message || label });
+  }
+
+  function flushDelayedSyncProgressBanner() {
+    if (!syncProgressBannerPending) return;
+    if (!syncInFlight && !vaultPullActive) {
+      resetSyncProgressBannerState();
+      return;
+    }
+    const pending = syncProgressBannerPending;
+    syncProgressBannerPending = null;
+    clearTimeout(syncProgressBannerTimer);
+    syncProgressBannerTimer = 0;
+    revealSyncProgressBanner(pending.text, pending.message);
+  }
+
+  function armDelayedSyncProgressBanner({ text, message } = {}) {
+    if (!syncProgressStartedAt) syncProgressStartedAt = Date.now();
+    syncProgressBannerPending = {
+      text: text || 'Downloading notes…',
+      message: message || text || 'Downloading notes…',
+    };
+    const elapsed = Date.now() - syncProgressStartedAt;
+    const wait = Math.max(0, SYNC_PROGRESS_BANNER_DELAY_MS - elapsed);
+    if (syncProgressBannerTimer) return;
+    if (wait === 0) {
+      flushDelayedSyncProgressBanner();
+      return;
+    }
+    syncProgressBannerTimer = setTimeout(() => {
+      syncProgressBannerTimer = 0;
+      flushDelayedSyncProgressBanner();
+    }, wait);
+  }
 
   function setSyncBannerProgress({ text, pct = null, indeterminate = false, visible = true } = {}) {
     const wrap = document.getElementById('sync-status-progress');
@@ -4539,6 +4593,7 @@
       text = 'Not syncing — sign in again';
     }
     if (!mode || mode === 'ready') {
+      resetSyncProgressBannerState();
       banner.hidden = true;
       banner.dataset.mode = 'ready';
       if (signin) signin.hidden = true;
@@ -4547,6 +4602,7 @@
       return;
     }
     if (mode === 'session') {
+      resetSyncProgressBannerState();
       banner.hidden = false;
       banner.dataset.mode = 'session';
       if (label) label.textContent = text || 'Not syncing — sign in again';
@@ -4556,6 +4612,9 @@
       setSyncBannerProgress({ visible: false });
       mirrorEditorSessionBanner(true, text || 'Not syncing — sign in again');
       return;
+    }
+    if (mode === 'error' || mode === 'timeout') {
+      resetSyncProgressBannerState();
     }
     mirrorEditorSessionBanner(false);
     banner.hidden = false;
@@ -4667,15 +4726,14 @@
     if (!NotesStore.isUnlocked()) return;
     revealAppShell();
     armVaultDownloadTimeout();
-    showSyncBanner('downloading', 'Downloading notes…', { message: 'Downloading notes…' });
-    setSyncBannerProgress({
-      text: 'Downloading notes…',
-      indeterminate: true,
-      visible: true,
-    });
     vaultPullActive = true;
     vaultPullExpected = Math.max(vaultPullExpected, Number(expectedTotal) || 0);
     document.body.classList.add('vault-pulling');
+    // Compact overlay only after ~2s (or immediately if already past the delay).
+    armDelayedSyncProgressBanner({
+      text: 'Downloading notes…',
+      message: 'Downloading notes…',
+    });
     if (ui.empty && NotesStore.listNotes().length > 0) ui.empty.hidden = true;
     lastNotesRenderKey = '';
     scheduleVaultPullRender(true);
@@ -4753,16 +4811,22 @@
       if (total > 0 && processed >= 0) {
         const pct = Math.max(1, Math.min(99, Math.round((processed / total) * 100)));
         const notes = Number(meta.notes) || 0;
-        setSyncBannerProgress({
-          text: NotesVaultSyncProgress.formatVaultSyncDownloadProgress({
-            processed,
-            total,
-            notes,
-          }),
-          pct,
-          indeterminate: false,
-          visible: true,
+        const progressText = NotesVaultSyncProgress.formatVaultSyncDownloadProgress({
+          processed,
+          total,
+          notes,
         });
+        // Keep the delayed overlay armed with live copy; flush if due.
+        armDelayedSyncProgressBanner({ text: progressText, message: progressText });
+        const banner = document.getElementById('sync-status-banner');
+        if (banner && !banner.hidden && banner.dataset.mode === 'downloading') {
+          setSyncBannerProgress({
+            text: progressText,
+            pct,
+            indeterminate: false,
+            visible: true,
+          });
+        }
       }
     },
     end: () => endVaultPull(),
@@ -17573,7 +17637,11 @@
       emptySyncBtn.disabled = true;
       emptySyncBtn.textContent = 'Syncing…';
     }
-    showSyncBanner('downloading', 'Downloading notes…');
+    syncProgressStartedAt = Date.now();
+    armDelayedSyncProgressBanner({
+      text: 'Downloading notes…',
+      message: 'Downloading notes…',
+    });
     armVaultDownloadTimeout();
     syncNow({ full: true }).catch((err) => {
       toast(err?.message || 'Sync failed', true);
@@ -19140,7 +19208,13 @@
       if (syncInFlight) {
         if (!quiet && isVaultReadyForSync()) {
           setBusy(true);
-          showSyncBanner('downloading', full ? 'Downloading notes…' : 'Syncing…');
+          // Header "Syncing…" only for routine checks; full/long pulls arm a compact overlay.
+          if (full || vaultPullActive) {
+            armDelayedSyncProgressBanner({
+              text: 'Downloading notes…',
+              message: 'Downloading notes…',
+            });
+          }
           armVaultDownloadTimeout();
         }
         return syncInFlight.finally(() => { if (!quiet) setBusy(false); });
@@ -19172,7 +19246,15 @@
       }
       if (isVaultReadyForSync()) setBusy(true);
       if (!quiet && isVaultReadyForSync()) {
-        showSyncBanner('downloading', full ? 'Downloading notes…' : 'Syncing…');
+        // Routine sync / "Checking for changes…" → header indicator only.
+        // Initial/full downloads arm a delayed compact overlay (see beginVaultPull).
+        syncProgressStartedAt = Date.now();
+        if (full) {
+          armDelayedSyncProgressBanner({
+            text: 'Downloading notes…',
+            message: 'Downloading notes…',
+          });
+        }
         armVaultDownloadTimeout();
       }
       syncInFlight = NotesStore.loadAccount()
