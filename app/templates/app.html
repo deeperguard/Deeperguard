@@ -1643,19 +1643,23 @@
         <h3>Backup &amp; import</h3>
         {% set google_drive_configured = (google_oauth_client_id|default('', true)|trim|length) > 0 %}
         {% set dropbox_configured = (dropbox_app_key|default('', true)|trim|length) > 0 %}
-        <div class="settings-card">
+        <div class="settings-card settings-backup-card">
           <h4 class="settings-subtitle">Back up</h4>
-          <p class="settings-hint">Encrypted on this device with your vault key. Google, Apple, Dropbox, and Deeperguard never see plaintext or keys.</p>
+          <p class="settings-hint">Encrypted on this device with your vault key. Destinations never see plaintext or keys.</p>
+
           <div class="settings-actions">
             <button type="button" id="btn-save-backup-file" class="btn primary">Save backup file</button>
             <button type="button" id="btn-download-backup" class="btn" hidden aria-hidden="true" tabindex="-1">Download encrypted vault</button>
-            <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not configured"{% endif %}>Back up to Google Drive</button>
-            <button type="button" id="btn-backup-dropbox" class="btn"{% if not dropbox_configured %} disabled title="Not configured"{% endif %}>Back up to Dropbox</button>
-            <button type="button" id="btn-backup-now" class="btn">Email backup now</button>
           </div>
-          <p id="backup-file-help" class="settings-hint">Save backup file downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code> (on iPhone: Save to Files → iCloud Drive). Email backup now sends the same encrypted format to your verified backup address. Google Drive and Dropbox upload the same client-encrypted blob to an app folder you authorize in the browser.</p>
+          <p id="backup-file-help" class="settings-hint">Downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code> (on iPhone: Save to Files → iCloud Drive).</p>
+
+          <div class="settings-actions">
+            <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not configured"{% endif %}>Back up to Google Drive</button>
+          </div>
+          <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not configured on this server.</p>
           <p id="google-drive-status" class="settings-hint" role="status" aria-live="polite"{% if not google_drive_configured %} hidden{% endif %}></p>
           <div id="google-drive-controls" class="settings-nested stack" {% if not google_drive_configured %}hidden{% endif %}>
+            <p class="settings-hint">Uploads the same client-encrypted blob to a Drive folder you authorize in the browser.</p>
             <label class="settings-row checkbox"><span>Automatic daily Google Drive backup when the app is open and online</span><input id="backup-drive-auto-daily" type="checkbox"></label>
             <div class="settings-actions">
               <button type="button" id="btn-drive-list" class="btn ghost sm">Show Drive backups</button>
@@ -1663,9 +1667,14 @@
             </div>
             <ul id="google-drive-backup-list" class="settings-hint" hidden></ul>
           </div>
-          <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not configured on this server.</p>
+
+          <div class="settings-actions">
+            <button type="button" id="btn-backup-dropbox" class="btn"{% if not dropbox_configured %} disabled title="Not configured"{% endif %}>Back up to Dropbox</button>
+          </div>
+          <p id="dropbox-not-configured" class="settings-hint"{% if dropbox_configured %} hidden{% endif %}>Dropbox: Not configured on this server.</p>
           <p id="dropbox-status" class="settings-hint" role="status" aria-live="polite"{% if not dropbox_configured %} hidden{% endif %}></p>
           <div id="dropbox-controls" class="settings-nested stack" {% if not dropbox_configured %}hidden{% endif %}>
+            <p class="settings-hint">Uploads the same client-encrypted blob to Apps/Deeperguard via OAuth 2 PKCE.</p>
             <label class="settings-row checkbox"><span>Automatic daily Dropbox backup when the app is open and online</span><input id="backup-dropbox-auto-daily" type="checkbox"></label>
             <div class="settings-actions">
               <button type="button" id="btn-dropbox-list" class="btn ghost sm">Show Dropbox backups</button>
@@ -1673,7 +1682,11 @@
             </div>
             <ul id="dropbox-backup-list" class="settings-hint" hidden></ul>
           </div>
-          <p id="dropbox-not-configured" class="settings-hint"{% if dropbox_configured %} hidden{% endif %}>Dropbox: Not configured on this server.</p>
+
+          <div class="settings-actions">
+            <button type="button" id="btn-backup-now" class="btn">Email backup now</button>
+          </div>
+          <p class="settings-hint">Sends the same encrypted <code>.dgbackup</code> to your verified backup address.</p>
           <label class="settings-row stacked">Backup email
             <input id="backup-email" type="email" autocomplete="email">
           </label>
@@ -1693,8 +1706,14 @@
           <div class="settings-actions">
             <button type="button" id="btn-save-backup" class="btn">Save email backup settings</button>
           </div>
+
+          <h4 class="settings-subtitle">Export</h4>
+          <div class="settings-actions">
+            <button type="button" id="btn-export-note" class="btn">Export current note</button>
+          </div>
+          <p class="settings-hint">Saves the open note as a file on this device.</p>
         </div>
-        <div class="settings-card">
+        <div class="settings-card settings-backup-card">
           <h4 class="settings-subtitle">Restore &amp; import</h4>
           <div class="settings-actions">
             <label class="file-label btn primary">Restore Deeperguard backup
@@ -1703,12 +1722,15 @@
             <label class="file-label btn">Import from Standard Notes
               <input id="import-file" type="file" accept=".txt,.json,.enc.json,.dgbackup,.gz,.json.gz,.enc.json.gz,.zip,text/plain,application/json,application/gzip,application/zip" hidden>
             </label>
-            <button type="button" id="btn-export-note" class="btn">Export current note</button>
           </div>
           <p class="settings-hint">Restore accepts <code>.dgbackup</code> (and legacy <code>.enc.json</code>) Deeperguard backups. Import from Standard Notes accepts encrypted or decrypted SN exports (zip or .txt).</p>
         </div>
-        <div class="settings-card" data-plan-feature="pcloud_backup">
-          <h4 class="settings-subtitle">pCloud backup</h4>
+      </section>
+
+      <section class="settings-group" data-plan-feature="pcloud_backup">
+        <h3>pCloud backup</h3>
+        <div class="settings-card settings-backup-card">
+          <p class="settings-hint">Optional encrypted vault sync via rclone to your pCloud account.</p>
           <label class="settings-row stacked">pCloud email / username
             <input id="pcloud-username" type="email" autocomplete="username">
           </label>

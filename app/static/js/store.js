@@ -5374,6 +5374,24 @@ const NotesStore = (() => {
     };
   }
 
+  function backupContentsEqual(a, b) {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function backupItemTimestamp(rowOrItem) {
+    const raw = rowOrItem?.updated_at;
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed / 1000 : 0;
+  }
+
   async function importBackup(json, merge = true, { blobs } = {}) {
     if (typeof NotesSnImport !== 'undefined') {
       const parsed = NotesSnImport.parse(json, { blobs });
@@ -5431,6 +5449,7 @@ const NotesStore = (() => {
     let created = 0;
     let updated = 0;
     let unchanged = 0;
+    let keptNewer = 0;
     for (const row of data.items || []) {
       const existing = state.items.get(row.item_uuid);
       if (!merge && existing) {
@@ -5439,11 +5458,28 @@ const NotesStore = (() => {
       }
       const incomingHash = String(row.content_hash || '');
       const existingHash = existing ? String(existing.content_hash || '') : '';
+      // Same content_hash/version token → already up to date (no write / push).
       if (existing && incomingHash && existingHash && incomingHash === existingHash) {
         unchanged += 1;
         continue;
       }
       const item = await unwrapItem(row);
+      if (existing) {
+        const localTs = backupItemTimestamp(existing);
+        const incomingTs = backupItemTimestamp(row) || backupItemTimestamp(item);
+        // Backups re-encrypt with a fresh IV, so hashes often differ even when
+        // plaintext is identical. Skip write/push/revision when content matches.
+        if (backupContentsEqual(existing.content, item.content)) {
+          unchanged += 1;
+          continue;
+        }
+        // Never overwrite a local item that is newer than the backup copy.
+        if (localTs > incomingTs) {
+          keptNewer += 1;
+          continue;
+        }
+      }
+      if (incomingHash) item.content_hash = incomingHash;
       state.items.set(row.item_uuid, item);
       state.dirty.add(row.item_uuid);
       await persistLocal(row.item_uuid, item);
@@ -5458,8 +5494,9 @@ const NotesStore = (() => {
       created,
       updated,
       unchanged,
+      keptNewer,
       tags: 0,
-      skipped: unchanged,
+      skipped: unchanged + keptNewer,
     };
   }
 

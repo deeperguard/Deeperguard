@@ -4827,6 +4827,15 @@ html[data-theme="light"] .doc-search-hit {
 .plan-locked-tab { opacity: 0.45; }
 .settings-hint.settings-diagnostics strong { color: var(--ok, #2f9a68); }
 .settings-actions { display: grid; gap: 8px; padding: 12px 14px; }
+/* Backup / restore / export / pCloud actions: at least 44px touch target. */
+.settings-backup-card .settings-actions .btn,
+.settings-backup-card .settings-actions .file-label.btn {
+  min-height: var(--touch);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .settings-nested { padding: 0 14px 14px; }
 .settings-advanced { margin-top: 12px; }
 .settings-advanced > summary {

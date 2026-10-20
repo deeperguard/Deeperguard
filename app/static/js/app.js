@@ -19517,11 +19517,14 @@
   }
 
   function importResultToast(result, { restore = false } = {}) {
-    if (restore && result && (result.created != null || result.updated != null || result.unchanged != null)) {
+    if (restore && result && (result.created != null || result.updated != null || result.unchanged != null || result.keptNewer != null)) {
       const created = Number(result.created) || 0;
       const updated = Number(result.updated) || 0;
       const unchanged = Number(result.unchanged) || 0;
-      return `Restore complete: ${created} new, ${updated} updated, ${unchanged} already up to date`;
+      const keptNewer = Number(result.keptNewer) || 0;
+      let msg = `Restore complete: ${created} new, ${updated} updated, ${unchanged} already up to date`;
+      if (keptNewer) msg += `, ${keptNewer} kept newer local`;
+      return msg;
     }
     const notes = result && result.imported != null ? result.imported : 0;
     const tags = result && result.tags ? result.tags : 0;
@@ -19588,13 +19591,29 @@
     const total = all.length || 1;
     let done = 0;
     for (const item of all) {
-      const wrapped = await NotesCrypto.encryptObject(NotesStore.state.cryptoKey, item.content);
-      const ciphertext = JSON.stringify(wrapped);
+      // Prefer the already-persisted ciphertext/hash so a round-trip restore
+      // matches content_hash without treating identical items as updated.
+      let ciphertext = '';
+      let contentHash = '';
+      try {
+        const stored = typeof NotesIDB !== 'undefined' && NotesIDB.getItem
+          ? await NotesIDB.getItem(item.uuid)
+          : null;
+        if (stored?.ciphertext && !stored.deleted) {
+          ciphertext = stored.ciphertext;
+          contentHash = stored.content_hash || await NotesCrypto.hashText(ciphertext);
+        }
+      } catch (err) { /* fall through to fresh encrypt */ }
+      if (!ciphertext) {
+        const wrapped = await NotesCrypto.encryptObject(NotesStore.state.cryptoKey, item.content);
+        ciphertext = JSON.stringify(wrapped);
+        contentHash = item.content_hash || await NotesCrypto.hashText(ciphertext);
+      }
       rows.push({
         item_uuid: item.uuid,
         content_version: 1,
         ciphertext,
-        content_hash: await NotesCrypto.hashText(ciphertext),
+        content_hash: contentHash,
         deleted: false,
         updated_at: item.updated_at,
       });
