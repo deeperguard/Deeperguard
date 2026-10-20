@@ -169,6 +169,14 @@ if (loginForm) {
     const fd = new FormData(loginForm);
     const email = String(fd.get('email') || '').trim().toLowerCase();
     const password = String(fd.get('password') || '');
+    if (!email) {
+      showError('login-error', 'Enter your email');
+      return;
+    }
+    if (!password) {
+      showError('login-error', 'Enter your password');
+      return;
+    }
     setLoginBusy(true, 'Signing in…');
     try {
       const data = await signInWithPassword(email, password);

@@ -21,12 +21,12 @@
       </div>
     </div>
     {% endif %}
-    <form id="login-form" class="stack">
+    <form id="login-form" class="stack" novalidate>
       <label>Email
-        <input type="email" name="email" autocomplete="username" required>
+        <input type="email" name="email" autocomplete="username" required aria-required="true">
       </label>
       <label>Account password
-        <input type="password" name="password" autocomplete="current-password" required>
+        <input type="password" name="password" autocomplete="current-password" required aria-required="true">
       </label>
       <p class="hint">This password signs you in. It also decrypts notes on this device until you change the vault password in Settings. It never leaves your browser.</p>
       <p id="login-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>

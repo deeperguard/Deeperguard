@@ -1130,12 +1130,16 @@ const NotesStore = (() => {
   }
 
   function isProbablyOffline(err) {
+    const message = String(err && err.message ? err.message : err || '');
+    // Fetch/network wording wins even if a recent health probe flipped us "online".
+    if (/failed to fetch|networkerror|load failed|timed out|offline|net::err_/i.test(message)) {
+      return true;
+    }
     if (typeof window !== 'undefined' && typeof window.notesNetworkReachable === 'function') {
       return !window.notesNetworkReachable();
     }
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
-    const message = String(err && err.message ? err.message : err || '');
-    return /failed to fetch|networkerror|load failed|timed out|offline/i.test(message);
+    return false;
   }
 
   const PASSWORD_ACK_KEY = 'notes_password_ack_at';

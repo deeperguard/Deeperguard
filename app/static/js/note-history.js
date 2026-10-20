@@ -35,11 +35,7 @@ const NotesHistory = (() => {
       ? String(NotesSearch.effectiveNoteTitle(snap) || '').trim()
       : '';
     if (derived && derived !== 'Untitled' && derived !== 'Title') return derived;
-    const at = revisionTimestamp(rev);
-    if (at) {
-      return new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-    }
-    return 'Untitled version';
+    return 'Untitled';
   }
 
   const api = { revisionRows, revisionTimestamp, shouldFlushOnOpen, revisionLabel };
