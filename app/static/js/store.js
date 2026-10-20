@@ -4756,6 +4756,26 @@ const NotesStore = (() => {
     state.dirty.delete(uuid);
   }
 
+  // Drop a never-synced item entirely (no server tombstone). Used for empty
+  // New-note drafts that stayed local via skipDirty.
+  function forgetLocal(uuid) {
+    const item = state.items.get(uuid);
+    if (!item) return false;
+    if (item.content?.type === 'note') {
+      for (const att of [...attachmentsForNote(uuid)]) {
+        if (att.deleted || att.uuid === uuid) continue;
+        forgetLocal(att.uuid);
+      }
+      try { updateSearchIndexFor(uuid); } catch (_) { /* ignore */ }
+    }
+    if (item.content?.type === 'attachment') dropSearchIndexEntry(uuid);
+    discardItem(uuid);
+    state.blocked.delete(uuid);
+    invalidateShadowDuplicates();
+    try { NotesIDB.deleteItem(uuid); } catch (_) { /* ignore */ }
+    return true;
+  }
+
   function remove(uuid, { force = false } = {}) {
     const item = state.items.get(uuid);
     if (!item) return false;
@@ -5524,6 +5544,7 @@ const NotesStore = (() => {
     repairStoredAttachmentCopies,
     restoreRevision,
     remove,
+    forgetLocal,
     importBackup,
     importLooseSnFiles,
     importAttachment,

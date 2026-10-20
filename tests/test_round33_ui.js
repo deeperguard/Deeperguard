@@ -68,8 +68,9 @@ assert.ok(/\.tag-section \.tag-new-btn \{[\s\S]*?min-height:\s*44px/.test(css)
   || /#btn-new-tag[\s\S]*?min-height:\s*44px/.test(css));
 assert.ok(/\.history-item \.btn \{[\s\S]*?min-height:\s*44px/.test(css));
 
-// 5. Backup cooldown toast wording.
-assert.ok(appJs.includes('Code already sent — resend in ${'));
+// 5. Backup cooldown toast wording (verified + unverified paths).
+assert.ok(appJs.includes('Code already sent — resend in'));
+assert.ok(appJs.includes('Verify this email first — a code was already sent. Resend in'));
 assert.ok(appJs.includes('armBackupNowCooldown'));
 assert.ok(appJs.includes('backupNowCooldownLeft'));
 assert.ok(appPy.includes('Code already sent — resend in'));

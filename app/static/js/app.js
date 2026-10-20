@@ -1652,9 +1652,14 @@
     const note = NotesStore.get(id);
     if (!note || note.deleted) return false;
     if (NotesStore.listAttachments(id).length) return false;
-    // Only brand-new never-saved empty drafts may be hard-deleted.
+    // Only drafts that never had user content may be auto-removed.
     if (!NotesSearch.noteMayHardDiscard?.(note)) return false;
-    NotesStore.remove(id, { force: true });
+    // Never synced → wipe locally. Already pushed → tombstone on the server.
+    if (!(Number(note.rev) > 0) && typeof NotesStore.forgetLocal === 'function') {
+      NotesStore.forgetLocal(id);
+    } else {
+      NotesStore.remove(id, { force: true });
+    }
     if (currentId === id) currentId = null;
     if (listSelectionId === id) listSelectionId = null;
     return true;
@@ -12229,11 +12234,10 @@
         attachments: next.attachments || [],
       },
     };
-    // Brand-new never-saved empty drafts are removed (including when content
-    // is unchanged). Ever-saved notes that were cleared to whitespace stay.
+    // Empty drafts with no user content are removed (including when content is
+    // unchanged). Notes that ever had user content stay even if cleared.
     if (!live.length && NotesSearch.noteMayHardDiscard?.(discardProbe)) {
-      NotesStore.remove(currentId, { force: true });
-      if (listSelectionId === currentId) listSelectionId = null;
+      discardEmptyDraftNote(currentId);
       return;
     }
     if (NotesSearch.sameNoteContent(note.content, next)) {
@@ -15139,7 +15143,14 @@
       if (title) payload.title = title;
       if (folderId) payload.folder_id = folderId;
       if (currentTag) payload.tags = [currentTag];
-      NotesStore.upsert(id, payload);
+      // Empty New-note drafts stay local until the user enters content so a
+      // 3s wait + switch cannot leave a synced Untitled shell behind.
+      const seeded = !!(
+        String(payload.title || '').trim()
+        || payload.folder_id
+        || (payload.tags && payload.tags.length)
+      );
+      NotesStore.upsert(id, payload, { skipDirty: !seeded });
       renderNotes();
       renderTags();
       if (open) openNote(id);
@@ -18564,9 +18575,33 @@
 
   let backupNowCooldownTimer = null;
   let backupNowCooldownUntil = 0;
+  // Unverified backup path: a verification code was already emailed this cooldown.
+  let backupVerifyCodePending = false;
 
   function backupNowCooldownLeft() {
     return Math.max(0, Math.ceil((backupNowCooldownUntil - Date.now()) / 1000));
+  }
+
+  function backupVerifyWaitFromAccount(account) {
+    return Math.max(
+      Number(account?.email_verify_retry_after) || 0,
+      Number(account?.backup_verify_retry_after) || 0,
+    );
+  }
+
+  function backupNeedsEmailVerify(account) {
+    if (!account) return backupVerifyCodePending;
+    if (account.email_verified === false) return true;
+    if (account.backup_recipient_verified === false) return true;
+    return backupVerifyCodePending;
+  }
+
+  function backupCooldownToast(seconds, { unverified = false } = {}) {
+    const left = Math.max(1, Math.ceil(Number(seconds) || 1));
+    if (unverified) {
+      return `Verify this email first — a code was already sent. Resend in ${left}s.`;
+    }
+    return `Code already sent — resend in ${left}s`;
   }
 
   function armBackupNowCooldown(seconds) {
@@ -18595,11 +18630,20 @@
 
   document.getElementById('btn-backup-now').addEventListener('click', async () => {
     const btn = document.getElementById('btn-backup-now');
-    const cooling = backupNowCooldownLeft();
+    const account = NotesStore.cachedAccount?.() || {};
+    const unverified = backupNeedsEmailVerify(account);
+    const accountWait = backupVerifyWaitFromAccount(account);
+    const cooling = Math.max(backupNowCooldownLeft(), unverified ? accountWait : 0);
+    // During cooldown never hit /api/backup/email again (avoids "We sent a code").
     if (cooling > 0 || btn?.disabled) {
-      const left = cooling || Number((/Resend in (\d+)s/.exec(btn?.textContent || '') || [])[1]) || 0;
+      const left = cooling
+        || Number((/Resend in (\d+)s/.exec(btn?.textContent || '') || [])[1])
+        || accountWait
+        || 0;
       if (left > 0) {
-        toast(`Code already sent — resend in ${left}s`, true);
+        if (unverified) backupVerifyCodePending = true;
+        armBackupNowCooldown(left);
+        toast(backupCooldownToast(left, { unverified }), true);
       }
       return;
     }
@@ -18607,34 +18651,43 @@
       await NotesStore.flush();
       const email = document.getElementById('backup-email').value;
       await NotesStore.api('/api/backup/email', { method: 'POST', body: JSON.stringify({ email }) });
+      backupVerifyCodePending = false;
       toast('Encrypted backup emailed');
     } catch (err) {
       const wait = Number(err.retryAfter) || 0;
-      if (err.status === 429 && wait > 0) {
-        const msg = (err.message && /Code already sent — resend in/i.test(err.message))
-          ? err.message
-          : `Code already sent — resend in ${Math.ceil(wait)}s`;
+      const msg = String(err.message || '');
+      if (err.status === 429 && /too many/i.test(msg)) {
         toast(msg, true);
-        armBackupNowCooldown(wait);
         return;
       }
-      if (err.status === 403 && /verify|We sent a code/i.test(String(err.message || ''))) {
-        const account = NotesStore.cachedAccount?.() || {};
+      if (err.status === 429 && wait > 0) {
+        const needsVerify = unverified || backupVerifyCodePending || /verify|already sent/i.test(msg);
+        if (needsVerify) backupVerifyCodePending = true;
+        armBackupNowCooldown(wait);
+        toast(backupCooldownToast(wait, { unverified: needsVerify }), true);
+        return;
+      }
+      if (err.status === 403 && /verify|We sent a code/i.test(msg)) {
         const retry = Math.max(
-          Number(account.email_verify_retry_after) || 0,
-          Number(account.backup_verify_retry_after) || 0,
-          Number(err.retryAfter) || 0,
+          backupVerifyWaitFromAccount(NotesStore.cachedAccount?.() || {}),
+          wait,
         );
-        // First unverified send: arm the button countdown so later clicks
-        // toast "Code already sent — resend in Ns" instead of repeating.
-        const justSent = /We sent a code/i.test(String(err.message || ''));
-        if (retry > 0 || justSent) {
-          armBackupNowCooldown(retry > 0 ? retry : 60);
-        }
-        if (retry > 0) {
-          toast(`Code already sent — resend in ${Math.ceil(retry)}s`, true);
+        const justSent = /We sent a code/i.test(msg);
+        backupVerifyCodePending = true;
+        const secs = retry > 0 ? retry : 60;
+        armBackupNowCooldown(secs);
+        // First send: keep the server's "We sent a code" copy. Later clicks
+        // are handled by the cooldown guard above and never re-call the API.
+        if (retry > 0 && !justSent) {
+          toast(backupCooldownToast(retry, { unverified: true }), true);
           return;
         }
+        if (justSent) {
+          toast(msg, true);
+          return;
+        }
+        toast(backupCooldownToast(secs, { unverified: true }), true);
+        return;
       }
       toast(err.message || 'Email backup failed', true);
     }
