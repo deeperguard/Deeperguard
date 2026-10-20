@@ -19152,6 +19152,22 @@
     });
   }
 
+  function isGoogleDriveConnected(Cloud = window.NotesCloudBackup) {
+    try {
+      return !!(Cloud?.readPrefs?.()?.driveConnected);
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function isDropboxConnected(Cloud = window.NotesCloudBackup) {
+    try {
+      return !!(Cloud?.readPrefs?.()?.dropboxConnected);
+    } catch (err) {
+      return false;
+    }
+  }
+
   function refreshGoogleDriveBackupUi() {
     const Cloud = window.NotesCloudBackup;
     syncCloudProviderKeysFromPrefs();
@@ -19165,6 +19181,7 @@
     const keyConfigured = document.getElementById('google-key-configured');
     const keyRemove = document.getElementById('btn-google-key-remove');
     const configured = !!(Cloud && Cloud.isGoogleConfigured && Cloud.isGoogleConfigured());
+    const connected = configured && isGoogleDriveConnected(Cloud);
     const source = Cloud?.googleKeySource?.() || '';
     const hasUserKey = !!String(prefs.googleOauthClientId || '').trim();
     if (keyInput && document.activeElement !== keyInput) {
@@ -19190,8 +19207,10 @@
     if (driveBtn) {
       driveBtn.disabled = !configured;
       driveBtn.title = configured ? '' : 'Not set up yet';
+      driveBtn.textContent = connected ? 'Back up to Google Drive' : 'Connect Google Drive';
     }
-    if (controls) controls.hidden = !configured;
+    // Disconnect / list / auto-daily only after a successful OAuth token.
+    if (controls) controls.hidden = !connected;
     if (!configured) {
       if (status) {
         status.hidden = true;
@@ -19199,20 +19218,41 @@
       }
       return;
     }
-    if (status) status.hidden = false;
     if (!Cloud) return;
     const cloudPrefs = Cloud.readPrefs();
     if (autoDaily) autoDaily.checked = !!cloudPrefs.autoDailyDrive;
     if (status) {
+      status.hidden = false;
       const account = cloudPrefs.driveAccountLabel ? `Connected as ${cloudPrefs.driveAccountLabel}. ` : '';
-      if (cloudPrefs.lastDriveBackupAt) {
+      if (!connected) {
+        status.textContent = 'Google Drive uses a short-lived browser token (drive.file). Connect to authorize this browser.';
+      } else if (cloudPrefs.lastDriveBackupAt) {
         const when = new Date(cloudPrefs.lastDriveBackupAt);
         status.textContent = `${account}Last Google Drive backup: ${Number.isNaN(when.getTime()) ? cloudPrefs.lastDriveBackupAt : when.toLocaleString()}`;
       } else {
-        status.textContent = cloudPrefs.driveConnected
-          ? `${account}Google Drive connected — no backup uploaded yet.`
-          : `${account}Google Drive uses a short-lived browser token (drive.file). Nothing is stored on our server.`;
+        status.textContent = `${account}Google Drive connected — no backup uploaded yet.`;
       }
+    }
+  }
+
+  async function connectGoogleDrive() {
+    const Cloud = window.NotesCloudBackup;
+    syncCloudProviderKeysFromPrefs();
+    if (!Cloud?.isGoogleConfigured?.()) {
+      toast('Google Drive is not set up yet — add your own Client ID', true);
+      return;
+    }
+    setGoogleKeyError('');
+    try {
+      await Cloud.requestAccessToken({ prompt: '' });
+      refreshGoogleDriveBackupUi();
+      toast('Google Drive connected');
+    } catch (err) {
+      try { await Cloud.disconnectGoogle?.(); } catch (e) { /* ignore */ }
+      const msg = err?.message || 'Google sign-in didn’t complete. Check your Client ID and try again.';
+      setGoogleKeyError(msg);
+      refreshGoogleDriveBackupUi();
+      throw err;
     }
   }
 
@@ -19221,6 +19261,10 @@
     syncCloudProviderKeysFromPrefs();
     if (!Cloud?.isGoogleConfigured?.()) {
       toast('Google Drive is not set up yet — add your own Client ID', true);
+      return;
+    }
+    if (!isGoogleDriveConnected(Cloud)) {
+      await connectGoogleDrive();
       return;
     }
     await runFileDownloadTask({
@@ -19245,7 +19289,8 @@
     if (btn?.disabled) return;
     if (btn) btn.disabled = true;
     try {
-      await runGoogleDriveBackup();
+      if (!isGoogleDriveConnected()) await connectGoogleDrive();
+      else await runGoogleDriveBackup();
     } catch (err) {
       toast(err.message || 'Google Drive backup failed', true);
     } finally {
@@ -19399,6 +19444,7 @@
     const keyConfigured = document.getElementById('dropbox-key-configured');
     const keyRemove = document.getElementById('btn-dropbox-key-remove');
     const configured = !!(Cloud && Cloud.isDropboxConfigured && Cloud.isDropboxConfigured());
+    const connected = configured && isDropboxConnected(Cloud);
     const source = Cloud?.dropboxKeySource?.() || '';
     const hasUserKey = !!String(prefs.dropboxAppKey || '').trim();
     if (keyInput && document.activeElement !== keyInput) {
@@ -19424,8 +19470,10 @@
     if (dropboxBtn) {
       dropboxBtn.disabled = !configured;
       dropboxBtn.title = configured ? '' : 'Not set up yet';
+      dropboxBtn.textContent = connected ? 'Back up to Dropbox' : 'Connect Dropbox';
     }
-    if (controls) controls.hidden = !configured;
+    // Disconnect / list / auto-daily only after a successful OAuth token.
+    if (controls) controls.hidden = !connected;
     if (!configured) {
       if (status) {
         status.hidden = true;
@@ -19433,20 +19481,62 @@
       }
       return;
     }
-    if (status) status.hidden = false;
     if (!Cloud) return;
     const cloudPrefs = Cloud.readPrefs();
     if (autoDaily) autoDaily.checked = !!cloudPrefs.autoDailyDropbox;
     if (status) {
+      status.hidden = false;
       const account = cloudPrefs.dropboxAccountLabel ? `Connected as ${cloudPrefs.dropboxAccountLabel}. ` : '';
-      if (cloudPrefs.lastDropboxBackupAt) {
+      if (!connected) {
+        status.textContent = 'Dropbox uses OAuth 2 PKCE in the browser (App folder). Connect to authorize this browser.';
+      } else if (cloudPrefs.lastDropboxBackupAt) {
         const when = new Date(cloudPrefs.lastDropboxBackupAt);
         status.textContent = `${account}Last Dropbox backup: ${Number.isNaN(when.getTime()) ? cloudPrefs.lastDropboxBackupAt : when.toLocaleString()}`;
       } else {
-        status.textContent = cloudPrefs.dropboxConnected
-          ? `${account}Dropbox connected — no backup uploaded yet.`
-          : `${account}Dropbox uses OAuth 2 PKCE in the browser (App folder). Nothing is stored on our server.`;
+        status.textContent = `${account}Dropbox connected — no backup uploaded yet.`;
       }
+    }
+  }
+
+  function mapDropboxAuthError(err) {
+    const raw = String(err?.message || err || '');
+    if (/popup/i.test(raw) && /block/i.test(raw)) {
+      return 'Popup was blocked — allow popups for deeperguard.com.';
+    }
+    if (/cancel/i.test(raw)) {
+      return 'Dropbox sign-in didn’t complete. Check your App key and try again.';
+    }
+    if (/invalid|unknown.?client|not configured|10–25|10-25/i.test(raw)) {
+      return 'Dropbox sign-in didn’t complete. Check your App key and try again.';
+    }
+    if (/didn’t complete|did not complete|sign-in/i.test(raw)) {
+      return 'Dropbox sign-in didn’t complete. Check your App key and try again.';
+    }
+    return raw || 'Dropbox sign-in didn’t complete. Check your App key and try again.';
+  }
+
+  async function connectDropbox() {
+    const Cloud = window.NotesCloudBackup;
+    syncCloudProviderKeysFromPrefs();
+    if (!Cloud?.isDropboxConfigured?.()) {
+      toast('Dropbox is not set up yet — add your own App key', true);
+      return;
+    }
+    setDropboxKeyError('');
+    try {
+      await Cloud.beginDropboxOAuth({ pending: 'connect' });
+      const token = await Cloud.ensureDropboxToken({ interactive: false });
+      if (!token) throw new Error('Dropbox sign-in did not complete');
+      refreshDropboxBackupUi();
+      toast('Dropbox connected');
+    } catch (err) {
+      try { await Cloud.disconnectDropbox?.(); } catch (e) { /* ignore */ }
+      const msg = mapDropboxAuthError(err);
+      setDropboxKeyError(msg);
+      refreshDropboxBackupUi();
+      const wrapped = new Error(msg);
+      wrapped.cause = err;
+      throw wrapped;
     }
   }
 
@@ -19457,9 +19547,13 @@
       toast('Dropbox is not set up yet — add your own App key', true);
       return;
     }
+    if (!isDropboxConnected(Cloud)) {
+      await connectDropbox();
+      return;
+    }
     let token = await Cloud.ensureDropboxToken({ interactive: false });
     if (!token) {
-      // Popup OAuth — vault tab stays put. Continues after success.
+      // Token expired — re-auth via popup, then upload.
       await Cloud.beginDropboxOAuth({ pending: 'backup' });
       token = await Cloud.ensureDropboxToken({ interactive: false });
       if (!token) throw new Error('Dropbox sign-in did not complete');
@@ -19484,9 +19578,12 @@
     if (btn?.disabled) return;
     if (btn) btn.disabled = true;
     try {
-      await runDropboxBackup();
+      if (!isDropboxConnected()) await connectDropbox();
+      else await runDropboxBackup();
     } catch (err) {
-      toast(err.message || 'Dropbox backup failed', true);
+      const msg = mapDropboxAuthError(err);
+      setDropboxKeyError(msg);
+      toast(msg, true);
     } finally {
       if (btn) btn.disabled = !window.NotesCloudBackup?.isDropboxConfigured?.();
       refreshDropboxBackupUi();
@@ -19603,7 +19700,11 @@
     } catch (err) {
       list.innerHTML = '';
       list.hidden = true;
-      toast(err.message || 'Could not list Dropbox backups', true);
+      const msg = mapDropboxAuthError(err);
+      setDropboxKeyError(msg);
+      try { await Cloud.disconnectDropbox?.(); } catch (e) { /* ignore */ }
+      refreshDropboxBackupUi();
+      toast(msg, true);
     }
   });
 
