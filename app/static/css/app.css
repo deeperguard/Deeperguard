@@ -3100,6 +3100,11 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   background: var(--bg-hover);
   box-shadow: 0 8px 24px rgba(0,0,0,.35);
 }
+/* Lift toasts above bottom-sheet dialog footers (Manage tags Done, confirms). */
+html.toast-above-dialog #toast {
+  bottom: calc(112px + var(--safe-bottom));
+  z-index: 110;
+}
 /* 2FA reserves a slot under the code list so a toast never covers an OTP. */
 html.totp-toast-open .totp-pane {
   padding-bottom: calc(56px + var(--safe-bottom));
@@ -3114,6 +3119,9 @@ html.totp-toast-open #toast {
   padding: 8px 12px;
   font-size: 13px;
   justify-content: center;
+}
+html.totp-toast-open.toast-above-dialog #toast {
+  bottom: calc(112px + var(--safe-bottom));
 }
 .toast.error { border-color: var(--danger); color: var(--danger); }
 .scan-backdrop {
