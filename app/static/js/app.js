@@ -2038,12 +2038,22 @@
     /* removed — banner only */
   }
 
-  function fetchHealthJson() {
-    // Probe /api/health through the shared boot cache (one request, then reuse).
-    if (typeof window.__notesFetchHealth === 'function') return window.__notesFetchHealth();
-    return fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
+  function fetchHealthJson({ force = false, timeoutMs = 1500 } = {}) {
+    // Short timeout + optional force so online recovery never waits on a hung
+    // or cached-failed probe from the offline window.
+    if (typeof window.__notesFetchHealth === 'function') {
+      return window.__notesFetchHealth(force, timeoutMs);
+    }
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch (err) { /* ignore */ } }, timeoutMs) : 0;
+    return fetch('/api/health', {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: ctrl?.signal,
+    })
       .then((res) => (res.ok ? res.json() : null))
-      .catch(() => null);
+      .catch(() => null)
+      .finally(() => { if (timer) clearTimeout(timer); });
   }
 
   function flushPendingUpdatePrompt() {
@@ -7437,7 +7447,12 @@
       });
     });
     host.querySelectorAll('[data-folder-note]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (event) => {
+        if (typeof shouldSwallowNoteOpen === 'function' && shouldSwallowNoteOpen()) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         const folderId = btn.closest('[data-folder]')?.dataset.folder || '';
         if (folderId) currentFolder = folderId;
         openNote(btn.dataset.folderNote);
@@ -7924,11 +7939,11 @@
     });
   }
 
-  async function probeNetwork({ syncOnRecovery = false } = {}) {
+  async function probeNetwork({ syncOnRecovery = false, forceHealth = false } = {}) {
     // iOS LAN-only Wi‑Fi may report navigator.onLine=false while homelab is reachable.
     // Cellular without WireGuard cannot reach 192.168.x — expect failures there.
     try {
-      const data = await fetchHealthJson();
+      const data = await fetchHealthJson({ force: forceHealth, timeoutMs: 1500 });
       if (!data || !data.ok) throw new Error('health failed');
       if (data.build) applyServerBuildStatus(data.build);
       const wasOffline = !networkReachable;
@@ -7939,6 +7954,12 @@
         NotesStore.emitSync('idle', '');
         if (syncOnRecovery && vaultReady) {
           const pending = NotesStore.state?.dirty?.size || 0;
+          try {
+            console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
+              reason: 'online-recovery',
+              pending,
+            });
+          } catch (err) { /* ignore */ }
           syncNow({ quiet: true, force: pending > 0 });
           resumePendingOcr().catch(() => {});
           listPreviewBackfillFailed.clear();
@@ -8024,11 +8045,13 @@
 
   function scheduleOnlineRecovery(attempt = 0) {
     clearTimeout(onlineRecoveryTimer);
-    const delays = [500, 1000, 2000, 4000];
+    // First probe immediately (0ms); then 0.5/1/2/4s. Never blocked behind a
+    // hung offline fetch — those are aborted when recovery starts.
+    const delays = [0, 500, 1000, 2000, 4000];
     if (attempt === 0) {
-      // Never wait on the 10s offline-watch tick once recovery starts.
       stopOfflineWatch();
       onlineRecoveryGeneration += 1;
+      NotesStore.abortInflightApi?.('online-recovery');
     }
     const generation = onlineRecoveryGeneration;
     if (attempt >= delays.length) {
@@ -8038,10 +8061,19 @@
     onlineRecoveryTimer = setTimeout(() => {
       if (generation !== onlineRecoveryGeneration) return;
       // Always probe — even when dirty is empty — so the Offline caption clears.
-      probeNetwork({ syncOnRecovery: true }).then((ok) => {
+      probeNetwork({ syncOnRecovery: true, forceHealth: true }).then((ok) => {
         if (generation !== onlineRecoveryGeneration) return ok;
         const stillDirty = NotesStore.state?.dirty?.size || 0;
-        if (ok && stillDirty > 0) return syncNow({ quiet: true, force: true });
+        if (ok && stillDirty > 0) {
+          try {
+            console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
+              reason: 'online-recovery-retry',
+              attempt,
+              pending: stillDirty,
+            });
+          } catch (err) { /* ignore */ }
+          return syncNow({ quiet: true, force: true });
+        }
         return ok;
       }).finally(() => {
         if (generation !== onlineRecoveryGeneration) return;
@@ -12312,11 +12344,42 @@
         attachments: next.attachments || [],
       },
     };
-    // Empty drafts with no user content are removed (including when content is
-    // unchanged). Notes that ever had user content stay even if cleared.
-    if (!live.length && NotesSearch.noteMayHardDiscard?.(discardProbe)) {
+    // Empty drafts with no user content are removed. Ever-saved notes must
+    // persist as empty Untitled when the user clears title+body — never discard
+    // and never skip the write (sameNoteContent maps '' ↔ 'Untitled').
+    const everSaved = !!NotesSearch.noteHasBeenSaved?.(existing);
+    if (!live.length && !everSaved && NotesSearch.noteMayHardDiscard?.(discardProbe)) {
       discardEmptyDraftNote(currentId);
       return;
+    }
+    const hasUserText = !!(
+      String(next.content || '').trim()
+      || (String(next.title || '').trim() && !NotesSearch.isPlaceholderTitle?.(next.title))
+    );
+    if (hasUserText || everSaved) next.user_edited = true;
+    if (everSaved && !live.length
+      && !String(next.content || '').trim()
+      && NotesSearch.isPlaceholderTitle?.(next.title || '')) {
+      next.title = '';
+      next.title_manual = false;
+      next.user_edited = true;
+      const prevBody = String(note.content?.content || '');
+      const prevTitle = String(note.content?.title || '').trim();
+      if (prevBody || (prevTitle && !NotesSearch.isPlaceholderTitle?.(prevTitle))
+        || note.content?.user_edited) {
+        NotesStore.upsert(currentId, next, { recordRevision: true });
+        const savedNote = NotesStore.get(currentId);
+        captureEditorBaseline(savedNote, false);
+        updateNoteMeta(savedNote);
+        renderHistory(savedNote);
+        const row = ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"]`);
+        const rowTitle = row?.querySelector('h3');
+        if (rowTitle) {
+          rowTitle.textContent = 'Untitled';
+          rowTitle.classList.add('note-title-placeholder');
+        }
+        return;
+      }
     }
     if (NotesSearch.sameNoteContent(note.content, next)) {
       updateNoteMeta(note);
@@ -16396,6 +16459,20 @@
     if (currentId) syncTagBarShell(NotesStore.get(currentId));
     layoutFindBarOverDocViewer();
   });
+  // Swallow the click that follows an outside-tap close so a note row under
+  // the finger does not open on the same gesture.
+  let swallowNoteOpenUntil = 0;
+  function swallowOverlayOutsideTap(event) {
+    swallowNoteOpenUntil = Date.now() + 450;
+    try {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+    } catch (err) { /* ignore */ }
+  }
+  function shouldSwallowNoteOpen() {
+    return Date.now() < swallowNoteOpenUntil;
+  }
   // Phone Tags/Folders overlay: tap/click outside closes and returns focus to the chip.
   document.addEventListener('pointerdown', (event) => {
     if (!compactLayoutActive() || document.body.classList.contains('nav-drawer-open')) return;
@@ -16411,6 +16488,17 @@
       return;
     }
     closePhoneBrowseOverlay({ focusChip: true });
+    // Outside tap only dismisses — do not open the note under the finger.
+    swallowOverlayOutsideTap(event);
+  }, true);
+  document.addEventListener('click', (event) => {
+    if (!shouldSwallowNoteOpen()) return;
+    if (!event.target?.closest?.('.note-row, .note-item, [data-folder-note]')) return;
+    try {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+    } catch (err) { /* ignore */ }
   }, true);
   function hideFolderComposer() {
     const composer = document.getElementById('folder-composer');
@@ -17512,6 +17600,10 @@
       if (suppressClick) {
         event.preventDefault();
         suppressClick = false;
+        return;
+      }
+      if (typeof shouldSwallowNoteOpen === 'function' && shouldSwallowNoteOpen()) {
+        event.preventDefault();
         return;
       }
       if (next.classList.contains('open')) {
@@ -19863,20 +19955,38 @@
     }
     onAppForeground('pageshow');
   });
-  window.addEventListener('online', () => {
-    // Drop the 10s fallback immediately — recovery chain owns reconnect.
+  function onNetworkOnline(source = 'online') {
+    try {
+      console.debug('[notes-sync]', new Date().toISOString(), 'online-event', {
+        source,
+        navigatorOnline: typeof navigator !== 'undefined' ? navigator.onLine : null,
+      });
+    } catch (err) { /* ignore */ }
+    // Drop the 10s fallback + abort hung offline fetches immediately.
     stopOfflineWatch();
+    NotesStore.abortInflightApi?.(source);
     onAppForeground('online');
     // Restart the backoff chain even if a probe is already in flight.
     scheduleOnlineRecovery(0);
     if ((NotesStore.state?.dirty?.size || 0) > 0) syncNow({ quiet: true, force: true });
-  });
+  }
+  window.addEventListener('online', () => onNetworkOnline('online'));
+  try {
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (conn && typeof conn.addEventListener === 'function') {
+      conn.addEventListener('change', () => {
+        if (typeof navigator !== 'undefined' && navigator.onLine && !networkReachable) {
+          onNetworkOnline('connection-change');
+        }
+      });
+    }
+  } catch (err) { /* ignore */ }
   window.addEventListener('offline', () => {
     networkReachable = false;
     NotesStore.emitSync('offline', 'Offline');
     updateNetworkStatusBanner();
     startOfflineWatch();
-    probeNetwork().then((ok) => {
+    probeNetwork({ forceHealth: true }).then((ok) => {
       if (!ok) {
         networkReachable = false;
         NotesStore.emitSync('offline', 'Offline');

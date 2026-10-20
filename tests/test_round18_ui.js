@@ -61,11 +61,11 @@ assert.ok(html.includes("sessionStorage.getItem('notes_just_registered') === '1'
 
 // 4. Signed-out /app shares one health read instead of a fan-out.
 assert.ok(html.includes('window.__notesFetchHealth'));
-assert.ok(appJs.includes('function fetchHealthJson()'));
-assert.ok(appJs.includes('return window.__notesFetchHealth()'));
+assert.ok(appJs.includes('function fetchHealthJson('));
+assert.ok(appJs.includes('window.__notesFetchHealth('));
 const bootAt = appJs.indexOf('async function boot(');
 const boot = appJs.slice(bootAt, bootAt + 2200);
-assert.ok(boot.includes('fetchHealthJson()'));
+assert.ok(boot.includes('fetchHealthJson('));
 assert.ok(!boot.includes("fetch('/api/health'"));
 
 console.log('ok');

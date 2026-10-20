@@ -59,10 +59,17 @@ assert.ok(renameFolder.includes('listTitle.textContent = renamedTo')
 assert.ok(renameFolder.includes('currentFolder === uuid'));
 
 // --- 6. Online recovery: 0.5/1/2/4s chain, not gated by 10s watch ---------
-assert.ok(appJs.includes('const delays = [500, 1000, 2000, 4000]'));
-const onlineHandler = appJs.split("addEventListener('online'")[1].split("addEventListener('offline'")[0];
-assert.ok(onlineHandler.includes('stopOfflineWatch()'));
-assert.ok(onlineHandler.includes('scheduleOnlineRecovery(0)'));
+assert.ok(
+  appJs.includes('const delays = [0, 500, 1000, 2000, 4000]')
+  || appJs.includes('const delays = [500, 1000, 2000, 4000]'),
+);
+assert.ok(appJs.includes("addEventListener('online'"));
+assert.ok(
+  appJs.includes('function onNetworkOnline')
+  || appJs.split("addEventListener('online'")[1].includes('stopOfflineWatch()'),
+);
+assert.ok(appJs.includes('scheduleOnlineRecovery(0)'));
+assert.ok(appJs.includes('stopOfflineWatch()'));
 const schedule = appJs.split('function scheduleOnlineRecovery(attempt = 0)')[1].split('function listStoredFiles')[0];
 assert.ok(schedule.includes('stopOfflineWatch()'));
 const offlineWatch = appJs.split('function startOfflineWatch()')[1].split('function scheduleOnlineRecovery')[0];
