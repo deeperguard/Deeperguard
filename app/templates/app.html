@@ -1658,22 +1658,25 @@
           </div>
           <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not set up yet — add your own key</p>
           <div id="google-drive-configure" class="settings-nested stack cloud-provider-configure">
+            <p id="google-key-configured" class="settings-hint cloud-configured-badge" hidden>Configured ✓</p>
             <label class="settings-row stacked">Google OAuth Client ID
               <input id="google-oauth-client-id-input" type="text" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com" inputmode="url">
             </label>
+            <p id="google-key-error" class="settings-hint settings-field-error" role="alert" hidden></p>
             <div class="settings-actions">
               <button type="button" id="btn-google-key-save" class="btn">Save</button>
-              <button type="button" id="btn-google-key-remove" class="btn ghost">Remove</button>
+              <button type="button" id="btn-google-key-remove" class="btn ghost" hidden>Remove</button>
             </div>
             <p id="google-key-status" class="settings-hint" role="status" aria-live="polite"></p>
             <details class="cloud-howto">
               <summary>How to get this</summary>
               <ol class="settings-hint cloud-howto-steps">
                 <li>Open the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a> and create (or select) a project.</li>
+                <li>Configure the <strong>OAuth consent screen</strong> first (Google Auth Platform): app name, support email, Audience → <strong>External</strong>, and add yourself as a test user. Do this before creating a client.</li>
                 <li>Enable the <strong>Google Drive API</strong> for that project.</li>
-                <li>Create an OAuth client of type <strong>Web application</strong>.</li>
+                <li>Create an OAuth client of type <strong>Web application</strong>. Leave redirect URIs empty.</li>
                 <li>Add authorized JavaScript origin: <code>https://www.deeperguard.com</code></li>
-                <li>Use scope <code>drive.file</code> (the app requests only that). If the consent screen is in Testing, add yourself as a test user.</li>
+                <li>The app requests only the <code>drive.file</code> scope. If the consent screen is in Testing, you must be listed as a test user.</li>
                 <li>Copy the Client ID (ends with <code>.apps.googleusercontent.com</code>). No client secret is used.</li>
               </ol>
             </details>
@@ -1694,12 +1697,14 @@
           </div>
           <p id="dropbox-not-configured" class="settings-hint"{% if dropbox_configured %} hidden{% endif %}>Dropbox: Not set up yet — add your own key</p>
           <div id="dropbox-configure" class="settings-nested stack cloud-provider-configure">
+            <p id="dropbox-key-configured" class="settings-hint cloud-configured-badge" hidden>Configured ✓</p>
             <label class="settings-row stacked">Dropbox App key
               <input id="dropbox-app-key-input" type="text" autocomplete="off" spellcheck="false" placeholder="App key (not the secret)" inputmode="text">
             </label>
+            <p id="dropbox-key-error" class="settings-hint settings-field-error" role="alert" hidden></p>
             <div class="settings-actions">
               <button type="button" id="btn-dropbox-key-save" class="btn">Save</button>
-              <button type="button" id="btn-dropbox-key-remove" class="btn ghost">Remove</button>
+              <button type="button" id="btn-dropbox-key-remove" class="btn ghost" hidden>Remove</button>
             </div>
             <p id="dropbox-key-status" class="settings-hint" role="status" aria-live="polite"></p>
             <details class="cloud-howto">
@@ -1708,7 +1713,7 @@
                 <li>Open the <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">Dropbox App Console</a> and create an app.</li>
                 <li>Choose <strong>Scoped access</strong> and <strong>App folder</strong>.</li>
                 <li>Add redirect URI: <code>https://www.deeperguard.com/app</code></li>
-                <li>Permissions: <code>files.content.write</code> and <code>files.content.read</code>.</li>
+                <li>On the <strong>Permissions</strong> tab, tick <code>files.content.write</code> and <code>files.content.read</code>, then click <strong>Submit</strong> before first use (changing permissions later requires reconnecting).</li>
                 <li>Copy the <strong>App key</strong> only — never the app secret (browser PKCE does not use it).</li>
               </ol>
             </details>

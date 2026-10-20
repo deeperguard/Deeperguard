@@ -4860,6 +4860,14 @@ html[data-theme="light"] .doc-search-hit {
 .cloud-howto-steps code {
   word-break: break-all;
 }
+.cloud-configured-badge {
+  color: var(--accent);
+  font-weight: 600;
+}
+.settings-field-error {
+  color: var(--danger);
+  margin: 0;
+}
 .settings-nested { padding: 0 14px 14px; }
 .settings-advanced { margin-top: 12px; }
 .settings-advanced > summary {
