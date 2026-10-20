@@ -46,9 +46,11 @@ function installHealthOwner({ fetchImpl, nowRef }) {
     __notesHealthGen: 0,
   };
   // Mirror app.html owner (keep in sync with templates/app.html).
-  window.__notesResetHealthBackoff = function () {
+  window.__notesResetHealthBackoff = function (opts) {
     window.__notesHealthBackoffMs = 0;
     window.__notesHealthNextAt = 0;
+    const doAbort = !opts || opts.abort !== false;
+    if (!doAbort) return;
     window.__notesHealthGen = (window.__notesHealthGen || 0) + 1;
     const old = window.__notesHealthCtrl;
     window.__notesHealthCtrl = null;
@@ -172,7 +174,9 @@ async function testReconnectSyncWithin1s() {
   online = true;
   const t0 = nowRef.t;
   let syncAt = null;
-  window.__notesResetHealthBackoff(); // online event
+  // Passive online opens the gate; recovery does one abort+probe.
+  window.__notesResetHealthBackoff({ abort: false });
+  window.__notesResetHealthBackoff(); // recovery abort once
   const data = await window.__notesFetchHealth(true, 1500);
   assert.ok(data && data.ok, 'reconnect probe must succeed');
   syncAt = nowRef.t - t0;

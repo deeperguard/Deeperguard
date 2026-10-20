@@ -8091,6 +8091,8 @@
     offlineWatchTimer = setTimeout(tick, offlineWatchDelayMs);
   }
 
+  let lastRecoveryAbortAt = 0;
+
   function scheduleOnlineRecovery(attempt = 0) {
     clearTimeout(onlineRecoveryTimer);
     // First probe immediately (0ms); then 0.5/1/2/4s. Health probes share one
@@ -8100,8 +8102,16 @@
       stopOfflineWatch();
       onlineRecoveryActive = true;
       onlineRecoveryGeneration += 1;
-      try { window.__notesResetHealthBackoff?.(); } catch (err) { /* ignore */ }
-      NotesStore.abortInflightApi?.('online-recovery');
+      // One abort+health-reset per recovery wave. Re-entrant online events
+      // within 500ms only reopen the backoff gate (no second abort).
+      const now = Date.now();
+      if (now - lastRecoveryAbortAt > 500) {
+        lastRecoveryAbortAt = now;
+        try { window.__notesResetHealthBackoff?.(); } catch (err) { /* ignore */ }
+        NotesStore.abortInflightApi?.('online-recovery');
+      } else {
+        try { window.__notesResetHealthBackoff?.({ abort: false }); } catch (err) { /* ignore */ }
+      }
     }
     const generation = onlineRecoveryGeneration;
     if (attempt >= delays.length) {
@@ -19798,6 +19808,10 @@
             NotesStore.logSync?.('sync-aborted', { reason: 'locked', quiet: !!quiet });
             return;
           }
+          if (err?.code === 'aborted') {
+            NotesStore.logSync?.('sync-aborted', { reason: err.reason || 'aborted', quiet: !!quiet });
+            return;
+          }
           if (isLoginRequiredError(err)) {
             showExpiredSessionBanner();
             return;
@@ -19917,6 +19931,22 @@
     if (reason !== 'online' && now - lastForegroundAt < 2000) return;
     lastForegroundAt = now;
     checkAppUpdate().catch(() => {});
+    // Online recovery owns health probes + sync. Foreground-on-online only does
+    // session bookkeeping so we don't abort a fresh probe mid-flight.
+    if (reason === 'online') {
+      scheduleNetworkProbe();
+      if (!vaultReady || ignoreNextForeground) return;
+      if (NotesStore.isUnlocked()) {
+        NotesStore.loadAccount()
+          .then((account) => checkRemoteVaultPasswordChange(account))
+          .catch((err) => {
+            if (isLoginRequiredError(err)) showExpiredSessionBanner();
+          });
+      }
+      if (!sessionExpiredHold) scheduleChangePoll();
+      ensureServerSession().catch(() => {});
+      return;
+    }
     probeNetwork({ syncOnRecovery: true }).catch(() => {});
     scheduleNetworkProbe();
     if (!vaultReady || ignoreNextForeground) return;
@@ -20040,14 +20070,11 @@
         navigatorOnline: typeof navigator !== 'undefined' ? navigator.onLine : null,
       });
     } catch (err) { /* ignore */ }
-    // Drop the offline-watch fallback + abort hung offline fetches immediately.
+    // Single recovery owner: one health reset+abort inside scheduleOnlineRecovery(0).
+    // Do not reset/abort here — that canceled fresh probes and flooded api-abort logs.
     stopOfflineWatch();
-    try { window.__notesResetHealthBackoff?.(); } catch (err) { /* ignore */ }
-    NotesStore.abortInflightApi?.(source);
-    onAppForeground('online');
-    // Restart the backoff chain even if a probe is already in flight.
     scheduleOnlineRecovery(0);
-    if ((NotesStore.state?.dirty?.size || 0) > 0) syncNow({ quiet: true, force: true });
+    onAppForeground('online');
   }
   window.addEventListener('online', () => onNetworkOnline('online'));
   try {
@@ -20070,8 +20097,9 @@
     networkReachable = false;
     NotesStore.emitSync('offline', 'Offline');
     updateNetworkStatusBanner();
-    // Do not force an immediate health probe here — that spams console errors
-    // while DevTools Offline is on. The backoff watch + 'online' event recover.
+    // Cancel hung API work so it does not sit for 8s → "Request timed out".
+    // Do not start sync or force a health probe on the offline transition.
+    NotesStore.abortInflightApi?.('offline');
     startOfflineWatch();
   });
   // Block accidental native form submits (iOS autofill / password managers).
