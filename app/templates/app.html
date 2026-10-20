@@ -114,45 +114,95 @@
           reveal();
         }
       };
-      // Share a successful health read briefly. Never cache failures — offline
-      // nulls used to stick for 8s and delay online recovery past 5s.
+      // ONE health-probe owner for the whole page. Concurrent callers share the
+      // in-flight promise (never abort each other). Failures apply a global
+      // backoff 2s → 5s → 10s so DevTools Offline cannot spawn hundreds of GETs.
+      // Only __notesResetHealthBackoff (online / success handoff) may drop a
+      // hung probe so reconnect stays fast (~0.4s).
+      window.__notesHealthBackoffMs = 0;
+      window.__notesHealthNextAt = 0;
+      window.__notesHealthOk = false;
+      window.__notesHealthAt = 0;
+      window.__notesHealthPromise = null;
+      window.__notesHealthInflight = null;
+      window.__notesHealthCtrl = null;
+      window.__notesHealthGen = 0;
+      window.__notesResetHealthBackoff = function () {
+        window.__notesHealthBackoffMs = 0;
+        window.__notesHealthNextAt = 0;
+        window.__notesHealthGen = (window.__notesHealthGen || 0) + 1;
+        // Drop hung offline probe so the next caller can start fresh.
+        var old = window.__notesHealthCtrl;
+        window.__notesHealthCtrl = null;
+        window.__notesHealthInflight = null;
+        if (old) { try { old.abort(); } catch (e) {} }
+      };
       window.__notesFetchHealth = function (force, timeoutMs) {
         var now = Date.now();
+        // Share any in-flight probe — concurrent callers never abort it.
+        if (window.__notesHealthInflight) return window.__notesHealthInflight;
+        // Fresh success cache (skipped when force asks for a re-check).
         var ttl = 1500;
         if (!force && window.__notesHealthOk && window.__notesHealthPromise
           && (now - (window.__notesHealthAt || 0)) < ttl) {
           return window.__notesHealthPromise;
         }
-        window.__notesHealthAt = now;
-        window.__notesHealthOk = false;
+        // Global failure backoff — at most one real request per window for
+        // every caller (boot, sync, progress UI, online-recovery).
+        if (window.__notesHealthNextAt && now < window.__notesHealthNextAt) {
+          return Promise.resolve(null);
+        }
         var ms = Math.max(500, Number(timeoutMs) || 1500);
         var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
         var timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, ms) : null;
-        if (window.__notesHealthCtrl) {
-          try { window.__notesHealthCtrl.abort(); } catch (e) {}
-        }
+        var gen = window.__notesHealthGen || 0;
+        window.__notesHealthAt = now;
+        window.__notesHealthOk = false;
         window.__notesHealthCtrl = ctrl;
-        window.__notesHealthPromise = fetch('/api/health', {
+        var inflight = fetch('/api/health', {
           cache: 'no-store',
           credentials: 'same-origin',
           signal: ctrl ? ctrl.signal : undefined,
         })
           .then(function (res) { return res.ok ? res.json() : null; })
           .then(function (data) {
-            if (data && data.ok) window.__notesHealthOk = true;
-            else window.__notesHealthPromise = null;
-            return data;
+            if (gen !== (window.__notesHealthGen || 0)) return null;
+            if (data && data.ok) {
+              window.__notesHealthOk = true;
+              window.__notesHealthPromise = Promise.resolve(data);
+              window.__notesHealthBackoffMs = 0;
+              window.__notesHealthNextAt = 0;
+              return data;
+            }
+            var prev = window.__notesHealthBackoffMs || 0;
+            var next = prev < 2000 ? 2000 : (prev < 5000 ? 5000 : 10000);
+            window.__notesHealthBackoffMs = next;
+            window.__notesHealthNextAt = Date.now() + next;
+            window.__notesHealthPromise = null;
+            return null;
           })
           .catch(function () {
+            if (gen !== (window.__notesHealthGen || 0)) return null;
+            var prev = window.__notesHealthBackoffMs || 0;
+            var next = prev < 2000 ? 2000 : (prev < 5000 ? 5000 : 10000);
+            window.__notesHealthBackoffMs = next;
+            window.__notesHealthNextAt = Date.now() + next;
             window.__notesHealthPromise = null;
             return null;
           })
           .finally(function () {
             if (timer) clearTimeout(timer);
+            if (window.__notesHealthInflight === inflight) window.__notesHealthInflight = null;
             if (window.__notesHealthCtrl === ctrl) window.__notesHealthCtrl = null;
           });
-        return window.__notesHealthPromise;
+        window.__notesHealthInflight = inflight;
+        return inflight;
       };
+      try {
+        window.addEventListener('online', function () {
+          window.__notesResetHealthBackoff();
+        });
+      } catch (e) { /* ignore */ }
       var probeHealth = function () {
         window.__notesFetchHealth().then(function (data) {
           if (!data || !data.ok || !data.build || !localBuild) return;
@@ -297,9 +347,12 @@
           sessionStorage.removeItem('notes_unlocked');
           sessionStorage.removeItem('notes_allow_boot_unlock');
         } catch (e) {}
-        fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
-          .then(function (res) {
-            if (!res.ok) throw new Error('offline');
+        (typeof window.__notesResetHealthBackoff === 'function' && window.__notesResetHealthBackoff());
+        (typeof window.__notesFetchHealth === 'function'
+          ? window.__notesFetchHealth(true, 3000)
+          : fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' }).then(function (res) { return res.ok ? res.json() : null; }))
+          .then(function (data) {
+            if (!data || !data.ok) throw new Error('offline');
             var appPath = location.pathname || '/app';
             return fetch(appPath + '?nosync=1', { cache: 'reload', credentials: 'same-origin' });
           })
@@ -427,8 +480,9 @@
           if (banner) banner.hidden = true;
           if (side) side.hidden = true;
           document.body.classList.remove('update-available');
-          fetch('/api/health', { cache: 'no-store', credentials: 'same-origin' })
-            .then(function (res) { return res.ok ? res.json() : null; })
+          (typeof window.__notesFetchHealth === 'function'
+            ? window.__notesFetchHealth()
+            : Promise.resolve(null))
             .then(function (data) {
               if (data && data.build) {
                 try { sessionStorage.setItem('notes_update_dismissed_build', data.build); } catch (e) {}
