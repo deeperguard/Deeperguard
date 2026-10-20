@@ -127,7 +127,7 @@
         window.__notesHealthOk = false;
         var ms = Math.max(500, Number(timeoutMs) || 1500);
         var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        var timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, ms);
+        var timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, ms) : null;
         if (window.__notesHealthCtrl) {
           try { window.__notesHealthCtrl.abort(); } catch (e) {}
         }
