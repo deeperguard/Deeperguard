@@ -11,10 +11,10 @@ const NotesClientOcr = (() => {
   const LIST_PREVIEW_PX = 432;
   const LIST_PREVIEW_QUALITY = 0.92;
   const MAX_LIST_PREVIEW_BYTES = 160 * 1024;
-  const ASSET_VER = '1';
+  const ASSET_VER = '2';
   const TESS_BASE = '/static/js/vendor/tesseract';
-  const PDF_SRC = '/static/js/vendor/pdfjs/pdf.min.js?v=8';
-  const PDF_WORKER = '/static/js/vendor/pdfjs/pdf.worker.min.js?v=8';
+  const PDF_SRC = '/static/js/vendor/pdfjs/pdf.min.mjs?v=10';
+  const PDF_WORKER = '/static/js/vendor/pdfjs/pdf.worker.min.mjs?v=10';
   const JSPDF_SRC = `/static/js/vendor/jspdf/jspdf.umd.min.js?v=${ASSET_VER}`;
   const HEIC_SRC = `/static/js/vendor/heic2any/heic2any.min.js?v=${ASSET_VER}`;
 
@@ -216,9 +216,10 @@ const NotesClientOcr = (() => {
       }
       return globalThis.pdfjsLib;
     }
-    await loadScript(PDF_SRC);
-    const lib = globalThis.pdfjsLib;
+    const mod = await import(PDF_SRC);
+    const lib = mod?.getDocument ? mod : (mod?.default || globalThis.pdfjsLib);
     if (!lib?.getDocument) throw new Error('PDF engine failed to load.');
+    globalThis.pdfjsLib = lib;
     try {
       lib.GlobalWorkerOptions.workerSrc = await resolvePdfWorkerSrc();
     } catch (_) {
@@ -553,7 +554,7 @@ const NotesClientOcr = (() => {
   async function extractPdf(file) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const pdfjs = await ensurePdf();
-    const doc = await pdfjs.getDocument({ data: bytes, useWorkerFetch: false }).promise;
+    const doc = await pdfjs.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false }).promise;
     try {
       const digital = await extractPdfDigital(doc);
       if (digitalPdfReady(digital)) {
@@ -663,7 +664,7 @@ const NotesClientOcr = (() => {
 
   async function pdfFirstPageCanvas(bytes) {
     const pdfjs = await ensurePdf();
-    const doc = await pdfjs.getDocument({ data: bytes, useWorkerFetch: false }).promise;
+    const doc = await pdfjs.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false }).promise;
     try {
       const page = await doc.getPage(1);
       const base = page.getViewport({ scale: 1 });

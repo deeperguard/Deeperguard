@@ -10,8 +10,8 @@ const PRECACHE = [
   '/static/js/vendor/noble-crypto.js',
   '/static/js/vendor/noble-argon2.js',
   // Pinned-version assets (never change per app build — safe in a byte-stable SW).
-  '/static/js/vendor/pdfjs/pdf.min.js?v=8',
-  '/static/js/vendor/pdfjs/pdf.worker.min.js?v=8',
+  '/static/js/vendor/pdfjs/pdf.min.mjs?v=10',
+  '/static/js/vendor/pdfjs/pdf.worker.min.mjs?v=10',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',
 ];
