@@ -10,8 +10,8 @@ const NotesPreview = (() => {
   const MAX_PAGE_DPR = 3;
   const MAX_CANVAS_PIXELS = IS_IOS ? 1800000 : 9000000;
   const MAX_SNAPSHOT_PIXELS = IS_IOS ? 1200000 : 6000000;
-  const PDF_SRC = '/static/js/vendor/pdfjs/pdf.min.js?v=8';
-  const PDF_WORKER = '/static/js/vendor/pdfjs/pdf.worker.min.js?v=8';
+  const PDF_SRC = '/static/js/vendor/pdfjs/pdf.min.mjs?v=10';
+  const PDF_WORKER = '/static/js/vendor/pdfjs/pdf.worker.min.mjs?v=10';
   let workerBlobUrl = '';
 
   function loadScript(src) {
@@ -59,9 +59,10 @@ const NotesPreview = (() => {
       }
       return globalThis.pdfjsLib;
     }
-    await loadScript(PDF_SRC);
-    const lib = globalThis.pdfjsLib;
+    const mod = await import(PDF_SRC);
+    const lib = mod?.getDocument ? mod : (mod?.default || globalThis.pdfjsLib);
     if (!lib || !lib.getDocument) throw new Error('PDF engine failed to load. Open the app once online.');
+    globalThis.pdfjsLib = lib;
     try {
       lib.GlobalWorkerOptions.workerSrc = await resolveWorkerSrc();
     } catch (err) {
@@ -172,7 +173,7 @@ const NotesPreview = (() => {
     const offline = preferDisableWorker();
     if (!offline) {
       try {
-        return await lib.getDocument({ data, useWorkerFetch: false }).promise;
+        return await lib.getDocument({ data, useWorkerFetch: false, isEvalSupported: false }).promise;
       } catch (err) {
         /* fall through to main-thread rendering */
       }
@@ -182,6 +183,7 @@ const NotesPreview = (() => {
         data: data.slice(),
         disableWorker: true,
         useWorkerFetch: false,
+        isEvalSupported: false,
       }).promise;
     } catch (err) {
       throw new Error('PDF preview needs the local PDF engine. Open the app once online.');

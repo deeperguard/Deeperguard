@@ -54,7 +54,63 @@
     }
   }
 
-  async function generateX(saltHex, identity, password) {
+  const SRP_KDF_V1 = 1;
+  const SRP_KDF_V2 = 2;
+  // Lighter than vault Argon2id (64 MiB) so login stays ~<1s on iPhone.
+  const SRP_ARGON2_PARAMS = { t: 2, m: 19456, p: 1, dkLen: 32 };
+
+  function normalizeSrpKdfVersion(value) {
+    const version = Number(value);
+    return version >= SRP_KDF_V2 ? SRP_KDF_V2 : SRP_KDF_V1;
+  }
+
+  function hexToBytes(hex) {
+    const text = String(hex || '').toLowerCase();
+    if (!text || text.length % 2 !== 0 || /[^0-9a-f]/.test(text)) return null;
+    const out = new Uint8Array(text.length / 2);
+    for (let i = 0; i < out.length; i += 1) {
+      out[i] = parseInt(text.slice(i * 2, i * 2 + 2), 16);
+    }
+    return out;
+  }
+
+  async function srpSaltBytes(saltHex) {
+    const fromHex = hexToBytes(saltHex);
+    if (fromHex && fromHex.length >= 8) return fromHex;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(saltHex || '')));
+    return new Uint8Array(digest);
+  }
+
+  async function hkdfSha256(ikm, salt, info, length) {
+    const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt, info: new TextEncoder().encode(info) },
+      key,
+      length * 8,
+    );
+    return new Uint8Array(bits);
+  }
+
+  async function generateX(saltHex, identity, password, kdfVersion = SRP_KDF_V1) {
+    const version = normalizeSrpKdfVersion(kdfVersion);
+    if (version === SRP_KDF_V2) {
+      const argon2 = globalThis.NobleArgon2;
+      if (!argon2 || !argon2.argon2idAsync) {
+        throw new Error('Argon2 library failed to load. Refresh the page.');
+      }
+      const salt = await srpSaltBytes(saltHex);
+      const pwd = new TextEncoder().encode(String(password || ''));
+      const stretched = await argon2.argon2idAsync(pwd, salt, SRP_ARGON2_PARAMS);
+      const material = await hkdfSha256(
+        stretched instanceof Uint8Array ? stretched : new Uint8Array(stretched),
+        salt,
+        `srp-auth:${identity}`,
+        32,
+      );
+      let value = 0n;
+      for (const byte of material) value = (value << 8n) + BigInt(byte);
+      return value % N;
+    }
     let hash1 = await sha256Hex(`${identity}:${password}`);
     const concat = `${saltHex}${hash1}`.toUpperCase();
     let hash = await sha256Hex(concat);
@@ -79,8 +135,8 @@
       return sha256Hex(`${Date.now()}::${seed}`);
     }
 
-    async generateVerifier(saltHex, identity, password) {
-      const x = await generateX(saltHex, identity, password);
+    async generateVerifier(saltHex, identity, password, kdfVersion = SRP_KDF_V2) {
+      const x = await generateX(saltHex, identity, password, kdfVersion);
       const v = modPow(G, x, N);
       return v.toString(16);
     }
@@ -89,15 +145,17 @@
       this.identity = String(identity || '').trim().toLowerCase();
       this.password = String(password || '');
       this.state = 1;
+      this.kdfVersion = SRP_KDF_V1;
     }
 
-    async step2(saltHex, bHex) {
+    async step2(saltHex, bHex, kdfVersion = SRP_KDF_V1) {
       if (this.state !== 1) throw new Error('SRP client not ready');
       bHex = String(bHex || '').toLowerCase();
       saltHex = String(saltHex || '').toLowerCase();
+      this.kdfVersion = normalizeSrpKdfVersion(kdfVersion);
       this.B = BigInt(`0x${bHex}`);
       if (this.B % N === 0n) throw new Error('Invalid server public value');
-      const x = await generateX(saltHex, this.identity, this.password);
+      const x = await generateX(saltHex, this.identity, this.password, this.kdfVersion);
       this.password = '';
       this.a = randomNonZeroModN();
       this.A = modPow(G, this.a, N);
@@ -177,15 +235,18 @@
    */
   async function credentialProofLogin(challengePath, loginPath, email, password) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const rotated = await makeVerifier(normalizedEmail, password);
     const challenge = await postJson(challengePath, { email: normalizedEmail });
+    const challengeVersion = normalizeSrpKdfVersion(challenge.srp_kdf_version);
+    // Rotate to v2 after proving with the stored version.
+    const rotated = await makeVerifier(normalizedEmail, password, null, SRP_KDF_V2);
     const client = new SrpClient();
     client.step1(normalizedEmail, password);
-    const creds = await client.step2(challenge.srp_salt, challenge.B);
+    const creds = await client.step2(challenge.srp_salt, challenge.B, challengeVersion);
     return postJson(loginPath, {
       email: normalizedEmail,
       srp_salt: rotated.srp_salt,
       srp_verifier: rotated.srp_verifier,
+      srp_kdf_version: SRP_KDF_V2,
       A: creds.A,
       M1: creds.M1,
     });
@@ -224,19 +285,39 @@
   async function register(email, password) {
     const client = new SrpClient();
     const srpSalt = await client.generateRandomSalt();
-    const verifier = await client.generateVerifier(srpSalt, email, password);
+    const verifier = await client.generateVerifier(srpSalt, email, password, SRP_KDF_V2);
     return postJson('/api/auth/srp/register', {
       email,
       srp_salt: srpSalt,
       srp_verifier: verifier,
+      srp_kdf_version: SRP_KDF_V2,
     });
+  }
+
+  async function maybeUpgradeSrpKdf(email, password, loginResult) {
+    if (!loginResult || !loginResult.srp_kdf_upgrade) return loginResult;
+    try {
+      const rotated = await makeVerifier(email, password, null, SRP_KDF_V2);
+      await postJson('/api/auth/srp/kdf-upgrade', {
+        srp_salt: rotated.srp_salt,
+        srp_verifier: rotated.srp_verifier,
+        srp_kdf_version: SRP_KDF_V2,
+      });
+      loginResult.srp_kdf_version = SRP_KDF_V2;
+      loginResult.srp_kdf_upgrade = false;
+    } catch (err) {
+      // Login already succeeded; upgrade can retry on a later sign-in.
+      try { console.warn('SRP KDF upgrade deferred', err); } catch (_) { /* ignore */ }
+    }
+    return loginResult;
   }
 
   async function login(email, password) {
     const client = new SrpClient();
     client.step1(email, password);
     const challenge = await postJson('/api/auth/srp/challenge', { email });
-    const creds = await client.step2(challenge.srp_salt, challenge.B);
+    const challengeVersion = normalizeSrpKdfVersion(challenge.srp_kdf_version);
+    const creds = await client.step2(challenge.srp_salt, challenge.B, challengeVersion);
     const result = await postJson('/api/auth/srp/verify', {
       email,
       A: creds.A,
@@ -248,25 +329,27 @@
       throw err;
     }
     await client.step3(result.M2);
-    return result;
+    return maybeUpgradeSrpKdf(email, password, result);
   }
 
   async function upgrade(email, password) {
     const client = new SrpClient();
     const srpSalt = await client.generateRandomSalt();
-    const verifier = await client.generateVerifier(srpSalt, email, password);
+    const verifier = await client.generateVerifier(srpSalt, email, password, SRP_KDF_V2);
     return postJson('/api/auth/srp/upgrade', {
       current_password: password,
       srp_salt: srpSalt,
       srp_verifier: verifier,
+      srp_kdf_version: SRP_KDF_V2,
     });
   }
 
-  async function makeVerifier(email, password, srpSalt) {
+  async function makeVerifier(email, password, srpSalt, kdfVersion = SRP_KDF_V2) {
     const client = new SrpClient();
     const salt = srpSalt || await client.generateRandomSalt();
-    const verifier = await client.generateVerifier(salt, email, password);
-    return { srp_salt: salt, srp_verifier: verifier };
+    const version = normalizeSrpKdfVersion(kdfVersion);
+    const verifier = await client.generateVerifier(salt, email, password, version);
+    return { srp_salt: salt, srp_verifier: verifier, srp_kdf_version: version };
   }
 
   async function resync(email, password) {
@@ -311,7 +394,11 @@
     const challenge = await postJson('/api/account/unlock/challenge', { email: normalizedEmail });
     const client = new SrpClient();
     client.step1(normalizedEmail, password);
-    const creds = await client.step2(challenge.srp_salt, challenge.B);
+    const creds = await client.step2(
+      challenge.srp_salt,
+      challenge.B,
+      normalizeSrpKdfVersion(challenge.srp_kdf_version),
+    );
     return postJson('/api/account/unlock', {
       email: normalizedEmail,
       A: creds.A,
@@ -324,7 +411,11 @@
     const challenge = await postJson('/api/account/password/challenge', { email: normalizedEmail });
     const client = new SrpClient();
     client.step1(normalizedEmail, proofPassword);
-    const creds = await client.step2(challenge.srp_salt, challenge.B);
+    const creds = await client.step2(
+      challenge.srp_salt,
+      challenge.B,
+      normalizeSrpKdfVersion(challenge.srp_kdf_version),
+    );
     return postJson('/api/account/password/prove', {
       email: normalizedEmail,
       A: creds.A,
@@ -337,12 +428,13 @@
    */
   async function passwordChangeCommit(email, rotationToken, newPassword) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const rotated = await makeVerifier(normalizedEmail, newPassword);
+    const rotated = await makeVerifier(normalizedEmail, newPassword, null, SRP_KDF_V2);
     return postJson('/api/account/password', {
       email: normalizedEmail,
       rotation_token: rotationToken,
       srp_salt: rotated.srp_salt,
       srp_verifier: rotated.srp_verifier,
+      srp_kdf_version: SRP_KDF_V2,
     });
   }
 
@@ -361,5 +453,8 @@
     repairLogin,
     passwordSignIn,
     shouldRetryWithRepairAfterSrp,
+    SRP_KDF_V1,
+    SRP_KDF_V2,
+    normalizeSrpKdfVersion,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

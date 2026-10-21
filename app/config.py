@@ -188,6 +188,15 @@ def default_user_quota_bytes() -> int:
         return 100 * 1024 * 1024
 
 
+def unverified_user_quota_bytes() -> int:
+    """Tiny storage cap until the account email is verified (default 1 MB)."""
+    try:
+        mb = int(os.environ.get("NOTES_UNVERIFIED_USER_QUOTA_MB", "1"))
+        return max(0, mb) * 1024 * 1024
+    except (TypeError, ValueError):
+        return 1 * 1024 * 1024
+
+
 def admin_emails() -> set[str]:
     raw = os.environ.get("NOTES_ADMIN_EMAILS", "").strip()
     if not raw:
@@ -215,11 +224,29 @@ def user_admin_flags(user) -> dict[str, bool]:
     except (KeyError, TypeError):
         email = ""
     env_flag = email in admin_emails() if email else False
+    # Env-listed admins must also have a verified email (L10).
+    email_ok = True
+    if env_flag:
+        try:
+            from email_verify import account_verified
+
+            email_ok = account_verified(user)
+        except Exception:
+            try:
+                email_ok = bool(int(user["email_verified"] or 0))
+            except (KeyError, TypeError, ValueError):
+                email_ok = False
+    env_admin = bool(env_flag and email_ok)
+    # NOTES_ADMIN_EMAILS never grants admin via a stale DB is_admin bit alone.
+    if env_flag:
+        is_admin = env_admin
+    else:
+        is_admin = db_flag
     return {
         "is_admin_db": db_flag,
-        "is_admin_env": env_flag,
-        "is_admin": db_flag or env_flag,
-        "admin_env_locked": env_flag,
+        "is_admin_env": env_admin,
+        "is_admin": is_admin,
+        "admin_env_locked": env_admin,
     }
 
 
@@ -389,13 +416,22 @@ def webauthn_rp_id(request_host: str) -> str:
 
 
 def session_cookie_domain() -> str | None:
-    """Return the cookie domain for sharing sessions across subdomains (.deeperguard.com).
-    Returns None for localhost / IP hosts.
+    """Host-only session cookies (no Domain). Legacy Domain cookies are cleared on migrate.
+
+    NOTES_COOKIE_DOMAIN is ignored for new cookies so pool.* cannot receive the session.
     """
-    raw = os.environ.get("NOTES_COOKIE_DOMAIN", "").strip()
-    if raw:
-        return raw if raw.startswith(".") else f".{raw}"
-    rp_id = webauthn_default_rp_id()
-    if rp_id and not is_ip_host(rp_id) and "." in rp_id:
-        return f".{rp_id}"
+    # Opt-in only for local multi-host experiments — production stays host-only.
+    if os.environ.get("NOTES_ALLOW_COOKIE_DOMAIN", "0") == "1":
+        raw = os.environ.get("NOTES_COOKIE_DOMAIN", "").strip()
+        if raw:
+            return raw if raw.startswith(".") else f".{raw}"
     return None
+
+
+def webauthn_expected_origin() -> str:
+    """Configured WebAuthn origin (not derived from the Host header)."""
+    raw = os.environ.get("NOTES_WEBAUTHN_ORIGIN", "").strip()
+    if raw:
+        return raw.rstrip("/")
+    preferred = webauthn_preferred_host()
+    return f"https://{preferred}"

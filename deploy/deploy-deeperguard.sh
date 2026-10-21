@@ -2,17 +2,17 @@
 # Sync deeperguard code to Vienna (or NOTES_HOST) and restart the service.
 set -euo pipefail
 # Production is the Vienna VPS behind Cloudflare. Do not git pull on that host.
-HOST="${NOTES_HOST:-62.83.35.198}"
+HOST="${NOTES_HOST:?Set NOTES_HOST to the Vienna origin host}"
 REMOTE="${NOTES_REMOTE_DIR:-/opt/deeperguard}"
 LAN_CIDR="${NOTES_LAN_CIDR:-192.168.178.0/24}"
 VPN_CIDR="${NOTES_VPN_CIDR:-10.0.0.0/24}"
-VPN_GATEWAY="${NOTES_VPN_GATEWAY:-192.168.178.77}"
-DEPLOY_SSH_HOST="${NOTES_DEPLOY_SSH_HOST:-192.168.178.174}"
+VPN_GATEWAY="${NOTES_VPN_GATEWAY:-}"
+DEPLOY_SSH_HOST="${NOTES_DEPLOY_SSH_HOST:-}"
 ENABLE_LAN_TLS="${NOTES_ENABLE_LAN_TLS:-0}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=12)
 
-ssh "${SSH_OPTS[@]}" "root@${HOST}" true || { echo "SSH to $HOST failed"; exit 1; }
+ssh "${SSH_OPTS[@]}" "root@${HOST}" true || { echo "SSH to NOTES_HOST failed"; exit 1; }
 
 version=""
 if git -C "$SRC" rev-parse --short HEAD >/dev/null 2>&1; then

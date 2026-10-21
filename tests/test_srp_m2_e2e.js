@@ -24,6 +24,9 @@ function pyRoundtrip(payload) {
 }
 
 global.window = global;
+if (!global.crypto || !global.crypto.subtle) {
+  global.crypto = crypto.webcrypto;
+}
 global.fetch = async () => ({ ok: false });
 vm.runInThisContext(fs.readFileSync(path.join(jsRoot, 'srp-auth.js'), 'utf8'));
 

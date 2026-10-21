@@ -1,4 +1,9 @@
-"""Thinbus-compatible SRP-6a (SHA-256, RFC 5054 2048-bit) for zero-knowledge login."""
+"""Thinbus-compatible SRP-6a (SHA-256, RFC 5054 2048-bit) for zero-knowledge login.
+
+Verifier KDF versions:
+  v1 — SHA-256(identity:password) then SHA-256(salt||hash1)  (legacy, still accepted)
+  v2 — Argon2id(password, salt) → HKDF-SHA256 info 'srp-auth' → x  (new signups / upgrades)
+"""
 from __future__ import annotations
 
 import hashlib
@@ -6,6 +11,10 @@ import hmac
 import secrets
 from dataclasses import dataclass
 from typing import Any
+
+from argon2.low_level import Type, hash_secret_raw
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 # RFC 5054 2048-bit group (matches thinbus-srp defaults).
 N = int(
@@ -20,6 +29,17 @@ N = int(
 )
 G = 2
 K = int("5b9e8ef059c6b32ea59fc1d322d37f04aa30bae5aa9003b8321e21ddb04e300", 16)
+
+SRP_KDF_V1 = 1
+SRP_KDF_V2 = 2
+# Tuned for interactive login on phones (~<1s); separate from vault Argon2id (64 MiB).
+SRP_ARGON2_PARAMS = {
+    "time_cost": 2,
+    "memory_cost": 19456,
+    "parallelism": 1,
+    "hash_len": 32,
+}
+SRP_HKDF_INFO = b"srp-auth"
 
 
 def _h(data: str) -> str:
@@ -59,6 +79,58 @@ def _random_nonzero_mod_n() -> int:
         value = _from_hex(raw) % N
         if value != 0:
             return value
+
+
+def normalize_srp_kdf_version(value: Any) -> int:
+    try:
+        version = int(value)
+    except (TypeError, ValueError):
+        return SRP_KDF_V1
+    return SRP_KDF_V2 if version >= SRP_KDF_V2 else SRP_KDF_V1
+
+
+def srp_salt_bytes(salt_hex: str) -> bytes:
+    """Derive ≥8-byte Argon2 salt from the stored SRP salt hex."""
+    text = str(salt_hex or "").strip().lower()
+    if text and all(c in "0123456789abcdef" for c in text) and len(text) % 2 == 0:
+        raw = bytes.fromhex(text)
+        if len(raw) >= 8:
+            return raw
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    return digest
+
+
+def _generate_x_v1(salt_hex: str, identity: str, password: str) -> int:
+    hash1 = _h(f"{identity}:{password}")
+    x_hash = _h(f"{salt_hex}{hash1}".upper())
+    return _from_hex(x_hash) % N
+
+
+def _generate_x_v2(salt_hex: str, identity: str, password: str) -> int:
+    salt = srp_salt_bytes(salt_hex)
+    stretched = hash_secret_raw(
+        secret=str(password or "").encode("utf-8"),
+        salt=salt,
+        type=Type.ID,
+        **SRP_ARGON2_PARAMS,
+    )
+    info = SRP_HKDF_INFO + b":" + str(identity or "").encode("utf-8")
+    material = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        info=info,
+    ).derive(stretched)
+    return int.from_bytes(material, "big") % N
+
+
+def generate_x(salt_hex: str, identity: str, password: str, kdf_version: int = SRP_KDF_V1) -> int:
+    identity = str(identity or "").strip().lower()
+    salt_hex = str(salt_hex or "").strip().lower()
+    version = normalize_srp_kdf_version(kdf_version)
+    if version == SRP_KDF_V2:
+        return _generate_x_v2(salt_hex, identity, password)
+    return _generate_x_v1(salt_hex, identity, password)
 
 
 @dataclass
@@ -145,11 +217,32 @@ def new_srp_salt_hex() -> str:
     return _h(f"{secrets.randbits(53)}::{seed}")
 
 
-def generate_verifier_hex(salt_hex: str, identity: str, password: str) -> str:
-    """Thinbus-compatible verifier for admin scripts and tests."""
-    identity = str(identity or "").strip().lower()
-    salt_hex = str(salt_hex or "").strip().lower()
-    hash1 = _h(f"{identity}:{password}")
-    x_hash = _h(f"{salt_hex}{hash1}".upper())
-    x = _from_hex(x_hash) % N
+def generate_verifier_hex(
+    salt_hex: str,
+    identity: str,
+    password: str,
+    kdf_version: int = SRP_KDF_V1,
+) -> str:
+    """Verifier for admin scripts, tests, and server-side password checks."""
+    x = generate_x(salt_hex, identity, password, kdf_version=kdf_version)
     return _to_hex(pow(G, x, N))
+
+
+def fake_srp_challenge(email: str, server_secret: bytes | str) -> tuple[str, str]:
+    """Deterministic fake salt+B for unknown emails (anti-enumeration)."""
+    identity = str(email or "").strip().lower()
+    secret = server_secret if isinstance(server_secret, bytes) else str(server_secret or "").encode("utf-8")
+    material = hmac.new(secret, f"srp-fake:{identity}".encode("utf-8"), hashlib.sha256).digest()
+    salt_hex = material[:16].hex()
+    # Stable fake verifier from the same HMAC stream (not a real password).
+    x = int.from_bytes(material[16:], "big") % N
+    if x == 0:
+        x = 1
+    v = pow(G, x, N)
+    # Deterministic b from HMAC so B is stable for the same email.
+    b_material = hmac.new(secret, f"srp-fake-b:{identity}".encode("utf-8"), hashlib.sha256).digest()
+    b = int.from_bytes(b_material, "big") % N
+    if b == 0:
+        b = 1
+    B = (pow(G, b, N) + (K * v) % N) % N
+    return salt_hex, _to_hex(B)

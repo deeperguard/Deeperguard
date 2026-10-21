@@ -50,32 +50,30 @@ class NotesAppTests(unittest.TestCase):
         for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS", "NOTES_ALLOWED_CIDRS", "NOTES_SKIP_LOGIN", "NOTES_BUILD", "NOTES_SERVER_INFO_REFRESH", "NOTES_SERVER_OCR", "NOTES_STRICT_ZK", "NOTES_ADMIN_EMAILS", "NOTES_DEFAULT_USER_QUOTA_MB", "NOTES_DEFAULT_PLAN", "NOTES_APP_PATH", "NOTES_AUTH_RATE_LIMIT", "NOTES_REPAIR_LOGIN_PASSWORD"):
             os.environ.pop(key, None)
 
-    def _srp_verifier(self, email: str, password: str, salt_hex: str | None = None) -> tuple[str, str]:
-        import hashlib
-
-        from srp_auth import G, N
-
-        def strip_hex(value: str) -> str:
-            out = value.lower()
-            while out.startswith("0"):
-                out = out[1:]
-            return out
-
-        def sha_hex(text: str) -> str:
-            return strip_hex(hashlib.sha256(text.encode("utf-8")).hexdigest())
+    def _srp_verifier(
+        self,
+        email: str,
+        password: str,
+        salt_hex: str | None = None,
+        *,
+        kdf_version: int = 2,
+    ) -> tuple[str, str]:
+        from srp_auth import generate_verifier_hex, new_srp_salt_hex
 
         if not salt_hex:
-            salt_hex = sha_hex(f"test-salt::{email}")
-        hash1 = sha_hex(f"{email}:{password}")
-        x_hash = sha_hex(f"{salt_hex}{hash1}".upper())
-        x = int(x_hash, 16) % N
-        return salt_hex, format(pow(G, x, N), "x")
+            salt_hex = new_srp_salt_hex()
+        return salt_hex, generate_verifier_hex(salt_hex, email, password, kdf_version=kdf_version)
 
-    def _register_user(self, email: str, password: str):
-        salt_hex, verifier = self._srp_verifier(email, password)
+    def _register_user(self, email: str, password: str, *, kdf_version: int = 2):
+        salt_hex, verifier = self._srp_verifier(email, password, kdf_version=kdf_version)
         return self.client.post(
             "/api/auth/srp/register",
-            json={"email": email, "srp_salt": salt_hex, "srp_verifier": verifier},
+            json={
+                "email": email,
+                "srp_salt": salt_hex,
+                "srp_verifier": verifier,
+                "srp_kdf_version": int(kdf_version),
+            },
         )
 
     def _register_legacy_user(self, email: str, password: str):
@@ -94,27 +92,21 @@ class NotesAppTests(unittest.TestCase):
             sess["csrf"] = secrets.token_urlsafe(32)
             sess["totp_ok"] = True
 
-    def _srp_login(self, email: str, password: str, salt_hex: str):
+    def _srp_login(self, email: str, password: str, salt_hex: str | None = None, *, kdf_version: int | None = None):
         import secrets
 
-        from srp_auth import G, K, N, _from_hex, _h, _to_hex
-
-        def strip_hex(value: str) -> str:
-            out = value.lower()
-            while out.startswith("0"):
-                out = out[1:]
-            return out
-
-        def sha_hex(text: str) -> str:
-            return strip_hex(_h(text))
+        from srp_auth import G, K, N, _from_hex, _h, _to_hex, generate_x, normalize_srp_kdf_version
 
         challenge = self.client.post("/api/auth/srp/challenge", json={"email": email})
         self.assertEqual(challenge.status_code, 200)
         body = challenge.get_json()
         b_hex = str(body["B"]).lower()
-        hash1 = sha_hex(f"{email}:{password}")
-        x_hash = sha_hex(f"{salt_hex}{hash1}".upper())
-        x = int(x_hash, 16) % N
+        # Always prove against the salt the server challenges with (may rotate).
+        stored_salt = str(body["srp_salt"]).lower()
+        version = normalize_srp_kdf_version(
+            kdf_version if kdf_version is not None else body.get("srp_kdf_version")
+        )
+        x = generate_x(stored_salt, email, password, kdf_version=version)
         byte_len = (N.bit_length() + 7) // 8
         while True:
             a_bytes = secrets.token_bytes(byte_len)
@@ -144,6 +136,7 @@ class NotesAppTests(unittest.TestCase):
         challenge_path: str,
         *,
         headers: dict | None = None,
+        kdf_version: int = 2,
     ):
         """Challenge + proof against the server-returned (stored) salt/verifier.
 
@@ -152,31 +145,30 @@ class NotesAppTests(unittest.TestCase):
         """
         import secrets
 
-        from srp_auth import G, K, N, _from_hex, _h, _to_hex
+        from srp_auth import (
+            G,
+            K,
+            N,
+            _from_hex,
+            _h,
+            _to_hex,
+            generate_verifier_hex,
+            generate_x,
+            normalize_srp_kdf_version,
+        )
 
-        def strip_hex(value: str) -> str:
-            out = value.lower()
-            while out.startswith("0"):
-                out = out[1:]
-            return out
-
-        def sha_hex(text: str) -> str:
-            return strip_hex(_h(text))
-
-        from srp_auth import generate_verifier_hex
-
-        rotation_verifier = generate_verifier_hex(salt_hex, email, password)
+        rotation_verifier = generate_verifier_hex(salt_hex, email, password, kdf_version=kdf_version)
         challenge = self.client.post(
             challenge_path,
             json={"email": email},
             headers=headers or {},
         )
         self.assertEqual(challenge.status_code, 200, challenge.get_json())
-        b_hex = str(challenge.get_json()["B"]).lower()
-        stored_salt = str(challenge.get_json()["srp_salt"]).lower()
-        hash1 = sha_hex(f"{email}:{password}")
-        x_hash = sha_hex(f"{stored_salt}{hash1}".upper())
-        x = int(x_hash, 16) % N
+        chal = challenge.get_json()
+        b_hex = str(chal["B"]).lower()
+        stored_salt = str(chal["srp_salt"]).lower()
+        version = normalize_srp_kdf_version(chal.get("srp_kdf_version") or kdf_version)
+        x = generate_x(stored_salt, email, password, kdf_version=version)
         byte_len = (N.bit_length() + 7) // 8
         while True:
             a_bytes = secrets.token_bytes(byte_len)
@@ -195,7 +187,7 @@ class NotesAppTests(unittest.TestCase):
         return a_hex, m1, rotation_verifier
 
     def _account_unlock_srp(self, email: str, password: str, csrf: str | None = None):
-        salt_hex, _verifier = self._srp_verifier(email, password)
+        salt_hex, _verifier = self._srp_verifier(email, password, kdf_version=2)
         headers = {"X-CSRF-Token": csrf} if csrf else {}
         a_hex, m1, _rotated = self._srp_credential_proof(
             email,
@@ -203,6 +195,7 @@ class NotesAppTests(unittest.TestCase):
             salt_hex,
             "/api/account/unlock/challenge",
             headers=headers,
+            kdf_version=2,
         )
         return self.client.post(
             "/api/account/unlock",
@@ -217,6 +210,7 @@ class NotesAppTests(unittest.TestCase):
             salt_hex,
             "/api/account/password/challenge",
             headers={"X-CSRF-Token": csrf},
+            kdf_version=2,
         )
         return self.client.post(
             "/api/account/password/prove",
@@ -225,13 +219,14 @@ class NotesAppTests(unittest.TestCase):
         )
 
     def _account_password_commit_srp(self, email: str, new_password: str, rotation_token: str, csrf: str):
-        new_salt, new_verifier = self._srp_verifier(email, new_password)
+        new_salt, new_verifier = self._srp_verifier(email, new_password, kdf_version=2)
         return self.client.post(
             "/api/account/password",
             json={
                 "rotation_token": rotation_token,
                 "srp_salt": new_salt,
                 "srp_verifier": new_verifier,
+                "srp_kdf_version": 2,
             },
             headers={"X-CSRF-Token": csrf},
         )
@@ -1376,7 +1371,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("vaultlock.js", (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8"))
         self.assertIn('role="tablist"', (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8"))
         self.assertIn('role="tab"', (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8"))
-        self.assertIn(b"pdf.min.js?v=8", res.data)
+        # pdf.js 4.x loads via dynamic import() of the ESM build (no UMD script tag).
+        self.assertNotIn(b"pdf.min.js?v=", res.data)
+        self.assertIn(b"preview.js", res.data)
         self.assertIn(b"notes_device_password_enc", res.data)
         self.assertIn(b'id="confirm-dialog"', res.data)
         self.assertIn(b'id="btn-find"', res.data)
@@ -1483,8 +1480,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("const CACHE = 'deeperguard-offline'", sw)
         self.assertIn("You're offline", sw)
         self.assertIn("Deeperguard", sw)
-        self.assertIn("pdf.min.js?v=8", sw)
-        self.assertIn("pdf.worker.min.js?v=8", sw)
+        self.assertIn("pdf.min.mjs?v=10", sw)
+        self.assertIn("pdf.worker.min.mjs?v=10", sw)
         preview_js = (APP_DIR / "static" / "js" / "preview.js").read_text(encoding="utf-8")
         self.assertIn("MAX_PAGE_DPR", preview_js)
         self.assertIn("MAX_CANVAS_PIXELS", preview_js)
@@ -4130,7 +4127,7 @@ class NotesAppTests(unittest.TestCase):
         kdf_salt = new_kdf_salt()
         user_id = notes_db.create_user_srp(email, kdf_salt, stored_salt, stored_verifier)
         rotated_salt = new_srp_salt_hex()
-        rotated_verifier = generate_verifier_hex(rotated_salt, email, password)
+        rotated_verifier = generate_verifier_hex(rotated_salt, email, password, kdf_version=2)
         with self.client.session_transaction() as sess:
             sess.clear()
         a_hex, m1, _ = self._srp_credential_proof(
@@ -4138,6 +4135,7 @@ class NotesAppTests(unittest.TestCase):
             password,
             rotated_salt,
             "/api/auth/repair-login/challenge",
+            kdf_version=2,
         )
         repaired = self.client.post(
             "/api/auth/repair-login",
@@ -4205,7 +4203,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_webauthn_credentials_list_requires_auth(self):
         res = self.client.get("/api/auth/webauthn/credentials")
-        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.status_code, 401)
 
     def test_webauthn_register_options_rejects_ip_host(self):
         import config
@@ -4264,7 +4262,7 @@ class NotesAppTests(unittest.TestCase):
         )
         csrf = self._csrf()
         self.client.post("/api/totp/setup", headers={"X-CSRF-Token": csrf})
-        with patch("app.totp_mod.verify", return_value=True):
+        with patch("app.totp_mod.verify_and_step", return_value=(True, 1)):
             self.client.post(
                 "/api/totp/enable",
                 json={"code": "123456"},
@@ -4292,7 +4290,7 @@ class NotesAppTests(unittest.TestCase):
         self._register_user("2fa-lock@home.local", "another-secure-pass")
         csrf = self._csrf()
         self.client.post("/api/totp/setup", headers={"X-CSRF-Token": csrf})
-        with patch("app.totp_mod.verify", return_value=True):
+        with patch("app.totp_mod.verify_and_step", return_value=(True, 1)):
             self.client.post(
                 "/api/totp/enable",
                 json={"code": "123456"},
@@ -4320,7 +4318,7 @@ class NotesAppTests(unittest.TestCase):
         self._register_user("2fa-rotate@home.local", "another-secure-pass")
         csrf = self._csrf()
         self.client.post("/api/totp/setup", headers={"X-CSRF-Token": csrf})
-        with patch("app.totp_mod.verify", return_value=True):
+        with patch("app.totp_mod.verify_and_step", return_value=(True, 1)):
             self.client.post(
                 "/api/totp/enable",
                 json={"code": "123456"},
@@ -4328,13 +4326,13 @@ class NotesAppTests(unittest.TestCase):
             )
         uid = notes_db.get_user_by_email("2fa-rotate@home.local")["id"]
         csrf = self._csrf()
-        with patch("app.totp_mod.verify", return_value=False):
+        with patch("app.totp_mod.verify_and_step", return_value=(False, 0)):
             denied = self.client.post(
                 "/api/totp/setup",
                 json={"code": "000000"},
                 headers={"X-CSRF-Token": csrf},
             )
-        with patch("app.totp_mod.verify", side_effect=lambda secret, code: code == "654321"):
+        with patch("app.totp_mod.verify_and_step", side_effect=lambda secret, code, last_step=0: ((True, 1) if code == "654321" else (False, 0))):
             allowed = self.client.post(
                 "/api/totp/setup",
                 json={"code": "654321"},
@@ -4348,7 +4346,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertFalse(user["totp_enabled"])
         self.assertEqual(str(user["totp_secret"]), new_secret)
         csrf = self._csrf()
-        with patch("app.totp_mod.verify", return_value=True):
+        with patch("app.totp_mod.verify_and_step", return_value=(True, 1)):
             enabled = self.client.post(
                 "/api/totp/enable",
                 json={"code": "111111"},
@@ -4373,7 +4371,7 @@ class NotesAppTests(unittest.TestCase):
         self._register_user("2fa-off@home.local", "another-secure-pass")
         csrf = self._csrf()
         self.client.post("/api/totp/setup", headers={"X-CSRF-Token": csrf})
-        with patch("app.totp_mod.verify", return_value=True):
+        with patch("app.totp_mod.verify_and_step", return_value=(True, 1)):
             self.client.post(
                 "/api/totp/enable",
                 json={"code": "123456"},
@@ -4386,7 +4384,7 @@ class NotesAppTests(unittest.TestCase):
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(missing.status_code, 403)
-        with patch("app.totp_mod.verify", return_value=False):
+        with patch("app.totp_mod.verify_and_step", return_value=(False, 0)):
             bad = self.client.post(
                 "/api/totp/disable",
                 json={"code": "000000"},
@@ -4498,6 +4496,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_new_user_gets_default_storage_quota(self):
         import db as notes_db
+        from config import unverified_user_quota_bytes
 
         os.environ["NOTES_DEFAULT_PLAN"] = "basic"
         os.environ["NOTES_DEFAULT_USER_QUOTA_MB"] = "100"
@@ -4505,10 +4504,15 @@ class NotesAppTests(unittest.TestCase):
         user = notes_db.get_user_by_email("quota@home.local")
         self.assertIsNotNone(user)
         self.assertEqual(notes_db.user_plan(user), "basic")
+        # Unverified signups get a tiny quota until email confirmation (M4).
+        self.assertEqual(int(user["storage_quota_bytes"]), unverified_user_quota_bytes())
+        notes_db.mark_email_verified(int(user["id"]))
+        user = notes_db.get_user_by_email("quota@home.local")
         self.assertEqual(int(user["storage_quota_bytes"]), 100 * 1024 * 1024)
 
     def test_new_user_defaults_to_pro_plan(self):
         import db as notes_db
+        from config import unverified_user_quota_bytes
         from plans import plan_storage_quota_bytes
 
         os.environ["NOTES_DEFAULT_PLAN"] = "pro"
@@ -4516,6 +4520,9 @@ class NotesAppTests(unittest.TestCase):
         user = notes_db.get_user_by_email("pro@home.local")
         self.assertIsNotNone(user)
         self.assertEqual(notes_db.user_plan(user), "pro")
+        self.assertEqual(int(user["storage_quota_bytes"]), unverified_user_quota_bytes())
+        notes_db.mark_email_verified(int(user["id"]))
+        user = notes_db.get_user_by_email("pro@home.local")
         self.assertEqual(int(user["storage_quota_bytes"]), plan_storage_quota_bytes("pro"))
 
     def test_account_includes_subscription_plan(self):
@@ -4911,6 +4918,8 @@ class NotesAppTests(unittest.TestCase):
         os.environ["NOTES_ADMIN_EMAILS"] = "envadmin@home.local"
         self._register_user("envadmin@home.local", "envadmin-secure-pass")
         admin = notes_db.get_user_by_email("envadmin@home.local")
+        # L10: env admins require a verified email before admin rights apply.
+        notes_db.mark_email_verified(int(admin["id"]))
         notes_db.update_user_admin_flag(int(admin["id"]), True)
         csrf = self._csrf()
         patch = self.client.patch(
@@ -5596,8 +5605,9 @@ class NotesAppTests(unittest.TestCase):
 
     def test_session_cookie_domain_configuration(self):
         from config import session_cookie_domain
+        # Host-only cookies (M2): no Domain attribute on new session cookies.
         domain = session_cookie_domain()
-        self.assertEqual(domain, ".deeperguard.com")
+        self.assertIsNone(domain)
 
     def test_marketing_page_contains_notes_build_meta(self):
         res = self.client.get("/")

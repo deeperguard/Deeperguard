@@ -174,9 +174,10 @@
     html = html.replace(/(<li[\s\S]*?<\/li>\n?)+/g, (block) => `<ul>${block}</ul>`);
     html = html.replace(/@@FENCE(\d+)@@/g, (_, i) => {
       const fence = fences[Number(i)] || { lang: '', code: '' };
-      const lang = fence.lang ? ` class="language-${escapeHtml(fence.lang)}"` : '';
+      const safeLang = escapeAttr(fence.lang);
+      const lang = fence.lang ? ` class="language-${safeLang}"` : '';
       const body = highlightFence(fence.code, fence.lang);
-      return `<pre class="code-preview"${fence.lang ? ` data-lang="${escapeHtml(fence.lang)}"` : ''}><code${lang}>${body}</code></pre>`;
+      return `<pre class="code-preview"${fence.lang ? ` data-lang="${safeLang}"` : ''}><code${lang}>${body}</code></pre>`;
     });
     html = html.replace(/@@TABLE(\d+)@@/g, (_, i) => renderTable(tables[Number(i)] || { header: [], aligns: [], rows: [] }));
     html = autolinkOutsideTags(html);

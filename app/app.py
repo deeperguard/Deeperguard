@@ -34,7 +34,14 @@ from admin_notify import log_signup_notify_config, notify_new_user_signup
 from mailer import send_contact_email
 from backup_pcloud import pcloud_credentials_configured, save_pcloud_settings, sync_user_backup
 from passwords import hash_password, new_kdf_salt, verify_password
-from srp_auth import SrpServerSession, generate_verifier_hex, new_srp_salt_hex
+from srp_auth import (
+    SRP_KDF_V2,
+    SrpServerSession,
+    fake_srp_challenge,
+    generate_verifier_hex,
+    new_srp_salt_hex,
+    normalize_srp_kdf_version,
+)
 from vault_crypto import password_unlocks_samples
 import webauthn_helper as webauthn_mod
 from auth_rate_limit import allow as auth_rate_allow
@@ -48,31 +55,70 @@ from verification_send_limit import (
     verification_retry_after,
 )
 
-class DynamicDomainSessionInterface(SecureCookieSessionInterface):
-    def get_cookie_domain(self, app: Flask) -> str | None:
-        configured = app.config.get("SESSION_COOKIE_DOMAIN")
-        if not configured:
-            return None
-        try:
-            from flask import request
-            from config import normalize_host
+class HostOnlySessionInterface(SecureCookieSessionInterface):
+    """Host-only session cookies; migrate legacy Domain=.deeperguard.com cookies."""
 
-            host = normalize_host(request.host)
-            domain = configured.lstrip(".")
-            if host == domain or host.endswith("." + domain):
-                return configured
-            return None
-        except Exception:
-            return None
+    LEGACY_COOKIE = "session"
+    HOST_COOKIE = "__Host-session"
+
+    def get_cookie_domain(self, app: Flask) -> str | None:
+        return None
+
+    def get_cookie_name(self, app: Flask) -> str:
+        if app.config.get("SESSION_COOKIE_SECURE"):
+            return self.HOST_COOKIE
+        return self.LEGACY_COOKIE
+
+    def open_session(self, app: Flask, request):  # type: ignore[override]
+        name = self.get_cookie_name(app)
+        has_host = bool(request.cookies.get(name))
+        has_legacy = bool(request.cookies.get(self.LEGACY_COOKIE))
+        if not has_host and has_legacy and name != self.LEGACY_COOKIE:
+            try:
+                from flask import g
+
+                g._dg_migrate_session_cookie = True
+            except Exception:
+                pass
+            previous = app.config.get("SESSION_COOKIE_NAME")
+            app.config["SESSION_COOKIE_NAME"] = self.LEGACY_COOKIE
+            try:
+                return super().open_session(app, request)
+            finally:
+                app.config["SESSION_COOKIE_NAME"] = previous or name
+        return super().open_session(app, request)
+
+    def save_session(self, app, session, response):  # type: ignore[override]
+        app.config["SESSION_COOKIE_DOMAIN"] = None
+        super().save_session(app, session, response)
+        # Always clear legacy Domain cookies when Secure host-only cookies are used.
+        if app.config.get("SESSION_COOKIE_SECURE") and self.get_cookie_name(app) == self.HOST_COOKIE:
+            for domain in (".deeperguard.com", "deeperguard.com"):
+                response.set_cookie(
+                    self.LEGACY_COOKIE,
+                    "",
+                    expires=0,
+                    max_age=0,
+                    path="/",
+                    domain=domain,
+                    secure=True,
+                    httponly=True,
+                    samesite="Lax",
+                )
 
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
-app.session_interface = DynamicDomainSessionInterface()
+app.session_interface = HostOnlySessionInterface()
 app.secret_key = ensure_flask_secret()
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("NOTES_SECURE_COOKIES", "0") == "1"
-app.config["SESSION_COOKIE_DOMAIN"] = session_cookie_domain()
+app.config["SESSION_COOKIE_DOMAIN"] = None
+app.config["SESSION_COOKIE_PATH"] = "/"
+if app.config["SESSION_COOKIE_SECURE"]:
+    app.config["SESSION_COOKIE_NAME"] = HostOnlySessionInterface.HOST_COOKIE
+else:
+    app.config["SESSION_COOKIE_NAME"] = HostOnlySessionInterface.LEGACY_COOKIE
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(seconds=SESSION_SECONDS)
 # 50 MB files are stored as base64 inside JSON (~4/3). 48 MB rejected those uploads.
 app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
@@ -106,11 +152,30 @@ def _srp_verifier_matches(user, email: str, password: str) -> bool:
     if not db.user_has_srp(user):
         return False
     try:
-        computed = int(generate_verifier_hex(str(user["srp_salt"]), email, password), 16)
+        kdf_ver = db.user_srp_kdf_version(user)
+        computed = int(
+            generate_verifier_hex(str(user["srp_salt"]), email, password, kdf_version=kdf_ver),
+            16,
+        )
         stored = int(str(user["srp_verifier"]), 16)
     except (TypeError, ValueError):
         return False
     return computed == stored
+
+
+def _revoke_other_sessions(uid: int, *, reason: str = "security") -> None:
+    try:
+        db.revoke_other_user_sessions(int(uid), auth.current_session_token(), reason=reason)
+    except Exception:
+        log.exception("revoke other sessions failed")
+
+
+def _generic_client_error(log_msg: str, exc: Exception | None = None, *, status: int = 400):
+    if exc is not None:
+        log.exception("%s: %s", log_msg, exc)
+    else:
+        log.error("%s", log_msg)
+    return jsonify({"error": "request failed"}), status
 
 
 def _account_login_password_ok(user, email: str, password: str) -> bool:
@@ -218,8 +283,12 @@ def _realign_login_credentials(
     password: str | None,
     srp_salt: str,
     srp_verifier: str,
+    *,
+    srp_kdf_version: int = SRP_KDF_V2,
 ) -> None:
-    db.update_user_srp_verifier(uid, srp_salt, srp_verifier)
+    db.update_user_srp_verifier(
+        uid, srp_salt, srp_verifier, srp_kdf_version=normalize_srp_kdf_version(srp_kdf_version),
+    )
     if not password:
         return
     user = db.get_user_by_id(uid)
@@ -623,6 +692,21 @@ def _health_readiness() -> tuple[bool, bool, bool, int, dict]:
     return ready, db_ok, disk_ok, db_bytes, server
 
 
+@app.get("/.well-known/security.txt")
+def security_txt():
+    contact = CONTACT_EMAIL or "security@deeperguard.com"
+    body = (
+        f"Contact: mailto:{contact}\n"
+        "Preferred-Languages: en, nl\n"
+        "Canonical: https://www.deeperguard.com/.well-known/security.txt\n"
+        "Policy: https://www.deeperguard.com/privacy\n"
+    )
+    resp = make_response(body)
+    resp.mimetype = "text/plain"
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
 @app.get("/api/health")
 def health():
     ready, db_ok, disk_ok, db_bytes, server = _health_readiness()
@@ -819,16 +903,31 @@ def api_auth_srp_register():
     email = str(body.get("email") or "").strip().lower()
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
+    srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
     if not EMAIL_RE.match(email):
         return jsonify({"error": "invalid email"}), 400
     if not srp_salt or not srp_verifier:
         return jsonify({"error": "missing srp credentials"}), 400
+    # Per-IP sign-up cap (M4) in addition to IP+email bucket.
+    if not auth_rate_allow(f"srp-register-ip:{auth.client_ip()}", limit=5, window=3600.0):
+        return jsonify({"error": "too many attempts"}), 429
     if _auth_rate_limited("srp-register", email):
         return jsonify({"error": "too many attempts"}), 429
     if db.get_user_by_email(email):
-        return jsonify({"error": "account already exists"}), 409
+        # Avoid distinct 409 enumeration; same message as a soft failure.
+        return jsonify({
+            "error": "Could not complete sign-up. If you already have an account, sign in instead.",
+        }), 400
+    if srp_kdf_version < SRP_KDF_V2:
+        return jsonify({"error": "srp_kdf_version 2 required for new accounts"}), 400
     kdf_salt = new_kdf_salt()
-    user_id = db.create_user_srp(email, kdf_salt, srp_salt, srp_verifier)
+    user_id = db.create_user_srp(
+        email,
+        kdf_salt,
+        srp_salt,
+        srp_verifier,
+        srp_kdf_version=SRP_KDF_V2,
+    )
     auth.login_user(user_id, totp_ok=True)
     notify_new_user_signup(email)
     user = db.get_user_by_id(user_id)
@@ -847,7 +946,9 @@ def api_auth_srp_challenge():
         return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if not user or not db.user_has_srp(user):
-        return jsonify({"error": "invalid credentials"}), 401
+        # Deterministic fake salt+B so unknown emails look like a real challenge (M5).
+        salt_hex, b_hex = fake_srp_challenge(email, app.secret_key)
+        return jsonify({"srp_salt": salt_hex, "B": b_hex, "srp_kdf_version": 1})
     try:
         sess = SrpServerSession()
         b_hex = sess.step1(email, str(user["srp_salt"]), str(user["srp_verifier"]))
@@ -859,7 +960,11 @@ def api_auth_srp_challenge():
         )
     except ValueError:
         return jsonify({"error": "invalid credentials"}), 401
-    return jsonify({"srp_salt": str(user["srp_salt"]), "B": b_hex})
+    return jsonify({
+        "srp_salt": str(user["srp_salt"]),
+        "B": b_hex,
+        "srp_kdf_version": db.user_srp_kdf_version(user),
+    })
 
 
 @app.post("/api/auth/srp/verify")
@@ -887,7 +992,31 @@ def api_auth_srp_verify():
     auth.login_user(int(user["id"]), totp_ok=not totp_required)
     payload = _login_payload(user, totp_required=totp_required)
     payload["M2"] = m2
+    kdf_ver = db.user_srp_kdf_version(user)
+    payload["srp_kdf_version"] = kdf_ver
+    payload["srp_kdf_upgrade"] = kdf_ver < SRP_KDF_V2
     return jsonify(payload)
+
+
+@app.post("/api/auth/srp/kdf-upgrade")
+def api_auth_srp_kdf_upgrade():
+    """Authenticated v1→v2 SRP verifier upgrade (CSRF + session required)."""
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user or not db.user_has_srp(user):
+        return jsonify({"error": "not found"}), 404
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    body = request.get_json(silent=True) or {}
+    srp_salt = str(body.get("srp_salt") or "").strip().lower()
+    srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
+    srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
+    if srp_kdf_version < SRP_KDF_V2 or not srp_salt or not srp_verifier:
+        return jsonify({"error": "invalid upgrade"}), 400
+    if db.user_srp_kdf_version(user) >= SRP_KDF_V2:
+        return jsonify({"ok": True, "srp_kdf_version": SRP_KDF_V2})
+    db.update_user_srp_verifier(uid, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2)
+    return jsonify({"ok": True, "srp_kdf_version": SRP_KDF_V2})
 
 
 @app.post("/api/auth/repair-login/challenge")
@@ -906,7 +1035,11 @@ def api_auth_repair_login_challenge():
         b_hex = _stored_srp_challenge(email, user, auth.SRP_PURPOSE_REPAIR_LOGIN)
     except ValueError:
         return jsonify({"error": "invalid credentials"}), 401
-    return jsonify({"srp_salt": str(user["srp_salt"]), "B": b_hex})
+    return jsonify({
+        "srp_salt": str(user["srp_salt"]),
+        "B": b_hex,
+        "srp_kdf_version": db.user_srp_kdf_version(user),
+    })
 
 
 @app.post("/api/auth/repair-login")
@@ -917,6 +1050,7 @@ def api_auth_repair_login():
     password = str(body.get("password") or "")
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
+    srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
     a_hex = str(body.get("A") or "").strip().lower()
     m1 = str(body.get("M1") or "").strip().lower()
     if not EMAIL_RE.match(email):
@@ -938,9 +1072,14 @@ def api_auth_repair_login():
             return jsonify({"error": "invalid credentials", "repair_exhausted": repair_exhausted}), 401
         if not srp_salt or not srp_verifier:
             srp_salt = new_srp_salt_hex()
-            srp_verifier = generate_verifier_hex(srp_salt, email, password)
+            srp_verifier = generate_verifier_hex(
+                srp_salt, email, password, kdf_version=SRP_KDF_V2,
+            )
+            srp_kdf_version = SRP_KDF_V2
         uid = int(user["id"])
-        _realign_login_credentials(uid, email, password, srp_salt, srp_verifier)
+        _realign_login_credentials(
+            uid, email, password, srp_salt, srp_verifier, srp_kdf_version=srp_kdf_version,
+        )
         totp_required = bool(user["totp_enabled"])
         auth.login_user(uid, totp_ok=not totp_required)
         user = db.get_user_by_id(uid)
@@ -955,7 +1094,9 @@ def api_auth_repair_login():
     if not _verify_stored_srp_proof(email, user, a_hex, m1, auth.SRP_PURPOSE_REPAIR_LOGIN):
         return jsonify({"error": "invalid credentials", "repair_exhausted": True}), 401
     uid = int(user["id"])
-    _realign_login_credentials(uid, email, None, srp_salt, srp_verifier)
+    _realign_login_credentials(
+        uid, email, None, srp_salt, srp_verifier, srp_kdf_version=srp_kdf_version,
+    )
     totp_required = bool(user["totp_enabled"])
     auth.login_user(uid, totp_ok=not totp_required)
     user = db.get_user_by_id(uid)
@@ -1043,7 +1184,11 @@ def api_auth_vault_recovery_challenge():
         b_hex = _stored_srp_challenge(email, user, auth.SRP_PURPOSE_VAULT_RECOVERY)
     except ValueError:
         return jsonify({"error": "invalid credentials"}), 401
-    return jsonify({"srp_salt": str(user["srp_salt"]), "B": b_hex})
+    return jsonify({
+        "srp_salt": str(user["srp_salt"]),
+        "B": b_hex,
+        "srp_kdf_version": db.user_srp_kdf_version(user),
+    })
 
 
 @app.post("/api/auth/vault-recovery")
@@ -1135,7 +1280,7 @@ def api_login():
         return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if user and db.user_auth_method(user) == "srp":
-        return jsonify({"error": "incorrect password", "auth_method": "srp"}), 401
+        return jsonify({"error": "invalid credentials"}), 401
     user_id, totp_required = auth.verify_credentials(email, password)
     if not user_id:
         return jsonify({"error": "invalid credentials"}), 401
@@ -1215,7 +1360,7 @@ def api_webauthn_register_options():
         existing = [str(row["credential_id"]) for row in db.list_webauthn_credentials(uid)]
         options = webauthn_mod.registration_options(uid, user["email"], existing)
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 400
+        return _generic_client_error("webauthn register options failed", exc, status=400)
     return jsonify({"ok": True, "options": options})
 
 
@@ -1244,7 +1389,8 @@ def api_webauthn_register_verify():
             ",".join(credential.get("transports") or []),
         )
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 400
+        return _generic_client_error("webauthn register verify failed", exc, status=400)
+    _revoke_other_sessions(uid, reason="passkey")
     return jsonify({"ok": True})
 
 
@@ -1280,6 +1426,7 @@ def api_webauthn_remove_credential():
         return jsonify({"error": "missing credential_id"}), 400
     if not db.delete_webauthn_credential(uid, credential_id):
         return jsonify({"error": "not found"}), 404
+    _revoke_other_sessions(uid, reason="passkey")
     return jsonify({"ok": True})
 
 
@@ -1290,20 +1437,20 @@ def api_webauthn_login_options():
     if _auth_rate_limited("webauthn-login", email or auth.client_ip()):
         return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
-    if not user:
-        return jsonify({"error": "invalid credentials"}), 401
-    creds = db.list_webauthn_credentials(int(user["id"]))
-    if not creds:
-        return jsonify({"error": "no passkeys registered"}), 404
+    # Indistinguishable response for unknown / no-passkey accounts (M5).
     if not webauthn_mod.WEBAUTHN_AVAILABLE:
         return jsonify({"error": "webauthn not available on server"}), 501
     host_error = webauthn_mod.passkey_host_error()
     if host_error:
         return jsonify({"error": host_error}), 400
+    creds = db.list_webauthn_credentials(int(user["id"])) if user else []
     try:
-        options = webauthn_mod.authentication_options([dict(row) for row in creds])
+        if creds:
+            options = webauthn_mod.authentication_options([dict(row) for row in creds])
+        else:
+            options = webauthn_mod.authentication_options_empty()
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 400
+        return _generic_client_error("webauthn login options failed", exc, status=400)
     return jsonify({"ok": True, "options": options})
 
 
@@ -1329,7 +1476,7 @@ def api_webauthn_login_verify():
         verified = webauthn_mod.verify_authentication(credential, dict(stored))
         db.update_webauthn_sign_count(verified["credential_id"], verified["sign_count"])
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 401
+        return _generic_client_error("webauthn login verify failed", exc, status=401)
     totp_required = bool(user["totp_enabled"])
     auth.login_user(int(user["id"]), totp_ok=not totp_required)
     return jsonify(_login_payload(user, totp_required=totp_required))
@@ -1391,7 +1538,11 @@ def api_account_unlock_challenge():
         b_hex = _stored_srp_challenge(email, user, auth.SRP_PURPOSE_UNLOCK)
     except ValueError:
         return jsonify({"error": "invalid credentials"}), 401
-    return jsonify({"srp_salt": str(user["srp_salt"]), "B": b_hex})
+    return jsonify({
+        "srp_salt": str(user["srp_salt"]),
+        "B": b_hex,
+        "srp_kdf_version": db.user_srp_kdf_version(user),
+    })
 
 
 @app.post("/api/account/unlock")
@@ -1448,7 +1599,11 @@ def api_account_password_challenge():
         b_hex = _stored_srp_challenge(email, user, auth.SRP_PURPOSE_PASSWORD_CHANGE)
     except ValueError:
         return jsonify({"error": "invalid credentials"}), 401
-    return jsonify({"srp_salt": str(user["srp_salt"]), "B": b_hex})
+    return jsonify({
+        "srp_salt": str(user["srp_salt"]),
+        "B": b_hex,
+        "srp_kdf_version": db.user_srp_kdf_version(user),
+    })
 
 
 @app.post("/api/account/password/prove")
@@ -1527,22 +1682,27 @@ def api_account_password():
             }), 400
         return jsonify({"error": "invalid or expired rotation token"}), 401
 
+    srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
     if db.user_auth_method(user) == "srp":
         if current or new or account or a_hex or m1:
             return jsonify({"error": "password must not be sent to the server"}), 400
         if not srp_salt or not srp_verifier:
             return jsonify({"error": "missing srp verifier"}), 400
-        changed_at = db.update_user_srp_verifier(uid, srp_salt, srp_verifier)
+        changed_at = db.update_user_srp_verifier(
+            uid, srp_salt, srp_verifier, srp_kdf_version=srp_kdf_version,
+        )
         db.clear_user_legacy_password(uid)
+        _revoke_other_sessions(uid, reason="password")
         return jsonify({"ok": True, "password_changed_at": changed_at, "auth_method": "srp"})
 
     if len(new) < 8:
         return jsonify({"error": "new password must be at least 8 characters"}), 400
     changed_at = db.update_user_password(uid, hash_password(new))
     if srp_salt and srp_verifier:
-        db.upgrade_user_to_srp(uid, srp_salt, srp_verifier)
+        db.upgrade_user_to_srp(uid, srp_salt, srp_verifier, srp_kdf_version=srp_kdf_version)
         if strict_zk():
             db.clear_user_legacy_password(uid)
+    _revoke_other_sessions(uid, reason="password")
     return jsonify({"ok": True, "password_changed_at": changed_at})
 
 
@@ -1653,8 +1813,13 @@ def api_totp_setup():
     if user["totp_enabled"]:
         if not code:
             return jsonify({"error": "current 2FA code required"}), 403
-        if not totp_mod.verify(str(user["totp_secret"]), code):
+        ok, step = totp_mod.verify_and_step(
+            str(user["totp_secret"]), code, last_step=db.user_totp_last_step(user),
+        )
+        if not ok:
             return jsonify({"error": "invalid code"}), 400
+        if step:
+            db.set_user_totp_last_step(uid, step)
     secret = totp_mod.new_secret()
     db.update_user_totp(uid, secret, enabled=False)
     return jsonify(
@@ -1677,10 +1842,16 @@ def api_totp_enable():
         return blocked
     body = request.get_json(silent=True) or {}
     code = str(body.get("code") or "")
-    if not totp_mod.verify(str(user["totp_secret"]), code):
+    ok, step = totp_mod.verify_and_step(
+        str(user["totp_secret"]), code, last_step=db.user_totp_last_step(user),
+    )
+    if not ok:
         return jsonify({"error": "invalid code"}), 400
+    if step:
+        db.set_user_totp_last_step(uid, step)
     db.update_user_totp(uid, str(user["totp_secret"]), enabled=True)
     auth.login_user(uid, totp_ok=True)
+    _revoke_other_sessions(uid, reason="totp")
     return jsonify({"ok": True})
 
 
@@ -1699,10 +1870,16 @@ def api_totp_disable():
     if user["totp_enabled"]:
         if not code:
             return jsonify({"error": "current 2FA code required"}), 403
-        if not totp_mod.verify(str(user["totp_secret"]), code):
+        ok, step = totp_mod.verify_and_step(
+            str(user["totp_secret"]), code, last_step=db.user_totp_last_step(user),
+        )
+        if not ok:
             return jsonify({"error": "invalid code"}), 400
+        if step:
+            db.set_user_totp_last_step(uid, step)
     db.update_user_totp(uid, "", enabled=False)
     auth.login_user(uid, totp_ok=True)
+    _revoke_other_sessions(uid, reason="totp")
     return jsonify({"ok": True})
 
 
@@ -1831,7 +2008,8 @@ def api_backup_email():
         meta = send_user_backup(uid, recipient)
     except Exception as exc:
         db.log_backup(uid, recipient, 0, 0, "error", str(exc))
-        return jsonify({"error": f"email failed: {exc}"}), 502
+        log.exception("backup email failed")
+        return jsonify({"error": "email failed"}), 502
     record_backup_attachment_send(uid, recipient)
     return jsonify(
         {
@@ -1839,7 +2017,6 @@ def api_backup_email():
             "bytes": meta["bytes_size"],
             "items": meta["item_count"],
             "compact": bool(meta.get("compact")),
-            "local_path": meta.get("local_path"),
         }
     )
 
@@ -1879,7 +2056,8 @@ def api_backup_pcloud_settings():
             rclone_token=rclone_token,
         )
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        log.warning("pcloud settings rejected: %s", exc)
+        return jsonify({"error": "invalid pCloud settings"}), 400
     user = db.get_user_by_id(uid)
     return jsonify(
         {
@@ -1912,7 +2090,7 @@ def api_backup_pcloud_sync():
     try:
         meta = sync_user_backup(uid)
     except Exception as exc:
-        return jsonify({"error": f"pCloud sync failed: {exc}"}), 502
+        return _generic_client_error("pCloud sync failed", exc, status=502)
     return jsonify(meta)
 
 
@@ -1943,9 +2121,9 @@ def api_ocr():
         try:
             result = ocr_mod.extract(filename, mime, data)
         except ocr_mod.OcrError as exc:
-            return jsonify({"error": str(exc)}), 400
+            return _generic_client_error("ocr sync failed", exc, status=400)
         except Exception as exc:
-            return jsonify({"error": f"processing failed: {exc}"}), 500
+            return _generic_client_error("ocr sync processing failed", exc, status=500)
         stored = ocr_index.save_document(uid, att_id, filename, mime, data, result)
         if ocr_ephemeral() and att_id:
             ocr_index.delete_document(uid, att_id)
@@ -1953,7 +2131,7 @@ def api_ocr():
     try:
         job_id = ocr_jobs.submit(uid, filename, mime, data, att_id)
     except RuntimeError as exc:
-        return jsonify({"error": str(exc)}), 503
+        return _generic_client_error("ocr job submit failed", exc, status=503)
     return jsonify({"ok": True, "job_id": job_id, "status": "pending"}), 202
 
 
@@ -1996,9 +2174,9 @@ def api_media_preview():
     try:
         preview = ocr_mod.render_list_preview(filename, mime, data)
     except ocr_mod.OcrError as exc:
-        return jsonify({"error": str(exc)}), 400
+        return _generic_client_error("media preview failed", exc, status=400)
     except Exception as exc:
-        return jsonify({"error": f"processing failed: {exc}"}), 500
+        return _generic_client_error("media preview processing failed", exc, status=500)
     if not preview:
         return jsonify({"error": "Could not render a preview for this file."}), 400
     return jsonify({
@@ -2107,9 +2285,9 @@ def api_media_prepare():
     try:
         result = ocr_mod.prepare(rows)
     except ocr_mod.OcrError as exc:
-        return jsonify({"error": str(exc)}), 400
+        return _generic_client_error("media prepare failed", exc, status=400)
     except Exception as exc:
-        return jsonify({"error": f"prepare failed: {exc}"}), 500
+        return _generic_client_error("media prepare processing failed", exc, status=500)
     response = app.response_class(result["data"], mimetype=result["mime"])
     response.headers["X-Notes-Filename"] = result["filename"]
     response.headers["Cache-Control"] = "no-store"

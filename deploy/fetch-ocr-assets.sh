@@ -8,11 +8,14 @@ JSPDF="$ROOT/app/static/js/vendor/jspdf"
 HEIC="$ROOT/app/static/js/vendor/heic2any"
 mkdir -p "$PDF" "$TESS/lang" "$JSPDF" "$HEIC"
 
-PDFJS_VER="${PDFJS_VER:-3.11.174}"
+# pdf.js ≥4.2 fixes CVE-2024-4367 (ESM builds only on npm).
+PDFJS_VER="${PDFJS_VER:-4.10.38}"
 TESSERACT_VER="${TESSERACT_VER:-5.1.1}"
 TESSDATA_VER="${TESSDATA_VER:-4.0.0}"
-JSPDF_VER="${JSPDF_VER:-2.5.2}"
+JSPDF_VER="${JSPDF_VER:-3.0.1}"
 HEIC_VER="${HEIC_VER:-0.0.4}"
+PDFJS_STAMP="$PDF/.pdfjs-ver"
+JSPDF_STAMP="$JSPDF/.jspdf-ver"
 
 fetch() {
   local url="$1"
@@ -25,8 +28,17 @@ fetch() {
   mv "$dest.part" "$dest"
 }
 
-fetch "https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/legacy/build/pdf.min.js" "$PDF/pdf.min.js"
-fetch "https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/legacy/build/pdf.worker.min.js" "$PDF/pdf.worker.min.js"
+if [[ ! -f "$PDFJS_STAMP" || "$(cat "$PDFJS_STAMP" 2>/dev/null || true)" != "$PDFJS_VER" ]]; then
+  rm -f "$PDF/pdf.min.js" "$PDF/pdf.worker.min.js" "$PDF/pdf.min.mjs" "$PDF/pdf.worker.min.mjs" "$PDF/pdf.mjs" "$PDF/pdf.worker.mjs"
+  printf '%s\n' "$PDFJS_VER" > "$PDFJS_STAMP"
+fi
+if [[ ! -f "$JSPDF_STAMP" || "$(cat "$JSPDF_STAMP" 2>/dev/null || true)" != "$JSPDF_VER" ]]; then
+  rm -f "$JSPDF/jspdf.umd.min.js"
+  printf '%s\n' "$JSPDF_VER" > "$JSPDF_STAMP"
+fi
+
+fetch "https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/legacy/build/pdf.min.mjs" "$PDF/pdf.min.mjs"
+fetch "https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/legacy/build/pdf.worker.min.mjs" "$PDF/pdf.worker.min.mjs"
 
 fetch "https://cdn.jsdelivr.net/npm/tesseract.js@${TESSERACT_VER}/dist/tesseract.min.js" "$TESS/tesseract.min.js"
 fetch "https://cdn.jsdelivr.net/npm/tesseract.js@${TESSERACT_VER}/dist/worker.min.js" "$TESS/worker.min.js"

@@ -65,4 +65,9 @@ assert.match(table, /text-align:right/);
 assert.match(table, /<strong>x<\/strong>/);
 assert.doesNotMatch(table, /\| Col A \|/);
 
+// L2: fence language / sheet name must be attribute-escaped.
+const fenceXss = render('```x"onmouseover="alert(1)\ncode\n```');
+assert.match(fenceXss, /data-lang="x&quot;onmouseover=&quot;alert\(1\)"/);
+assert.doesNotMatch(fenceXss, /data-lang="x"onmouseover=/);
+
 console.log('ok');

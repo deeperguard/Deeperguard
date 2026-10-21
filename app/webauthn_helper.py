@@ -42,6 +42,13 @@ def _rp_id() -> str:
 
 
 def _rp_origin() -> str:
+    # Prefer configured constant so Host-header spoofing cannot widen origins (L11).
+    configured = config.webauthn_expected_origin()
+    if configured.startswith("https://") or configured.startswith("http://"):
+        # Local/dev IP hosts still need request-derived origin for LAN testing.
+        host = _request_host()
+        if host and not config.is_ip_host(host) and config.passkey_host_ok(host):
+            return configured
     scheme = "https" if request.is_secure else "http"
     host = _request_host()
     if not host:
@@ -128,6 +135,11 @@ def authentication_options(credentials: list[dict[str, Any]]) -> dict[str, Any]:
     )
     session[SESSION_WEBAUTHN_AUTH] = bytes_to_base64url(options.challenge)
     return options_to_json_dict(options)
+
+
+def authentication_options_empty() -> dict[str, Any]:
+    """Options with empty allowCredentials (anti-enumeration for unknown emails)."""
+    return authentication_options([])
 
 
 def verify_authentication(credential: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]:
