@@ -6,6 +6,11 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
+const nodeCrypto = require('crypto');
+if (!global.crypto || !global.crypto.subtle) {
+  global.crypto = nodeCrypto.webcrypto;
+}
+
 const jsRoot = path.join(__dirname, '..', 'app', 'static', 'js');
 
 global.sessionStorage = {
@@ -28,6 +33,7 @@ global.fetch = async (url) => {
       json: async () => ({
         srp_salt: 'abc',
         B: '1' + '0'.repeat(510),
+        srp_kdf_version: 1,
       }),
     };
   }
