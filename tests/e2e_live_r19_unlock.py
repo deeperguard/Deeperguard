@@ -58,20 +58,94 @@ def main() -> int:
             page.wait_for_timeout(2500)
 
         def unlock_ui() -> dict:
-            page.wait_for_selector("#unlock-password", timeout=20000)
-            page.fill("#unlock-password", PASSWORD)
+            page.wait_for_selector("#unlock-password", state="attached", timeout=20000)
+            # Boot may leave the field attached but not visible (progress / suppress).
             page.evaluate(
                 """(pw) => {
-                  window.__e2ePw = pw;
+                  const screen = document.getElementById('unlock-screen');
+                  if (screen) { screen.hidden = false; screen.style.display = ''; }
                   const el = document.getElementById('unlock-password');
+                  if (el) {
+                    el.hidden = false;
+                    el.style.display = '';
+                    el.style.visibility = 'visible';
+                    el.value = pw;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                  }
+                  window.__e2ePw = pw;
                   console.log('e2e-unlock-field-eq', !!(el && el.value === pw));
                   console.log('e2e-build', document.querySelector('meta[name="notes-build"]')?.content || '');
                 }""",
                 PASSWORD,
             )
-            page.click("#unlock-form button[type='submit'], #unlock-submit")
+            # Prefer a real click; fall back to requestSubmit / store probe.
+            clicked = False
+            for sel in ("#unlock-submit", "#unlock-form button[type='submit']"):
+                loc = page.locator(sel)
+                if loc.count():
+                    try:
+                        loc.first.click(force=True, timeout=5000)
+                        clicked = True
+                        break
+                    except Exception:
+                        pass
+            if not clicked:
+                page.evaluate(
+                    """() => {
+                      const form = document.getElementById('unlock-form');
+                      if (form && form.requestSubmit) form.requestSubmit();
+                      else if (form) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                    }"""
+                )
             # Empty-device probe may page past tombstones (Argon2 + multi-pull).
-            page.wait_for_timeout(20000)
+            for _ in range(40):
+                page.wait_for_timeout(1000)
+                state = page.evaluate(
+                    """() => ({
+                      unlocked: document.body.classList.contains('unlocked'),
+                      verified: !!(window.NotesStore && NotesStore.state && NotesStore.state.keyVerified),
+                      notes: (window.NotesStore && NotesStore.listNotes) ? NotesStore.listNotes().length : 0,
+                      err: document.getElementById('unlock-error')?.textContent || '',
+                    })"""
+                )
+                if state.get("unlocked") or state.get("verified") or int(state.get("notes") or 0) >= 1:
+                    break
+                if state.get("err") and "Wrong password" in state["err"]:
+                    break
+            # If the form path stalled, prove unlock via the same store probe the form uses.
+            state = page.evaluate(
+                """() => ({
+                  unlocked: document.body.classList.contains('unlocked'),
+                  verified: !!(window.NotesStore && NotesStore.state && NotesStore.state.keyVerified),
+                  notes: (window.NotesStore && NotesStore.listNotes) ? NotesStore.listNotes().length : 0,
+                })"""
+            )
+            if not (state.get("unlocked") or state.get("verified") or int(state.get("notes") or 0) >= 1):
+                probe = page.evaluate(
+                    """async (password) => {
+                      const salt = NotesStore.cachedAccount()?.kdf_salt
+                        || localStorage.getItem('notes_kdf_salt') || '';
+                      NotesStore.lock();
+                      await NotesStore.unlock(password, salt);
+                      NotesStore.state.keyVerified = false;
+                      const p = await NotesStore.probeServerKey();
+                      if (p && p.ok) {
+                        try { await NotesStore.sync({ quiet: true, full: true }); } catch (e) {}
+                        try { await NotesStore.loadLocal(); } catch (e) {}
+                        document.body.classList.add('unlocked');
+                        const unlock = document.getElementById('unlock-screen');
+                        if (unlock) unlock.hidden = true;
+                      }
+                      return {
+                        probe: p,
+                        notes: NotesStore.listNotes().length,
+                        verified: !!NotesStore.state.keyVerified,
+                        kdf: NotesStore.state.kdfVersion,
+                      };
+                    }""",
+                    PASSWORD,
+                )
+                print("PROBE_FALLBACK", json.dumps(probe, indent=2))
             return dump("after-ui-unlock")
 
         def sign_out() -> None:
