@@ -6,6 +6,14 @@ const NotesSpreadsheet = (() => {
       .replace(/>/g, '&gt;');
   }
 
+  function escapeAttr(text) {
+    return String(text ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   function safeParseJson(raw) {
     const text = String(raw || '').trim();
     if (!text.startsWith('{')) return null;
@@ -88,7 +96,7 @@ const NotesSpreadsheet = (() => {
     const more = matrix.length > maxRows
       ? `<p class="muted spreadsheet-more">${matrix.length - maxRows} more row${matrix.length - maxRows === 1 ? '' : 's'} not shown.</p>`
       : '';
-    return `<div class="spreadsheet-preview" data-sheet="${escapeHtml(name)}">
+    return `<div class="spreadsheet-preview" data-sheet="${escapeAttr(name)}">
       <div class="spreadsheet-preview-head"><strong>${escapeHtml(name)}</strong></div>
       <div class="spreadsheet-scroll"><table class="spreadsheet-table"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table></div>
       ${more}
