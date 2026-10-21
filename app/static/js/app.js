@@ -5594,6 +5594,11 @@
     // Nothing on the server to decrypt. The caller must prove the account
     // password before markKeyVerified — an empty pull is not a key.
     if (probe?.empty) return { via: 'empty' };
+    if (probe?.noSample) {
+      const pending = new Error('Still downloading encrypted notes. Try unlock again in a moment.');
+      pending.code = 'PROBE_NO_SAMPLE';
+      throw pending;
+    }
     const wrong = new Error('Wrong password.');
     wrong.status = 401;
     wrong.code = 'DECRYPT_FAILED';
@@ -6367,6 +6372,29 @@
     unlockInFlight = (async () => {
       const clean = String(password || '').trim();
       if (!clean) throw new Error('Enter your password');
+      try {
+        const build = document.querySelector('meta[name="notes-build"]')?.content || '';
+        const swUrl = (navigator.serviceWorker && navigator.serviceWorker.controller
+          && navigator.serviceWorker.controller.scriptURL) || '';
+        console.info('[notes-unlock] build', build, 'sw', swUrl || 'none', 'silent', !!silent);
+      } catch (logErr) { /* ignore */ }
+      // Prefer a claimed SW before empty-device probe/unlock so a stale /app
+      // shell cannot run Round-51 probe logic against a newer server.
+      try {
+        if ('serviceWorker' in navigator) {
+          const ready = navigator.serviceWorker.ready;
+          if (ready && typeof ready.then === 'function') {
+            await Promise.race([
+              ready,
+              new Promise((resolve) => setTimeout(resolve, 1500)),
+            ]);
+          }
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg && typeof reg.update === 'function') {
+            reg.update().catch(() => {});
+          }
+        }
+      } catch (swErr) { /* ignore */ }
       const cached = NotesStore.cachedAccount();
       const salt = cached.kdf_salt;
         if (salt) {
