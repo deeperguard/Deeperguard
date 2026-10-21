@@ -2149,18 +2149,43 @@ const NotesStore = (() => {
   async function probeServerKey() {
     if (!state.cryptoKey) return { ok: false, locked: true };
     if (state.keyVerified) return { ok: true, already: true };
-    let data;
+    // Pull pages until we have live ciphertext. Tombstones sort first by
+    // synced_at on accounts that deleted early notes (Round 52 +r19): a single
+    // limit=8 page can be all deleted and must not mean "wrong password".
+    const rows = [];
+    let total = 0;
+    let cursorSince = 0;
+    let afterUuid = '';
+    let pages = 0;
     try {
-      data = await api('/api/sync/pull', {
-        method: 'POST',
-        body: JSON.stringify({
-          since: 0,
-          limit: 8,
+      while (pages < 24 && rows.length < 3) {
+        pages += 1;
+        const pullBody = {
+          since: cursorSince,
+          limit: 20,
           cursor: 'synced_at',
           include_blobs: 0,
-        }),
-        timeoutMs: 15000,
-      });
+        };
+        if (afterUuid) pullBody.after = afterUuid;
+        const data = await api('/api/sync/pull', {
+          method: 'POST',
+          body: JSON.stringify(pullBody),
+          timeoutMs: 15000,
+        });
+        if (pages === 1) total = Number(data.total_undeleted) || 0;
+        const batch = data.items || [];
+        if (!batch.length) break;
+        for (const row of batch) {
+          afterUuid = row.item_uuid || afterUuid;
+          const mark = Math.max(Number(row.synced_at) || 0, Number(row.updated_at) || 0);
+          if (mark > cursorSince) cursorSince = mark;
+          if (row && row.ciphertext && !row.deleted && !row.unchanged) {
+            rows.push(row);
+            if (rows.length >= 3) break;
+          }
+        }
+        if (!data.has_more) break;
+      }
     } catch (err) {
       if (isProbablyOffline(err)) {
         const offline = new Error('Could not verify this password while offline. Connect and try again.');
@@ -2170,10 +2195,14 @@ const NotesStore = (() => {
       }
       throw err;
     }
-    const total = Number(data.total_undeleted) || 0;
-    const rows = (data.items || []).filter((row) => row && row.ciphertext && !row.deleted);
     if (total === 0 && rows.length === 0) {
       return { ok: false, empty: true, opened: 0 };
+    }
+    if (rows.length === 0) {
+      // Vault has undeleted notes but this pull window only saw tombstones /
+      // unchanged stubs. Not a password proof either way.
+      logSync('probe-no-sample', { total, pages });
+      return { ok: false, empty: false, noSample: true, opened: 0, pages, total };
     }
     const tryRows = async () => {
       let opened = 0;
@@ -2193,7 +2222,7 @@ const NotesStore = (() => {
     let opened = await tryRows();
     if (opened > 0) {
       markKeyVerified();
-      return { ok: true, empty: false, opened };
+      return { ok: true, empty: false, opened, pages };
     }
     // Empty device: first derive used the account hint only. Retry the other
     // vault KDF once before declaring the password wrong.
@@ -2213,7 +2242,7 @@ const NotesStore = (() => {
         opened = await tryRows();
         if (opened > 0) {
           markKeyVerified();
-          return { ok: true, empty: false, opened };
+          return { ok: true, empty: false, opened, pages };
         }
       } catch (err) {
         /* keep previous key */
@@ -2222,7 +2251,7 @@ const NotesStore = (() => {
       state.altCryptoKey = prevAlt;
       state.kdfVersion = prevVer;
     }
-    return { ok: false, wrongKey: true, empty: false, opened: 0 };
+    return { ok: false, wrongKey: true, empty: false, opened: 0, pages };
   }
 
   let accountInFlight = null;
