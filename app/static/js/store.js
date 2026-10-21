@@ -3363,6 +3363,9 @@ const NotesStore = (() => {
       localStorage.removeItem('notes_test_password');
       localStorage.removeItem('notes_pending_device_report');
       localStorage.removeItem('notes_remember_device_declined');
+      // Stale away-timestamps must not survive sign-out and surprise-lock the
+      // next session (Round 53).
+      localStorage.removeItem('notes_unfocused_at');
     } catch (err) {
       /* ignore */
     }
@@ -3373,6 +3376,7 @@ const NotesStore = (() => {
       sessionStorage.removeItem('notes_kdf_cache');
       sessionStorage.removeItem('notes_csrf');
       sessionStorage.removeItem('notes_open_id');
+      sessionStorage.removeItem('notes_unfocused_at');
     } catch (err) {
       /* ignore */
     }
