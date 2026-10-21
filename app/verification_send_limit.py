@@ -62,6 +62,13 @@ def backup_attachment_cap_message() -> str:
     return "Too many encrypted backup emails sent today. Try again tomorrow."
 
 
+def _global_daily_cap() -> int:
+    try:
+        return max(1, int(os.environ.get("NOTES_VERIFY_SEND_GLOBAL_DAILY_CAP", "2000")))
+    except (TypeError, ValueError):
+        return 2000
+
+
 def check_verification_send(user_id: int, recipient: str) -> str:
     """Return 'send', 'skip' (cooldown), or 'blocked' (daily cap)."""
     target = str(recipient or "").strip().lower()
@@ -77,6 +84,10 @@ def check_verification_send(user_id: int, recipient: str) -> str:
         return "blocked"
     if db.count_email_sends_for_recipient(target, KIND_VERIFY, since) >= cap:
         return "blocked"
+    # Global daily cap across all accounts (M4).
+    if hasattr(db, "count_email_sends_global"):
+        if db.count_email_sends_global(KIND_VERIFY, since) >= _global_daily_cap():
+            return "blocked"
     return "send"
 
 

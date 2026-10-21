@@ -174,6 +174,10 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN srp_salt TEXT NOT NULL DEFAULT ''")
     if "srp_verifier" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN srp_verifier TEXT NOT NULL DEFAULT ''")
+    if "srp_kdf_version" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN srp_kdf_version INTEGER NOT NULL DEFAULT 1")
+    if "totp_last_step" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0")
     if "storage_quota_bytes" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN storage_quota_bytes INTEGER NOT NULL DEFAULT 0")
     if "is_admin" not in cols:
@@ -347,30 +351,36 @@ def create_user_srp(
     srp_verifier: str,
     kdf_iterations: int = 10000,
     *,
+    srp_kdf_version: int = 2,
     storage_quota_bytes: int | None = None,
     is_admin: bool = False,
     plan: str | None = None,
 ) -> int:
-    from config import user_is_admin_email
+    from config import unverified_user_quota_bytes
     from plans import default_plan, normalize_plan, plan_storage_quota_bytes
 
     ts = now()
     user_plan = normalize_plan(plan or default_plan())
-    quota = int(
+    # Unverified accounts get a tiny quota until email confirmation (M4).
+    full_quota = int(
         storage_quota_bytes
         if storage_quota_bytes is not None
         else plan_storage_quota_bytes(user_plan)
     )
-    admin_flag = 1 if is_admin or user_is_admin_email(email.strip().lower()) else 0
+    quota = int(unverified_user_quota_bytes()) if storage_quota_bytes is None else full_quota
+    # Do not stamp is_admin from NOTES_ADMIN_EMAILS at signup — L10 requires a
+    # verified email, and config.user_is_admin checks the env list at runtime.
+    admin_flag = 1 if is_admin else 0
+    kdf_ver = 2 if int(srp_kdf_version or 1) >= 2 else 1
     with tx() as conn:
         cur = conn.execute(
             """
             INSERT INTO users (
                 email, password_hash, kdf_salt, kdf_iterations, vault_kdf_version,
-                auth_method, srp_salt, srp_verifier, storage_quota_bytes, is_admin, plan,
+                auth_method, srp_salt, srp_verifier, srp_kdf_version, storage_quota_bytes, is_admin, plan,
                 email_verified, pcloud_remote_path, created_at, updated_at
             )
-            VALUES (?, '', ?, ?, 2, 'srp', ?, ?, ?, ?, ?, 0, '', ?, ?)
+            VALUES (?, '', ?, ?, 2, 'srp', ?, ?, ?, ?, ?, ?, 0, '', ?, ?)
             """,
             (
                 email.strip().lower(),
@@ -378,6 +388,7 @@ def create_user_srp(
                 int(kdf_iterations),
                 srp_salt.strip().lower(),
                 srp_verifier.strip().lower(),
+                kdf_ver,
                 quota,
                 admin_flag,
                 user_plan,
@@ -421,32 +432,114 @@ def user_has_legacy_password(user) -> bool:
         return False
 
 
-def upgrade_user_to_srp(user_id: int, srp_salt: str, srp_verifier: str) -> None:
+def upgrade_user_to_srp(
+    user_id: int,
+    srp_salt: str,
+    srp_verifier: str,
+    *,
+    srp_kdf_version: int = 2,
+) -> None:
     ts = now()
+    kdf_ver = 2 if int(srp_kdf_version or 1) >= 2 else 1
     with tx() as conn:
         conn.execute(
             """
             UPDATE users
-            SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, updated_at = ?
+            SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
+                updated_at = ?
             WHERE id = ?
             """,
-            (srp_salt.strip().lower(), srp_verifier.strip().lower(), ts, user_id),
+            (srp_salt.strip().lower(), srp_verifier.strip().lower(), kdf_ver, ts, user_id),
         )
 
 
-def update_user_srp_verifier(user_id: int, srp_salt: str, srp_verifier: str) -> float:
+def update_user_srp_verifier(
+    user_id: int,
+    srp_salt: str,
+    srp_verifier: str,
+    *,
+    srp_kdf_version: int | None = None,
+) -> float:
     ts = now()
     with tx() as conn:
-        conn.execute(
-            """
-            UPDATE users
-            SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?,
-                updated_at = ?, password_changed_at = ?
-            WHERE id = ?
-            """,
-            (srp_salt.strip().lower(), srp_verifier.strip().lower(), ts, ts, user_id),
-        )
+        if srp_kdf_version is None:
+            conn.execute(
+                """
+                UPDATE users
+                SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?,
+                    updated_at = ?, password_changed_at = ?
+                WHERE id = ?
+                """,
+                (srp_salt.strip().lower(), srp_verifier.strip().lower(), ts, ts, user_id),
+            )
+        else:
+            kdf_ver = 2 if int(srp_kdf_version or 1) >= 2 else 1
+            conn.execute(
+                """
+                UPDATE users
+                SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
+                    updated_at = ?, password_changed_at = ?
+                WHERE id = ?
+                """,
+                (
+                    srp_salt.strip().lower(),
+                    srp_verifier.strip().lower(),
+                    kdf_ver,
+                    ts,
+                    ts,
+                    user_id,
+                ),
+            )
     return ts
+
+
+def user_srp_kdf_version(user) -> int:
+    try:
+        value = int(user["srp_kdf_version"])
+    except (KeyError, TypeError, ValueError):
+        return 1
+    return 2 if value >= 2 else 1
+
+
+def revoke_other_user_sessions(user_id: int, keep_token: str = "", *, reason: str = "security") -> int:
+    """Revoke all sessions for user except the current cookie token (if given)."""
+    reason = str(reason or "security")[:32]
+    keep_hash = _session_token_hash(keep_token) if keep_token else ""
+    with tx() as conn:
+        if keep_hash:
+            cur = conn.execute(
+                """
+                UPDATE user_sessions
+                SET revoked_at = ?, revoke_reason = ?
+                WHERE user_id = ? AND revoked_at = 0 AND token_hash != ?
+                """,
+                (now(), reason, int(user_id), keep_hash),
+            )
+        else:
+            cur = conn.execute(
+                """
+                UPDATE user_sessions
+                SET revoked_at = ?, revoke_reason = ?
+                WHERE user_id = ? AND revoked_at = 0
+                """,
+                (now(), reason, int(user_id)),
+            )
+        return int(cur.rowcount or 0)
+
+
+def user_totp_last_step(user) -> int:
+    try:
+        return int(user["totp_last_step"] or 0)
+    except (KeyError, TypeError, ValueError):
+        return 0
+
+
+def set_user_totp_last_step(user_id: int, step: int) -> None:
+    with tx() as conn:
+        conn.execute(
+            "UPDATE users SET totp_last_step = ?, updated_at = ? WHERE id = ?",
+            (int(step), now(), int(user_id)),
+        )
 
 
 def clear_user_legacy_password(user_id: int) -> None:
@@ -1018,16 +1111,32 @@ def bump_email_verify_attempts(user_id: int) -> None:
 
 
 def mark_email_verified(user_id: int) -> None:
+    from plans import plan_storage_quota_bytes
+
+    user = get_user_by_id(user_id)
+    plan = str(user["plan"] or "") if user else ""
+    full_quota = plan_storage_quota_bytes(plan) if plan else 0
     with tx() as conn:
-        conn.execute(
-            """
-            UPDATE users
-            SET email_verified = 1, email_verify_hash = '', email_verify_expires = 0,
-                email_verify_attempts = 0, updated_at = ?
-            WHERE id = ?
-            """,
-            (now(), user_id),
-        )
+        if full_quota > 0:
+            conn.execute(
+                """
+                UPDATE users
+                SET email_verified = 1, email_verify_hash = '', email_verify_expires = 0,
+                    email_verify_attempts = 0, storage_quota_bytes = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (int(full_quota), now(), user_id),
+            )
+        else:
+            conn.execute(
+                """
+                UPDATE users
+                SET email_verified = 1, email_verify_hash = '', email_verify_expires = 0,
+                    email_verify_attempts = 0, updated_at = ?
+                WHERE id = ?
+                """,
+                (now(), user_id),
+            )
 
 
 def set_backup_verification(user_id: int, code_hash: str, expires_at: float) -> None:
@@ -1105,6 +1214,20 @@ def count_email_sends_for_user(user_id: int, kind: str, since: float) -> int:
         (int(user_id), kind, float(since)),
     ).fetchone()
     return int(row[0] if row else 0)
+
+
+def count_email_sends_global(kind: str, since: float) -> int:
+    row = connection().execute(
+        """
+        SELECT COUNT(*) AS n FROM email_send_log
+        WHERE kind = ? AND sent_at >= ?
+        """,
+        (str(kind), float(since)),
+    ).fetchone()
+    try:
+        return int(row["n"] or 0)
+    except (TypeError, ValueError, KeyError):
+        return 0
 
 
 def count_email_sends_for_recipient(recipient: str, kind: str, since: float) -> int:

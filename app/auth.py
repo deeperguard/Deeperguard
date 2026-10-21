@@ -406,14 +406,25 @@ def verify_credentials(email: str, password: str) -> tuple[int | None, bool]:
 
 
 def verify_totp_for_current_user(code: str) -> bool:
+    from auth_rate_limit import allow as rate_allow
+    from db import set_user_totp_last_step, user_totp_last_step
+    from totp import verify_and_step
+
     uid = current_user_id()
     if not uid:
         return False
     user = get_user_by_id(uid)
     if not user or not user["totp_secret"]:
         return False
-    if not totp_verify(str(user["totp_secret"]), code):
+    # Per-user attempt limit (IP-independent).
+    if not rate_allow(f"totp-user:{uid}", limit=10, window=300.0):
         return False
+    last_step = user_totp_last_step(user)
+    ok, step = verify_and_step(str(user["totp_secret"]), code, last_step=last_step)
+    if not ok:
+        return False
+    if step:
+        set_user_totp_last_step(uid, step)
     session[SESSION_TOTP] = True
     return True
 
@@ -545,9 +556,29 @@ def public_path(path: str) -> bool:
         return True
     if base in {"/manifest.json", "/sw.js"}:
         return True
-    if base.startswith("/api/auth/"):
+    # Only genuinely pre-login auth routes are public (M3). Passkey management
+    # and other post-login /api/auth/* routes require a session + CSRF + 2FA.
+    if base in {
+        "/api/auth/srp/challenge",
+        "/api/auth/srp/verify",
+        "/api/auth/srp/register",
+        "/api/auth/register",
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/api/auth/webauthn/login/options",
+        "/api/auth/webauthn/login/verify",
+        # Login-adjacent recovery / drift repair (password never leaves the client
+        # as a stored verifier proof). Kept public so sign-in still works.
+        "/api/auth/repair-login",
+        "/api/auth/repair-login/challenge",
+        "/api/auth/vault-recovery",
+        "/api/auth/vault-recovery/challenge",
+        "/api/auth/verify-vault",
+        "/api/auth/srp/resync",
+        "/api/auth/srp/upgrade",
+    }:
         return True
-    if base in {"/api/contact", "/api/promo", "/robots.txt", "/sitemap.xml"}:
+    if base in {"/api/contact", "/api/promo", "/robots.txt", "/sitemap.xml", "/.well-known/security.txt"}:
         return True
     from config import INDEXNOW_KEY
 
@@ -755,6 +786,10 @@ def security_headers() -> dict[str, str]:
         "X-Frame-Options": "DENY",
         "Referrer-Policy": "same-origin",
         "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+        # same-origin-allow-popups keeps Google GIS / Dropbox OAuth popups working
+        # (strict same-origin COOP breaks window.closed / postMessage opener links).
+        "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+        "Cross-Origin-Resource-Policy": "same-origin",
     }
     if os.environ.get("NOTES_SECURE_COOKIES", "0") == "1":
         headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"

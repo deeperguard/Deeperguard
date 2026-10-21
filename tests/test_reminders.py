@@ -18,7 +18,7 @@ def _srp_verifier(email: str, password: str) -> tuple[str, str]:
     from srp_auth import generate_verifier_hex, new_srp_salt_hex
 
     salt_hex = new_srp_salt_hex()
-    verifier = generate_verifier_hex(salt_hex, email, password)
+    verifier = generate_verifier_hex(salt_hex, email, password, kdf_version=2)
     return salt_hex, verifier
 
 
@@ -48,6 +48,9 @@ class ReminderTests(unittest.TestCase):
         self.app_mod = importlib.import_module("app")
         self.db = importlib.import_module("db")
         self.warning_cron = importlib.import_module("warning_cron")
+        import auth_rate_limit as arl
+
+        arl._hits.clear()
         self.client = self.app_mod.app.test_client()
 
     def tearDown(self):
@@ -71,7 +74,12 @@ class ReminderTests(unittest.TestCase):
         salt_hex, verifier = _srp_verifier(email, password)
         res = self.client.post(
             "/api/auth/srp/register",
-            json={"email": email, "srp_salt": salt_hex, "srp_verifier": verifier},
+            json={
+                "email": email,
+                "srp_salt": salt_hex,
+                "srp_verifier": verifier,
+                "srp_kdf_version": 2,
+            },
         )
         self.assertEqual(res.status_code, 200, res.get_data(as_text=True))
         return {"X-CSRF-Token": self._csrf()}
