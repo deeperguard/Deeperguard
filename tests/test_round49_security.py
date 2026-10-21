@@ -197,6 +197,7 @@ class Round49SecurityTests(unittest.TestCase):
         csrf = self._csrf()
         new_salt = new_srp_salt_hex()
         new_verifier = generate_verifier_hex(new_salt, v1_email, v1_pass, kdf_version=2)
+        changed_before = notes_db.user_password_changed_at(notes_db.get_user_by_email(v1_email))
         up = self.client.post(
             "/api/auth/srp/kdf-upgrade",
             json={
@@ -210,6 +211,8 @@ class Round49SecurityTests(unittest.TestCase):
         self.assertEqual(up.get_json()["srp_kdf_version"], 2)
         user_v1 = notes_db.get_user_by_email(v1_email)
         self.assertEqual(notes_db.user_srp_kdf_version(user_v1), 2)
+        # Verifier-format upgrade must not look like a vault password rotation.
+        self.assertEqual(notes_db.user_password_changed_at(user_v1), changed_before)
 
         self.client.post("/api/auth/logout")
         login_v2, chal_v2 = self._login(v1_email, v1_pass)

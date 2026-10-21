@@ -459,37 +459,72 @@ def update_user_srp_verifier(
     srp_verifier: str,
     *,
     srp_kdf_version: int | None = None,
+    touch_password_changed: bool = True,
 ) -> float:
+    """Update the stored SRP verifier.
+
+    touch_password_changed=False is for silent verifier-format upgrades (e.g. SRP
+    KDF v1→v2). Those must not bump password_changed_at — the client treats that
+    timestamp as a vault-password rotation and clears the post-login boot password.
+    """
     ts = now()
     with tx() as conn:
         if srp_kdf_version is None:
-            conn.execute(
-                """
-                UPDATE users
-                SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?,
-                    updated_at = ?, password_changed_at = ?
-                WHERE id = ?
-                """,
-                (srp_salt.strip().lower(), srp_verifier.strip().lower(), ts, ts, user_id),
-            )
+            if touch_password_changed:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?,
+                        updated_at = ?, password_changed_at = ?
+                    WHERE id = ?
+                    """,
+                    (srp_salt.strip().lower(), srp_verifier.strip().lower(), ts, ts, user_id),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (srp_salt.strip().lower(), srp_verifier.strip().lower(), ts, user_id),
+                )
         else:
             kdf_ver = 2 if int(srp_kdf_version or 1) >= 2 else 1
-            conn.execute(
-                """
-                UPDATE users
-                SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
-                    updated_at = ?, password_changed_at = ?
-                WHERE id = ?
-                """,
-                (
-                    srp_salt.strip().lower(),
-                    srp_verifier.strip().lower(),
-                    kdf_ver,
-                    ts,
-                    ts,
-                    user_id,
-                ),
-            )
+            if touch_password_changed:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
+                        updated_at = ?, password_changed_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        srp_salt.strip().lower(),
+                        srp_verifier.strip().lower(),
+                        kdf_ver,
+                        ts,
+                        ts,
+                        user_id,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        srp_salt.strip().lower(),
+                        srp_verifier.strip().lower(),
+                        kdf_ver,
+                        ts,
+                        user_id,
+                    ),
+                )
     return ts
 
 

@@ -1015,7 +1015,15 @@ def api_auth_srp_kdf_upgrade():
         return jsonify({"error": "invalid upgrade"}), 400
     if db.user_srp_kdf_version(user) >= SRP_KDF_V2:
         return jsonify({"ok": True, "srp_kdf_version": SRP_KDF_V2})
-    db.update_user_srp_verifier(uid, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2)
+    # Verifier-format upgrade only — do not bump password_changed_at (that would
+    # clear the post-login boot password and surface a false vault unlock error).
+    db.update_user_srp_verifier(
+        uid,
+        srp_salt,
+        srp_verifier,
+        srp_kdf_version=SRP_KDF_V2,
+        touch_password_changed=False,
+    )
     return jsonify({"ok": True, "srp_kdf_version": SRP_KDF_V2})
 
 
