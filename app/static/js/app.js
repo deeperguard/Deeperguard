@@ -2908,6 +2908,21 @@
     return readingTime(text).words;
   }
 
+  function logLockReason(reason, detail = {}) {
+    try {
+      console.info('[notes-lock] reason', reason, {
+        ...detail,
+        visibility: typeof document !== 'undefined' ? document.visibilityState : '',
+        unlocked: !!(typeof document !== 'undefined' && document.body?.classList?.contains('unlocked')),
+        keyVerified: !!(typeof NotesStore !== 'undefined' && NotesStore.state?.keyVerified),
+        lockOnUnfocus: lockOnUnfocusMode(),
+        autoLockMin: Number(prefs.autoLockMin) || 0,
+        unfocusedAt: readUnfocusedAt() || 0,
+        build: document.querySelector?.('meta[name="notes-build"]')?.content || '',
+      });
+    } catch (err) { /* ignore */ }
+  }
+
   function bumpIdle() {
     clearTimeout(idleTimer);
     let minutes = Number(prefs.autoLockMin) || 0;
@@ -2921,7 +2936,7 @@
         bumpIdle();
         return;
       }
-      lockVault('Locked after idle.');
+      lockVault('Locked after idle.', { reason: `idle-${minutes}min` });
     }, minutes * 60 * 1000);
   }
 
@@ -2942,7 +2957,11 @@
     unfocusLockDeadline = 0;
     unfocusLocking = true;
     markTypedUnlockRequired();
-    Promise.resolve(lockVault(message)).finally(() => {
+    const awayMs = readUnfocusedAt() ? (Date.now() - readUnfocusedAt()) : 0;
+    Promise.resolve(lockVault(message, {
+      reason: lockOnUnfocusMode() === 'immediate' ? 'unfocus-immediate' : 'unfocus-1min',
+      detail: { awayMs, visibility: document.visibilityState },
+    })).finally(() => {
       unfocusLocking = false;
     });
   }
@@ -3259,10 +3278,10 @@
     }, clearAfter);
   }
 
-  async function lockVault(message, { skipSync = false } = {}) {
+  async function lockVault(message, { skipSync = false, reason = '', detail = null } = {}) {
     if (unlockInFlight) {
       setTimeout(() => {
-        lockVault(message, { skipSync }).catch(() => {});
+        lockVault(message, { skipSync, reason, detail }).catch(() => {});
       }, 400);
       return;
     }
@@ -3270,6 +3289,17 @@
       ? NotesVaultLock.isAppUpdating(document.body, window.__notesUpdateInFlight)
       : !!(document.body.classList.contains('app-updating') || window.__notesUpdateInFlight);
     if (window.NotesVaultLock?.mayLockVault && !NotesVaultLock.mayLockVault({ updating })) return;
+    const lockReason = reason
+      || (message === 'Vault locked.' ? 'manual'
+        : (/^Locked after idle/.test(String(message || '')) ? 'idle'
+          : (/^Locked after 1 minute away/.test(String(message || '')) ? 'unfocus-1min'
+            : (String(message || '').includes('changed on another device') ? 'password-changed-remote'
+              : (message ? 'message' : 'unspecified')))));
+    logLockReason(lockReason, {
+      message: String(message || ''),
+      skipSync: !!skipSync,
+      ...(detail && typeof detail === 'object' ? detail : {}),
+    });
     // Show the locked state right away; the push below must not hold the UI hostage.
     syncVaultLockUi(false);
     if (!skipSync) {
@@ -5565,6 +5595,16 @@
 
   /** Soft fail for post-login auto-unlock — never looks like a wrong password. */
   function deferAutoUnlock(reason = 'auto-unlock deferred') {
+    // A slower silent attempt must not tear down a vault that already proved
+    // its key (Round 53: late defer after a successful auto-unlock).
+    if (vaultKeyProven() && NotesStore.isUnlocked()) {
+      logLockReason('auto-unlock-defer-skipped', { deferReason: reason, alreadyProven: true });
+      const err = new Error(reason);
+      err.code = 'AUTO_UNLOCK_DEFER';
+      err.skipped = true;
+      throw err;
+    }
+    logLockReason('auto-unlock-defer', { deferReason: reason });
     try { NotesStore.lock(); } catch (err) { /* ignore */ }
     const err = new Error(reason);
     err.code = 'AUTO_UNLOCK_DEFER';
@@ -5907,6 +5947,7 @@
       sessionExpiredHold = true;
       stopChangePoll();
       resetLoginProgress();
+      logLockReason('session-expired', { message: String(err?.message || '') });
       try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
       if (!silent) showUnlockError(SESSION_EXPIRED_MESSAGE);
       redirectToExpiredLogin();
@@ -5916,6 +5957,19 @@
     if (silent || err?.code === 'AUTO_UNLOCK_DEFER') {
       // Post-login auto-unlock: fall back to the typed unlock prompt without a
       // false "Wrong password." flash and without burning unlock rate limits.
+      // Never relock an already-open, key-proven vault (Round 53).
+      if (err?.skipped || (vaultKeyProven() && NotesStore.isUnlocked()
+        && document.body.classList.contains('unlocked'))) {
+        logLockReason('auto-unlock-abort-skipped', {
+          code: err?.code || '',
+          message: String(err?.message || ''),
+        });
+        throw err;
+      }
+      logLockReason('auto-unlock-abort', {
+        code: err?.code || '',
+        message: String(err?.message || ''),
+      });
       try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
       markVaultShellLocked();
       throw err;
@@ -6208,9 +6262,10 @@
     refreshEmptyStateCopy();
     updateEmptyStateVisibility();
     if (NotesStore.isUnlocked()) {
-      await lockVault(msg, { skipSync: true });
+      await lockVault(msg, { skipSync: true, reason: 'password-changed-remote' });
       return true;
     }
+    logLockReason('password-changed-remote', { locked: false, message: msg });
     // Caller must clear suppressUnlockScreen before showUnlock (boot path).
     suppressUnlockScreen = false;
     markRememberedShell(false);
@@ -6378,6 +6433,8 @@
           && navigator.serviceWorker.controller.scriptURL) || '';
         console.info('[notes-unlock] build', build, 'sw', swUrl || 'none', 'silent', !!silent);
       } catch (logErr) { /* ignore */ }
+      // Fresh unlock must not inherit a pre-login away timer.
+      try { clearUnfocusedAt(); } catch (clearErr) { /* ignore */ }
       // Prefer a claimed SW before empty-device probe/unlock so a stale /app
       // shell cannot run Round-51 probe logic against a newer server.
       try {
@@ -6926,6 +6983,7 @@
   async function wipeAfterRemoteSignOut() {
     if (remoteWipeStarted && remoteWipePromise) return remoteWipePromise;
     remoteWipeStarted = true;
+    logLockReason('session-revoked', {});
     try { NotesStore.setCsrf(''); } catch (err) { /* ignore */ }
     if (typeof NotesVaultSecrets !== 'undefined') {
       try { NotesVaultSecrets.clearSecrets(); } catch (err) { /* ignore */ }
