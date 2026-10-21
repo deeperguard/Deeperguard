@@ -792,7 +792,10 @@ const NotesStore = (() => {
     if (typeof NotesVaultSecrets !== 'undefined') {
       NotesVaultSecrets.setVaultPassword(password);
     }
-    persistVaultKdfServerVersion(state.kdfVersion);
+    // Do not persist vault_kdf_version until ciphertext proves the key. An empty
+    // device trusts the server/local hint for the first derive; writing that hint
+    // before a successful decrypt poisoned later unlocks (Round 51).
+    if (state.keyVerified) persistVaultKdfServerVersion(state.kdfVersion);
   }
 
   function isUnlocked() {
@@ -804,7 +807,9 @@ const NotesStore = (() => {
   }
 
   function markKeyVerified() {
-    if (state.cryptoKey) state.keyVerified = true;
+    if (!state.cryptoKey) return;
+    state.keyVerified = true;
+    persistVaultKdfServerVersion(state.kdfVersion);
   }
 
   function unverifiedKeyError() {
@@ -2170,21 +2175,52 @@ const NotesStore = (() => {
     if (total === 0 && rows.length === 0) {
       return { ok: false, empty: true, opened: 0 };
     }
-    let opened = 0;
-    for (const row of rows.slice(0, 3)) {
-      try {
-        const payload = parseCipherPayload(row.ciphertext);
-        if (!payload) continue;
-        await decryptCipherPayload(payload, { fast: true });
-        opened += 1;
-        break;
-      } catch (err) {
-        /* this row did not open with the derived key */
+    const tryRows = async () => {
+      let opened = 0;
+      for (const row of rows.slice(0, 3)) {
+        try {
+          const payload = parseCipherPayload(row.ciphertext);
+          if (!payload) continue;
+          await decryptCipherPayload(payload, { fast: true });
+          opened += 1;
+          break;
+        } catch (err) {
+          /* this row did not open with the derived key */
+        }
       }
-    }
+      return opened;
+    };
+    let opened = await tryRows();
     if (opened > 0) {
       markKeyVerified();
       return { ok: true, empty: false, opened };
+    }
+    // Empty device: first derive used the account hint only. Retry the other
+    // vault KDF once before declaring the password wrong.
+    const password = (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword())
+      || '';
+    const salt = sessionStorage.getItem('notes_salt') || cachedAccount().kdf_salt || '';
+    const altVersion = state.kdfVersion >= 2 ? 1 : 2;
+    if (password && salt) {
+      const prevKey = state.cryptoKey;
+      const prevAlt = state.altCryptoKey;
+      const prevVer = state.kdfVersion;
+      try {
+        const other = await deriveVaultKey(password, salt, altVersion);
+        state.cryptoKey = other.key || other;
+        state.kdfVersion = other.version || altVersion;
+        state.altCryptoKey = prevKey;
+        opened = await tryRows();
+        if (opened > 0) {
+          markKeyVerified();
+          return { ok: true, empty: false, opened };
+        }
+      } catch (err) {
+        /* keep previous key */
+      }
+      state.cryptoKey = prevKey;
+      state.altCryptoKey = prevAlt;
+      state.kdfVersion = prevVer;
     }
     return { ok: false, wrongKey: true, empty: false, opened: 0 };
   }

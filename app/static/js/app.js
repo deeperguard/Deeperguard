@@ -5563,6 +5563,14 @@
     throw wrong;
   }
 
+  /** Soft fail for post-login auto-unlock — never looks like a wrong password. */
+  function deferAutoUnlock(reason = 'auto-unlock deferred') {
+    try { NotesStore.lock(); } catch (err) { /* ignore */ }
+    const err = new Error(reason);
+    err.code = 'AUTO_UNLOCK_DEFER';
+    throw err;
+  }
+
   async function assertVaultKeyVerified() {
     // Do not return early just because keyVerified is already set. An empty
     // vault used to take that shortcut and skip the password proof.
@@ -5738,6 +5746,7 @@
 
   async function finishUnlocked({ skipReveal = false, deferSync = false } = {}) {
     clearUnlockPasswordField();
+    try { sessionStorage.removeItem('notes_post_login_unlock'); } catch (err) { /* ignore */ }
     const needsReload = vaultNeedsReload;
     vaultNeedsReload = false;
 
@@ -5899,7 +5908,7 @@
       throw err.code === 'SESSION_EXPIRED' ? err : sessionExpiredError();
     }
     resetLoginProgress();
-    if (silent) {
+    if (silent || err?.code === 'AUTO_UNLOCK_DEFER') {
       // Post-login auto-unlock: fall back to the typed unlock prompt without a
       // false "Wrong password." flash and without burning unlock rate limits.
       try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
@@ -6170,7 +6179,17 @@
   }
 
   async function checkRemoteVaultPasswordChange(account) {
-    if (!account || !NotesStore.remotePasswordChanged?.(account)) return false;
+    if (!account) return false;
+    // Fresh sign-in just proved the account password. Ack any server timestamp
+    // so a false password_changed_at bump from the Round 49 SRP KDF upgrade
+    // cannot clear the boot password or block auto-unlock.
+    let postLoginUnlock = false;
+    try { postLoginUnlock = sessionStorage.getItem('notes_post_login_unlock') === '1'; } catch (err) { /* ignore */ }
+    if (postLoginUnlock) {
+      if (account.password_changed_at) NotesStore.ackPasswordChanged?.(account.password_changed_at);
+      return false;
+    }
+    if (!NotesStore.remotePasswordChanged?.(account)) return false;
     if (NotesStore.passwordChangeInFlight?.()) return false;
 
     await NotesStore.prepareForRemotePasswordRotation?.();
@@ -6355,6 +6374,7 @@
         if (NotesStore.state.kdfFastReject) {
           clearSavedUnlockSecrets();
           NotesStore.lock();
+          if (silent) deferAutoUnlock();
           const wrong = new Error('Wrong password.');
           wrong.status = 401;
           throw wrong;
@@ -6413,38 +6433,55 @@
             NotesStore.lock();
             throw sessionExpiredError();
           }
-          // Boot auto-unlock must not call rate-limited unlock/repair endpoints.
-          if (silent) rejectWrongUnlockPassword();
-          let sessionValid = !!serverResult.ok || await serverSessionLooksValid();
-          if (!sessionValid) {
-            const repaired = await repairUnlockWithPassword(cached.email, clean);
-            if (repaired.sessionExpired) {
-              NotesStore.lock();
-              throw sessionExpiredError();
+          if (silent) {
+            // Post-login: try a server decrypt (both vault KDFs) before giving up.
+            // Never treat this as a wrong-password failure or hit rate limits.
+            let localProof = null;
+            try {
+              localProof = await assertVaultKeyVerified();
+            } catch (probeErr) {
+              if (isLoginRequiredError(probeErr)) throw sessionExpiredError();
+              deferAutoUnlock();
             }
-            if (repaired.wrongPassword) rejectWrongUnlockPassword();
-            if (repaired.rateLimited) {
-              NotesStore.lock();
-              throw new Error('Too many unlock attempts. Wait a few minutes and try again.');
+            if (localProof?.via !== 'decrypt' || !(Number(localProof.opened) > 0)) {
+              deferAutoUnlock();
             }
-            if (!repaired.ok) {
-              NotesStore.lock();
-              throw new Error('Could not reach the notes server. Connect to home Wi‑Fi or WireGuard and try again.');
+            await clearUnreadableLocalCache();
+            opened = { opened: 0, failed: 0, cipherOpened: 0 };
+            localAllFailed = false;
+            vaultRepairedOnline = true;
+          } else {
+            let sessionValid = !!serverResult.ok || await serverSessionLooksValid();
+            if (!sessionValid) {
+              const repaired = await repairUnlockWithPassword(cached.email, clean);
+              if (repaired.sessionExpired) {
+                NotesStore.lock();
+                throw sessionExpiredError();
+              }
+              if (repaired.wrongPassword) rejectWrongUnlockPassword();
+              if (repaired.rateLimited) {
+                NotesStore.lock();
+                throw new Error('Too many unlock attempts. Wait a few minutes and try again.');
+              }
+              if (!repaired.ok) {
+                NotesStore.lock();
+                throw new Error('Could not reach the notes server. Connect to home Wi‑Fi or WireGuard and try again.');
+              }
+              sessionValid = true;
+              serverResult = { ok: true };
+              const nextSalt = NotesStore.cachedAccount().kdf_salt || salt;
+              await NotesStore.unlock(clean, nextSalt);
             }
-            sessionValid = true;
-            serverResult = { ok: true };
-            const nextSalt = NotesStore.cachedAccount().kdf_salt || salt;
-            await NotesStore.unlock(clean, nextSalt);
+            // Local ciphertext failed. Continue only when a server row decrypts.
+            // An empty server vault must not wipe the local rows or open the shell.
+            const localProof = await assertVaultKeyVerified();
+            if (localProof?.via !== 'decrypt') rejectWrongUnlockPassword();
+            if (!(Number(localProof.opened) > 0)) rejectWrongUnlockPassword();
+            await clearUnreadableLocalCache();
+            opened = { opened: 0, failed: 0, cipherOpened: 0 };
+            localAllFailed = false;
+            vaultRepairedOnline = true;
           }
-          // Local ciphertext failed. Continue only when a server row decrypts.
-          // An empty server vault must not wipe the local rows or open the shell.
-          const localProof = await assertVaultKeyVerified();
-          if (localProof?.via !== 'decrypt') rejectWrongUnlockPassword();
-          if (!(Number(localProof.opened) > 0)) rejectWrongUnlockPassword();
-          await clearUnreadableLocalCache();
-          opened = { opened: 0, failed: 0, cipherOpened: 0 };
-          localAllFailed = false;
-          vaultRepairedOnline = true;
         }
         const hasLocalVault = (opened.cipherOpened || 0) > 0;
         const emptyLocal = opened.opened === 0;
@@ -6454,13 +6491,21 @@
         // not a key. Prove the typed password, or a server row must decrypt.
         if (!hasLocalVault && !vaultRepairedOnline) {
           if (serverResult.offline) {
+            if (silent) deferAutoUnlock();
             NotesStore.lock();
             throw new Error('Connect once online while signed in to unlock an empty device with the vault password.');
           }
-          const freshProof = await assertVaultKeyVerified();
+          let freshProof = null;
+          try {
+            freshProof = await assertVaultKeyVerified();
+          } catch (probeErr) {
+            if (isLoginRequiredError(probeErr)) throw sessionExpiredError();
+            if (silent) deferAutoUnlock();
+            throw probeErr;
+          }
           if (!(freshProof?.via === 'decrypt' && Number(freshProof.opened) > 0)) {
             // Boot auto-unlock: never hit rate-limited prove/unlock endpoints.
-            if (silent) rejectWrongUnlockPassword();
+            if (silent) deferAutoUnlock();
             await proveEmptyVaultWithAccountPassword(cached.email, clean);
           }
           passwordProven = vaultKeyProven();
@@ -6468,6 +6513,7 @@
         }
         if (serverResult.offline) {
           if (emptyLocal && !hasLocalVault) {
+            if (silent) deferAutoUnlock();
             NotesStore.lock();
             throw new Error('Connect once online while signed in to unlock an empty device with the vault password.');
           }
@@ -6491,7 +6537,7 @@
                 serverResult = { ok: true };
                 NotesStore.emitSync('pending', 'Sign in to sync');
               } else {
-                rejectWrongUnlockPassword();
+                deferAutoUnlock();
               }
             } else {
               // Server session expired. Attempt to re-authenticate with the entered password.
@@ -6546,14 +6592,21 @@
           } else if (canProveViaSync) {
             // Fresh device: decrypt server ciphertext, or prove the account
             // password when the server vault is empty. Never treat empty as a key.
-            const proof = await assertVaultKeyVerified();
+            let proof = null;
+            try {
+              proof = await assertVaultKeyVerified();
+            } catch (probeErr) {
+              if (isLoginRequiredError(probeErr)) throw sessionExpiredError();
+              if (silent) deferAutoUnlock();
+              throw probeErr;
+            }
             if (proof?.via === 'empty') {
-              if (silent) rejectWrongUnlockPassword();
+              if (silent) deferAutoUnlock();
               await proveEmptyVaultWithAccountPassword(cached.email, clean);
             }
             passwordProven = vaultKeyProven();
           } else {
-            if (silent) rejectWrongUnlockPassword();
+            if (silent) deferAutoUnlock();
             const repaired = await repairUnlockWithPassword(cached.email, clean);
             if (repaired.ok) {
               const proof = await assertVaultKeyVerified();
@@ -6586,7 +6639,10 @@
             }
           }
         }
-        if (!vaultKeyProven()) rejectWrongUnlockPassword();
+        if (!vaultKeyProven()) {
+          if (silent) deferAutoUnlock();
+          rejectWrongUnlockPassword();
+        }
         if (skipLogin) {
           try {
             localStorage.setItem('notes_test_password', clean);
@@ -6609,7 +6665,10 @@
       }
       const data = await bootstrapServerSession(cached);
       await NotesStore.unlock(clean, data.kdf_salt);
-      if (NotesStore.state.kdfFastReject) rejectWrongUnlockPassword();
+      if (NotesStore.state.kdfFastReject) {
+        if (silent) deferAutoUnlock();
+        rejectWrongUnlockPassword();
+      }
       let loaded = { cipherOpened: 0, opened: 0 };
       try {
         loaded = await NotesStore.loadLocal();

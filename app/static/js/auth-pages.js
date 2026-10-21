@@ -107,6 +107,8 @@ async function stashLoginSession(data, email, password) {
     else sessionStorage.removeItem('notes_boot_password_ready');
   } catch (e) { /* ignore */ }
   try { sessionStorage.setItem('notes_sync_after_login', '1'); } catch (e) { /* ignore */ }
+  // Suppress false vault-rotation from a prior SRP KDF upgrade bump until unlock.
+  try { sessionStorage.setItem('notes_post_login_unlock', '1'); } catch (e) { /* ignore */ }
   if (data.password_changed_at) ackPasswordChanged(data.password_changed_at);
 }
 
