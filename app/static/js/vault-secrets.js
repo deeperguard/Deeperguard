@@ -55,6 +55,10 @@
     setAccountPassword(clean);
     if (!clean) return;
     try {
+      // Drop any leftover derived-key stash from a prior register/login on this
+      // tab — adopting a stale Argon2 key after a plain login breaks auto-unlock.
+      sessionStorage.removeItem(BOOT_KDF);
+      pendingBootDerived = null;
       const key = await getBootKey();
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const cipher = await crypto.subtle.encrypt(

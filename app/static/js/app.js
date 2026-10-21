@@ -3171,20 +3171,23 @@
     }
   }
 
+  let settingsKeySaveDepth = 0;
+
   function isTransientUnfocus() {
     const VL = window.NotesVaultLock;
     const scanEl = document.getElementById('scan-dialog');
     const scanOpen = document.body.classList.contains('scan-dialog-open')
       || !!(scanEl && !scanEl.hidden);
     const updating = document.body.classList.contains('app-updating');
+    const settingsKeySave = settingsKeySaveDepth > 0;
     if (VL?.isTransientUnfocus) {
       return VL.isTransientUnfocus({
         scanOpen,
-        pickerOpen: notesPickerDepth > 0,
+        pickerOpen: notesPickerDepth > 0 || settingsKeySave,
         updating,
       });
     }
-    return scanOpen || notesPickerDepth > 0 || updating;
+    return scanOpen || notesPickerDepth > 0 || settingsKeySave || updating;
   }
 
   function readUnfocusedAt() {
@@ -5885,17 +5888,24 @@
     return unlocked;
   }
 
-  function abortUnlockAttempt(err) {
+  function abortUnlockAttempt(err, { silent = false } = {}) {
     if (isLoginRequiredError(err)) {
       sessionExpiredHold = true;
       stopChangePoll();
       resetLoginProgress();
       try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
-      showUnlockError(SESSION_EXPIRED_MESSAGE);
+      if (!silent) showUnlockError(SESSION_EXPIRED_MESSAGE);
       redirectToExpiredLogin();
       throw err.code === 'SESSION_EXPIRED' ? err : sessionExpiredError();
     }
     resetLoginProgress();
+    if (silent) {
+      // Post-login auto-unlock: fall back to the typed unlock prompt without a
+      // false "Wrong password." flash and without burning unlock rate limits.
+      try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
+      markVaultShellLocked();
+      throw err;
+    }
     const shellOpen = document.body.classList.contains('unlocked')
       && (!unlockScreen || unlockScreen.hidden);
     if (NotesStore.isUnlocked() && unlockErrorShouldRelock(err)) {
@@ -6177,7 +6187,16 @@
       await lockVault(msg, { skipSync: true });
       return true;
     }
+    // Caller must clear suppressUnlockScreen before showUnlock (boot path).
+    suppressUnlockScreen = false;
+    markRememberedShell(false);
     showUnlock(account.email || NotesStore.cachedAccount().email);
+    if (unlockError) {
+      unlockError.hidden = false;
+      unlockError.textContent = msg;
+      unlockError.classList.add('error');
+      unlockError.classList.remove('unlock-notice');
+    }
     return true;
   }
 
@@ -6308,7 +6327,7 @@
     }
   }
 
-  async function verifyAndUnlock(password) {
+  async function verifyAndUnlock(password, { silent = false } = {}) {
     if (NotesStore.isUnlocked() && vaultKeyProven()) {
       await ensureServerSession().catch(() => false);
       await finishUnlocked();
@@ -6317,7 +6336,7 @@
     if (unlockInFlight) return unlockInFlight;
     unlockPrimaryRevealed = false;
     beginLoginProgress();
-    if (unlockSubmit) {
+    if (unlockSubmit && !silent) {
       unlockSubmit.disabled = true;
       unlockSubmit.textContent = 'Checking…';
       unlockSubmit.setAttribute('aria-busy', 'true');
@@ -6394,6 +6413,8 @@
             NotesStore.lock();
             throw sessionExpiredError();
           }
+          // Boot auto-unlock must not call rate-limited unlock/repair endpoints.
+          if (silent) rejectWrongUnlockPassword();
           let sessionValid = !!serverResult.ok || await serverSessionLooksValid();
           if (!sessionValid) {
             const repaired = await repairUnlockWithPassword(cached.email, clean);
@@ -6438,6 +6459,8 @@
           }
           const freshProof = await assertVaultKeyVerified();
           if (!(freshProof?.via === 'decrypt' && Number(freshProof.opened) > 0)) {
+            // Boot auto-unlock: never hit rate-limited prove/unlock endpoints.
+            if (silent) rejectWrongUnlockPassword();
             await proveEmptyVaultWithAccountPassword(cached.email, clean);
           }
           passwordProven = vaultKeyProven();
@@ -6461,33 +6484,44 @@
             // Do not persist to device until sync decrypts at least one item.
             vaultSyncError = '';
           } else if (err.status === 401) {
-            // Server session expired. Attempt to re-authenticate with the entered password.
-            const relogin = await repairUnlockWithPassword(cached.email, clean);
-            if (relogin.ok) {
-              // Account password matched. That does not prove the vault key.
-              serverResult = { ok: true };
-              vaultSyncError = '';
-            } else if (relogin.wrongPassword) {
+            if (silent) {
               if (hasLocalVault || opened.cipherOpened > 0) {
                 vaultSyncError = 'Vault unlocked on this device. Sign in with your account password to sync.';
                 passwordProven = true;
                 serverResult = { ok: true };
                 NotesStore.emitSync('pending', 'Sign in to sync');
               } else {
-                NotesStore.lock();
-                const wrong = new Error(
-                  'Could not refresh your sign-in session with this password. Sign out, sign in with your account password, then unlock with your vault password (they can differ).',
-                );
-                wrong.status = 401;
-                throw wrong;
+                rejectWrongUnlockPassword();
               }
-            } else if (!hasLocalVault) {
-              NotesStore.lock();
-              if (isLoginRequiredError(err)) throw sessionExpiredError();
-              throw err;
             } else {
-              vaultSyncError = 'Unlocked on this device. Sign in again or open Settings → Change vault password if sync stays stuck.';
-              passwordProven = true;
+              // Server session expired. Attempt to re-authenticate with the entered password.
+              const relogin = await repairUnlockWithPassword(cached.email, clean);
+              if (relogin.ok) {
+                // Account password matched. That does not prove the vault key.
+                serverResult = { ok: true };
+                vaultSyncError = '';
+              } else if (relogin.wrongPassword) {
+                if (hasLocalVault || opened.cipherOpened > 0) {
+                  vaultSyncError = 'Vault unlocked on this device. Sign in with your account password to sync.';
+                  passwordProven = true;
+                  serverResult = { ok: true };
+                  NotesStore.emitSync('pending', 'Sign in to sync');
+                } else {
+                  NotesStore.lock();
+                  const wrong = new Error(
+                    'Could not refresh your sign-in session with this password. Sign out, sign in with your account password, then unlock with your vault password (they can differ).',
+                  );
+                  wrong.status = 401;
+                  throw wrong;
+                }
+              } else if (!hasLocalVault) {
+                NotesStore.lock();
+                if (isLoginRequiredError(err)) throw sessionExpiredError();
+                throw err;
+              } else {
+                vaultSyncError = 'Unlocked on this device. Sign in again or open Settings → Change vault password if sync stays stuck.';
+                passwordProven = true;
+              }
             }
           } else if (!hasLocalVault) {
             NotesStore.lock();
@@ -6514,10 +6548,12 @@
             // password when the server vault is empty. Never treat empty as a key.
             const proof = await assertVaultKeyVerified();
             if (proof?.via === 'empty') {
+              if (silent) rejectWrongUnlockPassword();
               await proveEmptyVaultWithAccountPassword(cached.email, clean);
             }
             passwordProven = vaultKeyProven();
           } else {
+            if (silent) rejectWrongUnlockPassword();
             const repaired = await repairUnlockWithPassword(cached.email, clean);
             if (repaired.ok) {
               const proof = await assertVaultKeyVerified();
@@ -6617,7 +6653,7 @@
     try {
       await unlockInFlight;
     } catch (err) {
-      abortUnlockAttempt(err);
+      abortUnlockAttempt(err, { silent });
     } finally {
       unlockInFlight = null;
     }
@@ -6996,12 +7032,17 @@
       }
       if (mayAutoUnlock && autoUnlockPassword && bootSalt) {
         try {
-          await verifyAndUnlock(autoUnlockPassword);
+          await verifyAndUnlock(autoUnlockPassword, { silent: true });
           return true;
         } catch (err) {
           bootSuppress = false;
           suppressUnlockScreen = false;
           markRememberedShell(false);
+          // Clear any false unlock error from a prior attempt; user must type.
+          if (unlockError) {
+            unlockError.hidden = true;
+            unlockError.textContent = '';
+          }
           if (skipLogin) {
             try {
               localStorage.removeItem('notes_test_password');
@@ -19364,28 +19405,54 @@
       toast(msg, true);
       return;
     }
-    const prev = String(prefs.googleOauthClientId || '').trim();
-    if (raw !== prev) {
-      try { await Cloud.disconnectGoogle?.(); } catch (err) { /* ignore */ }
+    settingsKeySaveDepth += 1;
+    try {
+      const prev = String(prefs.googleOauthClientId || '').trim();
+      if (raw !== prev) {
+        // Clear local Drive tokens only — GIS revoke can steal focus and trip
+        // lock-on-unfocus, which must never lock the vault while saving a key.
+        try {
+          Cloud.writePrefs?.({
+            driveConnected: false,
+            driveFolderId: '',
+            lastDriveFileId: '',
+            driveAccountLabel: '',
+          });
+        } catch (err) { /* ignore */ }
+      }
+      prefs.googleOauthClientId = raw;
+      pushGlobalPrefs();
+      syncCloudProviderKeysFromPrefs();
+      refreshGoogleDriveBackupUi();
+      toast('Google Client ID saved');
+    } finally {
+      settingsKeySaveDepth = Math.max(0, settingsKeySaveDepth - 1);
     }
-    prefs.googleOauthClientId = raw;
-    pushGlobalPrefs();
-    syncCloudProviderKeysFromPrefs();
-    refreshGoogleDriveBackupUi();
-    toast('Google Client ID saved');
   });
 
   document.getElementById('btn-google-key-remove')?.addEventListener('click', async () => {
     const Cloud = window.NotesCloudBackup;
     setGoogleKeyError('');
-    try { await Cloud.disconnectGoogle?.(); } catch (err) { /* ignore */ }
-    prefs.googleOauthClientId = '';
-    const input = document.getElementById('google-oauth-client-id-input');
-    if (input) input.value = '';
-    pushGlobalPrefs();
-    syncCloudProviderKeysFromPrefs();
-    refreshGoogleDriveBackupUi();
-    toast('Google Client ID removed');
+    settingsKeySaveDepth += 1;
+    try {
+      try {
+        Cloud?.writePrefs?.({
+          driveConnected: false,
+          driveFolderId: '',
+          lastDriveFileId: '',
+          driveAccountLabel: '',
+        });
+      } catch (err) { /* ignore */ }
+      prefs.googleOauthClientId = '';
+      const input = document.getElementById('google-oauth-client-id-input');
+      if (input) input.value = '';
+      pushGlobalPrefs();
+      syncCloudProviderKeysFromPrefs();
+      refreshGoogleDriveBackupUi();
+      toast('Google Client ID removed');
+    } finally {
+      settingsKeySaveDepth = Math.max(0, settingsKeySaveDepth - 1);
+    }
   });
 
   document.getElementById('backup-drive-auto-daily')?.addEventListener('change', (event) => {

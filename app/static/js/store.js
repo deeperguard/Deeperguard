@@ -5473,8 +5473,10 @@ const NotesStore = (() => {
           unchanged += 1;
           continue;
         }
-        // Never overwrite a local item that is newer than the backup copy.
-        if (localTs > incomingTs) {
+        // Never overwrite a local item that is newer than (or tied with) the
+        // backup copy. Equal timestamps keep local — a re-saved settings item
+        // or re-encrypted note must not lose to an older export on a tie.
+        if (localTs >= incomingTs) {
           keptNewer += 1;
           continue;
         }

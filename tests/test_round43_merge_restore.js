@@ -225,6 +225,35 @@ function revisionCount(item) {
   assert.strictEqual(apply.updated, 1);
   assert.strictEqual(NotesStore.get(olderLocalId).content.content, 'from backup');
 
+  // Equal timestamps keep local (do not count as "updated").
+  const tieId = NotesStore.newUuid();
+  const tieNote = NotesStore.defaultNote();
+  tieNote.title = 'Tie local';
+  tieNote.content = 'local-body';
+  NotesStore.upsert(tieId, tieNote, { touchUpdatedAt: false });
+  const tieItem = NotesStore.get(tieId);
+  tieItem.updated_at = 3000;
+  NotesStore.state.items.set(tieId, tieItem);
+  await NotesStore.flush();
+  NotesStore.state.dirty.clear();
+  const tieBackupContent = { ...tieItem.content, content: 'backup-body' };
+  const tieWrap = await NotesCrypto.encryptObject(NotesStore.state.cryptoKey, tieBackupContent);
+  const tieCipher = JSON.stringify(tieWrap);
+  const tieResult = await NotesStore.importBackup({
+    format: 'deeperguard-backup-v1',
+    items: [{
+      item_uuid: tieId,
+      content_version: 1,
+      ciphertext: tieCipher,
+      content_hash: await NotesCrypto.hashText(tieCipher),
+      deleted: false,
+      updated_at: 3000,
+    }],
+  }, true);
+  assert.strictEqual(tieResult.updated, 0, 'equal timestamps must not overwrite local');
+  assert.strictEqual(tieResult.keptNewer, 1);
+  assert.strictEqual(NotesStore.get(tieId).content.content, 'local-body');
+
   console.log('test_round43_merge_restore ok');
 })().catch((err) => {
   console.error(err);
