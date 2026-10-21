@@ -14,6 +14,7 @@
     });
     if (res.ok) {
       try { sessionStorage.setItem('notes_allow_boot_unlock', '1'); } catch (e) {}
+      try { sessionStorage.setItem('notes_post_login_unlock', '1'); } catch (e) {}
       let next = '/app';
       try {
         const note = new URLSearchParams(location.search).get('note') || '';
