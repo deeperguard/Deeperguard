@@ -134,6 +134,7 @@ def _inject_template_globals():
         "client_hash_short": client_assets.client_hash_short(),
         "release_tag": client_assets.release_tag(),
         "release_url": client_assets.release_url(),
+        "release_signed": client_assets.release_is_signed(),
     }
 
 
@@ -2782,6 +2783,7 @@ def _marketing_context() -> dict:
         "client_hash_short": client_assets.client_hash_short(),
         "release_tag": client_assets.release_tag(),
         "release_url": client_assets.release_url(),
+        "release_signed": client_assets.release_is_signed(),
         "site_url": f"{base}/",
         "canonical_url": f"{base}/",
         "og_image": f"{base}/static/icons/icon-512.png?v={NOTES_BUILD}",

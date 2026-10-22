@@ -17759,7 +17759,9 @@
       throw err;
     }
 
-    status.textContent = 'This is everything our server has for this item. Without your vault password it\'s unreadable.';
+    // Lead copy lives in the dialog markup — status is only for loading/errors.
+    status.hidden = true;
+    status.textContent = '';
     const fieldHelp = SERVER_COPY_META_FIELDS
       .filter((row) => Object.prototype.hasOwnProperty.call(serverItem, row.key)
         && serverItem[row.key] !== ''

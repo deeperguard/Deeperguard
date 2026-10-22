@@ -12,6 +12,9 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
+import urllib.request
 from functools import lru_cache
 from pathlib import Path
 
@@ -24,6 +27,9 @@ _HASHED_NAME = re.compile(
 )
 
 GITHUB_RELEASES = "https://github.com/deeperguard/Deeperguard/releases"
+_GITHUB_REPO = "deeperguard/Deeperguard"
+_SIGNED_CACHE: dict[str, object] = {"tag": "", "signed": False, "checked_at": 0.0}
+_SIGNED_CACHE_TTL_SEC = 3600
 
 
 def _source_date_epoch() -> int:
@@ -139,8 +145,63 @@ def release_url() -> str:
     tag = release_tag()
     if tag:
         return f"{GITHUB_RELEASES}/tag/{tag}"
-    # Fall back to the releases list until the first tag exists.
-    return GITHUB_RELEASES
+    # Prefer /latest once any release exists; else the list.
+    return f"{GITHUB_RELEASES}/latest"
+
+
+def release_is_signed() -> bool:
+    """True when the matching GitHub Release publishes a Sigstore bundle.
+
+    Override with NOTES_RELEASE_SIGNED=0|1, or a RELEASE_SIGNED file containing
+    0/1. Otherwise probe GitHub for client-manifest.sigstore.json (cached 1h).
+    """
+    env = (os.environ.get("NOTES_RELEASE_SIGNED") or "").strip().lower()
+    if env in {"1", "true", "yes", "on"}:
+        return True
+    if env in {"0", "false", "no", "off"}:
+        return False
+    for path in (
+        Path(os.environ.get("NOTES_ROOT", "/opt/deeperguard")) / "RELEASE_SIGNED",
+        _STATIC.parent.parent / "RELEASE_SIGNED",
+    ):
+        try:
+            value = path.read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            continue
+        if value in {"1", "true", "yes", "on"}:
+            return True
+        if value in {"0", "false", "no", "off"}:
+            return False
+    tag = release_tag()
+    if not tag:
+        return False
+    now = time.time()
+    if (
+        _SIGNED_CACHE.get("tag") == tag
+        and (now - float(_SIGNED_CACHE.get("checked_at") or 0)) < _SIGNED_CACHE_TTL_SEC
+    ):
+        return bool(_SIGNED_CACHE.get("signed"))
+    signed = _probe_release_has_sigstore(tag)
+    _SIGNED_CACHE["tag"] = tag
+    _SIGNED_CACHE["signed"] = signed
+    _SIGNED_CACHE["checked_at"] = now
+    return signed
+
+
+def _probe_release_has_sigstore(tag: str) -> bool:
+    """HEAD the Sigstore bundle on the release; fail closed (unsigned) on errors."""
+    url = (
+        f"https://github.com/{_GITHUB_REPO}/releases/download/"
+        f"{tag}/client-manifest.sigstore.json"
+    )
+    try:
+        req = urllib.request.Request(url, method="HEAD")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            return 200 <= int(getattr(resp, "status", 0) or 0) < 300
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return False
+    except Exception:
+        return False
 
 
 def asset_info(logical: str) -> dict | None:

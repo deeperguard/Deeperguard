@@ -162,8 +162,10 @@ class Round59ServerCopyTests(unittest.TestCase):
         self.assertIn("fetchServerItem", store_js)
         self.assertIn("/api/sync/item/", store_js)
         self.assertIn("openServerCopyView", app_js)
-        self.assertIn("Without your vault password it", app_js)
-        self.assertIn("unreadable", app_js)
+        # Lead copy lives once in the dialog markup (not re-set on success in JS).
+        self.assertIn("Without your vault password it", html)
+        self.assertIn("unreadable", html)
+        self.assertIn("status.hidden = true", app_js)
         self.assertIn("note-info-server-copy", html)
         self.assertIn("server-copy-dialog", html)
         self.assertIn("data-server-copy", app_js)
