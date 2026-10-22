@@ -43,6 +43,9 @@ const NotesCloudBackup = (() => {
   let userGoogleClientId = '';
   let userDropboxAppKey = '';
   let accountScopeId = '';
+  // Dropbox OAuth tokens live in encrypted vault settings (M5 / prior L8).
+  // Bridge is set by the app after unlock: { load(), save(patch), clear() }.
+  let vaultTokenBridge = null;
 
   function accountScope() {
     try {
@@ -509,23 +512,81 @@ const NotesCloudBackup = (() => {
     return base64UrlEncode(new Uint8Array(digest));
   }
 
+  function setVaultTokenBridge(bridge) {
+    vaultTokenBridge = bridge && typeof bridge === 'object' ? bridge : null;
+  }
+
+  function clearPlaintextDropboxTokensFromLocal() {
+    const prefs = readPrefs();
+    if (!prefs.dropboxAccessToken && !prefs.dropboxRefreshToken) return;
+    writePrefs({
+      dropboxAccessToken: '',
+      dropboxRefreshToken: '',
+    });
+  }
+
+  function migratePlaintextDropboxTokens(vaultPrefs) {
+    const local = readPrefs();
+    const refresh = String(local.dropboxRefreshToken || '').trim();
+    const access = String(local.dropboxAccessToken || '').trim();
+    if (!refresh && !access) return false;
+    const target = vaultPrefs && typeof vaultPrefs === 'object' ? vaultPrefs : {};
+    if (refresh && !target.dropboxRefreshToken) target.dropboxRefreshToken = refresh;
+    if (access && !target.dropboxAccessToken) {
+      target.dropboxAccessToken = access;
+      target.dropboxTokenExpiresAt = Number(local.dropboxTokenExpiresAt) || 0;
+    }
+    if (local.dropboxConnected) target.dropboxConnected = true;
+    dropboxAccessToken = String(target.dropboxAccessToken || access || '');
+    dropboxTokenExpiresAt = Number(target.dropboxTokenExpiresAt) || 0;
+    if (vaultTokenBridge?.save) {
+      vaultTokenBridge.save({
+        dropboxRefreshToken: String(target.dropboxRefreshToken || ''),
+        dropboxAccessToken: dropboxAccessToken,
+        dropboxTokenExpiresAt,
+        dropboxConnected: !!target.dropboxConnected,
+      });
+    }
+    clearPlaintextDropboxTokensFromLocal();
+    writePrefs({
+      dropboxConnected: !!target.dropboxConnected || !!(refresh || access),
+      dropboxTokenExpiresAt,
+    });
+    return true;
+  }
+
   function rememberDropboxTokens(payload) {
     const expiresIn = Number(payload.expires_in) || 14400;
     dropboxAccessToken = payload.access_token || '';
     dropboxTokenExpiresAt = Date.now() + (expiresIn * 1000) - 30000;
-    const patch = {
+    const vaultPatch = {
       dropboxConnected: true,
       dropboxAccessToken,
       dropboxTokenExpiresAt,
     };
-    if (payload.refresh_token) patch.dropboxRefreshToken = payload.refresh_token;
-    writePrefs(patch);
+    if (payload.refresh_token) vaultPatch.dropboxRefreshToken = payload.refresh_token;
+    else if (vaultTokenBridge?.load) {
+      const existing = vaultTokenBridge.load() || {};
+      if (existing.dropboxRefreshToken) vaultPatch.dropboxRefreshToken = existing.dropboxRefreshToken;
+    }
+    if (vaultTokenBridge?.save) {
+      vaultTokenBridge.save(vaultPatch);
+    }
+    // localStorage keeps only non-secret connection metadata.
+    writePrefs({
+      dropboxConnected: true,
+      dropboxTokenExpiresAt,
+      dropboxAccessToken: '',
+      dropboxRefreshToken: '',
+    });
+    clearPlaintextDropboxTokensFromLocal();
     return dropboxAccessToken;
   }
 
   function clearDropboxTokensLocal() {
     dropboxAccessToken = '';
     dropboxTokenExpiresAt = 0;
+    if (vaultTokenBridge?.clear) vaultTokenBridge.clear();
     writePrefs({
       dropboxConnected: false,
       dropboxAccessToken: '',
@@ -556,8 +617,16 @@ const NotesCloudBackup = (() => {
   }
 
   function loadCachedDropboxToken() {
+    if (vaultTokenBridge?.load) {
+      const vault = vaultTokenBridge.load() || {};
+      if (vault.dropboxAccessToken) {
+        dropboxAccessToken = vault.dropboxAccessToken;
+        dropboxTokenExpiresAt = Number(vault.dropboxTokenExpiresAt) || 0;
+      }
+    }
+    // Legacy plaintext localStorage — migrate on next save; do not prefer it.
     const prefs = readPrefs();
-    if (prefs.dropboxAccessToken) {
+    if (!dropboxAccessToken && prefs.dropboxAccessToken) {
       dropboxAccessToken = prefs.dropboxAccessToken;
       dropboxTokenExpiresAt = Number(prefs.dropboxTokenExpiresAt) || 0;
     }
@@ -565,8 +634,11 @@ const NotesCloudBackup = (() => {
   }
 
   async function refreshDropboxAccessToken() {
-    const prefs = readPrefs();
-    const refresh = prefs.dropboxRefreshToken || '';
+    let refresh = '';
+    if (vaultTokenBridge?.load) {
+      refresh = String((vaultTokenBridge.load() || {}).dropboxRefreshToken || '');
+    }
+    if (!refresh) refresh = String(readPrefs().dropboxRefreshToken || '');
     const key = dropboxAppKey();
     if (!refresh || !key) return '';
     const body = new URLSearchParams({
@@ -842,7 +914,11 @@ const NotesCloudBackup = (() => {
 
   async function disconnectDropbox() {
     loadCachedDropboxToken();
-    const token = dropboxAccessToken || readPrefs().dropboxAccessToken || '';
+    let token = dropboxAccessToken || '';
+    if (!token && vaultTokenBridge?.load) {
+      token = String((vaultTokenBridge.load() || {}).dropboxAccessToken || '');
+    }
+    if (!token) token = String(readPrefs().dropboxAccessToken || '');
     try {
       if (token) {
         await fetch(`${DROPBOX_API}/auth/token/revoke`, {
@@ -883,6 +959,9 @@ const NotesCloudBackup = (() => {
     isValidDropboxAppKey,
     setAccountScope,
     setUserProviderKeys,
+    setVaultTokenBridge,
+    migratePlaintextDropboxTokens,
+    clearPlaintextDropboxTokensFromLocal,
     userProviderKeys,
     serverGoogleClientId,
     serverDropboxAppKey,

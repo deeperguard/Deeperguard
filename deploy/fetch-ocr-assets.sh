@@ -12,23 +12,51 @@ mkdir -p "$PDF" "$TESS/lang" "$JSPDF" "$HEIC"
 PDFJS_VER="${PDFJS_VER:-4.10.38}"
 TESSERACT_VER="${TESSERACT_VER:-5.1.1}"
 TESSDATA_VER="${TESSDATA_VER:-4.0.0}"
-JSPDF_VER="${JSPDF_VER:-3.0.1}"
+# jsPDF ≥3.0.2 / 4.x fix CVE-2025-57810 and later High/Critical issues.
+JSPDF_VER="${JSPDF_VER:-4.2.1}"
 HEIC_VER="${HEIC_VER:-0.0.4}"
 PDFJS_STAMP="$PDF/.pdfjs-ver"
 JSPDF_STAMP="$JSPDF/.jspdf-ver"
 
+# Optional integrity pins (sha256 of the downloaded file). Empty = skip check.
+PDFJS_MJS_SHA256="${PDFJS_MJS_SHA256:-}"
+PDFJS_WORKER_SHA256="${PDFJS_WORKER_SHA256:-}"
+JSPDF_SHA256="${JSPDF_SHA256:-}"
+
 fetch() {
   local url="$1"
   local dest="$2"
+  local expect_sha="${3:-}"
   if [[ -s "$dest" ]]; then
-    return 0
+    if [[ -n "$expect_sha" ]]; then
+      local got
+      got="$(sha256sum "$dest" | awk '{print $1}')"
+      if [[ "$got" != "$expect_sha" ]]; then
+        echo "Integrity mismatch for $(basename "$dest"); re-fetching" >&2
+        rm -f "$dest"
+      else
+        return 0
+      fi
+    else
+      return 0
+    fi
   fi
   echo "Fetching $(basename "$dest")"
   curl -fsSL --retry 3 --retry-delay 2 "$url" -o "$dest.part"
+  if [[ -n "$expect_sha" ]]; then
+    local got
+    got="$(sha256sum "$dest.part" | awk '{print $1}')"
+    if [[ "$got" != "$expect_sha" ]]; then
+      rm -f "$dest.part"
+      echo "Integrity check failed for $(basename "$dest"): expected $expect_sha got $got" >&2
+      exit 1
+    fi
+  fi
   mv "$dest.part" "$dest"
 }
 
 if [[ ! -f "$PDFJS_STAMP" || "$(cat "$PDFJS_STAMP" 2>/dev/null || true)" != "$PDFJS_VER" ]]; then
+  # Remove legacy UMD builds so stale pdf.min.js?v=* URLs 404 (L10).
   rm -f "$PDF/pdf.min.js" "$PDF/pdf.worker.min.js" "$PDF/pdf.min.mjs" "$PDF/pdf.worker.min.mjs" "$PDF/pdf.mjs" "$PDF/pdf.worker.mjs"
   printf '%s\n' "$PDFJS_VER" > "$PDFJS_STAMP"
 fi
@@ -37,8 +65,8 @@ if [[ ! -f "$JSPDF_STAMP" || "$(cat "$JSPDF_STAMP" 2>/dev/null || true)" != "$JS
   printf '%s\n' "$JSPDF_VER" > "$JSPDF_STAMP"
 fi
 
-fetch "https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/legacy/build/pdf.min.mjs" "$PDF/pdf.min.mjs"
-fetch "https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/legacy/build/pdf.worker.min.mjs" "$PDF/pdf.worker.min.mjs"
+fetch "https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/legacy/build/pdf.min.mjs" "$PDF/pdf.min.mjs" "$PDFJS_MJS_SHA256"
+fetch "https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/legacy/build/pdf.worker.min.mjs" "$PDF/pdf.worker.min.mjs" "$PDFJS_WORKER_SHA256"
 
 fetch "https://cdn.jsdelivr.net/npm/tesseract.js@${TESSERACT_VER}/dist/tesseract.min.js" "$TESS/tesseract.min.js"
 fetch "https://cdn.jsdelivr.net/npm/tesseract.js@${TESSERACT_VER}/dist/worker.min.js" "$TESS/worker.min.js"
@@ -47,7 +75,10 @@ fetch "https://cdn.jsdelivr.net/npm/tesseract.js-core@${TESSERACT_VER}/tesseract
 fetch "https://github.com/naptha/tessdata/raw/gh-pages/${TESSDATA_VER}/eng.traineddata.gz" "$TESS/lang/eng.traineddata.gz"
 fetch "https://github.com/naptha/tessdata/raw/gh-pages/${TESSDATA_VER}/nld.traineddata.gz" "$TESS/lang/nld.traineddata.gz"
 
-fetch "https://cdn.jsdelivr.net/npm/jspdf@${JSPDF_VER}/dist/jspdf.umd.min.js" "$JSPDF/jspdf.umd.min.js"
+fetch "https://cdn.jsdelivr.net/npm/jspdf@${JSPDF_VER}/dist/jspdf.umd.min.js" "$JSPDF/jspdf.umd.min.js" "$JSPDF_SHA256"
 fetch "https://cdn.jsdelivr.net/npm/heic2any@${HEIC_VER}/dist/heic2any.min.js" "$HEIC/heic2any.min.js"
+
+# Ensure legacy UMD pdf.js is never left in the tree after deploy (L10).
+rm -f "$PDF/pdf.min.js" "$PDF/pdf.worker.min.js"
 
 echo "Client OCR + preview assets ready"

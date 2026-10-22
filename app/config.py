@@ -172,6 +172,31 @@ def allow_register() -> bool:
     return os.environ.get("NOTES_ALLOW_REGISTER", "1") == "1"
 
 
+def serve_ca_crt() -> bool:
+    """Homelab Notes CA download — off by default on public www (L6)."""
+    return os.environ.get("NOTES_SERVE_CA_CRT", "0") == "1"
+
+
+def turnstile_site_key() -> str:
+    return os.environ.get("NOTES_TURNSTILE_SITE_KEY", "").strip()
+
+
+def turnstile_secret_key() -> str:
+    return os.environ.get("NOTES_TURNSTILE_SECRET_KEY", "").strip()
+
+
+def turnstile_required() -> bool:
+    """When secret is set, register must present a valid Turnstile token (M3)."""
+    return bool(turnstile_secret_key())
+
+
+def register_ip_hourly_cap() -> int:
+    try:
+        return max(1, int(os.environ.get("NOTES_REGISTER_IP_HOURLY_CAP", "3")))
+    except (TypeError, ValueError):
+        return 3
+
+
 def min_password_length() -> int:
     try:
         return max(12, int(os.environ.get("NOTES_MIN_PASSWORD_LENGTH", "12")))

@@ -48,6 +48,12 @@ assert.match(emphasis, /<em>italic<\/em>/);
 assert.match(emphasis, /<strong>bold<\/strong>/);
 assert.match(emphasis, /<em>still<\/em>/);
 assert.match(emphasis, /<strong>works<\/strong>/);
+
+// Emphasis must not rewrite inside link attribute values (Round 56 L1).
+const attrTrap = render('[x](https://a.com/_x)_"onx=1');
+assert.doesNotMatch(attrTrap, /target="<em>/);
+assert.doesNotMatch(attrTrap, /<a[^>]+onx=/);
+assert.match(attrTrap, /target="_blank"/);
 const intraword = render('leave foo_bar_baz and foo__bar__baz alone');
 assert.doesNotMatch(intraword, /<em>/);
 assert.doesNotMatch(intraword, /<strong>/);

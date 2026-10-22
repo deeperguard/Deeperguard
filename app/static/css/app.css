@@ -606,6 +606,14 @@ html[data-theme="light"] .auth-card {
   font-weight: 500;
   color: var(--muted);
 }
+.hp-field {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
 .consent-row {
   display: flex;
   gap: 10px;

@@ -42,14 +42,23 @@
     return escapeHtml(source);
   }
 
+  function applyEmphasisOutsideTags(html, replacer) {
+    const parts = String(html || '').split(/(<[^>]+>)/g);
+    return parts.map((part) => (part.startsWith('<') ? part : replacer(part))).join('');
+  }
+
   function applyUnderscoreEmphasis(html) {
     const codes = [];
     let out = String(html || '').replace(/`[^`\n]+`/g, (match) => {
       codes.push(match);
       return `@@UCODE${codes.length - 1}@@`;
     });
-    out = out.replace(/(^|[^\w])__(?!_)([\s\S]+?)__(?!\w)/g, '$1<strong>$2</strong>');
-    out = out.replace(/(^|[^\w])_(?!_)([^_\n]+?)_(?!\w)/g, '$1<em>$2</em>');
+    // Emphasis must not rewrite inside HTML tags/attributes (L1).
+    out = applyEmphasisOutsideTags(out, (text) => (
+      text
+        .replace(/(^|[^\w])__(?!_)([\s\S]+?)__(?!\w)/g, '$1<strong>$2</strong>')
+        .replace(/(^|[^\w])_(?!_)([^_\n]+?)_(?!\w)/g, '$1<em>$2</em>')
+    ));
     return out.replace(/@@UCODE(\d+)@@/g, (_, i) => codes[Number(i)] || '');
   }
 
@@ -119,10 +128,13 @@
       if (hash) return `<a href="${escapeAttr(hash)}">${label}</a>`;
       return full;
     });
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/(^|[^*])\*(?!\*)(.+?)\*(?!\*)/g, '$1<em>$2</em>');
+    html = applyEmphasisOutsideTags(html, (text) => (
+      text
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*(?!\*)(.+?)\*(?!\*)/g, '$1<em>$2</em>')
+    ));
     html = applyUnderscoreEmphasis(html);
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = applyEmphasisOutsideTags(html, (text) => text.replace(/`([^`]+)`/g, '<code>$1</code>'));
     return html;
   }
 
@@ -162,10 +174,13 @@
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/(^|[^*])\*(?!\*)(.+?)\*(?!\*)/g, '$1<em>$2</em>');
+    html = applyEmphasisOutsideTags(html, (text) => (
+      text
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*(?!\*)(.+?)\*(?!\*)/g, '$1<em>$2</em>')
+    ));
     html = applyUnderscoreEmphasis(html);
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = applyEmphasisOutsideTags(html, (text) => text.replace(/`([^`]+)`/g, '<code>$1</code>'));
     html = html.replace(/^\s*[-*] \[([ xX])\] (.*)$/gm, (_, checked, label) => {
       const on = checked !== ' ';
       return `<li class="task${on ? ' done' : ''}"><button type="button" class="task-toggle" data-checked="${on ? '1' : '0'}" aria-checked="${on}">${on ? '☑' : '☐'}</button> ${label}</li>`;

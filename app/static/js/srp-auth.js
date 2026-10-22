@@ -253,13 +253,19 @@
   }
 
   async function repairLogin(email, password) {
+    // Prove-only against the stored verifier (C1). Server ignores any new
+    // salt/verifier; rotation belongs on /api/account/password after totp_ok.
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    return credentialProofLogin(
-      '/api/auth/repair-login/challenge',
-      '/api/auth/repair-login',
-      normalizedEmail,
-      password,
-    );
+    const challenge = await postJson('/api/auth/repair-login/challenge', { email: normalizedEmail });
+    const challengeVersion = normalizeSrpKdfVersion(challenge.srp_kdf_version);
+    const client = new SrpClient();
+    client.step1(normalizedEmail, password);
+    const creds = await client.step2(challenge.srp_salt, challenge.B, challengeVersion);
+    return postJson('/api/auth/repair-login', {
+      email: normalizedEmail,
+      A: creds.A,
+      M1: creds.M1,
+    });
   }
 
   /**
@@ -282,16 +288,24 @@
     return repairLogin(normalizedEmail, password);
   }
 
-  async function register(email, password) {
+  async function register(email, password, extras) {
     const client = new SrpClient();
     const srpSalt = await client.generateRandomSalt();
     const verifier = await client.generateVerifier(srpSalt, email, password, SRP_KDF_V2);
-    return postJson('/api/auth/srp/register', {
+    const body = {
       email,
       srp_salt: srpSalt,
       srp_verifier: verifier,
       srp_kdf_version: SRP_KDF_V2,
-    });
+      company: '', // honeypot — must stay empty
+    };
+    if (extras && typeof extras === 'object') {
+      if (extras.cf_turnstile_response) {
+        body.cf_turnstile_response = String(extras.cf_turnstile_response);
+      }
+      if (extras.company != null) body.company = String(extras.company);
+    }
+    return postJson('/api/auth/srp/register', body);
   }
 
   async function maybeUpgradeSrpKdf(email, password, loginResult) {
