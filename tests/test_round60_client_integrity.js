@@ -50,6 +50,7 @@ assert.ok(verify.includes('cosign verify-blob'));
 assert.ok(verify.includes('build-client-manifest.py'));
 assert.ok(verify.includes('manifest_sha256'));
 assert.ok(!verify.includes('Placeholder for Round 60'));
+assert.ok(verify.includes('release_signed') || verify.includes('signed releases'));
 assert.ok(!/<script[\s>]/i.test(verify), '/verify must stay script-free');
 
 // Dual-build repro (SOURCE_DATE_EPOCH pinned).

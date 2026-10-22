@@ -45,16 +45,19 @@
           <li>Find <code>POST /api/auth/srp/verify</code>. Request JSON contains <code>email</code>, client public value <code>A</code>, and proof <code>M1</code>. Response includes server proof <code>M2</code> plus vault metadata such as <code>kdf_salt</code> / <code>vault_kdf_version</code> for local unlock. There is still no password and no AES vault key.</li>
         </ol>
         <p>Related proofs use the same shape: <code>/api/auth/repair-login/challenge</code> + <code>/api/auth/repair-login</code> (<code>A</code>/<code>M1</code> only), and empty-vault unlock via <code>/api/account/unlock/challenge</code> + <code>/api/account/unlock</code>.</p>
-        <pre class="mk-code" tabindex="0">{
-<span class="mk-code-label">Redacted — POST /api/auth/srp/verify request</span>
+        <figure class="mk-code-block">
+          <figcaption class="mk-code-label">Redacted — POST /api/auth/srp/verify request</figcaption>
+          <pre class="mk-code" tabindex="0">
 {
   "email": "you@example.com",
   "A": "a1b2c3…(hex public value)…",
   "M1": "d4e5f6…(hex proof)…"
 }
 </pre>
-        <pre class="mk-code" tabindex="0">{
-<span class="mk-code-label">Redacted — POST /api/auth/srp/verify response (shape)</span>
+        </figure>
+        <figure class="mk-code-block">
+          <figcaption class="mk-code-label">Redacted — POST /api/auth/srp/verify response (shape)</figcaption>
+          <pre class="mk-code" tabindex="0">
 {
   "M2": "…",
   "kdf_salt": "…",
@@ -62,6 +65,7 @@
   "csrf": "…"
 }
 </pre>
+        </figure>
       </article>
 
       <article class="mk-card">
@@ -74,8 +78,9 @@
           <li><code>GET /api/sync/item/&lt;uuid&gt;</code> — the in-app “View server copy” action; returns one owned row exactly as stored.</li>
         </ul>
         <p>The encrypted envelope is a JSON string (or object) with AES-GCM fields <code>v</code>, <code>iv</code> (base64 nonce), and <code>data</code> (base64 ciphertext). That is what leaves the device — not the note title or body.</p>
-        <pre class="mk-code" tabindex="0">{
-<span class="mk-code-label">Redacted — one pushed item (POST /api/sync/items)</span>
+        <figure class="mk-code-block">
+          <figcaption class="mk-code-label">Redacted — one pushed item (POST /api/sync/items)</figcaption>
+          <pre class="mk-code" tabindex="0">
 {
   "item_uuid": "9f3c…-…",
   "content_version": 1,
@@ -87,6 +92,7 @@
   "base_rev": 3
 }
 </pre>
+        </figure>
         <p><strong>Plaintext metadata</strong> the server can see without your vault password: <code>item_uuid</code>, <code>content_version</code>, <code>content_hash</code>, <code>deleted</code>, <code>updated_at</code>, <code>synced_at</code>, <code>rev</code>, and byte sizes of ciphertext fields. Account fields such as email live on the user row, not inside note ciphertext.</p>
         <p>In the unlocked app, open any note → Note info → <strong>View server copy</strong> (also on files, 2FA entries, folders, and tags) to see the raw server JSON beside the decrypted local plaintext.</p>
       </article>
@@ -113,29 +119,50 @@
             <code>GET /api/health</code> as <code>client_hash</code>).
           </li>
           <li>
-            Open the matching <a href="https://github.com/deeperguard/Deeperguard/releases">GitHub Release</a>
-            (linked from About). Download <code>client-manifest.json</code>,
-            <code>client-manifest.json.sha256</code>, and the Sigstore bundle
-            <code>client-manifest.sigstore.json</code>.
+            Open the matching
+            <a href="{{ release_url }}" rel="noopener noreferrer">GitHub Release{% if release_tag %} {{ release_tag }}{% endif %}</a>
+            (same link as Settings → About). Download <code>client-manifest.json</code>
+            and <code>client-manifest.json.sha256</code>.
+            {% if release_signed %}
+            Also download the Sigstore bundle <code>client-manifest.sigstore.json</code>.
+            {% else %}
+            A Sigstore signature bundle is published once release signing is active;
+            until then verify by hash and by rebuilding from source (below).
+            {% endif %}
           </li>
           <li>
             Confirm the in-app hash equals <code>manifest_sha256</code> inside the
             release manifest (and the <code>.sha256</code> sidecar).
           </li>
           <li>
-            Verify the signature with Cosign (keyless OIDC, logged in Rekor):
-            <pre class="mk-code" tabindex="0"><span class="mk-code-label">cosign verify-blob</span>cosign verify-blob \
+            Rebuild from source at the release tag and compare hashes:
+            <figure class="mk-code-block">
+              <figcaption class="mk-code-label">reproducible build</figcaption>
+              <pre class="mk-code" tabindex="0">git checkout {% if release_tag %}{{ release_tag }}{% else %}&lt;tag&gt;{% endif %}
+export SOURCE_DATE_EPOCH=0
+python3 scripts/build-client-manifest.py --print-hash
+# must equal the release manifest_sha256</pre>
+            </figure>
+          </li>
+          <li>
+            {% if release_signed %}
+            This release is Sigstore-signed. Verify the signature with Cosign
+            (keyless OIDC, logged in Rekor):
+            {% else %}
+            <strong>When a release is Sigstore-signed</strong> (the release assets
+            include <code>client-manifest.sigstore.json</code>), also verify with
+            Cosign (keyless OIDC, logged in Rekor). Skip this step for unsigned
+            releases such as the first <code>v0.60.0</code> cut before the release
+            workflow was installed:
+            {% endif %}
+            <figure class="mk-code-block">
+              <figcaption class="mk-code-label">cosign verify-blob (signed releases)</figcaption>
+              <pre class="mk-code" tabindex="0">cosign verify-blob \
   --bundle client-manifest.sigstore.json \
   --certificate-identity-regexp 'https://github.com/deeperguard/Deeperguard/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   client-manifest.json</pre>
-          </li>
-          <li>
-            Rebuild from source at the release tag and compare hashes:
-            <pre class="mk-code" tabindex="0"><span class="mk-code-label">reproducible build</span>git checkout &lt;tag&gt;
-export SOURCE_DATE_EPOCH=0
-python3 scripts/build-client-manifest.py --print-hash
-# must equal the release manifest_sha256</pre>
+            </figure>
           </li>
         </ol>
         <p>Every script and stylesheet tag on the origin carries a Subresource Integrity digest. A pinned build (extension or desktop app) remains the strongest option if one is published later.</p>

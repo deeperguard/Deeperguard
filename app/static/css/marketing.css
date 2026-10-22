@@ -1625,6 +1625,9 @@ a.mk-badge-link:hover {
 /* /verify — inspectable code samples */
 .mk-subpage .mk-card {
   margin-bottom: 1.25rem;
+  /* Keep long lines + code samples inside the card on narrow phones. */
+  overflow-x: clip;
+  max-width: 100%;
 }
 .mk-subpage .mk-card h2 {
   margin: 0 0 0.75rem;
@@ -1638,6 +1641,7 @@ a.mk-badge-link:hover {
   color: var(--mk-muted);
   font-size: 0.95rem;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 .mk-subpage .mk-card ul,
 .mk-subpage .mk-card ol {
@@ -1647,34 +1651,59 @@ a.mk-badge-link:hover {
 .mk-subpage .mk-card li + li {
   margin-top: 0.35rem;
 }
+/* Inline code/links must not inflate line boxes on mobile. */
+.mk-subpage .mk-card code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  line-height: inherit;
+  padding: 0 0.28em;
+  border-radius: 4px;
+  background: var(--mk-panel-subtle);
+  vertical-align: baseline;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.mk-subpage .mk-card a {
+  line-height: inherit;
+}
 .mk-subpage kbd {
-  display: inline-block;
-  padding: 0.1rem 0.4rem;
+  display: inline;
+  padding: 0 0.28em;
   border: 1px solid var(--mk-border-strong);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--mk-panel-subtle);
   font-size: 0.85em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+.mk-code-block {
+  margin: 0.9rem 0 0;
+  max-width: 100%;
+}
+.mk-code-block .mk-code-label {
+  display: block;
+  margin: 0 0 0.35rem;
+  padding: 0 0.15rem;
+  color: var(--mk-faint);
+  font-size: 0.72rem;
+  font-family: var(--mk-sans);
+  font-weight: 600;
 }
 .mk-code {
-  position: relative;
-  margin: 0.9rem 0 0;
-  padding: 2.1rem 0.85rem 0.85rem;
+  display: block;
+  margin: 0;
+  padding: 0.85rem;
+  max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--mk-border);
   border-radius: var(--mk-radius-sm);
   background: #0f172a;
   color: #e2e8f0;
   font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre;
-}
-.mk-code-label {
-  position: absolute;
-  top: 0.45rem;
-  left: 0.75rem;
-  color: #94a3b8;
-  font-size: 0.72rem;
-  font-family: var(--mk-sans);
+  word-break: normal;
 }
 .mk-muted {
   color: var(--mk-faint) !important;

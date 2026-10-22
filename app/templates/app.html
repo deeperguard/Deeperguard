@@ -1815,22 +1815,7 @@
           <p class="settings-account">Notes <strong id="about-build">v{{ build }}</strong></p>
           <p class="settings-hint">Client code hash (SHA-256 of the shipped JS/CSS manifest):</p>
           <p class="settings-hint"><code id="about-client-hash" class="about-client-hash">{{ client_hash }}</code></p>
-          <p class="settings-hint">This matches <code>/api/health</code> → <code>client_hash</code> and the signed <code>client-manifest.json</code> on the GitHub Release.</p>
-          <div class="settings-actions">
-            <a class="btn" id="about-release-link" href="{{ release_url }}" target="_blank" rel="noopener noreferrer">GitHub Release</a>
-            <a class="btn" href="/verify">How to verify</a>
-          </div>
-          <p class="settings-hint">A pinned build (browser extension or desktop app) is the strongest option if one is published later — the web app still depends on the origin delivering these assets.</p>
-        </div>
-      </section>
-
-      <section class="settings-group" id="settings-about">
-        <h3>About</h3>
-        <div class="settings-card">
-          <p class="settings-account">Notes <strong id="about-build">v{{ build }}</strong></p>
-          <p class="settings-hint">Client code hash (SHA-256 of the shipped JS/CSS manifest):</p>
-          <p class="settings-hint"><code id="about-client-hash" class="about-client-hash">{{ client_hash }}</code></p>
-          <p class="settings-hint">This matches <code>/api/health</code> → <code>client_hash</code> and the signed <code>client-manifest.json</code> on the GitHub Release.</p>
+          <p class="settings-hint">This matches <code>/api/health</code> → <code>client_hash</code> and <code>manifest_sha256</code> in <code>client-manifest.json</code> on the <a href="{{ release_url }}" target="_blank" rel="noopener noreferrer">GitHub Release{% if release_tag %} {{ release_tag }}{% endif %}</a>{% if release_signed %}, which is Sigstore-signed{% endif %}.</p>
           <div class="settings-actions">
             <a class="btn" id="about-release-link" href="{{ release_url }}" target="_blank" rel="noopener noreferrer">GitHub Release</a>
             <a class="btn" href="/verify">How to verify</a>
