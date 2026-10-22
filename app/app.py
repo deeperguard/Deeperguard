@@ -192,9 +192,10 @@ def _account_login_password_ok(user, email: str, password: str) -> bool:
 def _stored_srp_challenge(email: str, user, purpose: str) -> str:
     """SRP step-1 bound to the account's *stored* salt/verifier.
 
-    Repair-login and strict-ZK vault-recovery proofs must authenticate against the
-    credentials on file — never against client-supplied ones, which would let an
-    unauthenticated caller swap in a self-made verifier (SECURITY-REVIEW-2026-10-07 H-1/M-1).
+    Repair-login, vault-recovery, and SRP KDF-upgrade proofs must authenticate
+    against the credentials on file — never against client-supplied ones, which
+    would let a caller swap in a self-made verifier (SECURITY-REVIEW-2026-10-07
+    H-1/M-1; SECURITY-REVIEW-2026-10-22 M-3).
     """
     sess = SrpServerSession()
     srp_salt = str(user["srp_salt"])
@@ -211,10 +212,10 @@ def _stored_srp_challenge(email: str, user, purpose: str) -> str:
     return b_hex
 
 
-def _verify_stored_srp_proof(email: str, user, a_hex: str, m1: str, purpose: str) -> bool:
-    """True when A/M1 complete an SRP exchange against the stored verifier (password never sent)."""
+def _complete_stored_srp_proof(email: str, user, a_hex: str, m1: str, purpose: str) -> str | None:
+    """Return M2 when A/M1 complete an SRP exchange against the stored verifier."""
     if not db.user_has_srp(user):
-        return False
+        return None
     state = auth.pop_srp_credential_challenge(
         email,
         str(user["srp_salt"]),
@@ -223,13 +224,17 @@ def _verify_stored_srp_proof(email: str, user, a_hex: str, m1: str, purpose: str
         int(user["id"]),
     )
     if not state:
-        return False
+        return None
     try:
         sess = SrpServerSession.from_private_state(state)
-        sess.step2(a_hex, m1)
-        return True
+        return sess.step2(a_hex, m1)
     except ValueError:
-        return False
+        return None
+
+
+def _verify_stored_srp_proof(email: str, user, a_hex: str, m1: str, purpose: str) -> bool:
+    """True when A/M1 complete an SRP exchange against the stored verifier (password never sent)."""
+    return _complete_stored_srp_proof(email, user, a_hex, m1, purpose) is not None
 
 
 def _vault_password_matches(user, password: str) -> bool:
@@ -574,6 +579,10 @@ def _gate():
         "/api/totp/verify",
         "/api/account/unlock",
         "/api/account/unlock/challenge",
+        # Post-SRP login still has totp_ok=False; the upgrade itself requires a
+        # fresh password proof, so it is safe to finish before the TOTP step.
+        "/api/auth/srp/kdf-upgrade",
+        "/api/auth/srp/kdf-upgrade/challenge",
     }:
         if request.path.startswith("/api/"):
             return jsonify({"error": "2FA required"}), 403
@@ -947,8 +956,9 @@ def api_auth_srp_challenge():
     user = db.get_user_by_email(email)
     if not user or not db.user_has_srp(user):
         # Deterministic fake salt+B so unknown emails look like a real challenge (M5).
+        # Report the current signup default (v2) so v1/v2 accounts are not enumerable (L-20).
         salt_hex, b_hex = fake_srp_challenge(email, app.secret_key)
-        return jsonify({"srp_salt": salt_hex, "B": b_hex, "srp_kdf_version": 1})
+        return jsonify({"srp_salt": salt_hex, "B": b_hex, "srp_kdf_version": SRP_KDF_V2})
     try:
         sess = SrpServerSession()
         b_hex = sess.step1(email, str(user["srp_salt"]), str(user["srp_verifier"]))
@@ -998,23 +1008,58 @@ def api_auth_srp_verify():
     return jsonify(payload)
 
 
-@app.post("/api/auth/srp/kdf-upgrade")
-def api_auth_srp_kdf_upgrade():
-    """Authenticated v1→v2 SRP verifier upgrade (CSRF + session required)."""
+@app.post("/api/auth/srp/kdf-upgrade/challenge")
+def api_auth_srp_kdf_upgrade_challenge():
+    """SRP step-1 for v1→v2 verifier upgrade (session + CSRF; binds to stored verifier)."""
     uid = auth.current_user_id()
     user = db.get_user_by_id(uid) if uid else None
     if not user or not db.user_has_srp(user):
         return jsonify({"error": "not found"}), 404
     if not auth.csrf_ok():
         return jsonify({"error": "invalid CSRF token"}), 400
+    email = str(user["email"] or "").strip().lower()
+    if _auth_rate_limited("srp-kdf-upgrade", email):
+        return jsonify({"error": "too many attempts"}), 429
+    if db.user_srp_kdf_version(user) >= SRP_KDF_V2:
+        return jsonify({"error": "already upgraded"}), 400
+    try:
+        b_hex = _stored_srp_challenge(email, user, auth.SRP_PURPOSE_KDF_UPGRADE)
+    except ValueError:
+        return jsonify({"error": "invalid credentials"}), 401
+    return jsonify({
+        "srp_salt": str(user["srp_salt"]),
+        "B": b_hex,
+        "srp_kdf_version": db.user_srp_kdf_version(user),
+    })
+
+
+@app.post("/api/auth/srp/kdf-upgrade")
+def api_auth_srp_kdf_upgrade():
+    """Install a v2 verifier only after a fresh SRP proof of the current password (M-3)."""
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user or not db.user_has_srp(user):
+        return jsonify({"error": "not found"}), 404
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    email = str(user["email"] or "").strip().lower()
+    if _auth_rate_limited("srp-kdf-upgrade", email):
+        return jsonify({"error": "too many attempts"}), 429
     body = request.get_json(silent=True) or {}
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
     srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
+    a_hex = str(body.get("A") or "").strip().lower()
+    m1 = str(body.get("M1") or "").strip().lower()
     if srp_kdf_version < SRP_KDF_V2 or not srp_salt or not srp_verifier:
         return jsonify({"error": "invalid upgrade"}), 400
     if db.user_srp_kdf_version(user) >= SRP_KDF_V2:
-        return jsonify({"ok": True, "srp_kdf_version": SRP_KDF_V2})
+        return jsonify({"error": "already upgraded"}), 400
+    if not a_hex or not m1:
+        return jsonify({"error": "missing srp proof"}), 400
+    m2 = _complete_stored_srp_proof(email, user, a_hex, m1, auth.SRP_PURPOSE_KDF_UPGRADE)
+    if not m2:
+        return jsonify({"error": "invalid credentials"}), 403
     # Verifier-format upgrade only — do not bump password_changed_at (that would
     # clear the post-login boot password and surface a false vault unlock error).
     db.update_user_srp_verifier(
@@ -1024,7 +1069,7 @@ def api_auth_srp_kdf_upgrade():
         srp_kdf_version=SRP_KDF_V2,
         touch_password_changed=False,
     )
-    return jsonify({"ok": True, "srp_kdf_version": SRP_KDF_V2})
+    return jsonify({"ok": True, "srp_kdf_version": SRP_KDF_V2, "M2": m2})
 
 
 @app.post("/api/auth/repair-login/challenge")

@@ -36,6 +36,15 @@ assert.ok(py.includes('SRP_PURPOSE_UNLOCK'));
 const unlockFn = py.slice(py.indexOf('def api_account_unlock('), py.indexOf('def _password_rotation_seconds'));
 assert.ok(unlockFn.includes('_verify_stored_srp_proof'));
 assert.ok(unlockFn.indexOf('_verify_stored_srp_proof') < unlockFn.lastIndexOf('_unlock_payload'));
+assert.ok(srp.includes("'/api/auth/srp/kdf-upgrade/challenge'"));
+assert.ok(srp.includes('A: creds.A'));
+assert.ok(srp.includes('M1: creds.M1'));
+assert.ok(py.includes('SRP_PURPOSE_KDF_UPGRADE'));
+assert.ok(py.includes('missing srp proof'));
+const kdfUp = py.slice(py.indexOf('def api_auth_srp_kdf_upgrade('), py.indexOf('def api_auth_repair_login_challenge'));
+assert.ok(kdfUp.includes('_complete_stored_srp_proof'));
+assert.ok(kdfUp.includes('SRP_PURPOSE_KDF_UPGRADE'));
+assert.ok(kdfUp.includes('touch_password_changed=False'));
 
 // 2. First Escape in the search field clears the query before the sidebar eats it.
 const searchEsc = appJs.indexOf('event.target === ui.search || document.activeElement === ui.search');
