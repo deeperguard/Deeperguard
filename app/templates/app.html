@@ -1540,6 +1540,7 @@
         <h3>Privacy &amp; security</h3>
         <div class="settings-card">
           <p class="settings-hint">Notes are encrypted on this device before sync. Your account password and vault password start as the same password. Sign-in proves who you are. The vault password decrypts notes on this device and never leaves it. You can change the vault password below. We cannot recover it. Account sign-in uses zero-knowledge SRP — the server stores only a proof, not your password.</p>
+          <p class="settings-hint">See <a href="/verify" target="_blank" rel="noopener">how to verify zero-knowledge</a> in DevTools, or use <strong>View server copy</strong> on a note, file, 2FA entry, folder, or tag.</p>
           <p class="settings-hint">Self-hosting? See the <a href="/self-host">self-host guide</a>.</p>
           <p class="settings-hint">Use <a href="https://www.deeperguard.com/">https://www.deeperguard.com/</a> on iPhone. Passkeys require that hostname.</p>
           <label class="settings-row">Lock after idle
@@ -1891,6 +1892,7 @@
       </dl>
       <div class="note-info-actions note-info-actions-bottom">
         <button type="button" id="note-info-share-bottom" class="btn ghost sm desktop-only">Copy note</button>
+        <button type="button" id="note-info-server-copy" class="btn ghost sm">View server copy</button>
         <button type="button" id="note-info-protect" class="btn ghost sm note-info-protect-btn">
           <span class="note-info-protect-icon" aria-hidden="true">
             <svg class="lock-closed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" hidden>
@@ -1910,6 +1912,31 @@
   <!-- File pickers live outside .sidebar so mobile editor-open (pointer-events:none) cannot block iOS/Safari. -->
   <input id="scan-camera" class="sr-file" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
   <input id="scan-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,application/pdf,text/plain" multiple tabindex="-1" aria-hidden="true">
+  <div id="server-copy-backdrop" class="scan-backdrop" hidden></div>
+  <div id="server-copy-dialog" class="scan-dialog server-copy-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="server-copy-title">
+    <div class="scan-dialog-handle" aria-hidden="true"></div>
+    <header class="scan-dialog-head">
+      <h2 id="server-copy-title">View server copy</h2>
+    </header>
+    <div class="scan-dialog-body server-copy-body">
+      <p class="scan-dialog-lead">This is everything our server has for this item. Without your vault password it's unreadable.</p>
+      <p id="server-copy-status" class="settings-hint" role="status"></p>
+      <div id="server-copy-meta" class="server-copy-meta" hidden></div>
+      <div id="server-copy-panels" class="server-copy-panels" hidden>
+        <section class="server-copy-panel">
+          <h3>Server JSON <span class="muted">(as stored)</span></h3>
+          <pre id="server-copy-raw" class="server-copy-pre" tabindex="0"></pre>
+        </section>
+        <section class="server-copy-panel">
+          <h3>Decrypted on this device</h3>
+          <pre id="server-copy-plain" class="server-copy-pre" tabindex="0"></pre>
+        </section>
+      </div>
+    </div>
+    <footer class="scan-dialog-foot">
+      <button type="button" id="server-copy-close" class="btn primary">Close</button>
+    </footer>
+  </div>
   <div id="scan-backdrop" class="scan-backdrop" hidden></div>
   <div id="scan-dialog" class="scan-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="scan-dialog-title">
     <div class="scan-dialog-handle" aria-hidden="true"></div>

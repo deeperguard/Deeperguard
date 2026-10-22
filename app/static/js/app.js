@@ -3793,6 +3793,7 @@
           </span>
         </button>
         <button type="button" class="totp-item-edit" data-totp-edit aria-label="Edit ${escapeAttr(label)}">Edit</button>
+        <button type="button" class="totp-item-server-copy" data-server-copy="${escapeAttr(item.uuid)}" aria-label="View server copy for ${escapeAttr(label)}">Server copy</button>
         <button type="button" class="totp-item-remove" data-totp-remove aria-label="Remove ${escapeAttr(label)}">×</button>
       </div>`;
     }).join('');
@@ -7478,6 +7479,7 @@
           <span class="tag-manage-name">${escapeHtml(tag.content.title || 'Tag')}</span>
           <span class="tag-count">${count}</span>
           <button type="button" class="btn ghost sm" data-manage-rename aria-label="Rename tag ${escapeAttr(tag.content.title || 'Tag')}">Rename</button>
+          <button type="button" class="btn ghost sm" data-server-copy="${escapeAttr(tag.uuid)}" aria-label="View server copy for tag ${escapeAttr(tag.content.title || 'Tag')}">Server copy</button>
           <button type="button" class="btn ghost sm" data-manage-delete aria-label="Delete tag ${escapeAttr(tag.content.title || 'Tag')}">Delete</button>
         </div>
         <div class="tag-colors">${swatches}</div>
@@ -7487,6 +7489,9 @@
       const uuid = row.dataset.manageTag;
       row.querySelector('[data-manage-rename]')?.addEventListener('click', () => beginManageRename(row, uuid));
       row.querySelector('[data-manage-delete]')?.addEventListener('click', () => deleteCurrentTag(uuid));
+      row.querySelector('[data-server-copy]')?.addEventListener('click', () => {
+        openServerCopyView(uuid).catch((err) => toast(err.message || 'Could not load server copy', true));
+      });
       row.querySelectorAll('[data-manage-color]').forEach((swatch) => {
         swatch.addEventListener('click', () => {
           NotesStore.setTagColor(uuid, swatch.dataset.manageColor);
@@ -7682,6 +7687,7 @@
           <button type="button" class="folder-select" data-folder-select="${escapeAttr(folder.uuid)}">${escapeHtml(folder.content.title || 'Folder')}</button>
           <span class="tag-count">${notes.length}</span>
           <button type="button" class="folder-rename" data-folder-rename="${escapeAttr(folder.uuid)}" aria-label="Rename folder ${escapeAttr(folder.content.title || 'Folder')}">✎</button>
+          <button type="button" class="folder-server-copy" data-server-copy="${escapeAttr(folder.uuid)}" aria-label="View server copy for folder ${escapeAttr(folder.content.title || 'Folder')}" title="View server copy">ⓘ</button>
           <button type="button" class="tag-remove folder-remove" data-folder-remove="${escapeAttr(folder.uuid)}" aria-label="Delete folder ${escapeAttr(folder.content.title || 'Folder')}">×</button>
         </div>
         <div class="folder-notes"${open ? '' : ' hidden'}>${kids || '<p class="folder-empty muted">Empty</p>'}</div>
@@ -7728,6 +7734,13 @@
         event.preventDefault();
         event.stopPropagation();
         beginRenameFolder(btn.dataset.folderRename);
+      });
+    });
+    host.querySelectorAll('[data-server-copy]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openServerCopyView(btn.dataset.serverCopy).catch((err) => toast(err.message || 'Could not load server copy', true));
       });
     });
     host.querySelectorAll('[data-folder-note]').forEach((btn) => {
@@ -9281,9 +9294,10 @@
         const retryBtn = !succeeded && attachmentOcrRetryable(a)
           ? `<button type="button" class="btn ghost sm ocr-retry" data-retry-ocr="${escapeAttr(a.uuid)}">Retry OCR</button>`
           : '';
+        const serverCopyBtn = `<button type="button" class="btn ghost sm" data-server-copy="${escapeAttr(a.uuid)}">Server copy</button>`;
         const rerunBtn = succeeded
-          ? `<details class="attachment-overflow"><summary class="btn ghost sm" aria-label="More file actions">⋯</summary><div class="attachment-overflow-menu"><button type="button" class="btn ghost sm ocr-retry" data-retry-ocr="${escapeAttr(a.uuid)}">Re-run OCR</button></div></details>`
-          : '';
+          ? `<details class="attachment-overflow"><summary class="btn ghost sm" aria-label="More file actions">⋯</summary><div class="attachment-overflow-menu"><button type="button" class="btn ghost sm ocr-retry" data-retry-ocr="${escapeAttr(a.uuid)}">Re-run OCR</button>${serverCopyBtn}</div></details>`
+          : `<details class="attachment-overflow"><summary class="btn ghost sm" aria-label="More file actions">⋯</summary><div class="attachment-overflow-menu">${serverCopyBtn}</div></details>`;
         const hideAttShare = isPhoneShell() && mobileDocToolbarActive();
         const shareBtn = !hideAttShare && attachmentCanWebShare()
           ? `<button type="button" class="btn ghost sm" data-share="${escapeAttr(a.uuid)}">Share</button>`
@@ -9374,6 +9388,11 @@
     ui.attachmentList.querySelectorAll('[data-retry-ocr]').forEach((btn) => {
       btn.addEventListener('click', () => {
         retryAttachmentOcr(btn.dataset.retryOcr).catch((err) => toast(err.message || 'OCR retry failed', true));
+      });
+    });
+    ui.attachmentList.querySelectorAll('[data-server-copy]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        openServerCopyView(btn.dataset.serverCopy).catch((err) => toast(err.message || 'Could not load server copy', true));
       });
     });
     ui.attachmentList.querySelectorAll('[data-pending-add]').forEach((btn) => {
@@ -17620,6 +17639,151 @@
   });
 
   document.getElementById('note-info-protect')?.addEventListener('click', toggleNoteProtection);
+  document.getElementById('note-info-server-copy')?.addEventListener('click', () => {
+    if (!currentId) {
+      toast('Open a note first', true);
+      return;
+    }
+    openServerCopyView(currentId).catch((err) => toast(err.message || 'Could not load server copy', true));
+  });
+  document.getElementById('server-copy-close')?.addEventListener('click', hideServerCopyDialog);
+  document.getElementById('server-copy-backdrop')?.addEventListener('click', hideServerCopyDialog);
+
+  const SERVER_COPY_META_FIELDS = [
+    { key: 'item_uuid', label: 'item_uuid — plaintext metadata (ID)' },
+    { key: 'content_version', label: 'content_version — plaintext metadata' },
+    { key: 'content_hash', label: 'content_hash — plaintext metadata (hash of ciphertext string)' },
+    { key: 'deleted', label: 'deleted — plaintext metadata' },
+    { key: 'updated_at', label: 'updated_at — plaintext metadata (timestamp)' },
+    { key: 'synced_at', label: 'synced_at — plaintext metadata (timestamp)' },
+    { key: 'rev', label: 'rev — plaintext metadata (server revision)' },
+    { key: 'needs_blob', label: 'needs_blob — plaintext metadata' },
+    { key: 'ciphertext', label: 'ciphertext — encrypted AES-GCM envelope (v, iv, data)' },
+    { key: 'blob_ciphertext', label: 'blob_ciphertext — encrypted file envelope (attachments)' },
+  ];
+
+  function hideServerCopyDialog() {
+    const dialog = document.getElementById('server-copy-dialog');
+    const backdrop = document.getElementById('server-copy-backdrop');
+    if (dialog) dialog.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+    if (!document.getElementById('scan-dialog') || document.getElementById('scan-dialog').hidden) {
+      if (!document.querySelector('.scan-dialog:not([hidden])')) {
+        document.body.classList.remove('scan-dialog-open');
+      }
+    }
+  }
+
+  function prettyServerJson(value) {
+    try {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}'))
+          || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          return JSON.stringify(JSON.parse(trimmed), null, 2);
+        }
+      }
+      return JSON.stringify(value, null, 2);
+    } catch (err) {
+      return String(value ?? '');
+    }
+  }
+
+  function localPlaintextForServerCopy(uuid) {
+    const item = NotesStore.get(uuid);
+    if (!item) return { missing: true, note: 'No decrypted copy on this device.' };
+    const content = item.content ? { ...item.content } : {};
+    // Never dump binary attachment bytes into the panel.
+    if (content.type === 'attachment') {
+      const hasEnc = !!(content.file_enc || content.file_enc_stored);
+      delete content.file_enc;
+      delete content.data_b64;
+      content.file_enc_present_locally = hasEnc;
+      content.file_bytes_note = 'Raw file bytes stay in the encrypted blob; not shown here.';
+    }
+    if (content.type === 'totp' && content.secret) {
+      const secret = String(content.secret);
+      content.secret = secret.length <= 4
+        ? '••••'
+        : `${secret.slice(0, 2)}…${secret.slice(-2)} (${secret.length} chars, redacted in UI)`;
+    }
+    return {
+      uuid: item.uuid || uuid,
+      updated_at: item.updated_at,
+      deleted: !!item.deleted,
+      rev: item.rev,
+      content,
+    };
+  }
+
+  async function openServerCopyView(uuid) {
+    const id = String(uuid || '').trim();
+    if (!id) throw new Error('Missing item id');
+    if (!NotesStore.isUnlocked?.()) throw new Error('Unlock the vault first');
+    const dialog = document.getElementById('server-copy-dialog');
+    const backdrop = document.getElementById('server-copy-backdrop');
+    const status = document.getElementById('server-copy-status');
+    const meta = document.getElementById('server-copy-meta');
+    const panels = document.getElementById('server-copy-panels');
+    const rawPre = document.getElementById('server-copy-raw');
+    const plainPre = document.getElementById('server-copy-plain');
+    if (!dialog || !backdrop || !status || !meta || !panels || !rawPre || !plainPre) {
+      throw new Error('Server copy dialog missing');
+    }
+    dialog.hidden = false;
+    backdrop.hidden = false;
+    document.body.classList.add('scan-dialog-open');
+    status.hidden = false;
+    status.textContent = 'Fetching raw server row…';
+    status.classList.remove('error');
+    meta.hidden = true;
+    panels.hidden = true;
+    rawPre.textContent = '';
+    plainPre.textContent = '';
+
+    let serverItem = null;
+    try {
+      if (typeof NotesStore.fetchServerItem !== 'function') {
+        throw new Error('Server copy fetch is unavailable');
+      }
+      serverItem = await NotesStore.fetchServerItem(id, { includeBlobs: true });
+    } catch (err) {
+      if (err?.status === 404) {
+        status.textContent = 'No server copy yet — sync this item while online, then try again.';
+        plainPre.textContent = prettyServerJson(localPlaintextForServerCopy(id));
+        panels.hidden = false;
+        return;
+      }
+      status.textContent = err?.message || 'Could not fetch server copy';
+      status.classList.add('error');
+      throw err;
+    }
+
+    status.textContent = 'This is everything our server has for this item. Without your vault password it\'s unreadable.';
+    const fieldHelp = SERVER_COPY_META_FIELDS
+      .filter((row) => Object.prototype.hasOwnProperty.call(serverItem, row.key)
+        && serverItem[row.key] !== ''
+        && serverItem[row.key] != null)
+      .map((row) => `<div><strong>${escapeHtml(row.key)}</strong> — ${escapeHtml(row.label.split('—')[1]?.trim() || row.label)}</div>`)
+      .join('');
+    meta.innerHTML = `<div><strong>Field guide</strong> (honest labels)</div>${fieldHelp}`;
+    meta.hidden = false;
+
+    // Show the API object as returned — parse nested ciphertext JSON for readability
+    // without re-encrypting or inventing fields.
+    const display = { ...serverItem };
+    ['ciphertext', 'blob_ciphertext'].forEach((key) => {
+      const raw = display[key];
+      if (typeof raw === 'string' && raw.trim().startsWith('{')) {
+        try { display[key] = JSON.parse(raw); } catch (err) { /* keep string */ }
+      }
+    });
+    rawPre.textContent = prettyServerJson(display);
+    plainPre.textContent = prettyServerJson(localPlaintextForServerCopy(id));
+    panels.hidden = false;
+  }
+  try { window.__notesOpenServerCopy = openServerCopyView; } catch (err) { /* ignore */ }
+
   document.getElementById('note-warn-save')?.addEventListener('click', () => {
     saveNoteWarning().catch(() => {});
   });
@@ -18585,6 +18749,12 @@
     }
     if (event.target.closest('[data-totp-edit]')) {
       showTotpEditDialog(row.dataset.totpId);
+      return;
+    }
+    const serverBtn = event.target.closest('[data-server-copy]');
+    if (serverBtn) {
+      openServerCopyView(serverBtn.dataset.serverCopy || row.dataset.totpId)
+        .catch((err) => toast(err.message || 'Could not load server copy', true));
       return;
     }
     copyTotpEntry(row.dataset.totpId);

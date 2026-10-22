@@ -483,7 +483,10 @@ def _headers(response):
         session.accessed = False
         session.modified = False
         _drop_set_cookie(response)
-    elif request.path in {"/", "/pricing", "/compare/standard-notes", "/contact", "/download", "/privacy", "/terms"}:
+    elif request.path in {
+        "/", "/pricing", "/compare/standard-notes", "/contact", "/download",
+        "/privacy", "/terms", "/verify",
+    }:
         # Marketing HTML is public and cookie-free. A short cache keeps repeat
         # visits off the origin. Clear-Site-Data must not be set here: the
         # browser deletes its HTTP cache before painting, and the one-time
@@ -2447,6 +2450,27 @@ def api_sync_refetch():
     return jsonify({"items": items, "server_time": time.time()})
 
 
+@app.get("/api/sync/item/<item_uuid>")
+def api_sync_item(item_uuid):
+    """Read-only raw server row for one owned item (View server copy).
+
+    Returns the same fields sync pull/refetch expose. Never logs ciphertext.
+    """
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    uuid = str(item_uuid or "").strip()
+    if not uuid or len(uuid) > 80:
+        return jsonify({"error": "not found"}), 404
+    include_blobs = str(request.args.get("include_blobs", "1")).strip().lower() not in {
+        "0", "false", "no",
+    }
+    items = db.list_items_by_uuid(uid, [uuid], include_blobs=include_blobs)
+    if not items:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"item": items[0], "server_time": time.time()})
+
+
 @app.post("/api/sync/blobs")
 def api_sync_blobs():
     uid = auth.current_user_id()
@@ -2920,6 +2944,12 @@ def download_page():
     return render_template("download.html", **_marketing_context())
 
 
+@app.get("/verify")
+def verify_page():
+    """Public guide: inspect login/sync traffic and confirm zero-knowledge claims."""
+    return render_template("verify.html", **_marketing_context())
+
+
 @app.get("/pricing")
 def pricing_page():
     # Canonical content lives on the homepage pricing section.
@@ -2970,6 +3000,7 @@ def sitemap_xml():
         "/contact",
         "/download",
         "/self-host",
+        "/verify",
         "/api/promo",
     ]
     lines = [

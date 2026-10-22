@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Verify zero-knowledge — Deeperguard</title>
+  <meta name="description" content="How to inspect Deeperguard login and sync traffic yourself and confirm passwords and note contents never leave your device in plaintext.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+</head>
+<body>
+  {% include 'partials/mk-topbar.html' %}
+  <main class="wrap mk-subpage">
+    <section class="mk-section" id="verify">
+      <div class="mk-section-head">
+        <span class="mk-badge">Independent check</span>
+        <h1>Verify zero-knowledge</h1>
+        <p>You do not have to trust our marketing copy. During sign-in and sync you can watch the real HTTP requests in your browser and confirm that passwords, vault keys, and note plaintext never appear on the wire.</p>
+      </div>
+
+      <article class="mk-card">
+        <h2>1. Open DevTools Network</h2>
+        <h3>Chrome / Edge / Brave</h3>
+        <ol>
+          <li>Open <a href="/login">Sign in</a> or <a href="/app">the app</a> in a normal (non-incognito) window if you already have an account.</li>
+          <li>Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> (Windows/Linux) or <kbd>⌘</kbd>+<kbd>Option</kbd>+<kbd>I</kbd> (macOS), or use the menu → More tools → Developer tools.</li>
+          <li>Open the <strong>Network</strong> tab. Enable <strong>Preserve log</strong> so navigations do not clear the list.</li>
+          <li>Filter by <code>Fetch/XHR</code> (or type <code>api</code> in the filter box).</li>
+        </ol>
+        <h3>Firefox</h3>
+        <ol>
+          <li>Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> (Windows/Linux) or <kbd>⌘</kbd>+<kbd>Option</kbd>+<kbd>E</kbd> (macOS), or menu → More tools → Web Developer Tools → Network.</li>
+          <li>Enable <strong>Persist Logs</strong>. Filter to <strong>XHR</strong> / <strong>Fetch</strong>.</li>
+        </ol>
+      </article>
+
+      <article class="mk-card">
+        <h2>2. What to look for during login (SRP-6a)</h2>
+        <p>Account sign-in uses Thinbus-compatible <strong>SRP-6a</strong>. The password is stretched in the browser (SHA-256 for legacy accounts, Argon2id for v2) and never posted as a field named <code>password</code> on the SRP routes.</p>
+        <ol>
+          <li>Reload <a href="/login">/login</a>, open Network, then sign in.</li>
+          <li>Find <code>POST /api/auth/srp/challenge</code>. Request JSON is only <code>{"email":"…"}</code>. Response includes <code>srp_salt</code>, server public value <code>B</code>, and <code>srp_kdf_version</code> — not your password.</li>
+          <li>Find <code>POST /api/auth/srp/verify</code>. Request JSON contains <code>email</code>, client public value <code>A</code>, and proof <code>M1</code>. Response includes server proof <code>M2</code> plus vault metadata such as <code>kdf_salt</code> / <code>vault_kdf_version</code> for local unlock. There is still no password and no AES vault key.</li>
+        </ol>
+        <p>Related proofs use the same shape: <code>/api/auth/repair-login/challenge</code> + <code>/api/auth/repair-login</code> (<code>A</code>/<code>M1</code> only), and empty-vault unlock via <code>/api/account/unlock/challenge</code> + <code>/api/account/unlock</code>.</p>
+        <pre class="mk-code" tabindex="0">{
+<span class="mk-code-label">Redacted — POST /api/auth/srp/verify request</span>
+{
+  "email": "you@example.com",
+  "A": "a1b2c3…(hex public value)…",
+  "M1": "d4e5f6…(hex proof)…"
+}
+</pre>
+        <pre class="mk-code" tabindex="0">{
+<span class="mk-code-label">Redacted — POST /api/auth/srp/verify response (shape)</span>
+{
+  "M2": "…",
+  "kdf_salt": "…",
+  "vault_kdf_version": 2,
+  "csrf": "…"
+}
+</pre>
+      </article>
+
+      <article class="mk-card">
+        <h2>3. What to look for during sync</h2>
+        <p>After unlock, create or edit a note and wait for sync (or pull to refresh). Filter Network for <code>sync</code>.</p>
+        <ul>
+          <li><code>POST /api/sync/pull</code> — body has cursors such as <code>since</code>, optional <code>known_hashes</code>, <code>include_blobs</code>, <code>limit</code>. Each returned item is ciphertext plus plaintext <em>metadata</em> only (see below).</li>
+          <li><code>POST /api/sync/items</code> — push body is <code>{"items":[…],"partial":1}</code>. Each item carries <code>item_uuid</code>, <code>ciphertext</code>, optional <code>blob_ciphertext</code>, <code>content_hash</code>, <code>deleted</code>, <code>updated_at</code>, <code>content_version</code>, and often <code>base_rev</code>.</li>
+          <li><code>POST /api/sync/blobs</code> / <code>POST /api/sync/refetch</code> — same ciphertext envelopes, still no note text.</li>
+          <li><code>GET /api/sync/item/&lt;uuid&gt;</code> — the in-app “View server copy” action; returns one owned row exactly as stored.</li>
+        </ul>
+        <p>The encrypted envelope is a JSON string (or object) with AES-GCM fields <code>v</code>, <code>iv</code> (base64 nonce), and <code>data</code> (base64 ciphertext). That is what leaves the device — not the note title or body.</p>
+        <pre class="mk-code" tabindex="0">{
+<span class="mk-code-label">Redacted — one pushed item (POST /api/sync/items)</span>
+{
+  "item_uuid": "9f3c…-…",
+  "content_version": 1,
+  "ciphertext": "{\"v\":1,\"iv\":\"&lt;base64&gt;\",\"data\":\"&lt;base64&gt;\"}",
+  "blob_ciphertext": "",
+  "content_hash": "&lt;sha-256 of ciphertext string&gt;",
+  "deleted": false,
+  "updated_at": 1760000000.123,
+  "base_rev": 3
+}
+</pre>
+        <p><strong>Plaintext metadata</strong> the server can see without your vault password: <code>item_uuid</code>, <code>content_version</code>, <code>content_hash</code>, <code>deleted</code>, <code>updated_at</code>, <code>synced_at</code>, <code>rev</code>, and byte sizes of ciphertext fields. Account fields such as email live on the user row, not inside note ciphertext.</p>
+        <p>In the unlocked app, open any note → Note info → <strong>View server copy</strong> (also on files, 2FA entries, folders, and tags) to see the raw server JSON beside the decrypted local plaintext.</p>
+      </article>
+
+      <article class="mk-card">
+        <h2>4. Optional: mitmproxy (and why Wireshark is not enough)</h2>
+        <p>To inspect HTTPS as cleartext HTTP, point the browser at a local TLS-intercepting proxy such as <a href="https://mitmproxy.org/" rel="noopener noreferrer">mitmproxy</a>, install its CA in the OS/browser trust store, and filter for <code>deeperguard.com</code>. You should still see only SRP proofs and ciphertext envelopes.</p>
+        <p><strong>Wireshark</strong> on the wire without TLS keys shows only TLS records — encrypted blobs. That proves transport encryption, not that the application payload is ciphertext. Use DevTools or mitmproxy for application JSON.</p>
+      </article>
+
+      <article class="mk-card">
+        <h2>What these tests can’t prove</h2>
+        <ul>
+          <li><strong>Server-side retention of old copies</strong> — your browser only sees what the API returns now. Historical backups or DB snapshots are outside this check.</li>
+          <li><strong>Metadata</strong> — email, IP address, request timing, ciphertext sizes, and item IDs are visible to the server and to anyone who can read logs or the database. Zero-knowledge covers vault contents, not traffic analysis.</li>
+          <li><strong>Integrity of the delivered client code</strong> — if a compromised origin shipped a malicious <code>app.js</code>, it could exfiltrate secrets before encryption. Checking the code you run is a separate step.</li>
+        </ul>
+        <h3>How to check the code you’re running</h3>
+        <p class="mk-muted">Placeholder for Round 60: reproducible builds, Subresource Integrity, and comparing the served JS to the public GitHub tree.</p>
+      </article>
+
+      <article class="mk-card">
+        <h2>Our claim fails if…</h2>
+        <ul>
+          <li>A login or sync request body contains your vault password, account password, or raw AES key material.</li>
+          <li>A sync item’s <code>ciphertext</code> / <code>blob_ciphertext</code> is readable plaintext (title, body, TOTP secret, file bytes) instead of a <code>v</code>/<code>iv</code>/<code>data</code> envelope.</li>
+          <li>Note contents appear in server access logs or error responses.</li>
+          <li>“View server copy” shows decrypted fields in the server JSON column (those belong only in the local plaintext column after unlock).</li>
+        </ul>
+        <p>If you find any of the above, please email <a href="mailto:notes@deeperguard.com?subject=Vulnerability%20report">notes@deeperguard.com</a> with subject “Vulnerability report”.</p>
+      </article>
+    </section>
+    {% include 'partials/mk-footer.html' %}
+  </main>
+</body>
+</html>
