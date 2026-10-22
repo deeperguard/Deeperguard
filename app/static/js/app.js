@@ -5653,6 +5653,16 @@
     throw err;
   }
 
+  /** Password just typed on login/register — empty vault may hit /account/unlock. */
+  function mayProveEmptyVaultOnSilentBoot() {
+    try {
+      return sessionStorage.getItem('notes_post_login_unlock') === '1'
+        || sessionStorage.getItem('notes_just_registered') === '1';
+    } catch (err) {
+      return false;
+    }
+  }
+
   async function assertVaultKeyVerified() {
     // Do not return early just because keyVerified is already set. An empty
     // vault used to take that shortcut and skip the password proof.
@@ -6637,8 +6647,10 @@
             throw probeErr;
           }
           if (!(freshProof?.via === 'decrypt' && Number(freshProof.opened) > 0)) {
-            // Boot auto-unlock: never hit rate-limited prove/unlock endpoints.
-            if (silent) deferAutoUnlock();
+            // Remembered-password boot unlock must not hit rate-limited prove
+            // endpoints. A password just typed on login/register may prove an
+            // empty vault (post-signup / empty-account sign-in).
+            if (silent && !mayProveEmptyVaultOnSilentBoot()) deferAutoUnlock();
             await proveEmptyVaultWithAccountPassword(cached.email, clean);
           }
           passwordProven = vaultKeyProven();
@@ -6734,7 +6746,7 @@
               throw probeErr;
             }
             if (proof?.via === 'empty') {
-              if (silent) deferAutoUnlock();
+              if (silent && !mayProveEmptyVaultOnSilentBoot()) deferAutoUnlock();
               await proveEmptyVaultWithAccountPassword(cached.email, clean);
             }
             passwordProven = vaultKeyProven();

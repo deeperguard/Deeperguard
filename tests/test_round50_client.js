@@ -16,8 +16,9 @@ const req = fs.readFileSync(path.join(root, 'requirements.txt'), 'utf8');
 
 assert.ok(appJs.includes('verifyAndUnlock(autoUnlockPassword, { silent: true })'));
 assert.ok(appJs.includes('abortUnlockAttempt(err, { silent })'));
-assert.ok(appJs.includes('Boot auto-unlock: never hit rate-limited'));
 assert.ok(appJs.includes('deferAutoUnlock'));
+assert.ok(appJs.includes('mayProveEmptyVaultOnSilentBoot'));
+assert.ok(appJs.includes('proveEmptyVaultWithAccountPassword'));
 assert.ok(appJs.includes('settingsKeySaveDepth'));
 assert.ok(appJs.includes('Clear local Drive tokens only'));
 assert.ok(vaultSecretsJs.includes('Drop any leftover derived-key stash'));
