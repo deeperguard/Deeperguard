@@ -1,0 +1,40 @@
+name: Client integrity
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  reproducible-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Dual build hash compare
+        env:
+          SOURCE_DATE_EPOCH: "0"
+        run: |
+          python3 scripts/build-client-manifest.py --check-repro
+          python3 scripts/build-client-manifest.py -o /tmp/manifest-a.json
+          python3 scripts/build-client-manifest.py -o /tmp/manifest-b.json
+          diff -u /tmp/manifest-a.json /tmp/manifest-b.json
+          test "$(python3 scripts/build-client-manifest.py --print-hash)" = "$(python3 -c 'import json;print(json.load(open("/tmp/manifest-a.json"))["manifest_sha256"])')"
+
+      - name: Unit tests (Round 60)
+        env:
+          SOURCE_DATE_EPOCH: "0"
+          NOTES_DISABLE_CIDR_GATE: "1"
+        run: |
+          python3 -m pip install -q -r requirements.lock
+          python3 -m unittest tests.test_round60_client_integrity -v
+          node tests/test_round60_client_integrity.js
