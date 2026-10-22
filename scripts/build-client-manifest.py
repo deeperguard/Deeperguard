@@ -53,8 +53,10 @@ def _iter_assets() -> list[Path]:
                 continue
             if path.suffix.lower() not in INCLUDE_SUFFIXES:
                 continue
-            # Skip build outputs and the manifest itself.
+            # Skip build outputs, AppleDouble junk, and editor swap files.
             if path.name == "client-manifest.json":
+                continue
+            if path.name.startswith("._") or path.name.endswith("~"):
                 continue
             found.append(path)
     return found
