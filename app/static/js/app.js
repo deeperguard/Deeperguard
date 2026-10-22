@@ -6341,6 +6341,12 @@
         const data = await NotesSrpAuth.passwordSignIn(normalized, password);
         NotesStore.cacheAccount(data);
         if (data.password_changed_at) NotesStore.ackPasswordChanged(data.password_changed_at);
+        if (data.totp_required && data.srp_kdf_upgrade) {
+          try { sessionStorage.setItem('notes_srp_kdf_upgrade', '1'); } catch (flagErr) { /* ignore */ }
+          if (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.stashBootPassword) {
+            await NotesVaultSecrets.stashBootPassword(password);
+          }
+        }
         const via = data.login_repaired ? 'login' : 'srp';
         return { ok: true, via, totpRequired: !!data.totp_required };
       } catch (err) {

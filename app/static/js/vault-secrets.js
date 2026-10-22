@@ -132,6 +132,36 @@
     return value;
   }
 
+  async function peekBootPassword() {
+    let payloadRaw = '';
+    let bootKeyRaw = '';
+    try {
+      payloadRaw = sessionStorage.getItem(BOOT_ENC) || '';
+      bootKeyRaw = sessionStorage.getItem(BOOT_KEY) || '';
+    } catch (err) {
+      return '';
+    }
+    if (!payloadRaw || !bootKeyRaw) return '';
+    try {
+      const payload = JSON.parse(payloadRaw);
+      const key = await crypto.subtle.importKey(
+        'raw',
+        b64ToBytes(bootKeyRaw),
+        'AES-GCM',
+        false,
+        ['decrypt'],
+      );
+      const plain = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: b64ToBytes(payload.iv) },
+        key,
+        b64ToBytes(payload.data),
+      );
+      return new TextDecoder().decode(plain);
+    } catch (err) {
+      return '';
+    }
+  }
+
   async function consumeBootPassword() {
     let payloadRaw = '';
     let bootKeyRaw = '';
@@ -292,6 +322,7 @@
     getAccountPassword,
     clearSecrets,
     stashBootPassword,
+    peekBootPassword,
     stashBootDerivedKey,
     takeBootDerivedKey,
     consumeBootPassword,

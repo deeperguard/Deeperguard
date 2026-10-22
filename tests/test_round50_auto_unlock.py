@@ -10,8 +10,11 @@ import unittest
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
+TESTS_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
+if str(TESTS_DIR) not in sys.path:
+    sys.path.insert(0, str(TESTS_DIR))
 
 
 class Round50AutoUnlockTests(unittest.TestCase):
@@ -161,12 +164,26 @@ class Round50AutoUnlockTests(unittest.TestCase):
         csrf = self._csrf()
         new_salt = new_srp_salt_hex()
         new_verifier = generate_verifier_hex(new_salt, email, password, kdf_version=2)
+        up_chal = self.client.post(
+            "/api/auth/srp/kdf-upgrade/challenge",
+            json={"email": email},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(up_chal.status_code, 200, up_chal.get_json())
+        from srp_client_proof import srp_client_proof
+
+        up_body = up_chal.get_json()
+        a_hex, m1 = srp_client_proof(
+            email, password, up_body["srp_salt"], up_body["B"], up_body.get("srp_kdf_version"),
+        )
         up = self.client.post(
             "/api/auth/srp/kdf-upgrade",
             json={
                 "srp_salt": new_salt,
                 "srp_verifier": new_verifier,
                 "srp_kdf_version": 2,
+                "A": a_hex,
+                "M1": m1,
             },
             headers={"X-CSRF-Token": csrf},
         )
