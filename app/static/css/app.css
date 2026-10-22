@@ -1471,6 +1471,18 @@ html[data-theme="light"] .zk-badge {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.app-client-hash {
+  font-size: 11px;
+  font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
+}
+.about-client-hash {
+  display: block;
+  word-break: break-all;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
 .sync-meta {
   margin: 0;
   font-size: 11px;

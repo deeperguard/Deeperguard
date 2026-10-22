@@ -6,7 +6,7 @@
   <title>{{ title }} — Deeperguard</title>
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
-  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
   <style>
     .mk-doc-body { max-width: 44rem; }
     .mk-doc-body h2 { margin: 1.6em 0 0.5em; font-size: 1.25rem; }

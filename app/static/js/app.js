@@ -20633,7 +20633,8 @@
 
   async function prefetchShellAssets(html) {
     const assetUrls = new Set();
-    const assetRe = /(?:href|src)="(\/static\/[^"]+\?v=[^"]+)"/g;
+    // Prefer content-hashed filenames; also accept legacy ?v= cache-busters.
+    const assetRe = /(?:href|src)="(\/static\/[^"]+\.(?:css|js|mjs)(?:\?[^"]*)?)"/g;
     let assetMatch;
     while ((assetMatch = assetRe.exec(html))) {
       assetUrls.add(assetMatch[1]);

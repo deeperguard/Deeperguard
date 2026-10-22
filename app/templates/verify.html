@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
-  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
 </head>
 <body>
   {% include 'partials/mk-topbar.html' %}
@@ -105,7 +105,40 @@
           <li><strong>Integrity of the delivered client code</strong> — if a compromised origin shipped a malicious <code>app.js</code>, it could exfiltrate secrets before encryption. Checking the code you run is a separate step.</li>
         </ul>
         <h3>How to check the code you’re running</h3>
-        <p class="mk-muted">Placeholder for Round 60: reproducible builds, Subresource Integrity, and comparing the served JS to the public GitHub tree.</p>
+        <ol>
+          <li>
+            In the unlocked app open <strong>Settings → About</strong>. Note the full
+            <strong>client code hash</strong> (also in the page’s
+            <code>notes-client-hash</code> meta tag and in
+            <code>GET /api/health</code> as <code>client_hash</code>).
+          </li>
+          <li>
+            Open the matching <a href="https://github.com/deeperguard/Deeperguard/releases">GitHub Release</a>
+            (linked from About). Download <code>client-manifest.json</code>,
+            <code>client-manifest.json.sha256</code>, and the Sigstore bundle
+            <code>client-manifest.sigstore.json</code>.
+          </li>
+          <li>
+            Confirm the in-app hash equals <code>manifest_sha256</code> inside the
+            release manifest (and the <code>.sha256</code> sidecar).
+          </li>
+          <li>
+            Verify the signature with Cosign (keyless OIDC, logged in Rekor):
+            <pre class="mk-code" tabindex="0"><span class="mk-code-label">cosign verify-blob</span>cosign verify-blob \
+  --bundle client-manifest.sigstore.json \
+  --certificate-identity-regexp 'https://github.com/deeperguard/Deeperguard/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  client-manifest.json</pre>
+          </li>
+          <li>
+            Rebuild from source at the release tag and compare hashes:
+            <pre class="mk-code" tabindex="0"><span class="mk-code-label">reproducible build</span>git checkout &lt;tag&gt;
+export SOURCE_DATE_EPOCH=0
+python3 scripts/build-client-manifest.py --print-hash
+# must equal the release manifest_sha256</pre>
+          </li>
+        </ol>
+        <p>Every script and stylesheet tag on the origin carries a Subresource Integrity digest. A pinned build (extension or desktop app) remains the strongest option if one is published later.</p>
       </article>
 
       <article class="mk-card">

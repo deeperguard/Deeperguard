@@ -34,6 +34,52 @@ Accounts are free during the public beta.
 
 [www.deeperguard.com](https://www.deeperguard.com)
 
+## Build from source (client integrity)
+
+The browser app is plain static JS/CSS (no bundler). A deterministic manifest
+hashes every shipped script and stylesheet so you can verify what the origin
+serves.
+
+**Toolchain pins**
+
+- Python: `.python-version` (`3.11`) and `requirements.lock` (from `requirements.txt`)
+- Node: `.nvmrc` (`18`) — used for the JS test suite only; there is no frontend npm build
+
+**Reproduce the client manifest**
+
+```bash
+git clone https://github.com/deeperguard/Deeperguard.git
+cd Deeperguard
+git checkout <tag-or-commit>
+export SOURCE_DATE_EPOCH=0
+python3 scripts/build-client-manifest.py --print-hash
+```
+
+Two runs with the same tree and `SOURCE_DATE_EPOCH` must print the same
+`manifest_sha256`. That value is exposed in the app (Settings → About), in
+`GET /api/health` as `client_hash`, and in the signed `client-manifest.json`
+attached to each GitHub Release (`v*` tags). Releases are signed with Sigstore
+Cosign keyless (Rekor). See [/verify](https://www.deeperguard.com/verify) for
+the full check (in-app hash → release manifest → `cosign verify-blob` → rebuild).
+
+A pinned build (browser extension or desktop app) is the strongest integrity
+option if one is published later — a normal web origin can always change what
+it serves next.
+
+**GitHub Actions**
+
+Workflow YAML lives in `deploy/github-workflows/` (`client-integrity.yml` dual
+build check, `release-client.yml` Cosign keyless release on `v*` tags). Copy
+both into `.github/workflows/` on a machine whose GitHub token has the
+`workflow` scope (the default OAuth app used by some agents cannot create
+workflow files):
+
+```bash
+mkdir -p .github/workflows
+cp deploy/github-workflows/*.yml .github/workflows/
+git add .github/workflows && git commit -m "Enable client integrity GitHub Actions" && git push
+```
+
 ## Source
 
-[AGPL-3.0](LICENSE) · [Privacy](docs/PRIVACY.md) · [Self-host](docs/SELF_HOST.md)
+[AGPL-3.0](LICENSE) · [Privacy](docs/PRIVACY.md) · [Self-host](docs/SELF_HOST.md) · [Verify](https://www.deeperguard.com/verify)

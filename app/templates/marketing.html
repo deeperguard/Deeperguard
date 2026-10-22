@@ -20,11 +20,12 @@
   <meta name="twitter:description" content="Encrypted notes on your device before sync. Browser PWA — public beta, Pro free. Not the DeepGuard deepfake product.">
   <meta name="twitter:image" content="{{ og_image }}">
   <meta name="notes-build" content="{{ build }}">
+  <meta name="notes-client-hash" content="{{ client_hash }}">
   <link rel="canonical" href="{{ canonical_url }}">
   <script type="application/ld+json" nonce="{{ csp_nonce }}">{{ json_ld | tojson }}</script>
   <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
-  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
 </head>
 <body>
   <div class="mk-beta-banner" role="status">
@@ -582,6 +583,6 @@
       </nav>
     </footer>
   </main>
-  <script src="/static/js/marketing.js?v={{ build }}" defer></script>
+  {{ asset_script('js/marketing.js', defer=True) }}
 </body>
 </html>

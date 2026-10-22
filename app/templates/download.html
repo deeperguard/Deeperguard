@@ -7,7 +7,7 @@
   <meta name="description" content="Install Deeperguard as a web app on your home screen. No app store.">
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
-  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
 </head>
 <body>
   {% include 'partials/mk-topbar.html' %}

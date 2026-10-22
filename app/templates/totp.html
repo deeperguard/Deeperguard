@@ -21,9 +21,9 @@
     </form>
     {% include 'partials/auth-footer.html' %}
   </main>
-  <script src="/static/js/vault-secrets.js?v={{ build }}"></script>
-  <script src="/static/js/vendor/noble-argon2.js?v={{ build }}"></script>
-  <script src="/static/js/srp-auth.js?v={{ build }}"></script>
-  <script src="/static/js/totp-page.js?v={{ build }}"></script>
+  {{ asset_script('js/vault-secrets.js') }}
+  {{ asset_script('js/vendor/noble-argon2.js') }}
+  {{ asset_script('js/srp-auth.js') }}
+  {{ asset_script('js/totp-page.js') }}
 </body>
 </html>
