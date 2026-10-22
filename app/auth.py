@@ -761,7 +761,7 @@ def content_security_policy() -> str:
     # Optional Dropbox App-folder backups (OAuth 2 PKCE + files API). Browser
     # talks to Dropbox directly; encrypted .dgbackup blobs only.
     dropbox_connect = " https://api.dropboxapi.com https://content.dropboxapi.com https://www.dropbox.com"
-    # Optional Cloudflare Turnstile on /register (only when a site key is configured).
+    # Optional Cloudflare Turnstile (when a site key is configured).
     turnstile = ""
     try:
         from config import turnstile_site_key
@@ -777,7 +777,8 @@ def content_security_policy() -> str:
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
             "font-src 'self'",
-            f"connect-src 'self'{google_connect}{dropbox_connect}",
+            # Widget talks to challenges.cloudflare.com from the browser.
+            f"connect-src 'self'{google_connect}{dropbox_connect}{turnstile}",
             "media-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'self'",

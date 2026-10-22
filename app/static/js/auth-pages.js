@@ -404,6 +404,12 @@ if (registerForm) {
       setFieldError('register-recover-ack', 'register-recover-error', '');
     }
     if (invalid) return;
+    const turnstileWidget = document.querySelector('.cf-turnstile');
+    const turnstileInput = document.querySelector('input[name="cf-turnstile-response"]');
+    if (turnstileWidget && !String(turnstileInput?.value || '').trim()) {
+      showError('register-error', 'Please complete the security check and try again.');
+      return;
+    }
     const submitBtn = registerForm.querySelector('[type="submit"]');
     if (submitBtn) {
       submitBtn.disabled = true;
@@ -411,7 +417,6 @@ if (registerForm) {
     }
     try {
       const company = String(document.getElementById('register-company')?.value || '');
-      const turnstileInput = document.querySelector('input[name="cf-turnstile-response"]');
       const data = await NotesSrpAuth.register(email, password, {
         company,
         cf_turnstile_response: turnstileInput ? String(turnstileInput.value || '') : '',

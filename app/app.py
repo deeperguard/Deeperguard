@@ -907,14 +907,18 @@ def _register_soft_fail():
     }), 400
 
 
-def _verify_turnstile_token(token: str) -> bool:
-    """Validate Cloudflare Turnstile when NOTES_TURNSTILE_SECRET_KEY is set."""
+def _verify_turnstile_token(token: str) -> str:
+    """Validate Cloudflare Turnstile when NOTES_TURNSTILE_SECRET_KEY is set.
+
+    Returns one of: ``ok``, ``missing``, ``invalid``, ``unavailable``.
+    Never logs the token or secret. Fail closed — do not create accounts on error.
+    """
     secret = turnstile_secret_key()
     if not secret:
-        return True
+        return "ok"
     value = str(token or "").strip()
     if not value:
-        return False
+        return "missing"
     try:
         import urllib.parse
         import urllib.request
@@ -932,10 +936,31 @@ def _verify_turnstile_token(token: str) -> bool:
         )
         with urllib.request.urlopen(req, timeout=8) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
-        return bool(payload.get("success"))
+        if bool(payload.get("success")):
+            return "ok"
+        return "invalid"
     except Exception:
-        log.exception("turnstile verify failed")
-        return False
+        # Do not log request body / token / secret.
+        log.exception("turnstile siteverify unreachable or failed")
+        return "unavailable"
+
+
+def _turnstile_register_error(status: str):
+    """Friendly Turnstile errors that do not enumerate accounts."""
+    if status == "unavailable":
+        return jsonify({
+            "error": "Security check is temporarily unavailable. Please try again.",
+            "code": "turnstile_unavailable",
+        }), 503
+    if status == "missing":
+        return jsonify({
+            "error": "Please complete the security check and try again.",
+            "code": "turnstile_required",
+        }), 400
+    return jsonify({
+        "error": "Security check failed. Please try again.",
+        "code": "turnstile_failed",
+    }), 400
 
 
 @app.post("/api/auth/srp/register")
@@ -950,10 +975,12 @@ def api_auth_srp_register():
     # Honeypot (M3): bots that fill hidden fields get the soft-fail response.
     if str(body.get("company") or body.get("website") or "").strip():
         return _register_soft_fail()
-    if turnstile_required() and not _verify_turnstile_token(
-        str(body.get("cf_turnstile_response") or body.get("turnstile_token") or "")
-    ):
-        return _register_soft_fail()
+    if turnstile_required():
+        ts_status = _verify_turnstile_token(
+            str(body.get("cf_turnstile_response") or body.get("turnstile_token") or "")
+        )
+        if ts_status != "ok":
+            return _turnstile_register_error(ts_status)
     if not EMAIL_RE.match(email):
         return jsonify({"error": "invalid email"}), 400
     if not srp_salt or not srp_verifier:
