@@ -42,9 +42,14 @@ scp "${SSH_OPTS[@]}" /tmp/deeperguard-deploy.tar.gz "root@${HOST}:/tmp/deepergua
 ssh "${SSH_OPTS[@]}" "root@${HOST}" bash -s <<REMOTE
 set -euo pipefail
 cd "${REMOTE}"
+# Drop stale static JS/CSS (AppleDouble ._* files, old vendor UMD copies) so
+# the client manifest hashes only the tree we just shipped.
+rm -rf app/static/js app/static/css
 tar xzf /tmp/deeperguard-deploy.tar.gz
 rm -f /tmp/deeperguard-deploy.tar.gz
 chmod +x deploy/*.sh
+# Remove any AppleDouble metadata that slipped into the tarball.
+find app/static -name '._*' -type f -delete 2>/dev/null || true
 printf '%s\n' "${version}" > VERSION
 if [[ -n "${build_id}" && -f /opt/deeperguard/config/deeperguard.env ]]; then
   if grep -q '^NOTES_BUILD=' /opt/deeperguard/config/deeperguard.env; then

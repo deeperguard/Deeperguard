@@ -63,6 +63,8 @@ def _build_from_source() -> dict:
                 continue
             if path.name == "client-manifest.json":
                 continue
+            if path.name.startswith("._") or path.name.endswith("~"):
+                continue
             data = path.read_bytes()
             sha256_hex = hashlib.sha256(data).hexdigest()
             logical = path.relative_to(_STATIC).as_posix()
