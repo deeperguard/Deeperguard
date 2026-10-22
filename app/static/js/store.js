@@ -2793,6 +2793,25 @@ const NotesStore = (() => {
     }, 400);
   }
 
+  /**
+   * Fetch one owned item exactly as the server stores it (ciphertext + metadata).
+   * Read-only GET — does not send plaintext or keys.
+   */
+  async function fetchServerItem(uuid, { includeBlobs = true } = {}) {
+    const id = String(uuid || '').trim();
+    if (!id) {
+      const err = new Error('Missing item id');
+      err.status = 400;
+      throw err;
+    }
+    const q = includeBlobs ? '1' : '0';
+    const data = await api(`/api/sync/item/${encodeURIComponent(id)}?include_blobs=${q}`, {
+      method: 'GET',
+      timeoutMs: 30000,
+    });
+    return data?.item || null;
+  }
+
   async function refetchSyncItems(uuids, { includeBlobs = true } = {}) {
     const ids = [...new Set((uuids || []).map((id) => String(id || '').trim()).filter(Boolean))];
     if (!ids.length) return [];
@@ -5655,6 +5674,7 @@ const NotesStore = (() => {
     syncSince,
     needsSyncOnOpen,
     sync,
+    fetchServerItem,
     pushDirty,
     pushDirtyPersisted,
     pullCipherWhileLocked,

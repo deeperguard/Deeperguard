@@ -1622,6 +1622,64 @@ a.mk-badge-link:hover {
   font-weight: 600;
 }
 
+/* /verify — inspectable code samples */
+.mk-subpage .mk-card {
+  margin-bottom: 1.25rem;
+}
+.mk-subpage .mk-card h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.25rem;
+}
+.mk-subpage .mk-card h3 {
+  margin: 1rem 0 0.4rem;
+}
+.mk-subpage .mk-card p,
+.mk-subpage .mk-card li {
+  color: var(--mk-muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+.mk-subpage .mk-card ul,
+.mk-subpage .mk-card ol {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+.mk-subpage .mk-card li + li {
+  margin-top: 0.35rem;
+}
+.mk-subpage kbd {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--mk-border-strong);
+  border-radius: 6px;
+  background: var(--mk-panel-subtle);
+  font-size: 0.85em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.mk-code {
+  position: relative;
+  margin: 0.9rem 0 0;
+  padding: 2.1rem 0.85rem 0.85rem;
+  overflow-x: auto;
+  border: 1px solid var(--mk-border);
+  border-radius: var(--mk-radius-sm);
+  background: #0f172a;
+  color: #e2e8f0;
+  font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre;
+}
+.mk-code-label {
+  position: absolute;
+  top: 0.45rem;
+  left: 0.75rem;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-family: var(--mk-sans);
+}
+.mk-muted {
+  color: var(--mk-faint) !important;
+}
+
 /* Marketing pages: prefers-color-scheme dark */
 @media (prefers-color-scheme: dark) {
   :root {
