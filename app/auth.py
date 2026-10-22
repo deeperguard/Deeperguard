@@ -761,10 +761,19 @@ def content_security_policy() -> str:
     # Optional Dropbox App-folder backups (OAuth 2 PKCE + files API). Browser
     # talks to Dropbox directly; encrypted .dgbackup blobs only.
     dropbox_connect = " https://api.dropboxapi.com https://content.dropboxapi.com https://www.dropbox.com"
+    # Optional Cloudflare Turnstile on /register (only when a site key is configured).
+    turnstile = ""
+    try:
+        from config import turnstile_site_key
+
+        if turnstile_site_key():
+            turnstile = " https://challenges.cloudflare.com"
+    except Exception:
+        turnstile = ""
     return "; ".join(
         (
             "default-src 'self'",
-            f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'{google_script}",
+            f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'{google_script}{turnstile}",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
             "font-src 'self'",
@@ -773,7 +782,7 @@ def content_security_policy() -> str:
             "object-src 'none'",
             "base-uri 'self'",
             "frame-ancestors 'none'",
-            f"frame-src 'self'{google_frame}",
+            f"frame-src 'self'{google_frame}{turnstile}",
             "worker-src 'self' blob:",
             "manifest-src 'self'",
             "form-action 'self'",

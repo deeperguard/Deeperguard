@@ -229,20 +229,21 @@ def generate_verifier_hex(
 
 
 def fake_srp_challenge(email: str, server_secret: bytes | str) -> tuple[str, str]:
-    """Deterministic fake salt+B for unknown emails (anti-enumeration)."""
+    """Fake salt+B for unknown emails (anti-enumeration).
+
+    Salt length matches ``new_srp_salt_hex`` (SHA-256 hex via ``_h``). B uses a
+    fresh random ephemeral each call so stable-B is not an existence oracle.
+    """
     identity = str(email or "").strip().lower()
     secret = server_secret if isinstance(server_secret, bytes) else str(server_secret or "").encode("utf-8")
     material = hmac.new(secret, f"srp-fake:{identity}".encode("utf-8"), hashlib.sha256).digest()
-    salt_hex = material[:16].hex()
-    # Stable fake verifier from the same HMAC stream (not a real password).
-    x = int.from_bytes(material[16:], "big") % N
+    # Same shape as new_srp_salt_hex() (~64 hex chars after leading-zero strip).
+    salt_hex = _h(material.hex())
+    x_material = hmac.new(secret, f"srp-fake-x:{identity}".encode("utf-8"), hashlib.sha256).digest()
+    x = int.from_bytes(x_material, "big") % N
     if x == 0:
         x = 1
     v = pow(G, x, N)
-    # Deterministic b from HMAC so B is stable for the same email.
-    b_material = hmac.new(secret, f"srp-fake-b:{identity}".encode("utf-8"), hashlib.sha256).digest()
-    b = int.from_bytes(b_material, "big") % N
-    if b == 0:
-        b = 1
+    b = _random_nonzero_mod_n()
     B = (pow(G, b, N) + (K * v) % N) % N
     return salt_hex, _to_hex(B)

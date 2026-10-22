@@ -24,7 +24,11 @@ def current_step(at: float | None = None) -> int:
 
 
 def verify_and_step(secret: str, code: str, *, last_step: int = 0) -> tuple[bool, int]:
-    """Verify a TOTP code. Returns (ok, step_used). Rejects reuse of last_step."""
+    """Verify a TOTP code. Returns (ok, step_used).
+
+    Rejects any step <= last_step (monotonic) so an older window code cannot be
+    reused after a newer step was accepted (M4).
+    """
     if not secret or not code:
         return False, 0
     clean = "".join(ch for ch in str(code) if ch.isdigit())
@@ -32,11 +36,12 @@ def verify_and_step(secret: str, code: str, *, last_step: int = 0) -> tuple[bool
         return False, 0
     totp = pyotp.TOTP(secret)
     now = time.time()
+    floor = int(last_step or 0)
     for offset in (-1, 0, 1):
         step = current_step(now) + offset
         if step <= 0:
             continue
-        if int(last_step or 0) and step == int(last_step):
+        if floor and step <= floor:
             continue
         expected = totp.at(step * 30)
         if expected == clean:

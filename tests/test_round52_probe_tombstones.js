@@ -131,7 +131,7 @@ async function waitPersist(uuid, tries = 40) {
 
 (async () => {
   const salt = 'c3d4e5f60718293a4b5c6d7e8f90a1b2';
-  const password = 'DgR19-Test-2026!xyz';
+  const password = 'probe-tombstone-local-test-pass';
 
   await NotesStore.unlock(password, salt, { kdfVersion: 2 });
   NotesStore.state.account = { email: 'r19@example.com', kdf_salt: salt, vault_kdf_version: 2 };

@@ -8,13 +8,17 @@ import sys
 import time
 
 BASE = os.environ.get("NOTES_E2E_BASE", "https://www.deeperguard.com").rstrip("/")
-EMAIL = os.environ.get("NOTES_E2E_EMAIL", "deeperguard-tester+r19@mail.grokbot.com")
-PASSWORD = os.environ.get("NOTES_E2E_PASSWORD", "DgR19-Test-2026!xyz")
+EMAIL = os.environ.get("NOTES_E2E_EMAIL", "").strip()
+PASSWORD = os.environ.get("NOTES_E2E_PASSWORD", "")
 TRIALS = int(os.environ.get("NOTES_E2E_IDLE_TRIALS", "3"))
 IDLE_SEC = int(os.environ.get("NOTES_E2E_IDLE_SEC", "180"))
 
 
 def main() -> int:
+    if not EMAIL or not PASSWORD:
+        print("SKIP: set NOTES_E2E_EMAIL and NOTES_E2E_PASSWORD to run live idle E2E")
+        return 0
+
     from playwright.sync_api import sync_playwright
 
     results = []

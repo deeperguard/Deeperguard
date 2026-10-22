@@ -26,7 +26,7 @@ import totp as totp_mod
 from flask.sessions import SecureCookieSessionInterface
 from datetime import timedelta
 
-from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, log_server_ocr_startup_warning, log_wan_secure_cookies_startup_warning, normalize_host, ocr_ephemeral, pcloud_password_set, pcloud_token_set, repair_login_password_enabled, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, webauthn_preferred_host, user_is_admin
+from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, log_server_ocr_startup_warning, log_wan_secure_cookies_startup_warning, normalize_host, ocr_ephemeral, pcloud_password_set, pcloud_token_set, repair_login_password_enabled, register_ip_hourly_cap, serve_ca_crt, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, turnstile_required, turnstile_secret_key, turnstile_site_key, webauthn_preferred_host, user_is_admin
 from uploads import ensure_user_upload_dir, user_upload_dir
 import promo as notes_promo
 from backup_mail import send_user_backup
@@ -884,6 +884,7 @@ def register():
         form_error=form_error,
         signed_in_email=(user["email"] if user else ""),
         csrf_token=(auth.csrf_token() if user else ""),
+        turnstile_site_key=turnstile_site_key(),
     ))
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -900,6 +901,43 @@ def api_register():
     ), 410
 
 
+def _register_soft_fail():
+    return jsonify({
+        "error": "Could not complete sign-up. If you already have an account, sign in instead.",
+    }), 400
+
+
+def _verify_turnstile_token(token: str) -> bool:
+    """Validate Cloudflare Turnstile when NOTES_TURNSTILE_SECRET_KEY is set."""
+    secret = turnstile_secret_key()
+    if not secret:
+        return True
+    value = str(token or "").strip()
+    if not value:
+        return False
+    try:
+        import urllib.parse
+        import urllib.request
+
+        data = urllib.parse.urlencode({
+            "secret": secret,
+            "response": value,
+            "remoteip": auth.client_ip(),
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        return bool(payload.get("success"))
+    except Exception:
+        log.exception("turnstile verify failed")
+        return False
+
+
 @app.post("/api/auth/srp/register")
 def api_auth_srp_register():
     if not allow_register():
@@ -909,20 +947,29 @@ def api_auth_srp_register():
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
     srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
+    # Honeypot (M3): bots that fill hidden fields get the soft-fail response.
+    if str(body.get("company") or body.get("website") or "").strip():
+        return _register_soft_fail()
+    if turnstile_required() and not _verify_turnstile_token(
+        str(body.get("cf_turnstile_response") or body.get("turnstile_token") or "")
+    ):
+        return _register_soft_fail()
     if not EMAIL_RE.match(email):
         return jsonify({"error": "invalid email"}), 400
     if not srp_salt or not srp_verifier:
         return jsonify({"error": "missing srp credentials"}), 400
-    # Per-IP sign-up cap (M4) in addition to IP+email bucket.
-    if not auth_rate_allow(f"srp-register-ip:{auth.client_ip()}", limit=5, window=3600.0):
+    # Per-IP sign-up cap (default 3/hour) in addition to IP+email bucket.
+    if not auth_rate_allow(
+        f"srp-register-ip:{auth.client_ip()}",
+        limit=register_ip_hourly_cap(),
+        window=3600.0,
+    ):
         return jsonify({"error": "too many attempts"}), 429
     if _auth_rate_limited("srp-register", email):
         return jsonify({"error": "too many attempts"}), 429
     if db.get_user_by_email(email):
         # Avoid distinct 409 enumeration; same message as a soft failure.
-        return jsonify({
-            "error": "Could not complete sign-up. If you already have an account, sign in instead.",
-        }), 400
+        return _register_soft_fail()
     if srp_kdf_version < SRP_KDF_V2:
         return jsonify({"error": "srp_kdf_version 2 required for new accounts"}), 400
     kdf_salt = new_kdf_salt()
@@ -988,7 +1035,8 @@ def api_auth_srp_verify():
         return jsonify({"error": "invalid credentials"}), 401
     state = auth.pop_srp_state(email, str(user["srp_salt"]), str(user["srp_verifier"]))
     if not state:
-        return jsonify({"error": "login expired — try again"}), 401
+        # Same wording as a failed proof so missing-challenge is not enumerable (M1).
+        return jsonify({"error": "invalid credentials"}), 401
     try:
         sess = SrpServerSession.from_private_state(state)
         m2 = sess.step2(a_hex, m1)
@@ -1079,7 +1127,9 @@ def api_auth_repair_login_challenge():
         return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if not user or not db.user_has_srp(user):
-        return jsonify({"error": "invalid credentials"}), 401
+        # Same shape as login challenge for unknown emails (M1).
+        salt_hex, b_hex = fake_srp_challenge(email, app.secret_key)
+        return jsonify({"srp_salt": salt_hex, "B": b_hex, "srp_kdf_version": SRP_KDF_V2})
     try:
         b_hex = _stored_srp_challenge(email, user, auth.SRP_PURPOSE_REPAIR_LOGIN)
     except ValueError:
@@ -1093,13 +1143,15 @@ def api_auth_repair_login_challenge():
 
 @app.post("/api/auth/repair-login")
 def api_auth_repair_login():
-    """Realign drifted SRP verifiers after a client SRP proof (password stays on the client)."""
+    """Prove the current password against the stored verifier and open a session.
+
+    Prove-only (C1): never rotates salt/verifier here. Credential rotation requires
+    a totp_ok session via /api/account/password (or vault-recovery with CSRF).
+    Submitted srp_salt/srp_verifier are ignored.
+    """
     body = request.get_json(silent=True) or {}
     email = str(body.get("email") or "").strip().lower()
     password = str(body.get("password") or "")
-    srp_salt = str(body.get("srp_salt") or "").strip().lower()
-    srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
-    srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
     a_hex = str(body.get("A") or "").strip().lower()
     m1 = str(body.get("M1") or "").strip().lower()
     if not EMAIL_RE.match(email):
@@ -1113,22 +1165,10 @@ def api_auth_repair_login():
     if repair_login_password_enabled() and password:
         if len(password) < min_password_length():
             return jsonify({"error": "invalid credentials"}), 401
-        # Password must match stored credentials (legacy hash, vault samples, or stored SRP
-        # verifier) — a client-supplied verifier that merely matches the submitted password
-        # proves nothing about the account.
         verified, repair_exhausted = _verify_login_password(user, email, password)
         if not verified:
             return jsonify({"error": "invalid credentials", "repair_exhausted": repair_exhausted}), 401
-        if not srp_salt or not srp_verifier:
-            srp_salt = new_srp_salt_hex()
-            srp_verifier = generate_verifier_hex(
-                srp_salt, email, password, kdf_version=SRP_KDF_V2,
-            )
-            srp_kdf_version = SRP_KDF_V2
         uid = int(user["id"])
-        _realign_login_credentials(
-            uid, email, password, srp_salt, srp_verifier, srp_kdf_version=srp_kdf_version,
-        )
         totp_required = bool(user["totp_enabled"])
         auth.login_user(uid, totp_ok=not totp_required)
         user = db.get_user_by_id(uid)
@@ -1136,16 +1176,11 @@ def api_auth_repair_login():
         payload["login_repaired"] = True
         return jsonify(payload)
 
-    if not srp_salt or not srp_verifier or not a_hex or not m1:
+    if not a_hex or not m1:
         return jsonify({"error": "invalid credentials"}), 400
-    # The proof must authenticate against the verifier on file; only then may the caller
-    # rotate to the freshly generated salt/verifier they submitted.
     if not _verify_stored_srp_proof(email, user, a_hex, m1, auth.SRP_PURPOSE_REPAIR_LOGIN):
         return jsonify({"error": "invalid credentials", "repair_exhausted": True}), 401
     uid = int(user["id"])
-    _realign_login_credentials(
-        uid, email, None, srp_salt, srp_verifier, srp_kdf_version=srp_kdf_version,
-    )
     totp_required = bool(user["totp_enabled"])
     auth.login_user(uid, totp_ok=not totp_required)
     user = db.get_user_by_id(uid)
@@ -1162,8 +1197,11 @@ def api_auth_srp_resync():
     password = str(body.get("password") or "")
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
+    srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
     if not EMAIL_RE.match(email) or not password or not srp_salt or not srp_verifier:
         return jsonify({"error": "invalid credentials"}), 400
+    if srp_kdf_version < SRP_KDF_V2:
+        return jsonify({"error": "srp_kdf_version 2 required"}), 400
     if _auth_rate_limited("srp-resync", email):
         return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
@@ -1174,7 +1212,9 @@ def api_auth_srp_resync():
     if not verify_password(user["password_hash"], password):
         return jsonify({"error": "invalid credentials"}), 401
     uid = int(user["id"])
-    _realign_login_credentials(uid, email, password, srp_salt, srp_verifier)
+    _realign_login_credentials(
+        uid, email, password, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
+    )
     totp_required = bool(user["totp_enabled"])
     auth.login_user(uid, totp_ok=not totp_required)
     user = db.get_user_by_id(int(user["id"]))
@@ -1248,8 +1288,11 @@ def api_auth_vault_recovery():
     password = str(body.get("password") or "")
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
+    srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
     a_hex = str(body.get("A") or "").strip().lower()
     m1 = str(body.get("M1") or "").strip().lower()
+    if srp_salt and srp_verifier and srp_kdf_version < SRP_KDF_V2:
+        return jsonify({"error": "srp_kdf_version 2 required"}), 400
     if strict_zk():
         if not srp_salt or not srp_verifier or not EMAIL_RE.match(email) or not a_hex or not m1:
             return jsonify({"error": "invalid credentials"}), 400
@@ -1267,7 +1310,9 @@ def api_auth_vault_recovery():
         # against the verifier on file (SRP step2 bound to stored credentials).
         if not _verify_stored_srp_proof(email, user, a_hex, m1, auth.SRP_PURPOSE_VAULT_RECOVERY):
             return jsonify({"error": "invalid credentials"}), 401
-        db.update_user_srp_verifier(int(uid), srp_salt, srp_verifier)
+        db.update_user_srp_verifier(
+            int(uid), srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
+        )
         totp_required = bool(user["totp_enabled"])
         auth.login_user(int(uid), totp_ok=not totp_required)
         user = db.get_user_by_id(int(uid))
@@ -1286,7 +1331,9 @@ def api_auth_vault_recovery():
     if not _vault_password_matches(user, password):
         return jsonify({"error": "invalid credentials"}), 401
     uid = int(user["id"])
-    _realign_login_credentials(uid, email, password, srp_salt, srp_verifier)
+    _realign_login_credentials(
+        uid, email, password, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
+    )
     totp_required = bool(user["totp_enabled"])
     auth.login_user(uid, totp_ok=not totp_required)
     user = db.get_user_by_id(uid)
@@ -1309,14 +1356,17 @@ def api_auth_srp_upgrade():
     body = request.get_json(silent=True) or {}
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
+    srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
     current = str(body.get("current_password") or body.get("password") or "").strip()
     if not srp_salt or not srp_verifier:
         return jsonify({"error": "missing srp credentials"}), 400
+    if srp_kdf_version < SRP_KDF_V2:
+        return jsonify({"error": "srp_kdf_version 2 required"}), 400
     if not db.user_has_legacy_password(user):
         return jsonify({"error": "invalid credentials"}), 401
     if not current or not verify_password(user["password_hash"], current):
         return jsonify({"error": "invalid credentials"}), 401
-    db.upgrade_user_to_srp(uid, srp_salt, srp_verifier)
+    db.upgrade_user_to_srp(uid, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2)
     return jsonify({"ok": True, "auth_method": "srp"})
 
 
@@ -1732,13 +1782,15 @@ def api_account_password():
         return jsonify({"error": "invalid or expired rotation token"}), 401
 
     srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
+    if srp_salt and srp_verifier and srp_kdf_version < SRP_KDF_V2:
+        return jsonify({"error": "srp_kdf_version 2 required"}), 400
     if db.user_auth_method(user) == "srp":
         if current or new or account or a_hex or m1:
             return jsonify({"error": "password must not be sent to the server"}), 400
         if not srp_salt or not srp_verifier:
             return jsonify({"error": "missing srp verifier"}), 400
         changed_at = db.update_user_srp_verifier(
-            uid, srp_salt, srp_verifier, srp_kdf_version=srp_kdf_version,
+            uid, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
         )
         db.clear_user_legacy_password(uid)
         _revoke_other_sessions(uid, reason="password")
@@ -2914,6 +2966,9 @@ if INDEXNOW_KEY:
 
 @app.get("/ca.crt")
 def ca_certificate():
+    # Off by default on public www; enable NOTES_SERVE_CA_CRT=1 for LAN TLS hosts (L6).
+    if not serve_ca_crt():
+        return ("Not found", 404)
     keys = os.environ.get("NOTES_KEYS") or os.path.join(os.environ.get("NOTES_ROOT", "/opt/deeperguard"), "keys")
     ca_dir = os.path.join(keys, "tls")
     ca_path = os.path.join(ca_dir, "ca.crt")
@@ -2956,7 +3011,8 @@ def service_worker():
     body = sw_path.read_text(encoding="utf-8")
     response = app.response_class(body, mimetype="application/javascript")
     response.headers["Service-Worker-Allowed"] = "/"
-    response.headers["Cache-Control"] = "public, max-age=86400"
+    # Origin wants revalidate-every-load; Cloudflare may still rewrite (L5).
+    response.headers["Cache-Control"] = "public, max-age=0, must-revalidate"
     return response
 
 

@@ -177,6 +177,10 @@
     aiChat: null,
     googleOauthClientId: '',
     dropboxAppKey: '',
+    dropboxRefreshToken: '',
+    dropboxAccessToken: '',
+    dropboxTokenExpiresAt: 0,
+    dropboxConnected: false,
     tagsCollapsed: false,
     foldersCollapsed: false,
     viewsCollapsed: false,
@@ -250,9 +254,13 @@
     'theme', 'fontSize', 'monospace', 'spellcheck', 'hidePreviews', 'compactList',
     'sort', 'autoPreview', 'autoLockMin', 'lockOnUnfocus', 'aiChat',
     'googleOauthClientId', 'dropboxAppKey',
+    'dropboxRefreshToken', 'dropboxAccessToken', 'dropboxTokenExpiresAt', 'dropboxConnected',
   ];
-  // Vault-only prefs never touch localStorage (API keys / per-account OAuth app IDs).
-  const VAULT_ONLY_PREF_KEYS = ['aiChat', 'googleOauthClientId', 'dropboxAppKey'];
+  // Vault-only prefs never touch localStorage (API keys / OAuth tokens / app IDs).
+  const VAULT_ONLY_PREF_KEYS = [
+    'aiChat', 'googleOauthClientId', 'dropboxAppKey',
+    'dropboxRefreshToken', 'dropboxAccessToken', 'dropboxTokenExpiresAt',
+  ];
   // Device-only prefs (storage/offline behaviour differs per device).
   const DEVICE_PREF_KEYS = ['rememberDevice', 'lightVault', 'tagsCollapsed', 'foldersCollapsed', 'viewsCollapsed', 'searchFilters', 'listPaneWidth'];
   let globalPrefsAppliedAt = 0;
@@ -3367,6 +3375,11 @@
     prefs.aiChat = null;
     prefs.googleOauthClientId = '';
     prefs.dropboxAppKey = '';
+    prefs.dropboxRefreshToken = '';
+    prefs.dropboxAccessToken = '';
+    prefs.dropboxTokenExpiresAt = 0;
+    prefs.dropboxConnected = false;
+    try { window.NotesCloudBackup?.clearPlaintextDropboxTokensFromLocal?.(); } catch (err) { /* ignore */ }
     globalPrefsAppliedAt = 0;
     globalPrefsHydrated = false;
     NotesStore.lock();
@@ -19383,6 +19396,36 @@
       googleClientId: String(prefs.googleOauthClientId || '').trim(),
       dropboxAppKey: String(prefs.dropboxAppKey || '').trim(),
     });
+    if (Cloud.setVaultTokenBridge) {
+      Cloud.setVaultTokenBridge({
+        load: () => ({
+          dropboxRefreshToken: String(prefs.dropboxRefreshToken || ''),
+          dropboxAccessToken: String(prefs.dropboxAccessToken || ''),
+          dropboxTokenExpiresAt: Number(prefs.dropboxTokenExpiresAt) || 0,
+          dropboxConnected: !!prefs.dropboxConnected,
+        }),
+        save: (patch) => {
+          if (!patch || typeof patch !== 'object') return;
+          if (patch.dropboxRefreshToken != null) prefs.dropboxRefreshToken = String(patch.dropboxRefreshToken || '');
+          if (patch.dropboxAccessToken != null) prefs.dropboxAccessToken = String(patch.dropboxAccessToken || '');
+          if (patch.dropboxTokenExpiresAt != null) prefs.dropboxTokenExpiresAt = Number(patch.dropboxTokenExpiresAt) || 0;
+          if (patch.dropboxConnected != null) prefs.dropboxConnected = !!patch.dropboxConnected;
+          try { pushGlobalPrefs(); } catch (err) { /* ignore */ }
+        },
+        clear: () => {
+          prefs.dropboxRefreshToken = '';
+          prefs.dropboxAccessToken = '';
+          prefs.dropboxTokenExpiresAt = 0;
+          prefs.dropboxConnected = false;
+          try { pushGlobalPrefs(); } catch (err) { /* ignore */ }
+        },
+      });
+      try {
+        if (Cloud.migratePlaintextDropboxTokens?.(prefs)) {
+          pushGlobalPrefs();
+        }
+      } catch (err) { /* ignore */ }
+    }
   }
 
   function isGoogleDriveConnected(Cloud = window.NotesCloudBackup) {

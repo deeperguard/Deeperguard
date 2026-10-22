@@ -410,7 +410,12 @@ if (registerForm) {
       submitBtn.textContent = 'Creating account…';
     }
     try {
-      const data = await NotesSrpAuth.register(email, password);
+      const company = String(document.getElementById('register-company')?.value || '');
+      const turnstileInput = document.querySelector('input[name="cf-turnstile-response"]');
+      const data = await NotesSrpAuth.register(email, password, {
+        company,
+        cf_turnstile_response: turnstileInput ? String(turnstileInput.value || '') : '',
+      });
       await stashLoginSession(data, email, password);
       try { sessionStorage.setItem('notes_just_registered', '1'); } catch (err) { /* ignore */ }
       try { sessionStorage.setItem('notes_verify_email_hint', '1'); } catch (err) { /* ignore */ }

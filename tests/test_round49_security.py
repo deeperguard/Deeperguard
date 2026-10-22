@@ -369,16 +369,16 @@ class Round49SecurityTests(unittest.TestCase):
         import db as notes_db
         from config import unverified_user_quota_bytes
 
-        # First 5 succeed; 6th hits per-IP cap (limit=5/hour).
-        for i in range(5):
+        # First 3 succeed; 4th hits per-IP cap (default limit=3/hour).
+        for i in range(3):
             email = f"m4ip{i}@example.com"
             res, _, _ = self._register_v2(email, "m4-secure-password")
             self.assertEqual(res.status_code, 200, res.get_json())
             user = notes_db.get_user_by_email(email)
             self.assertEqual(int(user["storage_quota_bytes"]), unverified_user_quota_bytes())
             self.assertEqual(int(user["email_verified"]), 0)
-        sixth, _, _ = self._register_v2("m4ip5@example.com", "m4-secure-password")
-        self.assertEqual(sixth.status_code, 429)
+        fourth, _, _ = self._register_v2("m4ip3@example.com", "m4-secure-password")
+        self.assertEqual(fourth.status_code, 429)
         import auth_rate_limit as arl
 
         arl._hits.clear()
@@ -403,7 +403,7 @@ class Round49SecurityTests(unittest.TestCase):
 
     # --- M5 -----------------------------------------------------------------
     def test_m5_anti_enumeration(self):
-        from srp_auth import fake_srp_challenge
+        from srp_auth import fake_srp_challenge, new_srp_salt_hex
 
         unknown = "nosuch-user@example.com"
         a = self.client.post("/api/auth/srp/challenge", json={"email": unknown})
@@ -411,12 +411,16 @@ class Round49SecurityTests(unittest.TestCase):
         self.assertEqual(a.status_code, 200)
         self.assertEqual(b.status_code, 200)
         ja, jb = a.get_json(), b.get_json()
+        # Salt is deterministic (same email); B is fresh each call (M1).
         self.assertEqual(ja["srp_salt"], jb["srp_salt"])
-        self.assertEqual(ja["B"], jb["B"])
+        self.assertNotEqual(ja["B"], jb["B"])
         self.assertEqual(int(ja["srp_kdf_version"]), 2)
-        salt, B = fake_srp_challenge(unknown, self.app_mod.app.secret_key)
+        # Salt shape matches real new_srp_salt_hex (SHA-256 via _h, ~60+ hex).
+        self.assertGreaterEqual(len(ja["srp_salt"]), 48)
+        sample_real = new_srp_salt_hex()
+        self.assertGreaterEqual(len(sample_real), 48)
+        salt, _B = fake_srp_challenge(unknown, self.app_mod.app.secret_key)
         self.assertEqual(ja["srp_salt"], salt)
-        self.assertEqual(ja["B"], B)
 
         legacy = self.client.post(
             "/api/auth/login",
@@ -437,8 +441,8 @@ class Round49SecurityTests(unittest.TestCase):
             json={"email": unknown},
             base_url="https://www.deeperguard.com",
         )
-        # May be 400 (host) in test env without Host match — accept 200 empty options too.
-        self.assertIn(wa.status_code, {200, 400})
+        # May be 400/501 (host / WebAuthn unavailable) in test env — accept empty options too.
+        self.assertIn(wa.status_code, {200, 400, 501})
         if wa.status_code == 200:
             opts = wa.get_json().get("options") or {}
             allow = opts.get("allowCredentials") or opts.get("publicKey", {}).get("allowCredentials")

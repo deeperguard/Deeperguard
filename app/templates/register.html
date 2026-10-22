@@ -57,6 +57,14 @@
         <span>I understand Deeperguard can't recover my notes if I forget this password</span>
       </label>
       <p id="register-recover-error" class="field-error" role="alert" hidden></p>
+      {# Honeypot — leave empty. Hidden from humans; bots that fill it are soft-failed. #}
+      <label class="hp-field" for="register-company" aria-hidden="true" tabindex="-1">
+        Company
+        <input id="register-company" type="text" name="company" autocomplete="off" tabindex="-1">
+      </label>
+      {% if turnstile_site_key %}
+      <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="light"></div>
+      {% endif %}
       <p class="auth-hint">Public beta: new accounts start on <strong>Pro</strong> (free for now) with <strong>5&nbsp;GB</strong> encrypted storage. After the beta, <strong>Basic</strong> is €2.99/month or €29/year (100&nbsp;MB) and <strong>Pro</strong> is €6.99/month or €69/year (5&nbsp;GB). Creating an account does not ask for a code. We email a verification code to this address, and you only enter it in Settings before encrypted backups are sent.</p>
       <p id="register-error" class="error" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
       <button type="submit" class="btn primary block">Create account</button>
@@ -65,6 +73,9 @@
     {% endif %}
     {% include 'partials/auth-footer.html' %}
   </main>
+  {% if turnstile_site_key %}
+  <script nonce="{{ csp_nonce }}" src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  {% endif %}
   <script src="/static/js/vendor/noble-crypto.js?v={{ build }}"></script>
   <script src="/static/js/vendor/noble-argon2.js?v={{ build }}"></script>
   <script src="/static/js/crypto.js?v={{ build }}"></script>

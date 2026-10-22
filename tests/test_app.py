@@ -4116,7 +4116,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(int(str(user["srp_verifier"]), 16), int(stored_verifier, 16))
 
     def test_repair_login_accepts_proof_against_stored_verifier(self):
-        """Honest repair-login: a proof against the stored verifier rotates to a fresh salt."""
+        """Honest repair-login: proof against stored verifier opens a session (prove-only, C1)."""
         import db as notes_db
         from passwords import new_kdf_salt
         from srp_auth import generate_verifier_hex, new_srp_salt_hex
@@ -4126,6 +4126,7 @@ class NotesAppTests(unittest.TestCase):
         stored_salt, stored_verifier = self._srp_verifier(email, password)
         kdf_salt = new_kdf_salt()
         user_id = notes_db.create_user_srp(email, kdf_salt, stored_salt, stored_verifier)
+        # Client may still submit a rotation payload; server must ignore it (C1).
         rotated_salt = new_srp_salt_hex()
         rotated_verifier = generate_verifier_hex(rotated_salt, email, password, kdf_version=2)
         with self.client.session_transaction() as sess:
@@ -4150,8 +4151,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(repaired.status_code, 200, repaired.get_json())
         self.assertTrue(repaired.get_json().get("login_repaired"))
         user = notes_db.get_user_by_id(user_id)
-        self.assertEqual(int(str(user["srp_verifier"]), 16), int(rotated_verifier, 16))
-        login = self._srp_login(email, password, rotated_salt)
+        self.assertEqual(int(str(user["srp_verifier"]), 16), int(stored_verifier, 16))
+        self.assertEqual(str(user["srp_salt"]).lower(), stored_salt.lower())
+        login = self._srp_login(email, password, stored_salt)
         self.assertEqual(login.status_code, 200)
 
     def test_app_repair_unlock_uses_password_sign_in(self):

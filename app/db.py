@@ -466,66 +466,102 @@ def update_user_srp_verifier(
     touch_password_changed=False is for silent verifier-format upgrades (e.g. SRP
     KDF v1→v2). Those must not bump password_changed_at — the client treats that
     timestamp as a vault-password rotation and clears the post-login boot password.
+
+    When srp_kdf_version is omitted, persist v2. Leaving the column unchanged while
+    installing a v2 verifier permanently locks the account out (H2).
     """
     ts = now()
+    # Default to v2 so callers that rotate verifiers cannot leave a stale v1 flag.
+    kdf_ver = 2 if int(srp_kdf_version if srp_kdf_version is not None else 2) >= 2 else 1
     with tx() as conn:
-        if srp_kdf_version is None:
-            if touch_password_changed:
-                conn.execute(
-                    """
-                    UPDATE users
-                    SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?,
-                        updated_at = ?, password_changed_at = ?
-                    WHERE id = ?
-                    """,
-                    (srp_salt.strip().lower(), srp_verifier.strip().lower(), ts, ts, user_id),
-                )
-            else:
-                conn.execute(
-                    """
-                    UPDATE users
-                    SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?,
-                        updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (srp_salt.strip().lower(), srp_verifier.strip().lower(), ts, user_id),
-                )
+        if touch_password_changed:
+            conn.execute(
+                """
+                UPDATE users
+                SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
+                    updated_at = ?, password_changed_at = ?
+                WHERE id = ?
+                """,
+                (
+                    srp_salt.strip().lower(),
+                    srp_verifier.strip().lower(),
+                    kdf_ver,
+                    ts,
+                    ts,
+                    user_id,
+                ),
+            )
         else:
-            kdf_ver = 2 if int(srp_kdf_version or 1) >= 2 else 1
-            if touch_password_changed:
-                conn.execute(
-                    """
-                    UPDATE users
-                    SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
-                        updated_at = ?, password_changed_at = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        srp_salt.strip().lower(),
-                        srp_verifier.strip().lower(),
-                        kdf_ver,
-                        ts,
-                        ts,
-                        user_id,
-                    ),
-                )
-            else:
-                conn.execute(
-                    """
-                    UPDATE users
-                    SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
-                        updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        srp_salt.strip().lower(),
-                        srp_verifier.strip().lower(),
-                        kdf_ver,
-                        ts,
-                        user_id,
-                    ),
-                )
+            conn.execute(
+                """
+                UPDATE users
+                SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    srp_salt.strip().lower(),
+                    srp_verifier.strip().lower(),
+                    kdf_ver,
+                    ts,
+                    user_id,
+                ),
+            )
     return ts
+
+
+def count_srp_kdf_v1_users() -> int:
+    """Count accounts still advertising SRP KDF v1 (candidates / residual)."""
+    row = connection().execute(
+        """
+        SELECT COUNT(*) AS n FROM users
+        WHERE COALESCE(srp_kdf_version, 1) < 2
+          AND srp_salt IS NOT NULL AND TRIM(srp_salt) != ''
+          AND srp_verifier IS NOT NULL AND TRIM(srp_verifier) != ''
+        """
+    ).fetchone()
+    try:
+        return int(row["n"] if row else 0)
+    except (KeyError, TypeError, ValueError):
+        return int(row[0]) if row else 0
+
+
+def repair_srp_kdf_v1_lockouts(*, apply: bool = False) -> int:
+    """One-time repair helper for H2-style lockouts.
+
+    Vault-recovery previously installed v2 verifiers while leaving srp_kdf_version=1.
+    Those rows cannot complete SRP login. Safe heuristic: accounts whose
+    password_changed_at is set (recovery/password rotation) while still on v1 —
+    new clients always rotate with Argon2id v2. Legitimate never-rotated v1
+    accounts keep password_changed_at NULL and are left alone.
+
+    Returns the number of matching rows (and updates them when apply=True).
+    Reports counts only — never emails or secrets.
+    """
+    where = """
+        COALESCE(srp_kdf_version, 1) < 2
+        AND srp_salt IS NOT NULL AND TRIM(srp_salt) != ''
+        AND srp_verifier IS NOT NULL AND TRIM(srp_verifier) != ''
+        AND password_changed_at IS NOT NULL
+        AND CAST(password_changed_at AS REAL) > 0
+    """
+    row = connection().execute(f"SELECT COUNT(*) AS n FROM users WHERE {where}").fetchone()
+    try:
+        count = int(row["n"] if row else 0)
+    except (KeyError, TypeError, ValueError):
+        count = int(row[0]) if row else 0
+    if apply and count:
+        ts = now()
+        with tx() as conn:
+            conn.execute(
+                f"""
+                UPDATE users
+                SET srp_kdf_version = 2, updated_at = ?
+                WHERE {where}
+                """,
+                (ts,),
+            )
+    return count
 
 
 def user_srp_kdf_version(user) -> int:

@@ -28,6 +28,9 @@ def _limits() -> tuple[int, float]:
     return max(1, limit), max(60.0, window)
 
 
+_MAX_KEYS = 20_000
+
+
 def allow(key: str, *, limit: int | None = None, window: float | None = None) -> bool:
     """Return True when the request is within the limit."""
     default_limit, default_window = _limits()
@@ -35,6 +38,14 @@ def allow(key: str, *, limit: int | None = None, window: float | None = None) ->
     use_window = window if window is not None else default_window
     now = time.time()
     with _lock:
+        # Bound memory growth on long-lived workers (prior L7).
+        if len(_hits) > _MAX_KEYS:
+            stale = [k for k, stamps in _hits.items() if not stamps or now - stamps[-1] >= use_window]
+            for k in stale[: max(1, len(stale) // 2)]:
+                _hits.pop(k, None)
+            if len(_hits) > _MAX_KEYS:
+                for k in list(_hits.keys())[: len(_hits) - _MAX_KEYS]:
+                    _hits.pop(k, None)
         bucket = _hits[key]
         bucket[:] = [stamp for stamp in bucket if now - stamp < use_window]
         if len(bucket) >= use_limit:

@@ -159,6 +159,19 @@ function loadCloud({
   vm.createContext(sandbox);
   vm.runInContext(cloudSrc, sandbox);
   const Cloud = sandbox.module.exports;
+  // Round 56 M5: tokens live in a vault bridge, not plaintext localStorage.
+  const vaultPrefs = {};
+  Cloud.setVaultTokenBridge({
+    load: () => ({ ...vaultPrefs }),
+    save: (patch) => Object.assign(vaultPrefs, patch || {}),
+    clear: () => {
+      vaultPrefs.dropboxRefreshToken = '';
+      vaultPrefs.dropboxAccessToken = '';
+      vaultPrefs.dropboxTokenExpiresAt = 0;
+      vaultPrefs.dropboxConnected = false;
+    },
+  });
+  Cloud.__vaultPrefs = vaultPrefs;
   Cloud.__store = store;
   Cloud.__session = session;
   Cloud.__sandbox = sandbox;
@@ -234,8 +247,11 @@ function loadCloud({
     assert.ok(authUrl.includes('files.content.read'));
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.pending, 'backup');
-    assert.strictEqual(Cloud.readPrefs().dropboxAccessToken, 'sl.access');
-    assert.strictEqual(Cloud.readPrefs().dropboxRefreshToken, 'sl.refresh');
+    // Tokens must be in the vault bridge, not plaintext localStorage.
+    assert.strictEqual(Cloud.__vaultPrefs.dropboxAccessToken, 'sl.access');
+    assert.strictEqual(Cloud.__vaultPrefs.dropboxRefreshToken, 'sl.refresh');
+    assert.strictEqual(Cloud.readPrefs().dropboxAccessToken, '');
+    assert.strictEqual(Cloud.readPrefs().dropboxRefreshToken, '');
     assert.ok(calls.some((c) => c.url.includes('/oauth2/token')));
   }
 
@@ -292,13 +308,12 @@ function loadCloud({
         return { ok: false, status: 404, json: async () => ({}) };
       },
     });
-    // Seed a valid token so ensureDropboxToken does not redirect
-    Cloud.writePrefs({
-      dropboxConnected: true,
-      dropboxAccessToken: 'sl.access',
-      dropboxTokenExpiresAt: Date.now() + 3600_000,
-      dropboxRefreshToken: 'sl.refresh',
-    });
+    // Seed a valid token in the vault bridge so ensureDropboxToken does not redirect
+    Cloud.__vaultPrefs.dropboxConnected = true;
+    Cloud.__vaultPrefs.dropboxAccessToken = 'sl.access';
+    Cloud.__vaultPrefs.dropboxTokenExpiresAt = Date.now() + 3600_000;
+    Cloud.__vaultPrefs.dropboxRefreshToken = 'sl.refresh';
+    Cloud.writePrefs({ dropboxConnected: true });
     const original = {
       format: 'deeperguard-backup-v1',
       items: [{ item_uuid: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', ciphertext: '{}' }],

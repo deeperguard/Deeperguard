@@ -7,11 +7,15 @@ import os
 import sys
 
 BASE = os.environ.get("NOTES_E2E_BASE", "https://www.deeperguard.com").rstrip("/")
-EMAIL = os.environ.get("NOTES_E2E_EMAIL", "deeperguard-tester+r19@mail.grokbot.com")
-PASSWORD = os.environ.get("NOTES_E2E_PASSWORD", "DgR19-Test-2026!xyz")
+EMAIL = os.environ.get("NOTES_E2E_EMAIL", "").strip()
+PASSWORD = os.environ.get("NOTES_E2E_PASSWORD", "")
 
 
 def main() -> int:
+    if not EMAIL or not PASSWORD:
+        print("SKIP: set NOTES_E2E_EMAIL and NOTES_E2E_PASSWORD to run live unlock E2E")
+        return 0
+
     from playwright.sync_api import sync_playwright
 
     console: list[str] = []
@@ -221,7 +225,7 @@ def main() -> int:
         login()
         mid = dump("after-second-login")
         page.evaluate(
-            """(pw) => { window.__e2ePw = pw; console.log('e2e-password-eq', pw === 'DgR19-Test-2026!xyz'); }""",
+            """(pw) => { window.__e2ePw = pw; console.log('e2e-password-len', String(pw || '').length); }""",
             PASSWORD,
         )
         final = unlock_ui()

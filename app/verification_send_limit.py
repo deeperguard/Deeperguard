@@ -64,9 +64,9 @@ def backup_attachment_cap_message() -> str:
 
 def _global_daily_cap() -> int:
     try:
-        return max(1, int(os.environ.get("NOTES_VERIFY_SEND_GLOBAL_DAILY_CAP", "2000")))
+        return max(1, int(os.environ.get("NOTES_VERIFY_SEND_GLOBAL_DAILY_CAP", "500")))
     except (TypeError, ValueError):
-        return 2000
+        return 500
 
 
 def check_verification_send(user_id: int, recipient: str) -> str:
