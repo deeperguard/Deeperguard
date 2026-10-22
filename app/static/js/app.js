@@ -256,6 +256,10 @@
   // Device-only prefs (storage/offline behaviour differs per device).
   const DEVICE_PREF_KEYS = ['rememberDevice', 'lightVault', 'tagsCollapsed', 'foldersCollapsed', 'viewsCollapsed', 'searchFilters', 'listPaneWidth'];
   let globalPrefsAppliedAt = 0;
+  // Do not push device/local defaults into the vault until we have pulled the
+  // account settings item (or confirmed the vault has none). Round 55: a race
+  // after sign-in could overwrite lockOnUnfocus / autoLockMin with Never.
+  let globalPrefsHydrated = false;
 
   function localPrefsJson() {
     const copy = { ...prefs };
@@ -273,8 +277,19 @@
 
   function pushGlobalPrefs() {
     if (!window.NotesStore?.isUnlocked?.() || typeof NotesStore.saveGlobalSettings !== 'function') return false;
-    // A fresh device must see the account's settings once before it may overwrite them.
-    if (!NotesStore.getGlobalSettings() && !unlockDidSync) return false;
+    if (!globalPrefsHydrated) {
+      const remote = NotesStore.getGlobalSettings?.();
+      if (remote?.prefs) {
+        // Settings exist — apply them first; never clobber with local defaults.
+        pullGlobalPrefs({ render: false });
+        if (!globalPrefsHydrated) return false;
+      } else if (!unlockDidSync) {
+        return false;
+      } else {
+        // Synced vault has no settings item yet; this device may seed once.
+        globalPrefsHydrated = true;
+      }
+    }
     try {
       const saved = NotesStore.saveGlobalSettings(pickGlobalPrefs(prefs));
       if (saved) globalPrefsAppliedAt = Date.now() / 1000;
@@ -287,25 +302,33 @@
   function pullGlobalPrefs({ render = true } = {}) {
     if (typeof NotesStore?.getGlobalSettings !== 'function') return false;
     const remote = NotesStore.getGlobalSettings();
-    if (!remote || !remote.prefs) return false;
-    if (remote.updatedAt <= globalPrefsAppliedAt) return false;
+    if (!remote || !remote.prefs) {
+      if (unlockDidSync) globalPrefsHydrated = true;
+      return false;
+    }
+    if (remote.updatedAt <= globalPrefsAppliedAt && globalPrefsHydrated) return false;
     globalPrefsAppliedAt = remote.updatedAt;
     const incoming = pickGlobalPrefs(remote.prefs);
     const changed = Object.keys(incoming).some((key) => JSON.stringify(prefs[key]) !== JSON.stringify(incoming[key]));
-    if (!changed) return false;
-    Object.assign(prefs, incoming);
-    if (!(prefs.lockOnUnfocus === 'immediate' || prefs.lockOnUnfocus === '1min' || prefs.lockOnUnfocus === 'never')) {
-      prefs.lockOnUnfocus = '1min';
+    if (changed) {
+      Object.assign(prefs, incoming);
+      if (!(prefs.lockOnUnfocus === 'immediate' || prefs.lockOnUnfocus === '1min' || prefs.lockOnUnfocus === 'never')) {
+        prefs.lockOnUnfocus = '1min';
+      }
+      if (typeof prefs.autoLockMin !== 'number' || !Number.isFinite(prefs.autoLockMin) || prefs.autoLockMin < 0) {
+        prefs.autoLockMin = 15;
+      }
+      try { localStorage.setItem('deeperguard-prefs', localPrefsJson()); } catch (err) { /* ignore quota */ }
+      applyPrefs();
+      try { syncCloudProviderKeysFromPrefs(); } catch (err) { /* ignore */ }
+      if (render) {
+        renderNotes();
+        if (!ui.settings?.hidden) initSettings().catch(() => {});
+        if (currentId) applyEditorMode();
+      }
     }
-    try { localStorage.setItem('deeperguard-prefs', localPrefsJson()); } catch (err) { /* ignore quota */ }
-    applyPrefs();
-    try { syncCloudProviderKeysFromPrefs(); } catch (err) { /* ignore */ }
-    if (render) {
-      renderNotes();
-      if (!ui.settings?.hidden) initSettings().catch(() => {});
-      if (currentId) applyEditorMode();
-    }
-    return true;
+    globalPrefsHydrated = true;
+    return changed;
   }
 
   const NOTE_SORT_ORDER = ['updated', 'created', 'title'];
@@ -666,7 +689,12 @@
   }
 
   function vaultActiveNoteCount() {
-    return NotesStore.listNotes().filter((n) => !n.deleted && !n.content?.trashed && !n.content?.archived).length;
+    // Match the note-list header (exclude empty never-saved stubs). Round 55.
+    return listedActiveNoteCount();
+  }
+
+  function vaultTrashedNoteCount() {
+    return NotesStore.listNotes().filter((n) => !n.deleted && n.content?.trashed).length;
   }
 
   function updatePlanBadge(badge, account) {
@@ -3340,6 +3368,7 @@
     prefs.googleOauthClientId = '';
     prefs.dropboxAppKey = '';
     globalPrefsAppliedAt = 0;
+    globalPrefsHydrated = false;
     NotesStore.lock();
     sessionExpiredAlertShown = false;
     try { sessionStorage.removeItem('notes_totp_resync'); } catch (err) { /* ignore */ }
@@ -7020,6 +7049,11 @@
     } catch (err) {
       if (isSessionRevokedError(err)) {
         await wipeAfterRemoteSignOut();
+        return;
+      }
+      // Timeouts / offline must not sign the user out or lock the vault (Round 55).
+      if (NotesStore.isProbablyOffline?.(err) || err?.code === 'aborted'
+        || /timed out|Failed to fetch|NetworkError/i.test(String(err?.message || ''))) {
         return;
       }
       if (err && (err.status === 401 || err.status === 403)) {
@@ -14050,6 +14084,9 @@
       refreshBtn.disabled = false;
       refreshBtn.removeAttribute('disabled');
     }
+    // Always paint saved prefs into the selects — HTML defaults are Never/Never
+    // and must not be what the user sees when deeperguard-prefs has real values.
+    initSettings().catch(() => {});
     refreshSettingsDiagnostics().catch(() => {});
     try { refreshGoogleDriveBackupUi(); } catch (err) { /* ignore */ }
     try { refreshDropboxBackupUi(); } catch (err) { /* ignore */ }
@@ -14069,12 +14106,16 @@
     const el = document.getElementById('vault-stats');
     if (!el || !vaultReady) return;
     const notes = vaultActiveNoteCount();
+    const trashed = vaultTrashedNoteCount();
     const docs = NotesStore.listAttachments().filter((att) => {
       const parent = NotesStore.get(att.content.note_id);
       return parent && !parent.deleted && !parent.content?.trashed && !parent.content?.archived;
     }).length;
     const tags = NotesStore.listTags().length;
-    const statsText = `${notes} note${notes === 1 ? '' : 's'} · ${docs} document${docs === 1 ? '' : 's'} · ${tags} tag${tags === 1 ? '' : 's'}`;
+    const notesLabel = trashed > 0
+      ? `${notes} note${notes === 1 ? '' : 's'} (${trashed} in trash)`
+      : `${notes} note${notes === 1 ? '' : 's'}`;
+    const statsText = `${notesLabel} · ${docs} document${docs === 1 ? '' : 's'} · ${tags} tag${tags === 1 ? '' : 's'}`;
     el.textContent = statsText;
     el.title = statsText;
   }
