@@ -23,10 +23,20 @@ build_id="${version:0:8}"
 chmod +x "$SRC/deploy/"*.sh
 bash "$SRC/deploy/fetch-ocr-assets.sh"
 
+# Deterministic client integrity manifest (hashed URLs + SRI digests).
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
+python3 "$SRC/scripts/build-client-manifest.py"
+client_hash="$(python3 "$SRC/scripts/build-client-manifest.py" --print-hash)"
+echo "Client manifest_sha256=${client_hash}"
+
+TAR_PATHS=(app deploy tests scripts requirements.txt requirements.lock README.md .python-version .nvmrc)
+if [[ -f "$SRC/RELEASE_TAG" ]]; then
+  TAR_PATHS+=(RELEASE_TAG)
+fi
 tar czf /tmp/deeperguard-deploy.tar.gz -C "$SRC" \
   --exclude=.git --exclude=venv --exclude=keys --exclude=data \
   --exclude='__pycache__' --exclude='*.pyc' \
-  app deploy tests requirements.txt README.md
+  "${TAR_PATHS[@]}"
 ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p ${REMOTE}"
 scp "${SSH_OPTS[@]}" /tmp/deeperguard-deploy.tar.gz "root@${HOST}:/tmp/deeperguard-deploy.tar.gz"
 ssh "${SSH_OPTS[@]}" "root@${HOST}" bash -s <<REMOTE
@@ -43,10 +53,16 @@ if [[ -n "${build_id}" && -f /opt/deeperguard/config/deeperguard.env ]]; then
     printf '\nNOTES_BUILD=%s\n' "${build_id}" >> /opt/deeperguard/config/deeperguard.env
   fi
 fi
+# Refresh the on-server manifest so SRI matches the files just unpacked.
+SOURCE_DATE_EPOCH=0 python3 scripts/build-client-manifest.py
 if [[ ! -x venv/bin/python ]]; then
   NOTES_ENABLE_LAN_TLS='${ENABLE_LAN_TLS}' NOTES_LAN_CIDR='${LAN_CIDR}' NOTES_VPN_CIDR='${VPN_CIDR}' NOTES_VPN_GATEWAY='${VPN_GATEWAY}' NOTES_DEPLOY_SSH_HOST='${DEPLOY_SSH_HOST}' NOTES_HOST='${HOST}' bash deploy/bootstrap.sh
 else
-  venv/bin/pip install -q -r requirements.txt
+  if [[ -f requirements.lock ]]; then
+    venv/bin/pip install -q -r requirements.lock
+  else
+    venv/bin/pip install -q -r requirements.txt
+  fi
   NOTES_ENABLE_LAN_TLS='${ENABLE_LAN_TLS}' bash deploy/install-services.sh
 fi
 if [[ '${ENABLE_LAN_TLS}' != "1" ]]; then

@@ -294,7 +294,11 @@ async function matchExact(request) {
 }
 
 function isVersioned(url) {
-  return url.searchParams.has('v');
+  // Legacy ?v= cache-busters and Round 60 content-hashed filenames
+  // (app.<sha16>.js) must use exact-match cache so a new HTML shell cannot
+  // pair with a previous deploy's scripts.
+  if (url.searchParams.has('v')) return true;
+  return /\.[a-f0-9]{16}\.(js|css|mjs)$/i.test(url.pathname);
 }
 
 function isCryptoWorker(url) {

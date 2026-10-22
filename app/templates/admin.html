@@ -74,6 +74,6 @@
     </div>
     {% include 'partials/auth-footer.html' %}
   </main>
-  <script src="/static/js/admin.js?v={{ build }}"></script>
+  {{ asset_script('js/admin.js') }}
 </body>
 </html>

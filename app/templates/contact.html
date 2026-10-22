@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
-  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
 </head>
 <body>
   {% include 'partials/mk-topbar.html' %}
@@ -50,6 +50,6 @@
     </section>
     {% include 'partials/mk-footer.html' %}
   </main>
-  <script src="/static/js/marketing.js?v={{ build }}" defer></script>
+  {{ asset_script('js/marketing.js', defer=True) }}
 </body>
 </html>

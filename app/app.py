@@ -15,6 +15,7 @@ from flask import Flask, jsonify, make_response, redirect, render_template, requ
 import admin_api
 import ai_relay
 import auth
+import client_assets
 import db
 import email_verify
 import ocr as ocr_mod
@@ -126,7 +127,14 @@ app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
 
 @app.context_processor
 def _inject_template_globals():
-    return {"csp_nonce": auth.csp_nonce()}
+    return {
+        **client_assets.jinja_globals(),
+        "csp_nonce": auth.csp_nonce(),
+        "client_hash": client_assets.client_hash(),
+        "client_hash_short": client_assets.client_hash_short(),
+        "release_tag": client_assets.release_tag(),
+        "release_url": client_assets.release_url(),
+    }
 
 
 @app.errorhandler(413)
@@ -414,6 +422,7 @@ def _notes_build() -> str:
 
 
 NOTES_BUILD = _notes_build()
+NOTES_CLIENT_HASH = client_assets.client_hash()
 DEVICE_REPORT_MAX = 32 * 1024
 DEVICE_REPORT_KEEP = 8
 SERVER_OCR_DISABLED = (
@@ -508,6 +517,13 @@ def _headers(response):
         session.accessed = False
         session.modified = False
         _drop_set_cookie(response)
+    elif client_assets.resolve_hashed_static(request.path):
+        # Content-hashed filenames are immutable; HTML always points at a new name.
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        response.headers.pop("Pragma", None)
+        session.accessed = False
+        session.modified = False
+        _drop_set_cookie(response)
     elif auth.cacheable_shell(request.path):
         response.headers["Cache-Control"] = "public, max-age=86400, immutable"
         response.headers.pop("Pragma", None)
@@ -517,6 +533,19 @@ def _headers(response):
     elif request.path in {"/login", "/register", "/totp"}:
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.before_request
+def _serve_hashed_static():
+    """Serve /static/js/app.<sha16>.js from app/static/js/app.js when the hash matches."""
+    logical = client_assets.resolve_hashed_static(request.path)
+    if not logical:
+        return None
+    if request.method not in {"GET", "HEAD"}:
+        return None
+    if not auth.client_allowed():
+        return ("Deeperguard is limited to the LAN and WireGuard.", 403)
+    return send_from_directory(Path(app.static_folder), logical)
 
 
 @app.before_request
@@ -722,6 +751,7 @@ def health():
         "ok": ready,
         "service": "deeperguard",
         "build": NOTES_BUILD,
+        "client_hash": NOTES_CLIENT_HASH or client_assets.client_hash(),
     }
     uid = auth.current_user_id()
     user = db.get_user_by_id(uid) if uid else None
@@ -2748,6 +2778,10 @@ def _marketing_context() -> dict:
     promo = _promo_payload()
     return {
         "build": NOTES_BUILD,
+        "client_hash": NOTES_CLIENT_HASH or client_assets.client_hash(),
+        "client_hash_short": client_assets.client_hash_short(),
+        "release_tag": client_assets.release_tag(),
+        "release_url": client_assets.release_url(),
         "site_url": f"{base}/",
         "canonical_url": f"{base}/",
         "og_image": f"{base}/static/icons/icon-512.png?v={NOTES_BUILD}",

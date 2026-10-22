@@ -1,0 +1,75 @@
+name: Release client integrity
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Build client manifest
+        env:
+          SOURCE_DATE_EPOCH: "0"
+        run: |
+          python3 scripts/build-client-manifest.py --check-repro
+          python3 scripts/build-client-manifest.py -o client-manifest.json
+          python3 -c 'import hashlib,pathlib; p=pathlib.Path("client-manifest.json"); h=hashlib.sha256(p.read_bytes()).hexdigest(); pathlib.Path("client-manifest.json.sha256").write_text(h+"  client-manifest.json\n")'
+          MANIFEST_HASH="$(python3 -c 'import json;print(json.load(open("client-manifest.json"))["manifest_sha256"])')"
+          echo "MANIFEST_HASH=$MANIFEST_HASH" >> "$GITHUB_ENV"
+          echo "manifest_sha256=$MANIFEST_HASH"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign manifest (keyless)
+        run: |
+          cosign sign-blob --yes \
+            --bundle client-manifest.sigstore.json \
+            client-manifest.json
+
+      - name: Verify signature locally
+        run: |
+          cosign verify-blob \
+            --bundle client-manifest.sigstore.json \
+            --certificate-identity-regexp "https://github.com/deeperguard/Deeperguard/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            client-manifest.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## Client integrity
+
+            `manifest_sha256`: `${{ env.MANIFEST_HASH }}`
+
+            Verify:
+
+            ```bash
+            cosign verify-blob \
+              --bundle client-manifest.sigstore.json \
+              --certificate-identity-regexp 'https://github.com/deeperguard/Deeperguard/' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              client-manifest.json
+            ```
+
+            Rebuild from this tag with `SOURCE_DATE_EPOCH=0 python3 scripts/build-client-manifest.py --print-hash` — the hash must match.
+          files: |
+            client-manifest.json
+            client-manifest.json.sha256
+            client-manifest.sigstore.json

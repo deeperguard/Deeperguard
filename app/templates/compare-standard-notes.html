@@ -19,7 +19,7 @@
   <meta name="notes-build" content="{{ build }}">
   <link rel="canonical" href="{{ canonical_url }}">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
-  <link rel="stylesheet" href="/static/css/marketing.css?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
 </head>
 <body>
   <div class="mk-beta-banner" role="status">

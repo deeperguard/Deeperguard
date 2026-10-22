@@ -167,6 +167,8 @@ const NotesCrypto = (() => {
   }
 
   function workerUrl() {
+    const hashed = document.querySelector('meta[name="notes-crypto-worker"]')?.getAttribute('content') || '';
+    if (hashed) return hashed;
     const build = document.querySelector('meta[name="notes-build"]')?.getAttribute('content') || '';
     return `/static/js/crypto-worker.js${build ? `?v=${build}` : ''}`;
   }

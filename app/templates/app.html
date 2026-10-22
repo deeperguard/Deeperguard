@@ -10,6 +10,8 @@
   <meta name="apple-mobile-web-app-title" content="Notes">
   <meta name="theme-color" content="#ffffff">
   <meta name="notes-build" content="{{ build }}">
+  <meta name="notes-client-hash" content="{{ client_hash }}">
+  <meta name="notes-crypto-worker" content="{{ asset_url('js/crypto-worker.js') }}">
   <meta name="google-oauth-client-id" content="{{ google_oauth_client_id|default('', true) }}">
   <meta name="dropbox-app-key" content="{{ dropbox_app_key|default('', true) }}">
   <title>Deeperguard</title>
@@ -22,8 +24,8 @@
   <link rel="apple-touch-startup-image" href="/static/icons/icon-512.png?v={{ build }}" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
   <link rel="apple-touch-startup-image" href="/static/icons/icon-512.png?v={{ build }}" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
   <link rel="apple-touch-startup-image" href="/static/icons/icon-512.png?v={{ build }}" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-  <link rel="stylesheet" href="/static/css/app.css?v={{ build }}">
-  <script src="/static/js/vaultlock.js?v={{ build }}"></script>
+  {{ asset_stylesheet('css/app.css') }}
+  {{ asset_script('js/vaultlock.js') }}
   <script nonce="{{ csp_nonce }}">
     (function () {
       // Media queries use the layout viewport. Browser zoom with
@@ -672,7 +674,7 @@
             {% with size='sm', mark_tag='span' %}{% include 'partials/brand-mark.html' %}{% endwith %}
             <div class="brand-copy">
               <div class="brand-title-row">
-                <strong>Notes <span id="app-version" class="app-version">v{{ build }}</span></strong>
+                <strong>Notes <span id="app-version" class="app-version">v{{ build }}</span> <span id="app-client-hash" class="app-client-hash muted" title="Client manifest SHA-256">{{ client_hash_short }}</span></strong>
                 <span id="list-plan-badge" class="plan-badge plan-badge-sm" hidden aria-label="Subscription plan">Pro</span>
               </div>
               <p id="sync-meta" class="sync-meta">Not synced yet</p>
@@ -1807,6 +1809,36 @@
         </div>
       </section>
 
+      <section class="settings-group" id="settings-about">
+        <h3>About</h3>
+        <div class="settings-card">
+          <p class="settings-account">Notes <strong id="about-build">v{{ build }}</strong></p>
+          <p class="settings-hint">Client code hash (SHA-256 of the shipped JS/CSS manifest):</p>
+          <p class="settings-hint"><code id="about-client-hash" class="about-client-hash">{{ client_hash }}</code></p>
+          <p class="settings-hint">This matches <code>/api/health</code> → <code>client_hash</code> and the signed <code>client-manifest.json</code> on the GitHub Release.</p>
+          <div class="settings-actions">
+            <a class="btn" id="about-release-link" href="{{ release_url }}" target="_blank" rel="noopener noreferrer">GitHub Release</a>
+            <a class="btn" href="/verify">How to verify</a>
+          </div>
+          <p class="settings-hint">A pinned build (browser extension or desktop app) is the strongest option if one is published later — the web app still depends on the origin delivering these assets.</p>
+        </div>
+      </section>
+
+      <section class="settings-group" id="settings-about">
+        <h3>About</h3>
+        <div class="settings-card">
+          <p class="settings-account">Notes <strong id="about-build">v{{ build }}</strong></p>
+          <p class="settings-hint">Client code hash (SHA-256 of the shipped JS/CSS manifest):</p>
+          <p class="settings-hint"><code id="about-client-hash" class="about-client-hash">{{ client_hash }}</code></p>
+          <p class="settings-hint">This matches <code>/api/health</code> → <code>client_hash</code> and the signed <code>client-manifest.json</code> on the GitHub Release.</p>
+          <div class="settings-actions">
+            <a class="btn" id="about-release-link" href="{{ release_url }}" target="_blank" rel="noopener noreferrer">GitHub Release</a>
+            <a class="btn" href="/verify">How to verify</a>
+          </div>
+          <p class="settings-hint">A pinned build (browser extension or desktop app) is the strongest option if one is published later — the web app still depends on the origin delivering these assets.</p>
+        </div>
+      </section>
+
       <section class="settings-group" id="settings-danger-zone">
         <h3>Danger zone</h3>
         <div class="settings-card">
@@ -2116,39 +2148,39 @@
     <button type="button" id="doc-immersive-close" class="doc-immersive-close" hidden aria-label="Close preview">×</button>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="/static/js/vendor/noble-crypto.js?v={{ build }}"></script>
-  <script src="/static/js/vendor/noble-argon2.js?v={{ build }}"></script>
-  <script src="/static/js/crypto.js?v={{ build }}"></script>
-  <script src="/static/js/sanitize.js?v={{ build }}"></script>
-  <script src="/static/js/webauthn-client.js?v={{ build }}"></script>
-  <script src="/static/js/passkeys.js?v={{ build }}"></script>
-  <script src="/static/js/vault-secrets.js?v={{ build }}"></script>
-  <script src="/static/js/srp-auth.js?v={{ build }}"></script>
-  <script src="/static/js/idb.js?v={{ build }}"></script>
-  <script src="/static/js/snimport.js?v={{ build }}"></script>
-  <script src="/static/js/store.js?v={{ build }}"></script>
-  <script src="/static/js/vendor/jsQR.js?v={{ build }}"></script>
-  <script src="/static/js/totp.js?v={{ build }}"></script>
-  <script src="/static/js/search.js?v={{ build }}"></script>
-  <script src="/static/js/spreadsheet.js?v={{ build }}"></script>
-  <script src="/static/js/markdown.js?v={{ build }}"></script>
-  <script src="/static/js/in-doc-nav.js?v={{ build }}"></script>
-  <script src="/static/js/superscript.js?v={{ build }}"></script>
-  <script src="/static/js/link-overlay.js?v={{ build }}"></script>
-  <script src="/static/js/checklist.js?v={{ build }}"></script>
-  <script src="/static/js/tagsuggest.js?v={{ build }}"></script>
-  <script src="/static/js/preview.js?v={{ build }}"></script>
-  <script src="/static/js/photo-ocr-preprocess.js?v={{ build }}"></script>
-  <script src="/static/js/client-ocr-engine.js?v={{ build }}"></script>
-  <script src="/static/js/ocr.js?v={{ build }}"></script>
-  <script src="/static/js/ocr-quality.js?v={{ build }}"></script>
-  <script src="/static/js/swipe.js?v={{ build }}"></script>
-  <script src="/static/js/ios-tune.js?v={{ build }}"></script>
-  <script src="/static/js/vaultlock.js?v={{ build }}"></script>
-  <script src="/static/js/ai-chat.js?v={{ build }}"></script>
-  <script src="/static/js/note-history.js?v={{ build }}"></script>
-  <script src="/static/js/vault-sync-progress.js?v={{ build }}"></script>
-  <script src="/static/js/cloud-backup.js?v={{ build }}"></script>
-  <script src="/static/js/app.js?v={{ build }}"></script>
+  {{ asset_script('js/vendor/noble-crypto.js') }}
+  {{ asset_script('js/vendor/noble-argon2.js') }}
+  {{ asset_script('js/crypto.js') }}
+  {{ asset_script('js/sanitize.js') }}
+  {{ asset_script('js/webauthn-client.js') }}
+  {{ asset_script('js/passkeys.js') }}
+  {{ asset_script('js/vault-secrets.js') }}
+  {{ asset_script('js/srp-auth.js') }}
+  {{ asset_script('js/idb.js') }}
+  {{ asset_script('js/snimport.js') }}
+  {{ asset_script('js/store.js') }}
+  {{ asset_script('js/vendor/jsQR.js') }}
+  {{ asset_script('js/totp.js') }}
+  {{ asset_script('js/search.js') }}
+  {{ asset_script('js/spreadsheet.js') }}
+  {{ asset_script('js/markdown.js') }}
+  {{ asset_script('js/in-doc-nav.js') }}
+  {{ asset_script('js/superscript.js') }}
+  {{ asset_script('js/link-overlay.js') }}
+  {{ asset_script('js/checklist.js') }}
+  {{ asset_script('js/tagsuggest.js') }}
+  {{ asset_script('js/preview.js') }}
+  {{ asset_script('js/photo-ocr-preprocess.js') }}
+  {{ asset_script('js/client-ocr-engine.js') }}
+  {{ asset_script('js/ocr.js') }}
+  {{ asset_script('js/ocr-quality.js') }}
+  {{ asset_script('js/swipe.js') }}
+  {{ asset_script('js/ios-tune.js') }}
+  {{ asset_script('js/vaultlock.js') }}
+  {{ asset_script('js/ai-chat.js') }}
+  {{ asset_script('js/note-history.js') }}
+  {{ asset_script('js/vault-sync-progress.js') }}
+  {{ asset_script('js/cloud-backup.js') }}
+  {{ asset_script('js/app.js') }}
 </body>
 </html>
