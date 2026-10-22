@@ -3011,7 +3011,8 @@ def service_worker():
     body = sw_path.read_text(encoding="utf-8")
     response = app.response_class(body, mimetype="application/javascript")
     response.headers["Service-Worker-Allowed"] = "/"
-    response.headers["Cache-Control"] = "public, max-age=86400"
+    # Origin wants revalidate-every-load; Cloudflare may still rewrite (L5).
+    response.headers["Cache-Control"] = "public, max-age=0, must-revalidate"
     return response
 
 
