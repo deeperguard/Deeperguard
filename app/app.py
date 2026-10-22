@@ -579,10 +579,6 @@ def _gate():
         "/api/totp/verify",
         "/api/account/unlock",
         "/api/account/unlock/challenge",
-        # Post-SRP login still has totp_ok=False; the upgrade itself requires a
-        # fresh password proof, so it is safe to finish before the TOTP step.
-        "/api/auth/srp/kdf-upgrade",
-        "/api/auth/srp/kdf-upgrade/challenge",
     }:
         if request.path.startswith("/api/"):
             return jsonify({"error": "2FA required"}), 403

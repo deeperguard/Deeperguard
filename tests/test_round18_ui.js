@@ -45,6 +45,11 @@ const kdfUp = py.slice(py.indexOf('def api_auth_srp_kdf_upgrade('), py.indexOf('
 assert.ok(kdfUp.includes('_complete_stored_srp_proof'));
 assert.ok(kdfUp.includes('SRP_PURPOSE_KDF_UPGRADE'));
 assert.ok(kdfUp.includes('touch_password_changed=False'));
+assert.ok(srp.includes('if (result.totp_required) return result;'));
+const totpPage = fs.readFileSync(path.join(root, 'app/static/js/totp-page.js'), 'utf8');
+assert.ok(totpPage.includes('maybeUpgradeSrpKdf'));
+const gate = py.slice(py.indexOf('if not skipped and auth.needs_totp()'), py.indexOf('return redirect(url_for("totp_page"'));
+assert.ok(!gate.includes('/api/auth/srp/kdf-upgrade'));
 
 // 2. First Escape in the search field clears the query before the sidebar eats it.
 const searchEsc = appJs.indexOf('event.target === ui.search || document.activeElement === ui.search');

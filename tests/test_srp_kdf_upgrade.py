@@ -322,8 +322,9 @@ class SrpKdfUpgradeProofTests(unittest.TestCase):
         self.assertEqual(up.status_code, 400, up.get_json())
         self.assertEqual(up.get_json().get("error"), "already upgraded")
 
-    def test_upgrade_allowed_before_totp(self):
+    def test_upgrade_requires_totp_then_succeeds(self):
         import db as notes_db
+        import pyotp
         import totp as totp_mod
         from srp_auth import generate_verifier_hex, new_srp_salt_hex
 
@@ -341,6 +342,18 @@ class SrpKdfUpgradeProofTests(unittest.TestCase):
         self.assertEqual(login.status_code, 200, login.get_json())
         self.assertTrue(login.get_json().get("totp_required"))
         csrf = self._csrf()
+        before = self._upgrade_challenge(csrf, email)
+        self.assertEqual(before.status_code, 403, before.get_json())
+        self.assertEqual(before.get_json().get("error"), "2FA required")
+        self.assertEqual(notes_db.user_srp_kdf_version(notes_db.get_user_by_email(email)), 1)
+
+        verified = self.client.post(
+            "/api/totp/verify",
+            json={"code": pyotp.TOTP(secret).now()},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(verified.status_code, 200, verified.get_json())
+
         chal = self._upgrade_challenge(csrf, email)
         self.assertEqual(chal.status_code, 200, chal.get_json())
         body = chal.get_json()
@@ -371,10 +384,16 @@ class SrpKdfUpgradeProofTests(unittest.TestCase):
 
     def test_client_upgrade_proves_current_password(self):
         src = (REPO / "app" / "static" / "js" / "srp-auth.js").read_text(encoding="utf-8")
+        totp = (REPO / "app" / "static" / "js" / "totp-page.js").read_text(encoding="utf-8")
+        gate = (REPO / "app" / "app.py").read_text(encoding="utf-8")
+        exemption = gate[gate.index("if not skipped and auth.needs_totp()") : gate.index("return redirect(url_for(\"totp_page\"")]
+        self.assertNotIn("/api/auth/srp/kdf-upgrade", exemption)
+        self.assertIn("if (result.totp_required) return result;", src)
         self.assertIn("/api/auth/srp/kdf-upgrade/challenge", src)
         self.assertIn("A: creds.A", src)
         self.assertIn("M1: creds.M1", src)
         self.assertIn("client.step3(upgraded.M2)", src)
+        self.assertIn("maybeUpgradeSrpKdf", totp)
 
 
 if __name__ == "__main__":

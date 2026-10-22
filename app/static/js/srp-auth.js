@@ -345,6 +345,10 @@
       throw err;
     }
     await client.step3(result.M2);
+    // 2FA sessions are not fully authenticated until /api/totp/verify.
+    // Upgrading before that would let a password-only caller replace the
+    // verifier; totp-page.js finishes the upgrade after TOTP succeeds.
+    if (result.totp_required) return result;
     return maybeUpgradeSrpKdf(email, password, result);
   }
 
@@ -468,6 +472,7 @@
     passwordChangeCommit,
     repairLogin,
     passwordSignIn,
+    maybeUpgradeSrpKdf,
     shouldRetryWithRepairAfterSrp,
     SRP_KDF_V1,
     SRP_KDF_V2,
