@@ -353,12 +353,12 @@ function tipHex(n) {
   assert.strictEqual(NotesFreshness.getPublicSnapshot().startVerified, true);
   assert.strictEqual(NotesFreshness.getPublicSnapshot().canApproveDevice, true);
 
-  // --- UI / verify contracts ---
+  // --- UI / verify contracts (Round 69 refreshed labels; Feature C behavior unchanged) ---
   const appHtml = fs.readFileSync(path.join(root, 'app/templates/app.html'), 'utf8');
-  assert.ok(appHtml.includes('Approve a new device'));
+  assert.ok(appHtml.includes('On a trusted device: Show a code'));
   assert.ok(appHtml.includes('btn-approve-new-device'));
   assert.ok(appHtml.includes('device-start-banner'));
-  assert.ok(appHtml.includes('Confirm this device is up to date'));
+  assert.ok(appHtml.includes('New device: check it has your latest notes.'));
   assert.ok(appHtml.includes("asset_script('js/vendor/qrcode-generator.js')"));
   assert.ok(appHtml.includes('btn-device-start-skip'));
   assert.ok(appHtml.includes('Unverified start'));
