@@ -735,6 +735,13 @@
           <button type="button" id="btn-offline-setup-dismiss" class="btn ghost sm">Not now</button>
         </div>
       </div>
+      <div id="device-start-banner" class="device-start-banner" hidden role="status" aria-live="polite">
+        <p><strong>Confirm this device is up to date</strong> — compare with a device you already trust, or skip and stay labeled Unverified start.</p>
+        <div class="offline-setup-actions">
+          <button type="button" id="btn-device-start-verify" class="btn primary sm">Verify start</button>
+          <button type="button" id="btn-device-start-skip" class="btn ghost sm">Skip</button>
+        </div>
+      </div>
       <div class="sidebar-scroll" id="sidebar-scroll">
         <button type="button" id="btn-drawer-close" class="btn ghost sm drawer-close">Close</button>
       <div class="filter-bar">
@@ -1470,9 +1477,33 @@
           <p class="settings-hint">Devices currently signed in to this account. Sign out a device to end that session and delete its local vault copy when it next connects.</p>
           <div id="vault-freshness-panel" class="vault-freshness-panel" hidden>
             <p class="settings-hint" id="vault-freshness-summary">Vault head on this device: —</p>
-            <p class="settings-hint">Compare the fingerprint with another unlocked device. Matching counter + fingerprint means both devices have seen the same vault tip. A brand-new device trusts the first tip it downloads.</p>
+            <p class="settings-hint" id="vault-freshness-start-label" hidden></p>
+            <p class="settings-hint">Compare the fingerprint with another unlocked device. Matching counter + fingerprint means both devices have seen the same vault tip. A new device stays Unverified start until you approve it from a trusted device (or skip).</p>
             <div class="settings-actions">
               <button type="button" id="btn-compare-vault-head" class="btn">Compare devices</button>
+              <button type="button" id="btn-approve-new-device" class="btn" hidden>Approve a new device</button>
+              <button type="button" id="btn-verify-device-start" class="btn" hidden>Verify start</button>
+            </div>
+            <div id="approve-new-device-panel" class="approve-new-device-panel" hidden>
+              <p class="settings-hint">Show this on a trusted device. Built only from this device’s local verified vault head — never from a fresh server response. Contains counter, tip hash, and time only (no keys or note plaintext).</p>
+              <img id="approve-new-device-qr" class="approve-new-device-qr" alt="Approval QR code" hidden>
+              <p class="settings-hint" id="approve-new-device-meta"></p>
+              <p class="settings-hint"><code id="approve-new-device-code" class="approve-new-device-code"></code></p>
+              <div class="settings-actions">
+                <button type="button" id="btn-approve-new-device-hide" class="btn ghost">Hide</button>
+              </div>
+            </div>
+            <div id="verify-device-start-panel" class="verify-device-start-panel" hidden>
+              <p class="settings-hint">Scan a QR from your other device, enter its short code, or confirm the counter and fingerprint match by eye.</p>
+              <div class="settings-actions">
+                <button type="button" id="btn-device-start-scan-qr" class="btn">Scan QR</button>
+                <button type="button" id="btn-device-start-enter-code" class="btn">Enter code</button>
+                <button type="button" id="btn-device-start-confirm-eye" class="btn">Match by eye</button>
+              </div>
+              <video id="device-start-qr-video" class="device-start-qr-video" playsinline muted hidden></video>
+              <canvas id="device-start-qr-canvas" class="sr-file" hidden></canvas>
+              <p id="device-start-qr-status" class="settings-hint" hidden></p>
+              <p id="vault-freshness-verify-result" class="settings-hint" hidden></p>
             </div>
             <p id="vault-freshness-compare-result" class="settings-hint" hidden></p>
           </div>
@@ -1825,6 +1856,7 @@
           <p class="settings-hint">Client code hash (SHA-256 of the shipped JS/CSS manifest):</p>
           <p class="settings-hint"><code id="about-client-hash" class="about-client-hash">{{ client_hash }}</code></p>
           <p id="about-release-hash-status" class="settings-hint release-hash-status" data-release-hash-status role="status">Checking signed release…</p>
+          <p id="about-device-start-status" class="settings-hint" hidden></p>
           <p class="settings-hint">After load, the browser re-fetches same-origin assets from <code>client-manifest.json</code>, hashes them with SubtleCrypto (canonical <code>manifest_sha256</code> form), and compares that <em>computed</em> value to <code>manifest_sha256</code> on the <a href="{{ release_url }}" target="_blank" rel="noopener noreferrer">GitHub Release{% if release_tag %} <span id="about-release-tag" data-tag="{{ release_tag }}">{{ release_tag }}</span>{% endif %}</a> (public Releases API — not this server). The shell meta above is only a convenience mirror; a mismatch with the computed hash is flagged. A match proves the hashed assets equal that release’s published hash — not Sigstore verification. Loaded <code>&lt;script&gt;</code>/<code>&lt;link&gt;</code> URLs are cross-checked against the manifest (unlisted assets fail the check). Requests time out rather than hanging. This checker script is itself served by the same origin, so independent verification still means <code>cosign</code> or rebuilding from source (see <a href="/verify">/verify</a>).{% if release_signed %} This release publishes a Sigstore bundle.{% endif %}</p>
           <div class="settings-actions">
             <a class="btn" id="about-release-link" href="{{ release_url }}" target="_blank" rel="noopener noreferrer">GitHub Release</a>
@@ -2152,6 +2184,7 @@
   {{ asset_script('js/vault-secrets.js') }}
   {{ asset_script('js/srp-auth.js') }}
   {{ asset_script('js/idb.js') }}
+  {{ asset_script('js/vendor/qrcode-generator.js') }}
   {{ asset_script('js/freshness.js') }}
   {{ asset_script('js/release-integrity.js') }}
   {{ asset_script('js/snimport.js') }}

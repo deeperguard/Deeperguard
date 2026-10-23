@@ -1881,6 +1881,41 @@ html[data-theme="light"] mark.search-hit {
   border-radius: 10px; border: 1px solid var(--warn, #c77d1a);
   background: color-mix(in srgb, var(--warn, #c77d1a) 12%, transparent);
 }
+.device-start-banner {
+  margin: 0 12px 10px; padding: 10px 12px; font-size: .82rem; line-height: 1.4;
+  border-radius: 10px; border: 1px solid var(--warn, #c77d1a);
+  background: color-mix(in srgb, var(--warn, #c77d1a) 12%, transparent);
+}
+.device-start-banner p { margin: 0 0 8px; }
+.device-start-banner .offline-setup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.approve-new-device-panel,
+.verify-device-start-panel {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, rgba(255,255,255,.08));
+}
+.approve-new-device-qr {
+  display: block;
+  width: min(220px, 70vw);
+  height: auto;
+  margin: 8px 0;
+  background: #fff;
+  border-radius: 8px;
+}
+.approve-new-device-code {
+  display: block;
+  word-break: break-all;
+  font-size: .78rem;
+  user-select: all;
+}
+.device-start-qr-video {
+  display: block;
+  width: min(280px, 80vw);
+  max-height: 220px;
+  margin: 8px 0;
+  border-radius: 8px;
+  background: #000;
+}
 .network-status-banner {
   display: flex;
   align-items: flex-start;
@@ -6162,6 +6197,7 @@ body.search-filters-open .fab-stack,
   .sidebar-head { order: 1; }
   #sidebar-update { order: 2; }
   #offline-setup-banner { order: 3; }
+  #device-start-banner { order: 3; }
   .search-wrap { order: 4; }
   .filter-bar { order: 5; }
   .trash-toolbar { order: 6; }

@@ -150,7 +150,7 @@ function reset() {
   const flipped = { ...enc, data: enc.data.slice(0, -4) + (enc.data.endsWith('AAAA') ? 'BBBB' : 'AAAA') };
   await assert.rejects(() => NotesCrypto.decryptObject(key, flipped));
 
-  // --- new device trusts first head ---
+  // --- new device adopts first head as Unverified start (Feature C) ---
   reset();
   const items = new Map();
   items.set('n1', { content: { type: 'note', __fv: 1, __fid: 'n1' }, deleted: false });
@@ -163,7 +163,10 @@ function reset() {
     prev_counter: 0,
   }, items);
   assert.strictEqual(first.bootstrap, true);
+  assert.strictEqual(first.unverified, true);
   assert.strictEqual(NotesFreshness.getPublicSnapshot().counter, 1);
+  assert.strictEqual(NotesFreshness.getPublicSnapshot().startVerified, false);
+  assert.strictEqual(NotesFreshness.getPublicSnapshot().showUnverifiedLabel, true);
 
   // --- freeze: older unknown head ---
   const freeze = await NotesFreshness.evaluateRemoteHead({
@@ -267,9 +270,10 @@ function reset() {
   const verify = fs.readFileSync(path.join(root, 'app/templates/verify.html'), 'utf8');
   assert.ok(verify.includes('data-claim-version="2"'));
   assert.ok(verify.includes('Sync freshness'));
-  assert.ok(verify.includes('trusts the first tip'));
+  assert.ok(verify.includes('Unverified start'));
   assert.ok(verify.includes('No new server-visible fields'));
   assert.ok(verify.includes('Pre-bootstrap history'));
+  assert.ok(verify.includes('out-of-band'));
   const storeJs = fs.readFileSync(path.join(jsRoot, 'store.js'), 'utf8');
   assert.ok(storeJs.includes('NotesFreshness.checkIncoming'));
   assert.ok(storeJs.includes('refreshVaultHead'));

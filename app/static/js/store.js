@@ -5655,6 +5655,8 @@ const NotesStore = (() => {
     if (resetFreshness && typeof NotesFreshness !== 'undefined' && state.cryptoKey) {
       await NotesFreshness.resetAfterIntentionalRestore(state.cryptoKey);
     }
+    let backupVaultHead = null;
+    let backupAnchorLabel = null;
     if (typeof NotesSnImport !== 'undefined') {
       const parsed = NotesSnImport.parse(json, { blobs });
       if (parsed.kind === 'sn-encrypted') throw new Error(parsed.error);
@@ -5749,10 +5751,26 @@ const NotesStore = (() => {
       await persistLocal(row.item_uuid, item);
       const light = strippedAttachmentContent(item.content);
       if (light) item.content = light;
+      if (item.content?.type === 'vault_head') {
+        backupVaultHead = item.content;
+        const rawTs = row.updated_at || item.content.updated_at || data.exported_at || data.created_at;
+        if (rawTs) backupAnchorLabel = String(rawTs).slice(0, 10);
+      }
       if (existing) updated += 1;
       else created += 1;
     }
     await pushDirty();
+    // Optional Feature C: encrypted backup that includes vault_head anchors the restore.
+    if (
+      resetFreshness
+      && backupVaultHead
+      && typeof NotesFreshness !== 'undefined'
+      && typeof NotesFreshness.anchorFromBackup === 'function'
+    ) {
+      try {
+        NotesFreshness.anchorFromBackup(backupVaultHead, backupAnchorLabel);
+      } catch (err) { /* non-fatal */ }
+    }
     return {
       imported: created + updated,
       created,
@@ -5761,6 +5779,7 @@ const NotesStore = (() => {
       keptNewer,
       tags: 0,
       skipped: unchanged + keptNewer,
+      anchoredBackup: !!(resetFreshness && backupVaultHead),
     };
   }
 

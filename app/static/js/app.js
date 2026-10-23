@@ -12975,12 +12975,63 @@
     }, 10000);
   }
 
+  let deviceStartScanTimer = 0;
+  let deviceStartScanStream = null;
+
+  function stopDeviceStartQrScan() {
+    if (deviceStartScanTimer) {
+      clearTimeout(deviceStartScanTimer);
+      deviceStartScanTimer = 0;
+    }
+    if (deviceStartScanStream) {
+      try {
+        deviceStartScanStream.getTracks().forEach((t) => t.stop());
+      } catch (err) { /* ignore */ }
+      deviceStartScanStream = null;
+    }
+    const video = document.getElementById('device-start-qr-video');
+    if (video) {
+      try { video.srcObject = null; } catch (err) { /* ignore */ }
+      video.hidden = true;
+    }
+  }
+
+  function renderDeviceStartBanner() {
+    const banner = document.getElementById('device-start-banner');
+    if (!banner || typeof NotesFreshness === 'undefined') return;
+    if (!NotesStore.isUnlocked?.()) {
+      banner.hidden = true;
+      return;
+    }
+    const snap = NotesFreshness.getPublicSnapshot();
+    banner.hidden = !snap.needsStartConfirm;
+  }
+
+  function renderAboutDeviceStartStatus() {
+    const el = document.getElementById('about-device-start-status');
+    if (!el || typeof NotesFreshness === 'undefined') return;
+    if (!NotesStore.isUnlocked?.()) {
+      el.hidden = true;
+      return;
+    }
+    const snap = NotesFreshness.getPublicSnapshot();
+    if (snap.showUnverifiedLabel || snap.startStatus === 'anchored_backup') {
+      el.hidden = false;
+      el.textContent = snap.startLabel || 'Unverified start';
+    } else {
+      el.hidden = true;
+      el.textContent = '';
+    }
+  }
+
   function renderVaultFreshnessPanel() {
     const panel = document.getElementById('vault-freshness-panel');
     const summary = document.getElementById('vault-freshness-summary');
     if (!panel || !summary || typeof NotesFreshness === 'undefined') return;
     if (!NotesStore.isUnlocked?.()) {
       panel.hidden = true;
+      renderDeviceStartBanner();
+      renderAboutDeviceStartStatus();
       return;
     }
     const snap = NotesFreshness.getPublicSnapshot();
@@ -12989,7 +13040,170 @@
     const fp = snap.fingerprint || '—';
     summary.textContent = snap.tip
       ? `Vault head on this device: counter ${counter} · fingerprint ${fp}`
-      : 'Vault head on this device: none yet (will trust the first tip after sync).';
+      : 'Vault head on this device: none yet (sync to adopt a tip — it stays Unverified start until you approve).';
+    const startLabel = document.getElementById('vault-freshness-start-label');
+    if (startLabel) {
+      if (snap.startLabel) {
+        startLabel.hidden = false;
+        startLabel.textContent = snap.startLabel;
+      } else {
+        startLabel.hidden = true;
+        startLabel.textContent = '';
+      }
+    }
+    const approveBtn = document.getElementById('btn-approve-new-device');
+    if (approveBtn) approveBtn.hidden = !snap.canApproveDevice;
+    const verifyBtn = document.getElementById('btn-verify-device-start');
+    if (verifyBtn) verifyBtn.hidden = !(snap.showUnverifiedLabel);
+    if (snap.startVerified) {
+      const verifyPanel = document.getElementById('verify-device-start-panel');
+      if (verifyPanel) verifyPanel.hidden = true;
+      stopDeviceStartQrScan();
+    }
+    renderDeviceStartBanner();
+    renderAboutDeviceStartStatus();
+  }
+
+  function showApproveNewDevicePanel() {
+    const panel = document.getElementById('approve-new-device-panel');
+    const img = document.getElementById('approve-new-device-qr');
+    const meta = document.getElementById('approve-new-device-meta');
+    const codeEl = document.getElementById('approve-new-device-code');
+    if (typeof NotesFreshness === 'undefined') return;
+    let payload;
+    try {
+      payload = NotesFreshness.buildApprovalPayload();
+    } catch (err) {
+      toast(err.message || 'Cannot build approval code', true);
+      return;
+    }
+    if (panel) panel.hidden = false;
+    if (meta) {
+      meta.textContent = `Counter ${payload.counter} · fingerprint ${payload.fingerprint}`;
+    }
+    if (codeEl) codeEl.textContent = payload.code;
+    if (img) {
+      const url = NotesFreshness.renderApprovalQrDataUrl(payload);
+      if (url) {
+        img.src = url;
+        img.hidden = false;
+      } else {
+        img.hidden = true;
+      }
+    }
+  }
+
+  function hideApproveNewDevicePanel() {
+    const panel = document.getElementById('approve-new-device-panel');
+    if (panel) panel.hidden = true;
+  }
+
+  function showVerifyDeviceStartPanel() {
+    const panel = document.getElementById('verify-device-start-panel');
+    if (panel) panel.hidden = false;
+    if (typeof NotesFreshness !== 'undefined') {
+      NotesFreshness.reopenStartVerification();
+    }
+    renderVaultFreshnessPanel();
+    const settings = document.getElementById('settings-panel');
+    if (settings && settings.hidden) {
+      document.getElementById('btn-settings')?.click();
+    }
+  }
+
+  function applyDeviceStartVerifyResult(result) {
+    const resultEl = document.getElementById('vault-freshness-verify-result');
+    if (resultEl) {
+      resultEl.hidden = false;
+      resultEl.textContent = result.message || (result.ok ? 'Verified.' : 'Not verified.');
+    }
+    toast(result.message || (result.ok ? 'Start verified' : 'Not verified'), !result.ok);
+    renderVaultFreshnessPanel();
+    if (result.ok) {
+      stopDeviceStartQrScan();
+      const panel = document.getElementById('verify-device-start-panel');
+      if (panel) panel.hidden = true;
+    }
+  }
+
+  async function enterDeviceStartCode() {
+    if (typeof NotesFreshness === 'undefined') return;
+    const raw = window.prompt('Enter the short approval code from your other device.', '');
+    if (raw == null) return;
+    applyDeviceStartVerifyResult(NotesFreshness.verifyAnchor(raw));
+  }
+
+  async function confirmDeviceStartByEye() {
+    if (typeof NotesFreshness === 'undefined') return;
+    const snap = NotesFreshness.getPublicSnapshot();
+    const ok = await confirmAction(
+      `On your other (trusted) device, open Settings → Signed-in devices → Approve a new device and confirm it shows counter ${snap.counter} and fingerprint ${snap.fingerprint}.`,
+      {
+        title: 'Match by eye?',
+        confirmLabel: 'They match',
+        cancelLabel: 'Cancel',
+      },
+    );
+    if (!ok) return;
+    applyDeviceStartVerifyResult(NotesFreshness.confirmStartByEye());
+  }
+
+  function decodeDeviceStartQrFromVideo() {
+    const video = document.getElementById('device-start-qr-video');
+    const canvas = document.getElementById('device-start-qr-canvas');
+    if (!video || !canvas || video.readyState < 2) return '';
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) return '';
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return '';
+    ctx.drawImage(video, 0, 0, width, height);
+    const image = ctx.getImageData(0, 0, width, height);
+    if (typeof jsQR !== 'function') return '';
+    const result = jsQR(image.data, width, height, { inversionAttempts: 'attemptBoth' });
+    return result && result.data ? String(result.data) : '';
+  }
+
+  async function startDeviceStartQrScan() {
+    const status = document.getElementById('device-start-qr-status');
+    const video = document.getElementById('device-start-qr-video');
+    stopDeviceStartQrScan();
+    if (!navigator.mediaDevices?.getUserMedia || !video) {
+      toast('Camera is not available on this device.', true);
+      return;
+    }
+    try {
+      deviceStartScanStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' } },
+      });
+      video.srcObject = deviceStartScanStream;
+      video.hidden = false;
+      await video.play();
+      if (status) {
+        status.hidden = false;
+        status.textContent = 'Point the camera at the approval QR.';
+      }
+      const tick = () => {
+        const value = decodeDeviceStartQrFromVideo();
+        if (value) {
+          stopDeviceStartQrScan();
+          if (status) {
+            status.hidden = false;
+            status.textContent = 'QR scanned.';
+          }
+          applyDeviceStartVerifyResult(NotesFreshness.verifyAnchor(value));
+          return;
+        }
+        deviceStartScanTimer = setTimeout(tick, 250);
+      };
+      deviceStartScanTimer = setTimeout(tick, 250);
+    } catch (err) {
+      stopDeviceStartQrScan();
+      toast(err.message || 'Could not open the camera.', true);
+    }
   }
 
   async function compareVaultHeadWithPrompt() {
@@ -13049,6 +13263,33 @@
   wireFreshnessWarnings();
   document.getElementById('btn-compare-vault-head')?.addEventListener('click', () => {
     compareVaultHeadWithPrompt().catch((err) => toast(err.message || 'Compare failed', true));
+  });
+  document.getElementById('btn-approve-new-device')?.addEventListener('click', () => {
+    showApproveNewDevicePanel();
+  });
+  document.getElementById('btn-approve-new-device-hide')?.addEventListener('click', () => {
+    hideApproveNewDevicePanel();
+  });
+  document.getElementById('btn-verify-device-start')?.addEventListener('click', () => {
+    showVerifyDeviceStartPanel();
+  });
+  document.getElementById('btn-device-start-verify')?.addEventListener('click', () => {
+    showVerifyDeviceStartPanel();
+  });
+  document.getElementById('btn-device-start-skip')?.addEventListener('click', () => {
+    if (typeof NotesFreshness === 'undefined') return;
+    NotesFreshness.skipStartVerification();
+    toast('Skipped — this device stays labeled Unverified start.');
+    renderVaultFreshnessPanel();
+  });
+  document.getElementById('btn-device-start-scan-qr')?.addEventListener('click', () => {
+    startDeviceStartQrScan().catch((err) => toast(err.message || 'Scan failed', true));
+  });
+  document.getElementById('btn-device-start-enter-code')?.addEventListener('click', () => {
+    enterDeviceStartCode().catch((err) => toast(err.message || 'Verify failed', true));
+  });
+  document.getElementById('btn-device-start-confirm-eye')?.addEventListener('click', () => {
+    confirmDeviceStartByEye().catch((err) => toast(err.message || 'Confirm failed', true));
   });
 
   async function loadSignedInDevices() {
