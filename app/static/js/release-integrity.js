@@ -1,25 +1,29 @@
 /**
  * Client-side build-hash check against the published GitHub Release.
  *
- * Local hash: meta[name="notes-client-hash"] (same value as client-manifest.json
- * → manifest_sha256, stamped into the shell when the origin served it).
+ * Local hash: SHA-256 over the canonical manifest form of the same-origin
+ * assets listed in /static/client-manifest.json (fetch each asset URL, hash
+ * bytes with SubtleCrypto). The shell meta notes-client-hash is only a
+ * convenience mirror — if it differs from the computed value, that is flagged.
  *
- * Expected hash: public GitHub Releases API JSON for the matching tag (or
- * latest). The release body embeds `manifest_sha256` from the same workflow
- * that publishes and Sigstore-signs client-manifest.json. Release asset
- * download URLs redirect to release-assets.githubusercontent.com, which does
- * not send Access-Control-Allow-Origin, so the browser cannot read the asset
- * body; the Releases API JSON is CORS-enabled (*) and is the clean path.
+ * Expected hash: public GitHub Releases API JSON for the preferred tag. The
+ * release body embeds `manifest_sha256` from the signing workflow. Release
+ * asset CDN bodies lack CORS ACAO, so the API JSON is the clean path.
  *
- * A hash match proves the served client hash equals the hash published with
- * that release. It is NOT Sigstore/cosign signature verification — do that
- * with cosign (see /verify). Never blocks the app; never sends vault data.
+ * Also fetches /releases/latest (cached) and warns when the matched tag is
+ * older than latest — warning, not an error.
+ *
+ * Honesty: a match proves the hashed same-origin assets equal the hash
+ * published with that release. The checker script itself is served by the
+ * same origin, so independent verification still means cosign / building from
+ * source. Not Sigstore verification. Never blocks the app; never sends vault data.
  */
 (function (global) {
   const REPO = 'deeperguard/Deeperguard';
   const API = 'https://api.github.com';
-  const CACHE_KEY = 'notes_release_hash_check_v1';
-  const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h — stay under unauthenticated API budget
+  const MANIFEST_URL = '/static/client-manifest.json';
+  const CACHE_KEY = 'notes_release_hash_check_v2';
+  const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
   const RATE_COOLDOWN_MS = 60 * 60 * 1000;
 
   const STATUS = {
@@ -57,7 +61,8 @@
     }
   }
 
-  function localClientHash() {
+  /** Convenience mirror from the shell (may be stamped by a tampered origin). */
+  function metaClientHash() {
     const fromMeta = metaContent('notes-client-hash').toLowerCase();
     if (/^[a-f0-9]{64}$/.test(fromMeta)) return fromMeta;
     try {
@@ -66,6 +71,11 @@
       if (/^[a-f0-9]{64}$/.test(text)) return text;
     } catch (err) { /* ignore */ }
     return '';
+  }
+
+  // Back-compat alias used by older tests / callers.
+  function localClientHash() {
+    return metaClientHash();
   }
 
   function preferredTag() {
@@ -99,8 +109,8 @@
     } catch (err) { /* quota / private mode */ }
   }
 
-  function cacheLooksFresh(doc, localHash, tag) {
-    if (!doc || doc.localHash !== localHash) return false;
+  function cacheLooksFresh(doc, computedHash, tag) {
+    if (!doc || doc.localHash !== computedHash) return false;
     if ((tag || '') !== (doc.tag || '')) return false;
     const at = Number(doc.checkedAt || 0);
     if (!at || (Date.now() - at) > CACHE_TTL_MS) return false;
@@ -109,23 +119,58 @@
       || doc.status === STATUS.unavailable;
   }
 
+  function parseTagParts(tag) {
+    const m = String(tag || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)/i);
+    if (!m) return null;
+    return [Number(m[1]), Number(m[2]), Number(m[3])];
+  }
+
+  function tagOlderThan(a, b) {
+    const pa = parseTagParts(a);
+    const pb = parseTagParts(b);
+    if (!pa || !pb) return false;
+    for (let i = 0; i < 3; i += 1) {
+      if (pa[i] < pb[i]) return true;
+      if (pa[i] > pb[i]) return false;
+    }
+    return false;
+  }
+
   function formatMessage(result) {
     if (!result) return 'Checking signed release…';
-    if (result.status === STATUS.match) {
-      return `Matches signed release ${result.tag || ''}`.trim();
+    if (result.status === STATUS.pending) return 'Checking signed release…';
+
+    if (result.failedAssets && result.failedAssets.length) {
+      const list = result.failedAssets.slice(0, 8).join(', ');
+      const more = result.failedAssets.length > 8
+        ? ` (+${result.failedAssets.length - 8} more)`
+        : '';
+      return `Could not check — failed to hash: ${list}${more}`;
     }
-    if (result.status === STATUS.mismatch) {
-      return 'Does not match';
+
+    if (result.status === STATUS.mismatch) return 'Does not match';
+    if (result.status === STATUS.unavailable) {
+      return 'Could not check (offline / rate-limited)';
     }
-    if (result.status === STATUS.pending) {
-      return 'Checking signed release…';
+
+    // match
+    let msg;
+    if (result.signed) {
+      msg = `Matches signed release ${result.tag || ''}`.trim();
+    } else {
+      msg = `Matches release ${result.tag || ''} (not Sigstore-signed)`.trim();
     }
-    return 'Could not check (offline / rate-limited)';
+    if (result.newerTag) {
+      msg += ` — newer release ${result.newerTag} exists`;
+    }
+    if (result.metaMismatch) {
+      msg += ' (shell meta hash differs from computed)';
+    }
+    return msg;
   }
 
   function parseManifestShaFromBody(body) {
     const text = String(body || '');
-    // Release workflow body: `manifest_sha256`: `<64 hex>`
     let m = text.match(/`manifest_sha256`\s*:\s*`([a-f0-9]{64})`/i);
     if (m) return m[1].toLowerCase();
     m = text.match(/manifest_sha256[`\s:=]+([a-f0-9]{64})/i);
@@ -136,6 +181,107 @@
   function releaseHasSigstore(assets) {
     if (!Array.isArray(assets)) return false;
     return assets.some((a) => a && String(a.name || '') === 'client-manifest.sigstore.json');
+  }
+
+  async function sha256Hex(buffer) {
+    const subtle = global.crypto && global.crypto.subtle;
+    if (!subtle || typeof subtle.digest !== 'function') {
+      const err = new Error('no SubtleCrypto');
+      err.code = 'no_crypto';
+      throw err;
+    }
+    const digest = await subtle.digest('SHA-256', buffer);
+    const bytes = new Uint8Array(digest);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i += 1) {
+      hex += bytes[i].toString(16).padStart(2, '0');
+    }
+    return hex;
+  }
+
+  /**
+   * Fetch same-origin client-manifest.json, hash each listed asset URL, then
+   * SHA-256 the canonical "logical:sha256\\n…" payload (same as build script).
+   */
+  async function computeLocalManifestHash() {
+    const metaHash = metaClientHash();
+    const failedAssets = [];
+    let doc;
+    try {
+      const resp = await global.fetch(MANIFEST_URL, {
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      if (!resp.ok) {
+        return {
+          computedHash: '',
+          metaHash,
+          failedAssets: ['client-manifest.json'],
+          metaMismatch: false,
+        };
+      }
+      doc = await resp.json();
+    } catch (err) {
+      return {
+        computedHash: '',
+        metaHash,
+        failedAssets: ['client-manifest.json'],
+        metaMismatch: false,
+      };
+    }
+
+    const assets = (doc && doc.assets) || {};
+    const keys = Object.keys(assets).sort();
+    if (!keys.length) {
+      return {
+        computedHash: '',
+        metaHash,
+        failedAssets: ['client-manifest.json (empty assets)'],
+        metaMismatch: false,
+      };
+    }
+
+    const lines = [];
+    for (let i = 0; i < keys.length; i += 1) {
+      const key = keys[i];
+      const info = assets[key] || {};
+      const url = String(info.url || `/static/${key}`);
+      try {
+        const resp = await global.fetch(url, {
+          method: 'GET',
+          credentials: 'same-origin',
+          cache: 'force-cache',
+        });
+        if (!resp.ok) {
+          failedAssets.push(key);
+          continue;
+        }
+        const buf = await resp.arrayBuffer();
+        const hex = await sha256Hex(buf);
+        lines.push(`${key}:${hex}`);
+      } catch (err) {
+        failedAssets.push(key);
+      }
+    }
+
+    if (failedAssets.length) {
+      return {
+        computedHash: '',
+        metaHash,
+        failedAssets,
+        metaMismatch: false,
+      };
+    }
+
+    const payload = new TextEncoder().encode(lines.join('\n'));
+    const computedHash = await sha256Hex(payload);
+    return {
+      computedHash,
+      metaHash,
+      failedAssets: [],
+      metaMismatch: !!(metaHash && computedHash && metaHash !== computedHash),
+    };
   }
 
   async function fetchReleaseJson(tag) {
@@ -167,7 +313,6 @@
       throw err;
     }
     if (remaining !== null && Number(remaining) <= 0) {
-      // Body may still be usable this once; note cooldown for next time.
       writeCache({
         ...(readCache() || {}),
         rateLimitedUntil: reset ? Number(reset) * 1000 : Date.now() + RATE_COOLDOWN_MS,
@@ -176,15 +321,19 @@
     return resp.json();
   }
 
-  function resultFromParts({ status, tag, localHash, expectedHash, signed, reason }) {
+  function resultFromParts(parts) {
     const result = {
-      status,
-      tag: tag || '',
-      localHash: localHash || '',
-      expectedHash: expectedHash || '',
-      signed: !!signed,
-      reason: reason || '',
+      status: parts.status || STATUS.unavailable,
+      tag: parts.tag || '',
+      localHash: parts.localHash || '',
+      expectedHash: parts.expectedHash || '',
+      signed: !!parts.signed,
+      reason: parts.reason || '',
       checkedAt: Date.now(),
+      metaHash: parts.metaHash || '',
+      metaMismatch: !!parts.metaMismatch,
+      newerTag: parts.newerTag || '',
+      failedAssets: Array.isArray(parts.failedAssets) ? parts.failedAssets : [],
       message: '',
     };
     result.message = formatMessage(result);
@@ -193,20 +342,50 @@
 
   async function runCheck(opts) {
     const force = !!(opts && opts.force);
-    const localHash = localClientHash();
     const tag = preferredTag();
+
+    let computed;
+    try {
+      computed = await computeLocalManifestHash();
+    } catch (err) {
+      const code = err && err.code;
+      return resultFromParts({
+        status: STATUS.unavailable,
+        tag,
+        metaHash: metaClientHash(),
+        reason: code || 'compute_failed',
+        failedAssets: code === 'no_crypto' ? ['SubtleCrypto unavailable'] : [],
+      });
+    }
+
+    const localHash = computed.computedHash;
+    const metaHash = computed.metaHash;
+    const failedAssets = computed.failedAssets || [];
+    const metaMismatch = !!computed.metaMismatch;
+
+    if (failedAssets.length) {
+      return resultFromParts({
+        status: STATUS.unavailable,
+        tag,
+        metaHash,
+        metaMismatch,
+        failedAssets,
+        reason: 'asset_hash_failed',
+      });
+    }
 
     if (!localHash) {
       return resultFromParts({
         status: STATUS.unavailable,
         tag,
+        metaHash,
         reason: 'no_local_hash',
       });
     }
 
     const cached = readCache();
     if (!force && cacheLooksFresh(cached, localHash, tag)) {
-      return {
+      const restored = {
         status: cached.status,
         tag: cached.tag || tag,
         localHash,
@@ -214,9 +393,14 @@
         signed: !!cached.signed,
         reason: cached.reason || 'cache',
         checkedAt: cached.checkedAt,
-        message: formatMessage(cached),
+        metaHash: cached.metaHash || metaHash,
+        metaMismatch: cached.metaMismatch != null ? !!cached.metaMismatch : metaMismatch,
+        newerTag: cached.newerTag || '',
+        failedAssets: [],
         fromCache: true,
       };
+      restored.message = formatMessage(restored);
+      return restored;
     }
 
     const rateUntil = Number((cached && cached.rateLimitedUntil) || 0);
@@ -225,6 +409,8 @@
         status: STATUS.unavailable,
         tag,
         localHash,
+        metaHash,
+        metaMismatch,
         reason: 'rate_limited',
       });
     }
@@ -235,12 +421,33 @@
       const expectedHash = parseManifestShaFromBody(release.body);
       const signed = releaseHasSigstore(release.assets);
 
+      let newerTag = '';
+      try {
+        // One extra call; skipped when preferred tag already is latest.
+        const latest = await fetchReleaseJson('');
+        const latestTag = String(latest.tag_name || '').trim();
+        if (latestTag && releaseTag && tagOlderThan(releaseTag, latestTag)) {
+          newerTag = latestTag;
+        }
+      } catch (err) {
+        // Latest probe is best-effort; do not fail the whole check.
+        if (err && err.code === 'rate_limited') {
+          writeCache({
+            ...(readCache() || {}),
+            rateLimitedUntil: err.resetAt || (Date.now() + RATE_COOLDOWN_MS),
+          });
+        }
+      }
+
       if (!expectedHash) {
         const unavailable = resultFromParts({
           status: STATUS.unavailable,
           tag: releaseTag,
           localHash,
+          metaHash,
+          metaMismatch,
           signed,
+          newerTag,
           reason: 'no_hash_in_release',
         });
         writeCache({ ...unavailable, localHash, rateLimitedUntil: 0 });
@@ -248,32 +455,18 @@
       }
 
       const match = expectedHash === localHash;
-      // Only claim "signed release" match when the release publishes a Sigstore bundle.
-      // A bare hash match on an unsigned release still uses status=match but message
-      // stays honest via formatMessage only when signed; if unsigned, treat as match
-      // with tag but message "Matches signed release" would be wrong — require signed.
-      if (match && !signed) {
-        const result = resultFromParts({
-          status: STATUS.match,
-          tag: releaseTag,
-          localHash,
-          expectedHash,
-          signed: false,
-          reason: 'hash_match_unsigned',
-        });
-        // Honest copy when the release is not Sigstore-signed yet.
-        result.message = `Matches release ${releaseTag} (not Sigstore-signed)`.trim();
-        writeCache({ ...result, localHash, rateLimitedUntil: 0 });
-        return result;
-      }
-
       const result = resultFromParts({
         status: match ? STATUS.match : STATUS.mismatch,
         tag: releaseTag,
         localHash,
         expectedHash,
         signed,
-        reason: match ? 'hash_match' : 'hash_mismatch',
+        metaHash,
+        metaMismatch,
+        newerTag,
+        reason: match
+          ? (signed ? 'hash_match' : 'hash_match_unsigned')
+          : 'hash_mismatch',
       });
       writeCache({ ...result, localHash, rateLimitedUntil: 0 });
       return result;
@@ -294,6 +487,8 @@
         status: STATUS.unavailable,
         tag,
         localHash,
+        metaHash,
+        metaMismatch,
         reason: code || 'network',
       });
     }
@@ -302,19 +497,35 @@
   function paint(el, result) {
     if (!el) return;
     const r = result || lastResult;
-    const text = r ? (r.message || formatMessage(r)) : 'Checking signed release…';
+    let text = r ? (r.message || formatMessage(r)) : 'Checking signed release…';
+    const prefix = el.getAttribute('data-status-prefix') || '';
+    if (prefix) {
+      const bare = text.replace(/^Status:\s*/i, '');
+      text = `${prefix}${bare}`;
+    }
     el.textContent = text;
     el.dataset.status = r ? r.status : STATUS.pending;
+    if (r && r.newerTag) el.dataset.newer = r.newerTag;
+    else el.removeAttribute('data-newer');
+    if (r && r.metaMismatch) el.dataset.metaMismatch = '1';
+    else el.removeAttribute('data-meta-mismatch');
     el.hidden = false;
     el.removeAttribute('hidden');
-    el.classList.remove('release-check-match', 'release-check-mismatch', 'release-check-unavailable', 'release-check-pending');
-    const cls = r && r.status === STATUS.match
-      ? 'release-check-match'
-      : r && r.status === STATUS.mismatch
-        ? 'release-check-mismatch'
-        : r && r.status === STATUS.pending
-          ? 'release-check-pending'
-          : 'release-check-unavailable';
+    el.classList.remove(
+      'release-check-match',
+      'release-check-mismatch',
+      'release-check-unavailable',
+      'release-check-pending',
+      'release-check-warn',
+    );
+    let cls = 'release-check-unavailable';
+    if (r && r.status === STATUS.match) {
+      cls = (r.newerTag || r.metaMismatch) ? 'release-check-warn' : 'release-check-match';
+    } else if (r && r.status === STATUS.mismatch) {
+      cls = 'release-check-mismatch';
+    } else if (r && r.status === STATUS.pending) {
+      cls = 'release-check-pending';
+    }
     el.classList.add(cls);
     if (r && r.status === STATUS.mismatch) {
       el.setAttribute('role', 'alert');
@@ -334,7 +545,11 @@
 
   async function ensureChecked(opts) {
     if (inflight) return inflight;
-    const pending = resultFromParts({ status: STATUS.pending, tag: preferredTag(), localHash: localClientHash() });
+    const pending = resultFromParts({
+      status: STATUS.pending,
+      tag: preferredTag(),
+      metaHash: metaClientHash(),
+    });
     emit(pending);
     paintAll(pending);
     inflight = runCheck(opts).then((result) => {
@@ -342,12 +557,12 @@
       emit(result);
       paintAll(result);
       return result;
-    }, (err) => {
+    }, () => {
       inflight = null;
       const result = resultFromParts({
         status: STATUS.unavailable,
         tag: preferredTag(),
-        localHash: localClientHash(),
+        metaHash: metaClientHash(),
         reason: 'error',
       });
       emit(result);
@@ -358,7 +573,6 @@
   }
 
   function start(opts) {
-    // Never block app boot — schedule after the current turn.
     try {
       if (typeof global.requestIdleCallback === 'function') {
         global.requestIdleCallback(() => { ensureChecked(opts); }, { timeout: 4000 });
@@ -374,7 +588,6 @@
     return lastResult;
   }
 
-  // Auto-start when this script is the page's integrity helper (app + /verify).
   function autoStart() {
     try {
       if (!global.document) return;
@@ -389,9 +602,14 @@
   const api = {
     STATUS,
     localClientHash,
+    metaClientHash,
     preferredTag,
     parseManifestShaFromBody,
+    parseTagParts,
+    tagOlderThan,
     formatMessage,
+    computeLocalManifestHash,
+    sha256Hex,
     runCheck,
     ensureChecked,
     start,
@@ -399,10 +617,10 @@
     paintAll,
     onChange,
     getResult,
-    // test hooks
     _readCache: readCache,
     _writeCache: writeCache,
     _CACHE_KEY: CACHE_KEY,
+    _MANIFEST_URL: MANIFEST_URL,
   };
 
   global.NotesReleaseIntegrity = api;

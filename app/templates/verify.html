@@ -147,40 +147,52 @@ await NotesStore.testDemoRollbackWarning(uuid, 9);
           <li><strong>Colluding malicious clients</strong> — a device that willingly resets high-water marks (or never ran a current client) can accept older tips; compare fingerprints across devices you control.</li>
         </ul>
         <h3>How to check the code you’re running</h3>
-        <p id="verify-release-hash-status" class="mk-release-hash-status" data-release-hash-status role="status">Checking signed release…</p>
         <p>
-          After load, this page (and <strong>Settings → About</strong>) compares the
-          shell’s <code>notes-client-hash</code> to the <code>manifest_sha256</code>
-          published on the matching
+          After load, this page (and <strong>Settings → About</strong>) fetches
+          same-origin assets listed in <code>/static/client-manifest.json</code>,
+          hashes them in the browser (SubtleCrypto, canonical
+          <code>manifest_sha256</code> form), and compares that computed value to
+          the <code>manifest_sha256</code> published on the matching
           <a href="{{ release_url }}" rel="noopener noreferrer">GitHub Release{% if release_tag %} {{ release_tag }}{% endif %}</a>
-          by fetching the public GitHub Releases API in your browser
-          (<code>api.github.com</code>). The expected value does <strong>not</strong>
-          come from the Deeperguard server. Outcomes:
-          <em>Matches signed release vX.Y.Z</em>,
-          <em>Does not match</em> (only when a release hash was fetched and differs — no false alarms on network errors),
-          or <em>Could not check (offline / rate-limited)</em>.
+          via the public GitHub Releases API (<code>api.github.com</code>). The
+          expected value does <strong>not</strong> come from the Deeperguard
+          server. The shell <code>notes-client-hash</code> meta is only a
+          convenience mirror — if it differs from the computed hash, that is
+          flagged. Outcomes:
+          <em>Matches signed release vX.Y.Z</em>
+          (optionally <em>— newer release vA.B.C exists</em> when the matched
+          tag is older than <code>/releases/latest</code>),
+          <em>Does not match</em> (only when a release hash was fetched and
+          differs — no false alarms on network errors),
+          or <em>Could not check</em> (offline / rate-limited, or naming any
+          assets that could not be hashed).
           The check never blocks the app and never sends note data.
         </p>
+        <p class="mk-release-hash-status-line">
+          <span id="verify-release-hash-status" class="mk-release-hash-status" data-release-hash-status data-status-prefix="Status: " role="status">Status: Checking signed release…</span>
+        </p>
         <p>
-          <strong>Honesty:</strong> a hash match proves the served client equals the
-          hash published with that release. It is <strong>not</strong> Sigstore
-          signature verification. Release asset download URLs redirect to
+          <strong>Honesty:</strong> a hash match proves the same-origin assets
+          hashed in this browser equal the hash published with that release. It
+          is <strong>not</strong> Sigstore signature verification. The checker
+          script (<code>release-integrity.js</code>) is itself served by this
+          origin, so a compromised server could still lie — independent
+          verification means <code>cosign</code> / rebuilding from source below.
+          Release asset download URLs redirect to
           <code>release-assets.githubusercontent.com</code>, which does not send
           <code>Access-Control-Allow-Origin</code>, so the browser cannot read
-          <code>client-manifest.json</code> / the Sigstore bundle directly; the
-          Releases API JSON (CORS <code>*</code>) embeds the same
-          <code>manifest_sha256</code> from the signing workflow. Full signature
-          verification is done with <code>cosign</code> below — in-browser Sigstore
-          bundle verification is not implemented.
+          the release <code>client-manifest.json</code> / Sigstore bundle
+          directly; the Releases API JSON (CORS <code>*</code>) embeds the same
+          <code>manifest_sha256</code> from the signing workflow.
         </p>
         <ol>
           <li>
             In the unlocked app open <strong>Settings → About</strong>, or read the
-            status line above. Note the full
+            <strong>Status</strong> line above. Note the full
             <strong>client code hash</strong> (also in the page’s
             <code>notes-client-hash</code> meta tag and in
-            <code>GET /api/health</code> as <code>client_hash</code> — health is a
-            convenience mirror, not the source of the automatic check).
+            <code>GET /api/health</code> as <code>client_hash</code> — health/meta
+            are convenience mirrors; the automatic check hashes loaded assets).
           </li>
           <li>
             Open the matching

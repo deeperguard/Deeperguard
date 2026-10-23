@@ -82,8 +82,12 @@ class Round65ReleaseHashTests(unittest.TestCase):
         self.assertIn('name="notes-release-tag"', html)
         self.assertIn("api.github.com", html)
         self.assertIn("release-integrity", html)
-        self.assertIn("Could not check (offline / rate-limited)", html)
+        self.assertIn("Could not check", html)
         self.assertIn("Does not match", html)
+        self.assertIn("data-status-prefix", html)
+        self.assertIn("Status:", html)
+        self.assertIn("SubtleCrypto", html)
+        self.assertIn("newer release", html)
 
     def test_about_has_status(self):
         from config import app_entry_path
