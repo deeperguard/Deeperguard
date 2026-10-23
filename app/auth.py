@@ -18,14 +18,12 @@ from db import (
     consume_srp_challenge,
     create_srp_challenge,
     create_user_session,
-    get_active_session_for_device,
     get_first_user,
     get_latest_session_for_device,
     get_session_by_token,
     get_user_by_id,
     get_user_by_email,
     revoke_session_by_token,
-    rotate_session_token,
     touch_user_session,
 )
 from passwords import verify_password
@@ -173,36 +171,23 @@ def _record_device_session(user_id: int, *, login: bool = True) -> str:
     )
 
 
-def _align_session_with_request(user_id: int, row) -> str:
-    """Keep THIS DEVICE on the browser that holds the cookie.
+def _align_session_with_request(_user_id: int, row) -> str:
+    """Refresh THIS cookie's own session row — never another live row.
 
-    A later login on this browser can leave the cookie pointing at an older
-    row (often still labeled with a previous user agent). When the request
-    names a device id, adopt that device's live session. Otherwise refresh
-    the cookie row's label so it describes this request, and never steal a
-    different row just because the user-agent string matches.
+    L-17: an authenticated request that names another live same-user
+    ``X-Device-Id`` must not adopt that row or rotate its token (that would
+    invalidate the other browser's cookie). Only retitle this cookie's row
+    when it already names this device or has no device id yet.
     """
     ua = str(request.headers.get("User-Agent") or "")
     label = device_label(ua)
     device_id = request_device_id()
     ip = client_ip()
     loc = ip_location(ip)
-    owner = get_active_session_for_device(user_id, device_id) if device_id else None
-    if owner and int(owner["id"]) != int(row["id"]):
-        rebound = rotate_session_token(int(owner["id"]), int(user_id))
-        if rebound:
-            touch_user_session(
-                int(owner["id"]),
-                ip=ip,
-                ip_location=loc,
-                user_agent=ua,
-                device_label=label,
-            )
-            return rebound
     cookie_device = str(row["device_id"] or "")
     if cookie_device and cookie_device != device_id:
         # This cookie belongs to a known device the request did not name.
-        # Keep its label; a user-agent string must not retitle another browser.
+        # Keep its label; do not adopt or rotate a different live row.
         touch_user_session(int(row["id"]), ip=ip, ip_location=loc)
         return ""
     stored_label = str(row["device_label"] or "")
@@ -573,11 +558,12 @@ def public_path(path: str) -> bool:
         # as a stored verifier proof). Kept public so sign-in still works.
         "/api/auth/repair-login",
         "/api/auth/repair-login/challenge",
-        "/api/auth/vault-recovery",
-        "/api/auth/vault-recovery/challenge",
+        # verify-vault is prove-only (no verifier write). resync is a pre-login
+        # leftover-hash repair; the handler 403s a TOTP-pending session.
         "/api/auth/verify-vault",
         "/api/auth/srp/resync",
-        "/api/auth/srp/upgrade",
+        # vault-recovery and srp/upgrade write salt/verifier. They require a
+        # session and must not skip the 2FA gate (L-22; same as kdf-upgrade).
     }:
         return True
     if base in {"/api/contact", "/api/promo", "/robots.txt", "/sitemap.xml", "/.well-known/security.txt"}:
@@ -755,13 +741,37 @@ def content_security_policy() -> str:
     nonce = csp_nonce()
     # Optional Google Drive backups (GIS token client + drive.file). Allowed
     # only so the client can load the GIS script and call Google APIs — no
-    # vault keys or plaintext ever leave the browser.
-    google_script = " https://accounts.google.com"
-    google_connect = " https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com"
-    google_frame = " https://accounts.google.com"
+    # vault keys or plaintext ever leave the browser. Hosts are emitted only
+    # when GOOGLE_OAUTH_CLIENT_ID is set, and only on the app shell (L-19).
+    google_script = ""
+    google_connect = ""
+    google_frame = ""
     # Optional Dropbox App-folder backups (OAuth 2 PKCE + files API). Browser
-    # talks to Dropbox directly; encrypted .dgbackup blobs only.
-    dropbox_connect = " https://api.dropboxapi.com https://content.dropboxapi.com https://www.dropbox.com"
+    # talks to Dropbox directly; encrypted .dgbackup blobs only. Hosts are
+    # emitted only when DROPBOX_APP_KEY is set, and only on the app shell.
+    dropbox_connect = ""
+    try:
+        from config import app_entry_path
+
+        google_id = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+        dropbox_key = os.environ.get("DROPBOX_APP_KEY", "").strip()
+        try:
+            on_app = request.path.split("?", 1)[0] == app_entry_path()
+        except Exception:
+            on_app = False
+        if google_id and on_app:
+            google_script = " https://accounts.google.com"
+            google_connect = (
+                " https://accounts.google.com https://oauth2.googleapis.com https://www.googleapis.com"
+            )
+            google_frame = " https://accounts.google.com"
+        if dropbox_key and on_app:
+            dropbox_connect = (
+                " https://api.dropboxapi.com https://content.dropboxapi.com https://www.dropbox.com"
+            )
+    except Exception:
+        google_script = google_connect = google_frame = ""
+        dropbox_connect = ""
     # Optional Cloudflare Turnstile (when a site key is configured).
     turnstile = ""
     try:

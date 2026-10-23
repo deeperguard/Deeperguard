@@ -27,7 +27,7 @@ import totp as totp_mod
 from flask.sessions import SecureCookieSessionInterface
 from datetime import timedelta
 
-from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, log_server_ocr_startup_warning, log_wan_secure_cookies_startup_warning, normalize_host, ocr_ephemeral, pcloud_password_set, pcloud_token_set, repair_login_password_enabled, register_ip_hourly_cap, serve_ca_crt, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, turnstile_required, turnstile_secret_key, turnstile_site_key, webauthn_preferred_host, user_is_admin
+from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, log_server_ocr_startup_warning, log_turnstile_startup_warning, log_wan_secure_cookies_startup_warning, normalize_host, ocr_ephemeral, pcloud_password_set, pcloud_token_set, repair_login_password_enabled, register_ip_hourly_cap, serve_ca_crt, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, turnstile_required, turnstile_secret_key, turnstile_site_key, turnstile_unpaired, webauthn_preferred_host, user_is_admin
 from uploads import ensure_user_upload_dir, user_upload_dir
 import promo as notes_promo
 from backup_mail import send_user_backup
@@ -946,7 +946,12 @@ def _verify_turnstile_token(token: str) -> str:
 
     Returns one of: ``ok``, ``missing``, ``invalid``, ``unavailable``.
     Never logs the token or secret. Fail closed — do not create accounts on error.
+    Both keys unset: skip (disabled). Exactly one key: refuse (L-21).
     """
+    if turnstile_unpaired():
+        log_turnstile_startup_warning()
+        log.error("turnstile keys unpaired — refusing register (L-21)")
+        return "unavailable"
     secret = turnstile_secret_key()
     if not secret:
         return "ok"
@@ -1207,7 +1212,7 @@ def api_auth_repair_login():
     """Prove the current password against the stored verifier and open a session.
 
     Prove-only (C1): never rotates salt/verifier here. Credential rotation requires
-    a totp_ok session via /api/account/password (or vault-recovery with CSRF).
+    a totp_ok session via /api/account/password (or vault-recovery after 2FA).
     Submitted srp_salt/srp_verifier are ignored.
     """
     body = request.get_json(silent=True) or {}
@@ -1263,6 +1268,10 @@ def api_auth_srp_resync():
         return jsonify({"error": "invalid credentials"}), 400
     if srp_kdf_version < SRP_KDF_V2:
         return jsonify({"error": "srp_kdf_version 2 required"}), 400
+    # Pre-login leftover-hash repair stays public, but a password-only
+    # (TOTP-pending) session must not rotate the verifier (L-22).
+    if auth.authenticated() and auth.needs_totp():
+        return jsonify({"error": "2FA required"}), 403
     if _auth_rate_limited("srp-resync", email):
         return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
@@ -1321,6 +1330,8 @@ def api_auth_vault_recovery_challenge():
     uid = auth.current_user_id()
     if not uid:
         return jsonify({"error": "sign in required"}), 401
+    if auth.needs_totp():
+        return jsonify({"error": "2FA required"}), 403
     if not auth.csrf_ok():
         return jsonify({"error": "invalid CSRF token"}), 400
     user = db.get_user_by_email(email)
@@ -1360,6 +1371,8 @@ def api_auth_vault_recovery():
         uid = auth.current_user_id()
         if not uid:
             return jsonify({"error": "sign in required"}), 401
+        if auth.needs_totp():
+            return jsonify({"error": "2FA required"}), 403
         if not auth.csrf_ok():
             return jsonify({"error": "invalid CSRF token"}), 400
         user = db.get_user_by_email(email)
@@ -1409,6 +1422,8 @@ def api_auth_srp_upgrade():
     user = db.get_user_by_id(uid) if uid else None
     if not user:
         return jsonify({"error": "not found"}), 404
+    if auth.needs_totp():
+        return jsonify({"error": "2FA required"}), 403
     email = str(user["email"] or "").strip().lower()
     if _auth_rate_limited("srp-upgrade", email):
         return jsonify({"error": "too many attempts"}), 429
@@ -3113,6 +3128,7 @@ def service_worker():
 # Initialize DB on import for gunicorn workers.
 log_server_ocr_startup_warning()
 log_wan_secure_cookies_startup_warning()
+log_turnstile_startup_warning()
 log_signup_notify_config()
 db.init_schema()
 from uploads import migrate_email_named_upload_dirs
