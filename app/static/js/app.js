@@ -14264,8 +14264,13 @@
     startSignedInDevicesRefresh();
     try {
       if (globalThis.NotesReleaseIntegrity) {
-        NotesReleaseIntegrity.paintAll(NotesReleaseIntegrity.getResult());
-        NotesReleaseIntegrity.ensureChecked().catch(() => {});
+        const last = NotesReleaseIntegrity.getResult();
+        NotesReleaseIntegrity.paintAll(last);
+        // Retry when prior check hung/timed out/unavailable (clears stuck inflight).
+        const force = !last
+          || last.status === 'pending'
+          || last.status === 'unavailable';
+        NotesReleaseIntegrity.ensureChecked({ force }).catch(() => {});
       }
     } catch (err) { /* ignore */ }
   }
@@ -21658,6 +21663,13 @@
       // Overview first after unlock; user picks a note from the list.
     }
     vaultReady = true;
+    try {
+      // Release-hash check is independent of unlock, but re-kick after unlock in
+      // case the idle callback was deferred behind vault work / hung earlier.
+      if (globalThis.NotesReleaseIntegrity) {
+        NotesReleaseIntegrity.start();
+      }
+    } catch (err) { /* ignore */ }
     initPullToSync();
     initEditorEdgeSwipeBack();
     initPaneSplitter();

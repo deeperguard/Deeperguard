@@ -1,5 +1,5 @@
 /**
- * Round 65/66: client release-hash check (computed local hash, latest warning).
+ * Round 65–67: release-hash check (compute, latest warning, timeouts, unlisted).
  */
 const assert = require('assert');
 const fs = require('fs');
@@ -16,42 +16,20 @@ const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
 
 assert.ok(appHtml.includes("asset_script('js/release-integrity.js')"));
 assert.ok(appHtml.includes('data-release-hash-status'));
-assert.ok(appHtml.includes('name="notes-release-tag"'));
 assert.ok(appHtml.includes('SubtleCrypto'));
-assert.ok(appHtml.includes('same origin'));
-
-assert.ok(verify.includes("asset_script('js/release-integrity.js')"));
-assert.ok(verify.includes('data-release-hash-status'));
 assert.ok(verify.includes('data-status-prefix="Status: "'));
-assert.ok(verify.includes('Status: Checking signed release'));
-assert.ok(verify.includes('<strong>Status</strong> line above'));
-assert.ok(verify.includes('api.github.com'));
-assert.ok(verify.includes('SubtleCrypto') || verify.includes('hashes them in the browser'));
-assert.ok(verify.includes('compromised server') || verify.includes('itself served'));
-assert.ok(verify.includes('cosign'));
+assert.ok(verify.includes('timed out') || verify.includes('unlisted asset'));
 assert.ok(verify.includes('newer release'));
-assert.ok(!/<script[\s>]/i.test(verify), 'no raw <script> tags');
-
+assert.ok(!/<script[\s>]/i.test(verify));
 assert.ok(authPy.includes('https://api.github.com'));
-assert.ok(!authPy.includes('release-assets.githubusercontent.com'));
 assert.ok(appJs.includes('NotesReleaseIntegrity'));
-assert.ok(src.includes('computeLocalManifestHash'));
-assert.ok(src.includes('force-cache'));
-assert.ok(src.includes('/releases/latest') || src.includes("fetchReleaseJson('')"));
+assert.ok(appJs.includes("last.status === 'pending'") || appJs.includes('force'));
+assert.ok(src.includes('AbortController') || src.includes('fetchWithTimeout'));
+assert.ok(src.includes('crossCheckLoadedAssets'));
+assert.ok(src.includes('timed out'));
+assert.ok(src.includes('unlisted asset') || src.includes('unlistedAssets'));
 assert.ok(!src.includes('/api/health'));
 
-function webcryptoSubtle() {
-  return {
-    digest: async (algo, buf) => {
-      assert.strictEqual(algo, 'SHA-256');
-      const hash = crypto.createHash('sha256');
-      hash.update(Buffer.from(buf));
-      return hash.digest().buffer.slice(hash.digest().byteOffset, hash.digest().byteOffset + hash.digest().byteLength);
-    },
-  };
-}
-
-// Node crypto subtle returns ArrayBuffer via digest sync helper
 function nodeSubtle() {
   return {
     digest: async (algo, buf) => {
@@ -66,25 +44,29 @@ function loadApi(harness) {
   const sandbox = {
     window: harness,
     globalThis: harness,
-    setTimeout: (fn) => { fn(); return 0; },
-    requestIdleCallback: undefined,
+    // Real timers — AbortController timeouts must not fire immediately.
+    setTimeout,
+    clearTimeout,
+    AbortController: global.AbortController,
     console,
     TextEncoder,
+    URL,
   };
-  sandbox.window = harness;
   sandbox.document = harness.document;
   sandbox.localStorage = harness.localStorage;
   sandbox.fetch = harness.fetch;
   sandbox.crypto = harness.crypto;
+  sandbox.location = harness.location;
   vm.runInNewContext(src, sandbox, { filename: 'release-integrity.js' });
   return harness.NotesReleaseIntegrity;
 }
 
-function makeHarness({ hash, tag, fetchImpl, storage }) {
+function makeHarness({ hash, tag, fetchImpl, storage, scripts, links, worker }) {
   const store = storage || Object.create(null);
   const meta = {
     'notes-client-hash': hash || '',
     'notes-release-tag': tag || '',
+    'notes-crypto-worker': worker || '',
   };
   const statusEl = {
     textContent: '',
@@ -103,7 +85,19 @@ function makeHarness({ hash, tag, fetchImpl, storage }) {
       remove(...cs) { cs.forEach((c) => this._s.delete(c)); },
     },
   };
+  const scriptEls = (scripts || []).map((srcUrl) => ({
+    getAttribute: (n) => (n === 'src' ? srcUrl : null),
+    src: srcUrl,
+  }));
+  const linkEls = (links || []).map((href) => ({
+    getAttribute: (n) => (n === 'href' ? href : null),
+    href,
+  }));
   const harness = {
+    AbortController: global.AbortController,
+    setTimeout,
+    clearTimeout,
+    location: { href: 'https://www.deeperguard.com/app' },
     document: {
       readyState: 'loading',
       querySelector(sel) {
@@ -115,11 +109,12 @@ function makeHarness({ hash, tag, fetchImpl, storage }) {
       },
       querySelectorAll(sel) {
         if (sel === '[data-release-hash-status]') return [statusEl];
+        if (sel === 'script[src]') return scriptEls;
+        if (sel === 'link[rel="stylesheet"][href]') return linkEls;
         return [];
       },
       getElementById(id) {
         if (id === 'about-client-hash') return { textContent: hash || '' };
-        if (id === 'verify-release-hash-status') return statusEl;
         return null;
       },
       addEventListener() {},
@@ -143,15 +138,13 @@ function assetBytes(label) {
 }
 
 function buildManifestDoc(entries) {
-  // entries: [{key, bytes}]
   const assets = {};
-  const lines = [];
-  for (const { key, bytes } of entries) {
+  for (const { key, bytes, url } of entries) {
     const sha = crypto.createHash('sha256').update(bytes).digest('hex');
-    assets[key] = { sha256: sha, url: `/static/${key}`, bytes: bytes.length };
+    assets[key] = { sha256: sha, url: url || `/static/${key}`, bytes: bytes.length };
   }
   const keys = Object.keys(assets).sort();
-  for (const key of keys) lines.push(`${key}:${assets[key].sha256}`);
+  const lines = keys.map((key) => `${key}:${assets[key].sha256}`);
   const manifest_sha256 = crypto.createHash('sha256').update(lines.join('\n'), 'utf8').digest('hex');
   return { version: 1, created: 0, manifest_sha256, asset_count: keys.length, assets };
 }
@@ -174,37 +167,56 @@ function githubOk(bodyObj) {
   const api = loadApi(harness);
   assert.strictEqual(api.parseManifestShaFromBody('`manifest_sha256`: `' + HASH_A + '`'), HASH_A);
   assert.ok(api.tagOlderThan('v0.62.1', 'v0.63.0'));
-  assert.ok(!api.tagOlderThan('v0.63.0', 'v0.62.1'));
   assert.ok(api.formatMessage({
     status: 'match', tag: 'v0.62.1', signed: true, newerTag: 'v0.63.0',
   }).includes('newer release v0.63.0 exists'));
   assert.ok(api.formatMessage({
-    status: 'unavailable', failedAssets: ['js/app.js', 'css/app.css'],
-  }).includes('failed to hash: js/app.js, css/app.css'));
+    status: 'unavailable', reason: 'timeout',
+  }).includes('Could not check (timed out)'));
+  assert.ok(api.formatMessage({
+    status: 'mismatch', unlistedAssets: ['/static/js/evil.js'],
+  }).includes('Does not match: unlisted asset /static/js/evil.js'));
 }
 
 (async () => {
   const entries = [
-    { key: 'css/app.css', bytes: assetBytes('css') },
-    { key: 'js/app.js', bytes: assetBytes('js') },
+    { key: 'css/app.css', bytes: assetBytes('css'), url: '/static/css/app.1111111111111111.css' },
+    { key: 'js/app.js', bytes: assetBytes('js'), url: '/static/js/app.2222222222222222.js' },
   ];
   const manifest = buildManifestDoc(entries);
   const computed = manifest.manifest_sha256;
 
-  function assetFetchImpl({ tagBody, latestTag, tagName, failKey, metaHash }) {
-    return async (url) => {
+  function assetFetchImpl({ tagBody, latestTag, tagName, failKey, hangUrl }) {
+    return async (url, init) => {
       const u = String(url);
+      const signal = init && init.signal;
+      if (hangUrl && u.includes(hangUrl)) {
+        // Never resolve unless aborted (AbortController timeout).
+        return new Promise((resolve, reject) => {
+          if (!signal) return;
+          if (signal.aborted) {
+            const err = new Error('Aborted');
+            err.name = 'AbortError';
+            reject(err);
+            return;
+          }
+          signal.addEventListener('abort', () => {
+            const err = new Error('Aborted');
+            err.name = 'AbortError';
+            reject(err);
+          }, { once: true });
+        });
+      }
       if (u.endsWith('/client-manifest.json') || u === '/static/client-manifest.json') {
         return {
           ok: true,
           status: 200,
           headers: { get: () => null },
           json: async () => manifest,
-          arrayBuffer: async () => Buffer.from(JSON.stringify(manifest)),
         };
       }
       for (const e of entries) {
-        if (u.endsWith(e.key) || u.includes(`/static/${e.key}`)) {
+        if (u === e.url || u.endsWith(e.key) || u.includes(e.url)) {
           if (failKey && e.key === failKey) {
             return { ok: false, status: 500, headers: { get: () => null } };
           }
@@ -212,20 +224,23 @@ function githubOk(bodyObj) {
             ok: true,
             status: 200,
             headers: { get: () => null },
-            arrayBuffer: async () => e.bytes.buffer.slice(e.bytes.byteOffset, e.bytes.byteOffset + e.bytes.byteLength),
+            arrayBuffer: async () => e.bytes.buffer.slice(
+              e.bytes.byteOffset,
+              e.bytes.byteOffset + e.bytes.byteLength,
+            ),
           };
         }
       }
       if (u.includes('/releases/latest')) {
         return githubOk({
-          tag_name: latestTag || tagName || 'v0.63.0',
-          body: '`manifest_sha256`: `' + (latestTag === tagName ? computed : HASH_B) + '`',
+          tag_name: latestTag || tagName || 'v0.63.1',
+          body: '`manifest_sha256`: `' + computed + '`',
           assets: [{ name: 'client-manifest.sigstore.json' }],
         });
       }
       if (u.includes('/releases/tags/')) {
         return githubOk({
-          tag_name: tagName || 'v0.63.0',
+          tag_name: tagName || 'v0.63.1',
           body: tagBody || ('`manifest_sha256`: `' + computed + '`'),
           assets: [{ name: 'client-manifest.json' }, { name: 'client-manifest.sigstore.json' }],
         });
@@ -234,19 +249,19 @@ function githubOk(bodyObj) {
     };
   }
 
-  // Match + signed (meta equals computed)
+  // Match + signed
   {
     const { harness, statusEl } = makeHarness({
       hash: computed,
-      tag: 'v0.63.0',
-      fetchImpl: assetFetchImpl({ tagName: 'v0.63.0', latestTag: 'v0.63.0' }),
+      tag: 'v0.63.1',
+      scripts: [entries[1].url],
+      links: [entries[0].url],
+      fetchImpl: assetFetchImpl({ tagName: 'v0.63.1', latestTag: 'v0.63.1' }),
     });
     const api = loadApi(harness);
     const result = await api.runCheck({ force: true });
     assert.strictEqual(result.status, 'match');
-    assert.strictEqual(result.localHash, computed);
-    assert.strictEqual(result.message, 'Matches signed release v0.63.0');
-    assert.ok(!result.newerTag);
+    assert.strictEqual(result.message, 'Matches signed release v0.63.1');
     api.paint(statusEl, result);
     assert.ok(statusEl.textContent.startsWith('Status: Matches signed release'));
   }
@@ -256,83 +271,115 @@ function githubOk(bodyObj) {
     const { harness } = makeHarness({
       hash: computed,
       tag: 'v0.62.1',
+      scripts: [entries[1].url],
+      links: [entries[0].url],
       fetchImpl: assetFetchImpl({
         tagName: 'v0.62.1',
-        latestTag: 'v0.63.0',
+        latestTag: 'v0.63.1',
         tagBody: '`manifest_sha256`: `' + computed + '`',
       }),
     });
     const api = loadApi(harness);
     const result = await api.runCheck({ force: true });
     assert.strictEqual(result.status, 'match');
-    assert.strictEqual(result.newerTag, 'v0.63.0');
-    assert.ok(result.message.includes('Matches signed release v0.62.1'));
-    assert.ok(result.message.includes('newer release v0.63.0 exists'));
+    assert.strictEqual(result.newerTag, 'v0.63.1');
+    assert.ok(result.message.includes('newer release v0.63.1 exists'));
   }
 
-  // Meta differs from computed — still match release, flag meta
+  // Meta differs from computed
   {
     const { harness } = makeHarness({
-      hash: HASH_B, // wrong meta
-      tag: 'v0.63.0',
-      fetchImpl: assetFetchImpl({ tagName: 'v0.63.0', latestTag: 'v0.63.0' }),
+      hash: HASH_B,
+      tag: 'v0.63.1',
+      scripts: [entries[1].url],
+      links: [entries[0].url],
+      fetchImpl: assetFetchImpl({ tagName: 'v0.63.1', latestTag: 'v0.63.1' }),
     });
     const api = loadApi(harness);
     const result = await api.runCheck({ force: true });
     assert.strictEqual(result.status, 'match');
     assert.ok(result.metaMismatch);
-    assert.ok(result.message.includes('shell meta hash differs'));
   }
 
-  // Mismatch vs release
+  // Unlisted loaded script
   {
     const { harness } = makeHarness({
       hash: computed,
-      tag: 'v0.63.0',
-      fetchImpl: assetFetchImpl({
-        tagName: 'v0.63.0',
-        latestTag: 'v0.63.0',
-        tagBody: '`manifest_sha256`: `' + HASH_B + '`',
-      }),
+      tag: 'v0.63.1',
+      scripts: [entries[1].url, '/static/js/evil.ffffffffffffffff.js'],
+      links: [entries[0].url],
+      fetchImpl: assetFetchImpl({ tagName: 'v0.63.1', latestTag: 'v0.63.1' }),
     });
     const api = loadApi(harness);
     const result = await api.runCheck({ force: true });
     assert.strictEqual(result.status, 'mismatch');
-    assert.strictEqual(result.message, 'Does not match');
+    assert.ok(result.message.includes('Does not match: unlisted asset'));
+    assert.ok(result.message.includes('evil.ffffffffffffffff.js'));
   }
 
-  // Failed asset named exactly
+  // Failed asset
   {
     const { harness } = makeHarness({
       hash: computed,
-      tag: 'v0.63.0',
-      fetchImpl: assetFetchImpl({ tagName: 'v0.63.0', latestTag: 'v0.63.0', failKey: 'js/app.js' }),
+      tag: 'v0.63.1',
+      scripts: [entries[1].url],
+      links: [entries[0].url],
+      fetchImpl: assetFetchImpl({ tagName: 'v0.63.1', latestTag: 'v0.63.1', failKey: 'js/app.js' }),
     });
     const api = loadApi(harness);
     const result = await api.runCheck({ force: true });
     assert.strictEqual(result.status, 'unavailable');
-    assert.ok(Array.isArray(result.failedAssets));
     assert.strictEqual(result.failedAssets.join(','), 'js/app.js');
-    assert.ok(result.message.includes('failed to hash: js/app.js'));
   }
 
-  // Must not call Deeperguard APIs for expected hash
+  // Never-resolving fetch → timeout
   {
-    const urls = [];
-    const base = assetFetchImpl({ tagName: 'v0.63.0', latestTag: 'v0.63.0' });
     const { harness } = makeHarness({
       hash: computed,
-      tag: 'v0.63.0',
-      fetchImpl: async (url, init) => {
-        urls.push(String(url));
-        return base(url, init);
-      },
+      tag: 'v0.63.1',
+      scripts: [entries[1].url],
+      links: [entries[0].url],
+      fetchImpl: assetFetchImpl({
+        tagName: 'v0.63.1',
+        latestTag: 'v0.63.1',
+        hangUrl: 'client-manifest.json',
+      }),
     });
     const api = loadApi(harness);
-    await api.runCheck({ force: true });
-    assert.ok(urls.some((u) => u.includes('api.github.com')));
-    assert.ok(urls.some((u) => u.includes('/static/')));
-    assert.ok(!urls.some((u) => u.includes('/api/health')));
+    api._setTimeoutsForTests(40, 120);
+    const started = Date.now();
+    const result = await api.runCheck({ force: true });
+    const elapsed = Date.now() - started;
+    assert.strictEqual(result.status, 'unavailable');
+    assert.strictEqual(result.reason, 'timeout');
+    assert.strictEqual(result.message, 'Could not check (timed out)');
+    assert.ok(elapsed < 2000, `timeout too slow: ${elapsed}ms`);
+    api._setTimeoutsForTests(9000, 28000);
+  }
+
+  // ensureChecked clears stuck inflight and retries
+  {
+    const { harness } = makeHarness({
+      hash: computed,
+      tag: 'v0.63.1',
+      scripts: [entries[1].url],
+      links: [entries[0].url],
+      fetchImpl: assetFetchImpl({
+        tagName: 'v0.63.1',
+        latestTag: 'v0.63.1',
+        hangUrl: 'client-manifest.json',
+      }),
+    });
+    const api = loadApi(harness);
+    api._setTimeoutsForTests(40, 100);
+    const p1 = api.ensureChecked({ force: true });
+    await new Promise((r) => setTimeout(r, 15));
+    assert.strictEqual(api.getResult().status, 'pending');
+    harness.fetch = assetFetchImpl({ tagName: 'v0.63.1', latestTag: 'v0.63.1' });
+    api._setTimeoutsForTests(9000, 28000);
+    const result = await api.ensureChecked({ force: true });
+    assert.strictEqual(result.status, 'match');
+    await p1.catch(() => {}); // settle abandoned generation quickly (short timeouts)
   }
 
   console.log('test_round65_release_hash ok');

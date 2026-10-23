@@ -164,8 +164,8 @@ await NotesStore.testDemoRollbackWarning(uuid, 9);
           tag is older than <code>/releases/latest</code>),
           <em>Does not match</em> (only when a release hash was fetched and
           differs — no false alarms on network errors),
-          or <em>Could not check</em> (offline / rate-limited, or naming any
-          assets that could not be hashed).
+          or <em>Could not check</em> (offline / rate-limited / timed out, or naming any
+          assets that could not be hashed). Loaded same-origin scripts/styles not listed in the manifest yield <em>Does not match: unlisted asset …</em>.
           The check never blocks the app and never sends note data.
         </p>
         <p class="mk-release-hash-status-line">
