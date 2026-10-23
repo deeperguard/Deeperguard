@@ -1840,13 +1840,24 @@ a.mk-badge-link:hover {
   }
 }
 
-/* Round 65: automatic release hash status on /verify */
+/* Round 65/66: automatic release hash status on /verify */
+.mk-release-hash-status-line {
+  margin: 0.85rem 0 1rem;
+}
 .mk-release-hash-status {
+  display: block;
   font-weight: 600;
-  margin: 0 0 0.75rem;
+  margin: 0;
 }
 .mk-release-hash-status.release-check-match {
-  color: #15803d;
+  color: var(--mk-ok, #059669);
+}
+.mk-release-hash-status.release-check-warn {
+  color: var(--mk-warn, #b45309);
+  border: 1px solid var(--mk-warn-border, #fde68a);
+  background: var(--mk-warn-bg, #fffbeb);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
 }
 .mk-release-hash-status.release-check-mismatch {
   color: var(--mk-danger, #dc2626);
