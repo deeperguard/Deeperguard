@@ -796,6 +796,14 @@ const NotesStore = (() => {
     // device trusts the server/local hint for the first derive; writing that hint
     // before a successful decrypt poisoned later unlocks (Round 51).
     if (state.keyVerified) persistVaultKdfServerVersion(state.kdfVersion);
+    if (typeof NotesFreshness !== 'undefined') {
+      NotesFreshness.setCryptoKey(state.cryptoKey);
+      try {
+        await NotesFreshness.load(state.cryptoKey);
+      } catch (err) {
+        /* bootstrap empty freshness */
+      }
+    }
   }
 
   function isUnlocked() {
@@ -857,6 +865,9 @@ const NotesStore = (() => {
     }
     if (typeof NotesCrypto !== 'undefined' && typeof NotesCrypto.terminateWorker === 'function') {
       NotesCrypto.terminateWorker();
+    }
+    if (typeof NotesFreshness !== 'undefined') {
+      NotesFreshness.clearMemory();
     }
     emitSync('idle', '');
   }
@@ -1540,6 +1551,14 @@ const NotesStore = (() => {
         if (fileEnc) blobCiphertext = JSON.stringify(fileEnc);
       }
     }
+    if (typeof NotesFreshness !== 'undefined') {
+      wrapContent = NotesFreshness.stampForWrap(uuid, wrapContent);
+      // Keep in-memory plaintext aligned with what we encrypt (migration __fv/__fid).
+      if (content && typeof content === 'object' && NotesFreshness.shouldTrackType(content.type)) {
+        content.__fid = wrapContent.__fid;
+        content.__fv = wrapContent.__fv;
+      }
+    }
     const payload = await NotesCrypto.encryptObject(state.cryptoKey, wrapContent);
     const ciphertext = JSON.stringify(payload);
     const content_hash = await NotesCrypto.hashText(ciphertext);
@@ -1594,6 +1613,9 @@ const NotesStore = (() => {
     ) {
       // Bytes live in IndexedDB or still on the server (light vault) — fetched on demand.
       content = { ...content, file_enc_stored: true };
+    }
+    if (typeof NotesFreshness !== 'undefined') {
+      content = NotesFreshness.annotateDecrypted(row.item_uuid || row.uuid, content);
     }
     const item = {
       uuid: row.item_uuid || row.uuid,
@@ -1660,6 +1682,16 @@ const NotesStore = (() => {
       rev: row.rev,
     }, { fast, skipBlob });
     if (row.content_hash) item.content_hash = row.content_hash;
+    // Local IDB is this device's cache — adopt versions into HWM without the
+    // server-rollback gate (that runs only on applySyncPayload pulls).
+    if (typeof NotesFreshness !== 'undefined') {
+      NotesFreshness.noteAccepted(
+        row.uuid,
+        item.content,
+        row.content_hash || item.content_hash || '',
+        { deleted: !!row.deleted },
+      );
+    }
     const light = strippedAttachmentContent(item.content);
     if (light) item.content = light;
     state.items.set(row.uuid, item);
@@ -2887,6 +2919,7 @@ const NotesStore = (() => {
     const expectedTotal = Math.max(1, Number(progress?.expectedTotal) || total || 1);
     const epoch = state.lockEpoch;
     let protectionPushNeeded = false;
+    let remoteVaultHead = null;
     for (let i = 0; i < rows.length; i += 1) {
       const row = rows[i];
       // Locked mid-pull: stop here. Rows are not persisted without the key and
@@ -2908,6 +2941,19 @@ const NotesStore = (() => {
       } else {
         try {
           const remote = await unwrapItem(row);
+          if (typeof NotesFreshness !== 'undefined') {
+            const check = NotesFreshness.checkIncoming(
+              row.item_uuid,
+              remote.content,
+              row.content_hash || remote.content_hash || '',
+              { isDelete: !!row.deleted },
+            );
+            if (check.reject) {
+              // Keep the local copy; do not overwrite with a stale/forged blob.
+              watermark = Math.max(watermark, rowCursor(row));
+              continue;
+            }
+          }
           const local = state.items.get(row.item_uuid);
           const localWins = localCopyWins(local, row);
           let applied = false;
@@ -2926,6 +2972,9 @@ const NotesStore = (() => {
               // A file deleted on another device leaves this note; its copied
               // scan text and filename list must not keep matching searches.
               if (parentNoteId) refreshNoteSearchText(parentNoteId);
+              if (typeof NotesFreshness !== 'undefined') {
+                NotesFreshness.noteAccepted(row.item_uuid, null, '', { deleted: true });
+              }
               applied = true;
             }
           } else if (localWins) {
@@ -2994,6 +3043,14 @@ const NotesStore = (() => {
             state.items.set(row.item_uuid, remote);
             if (row.content_hash) remote.content_hash = row.content_hash;
             await persistLocal(row.item_uuid, remote);
+            if (typeof NotesFreshness !== 'undefined') {
+              NotesFreshness.noteAccepted(
+                row.item_uuid,
+                remote.content,
+                row.content_hash || remote.content_hash || '',
+              );
+              if (remote.content?.type === 'vault_head') remoteVaultHead = remote.content;
+            }
             if (remote.content?.type === 'note') {
               if (!progress?.deferSearchIndex) updateSearchIndexFor(row.item_uuid);
               protectionMerged = !!remote.content.locked !== prevLocked
@@ -3031,6 +3088,13 @@ const NotesStore = (() => {
           if (!state.cryptoKey || state.lockEpoch !== epoch) throw lockedError();
           console.warn('decrypt failed', row.item_uuid, e);
           state.undecryptable.add(row.item_uuid);
+          if (typeof NotesFreshness !== 'undefined') {
+            NotesFreshness.pushWarning(
+              NotesFreshness.WARN_TYPES.integrity,
+              'The server returned a corrupted item (integrity error — not shown).',
+              { uuid: row.item_uuid },
+            );
+          }
           decryptSkipped += 1;
           if (firstFailedAt == null) firstFailedAt = Number(row.updated_at) || 0;
           // Keep going — one bad blob must not stop the rest of the vault.
@@ -3049,6 +3113,12 @@ const NotesStore = (() => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
     }
+    if (typeof NotesFreshness !== 'undefined' && remoteVaultHead) {
+      await NotesFreshness.evaluateRemoteHead(remoteVaultHead, state.items);
+    }
+    if (finalize) {
+      await refreshVaultHead({ quiet: true });
+    }
     if (protectionPushNeeded) schedulePush();
     if (finalize && !decryptSkipped) {
       await rememberLastSync(Number(data.cursor) || data.server_time || watermark || Date.now() / 1000);
@@ -3063,6 +3133,37 @@ const NotesStore = (() => {
       processed: rows.length,
       unchangedMisses,
     };
+  }
+
+  let vaultHeadTimer = 0;
+  async function refreshVaultHead({ quiet = true } = {}) {
+    if (typeof NotesFreshness === 'undefined' || !state.cryptoKey || !state.keyVerified) return null;
+    try {
+      const head = await NotesFreshness.commitLocalHead(state.items);
+      const content = NotesFreshness.headContent(head);
+      const existing = state.items.get(NotesFreshness.HEAD_UUID);
+      if (
+        existing
+        && !existing.deleted
+        && existing.content?.tip === content.tip
+        && Number(existing.content?.counter) === Number(content.counter)
+      ) {
+        return head;
+      }
+      upsert(NotesFreshness.HEAD_UUID, content, { touchUpdatedAt: true, skipDirty: false });
+      return head;
+    } catch (err) {
+      if (!quiet) console.warn('vault head refresh failed', err);
+      return null;
+    }
+  }
+
+  function scheduleVaultHeadRefresh() {
+    if (vaultHeadTimer) clearTimeout(vaultHeadTimer);
+    vaultHeadTimer = setTimeout(() => {
+      vaultHeadTimer = 0;
+      refreshVaultHead({ quiet: true }).catch(() => {});
+    }, 400);
   }
 
   async function pullChanges(since, { quiet = false } = {}) {
@@ -3363,6 +3464,9 @@ const NotesStore = (() => {
       state.localReady = false;
       state.cryptoKey = null;
       state.altCryptoKey = null;
+      if (typeof NotesFreshness !== 'undefined') {
+        NotesFreshness.clearMemory();
+      }
       if (typeof NotesIDB.clearAll === 'function') {
         await NotesIDB.clearAll();
       }
@@ -4144,6 +4248,14 @@ const NotesStore = (() => {
   function upsert(uuid, content, { recordRevision = false, touchUpdatedAt = true, touchSyncOnly = false, skipDirty = false } = {}) {
     if (state.cryptoKey && !state.keyVerified) throw unverifiedKeyError();
     const existing = state.items.get(uuid);
+    if (typeof NotesFreshness !== 'undefined' && content && typeof content === 'object') {
+      // Bump the encrypted version on real edits that will sync. Local-only
+      // bookkeeping (skipDirty) must not advance __fv without a push.
+      content = NotesFreshness.stampForUpsert(uuid, content, {
+        bump: !skipDirty,
+        existing,
+      });
+    }
     if (recordRevision && existing?.content?.type === 'note') {
       const prev = existing.content;
       const changed = prev.title !== content.title || prev.content !== content.content;
@@ -4194,6 +4306,10 @@ const NotesStore = (() => {
     if (!skipDirty) {
       state.dirty.add(uuid);
       schedulePush();
+      if (typeof NotesFreshness !== 'undefined' && NotesFreshness.shouldTrackType(content.type)) {
+        NotesFreshness.noteAccepted(uuid, content, item.content_hash || '');
+        scheduleVaultHeadRefresh();
+      }
     }
     if (content.type === 'note') updateSearchIndexFor(uuid);
     persistLocal(uuid, item);
@@ -4924,6 +5040,10 @@ const NotesStore = (() => {
     invalidateShadowDuplicates();
     state.blocked.delete(uuid);
     state.dirty.add(uuid);
+    if (typeof NotesFreshness !== 'undefined') {
+      NotesFreshness.noteAccepted(uuid, null, '', { deleted: true });
+      scheduleVaultHeadRefresh();
+    }
     persistLocal(uuid, item);
     schedulePush();
     return true;
@@ -5480,7 +5600,10 @@ const NotesStore = (() => {
     return Number.isFinite(parsed) ? parsed / 1000 : 0;
   }
 
-  async function importBackup(json, merge = true, { blobs } = {}) {
+  async function importBackup(json, merge = true, { blobs, resetFreshness = false } = {}) {
+    if (resetFreshness && typeof NotesFreshness !== 'undefined' && state.cryptoKey) {
+      await NotesFreshness.resetAfterIntentionalRestore(state.cryptoKey);
+    }
     if (typeof NotesSnImport !== 'undefined') {
       const parsed = NotesSnImport.parse(json, { blobs });
       if (parsed.kind === 'sn-encrypted') throw new Error(parsed.error);
@@ -5732,6 +5855,7 @@ const NotesStore = (() => {
     setAttachmentOcr,
     setAttachmentPreview,
     getAttachmentPreviewBytes,
+    refreshVaultHead,
     migrateVaultKdfIfNeeded,
     changePassword,
     repairAttachmentsWithPreviousPassword,
