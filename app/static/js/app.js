@@ -12942,14 +12942,92 @@
   function startSignedInDevicesRefresh() {
     stopSignedInDevicesRefresh();
     loadSignedInDevices().catch(() => {});
+    renderVaultFreshnessPanel();
     signedInDevicesTimer = window.setInterval(() => {
       if (!document.body.classList.contains('settings-open')) {
         stopSignedInDevicesRefresh();
         return;
       }
       loadSignedInDevices().catch(() => {});
+      renderVaultFreshnessPanel();
     }, 10000);
   }
+
+  function renderVaultFreshnessPanel() {
+    const panel = document.getElementById('vault-freshness-panel');
+    const summary = document.getElementById('vault-freshness-summary');
+    if (!panel || !summary || typeof NotesFreshness === 'undefined') return;
+    if (!NotesStore.isUnlocked?.()) {
+      panel.hidden = true;
+      return;
+    }
+    const snap = NotesFreshness.getPublicSnapshot();
+    panel.hidden = false;
+    const counter = snap.counter || 0;
+    const fp = snap.fingerprint || '—';
+    summary.textContent = snap.tip
+      ? `Vault head on this device: counter ${counter} · fingerprint ${fp}`
+      : 'Vault head on this device: none yet (will trust the first tip after sync).';
+  }
+
+  async function compareVaultHeadWithPrompt() {
+    const resultEl = document.getElementById('vault-freshness-compare-result');
+    if (typeof NotesFreshness === 'undefined') return;
+    const snap = NotesFreshness.getPublicSnapshot();
+    const other = window.prompt(
+      'Enter the other device’s vault fingerprint (and optional counter), e.g. “ab12cd…ef34” or “12 ab12cd…ef34”.',
+      '',
+    );
+    if (other == null) return;
+    const raw = String(other).trim().toLowerCase();
+    if (!raw) return;
+    const parts = raw.split(/\s+/);
+    let otherCounter = null;
+    let otherFp = raw;
+    if (parts.length >= 2 && /^\d+$/.test(parts[0])) {
+      otherCounter = Number(parts[0]);
+      otherFp = parts.slice(1).join('');
+    }
+    const localFp = String(snap.fingerprint || '').toLowerCase();
+    const tip = String(snap.tip || '').toLowerCase();
+    const fpMatch = otherFp && (
+      localFp === otherFp
+      || tip.startsWith(otherFp.replace(/…/g, '').slice(0, 6))
+      || (otherFp.includes('…') && localFp === otherFp)
+    );
+    const counterMatch = otherCounter == null || otherCounter === Number(snap.counter);
+    let message;
+    if (fpMatch && counterMatch) {
+      message = 'Match — both devices report the same vault tip.';
+    } else if (fpMatch && !counterMatch) {
+      message = 'Fingerprint matches but counters differ — sync both devices and compare again.';
+    } else {
+      message = 'No match — sync both devices, then compare again. Persistent mismatch can mean a freeze or fork.';
+    }
+    if (resultEl) {
+      resultEl.hidden = false;
+      resultEl.textContent = message;
+    }
+    toast(message, !(fpMatch && counterMatch));
+  }
+
+  let freshnessToastAt = 0;
+  function wireFreshnessWarnings() {
+    if (typeof NotesFreshness === 'undefined' || NotesFreshness.__uiWired) return;
+    NotesFreshness.__uiWired = true;
+    NotesFreshness.onChange((snap) => {
+      renderVaultFreshnessPanel();
+      const latest = snap?.warnings?.[0];
+      if (!latest || !latest.message) return;
+      if (latest.at && latest.at <= freshnessToastAt) return;
+      freshnessToastAt = latest.at || Date.now();
+      toast(latest.message, true);
+    });
+  }
+  wireFreshnessWarnings();
+  document.getElementById('btn-compare-vault-head')?.addEventListener('click', () => {
+    compareVaultHeadWithPrompt().catch((err) => toast(err.message || 'Compare failed', true));
+  });
 
   async function loadSignedInDevices() {
     const el = document.getElementById('signed-in-devices');
@@ -12957,6 +13035,7 @@
     try {
       const data = await NotesStore.api('/api/sessions');
       renderSignedInDevices(data.sessions || []);
+      renderVaultFreshnessPanel();
     } catch (err) {
       lastSignedInDevicesJson = '';
       el.innerHTML = '<p class="settings-hint">Could not load signed-in devices.</p>';
@@ -19946,10 +20025,12 @@
           try {
             const ok = await confirmRestoreBackupChoice();
             if (!ok) return;
+            const resetFreshness = await confirmIntentionalFreshnessReset();
+            if (!resetFreshness) return;
             setRestoreResultStatus('');
             toast('Downloading backup…');
             const text = await Cloud.downloadDriveBackup(file.id);
-            const result = await NotesStore.importBackup(text, ok.merge);
+            const result = await NotesStore.importBackup(text, ok.merge, { resetFreshness: true });
             renderTags();
             renderNotes();
             showRestoreResult(result);
@@ -20220,11 +20301,13 @@
           try {
             const ok = await confirmRestoreBackupChoice();
             if (!ok) return;
+            const resetFreshness = await confirmIntentionalFreshnessReset();
+            if (!resetFreshness) return;
             setRestoreResultStatus('');
             toast('Downloading backup…');
             const path = file.path_display || file.path_lower || `/${file.name}`;
             const text = await Cloud.downloadDropboxBackup(path);
-            const result = await NotesStore.importBackup(text, ok.merge);
+            const result = await NotesStore.importBackup(text, ok.merge, { resetFreshness: true });
             renderTags();
             renderNotes();
             showRestoreResult(result);
@@ -20263,6 +20346,18 @@
     return null;
   }
 
+  async function confirmIntentionalFreshnessReset() {
+    return confirmAction(
+      'Restoring an older backup on purpose will reset this device’s sync high-water marks so older item versions are accepted. Continue only if you intend to roll the vault back.',
+      {
+        title: 'Reset sync freshness?',
+        confirmLabel: 'Reset and restore',
+        cancelLabel: 'Cancel',
+        danger: true,
+      },
+    );
+  }
+
   document.getElementById('restore-backup-file')?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -20270,6 +20365,8 @@
     try {
       const choice = await confirmRestoreBackupChoice();
       if (!choice) return;
+      const resetFreshness = await confirmIntentionalFreshnessReset();
+      if (!resetFreshness) return;
       setRestoreResultStatus('');
       toast('Restoring…');
       const opened = await NotesSnImport.openBackupFile(file);
@@ -20279,7 +20376,10 @@
         result.imported = 0;
         result.tags = 0;
       } else {
-        result = await NotesStore.importBackup(opened.text, choice.merge, { blobs: opened.blobs });
+        result = await NotesStore.importBackup(opened.text, choice.merge, {
+          blobs: opened.blobs,
+          resetFreshness: true,
+        });
       }
       renderTags();
       renderNotes();
@@ -20395,6 +20495,8 @@
     e.target.value = '';
     if (!file) return;
     try {
+      const resetFreshness = await confirmIntentionalFreshnessReset();
+      if (!resetFreshness) return;
       setRestoreResultStatus('');
       toast('Importing…');
       const opened = await NotesSnImport.openBackupFile(file);
@@ -20404,7 +20506,10 @@
         result.imported = 0;
         result.tags = 0;
       } else {
-        result = await NotesStore.importBackup(opened.text, true, { blobs: opened.blobs });
+        result = await NotesStore.importBackup(opened.text, true, {
+          blobs: opened.blobs,
+          resetFreshness: true,
+        });
       }
       renderTags();
       renderNotes();

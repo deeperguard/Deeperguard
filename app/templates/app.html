@@ -1467,6 +1467,14 @@
         <h3>Signed-in devices</h3>
         <div class="settings-card">
           <p class="settings-hint">Devices currently signed in to this account. Sign out a device to end that session and delete its local vault copy when it next connects.</p>
+          <div id="vault-freshness-panel" class="vault-freshness-panel" hidden>
+            <p class="settings-hint" id="vault-freshness-summary">Vault head on this device: —</p>
+            <p class="settings-hint">Compare the fingerprint with another unlocked device. Matching counter + fingerprint means both devices have seen the same vault tip. A brand-new device trusts the first tip it downloads.</p>
+            <div class="settings-actions">
+              <button type="button" id="btn-compare-vault-head" class="btn">Compare devices</button>
+            </div>
+            <p id="vault-freshness-compare-result" class="settings-hint" hidden></p>
+          </div>
           <div id="signed-in-devices" class="device-list" role="list"></div>
         </div>
       </section>
@@ -2142,6 +2150,7 @@
   {{ asset_script('js/vault-secrets.js') }}
   {{ asset_script('js/srp-auth.js') }}
   {{ asset_script('js/idb.js') }}
+  {{ asset_script('js/freshness.js') }}
   {{ asset_script('js/snimport.js') }}
   {{ asset_script('js/store.js') }}
   {{ asset_script('js/vendor/jsQR.js') }}

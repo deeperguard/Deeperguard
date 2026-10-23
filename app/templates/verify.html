@@ -17,7 +17,7 @@
       <div class="mk-section-head">
         <span class="mk-badge">Independent check</span>
         <h1>Verify zero-knowledge</h1>
-        <p>You do not have to trust our marketing copy. During sign-in and sync you can watch the real HTTP requests in your browser and confirm that passwords, vault keys, and note plaintext never appear on the wire.</p>
+        <p data-claim-version="2">Claim version <strong>2</strong> — zero-knowledge sync plus client-side rollback / freeze / fork detection. You do not have to trust our marketing copy. During sign-in and sync you can watch the real HTTP requests in your browser and confirm that passwords, vault keys, and note plaintext never appear on the wire.</p>
       </div>
 
       <article class="mk-card">
@@ -94,11 +94,32 @@
 </pre>
         </figure>
         <p><strong>Plaintext metadata</strong> the server can see without your vault password: <code>item_uuid</code>, <code>content_version</code>, <code>content_hash</code>, <code>deleted</code>, <code>updated_at</code>, <code>synced_at</code>, <code>rev</code>, and byte sizes of ciphertext fields. Account fields such as email live on the user row, not inside note ciphertext.</p>
+        <p><strong>No new server-visible fields for sync freshness.</strong> Per-item version counters (<code>__fv</code>), bound item IDs (<code>__fid</code>), high-water marks, and the vault head chain live only inside AES-GCM ciphertext (or in vault-key-encrypted IndexedDB meta on the device). The server still sees only the same ciphertext envelope and existing metadata; it cannot read versions or tips.</p>
         <p>In the unlocked app, open any note → Note info → <strong>View server copy</strong> (also on files, 2FA entries, folders, and tags) to see the raw server JSON beside the decrypted local plaintext.</p>
       </article>
 
       <article class="mk-card">
-        <h2>4. Optional: mitmproxy (and why Wireshark is not enough)</h2>
+        <h2>4. Sync freshness (rollback / freeze / fork)</h2>
+        <p>AES-GCM detects byte flips of ciphertext, but a server that only stores blobs could still serve an older valid ciphertext (rollback), withhold updates (freeze), or show different devices different histories (fork). Deeperguard clients detect those cases locally:</p>
+        <ul>
+          <li><strong>Per-item version</strong> — a monotonic <code>__fv</code> and the item’s UUID (<code>__fid</code>) sit inside the encrypted payload. Every real edit increments the version. The server cannot change them without breaking decryption.</li>
+          <li><strong>High-water mark</strong> — each device stores (encrypted at rest) the highest version seen per item. A pull that offers a lower version is refused with: “The server returned an older version of this item.”</li>
+          <li><strong>Vault head chain</strong> — an encrypted <code>vault_head</code> item holds a counter and a tip hash over sorted <code>item_uuid:version</code> pairs, chained to the previous tip. Settings → Signed-in devices shows this device’s counter and a short fingerprint for optional comparison.</li>
+          <li><strong>Concurrent edits</strong> — two devices that advance from the same parent tip rebase to a merged tip without a fork alarm. A fork warning fires only when the same counter appears with tips that do not share a parent / chain link.</li>
+        </ul>
+        <p><strong>New device honesty:</strong> a brand-new device with no prior high-water marks or vault head <em>trusts the first tip it sees</em>. That cannot prove the server did not already roll the vault back before this device existed — only that this device will detect later regressions.</p>
+        <p><strong>Intentional restore:</strong> restoring an older backup asks for an explicit confirmation that resets high-water marks on this device so the older versions are accepted on purpose.</p>
+        <h3>Reproducible checks (DevTools)</h3>
+        <ol>
+          <li>Unlock the vault. In Console, run <code>localStorage.setItem('notes_freshness_test','1')</code> (test hook; ignored unless set).</li>
+          <li>Pick a note UUID from <code>NotesStore.state.items</code>. Run <code>NotesFreshness.testInjectRollbackScenario('&lt;uuid&gt;', 9)</code> then trigger a sync after the server still holds a lower version of that item — or, in a lab, push an older ciphertext for that UUID. You should see the rollback warning toast; the older body must not replace the local note.</li>
+          <li>Byte-flip: in Application → IndexedDB (or via a lab sync fixture), flip one character inside a stored ciphertext <code>data</code> field and sync/reload. Decryption must fail; the item must not render as plaintext (integrity warning).</li>
+          <li>Clear the test hook when finished: <code>localStorage.removeItem('notes_freshness_test')</code>. The hook only stages a higher local high-water mark for QA; it cannot disable encryption or export keys.</li>
+        </ol>
+      </article>
+
+      <article class="mk-card">
+        <h2>5. Optional: mitmproxy (and why Wireshark is not enough)</h2>
         <p>To inspect HTTPS as cleartext HTTP, point the browser at a local TLS-intercepting proxy such as <a href="https://mitmproxy.org/" rel="noopener noreferrer">mitmproxy</a>, install its CA in the OS/browser trust store, and filter for <code>deeperguard.com</code>. You should still see only SRP proofs and ciphertext envelopes.</p>
         <p><strong>Wireshark</strong> on the wire without TLS keys shows only TLS records — encrypted blobs. That proves transport encryption, not that the application payload is ciphertext. Use DevTools or mitmproxy for application JSON.</p>
       </article>
@@ -106,9 +127,11 @@
       <article class="mk-card">
         <h2>What these tests can’t prove</h2>
         <ul>
-          <li><strong>Server-side retention of old copies</strong> — your browser only sees what the API returns now. Historical backups or DB snapshots are outside this check.</li>
-          <li><strong>Metadata</strong> — email, IP address, request timing, ciphertext sizes, and item IDs are visible to the server and to anyone who can read logs or the database. Zero-knowledge covers vault contents, not traffic analysis.</li>
-          <li><strong>Integrity of the delivered client code</strong> — if a compromised origin shipped a malicious <code>app.js</code>, it could exfiltrate secrets before encryption. Checking the code you run is a separate step.</li>
+          <li><strong>Server-side retention of old copies</strong> — your browser only sees what the API returns now. Historical backups or DB snapshots are outside this check. Client high-water marks detect a later rollback of an item this device already saw; they do not audit the server’s private history.</li>
+          <li><strong>Pre-bootstrap history</strong> — a brand-new device trusts the first vault head it downloads. Freshness checks cannot prove the server did not already serve a rolled-back tip before that device existed.</li>
+          <li><strong>Metadata</strong> — email, IP address, request timing, ciphertext sizes, and item IDs are visible to the server and to anyone who can read logs or the database. Zero-knowledge covers vault contents, not traffic analysis. Sync freshness adds no new plaintext metadata fields.</li>
+          <li><strong>Integrity of the delivered client code</strong> — if a compromised origin shipped a malicious <code>app.js</code>, it could exfiltrate secrets before encryption or skip freshness checks. Checking the code you run is a separate step.</li>
+          <li><strong>Colluding malicious clients</strong> — a device that willingly resets high-water marks (or never ran a current client) can accept older tips; compare fingerprints across devices you control.</li>
         </ul>
         <h3>How to check the code you’re running</h3>
         <ol>
