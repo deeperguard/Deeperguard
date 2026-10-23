@@ -2844,6 +2844,57 @@ const NotesStore = (() => {
     return data?.item || null;
   }
 
+  /**
+   * QA-only: re-fetch one item's current server ciphertext and run it through
+   * the same applySyncPayload freshness path used on normal pulls. Requires
+   * localStorage notes_freshness_test=1. Does not disable crypto, export keys,
+   * or accept remote triggers.
+   */
+  async function testFreshnessProbeItem(uuid) {
+    if (typeof NotesFreshness === 'undefined' || !NotesFreshness.isTestHookEnabled()) {
+      throw new Error('Freshness test hook disabled (set localStorage notes_freshness_test=1)');
+    }
+    if (!state.cryptoKey) throw new Error('Unlock the vault first');
+    const id = String(uuid || '').trim();
+    if (!id) throw new Error('Missing item id');
+    const row = await fetchServerItem(id, { includeBlobs: false });
+    if (!row || !row.ciphertext) {
+      throw new Error('Server returned no ciphertext for this item');
+    }
+    // Force a full row through the production pull path (not an unchanged stub).
+    const forced = {
+      ...row,
+      item_uuid: row.item_uuid || id,
+      unchanged: false,
+    };
+    const before = NotesFreshness.getPublicSnapshot();
+    await applySyncPayload(
+      { items: [forced], cursor: state.lastSync || 0, server_time: Date.now() / 1000 },
+      { finalize: false, quiet: true },
+    );
+    const after = NotesFreshness.getPublicSnapshot();
+    const warning = (after.warnings || [])[0] || null;
+    const newWarning = warning && (!before.warnings?.[0] || warning.at !== before.warnings[0].at)
+      ? warning
+      : (after.warningCount > before.warningCount ? warning : null);
+    return {
+      ok: !newWarning || newWarning.type !== NotesFreshness.WARN_TYPES.rollback,
+      rejected: !!(newWarning && newWarning.type === NotesFreshness.WARN_TYPES.rollback),
+      warning: newWarning,
+      hwm: NotesFreshness.getHwm(id),
+      serverHash: String(row.content_hash || ''),
+    };
+  }
+
+  /** QA-only: raise HWM then probe the live server copy (end-to-end rollback demo). */
+  async function testDemoRollbackWarning(uuid, heldVersion = 9) {
+    if (typeof NotesFreshness === 'undefined' || !NotesFreshness.isTestHookEnabled()) {
+      throw new Error('Freshness test hook disabled (set localStorage notes_freshness_test=1)');
+    }
+    NotesFreshness.testInjectRollbackScenario(uuid, heldVersion);
+    return testFreshnessProbeItem(uuid);
+  }
+
   async function refetchSyncItems(uuids, { includeBlobs = true } = {}) {
     const ids = [...new Set((uuids || []).map((id) => String(id || '').trim()).filter(Boolean))];
     if (!ids.length) return [];
@@ -4262,12 +4313,12 @@ const NotesStore = (() => {
       content.revisions = [...(prev.revisions || [])];
       if (changed) {
         const now = Date.now();
-        // Autosave already waits until typing pauses, so each changed save is
-        // its own version. A single burst stays one version.
+        // Checkpoint of what this save wrote (newest history entry matches the
+        // saved body/title). Older entries remain earlier checkpoints.
         content.revisions.unshift({
           at: new Date(now).toISOString(),
-          title: prev.title || '',
-          content: prev.content || '',
+          title: content.title || '',
+          content: content.content || '',
         });
         if (content.revisions.length > MAX_REVISIONS) {
           content.revisions = content.revisions.slice(0, MAX_REVISIONS);
@@ -5798,6 +5849,8 @@ const NotesStore = (() => {
     needsSyncOnOpen,
     sync,
     fetchServerItem,
+    testFreshnessProbeItem,
+    testDemoRollbackWarning,
     pushDirty,
     pushDirtyPersisted,
     pullCipherWhileLocked,

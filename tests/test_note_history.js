@@ -152,8 +152,10 @@ NotesStore.upsert(burstId, { ...NotesStore.get(burstId).content, content: 'two' 
 NotesStore.upsert(burstId, { ...NotesStore.get(burstId).content, content: 'three' }, { recordRevision: true });
 const burstRows = NotesHistory.revisionRows(NotesStore.get(burstId));
 assert.strictEqual(burstRows.length, 2);
-assert.strictEqual(burstRows[0].content, 'two');
-assert.strictEqual(burstRows[1].content, 'one');
+// Newest history entry is a checkpoint of what that save wrote.
+assert.strictEqual(burstRows[0].content, 'three');
+assert.strictEqual(burstRows[1].content, 'two');
+assert.strictEqual(NotesStore.get(burstId).content.content, 'three');
 
 const root = path.join(__dirname, '..');
 const appJs = fs.readFileSync(path.join(root, 'app', 'static', 'js', 'app.js'), 'utf8');
@@ -179,8 +181,8 @@ assert.ok(historyFn.includes('catch (err)'));
 assert.ok(!historyFn.includes('if (!revisions.length)') || historyFn.indexOf('revisionRows') < historyFn.indexOf('if (!revisions.length)'));
 
 const html = fs.readFileSync(path.join(root, 'app', 'templates', 'app.html'), 'utf8');
-const historySrc = html.indexOf('/static/js/note-history.js');
-const appSrc = html.indexOf('/static/js/app.js');
+const historySrc = html.indexOf("asset_script('js/note-history.js')");
+const appSrc = html.indexOf("asset_script('js/app.js')");
 assert.ok(historySrc > 0 && historySrc < appSrc);
 
 console.log('ok');

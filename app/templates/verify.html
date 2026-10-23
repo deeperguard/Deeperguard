@@ -111,10 +111,21 @@
         <p><strong>Intentional restore:</strong> restoring an older backup asks for an explicit confirmation that resets high-water marks on this device so the older versions are accepted on purpose.</p>
         <h3>Reproducible checks (DevTools)</h3>
         <ol>
-          <li>Unlock the vault. In Console, run <code>localStorage.setItem('notes_freshness_test','1')</code> (test hook; ignored unless set).</li>
-          <li>Pick a note UUID from <code>NotesStore.state.items</code>. Run <code>NotesFreshness.testInjectRollbackScenario('&lt;uuid&gt;', 9)</code> then trigger a sync after the server still holds a lower version of that item — or, in a lab, push an older ciphertext for that UUID. You should see the rollback warning toast; the older body must not replace the local note.</li>
+          <li>Unlock the vault. In Console, run <code>localStorage.setItem('notes_freshness_test','1')</code> (required; the hooks do nothing without it).</li>
+          <li>Pick a note UUID from <code>NotesStore.state.items</code> (or from Note info). A quiet sync alone often pulls <code>items: 0</code>, so the freshness check is never reached — use the end-to-end hook instead:</li>
+        </ol>
+        <figure class="mk-code-block">
+          <figcaption class="mk-code-label">rollback demo (production applySyncPayload path)</figcaption>
+          <pre class="mk-code" tabindex="0">localStorage.setItem('notes_freshness_test', '1');
+const uuid = '…'; // note UUID
+await NotesStore.testDemoRollbackWarning(uuid, 9);
+// → toast: "The server returned an older version of this item."
+// → rejected: true; local note body unchanged</pre>
+        </figure>
+        <ol start="3">
+          <li>That call raises the local high-water mark, re-fetches the item’s current server ciphertext via <code>GET /api/sync/item/…</code>, and runs it through the same <code>applySyncPayload</code> freshness gate used on normal pulls. It cannot disable crypto, export keys, or be triggered by the server.</li>
           <li>Byte-flip: in Application → IndexedDB (or via a lab sync fixture), flip one character inside a stored ciphertext <code>data</code> field and sync/reload. Decryption must fail; the item must not render as plaintext (integrity warning).</li>
-          <li>Clear the test hook when finished: <code>localStorage.removeItem('notes_freshness_test')</code>. The hook only stages a higher local high-water mark for QA; it cannot disable encryption or export keys.</li>
+          <li>Clear the hook when finished: <code>localStorage.removeItem('notes_freshness_test')</code>.</li>
         </ol>
       </article>
 
