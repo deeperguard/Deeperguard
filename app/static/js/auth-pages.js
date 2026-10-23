@@ -112,6 +112,11 @@ async function stashLoginSession(data, email, password) {
   try {
     if (data.srp_kdf_upgrade) sessionStorage.setItem('notes_srp_kdf_upgrade', '1');
     else sessionStorage.removeItem('notes_srp_kdf_upgrade');
+    if (data.auth_method && data.auth_method !== 'srp') {
+      sessionStorage.setItem('notes_srp_legacy_upgrade', '1');
+    } else {
+      sessionStorage.removeItem('notes_srp_legacy_upgrade');
+    }
   } catch (e) { /* ignore */ }
   if (data.password_changed_at) ackPasswordChanged(data.password_changed_at);
 }

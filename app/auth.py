@@ -737,6 +737,24 @@ def csp_nonce() -> str:
     return nonce
 
 
+def _csp_on_app_shell() -> bool:
+    """True for the notes PWA shell — including query variants and /app/… paths.
+
+    Dropbox OAuth redirects to ``{origin}/app`` (query string is not in
+    ``request.path``). The in-app Update download uses ``/api/app-shell``.
+    """
+    try:
+        from config import app_entry_path
+
+        path = request.path.split("?", 1)[0]
+        entry = app_entry_path()
+    except Exception:
+        return False
+    if path == entry or path.startswith(f"{entry}/"):
+        return True
+    return path == "/api/app-shell"
+
+
 def content_security_policy() -> str:
     nonce = csp_nonce()
     # Optional Google Drive backups (GIS token client + drive.file). Allowed
@@ -751,14 +769,9 @@ def content_security_policy() -> str:
     # emitted only when DROPBOX_APP_KEY is set, and only on the app shell.
     dropbox_connect = ""
     try:
-        from config import app_entry_path
-
         google_id = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
         dropbox_key = os.environ.get("DROPBOX_APP_KEY", "").strip()
-        try:
-            on_app = request.path.split("?", 1)[0] == app_entry_path()
-        except Exception:
-            on_app = False
+        on_app = _csp_on_app_shell()
         if google_id and on_app:
             google_script = " https://accounts.google.com"
             google_connect = (

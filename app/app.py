@@ -1387,10 +1387,10 @@ def api_auth_vault_recovery():
         db.update_user_srp_verifier(
             int(uid), srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
         )
-        totp_required = bool(user["totp_enabled"])
-        auth.login_user(int(uid), totp_ok=not totp_required)
+        # Session + TOTP already passed the gate (L-22). Re-login would clear
+        # totp_ok / CSRF and bounce a just-verified 2FA user back to /totp.
         user = db.get_user_by_id(int(uid))
-        payload = _login_payload(user, totp_required=totp_required)
+        payload = _login_payload(user, totp_required=False)
         payload["vault_recovered"] = True
         return jsonify(payload)
     if not EMAIL_RE.match(email) or not password or not srp_salt or not srp_verifier:
@@ -1408,10 +1408,8 @@ def api_auth_vault_recovery():
     _realign_login_credentials(
         uid, email, password, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
     )
-    totp_required = bool(user["totp_enabled"])
-    auth.login_user(uid, totp_ok=not totp_required)
     user = db.get_user_by_id(uid)
-    payload = _login_payload(user, totp_required=totp_required)
+    payload = _login_payload(user, totp_required=False)
     payload["vault_recovered"] = True
     return jsonify(payload)
 

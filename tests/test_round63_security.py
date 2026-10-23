@@ -261,6 +261,10 @@ class Round63SecurityTests(unittest.TestCase):
         self.assertEqual(len(kept), 1)
         self.assertEqual(kept[0]["ciphertext"], ciphertext)
 
+        self.assertFalse(recovered.get_json().get("totp_required"))
+        account = self.client.get("/api/account")
+        self.assertEqual(account.status_code, 200, account.get_json())
+        self.assertEqual(account.get_json().get("email"), email)
         follow = self._login(email, password)
         self.assertEqual(follow.status_code, 200, follow.get_json())
 
@@ -284,8 +288,11 @@ class Round63SecurityTests(unittest.TestCase):
         self.assertEqual(chal.status_code, 200, chal.get_json())
         self.assertEqual(recovered.status_code, 200, recovered.get_json())
         self.assertTrue(recovered.get_json().get("vault_recovered"))
+        self.assertFalse(recovered.get_json().get("totp_required"))
         kept = notes_db.list_items_by_uuid(uid, ["round63-keep-note"])
         self.assertEqual(kept[0]["ciphertext"], ciphertext)
+        account = self.client.get("/api/account")
+        self.assertEqual(account.status_code, 200, account.get_json())
 
     def test_l22_srp_upgrade_and_resync_reject_totp_pending(self):
         import db as notes_db
@@ -349,6 +356,263 @@ class Round63SecurityTests(unittest.TestCase):
         )
         self.assertEqual(allowed.status_code, 200, allowed.get_json())
         self.assertTrue(allowed.get_json().get("srp_resynced"))
+
+    def _repair_login(self, email: str, password: str):
+        challenge = self.client.post(
+            "/api/auth/repair-login/challenge",
+            json={"email": email},
+        )
+        self.assertEqual(challenge.status_code, 200, challenge.get_json())
+        body = challenge.get_json()
+        a_hex, m1 = srp_client_proof(
+            email, password, body["srp_salt"], body["B"], body.get("srp_kdf_version"),
+        )
+        return self.client.post(
+            "/api/auth/repair-login",
+            json={"email": email, "A": a_hex, "M1": m1},
+        )
+
+    def _create_legacy_user(self, email: str, password: str, *, totp: bool = False):
+        import db as notes_db
+        from passwords import hash_password, new_kdf_salt
+
+        uid = notes_db.create_user(email, hash_password(password), new_kdf_salt())
+        notes_db.connection().execute(
+            "UPDATE users SET email_verified = 1, storage_quota_bytes = ? WHERE id = ?",
+            (100 * 1024 * 1024, uid),
+        )
+        notes_db.connection().commit()
+        secret = ""
+        if totp:
+            import totp as totp_mod
+
+            secret = totp_mod.new_secret()
+            notes_db.connection().execute(
+                "UPDATE users SET totp_secret = ?, totp_enabled = 1 WHERE id = ?",
+                (secret, uid),
+            )
+            notes_db.connection().commit()
+        return uid, secret
+
+    def test_l22_repair_login_then_vault_recovery_without_2fa(self):
+        import db as notes_db
+        from srp_auth import generate_verifier_hex, new_srp_salt_hex
+
+        email = f"l22-repair-{secrets.token_hex(4)}@example.com"
+        password = "l22-repair-password"
+        uid, stored_salt, stored_verifier, _ = self._create_srp_user(email, password)
+        ciphertext = self._add_note(uid, password)
+
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        signed_out = self.client.post(
+            "/api/auth/vault-recovery/challenge",
+            json={"email": email},
+        )
+        self.assertEqual(signed_out.status_code, 401, signed_out.get_json())
+        self.assertEqual(signed_out.get_json().get("error"), "login required")
+
+        repaired = self._repair_login(email, password)
+        self.assertEqual(repaired.status_code, 200, repaired.get_json())
+        self.assertFalse(repaired.get_json().get("totp_required"))
+        csrf = self._csrf()
+        new_salt = new_srp_salt_hex()
+        new_verifier = generate_verifier_hex(new_salt, email, password, kdf_version=2)
+        chal, recovered = self._vault_recovery(
+            email, password, csrf, new_salt=new_salt, new_verifier=new_verifier,
+        )
+        self.assertEqual(chal.status_code, 200, chal.get_json())
+        self.assertEqual(recovered.status_code, 200, recovered.get_json())
+        self.assertTrue(recovered.get_json().get("vault_recovered"))
+        self.assertFalse(recovered.get_json().get("totp_required"))
+        user = notes_db.get_user_by_email(email)
+        self.assertEqual(str(user["srp_salt"]).lower(), new_salt.lower())
+        self.assertEqual(int(str(user["srp_verifier"]), 16), int(new_verifier, 16))
+        kept = notes_db.list_items_by_uuid(uid, ["round63-keep-note"])
+        self.assertEqual(kept[0]["ciphertext"], ciphertext)
+        account = self.client.get("/api/account")
+        self.assertEqual(account.status_code, 200, account.get_json())
+
+    def test_l22_repair_login_then_vault_recovery_after_totp(self):
+        import db as notes_db
+        import pyotp
+        from srp_auth import generate_verifier_hex, new_srp_salt_hex
+
+        email = f"l22-repair-2fa-{secrets.token_hex(4)}@example.com"
+        password = "l22-repair-2fa-password"
+        uid, stored_salt, stored_verifier, secret = self._create_srp_user(
+            email, password, totp=True,
+        )
+        ciphertext = self._add_note(uid, password)
+
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        repaired = self._repair_login(email, password)
+        self.assertEqual(repaired.status_code, 200, repaired.get_json())
+        self.assertTrue(repaired.get_json().get("totp_required"))
+        csrf = self._csrf()
+        new_salt = new_srp_salt_hex()
+        new_verifier = generate_verifier_hex(new_salt, email, password, kdf_version=2)
+        chal, recovered = self._vault_recovery(
+            email, password, csrf, new_salt=new_salt, new_verifier=new_verifier,
+        )
+        self.assertEqual(chal.status_code, 403, chal.get_json())
+        self.assertEqual(chal.get_json().get("error"), "2FA required")
+        self.assertIsNone(recovered)
+        user = notes_db.get_user_by_email(email)
+        self.assertEqual(str(user["srp_salt"]).lower(), stored_salt.lower())
+        self.assertEqual(int(str(user["srp_verifier"]), 16), int(stored_verifier, 16))
+
+        verified = self.client.post(
+            "/api/totp/verify",
+            json={"code": pyotp.TOTP(secret).now()},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(verified.status_code, 200, verified.get_json())
+        chal, recovered = self._vault_recovery(
+            email, password, csrf, new_salt=new_salt, new_verifier=new_verifier,
+        )
+        self.assertEqual(chal.status_code, 200, chal.get_json())
+        self.assertEqual(recovered.status_code, 200, recovered.get_json())
+        self.assertTrue(recovered.get_json().get("vault_recovered"))
+        self.assertFalse(recovered.get_json().get("totp_required"))
+        kept = notes_db.list_items_by_uuid(uid, ["round63-keep-note"])
+        self.assertEqual(kept[0]["ciphertext"], ciphertext)
+        account = self.client.get("/api/account")
+        self.assertEqual(account.status_code, 200, account.get_json())
+        self.assertEqual(account.get_json().get("email"), email)
+
+    def test_l22_legacy_argon2_upgrade_without_2fa(self):
+        import db as notes_db
+
+        email = f"l22-legacy-{secrets.token_hex(4)}@example.com"
+        password = "l22-legacy-password"
+        uid, _ = self._create_legacy_user(email, password)
+        ciphertext = self._add_note(uid, password)
+        login = self.client.post("/api/auth/login", json={"email": email, "password": password})
+        self.assertEqual(login.status_code, 200, login.get_json())
+        self.assertEqual(login.get_json().get("auth_method"), "argon2")
+        self.assertFalse(login.get_json().get("totp_required"))
+        csrf = self._csrf()
+        new_salt, new_verifier = self._srp_pair(email, password)
+        upgraded = self.client.post(
+            "/api/auth/srp/upgrade",
+            json={
+                "current_password": password,
+                "srp_salt": new_salt,
+                "srp_verifier": new_verifier,
+                "srp_kdf_version": 2,
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(upgraded.status_code, 200, upgraded.get_json())
+        self.assertEqual(upgraded.get_json().get("auth_method"), "srp")
+        user = notes_db.get_user_by_id(uid)
+        self.assertEqual(notes_db.user_auth_method(user), "srp")
+        kept = notes_db.list_items_by_uuid(uid, ["round63-keep-note"])
+        self.assertEqual(kept[0]["ciphertext"], ciphertext)
+        follow = self._login(email, password)
+        self.assertEqual(follow.status_code, 200, follow.get_json())
+        account = self.client.get("/api/account")
+        self.assertEqual(account.status_code, 200, account.get_json())
+
+    def test_l22_legacy_argon2_upgrade_after_totp(self):
+        import db as notes_db
+        import pyotp
+
+        email = f"l22-legacy-2fa-{secrets.token_hex(4)}@example.com"
+        password = "l22-legacy-2fa-password"
+        uid, secret = self._create_legacy_user(email, password, totp=True)
+        ciphertext = self._add_note(uid, password)
+        login = self.client.post("/api/auth/login", json={"email": email, "password": password})
+        self.assertEqual(login.status_code, 200, login.get_json())
+        self.assertEqual(login.get_json().get("auth_method"), "argon2")
+        self.assertTrue(login.get_json().get("totp_required"))
+        csrf = self._csrf()
+        new_salt, new_verifier = self._srp_pair(email, password)
+        denied = self.client.post(
+            "/api/auth/srp/upgrade",
+            json={
+                "current_password": password,
+                "srp_salt": new_salt,
+                "srp_verifier": new_verifier,
+                "srp_kdf_version": 2,
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(denied.status_code, 403, denied.get_json())
+        self.assertEqual(denied.get_json().get("error"), "2FA required")
+        self.assertEqual(notes_db.user_auth_method(notes_db.get_user_by_id(uid)), "argon2")
+
+        verified = self.client.post(
+            "/api/totp/verify",
+            json={"code": pyotp.TOTP(secret).now()},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(verified.status_code, 200, verified.get_json())
+        upgraded = self.client.post(
+            "/api/auth/srp/upgrade",
+            json={
+                "current_password": password,
+                "srp_salt": new_salt,
+                "srp_verifier": new_verifier,
+                "srp_kdf_version": 2,
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(upgraded.status_code, 200, upgraded.get_json())
+        self.assertEqual(upgraded.get_json().get("auth_method"), "srp")
+        user = notes_db.get_user_by_id(uid)
+        self.assertEqual(notes_db.user_auth_method(user), "srp")
+        kept = notes_db.list_items_by_uuid(uid, ["round63-keep-note"])
+        self.assertEqual(kept[0]["ciphertext"], ciphertext)
+        account = self.client.get("/api/account")
+        self.assertEqual(account.status_code, 200, account.get_json())
+        follow = self._login(email, password)
+        self.assertEqual(follow.status_code, 200, follow.get_json())
+
+    def test_l22_client_defers_writers_until_after_totp(self):
+        srp = (REPO / "app" / "static" / "js" / "srp-auth.js").read_text(encoding="utf-8")
+        totp = (REPO / "app" / "static" / "js" / "totp-page.js").read_text(encoding="utf-8")
+        app_js = (REPO / "app" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        auth_pages = (REPO / "app" / "static" / "js" / "auth-pages.js").read_text(encoding="utf-8")
+        gate = (REPO / "app" / "app.py").read_text(encoding="utf-8")
+        exemption = gate[
+            gate.index("if not skipped and auth.needs_totp()")
+            : gate.index('return redirect(url_for("totp_page"')
+        ]
+        self.assertNotIn("/api/auth/vault-recovery", exemption)
+        self.assertNotIn("/api/auth/srp/upgrade", exemption)
+        sign_in = srp[srp.index("async function passwordSignIn") : srp.index("async function register")]
+        self.assertIn("postJson('/api/auth/login'", sign_in)
+        self.assertIn("if (result?.totp_required) return result;", sign_in)
+        self.assertLess(
+            sign_in.index("if (result?.totp_required) return result;"),
+            sign_in.index("maybeUpgradeLegacySrp"),
+        )
+        self.assertIn("async function maybeUpgradeLegacySrp", srp)
+        self.assertIn("/api/auth/srp/upgrade", srp)
+        self.assertIn("finishLegacySrpUpgradeIfNeeded", totp)
+        self.assertIn("finishVaultRecoveryIfNeeded", totp)
+        self.assertIn("NotesSrpAuth.upgrade", totp)
+        self.assertIn("NotesSrpAuth.vaultRecovery", totp)
+        self.assertLess(
+            totp.index("await finishLegacySrpUpgradeIfNeeded()"),
+            totp.index("await finishVaultRecoveryIfNeeded()"),
+        )
+        self.assertIn("notes_srp_legacy_upgrade", auth_pages)
+        repair = app_js[
+            app_js.index("async function repairUnlockWithPassword")
+            : app_js.index("async function establishServerSessionAfterVaultUnlock")
+        ]
+        self.assertIn("isLoginRequiredError(err) || isTotpRequiredError(err)", repair)
+        self.assertIn("notes_vault_recovery", repair)
+        self.assertIn("notes_srp_legacy_upgrade", repair)
+        vault_fn = gate[
+            gate.index("def api_auth_vault_recovery(")
+            : gate.index("def api_auth_srp_upgrade(")
+        ]
+        self.assertNotIn("auth.login_user", vault_fn)
 
     def test_l21_half_configured_turnstile_fails_closed(self):
         import db as notes_db
@@ -465,6 +729,53 @@ class Round63SecurityTests(unittest.TestCase):
         login_csp = self.client.get("/login").headers.get("Content-Security-Policy") or ""
         for host in GOOGLE_HOSTS + DROPBOX_HOSTS:
             self.assertNotIn(host, login_csp, host)
+
+    def test_l19_csp_covers_app_shell_prefix_and_query_variants(self):
+        from config import app_entry_path
+
+        os.environ["GOOGLE_OAUTH_CLIENT_ID"] = "123.apps.googleusercontent.com"
+        os.environ["DROPBOX_APP_KEY"] = "dropbox-app-key"
+        entry = app_entry_path()
+        auth_src = (REPO / "app" / "auth.py").read_text(encoding="utf-8")
+        self.assertIn("def _csp_on_app_shell", auth_src)
+        self.assertIn('path.startswith(f"{entry}/")', auth_src)
+        self.assertIn('path == "/api/app-shell"', auth_src)
+        # GIS / Dropbox live on the notes shell (settings is the /app SPA;
+        # Dropbox PKCE returns to {origin}/app; Update downloads /api/app-shell).
+        for path in (
+            entry,
+            f"{entry}?hard=1",
+            f"{entry}?note=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            f"{entry}/settings",
+            "/api/app-shell",
+            "/api/app-shell?t=1",
+        ):
+            resp = self.client.get(path, follow_redirects=False)
+            csp = resp.headers.get("Content-Security-Policy") or ""
+            for host in GOOGLE_HOSTS + DROPBOX_HOSTS:
+                self.assertIn(host, csp, f"{host} missing on {path} ({resp.status_code})")
+        for path in ("/login", "/", "/totp", "/sw.js", "/register"):
+            resp = self.client.get(path, follow_redirects=False)
+            csp = resp.headers.get("Content-Security-Policy") or ""
+            for host in GOOGLE_HOSTS + DROPBOX_HOSTS:
+                self.assertNotIn(host, csp, f"{host} leaked on {path}")
+
+    def test_round63_ui_assertions(self):
+        import shutil
+        import subprocess
+
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not installed")
+        script = TESTS_DIR / "test_round63_ui.js"
+        completed = subprocess.run(
+            [node, str(script)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
 
 
 if __name__ == "__main__":
