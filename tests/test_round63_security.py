@@ -585,6 +585,8 @@ class Round63SecurityTests(unittest.TestCase):
         self.assertNotIn("/api/auth/srp/upgrade", exemption)
         sign_in = srp[srp.index("async function passwordSignIn") : srp.index("async function register")]
         self.assertIn("postJson('/api/auth/login'", sign_in)
+        self.assertTrue("legacy_login" in sign_in or "legacyLogin" in sign_in)
+        self.assertIn("incorrectPassword", sign_in)
         self.assertIn("if (result?.totp_required) return result;", sign_in)
         self.assertLess(
             sign_in.index("if (result?.totp_required) return result;"),
