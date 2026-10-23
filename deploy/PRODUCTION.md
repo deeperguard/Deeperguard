@@ -129,10 +129,11 @@ Production origin is the Vienna VPS (set `NOTES_HOST` / SSH host via env — do 
 
 ```bash
 # from ~/Projects/deeperguard after git push
-NOTES_HOST="$NOTES_HOST" bash deploy/deploy-deeperguard.sh
+# NOTES_RELEASE_TAG is required unless HEAD is an exact release tag (Round 72.2).
+NOTES_HOST="$NOTES_HOST" NOTES_RELEASE_TAG=vX.Y.Z bash deploy/deploy-deeperguard.sh
 ```
 
-Defaults: `NOTES_HOST` (required), `NOTES_ENABLE_LAN_TLS=0`. Gunicorn stays on `127.0.0.1:80` behind Cloudflare Tunnel. The www tunnel is `homelab-notes`. `pool.deeperguard.com` uses the separate `deeperguard-pool` tunnel.
+Defaults: `NOTES_HOST` (required), `NOTES_RELEASE_TAG` (or exact-match git tag), `NOTES_ENABLE_LAN_TLS=0`. Gunicorn stays on `127.0.0.1:80` behind Cloudflare Tunnel. The www tunnel is `homelab-notes`. `pool.deeperguard.com` uses the separate `deeperguard-pool` tunnel. The served `notes-release-tag` meta comes from `RELEASE_TAG` on the host — deploy rewrites it every time.
 
 Never `git pull` on Vienna. Never commit `config/deeperguard.env`, `keys/`, or `data/`.
 
