@@ -2273,18 +2273,174 @@
     }
   }
 
-  async function serverUnreachableNow() {
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
-    if (typeof window.notesNetworkReachable === 'function' && !window.notesNetworkReachable()) return true;
+  async function serverUnreachableNow({ force = false } = {}) {
+    // Round 72: unlock passes force:true so a health backoff null or a stale
+    // networkReachable=false cannot short-circuit before bootstrap/pull.
+    if (!force && typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+    if (!force && typeof window.notesNetworkReachable === 'function' && !window.notesNetworkReachable()) {
+      return true;
+    }
     // Share the page-load /api/health read. A second probe here used to fan out
     // before the user had even typed a password.
     try {
-      const data = await fetchHealthJson();
+      const data = await fetchHealthJson({
+        force,
+        timeoutMs: force ? 3000 : 1500,
+      });
       return !(data && data.ok);
     } catch (err) {
       return true;
     }
   }
+
+  function isRealNetworkFailure(err) {
+    if (!err) return true;
+    if (err.code === 'aborted' || err.code === 'EMPTY_DEVICE_FETCH_PENDING') return true;
+    if (typeof NotesStore !== 'undefined' && NotesStore.isProbablyOffline?.(err)) return true;
+    const status = Number(err.status) || 0;
+    if (!status && err.code !== 'DECRYPT_FAILED' && err.code !== 'PROBE_NO_SAMPLE') return true;
+    return false;
+  }
+
+  // Empty-device unlock: first online pull retries at 0/1/2/4/8s, then fallback UI.
+  const EMPTY_DEVICE_RETRY_DELAYS_MS = [0, 1000, 2000, 4000, 8000];
+  let emptyDeviceBgRetryTimer = 0;
+  let emptyDeviceFetchGeneration = 0;
+
+  function clearEmptyDeviceBgRetry() {
+    if (emptyDeviceBgRetryTimer) {
+      clearTimeout(emptyDeviceBgRetryTimer);
+      emptyDeviceBgRetryTimer = 0;
+    }
+  }
+
+  function setEmptyDeviceUnlockUi(mode) {
+    const status = document.getElementById('unlock-status');
+    const progress = document.getElementById('unlock-progress');
+    const retryBtn = document.getElementById('unlock-empty-retry');
+    if (mode === 'fetching') {
+      if (status) {
+        status.hidden = false;
+        status.classList.add('is-fetching');
+        status.classList.remove('is-fallback');
+        status.textContent = 'Getting your notes from the server…';
+      }
+      if (progress) {
+        progress.hidden = false;
+        progress.classList.add('is-indeterminate');
+        progress.removeAttribute('aria-valuenow');
+        progress.setAttribute('aria-busy', 'true');
+      }
+      if (retryBtn) retryBtn.hidden = true;
+      return;
+    }
+    if (mode === 'fallback') {
+      if (status) {
+        status.hidden = false;
+        status.classList.remove('is-fetching');
+        status.classList.add('is-fallback');
+        status.textContent = "Can't reach the server right now. We'll keep trying in the background.";
+      }
+      if (progress) {
+        progress.hidden = true;
+        progress.classList.remove('is-indeterminate');
+        progress.removeAttribute('aria-busy');
+      }
+      if (retryBtn) retryBtn.hidden = false;
+      return;
+    }
+    if (status) {
+      status.hidden = true;
+      status.classList.remove('is-fetching', 'is-fallback');
+      status.textContent = '';
+    }
+    if (progress) {
+      progress.hidden = true;
+      progress.classList.remove('is-indeterminate');
+      progress.removeAttribute('aria-busy');
+    }
+    if (retryBtn) retryBtn.hidden = true;
+  }
+
+  function emptyDeviceFetchPendingError() {
+    const err = new Error(
+      "Can't reach the server right now. We'll keep trying in the background.",
+    );
+    err.code = 'EMPTY_DEVICE_FETCH_PENDING';
+    return err;
+  }
+
+  function scheduleEmptyDeviceBackgroundRetry(cached, password) {
+    clearEmptyDeviceBgRetry();
+    const gen = emptyDeviceFetchGeneration;
+    emptyDeviceBgRetryTimer = setTimeout(() => {
+      emptyDeviceBgRetryTimer = 0;
+      if (gen !== emptyDeviceFetchGeneration) return;
+      if (NotesStore.isUnlocked() && vaultKeyProven()) return;
+      const clean = String(password || '').trim();
+      if (!clean) return;
+      verifyAndUnlock(clean, { silent: true }).catch(() => {
+        scheduleEmptyDeviceBackgroundRetry(cached, password);
+      });
+    }, 15000);
+  }
+
+  async function fetchEmptyDeviceProofWithRetry(cached, password, { silent = false } = {}) {
+    emptyDeviceFetchGeneration += 1;
+    const gen = emptyDeviceFetchGeneration;
+    clearEmptyDeviceBgRetry();
+    setEmptyDeviceUnlockUi('fetching');
+    let lastErr = null;
+    for (let i = 0; i < EMPTY_DEVICE_RETRY_DELAYS_MS.length; i += 1) {
+      if (gen !== emptyDeviceFetchGeneration) throw emptyDeviceFetchPendingError();
+      const wait = EMPTY_DEVICE_RETRY_DELAYS_MS[i];
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      if (gen !== emptyDeviceFetchGeneration) throw emptyDeviceFetchPendingError();
+      try {
+        // Re-bootstrap when health/reachability was flaky on the first pass.
+        try {
+          await bootstrapServerSession(cached, {
+            retryOnLoginRequired: !!(silent && isPostLoginBootUnlock()),
+          });
+        } catch (bootErr) {
+          if (isLoginRequiredError(bootErr)) throw sessionExpiredError();
+          if (!isRealNetworkFailure(bootErr)) throw bootErr;
+          lastErr = bootErr;
+          continue;
+        }
+        const proof = await assertVaultKeyVerified();
+        setEmptyDeviceUnlockUi('clear');
+        return { ok: true, proof };
+      } catch (err) {
+        if (isLoginRequiredError(err)) throw sessionExpiredError();
+        if (err?.code === 'EMPTY_DEVICE_FETCH_PENDING') throw err;
+        if (err?.code === 'PROBE_NO_SAMPLE' || isRealNetworkFailure(err)) {
+          lastErr = err;
+          setEmptyDeviceUnlockUi('fetching');
+          continue;
+        }
+        setEmptyDeviceUnlockUi('clear');
+        throw err;
+      }
+    }
+    setEmptyDeviceUnlockUi('fallback');
+    scheduleEmptyDeviceBackgroundRetry(cached, password);
+    if (silent) deferAutoUnlock();
+    const pending = emptyDeviceFetchPendingError();
+    if (lastErr) pending.cause = lastErr;
+    throw pending;
+  }
+
+  // Round 72 helpers — empty-device unlock health + fetch retry UI.
+  // Kept next to the Part A helpers (not beside NotesPostLoginUnlock) so the
+  // Round 70 vm slice of POST_LOGIN_* helpers does not reference these consts.
+  window.NotesEmptyDeviceUnlock = {
+    EMPTY_DEVICE_RETRY_DELAYS_MS,
+    serverUnreachableNow,
+    isRealNetworkFailure,
+    setEmptyDeviceUnlockUi,
+    emptyDeviceFetchPendingError,
+  };
 
   let sessionExpiredAlertShown = false;
   let sessionExpiredHold = false;
@@ -6066,6 +6222,24 @@
       redirectToExpiredLogin();
       throw err.code === 'SESSION_EXPIRED' ? err : sessionExpiredError();
     }
+    // Round 72: empty-device fetch fallback owns the unlock status line —
+    // do not replace it with a generic error or leave Checking… spinning.
+    if (err?.code === 'EMPTY_DEVICE_FETCH_PENDING') {
+      resetLoginProgress();
+      logLockReason('empty-device-fetch-pending', { message: String(err?.message || '') });
+      try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
+      markVaultShellLocked();
+      if (unlockSubmit) {
+        unlockSubmit.disabled = false;
+        unlockSubmit.textContent = 'Unlock';
+        unlockSubmit.removeAttribute('aria-busy');
+        unlockSubmit.classList.remove('is-checking');
+      }
+      if (!document.getElementById('unlock-status')?.classList.contains('is-fallback')) {
+        setEmptyDeviceUnlockUi('fallback');
+      }
+      throw err;
+    }
     resetLoginProgress();
     if (silent || err?.code === 'AUTO_UNLOCK_DEFER') {
       // Post-login auto-unlock: fall back to the typed unlock prompt without a
@@ -6621,11 +6795,14 @@
         await yieldToPaint();
         const retryOnLoginRequired = !!(silent && isPostLoginBootUnlock());
         const serverCheck = (async () => {
-          if (await serverUnreachableNow()) return { offline: true };
+          // Round 72: force health. Backoff null / stale networkReachable must
+          // not skip bootstrap — only a real /api/account failure is offline.
+          await serverUnreachableNow({ force: true });
           try {
             await bootstrapServerSession(cached, { retryOnLoginRequired });
             return { ok: true };
           } catch (err) {
+            if (isRealNetworkFailure(err)) return { offline: true, err };
             return { err };
           }
         })();
@@ -6727,16 +6904,18 @@
         // No local ciphertext and no repaired server row: a session cookie is
         // not a key. Prove the typed password, or a server row must decrypt.
         if (!hasLocalVault && !vaultRepairedOnline) {
-          if (serverResult.offline) {
-            if (silent) deferAutoUnlock();
-            NotesStore.lock();
-            throw new Error('Connect once online while signed in to unlock an empty device with the vault password.');
-          }
+          // Round 72: retry pull/bootstrap with UI; offline only after real
+          // /api/account or /api/sync/pull failures exhaust the backoff.
           let freshProof = null;
           try {
-            freshProof = await assertVaultKeyVerified();
+            const fetched = await fetchEmptyDeviceProofWithRetry(cached, clean, { silent });
+            freshProof = fetched?.proof || null;
           } catch (probeErr) {
             if (isLoginRequiredError(probeErr)) throw sessionExpiredError();
+            if (probeErr?.code === 'EMPTY_DEVICE_FETCH_PENDING') {
+              NotesStore.lock();
+              throw probeErr;
+            }
             if (silent) deferAutoUnlock();
             throw probeErr;
           }
@@ -6751,10 +6930,13 @@
           if (passwordProven) serverResult = { ok: true };
         }
         if (serverResult.offline) {
-          if (emptyLocal && !hasLocalVault) {
+          if (emptyLocal && !hasLocalVault && !passwordProven) {
+            // Empty-device path above already retried pull/bootstrap.
             if (silent) deferAutoUnlock();
             NotesStore.lock();
-            throw new Error('Connect once online while signed in to unlock an empty device with the vault password.');
+            setEmptyDeviceUnlockUi('fallback');
+            scheduleEmptyDeviceBackgroundRetry(cached, clean);
+            throw emptyDeviceFetchPendingError();
           }
           markOfflineUnlockVerified();
         } else if (serverResult.ok) {
@@ -7001,11 +7183,20 @@
     unlockSubmit.classList.add('is-checking');
     try {
       await verifyAndUnlock(typed);
+      setEmptyDeviceUnlockUi('clear');
+      clearEmptyDeviceBgRetry();
       repairUnlockShellState();
       if (vaultKeyProven() && !isVaultReadyForSync()) showApp();
     } catch (err) {
       if (isLoginRequiredError(err)) {
         showUnlockError(SESSION_EXPIRED_MESSAGE);
+        unlockSubmit.disabled = false;
+        unlockSubmit.textContent = 'Unlock';
+        unlockSubmit.removeAttribute('aria-busy');
+        unlockSubmit.classList.remove('is-checking');
+        return;
+      }
+      if (err?.code === 'EMPTY_DEVICE_FETCH_PENDING') {
         unlockSubmit.disabled = false;
         unlockSubmit.textContent = 'Unlock';
         unlockSubmit.removeAttribute('aria-busy');
@@ -7029,6 +7220,14 @@
   unlockForm?.addEventListener('submit', (e) => {
     e.preventDefault();
     e.stopPropagation();
+    submitUnlockForm().catch(() => {});
+  });
+
+  document.getElementById('unlock-empty-retry')?.addEventListener('click', () => {
+    emptyDeviceFetchGeneration += 1;
+    clearEmptyDeviceBgRetry();
+    setEmptyDeviceUnlockUi('clear');
+    showUnlockError('');
     submitUnlockForm().catch(() => {});
   });
 
