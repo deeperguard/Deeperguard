@@ -3,12 +3,9 @@ async function postJson(path, body) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(function deviceHeaders() {
       try {
-        let id = localStorage.getItem('notes_device_id') || '';
-        if (!/^[A-Za-z0-9._-]{8,80}$/.test(id)) {
-          id = (crypto.randomUUID && crypto.randomUUID())
-            || `d${Date.now()}${Math.random().toString(36).slice(2, 10)}`;
-          localStorage.setItem('notes_device_id', id);
-        }
+        const id = (typeof NotesSrpAuth !== 'undefined' && NotesSrpAuth.ensureDeviceId)
+          ? NotesSrpAuth.ensureDeviceId()
+          : '';
         return id ? { 'X-Device-Id': id } : {};
       } catch (err) {
         return {};

@@ -1468,17 +1468,35 @@ def api_logout():
     return jsonify({"ok": True})
 
 
-def _public_session(row, *, current_token: str) -> dict:
+_SESSION_INACTIVE_SECONDS = 30 * 24 * 60 * 60
+
+
+def _device_id_suffix(device_id: str) -> str:
+    raw = str(device_id or "").strip()
+    if not raw:
+        return ""
+    # Short stable hint for the signed-in devices list (not a secret).
+    return raw.replace("-", "")[:4].lower()
+
+
+def _public_session(row, *, current_token: str, now: float | None = None) -> dict:
     token_match = False
     if current_token:
         stored = db.get_session_by_token(current_token)
         token_match = bool(stored and int(stored["id"]) == int(row["id"]))
+    last_seen = float(row["last_seen_at"] or 0)
+    device_id = str(row["device_id"] or "")
+    at = float(now if now is not None else time.time())
+    inactive = bool(last_seen > 0 and (at - last_seen) >= _SESSION_INACTIVE_SECONDS)
     return {
         "id": int(row["id"]),
         "device": str(row["device_label"] or "Unknown device"),
+        "device_id_suffix": _device_id_suffix(device_id),
         "ip": str(row["ip"] or ""),
         "ip_location": str(row["ip_location"] or "Unknown"),
         "last_login_at": float(row["last_login_at"] or 0),
+        "last_seen_at": last_seen,
+        "inactive": inactive,
         "current": token_match,
     }
 

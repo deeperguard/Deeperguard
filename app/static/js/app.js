@@ -8510,8 +8510,22 @@
       // Always probe — even when dirty is empty — so the Offline caption clears.
       probeNetwork({ syncOnRecovery: true, forceHealth: true }).then((ok) => {
         if (generation !== onlineRecoveryGeneration) return ok;
+        if (!ok) return ok;
+        // Round 71: first successful probe always force-pulls (abort of the
+        // store online sync + wasOffline gate used to leave remote edits
+        // until the ~25s change poll). syncInFlight coalesces overlapping pulls.
+        if (attempt === 0 && vaultReady) {
+          try {
+            console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
+              reason: 'online-recovery',
+              attempt: 0,
+              pending: NotesStore.state?.dirty?.size || 0,
+            });
+          } catch (err) { /* ignore */ }
+          return syncNow({ quiet: true, force: true });
+        }
         const stillDirty = NotesStore.state?.dirty?.size || 0;
-        if (ok && stillDirty > 0) {
+        if (stillDirty > 0) {
           try {
             console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
               reason: 'online-recovery-retry',
@@ -12968,6 +12982,12 @@
     }
   }
 
+  function formatDeviceRowName(item) {
+    const base = item?.device || 'Unknown device';
+    const suffix = String(item?.device_id_suffix || '').trim();
+    return suffix ? `${base} · ${suffix}` : base;
+  }
+
   function renderSignedInDevices(sessions) {
     const el = document.getElementById('signed-in-devices');
     if (!el) return;
@@ -12982,12 +13002,13 @@
     el.replaceChildren(...rows.map((item) => {
       const row = document.createElement('article');
       row.className = 'device-row';
+      if (item.inactive) row.classList.add('device-row-inactive');
       row.setAttribute('role', 'listitem');
       const head = document.createElement('div');
       head.className = 'device-row-head';
       const name = document.createElement('span');
       name.className = 'device-row-name';
-      name.textContent = item.device || 'Unknown device';
+      name.textContent = formatDeviceRowName(item);
       head.appendChild(name);
       if (item.current) {
         const badge = document.createElement('span');
@@ -12995,9 +13016,16 @@
         badge.textContent = 'This device';
         head.appendChild(badge);
       }
+      if (item.inactive) {
+        const inactive = document.createElement('span');
+        inactive.className = 'device-inactive';
+        inactive.textContent = 'Inactive';
+        head.appendChild(inactive);
+      }
       const meta = document.createElement('p');
       meta.className = 'device-meta';
       const parts = [
+        `Last seen ${formatDeviceLogin(item.last_seen_at || item.last_login_at)}`,
         `Last login ${formatDeviceLogin(item.last_login_at)}`,
         item.ip ? `IP ${item.ip}` : '',
         item.ip_location || '',
