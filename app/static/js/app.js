@@ -6375,6 +6375,22 @@
     if (!normalized || !password) return { ok: false };
     if (verifyOnly) return await checkVaultPasswordOnline(normalized, password);
 
+    const stashPendingAuthWrites = async (data) => {
+      try {
+        if (data.srp_kdf_upgrade) sessionStorage.setItem('notes_srp_kdf_upgrade', '1');
+        if (data.auth_method && data.auth_method !== 'srp') {
+          sessionStorage.setItem('notes_srp_legacy_upgrade', '1');
+        }
+        sessionStorage.setItem('notes_vault_recovery', '1');
+      } catch (flagErr) { /* ignore */ }
+      if (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.stashBootPassword) {
+        await NotesVaultSecrets.stashBootPassword(password);
+      }
+    };
+
+    // vault-recovery writes salt/verifier and now needs a totp_ok session (L-22).
+    // Missing session / TOTP-pending must fall through to repair-login, then
+    // finish recovery after TOTP (or immediately when 2FA is off).
     if (window.NotesSrpAuth?.vaultRecovery) {
       try {
         const data = await NotesSrpAuth.vaultRecovery(normalized, password);
@@ -6382,11 +6398,12 @@
         if (data.password_changed_at) NotesStore.ackPasswordChanged(data.password_changed_at);
         return { ok: true, via: 'vault', totpRequired: !!data.totp_required };
       } catch (err) {
-        if (isLoginRequiredError(err)) return { ok: false, sessionExpired: true };
-        if (err?.status === 401) {
+        if (err?.status === 429) return { ok: false, rateLimited: true };
+        if (isLoginRequiredError(err) || isTotpRequiredError(err)) {
+          /* no session or TOTP still pending — prove via repair-login */
+        } else if (err?.status === 401) {
           return { ok: false, wrongPassword: true };
         }
-        if (err?.status === 429) return { ok: false, rateLimited: true };
       }
     }
     if (window.NotesSrpAuth?.passwordSignIn) {
@@ -6394,14 +6411,23 @@
         const data = await NotesSrpAuth.passwordSignIn(normalized, password);
         NotesStore.cacheAccount(data);
         if (data.password_changed_at) NotesStore.ackPasswordChanged(data.password_changed_at);
-        if (data.totp_required && data.srp_kdf_upgrade) {
-          try { sessionStorage.setItem('notes_srp_kdf_upgrade', '1'); } catch (flagErr) { /* ignore */ }
-          if (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.stashBootPassword) {
-            await NotesVaultSecrets.stashBootPassword(password);
+        if (data.totp_required) {
+          await stashPendingAuthWrites(data);
+          const via = data.login_repaired ? 'login' : 'srp';
+          return { ok: true, via, totpRequired: true };
+        }
+        if (window.NotesSrpAuth?.vaultRecovery) {
+          try {
+            const recovered = await NotesSrpAuth.vaultRecovery(normalized, password);
+            NotesStore.cacheAccount(recovered);
+            if (recovered.password_changed_at) NotesStore.ackPasswordChanged(recovered.password_changed_at);
+            return { ok: true, via: 'vault', totpRequired: false };
+          } catch (recoverErr) {
+            // Session is live; verifier realign can retry on the next unlock.
           }
         }
         const via = data.login_repaired ? 'login' : 'srp';
-        return { ok: true, via, totpRequired: !!data.totp_required };
+        return { ok: true, via, totpRequired: false };
       } catch (err) {
         if (isLoginRequiredError(err)) return { ok: false, sessionExpired: true };
         if (err?.status === 429) return { ok: false, rateLimited: true };

@@ -275,17 +275,33 @@
   async function passwordSignIn(email, password, options) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const onStatus = options && typeof options.onStatus === 'function' ? options.onStatus : null;
+    let result;
     if (login) {
       if (onStatus) onStatus('Verifying sign-in…');
       try {
-        return await login(normalizedEmail, password);
+        result = await login(normalizedEmail, password);
       } catch (srpErr) {
         if (srpErr?.status === 429) throw srpErr;
         if (!shouldRetryWithRepairAfterSrp(srpErr)) throw srpErr;
       }
     }
-    if (onStatus) onStatus('Repairing sign-in…');
-    return repairLogin(normalizedEmail, password);
+    if (!result) {
+      if (onStatus) onStatus('Repairing sign-in…');
+      try {
+        result = await repairLogin(normalizedEmail, password);
+      } catch (repairErr) {
+        if (repairErr?.status === 429) throw repairErr;
+        // Leftover Argon2-only accounts still sign in here, then upgrade to SRP
+        // after TOTP (or immediately when 2FA is off).
+        if (onStatus) onStatus('Signing in…');
+        result = await postJson('/api/auth/login', {
+          email: normalizedEmail,
+          password,
+        });
+      }
+    }
+    if (result?.totp_required) return result;
+    return maybeUpgradeLegacySrp(normalizedEmail, password, result);
   }
 
   async function register(email, password, extras) {
@@ -364,6 +380,22 @@
     // verifier; totp-page.js finishes the upgrade after TOTP succeeds.
     if (result.totp_required) return result;
     return maybeUpgradeSrpKdf(email, password, result);
+  }
+
+  async function maybeUpgradeLegacySrp(email, password, loginResult) {
+    if (!loginResult || loginResult.totp_required) return loginResult;
+    if (String(loginResult.auth_method || 'srp') === 'srp') return loginResult;
+    try {
+      if (loginResult.csrf) {
+        try { sessionStorage.setItem('notes_csrf', loginResult.csrf); } catch (_) { /* ignore */ }
+      }
+      const upgraded = await upgrade(email, password);
+      loginResult.auth_method = upgraded.auth_method || 'srp';
+    } catch (err) {
+      // Login already succeeded; leftover Argon2 → SRP can retry next sign-in.
+      try { console.warn('SRP legacy upgrade deferred', err); } catch (_) { /* ignore */ }
+    }
+    return loginResult;
   }
 
   async function upgrade(email, password) {
@@ -487,6 +519,7 @@
     repairLogin,
     passwordSignIn,
     maybeUpgradeSrpKdf,
+    maybeUpgradeLegacySrp,
     shouldRetryWithRepairAfterSrp,
     SRP_KDF_V1,
     SRP_KDF_V2,

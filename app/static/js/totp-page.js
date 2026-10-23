@@ -4,10 +4,7 @@
   const csrf = form.dataset.csrf || '';
   const err = document.getElementById('totp-error');
 
-  async function finishSrpKdfUpgradeIfNeeded() {
-    let pending = false;
-    try { pending = sessionStorage.getItem('notes_srp_kdf_upgrade') === '1'; } catch (e) { /* ignore */ }
-    if (!pending || !window.NotesSrpAuth?.maybeUpgradeSrpKdf) return;
+  async function bootCredentials() {
     const email = String((function () {
       try { return localStorage.getItem('notes_email') || ''; } catch (e) { return ''; }
     })()).trim().toLowerCase();
@@ -15,6 +12,14 @@
     if (window.NotesVaultSecrets?.peekBootPassword) {
       try { password = await NotesVaultSecrets.peekBootPassword(); } catch (e) { password = ''; }
     }
+    return { email, password };
+  }
+
+  async function finishSrpKdfUpgradeIfNeeded() {
+    let pending = false;
+    try { pending = sessionStorage.getItem('notes_srp_kdf_upgrade') === '1'; } catch (e) { /* ignore */ }
+    if (!pending || !window.NotesSrpAuth?.maybeUpgradeSrpKdf) return;
+    const { email, password } = await bootCredentials();
     if (!email || !password) return;
     try {
       sessionStorage.setItem('notes_csrf', csrf);
@@ -24,6 +29,32 @@
       csrf,
     });
     try { sessionStorage.removeItem('notes_srp_kdf_upgrade'); } catch (e) { /* ignore */ }
+  }
+
+  async function finishLegacySrpUpgradeIfNeeded() {
+    let pending = false;
+    try { pending = sessionStorage.getItem('notes_srp_legacy_upgrade') === '1'; } catch (e) { /* ignore */ }
+    if (!pending || !window.NotesSrpAuth?.upgrade) return;
+    const { email, password } = await bootCredentials();
+    if (!email || !password) return;
+    try {
+      sessionStorage.setItem('notes_csrf', csrf);
+    } catch (e) { /* ignore */ }
+    await NotesSrpAuth.upgrade(email, password);
+    try { sessionStorage.removeItem('notes_srp_legacy_upgrade'); } catch (e) { /* ignore */ }
+  }
+
+  async function finishVaultRecoveryIfNeeded() {
+    let pending = false;
+    try { pending = sessionStorage.getItem('notes_vault_recovery') === '1'; } catch (e) { /* ignore */ }
+    if (!pending || !window.NotesSrpAuth?.vaultRecovery) return;
+    const { email, password } = await bootCredentials();
+    if (!email || !password) return;
+    try {
+      sessionStorage.setItem('notes_csrf', csrf);
+    } catch (e) { /* ignore */ }
+    await NotesSrpAuth.vaultRecovery(email, password);
+    try { sessionStorage.removeItem('notes_vault_recovery'); } catch (e) { /* ignore */ }
   }
 
   form.addEventListener('submit', async (e) => {
@@ -39,6 +70,8 @@
       try { sessionStorage.setItem('notes_allow_boot_unlock', '1'); } catch (e) {}
       try { sessionStorage.setItem('notes_post_login_unlock', '1'); } catch (e) {}
       try { await finishSrpKdfUpgradeIfNeeded(); } catch (e) { /* login succeeded; retry later */ }
+      try { await finishLegacySrpUpgradeIfNeeded(); } catch (e) { /* leftover Argon2; retry next login */ }
+      try { await finishVaultRecoveryIfNeeded(); } catch (e) { /* verifier realign; retry next unlock */ }
       let next = '/app';
       try {
         const note = new URLSearchParams(location.search).get('note') || '';

@@ -185,9 +185,36 @@ def turnstile_secret_key() -> str:
     return os.environ.get("NOTES_TURNSTILE_SECRET_KEY", "").strip()
 
 
+def turnstile_unpaired() -> bool:
+    """True when exactly one of the Turnstile site/secret keys is set (L-21)."""
+    return bool(turnstile_site_key()) != bool(turnstile_secret_key())
+
+
 def turnstile_required() -> bool:
-    """When secret is set, register must present a valid Turnstile token (M3)."""
-    return bool(turnstile_secret_key())
+    """Register must present a valid Turnstile token when either key is set.
+
+    Both keys unset: disabled (local/dev). Both set: verify with Cloudflare.
+    Exactly one set: fail closed — do not skip verification (L-21).
+    """
+    return bool(turnstile_site_key() or turnstile_secret_key())
+
+
+_turnstile_startup_warned = False
+
+
+def log_turnstile_startup_warning() -> None:
+    """Log once when Turnstile keys are unpaired so register cannot fail open."""
+    global _turnstile_startup_warned
+    if _turnstile_startup_warned or not turnstile_unpaired():
+        return
+    _turnstile_startup_warned = True
+    import logging
+
+    log = logging.getLogger("deeperguard")
+    log.error(
+        "NOTES_TURNSTILE_SITE_KEY and NOTES_TURNSTILE_SECRET_KEY must both be set "
+        "or both unset; sign-up will refuse until they are paired (L-21)."
+    )
 
 
 def register_ip_hourly_cap() -> int:

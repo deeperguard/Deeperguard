@@ -19,7 +19,8 @@ assert.ok(appJs.includes('navigate = true'));
 assert.ok(appJs.includes('navigate: false'));
 
 assert.ok(auth.includes('def _align_session_with_request'));
-assert.ok(auth.includes('rotate_session_token'));
+assert.ok(!auth.includes('get_active_session_for_device'));
+assert.ok(!auth.includes('rotate_session_token'));
 assert.ok(!auth.includes('if request_label =='));
 
 assert.ok(appJs.includes('dirtyCount === 0 && quiet'));

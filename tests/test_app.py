@@ -794,8 +794,10 @@ class NotesAppTests(unittest.TestCase):
         ).get_json()["sessions"]
         marked = [item for item in rebound if item["current"]]
         self.assertEqual(len(marked), 1)
-        self.assertNotEqual(marked[0]["id"], cookie["id"])
-        self.assertEqual(marked[0]["device"], "Linux · Chrome")
+        # L-17: naming another live device must not adopt that row.
+        self.assertEqual(marked[0]["id"], cookie["id"])
+        other = next(item for item in rebound if item["id"] != cookie["id"])
+        self.assertFalse(other["current"])
         # A mismatched user agent must not move the badge onto a different row.
         self.client.environ_base["HTTP_USER_AGENT"] = (
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
@@ -803,8 +805,7 @@ class NotesAppTests(unittest.TestCase):
         )
         stolen = self.client.get("/api/sessions").get_json()["sessions"]
         still = next(item for item in stolen if item["current"])
-        self.assertEqual(still["id"], marked[0]["id"])
-        self.assertEqual(still["device"], "Linux · Chrome")
+        self.assertEqual(still["id"], cookie["id"])
 
     def test_remote_sign_out_tells_device_to_wipe(self):
         import secrets
