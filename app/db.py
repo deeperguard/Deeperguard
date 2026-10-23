@@ -779,6 +779,14 @@ def revoke_duplicate_sessions(
     ip: str = "",
     device_label: str = "",
 ) -> None:
+    """Revoke true duplicates only.
+
+    - Same non-empty device_id → revoke the other live rows.
+    - Keep row has empty device_id → revoke other empty-device_id rows with the
+      same (ip, device_label).
+    Never revoke a row because it shares (ip, label) with a different/real
+    device_id (shared Cloudflare/NAT IPs used to kill fresh Incognito logins).
+    """
     uid = int(user_id)
     keep_id = int(keep_id)
     device_id = normalize_device_id(device_id)
@@ -793,6 +801,7 @@ def revoke_duplicate_sessions(
                 """,
                 (ts, uid, keep_id, device_id),
             )
+            return
         if ip and device_label:
             conn.execute(
                 """
@@ -1027,6 +1036,11 @@ def revoke_session_by_token(token: str, *, reason: str = "logout") -> bool:
 
 
 def collapse_duplicate_sessions(user_id: int) -> None:
+    """Collapse same device_id rows, or empty↔empty (ip, label) pairs only.
+
+    A real device_id must never mark an empty-device_id row as duplicate just
+    because they share a Cloudflare/NAT IP and UA label.
+    """
     rows = connection().execute(
         """
         SELECT id, device_id, ip, device_label
@@ -1039,20 +1053,20 @@ def collapse_duplicate_sessions(user_id: int) -> None:
     with_id = [row for row in rows if str(row["device_id"] or "")]
     without_id = [row for row in rows if not str(row["device_id"] or "")]
     seen_device: set[str] = set()
-    seen_fp: set[tuple[str, str]] = set()
-    for row in with_id + without_id:
+    seen_empty_fp: set[tuple[str, str]] = set()
+    for row in with_id:
         device_id = str(row["device_id"] or "")
-        fp = (str(row["ip"] or ""), str(row["device_label"] or ""))
-        duplicate = bool(device_id and device_id in seen_device)
-        if not duplicate and not device_id and fp[0] and fp[1] and fp in seen_fp:
-            duplicate = True
-        if duplicate:
+        if device_id in seen_device:
             revoke_user_session(int(row["id"]), int(user_id), reason="duplicate")
             continue
-        if device_id:
-            seen_device.add(device_id)
+        seen_device.add(device_id)
+    for row in without_id:
+        fp = (str(row["ip"] or ""), str(row["device_label"] or ""))
+        if fp[0] and fp[1] and fp in seen_empty_fp:
+            revoke_user_session(int(row["id"]), int(user_id), reason="duplicate")
+            continue
         if fp[0] and fp[1]:
-            seen_fp.add(fp)
+            seen_empty_fp.add(fp)
 
 
 def prune_user_sessions(user_id: int, *, older_than: float) -> None:

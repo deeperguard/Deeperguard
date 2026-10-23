@@ -282,11 +282,22 @@ const NotesStore = (() => {
 
   function deviceId() {
     try {
+      if (typeof NotesSrpAuth !== 'undefined' && typeof NotesSrpAuth.ensureDeviceId === 'function') {
+        return NotesSrpAuth.ensureDeviceId() || '';
+      }
       const key = 'notes_device_id';
       let id = localStorage.getItem(key) || '';
       if (!/^[A-Za-z0-9._-]{8,80}$/.test(id)) {
-        id = (crypto.randomUUID && crypto.randomUUID())
-          || `d${Date.now()}${Math.random().toString(36).slice(2, 10)}`;
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          id = crypto.randomUUID();
+        } else if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+          const buf = new Uint8Array(16);
+          crypto.getRandomValues(buf);
+          id = Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+        } else {
+          return '';
+        }
+        if (!/^[A-Za-z0-9._-]{8,80}$/.test(id)) return '';
         localStorage.setItem(key, id);
       }
       return id;

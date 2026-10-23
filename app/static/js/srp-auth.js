@@ -182,6 +182,36 @@
     }
   }
 
+  const DEVICE_ID_KEY = 'notes_device_id';
+  const DEVICE_ID_RE = /^[A-Za-z0-9._-]{8,80}$/;
+
+  /**
+   * Stable per-browser id for session rows. Random only (UUID / getRandomValues);
+   * never derived from IP, UA, or fingerprint. Stored in localStorage and sent
+   * only as X-Device-Id to this origin.
+   */
+  function ensureDeviceId() {
+    try {
+      let id = localStorage.getItem(DEVICE_ID_KEY) || '';
+      if (!DEVICE_ID_RE.test(id)) {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          id = crypto.randomUUID();
+        } else if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+          const buf = new Uint8Array(16);
+          crypto.getRandomValues(buf);
+          id = Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+        } else {
+          return '';
+        }
+        if (!DEVICE_ID_RE.test(id)) return '';
+        localStorage.setItem(DEVICE_ID_KEY, id);
+      }
+      return id;
+    } catch (err) {
+      return '';
+    }
+  }
+
   async function postJson(path, body) {
     const headers = { 'Content-Type': 'application/json' };
     try {
@@ -191,9 +221,7 @@
       /* private mode / missing sessionStorage */
     }
     try {
-      const device = (global.NotesStore && NotesStore.deviceId)
-        ? NotesStore.deviceId()
-        : (localStorage.getItem('notes_device_id') || '');
+      const device = ensureDeviceId();
       if (device) headers['X-Device-Id'] = device;
     } catch (err) {
       /* ignore */
@@ -506,6 +534,7 @@
 
   global.NotesSrpAuth = {
     SrpClient,
+    ensureDeviceId,
     register,
     login,
     upgrade,
