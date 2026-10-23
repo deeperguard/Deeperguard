@@ -13024,6 +13024,19 @@
     }
   }
 
+  function deviceStartExplainer(snap) {
+    if (snap.startVerified) {
+      if (snap.startStatus === 'anchored_backup') {
+        return 'This device’s start is anchored to a backup. You can still show a code so another device can verify against this tip.';
+      }
+      return 'This device’s start is verified. Show a code so a new device can confirm it has the same vault tip.';
+    }
+    if (snap.tip) {
+      return 'This device is labeled Unverified start until you confirm it against a trusted device (or tap Later). Enter a code from a trusted device, scan its QR, or match the fingerprint by eye.';
+    }
+    return 'Sync to adopt a vault tip. Until you confirm against a trusted device, this device stays labeled Unverified start.';
+  }
+
   function renderVaultFreshnessPanel() {
     const panel = document.getElementById('vault-freshness-panel');
     const summary = document.getElementById('vault-freshness-summary');
@@ -13040,10 +13053,32 @@
     const fp = snap.fingerprint || '—';
     summary.textContent = snap.tip
       ? `Vault head on this device: counter ${counter} · fingerprint ${fp}`
-      : 'Vault head on this device: none yet (sync to adopt a tip — it stays Unverified start until you approve).';
+      : 'Vault head on this device: none yet (sync to adopt a tip).';
+    const chip = document.getElementById('vault-freshness-chip');
+    if (chip) {
+      if (snap.startVerified) {
+        chip.hidden = false;
+        chip.textContent = 'Verified';
+        chip.classList.add('is-verified');
+        chip.classList.remove('is-unverified');
+      } else if (snap.tip || snap.showUnverifiedLabel) {
+        chip.hidden = false;
+        chip.textContent = 'Not verified yet';
+        chip.classList.add('is-unverified');
+        chip.classList.remove('is-verified');
+      } else {
+        chip.hidden = true;
+        chip.textContent = '';
+        chip.classList.remove('is-verified', 'is-unverified');
+      }
+    }
     const startLabel = document.getElementById('vault-freshness-start-label');
     if (startLabel) {
-      if (snap.startLabel) {
+      // Keep the exact phrase "Unverified start" visible for unverified devices.
+      if (snap.showUnverifiedLabel) {
+        startLabel.hidden = false;
+        startLabel.textContent = 'Unverified start';
+      } else if (snap.startStatus === 'anchored_backup' && snap.startLabel) {
         startLabel.hidden = false;
         startLabel.textContent = snap.startLabel;
       } else {
@@ -13051,6 +13086,8 @@
         startLabel.textContent = '';
       }
     }
+    const explainer = document.getElementById('vault-freshness-explainer');
+    if (explainer) explainer.textContent = deviceStartExplainer(snap);
     const approveBtn = document.getElementById('btn-approve-new-device');
     if (approveBtn) approveBtn.hidden = !snap.canApproveDevice;
     const verifyBtn = document.getElementById('btn-verify-device-start');
@@ -13058,6 +13095,8 @@
     if (snap.startVerified) {
       const verifyPanel = document.getElementById('verify-device-start-panel');
       if (verifyPanel) verifyPanel.hidden = true;
+      const codeForm = document.getElementById('device-start-code-form');
+      if (codeForm) codeForm.hidden = true;
       stopDeviceStartQrScan();
     }
     renderDeviceStartBanner();
@@ -13098,46 +13137,145 @@
     if (panel) panel.hidden = true;
   }
 
-  function showVerifyDeviceStartPanel() {
-    const panel = document.getElementById('verify-device-start-panel');
-    if (panel) panel.hidden = false;
-    if (typeof NotesFreshness !== 'undefined') {
-      NotesFreshness.reopenStartVerification();
+  async function copyApproveNewDeviceCode() {
+    const codeEl = document.getElementById('approve-new-device-code');
+    const text = String(codeEl?.textContent || '').trim();
+    if (!text) {
+      toast('No code to copy', true);
+      return;
     }
-    renderVaultFreshnessPanel();
-    const settings = document.getElementById('settings-panel');
-    if (settings && settings.hidden) {
-      document.getElementById('btn-settings')?.click();
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      toast('Code copied');
+    } catch (err) {
+      toast(err.message || 'Could not copy', true);
     }
   }
 
-  function applyDeviceStartVerifyResult(result) {
+  function showVerifyDeviceStartPanel() {
+    // Open Settings locally (no network). Banner used to click a missing
+    // #btn-settings id, so Verify now did nothing offline.
+    if (typeof openSettings === 'function') {
+      openSettings();
+    } else {
+      const settings = document.getElementById('settings-panel');
+      if (settings) {
+        settings.hidden = false;
+        settings.removeAttribute('hidden');
+      }
+      document.body.classList.add('settings-open');
+    }
+    if (typeof NotesFreshness !== 'undefined') {
+      NotesFreshness.reopenStartVerification();
+    }
+    const panel = document.getElementById('verify-device-start-panel');
+    if (panel) panel.hidden = false;
+    renderVaultFreshnessPanel();
+    try {
+      document.getElementById('signed-in-devices-group')?.scrollIntoView?.({ block: 'nearest' });
+      panel?.scrollIntoView?.({ block: 'nearest' });
+    } catch (err) { /* ignore */ }
+  }
+
+  function setDeviceStartCodeError(message) {
+    const errEl = document.getElementById('device-start-code-error');
+    if (!errEl) return;
+    if (message) {
+      errEl.hidden = false;
+      errEl.textContent = message;
+    } else {
+      errEl.hidden = true;
+      errEl.textContent = '';
+    }
+  }
+
+  function normalizeDeviceStartCode(raw) {
+    return String(raw || '').replace(/[\s-]+/g, '').trim();
+  }
+
+  function applyDeviceStartVerifyResult(result, { fromCodeField = false } = {}) {
     const resultEl = document.getElementById('vault-freshness-verify-result');
+    const fieldErrors = fromCodeField && (result.error === 'checksum' || result.error === 'version'
+      || result.error === 'empty' || result.error === 'format' || result.error === 'truncated'
+      || result.error === 'tip' || result.error === 'counter' || result.error === 'ts');
+    if (fieldErrors) {
+      setDeviceStartCodeError(result.message || 'That approval code could not be read.');
+      if (resultEl) {
+        resultEl.hidden = true;
+        resultEl.textContent = '';
+        resultEl.classList.remove('device-start-verify-ok');
+      }
+      return;
+    }
+    setDeviceStartCodeError('');
+    let message = result.message || (result.ok ? 'Verified.' : 'Not verified.');
+    if (result.rollback) {
+      message = `${message}\nReconnect, then get a fresh code from your other device.`;
+    }
     if (resultEl) {
       resultEl.hidden = false;
-      resultEl.textContent = result.message || (result.ok ? 'Verified.' : 'Not verified.');
+      resultEl.textContent = '';
+      resultEl.classList.toggle('device-start-verify-ok', !!result.ok);
+      if (result.ok) {
+        resultEl.textContent = `✓ ${message}`;
+      } else {
+        resultEl.textContent = message;
+      }
     }
-    toast(result.message || (result.ok ? 'Start verified' : 'Not verified'), !result.ok);
+    // Success stays visible inline; toast only for failures so it never covers
+    // the Signed-in devices list while Settings is open.
+    if (!result.ok) {
+      toast(result.message || 'Not verified', true);
+    }
     renderVaultFreshnessPanel();
     if (result.ok) {
       stopDeviceStartQrScan();
       const panel = document.getElementById('verify-device-start-panel');
       if (panel) panel.hidden = true;
+      const codeForm = document.getElementById('device-start-code-form');
+      if (codeForm) codeForm.hidden = true;
     }
   }
 
-  async function enterDeviceStartCode() {
+  function showDeviceStartCodeForm() {
+    const form = document.getElementById('device-start-code-form');
+    const input = document.getElementById('device-start-code-input');
+    if (form) form.hidden = false;
+    setDeviceStartCodeError('');
+    if (input) {
+      input.value = '';
+      try { input.focus(); } catch (err) { /* ignore */ }
+    }
+  }
+
+  function submitDeviceStartCode() {
     if (typeof NotesFreshness === 'undefined') return;
-    const raw = window.prompt('Enter the short approval code from your other device.', '');
-    if (raw == null) return;
-    applyDeviceStartVerifyResult(NotesFreshness.verifyAnchor(raw));
+    const input = document.getElementById('device-start-code-input');
+    const raw = normalizeDeviceStartCode(input?.value || '');
+    if (!raw) {
+      setDeviceStartCodeError('Enter an approval code or scan a QR.');
+      return;
+    }
+    applyDeviceStartVerifyResult(NotesFreshness.verifyAnchor(raw), { fromCodeField: true });
   }
 
   async function confirmDeviceStartByEye() {
     if (typeof NotesFreshness === 'undefined') return;
     const snap = NotesFreshness.getPublicSnapshot();
     const ok = await confirmAction(
-      `On your other (trusted) device, open Settings → Signed-in devices → Approve a new device and confirm it shows counter ${snap.counter} and fingerprint ${snap.fingerprint}.`,
+      `On your other (trusted) device, open Settings → Signed-in devices → On a trusted device: Show a code and confirm it shows counter ${snap.counter} and fingerprint ${snap.fingerprint}.`,
       {
         title: 'Match by eye?',
         confirmLabel: 'They match',
@@ -13270,6 +13408,9 @@
   document.getElementById('btn-approve-new-device-hide')?.addEventListener('click', () => {
     hideApproveNewDevicePanel();
   });
+  document.getElementById('btn-approve-new-device-copy')?.addEventListener('click', () => {
+    copyApproveNewDeviceCode().catch((err) => toast(err.message || 'Copy failed', true));
+  });
   document.getElementById('btn-verify-device-start')?.addEventListener('click', () => {
     showVerifyDeviceStartPanel();
   });
@@ -13279,14 +13420,23 @@
   document.getElementById('btn-device-start-skip')?.addEventListener('click', () => {
     if (typeof NotesFreshness === 'undefined') return;
     NotesFreshness.skipStartVerification();
-    toast('Skipped — this device stays labeled Unverified start.');
+    toast('Later — this device stays labeled Unverified start.');
     renderVaultFreshnessPanel();
   });
   document.getElementById('btn-device-start-scan-qr')?.addEventListener('click', () => {
     startDeviceStartQrScan().catch((err) => toast(err.message || 'Scan failed', true));
   });
   document.getElementById('btn-device-start-enter-code')?.addEventListener('click', () => {
-    enterDeviceStartCode().catch((err) => toast(err.message || 'Verify failed', true));
+    showDeviceStartCodeForm();
+  });
+  document.getElementById('btn-device-start-code-submit')?.addEventListener('click', () => {
+    submitDeviceStartCode();
+  });
+  document.getElementById('device-start-code-input')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submitDeviceStartCode();
+    }
   });
   document.getElementById('btn-device-start-confirm-eye')?.addEventListener('click', () => {
     confirmDeviceStartByEye().catch((err) => toast(err.message || 'Confirm failed', true));

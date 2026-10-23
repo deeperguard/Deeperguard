@@ -5822,8 +5822,11 @@ const NotesStore = (() => {
         syncWhileLocked({ quiet: true }).catch(() => {});
         return;
       }
-      pushDirty()
-        .then((ok) => (ok ? sync() : false))
+      // Always pull after reconnect — do not gate on pushDirty success (a
+      // brief offline race used to skip the pull until the next 30s poll).
+      pushDirty({ quiet: true })
+        .catch(() => false)
+        .then(() => sync({ quiet: true }))
         .catch(() => {});
     });
   }

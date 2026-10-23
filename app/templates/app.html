@@ -735,13 +735,6 @@
           <button type="button" id="btn-offline-setup-dismiss" class="btn ghost sm">Not now</button>
         </div>
       </div>
-      <div id="device-start-banner" class="device-start-banner" hidden role="status" aria-live="polite">
-        <p><strong>Confirm this device is up to date</strong> — compare with a device you already trust, or skip and stay labeled Unverified start.</p>
-        <div class="offline-setup-actions">
-          <button type="button" id="btn-device-start-verify" class="btn primary sm">Verify start</button>
-          <button type="button" id="btn-device-start-skip" class="btn ghost sm">Skip</button>
-        </div>
-      </div>
       <div class="sidebar-scroll" id="sidebar-scroll">
         <button type="button" id="btn-drawer-close" class="btn ghost sm drawer-close">Close</button>
       <div class="filter-bar">
@@ -851,6 +844,13 @@
       </footer>
       </div>
       <div class="list-pane list-toolbar">
+      <div id="device-start-banner" class="device-start-banner" hidden role="status" aria-live="polite">
+        <p class="device-start-banner-copy">New device: check it has your latest notes.</p>
+        <div class="device-start-banner-actions">
+          <button type="button" id="btn-device-start-verify" class="btn primary sm">Verify now</button>
+          <button type="button" id="btn-device-start-skip" class="btn ghost sm">Later</button>
+        </div>
+      </div>
       <div id="sync-status-banner" class="sync-status-banner list-sync-banner" hidden role="status">
         <div class="sync-status-banner-main">
           <span id="sync-status-text"></span>
@@ -1476,36 +1476,54 @@
         <div class="settings-card">
           <p class="settings-hint">Devices currently signed in to this account. Sign out a device to end that session and delete its local vault copy when it next connects.</p>
           <div id="vault-freshness-panel" class="vault-freshness-panel" hidden>
-            <p class="settings-hint" id="vault-freshness-summary">Vault head on this device: —</p>
-            <p class="settings-hint" id="vault-freshness-start-label" hidden></p>
-            <p class="settings-hint">Compare the fingerprint with another unlocked device. Matching counter + fingerprint means both devices have seen the same vault tip. A new device stays Unverified start until you approve it from a trusted device (or skip).</p>
+            <p id="vault-freshness-chip" class="device-start-chip" hidden></p>
+            <p class="settings-hint" id="vault-freshness-start-label" hidden>Unverified start</p>
+            <p class="settings-hint" id="vault-freshness-explainer"></p>
+            <details id="vault-freshness-tech" class="vault-freshness-tech">
+              <summary>Technical details</summary>
+              <p class="settings-hint" id="vault-freshness-summary">Vault head on this device: —</p>
+              <div class="settings-actions">
+                <button type="button" id="btn-compare-vault-head" class="btn">Compare devices</button>
+              </div>
+              <p id="vault-freshness-compare-result" class="settings-hint" hidden></p>
+            </details>
             <div class="settings-actions">
-              <button type="button" id="btn-compare-vault-head" class="btn">Compare devices</button>
-              <button type="button" id="btn-approve-new-device" class="btn" hidden>Approve a new device</button>
-              <button type="button" id="btn-verify-device-start" class="btn" hidden>Verify start</button>
+              <button type="button" id="btn-approve-new-device" class="btn" hidden>On a trusted device: Show a code</button>
+              <button type="button" id="btn-verify-device-start" class="btn" hidden>On your new device: Enter a code</button>
             </div>
             <div id="approve-new-device-panel" class="approve-new-device-panel" hidden>
-              <p class="settings-hint">Show this on a trusted device. Built only from this device’s local verified vault head — never from a fresh server response. Contains counter, tip hash, and time only (no keys or note plaintext).</p>
+              <p class="settings-hint">Scan this on your new device. The code holds only a version number and a fingerprint, never your keys or notes.</p>
+              <p class="settings-hint approve-new-device-qr-label"><strong>Scan the QR code</strong></p>
               <img id="approve-new-device-qr" class="approve-new-device-qr" alt="Approval QR code" hidden>
               <p class="settings-hint" id="approve-new-device-meta"></p>
-              <p class="settings-hint"><code id="approve-new-device-code" class="approve-new-device-code"></code></p>
+              <p class="settings-hint approve-new-device-code-wrap">
+                <code id="approve-new-device-code" class="approve-new-device-code"></code>
+              </p>
               <div class="settings-actions">
+                <button type="button" id="btn-approve-new-device-copy" class="btn">Copy code</button>
                 <button type="button" id="btn-approve-new-device-hide" class="btn ghost">Hide</button>
               </div>
             </div>
             <div id="verify-device-start-panel" class="verify-device-start-panel" hidden>
               <p class="settings-hint">Scan a QR from your other device, enter its short code, or confirm the counter and fingerprint match by eye.</p>
               <div class="settings-actions">
-                <button type="button" id="btn-device-start-scan-qr" class="btn">Scan QR</button>
+                <button type="button" id="btn-device-start-scan-qr" class="btn primary">Scan QR</button>
                 <button type="button" id="btn-device-start-enter-code" class="btn">Enter code</button>
                 <button type="button" id="btn-device-start-confirm-eye" class="btn">Match by eye</button>
+              </div>
+              <div id="device-start-code-form" class="device-start-code-form" hidden>
+                <label class="settings-hint" for="device-start-code-input">Approval code</label>
+                <input id="device-start-code-input" class="device-start-code-input" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX">
+                <p id="device-start-code-error" class="device-start-code-error" hidden></p>
+                <div class="settings-actions">
+                  <button type="button" id="btn-device-start-code-submit" class="btn primary">Check code</button>
+                </div>
               </div>
               <video id="device-start-qr-video" class="device-start-qr-video" playsinline muted hidden></video>
               <canvas id="device-start-qr-canvas" class="sr-file" hidden></canvas>
               <p id="device-start-qr-status" class="settings-hint" hidden></p>
               <p id="vault-freshness-verify-result" class="settings-hint" hidden></p>
             </div>
-            <p id="vault-freshness-compare-result" class="settings-hint" hidden></p>
           </div>
           <div id="signed-in-devices" class="device-list" role="list"></div>
         </div>
