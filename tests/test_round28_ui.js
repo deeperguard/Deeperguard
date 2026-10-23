@@ -40,7 +40,8 @@ assert.ok(tight.includes('.mk-brand small { display: none;'));
 assert.ok(appJs.includes('function scheduleOnlineRecovery'));
 assert.ok(appJs.includes('scheduleOnlineRecovery(0)'));
 assert.ok(
-  appJs.includes('const delays = [0, 500, 1000, 2000, 4000]')
+  appJs.includes('ONLINE_RECOVERY_DELAYS_MS = [0, 1000, 2000, 4000, 8000]')
+  || appJs.includes('const delays = [0, 500, 1000, 2000, 4000]')
   || appJs.includes('const delays = [500, 1000, 2000, 4000]'),
 );
 assert.ok(storeJs.includes('will sync when online'));

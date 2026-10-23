@@ -98,9 +98,9 @@ Promise.resolve(sandbox.NotesSrpAuth.login('fresh@example.com', 'password-ok-lon
     assert.ok(!freshnessJs.includes('last_seen_at'));
     assert.ok(!freshnessJs.includes('/api/sessions'));
 
-    // --- B1: attempt 0 always force sync when vault ready ---------------------
+    // --- B1: recovery force-sync (Round 72: unlocked gate, not only vaultReady)
     const recovery = appJs.split('function scheduleOnlineRecovery')[1].split('function listStoredFiles')[0];
-    assert.ok(recovery.includes('attempt === 0 && vaultReady'));
+    assert.ok(recovery.includes('NotesStore.isUnlocked()'));
     assert.ok(recovery.includes('syncNow({ quiet: true, force: true })'));
     assert.ok(recovery.includes("reason: 'online-recovery'"));
     // test_round39: onAppForeground('online') still must not call syncNow directly.
@@ -110,8 +110,8 @@ Promise.resolve(sandbox.NotesSrpAuth.login('fresh@example.com', 'password-ok-lon
 
     return new Promise((resolve, reject) => {
       let syncCalls = 0;
-      const vaultReady = true;
       let networkReachable = false;
+      const NotesStore = { isUnlocked: () => true };
       function syncNow() {
         syncCalls += 1;
         return Promise.resolve(true);
@@ -123,7 +123,7 @@ Promise.resolve(sandbox.NotesSrpAuth.login('fresh@example.com', 'password-ok-lon
       setTimeout(() => {
         probeNetwork().then((ok) => {
           if (!ok) return ok;
-          if (vaultReady) return syncNow({ quiet: true, force: true });
+          if (NotesStore.isUnlocked()) return syncNow({ quiet: true, force: true });
           return ok;
         }).finally(() => {
           try {

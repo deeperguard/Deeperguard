@@ -1100,6 +1100,24 @@ html[data-theme="light"] .zk-badge {
   font-size: 13px;
   text-align: center;
 }
+.unlock-status.is-fetching::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-top-color: var(--muted);
+  border-radius: 50%;
+  animation: unlock-checking-spin 0.7s linear infinite;
+}
+.unlock-status.is-fallback {
+  color: var(--muted);
+}
+#unlock-empty-retry {
+  margin-top: 0.35rem;
+}
 .unlock-progress {
   height: 4px;
   border-radius: 999px;

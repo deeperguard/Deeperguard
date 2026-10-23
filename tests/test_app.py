@@ -778,7 +778,9 @@ class NotesAppTests(unittest.TestCase):
         refreshed = self.client.get("/api/sessions").get_json()["sessions"]
         current = next(item for item in refreshed if item["current"])
         self.assertEqual(current["id"], cookie["id"])
-        self.assertEqual(current["device"], "Linux · Chrome")
+        # Round 72: device_label is frozen at login / first non-empty value.
+        # A later Linux UA (or DevTools emulation) must not rename the row.
+        self.assertEqual(current["device"], "iPhone · Safari")
 
         linux = notes_db.create_user_session(
             uid,

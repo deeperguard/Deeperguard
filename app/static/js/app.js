@@ -2273,18 +2273,216 @@
     }
   }
 
-  async function serverUnreachableNow() {
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
-    if (typeof window.notesNetworkReachable === 'function' && !window.notesNetworkReachable()) return true;
+  async function serverUnreachableNow({ force = false } = {}) {
+    // Round 72: unlock passes force:true so a health backoff null or a stale
+    // networkReachable=false cannot short-circuit before bootstrap/pull.
+    if (!force && typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+    if (!force && typeof window.notesNetworkReachable === 'function' && !window.notesNetworkReachable()) {
+      return true;
+    }
     // Share the page-load /api/health read. A second probe here used to fan out
     // before the user had even typed a password.
     try {
-      const data = await fetchHealthJson();
+      const data = await fetchHealthJson({
+        force,
+        timeoutMs: force ? 3000 : 1500,
+      });
       return !(data && data.ok);
     } catch (err) {
       return true;
     }
   }
+
+  function isRealNetworkFailure(err) {
+    if (!err) return true;
+    if (err.code === 'aborted' || err.code === 'EMPTY_DEVICE_FETCH_PENDING') return true;
+    if (typeof NotesStore !== 'undefined' && NotesStore.isProbablyOffline?.(err)) return true;
+    const status = Number(err.status) || 0;
+    if (!status && err.code !== 'DECRYPT_FAILED' && err.code !== 'PROBE_NO_SAMPLE') return true;
+    return false;
+  }
+
+  // Empty-device unlock: first online pull retries at 0/1/2/4/8s, then fallback UI.
+  const EMPTY_DEVICE_RETRY_DELAYS_MS = [0, 1000, 2000, 4000, 8000];
+  // After the fast window, only probe reachability (no vault key / no Argon2).
+  const EMPTY_DEVICE_BG_PROBE_MS = CHANGE_POLL_MS;
+  let emptyDeviceBgRetryTimer = 0;
+  let emptyDeviceFetchGeneration = 0;
+
+  function clearEmptyDeviceBgRetry() {
+    if (emptyDeviceBgRetryTimer) {
+      clearTimeout(emptyDeviceBgRetryTimer);
+      emptyDeviceBgRetryTimer = 0;
+    }
+  }
+
+  /** Stop background probes and invalidate any in-flight empty-device fetch. */
+  function stopEmptyDeviceBackgroundRetry() {
+    emptyDeviceFetchGeneration += 1;
+    clearEmptyDeviceBgRetry();
+  }
+
+  function setEmptyDeviceUnlockUi(mode) {
+    const status = document.getElementById('unlock-status');
+    const progress = document.getElementById('unlock-progress');
+    const retryBtn = document.getElementById('unlock-empty-retry');
+    if (mode === 'fetching') {
+      if (status) {
+        status.hidden = false;
+        status.classList.add('is-fetching');
+        status.classList.remove('is-fallback');
+        status.textContent = 'Getting your notes from the server…';
+      }
+      if (progress) {
+        progress.hidden = false;
+        progress.classList.add('is-indeterminate');
+        progress.removeAttribute('aria-valuenow');
+        progress.setAttribute('aria-busy', 'true');
+      }
+      if (retryBtn) retryBtn.hidden = true;
+      return;
+    }
+    if (mode === 'fallback') {
+      if (status) {
+        status.hidden = false;
+        status.classList.remove('is-fetching');
+        status.classList.add('is-fallback');
+        status.textContent = "Can't reach the server right now. We'll keep trying in the background.";
+      }
+      if (progress) {
+        progress.hidden = true;
+        progress.classList.remove('is-indeterminate');
+        progress.removeAttribute('aria-busy');
+      }
+      if (retryBtn) retryBtn.hidden = false;
+      return;
+    }
+    if (status) {
+      status.hidden = true;
+      status.classList.remove('is-fetching', 'is-fallback');
+      status.textContent = '';
+    }
+    if (progress) {
+      progress.hidden = true;
+      progress.classList.remove('is-indeterminate');
+      progress.removeAttribute('aria-busy');
+    }
+    if (retryBtn) retryBtn.hidden = true;
+  }
+
+  function emptyDeviceFetchPendingError() {
+    const err = new Error(
+      "Can't reach the server right now. We'll keep trying in the background.",
+    );
+    err.code = 'EMPTY_DEVICE_FETCH_PENDING';
+    return err;
+  }
+
+  async function probeEmptyDeviceServerReachable() {
+    // Reachability only — never derive a vault key or start an unlock attempt.
+    try {
+      const data = await fetchHealthJson({ force: true, timeoutMs: 3000 });
+      if (data && data.ok) return true;
+    } catch (err) { /* try account next */ }
+    try {
+      await NotesStore.loadAccount();
+      return true;
+    } catch (err) {
+      // Server answered (session expired / auth) — still reachable.
+      if (isLoginRequiredError(err) || Number(err?.status) > 0) return true;
+      return !isRealNetworkFailure(err);
+    }
+  }
+
+  function scheduleEmptyDeviceBackgroundRetry() {
+    clearEmptyDeviceBgRetry();
+    const gen = emptyDeviceFetchGeneration;
+    emptyDeviceBgRetryTimer = setTimeout(() => {
+      emptyDeviceBgRetryTimer = 0;
+      if (gen !== emptyDeviceFetchGeneration) return;
+      if (NotesStore.isUnlocked() && vaultKeyProven()) {
+        setEmptyDeviceUnlockUi('clear');
+        return;
+      }
+      const status = document.getElementById('unlock-status');
+      if (!status?.classList.contains('is-fallback')) return;
+      probeEmptyDeviceServerReachable().then((reachable) => {
+        if (gen !== emptyDeviceFetchGeneration) return;
+        if (reachable) {
+          // Server is back. Clear the fallback so the unlock form is ready;
+          // typed Unlock (or the existing post-login silent boot path) continues.
+          setEmptyDeviceUnlockUi('clear');
+          return;
+        }
+        scheduleEmptyDeviceBackgroundRetry();
+      }).catch(() => {
+        if (gen !== emptyDeviceFetchGeneration) return;
+        scheduleEmptyDeviceBackgroundRetry();
+      });
+    }, EMPTY_DEVICE_BG_PROBE_MS);
+  }
+
+  async function fetchEmptyDeviceProofWithRetry(cached, { silent = false } = {}) {
+    emptyDeviceFetchGeneration += 1;
+    const gen = emptyDeviceFetchGeneration;
+    clearEmptyDeviceBgRetry();
+    setEmptyDeviceUnlockUi('fetching');
+    let lastErr = null;
+    for (let i = 0; i < EMPTY_DEVICE_RETRY_DELAYS_MS.length; i += 1) {
+      if (gen !== emptyDeviceFetchGeneration) throw emptyDeviceFetchPendingError();
+      const wait = EMPTY_DEVICE_RETRY_DELAYS_MS[i];
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      if (gen !== emptyDeviceFetchGeneration) throw emptyDeviceFetchPendingError();
+      try {
+        // Re-bootstrap when health/reachability was flaky on the first pass.
+        try {
+          await bootstrapServerSession(cached, {
+            retryOnLoginRequired: !!(silent && isPostLoginBootUnlock()),
+          });
+        } catch (bootErr) {
+          if (isLoginRequiredError(bootErr)) throw sessionExpiredError();
+          if (!isRealNetworkFailure(bootErr)) throw bootErr;
+          lastErr = bootErr;
+          continue;
+        }
+        const proof = await assertVaultKeyVerified();
+        setEmptyDeviceUnlockUi('clear');
+        return { ok: true, proof };
+      } catch (err) {
+        if (isLoginRequiredError(err)) throw sessionExpiredError();
+        if (err?.code === 'EMPTY_DEVICE_FETCH_PENDING') throw err;
+        if (err?.code === 'PROBE_NO_SAMPLE' || isRealNetworkFailure(err)) {
+          lastErr = err;
+          setEmptyDeviceUnlockUi('fetching');
+          continue;
+        }
+        setEmptyDeviceUnlockUi('clear');
+        throw err;
+      }
+    }
+    setEmptyDeviceUnlockUi('fallback');
+    scheduleEmptyDeviceBackgroundRetry();
+    if (silent) deferAutoUnlock();
+    const pending = emptyDeviceFetchPendingError();
+    if (lastErr) pending.cause = lastErr;
+    throw pending;
+  }
+
+  // Round 72 helpers — empty-device unlock health + fetch retry UI.
+  // Kept next to the Part A helpers (not beside NotesPostLoginUnlock) so the
+  // Round 70 vm slice of POST_LOGIN_* helpers does not reference these consts.
+  window.NotesEmptyDeviceUnlock = {
+    EMPTY_DEVICE_RETRY_DELAYS_MS,
+    EMPTY_DEVICE_BG_PROBE_MS,
+    serverUnreachableNow,
+    isRealNetworkFailure,
+    setEmptyDeviceUnlockUi,
+    emptyDeviceFetchPendingError,
+    scheduleEmptyDeviceBackgroundRetry,
+    clearEmptyDeviceBgRetry,
+    stopEmptyDeviceBackgroundRetry,
+    probeEmptyDeviceServerReachable,
+  };
 
   let sessionExpiredAlertShown = false;
   let sessionExpiredHold = false;
@@ -3325,6 +3523,9 @@
       ? NotesVaultLock.isAppUpdating(document.body, window.__notesUpdateInFlight)
       : !!(document.body.classList.contains('app-updating') || window.__notesUpdateInFlight);
     if (window.NotesVaultLock?.mayLockVault && !NotesVaultLock.mayLockVault({ updating })) return;
+    // Round 72: never leave empty-device reachability probes running after lock.
+    stopEmptyDeviceBackgroundRetry();
+    setEmptyDeviceUnlockUi('clear');
     const lockReason = reason
       || (message === 'Vault locked.' ? 'manual'
         : (/^Locked after idle/.test(String(message || '')) ? 'idle'
@@ -6066,6 +6267,24 @@
       redirectToExpiredLogin();
       throw err.code === 'SESSION_EXPIRED' ? err : sessionExpiredError();
     }
+    // Round 72: empty-device fetch fallback owns the unlock status line —
+    // do not replace it with a generic error or leave Checking… spinning.
+    if (err?.code === 'EMPTY_DEVICE_FETCH_PENDING') {
+      resetLoginProgress();
+      logLockReason('empty-device-fetch-pending', { message: String(err?.message || '') });
+      try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
+      markVaultShellLocked();
+      if (unlockSubmit) {
+        unlockSubmit.disabled = false;
+        unlockSubmit.textContent = 'Unlock';
+        unlockSubmit.removeAttribute('aria-busy');
+        unlockSubmit.classList.remove('is-checking');
+      }
+      if (!document.getElementById('unlock-status')?.classList.contains('is-fallback')) {
+        setEmptyDeviceUnlockUi('fallback');
+      }
+      throw err;
+    }
     resetLoginProgress();
     if (silent || err?.code === 'AUTO_UNLOCK_DEFER') {
       // Post-login auto-unlock: fall back to the typed unlock prompt without a
@@ -6621,11 +6840,14 @@
         await yieldToPaint();
         const retryOnLoginRequired = !!(silent && isPostLoginBootUnlock());
         const serverCheck = (async () => {
-          if (await serverUnreachableNow()) return { offline: true };
+          // Round 72: force health. Backoff null / stale networkReachable must
+          // not skip bootstrap — only a real /api/account failure is offline.
+          await serverUnreachableNow({ force: true });
           try {
             await bootstrapServerSession(cached, { retryOnLoginRequired });
             return { ok: true };
           } catch (err) {
+            if (isRealNetworkFailure(err)) return { offline: true, err };
             return { err };
           }
         })();
@@ -6727,16 +6949,18 @@
         // No local ciphertext and no repaired server row: a session cookie is
         // not a key. Prove the typed password, or a server row must decrypt.
         if (!hasLocalVault && !vaultRepairedOnline) {
-          if (serverResult.offline) {
-            if (silent) deferAutoUnlock();
-            NotesStore.lock();
-            throw new Error('Connect once online while signed in to unlock an empty device with the vault password.');
-          }
+          // Round 72: retry pull/bootstrap with UI; offline only after real
+          // /api/account or /api/sync/pull failures exhaust the backoff.
           let freshProof = null;
           try {
-            freshProof = await assertVaultKeyVerified();
+            const fetched = await fetchEmptyDeviceProofWithRetry(cached, { silent });
+            freshProof = fetched?.proof || null;
           } catch (probeErr) {
             if (isLoginRequiredError(probeErr)) throw sessionExpiredError();
+            if (probeErr?.code === 'EMPTY_DEVICE_FETCH_PENDING') {
+              NotesStore.lock();
+              throw probeErr;
+            }
             if (silent) deferAutoUnlock();
             throw probeErr;
           }
@@ -6751,10 +6975,13 @@
           if (passwordProven) serverResult = { ok: true };
         }
         if (serverResult.offline) {
-          if (emptyLocal && !hasLocalVault) {
+          if (emptyLocal && !hasLocalVault && !passwordProven) {
+            // Empty-device path above already retried pull/bootstrap.
             if (silent) deferAutoUnlock();
             NotesStore.lock();
-            throw new Error('Connect once online while signed in to unlock an empty device with the vault password.');
+            setEmptyDeviceUnlockUi('fallback');
+            scheduleEmptyDeviceBackgroundRetry();
+            throw emptyDeviceFetchPendingError();
           }
           markOfflineUnlockVerified();
         } else if (serverResult.ok) {
@@ -7001,11 +7228,20 @@
     unlockSubmit.classList.add('is-checking');
     try {
       await verifyAndUnlock(typed);
+      stopEmptyDeviceBackgroundRetry();
+      setEmptyDeviceUnlockUi('clear');
       repairUnlockShellState();
       if (vaultKeyProven() && !isVaultReadyForSync()) showApp();
     } catch (err) {
       if (isLoginRequiredError(err)) {
         showUnlockError(SESSION_EXPIRED_MESSAGE);
+        unlockSubmit.disabled = false;
+        unlockSubmit.textContent = 'Unlock';
+        unlockSubmit.removeAttribute('aria-busy');
+        unlockSubmit.classList.remove('is-checking');
+        return;
+      }
+      if (err?.code === 'EMPTY_DEVICE_FETCH_PENDING') {
         unlockSubmit.disabled = false;
         unlockSubmit.textContent = 'Unlock';
         unlockSubmit.removeAttribute('aria-busy');
@@ -7032,12 +7268,21 @@
     submitUnlockForm().catch(() => {});
   });
 
+  document.getElementById('unlock-empty-retry')?.addEventListener('click', () => {
+    stopEmptyDeviceBackgroundRetry();
+    setEmptyDeviceUnlockUi('clear');
+    showUnlockError('');
+    submitUnlockForm().catch(() => {});
+  });
+
   const SIGN_OUT_WARNING = (
     'All notes, attachments, and vault data on this device will be deleted. '
     + 'Your encrypted data stays on the Deeperguard server and will download again when you sign back in.'
   );
 
   async function clearLocalVaultAndLeave(next = '/login') {
+    stopEmptyDeviceBackgroundRetry();
+    setEmptyDeviceUnlockUi('clear');
     clearUnlockPasswordField({ force: true });
     try {
       NotesStore.lock();
@@ -8347,7 +8592,8 @@
       updateNetworkStatusBanner();
       if (wasOffline) {
         NotesStore.emitSync('idle', '');
-        if (syncOnRecovery && vaultReady) {
+        // Round 72: quiet recovery sync gates on unlocked, not only vaultReady.
+        if (syncOnRecovery && NotesStore.isUnlocked()) {
           const pending = NotesStore.state?.dirty?.size || 0;
           try {
             console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
@@ -8356,7 +8602,7 @@
             });
           } catch (err) { /* ignore */ }
           // Always force after offline so a dirty note is not skipped by the
-          // "synced recently" throttle.
+          // "synced recently" throttle. syncInFlight coalesces with recovery.
           syncNow({ quiet: true, force: true });
           resumePendingOcr().catch(() => {});
           listPreviewBackfillFailed.clear();
@@ -8472,11 +8718,15 @@
 
   let lastRecoveryAbortAt = 0;
 
+  const ONLINE_RECOVERY_DELAYS_MS = [0, 1000, 2000, 4000, 8000];
+
   function scheduleOnlineRecovery(attempt = 0) {
     clearTimeout(onlineRecoveryTimer);
-    // First probe immediately (0ms); then 0.5/1/2/4s. Health probes share one
-    // in-flight request and global backoff — never abort-storm.
-    const delays = [0, 500, 1000, 2000, 4000];
+    // Round 72: probe immediately, then force-pull retries at 1/2/4/8s until
+    // one pull succeeds. Health probes still share one in-flight request and
+    // global backoff — never abort-storm (R39). After the fast window, fall
+    // back to CHANGE_POLL_MS (25s).
+    const delays = ONLINE_RECOVERY_DELAYS_MS;
     if (attempt === 0) {
       stopOfflineWatch();
       onlineRecoveryActive = true;
@@ -8498,6 +8748,8 @@
       if (!networkReachable) {
         offlineWatchDelayMs = 2000;
         startOfflineWatch();
+      } else if (!sessionExpiredHold) {
+        scheduleChangePoll();
       }
       return;
     }
@@ -8508,42 +8760,41 @@
     onlineRecoveryTimer = setTimeout(() => {
       if (generation !== onlineRecoveryGeneration) return;
       // Always probe — even when dirty is empty — so the Offline caption clears.
-      probeNetwork({ syncOnRecovery: true, forceHealth: true }).then((ok) => {
-        if (generation !== onlineRecoveryGeneration) return ok;
-        if (!ok) return ok;
-        // Round 71: first successful probe always force-pulls (abort of the
-        // store online sync + wasOffline gate used to leave remote edits
-        // until the ~25s change poll). syncInFlight coalesces overlapping pulls.
-        if (attempt === 0 && vaultReady) {
-          try {
-            console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
-              reason: 'online-recovery',
-              attempt: 0,
-              pending: NotesStore.state?.dirty?.size || 0,
-            });
-          } catch (err) { /* ignore */ }
-          return syncNow({ quiet: true, force: true });
+      probeNetwork({ syncOnRecovery: true, forceHealth: true }).then(async (ok) => {
+        if (generation !== onlineRecoveryGeneration) return { probeOk: false };
+        if (!ok) return { probeOk: false };
+        // Quiet recovery: gate on unlocked (not only vaultReady) so a shell
+        // that is crypto-ready still force-pulls remote edits.
+        if (!NotesStore.isUnlocked()) {
+          return { probeOk: true, synced: false, locked: true };
         }
-        const stillDirty = NotesStore.state?.dirty?.size || 0;
-        if (stillDirty > 0) {
-          try {
-            console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
-              reason: 'online-recovery-retry',
-              attempt,
-              pending: stillDirty,
-            });
-          } catch (err) { /* ignore */ }
-          return syncNow({ quiet: true, force: true });
-        }
-        return ok;
-      }).finally(() => {
+        try {
+          console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
+            reason: 'online-recovery',
+            attempt,
+            pending: NotesStore.state?.dirty?.size || 0,
+          });
+        } catch (err) { /* ignore */ }
+        const synced = await syncNow({ quiet: true, force: true });
+        return { probeOk: true, synced: synced === true };
+      }).then((result) => {
         if (generation !== onlineRecoveryGeneration) return;
-        if (!networkReachable || (NotesStore.state?.dirty?.size || 0) > 0) {
-          scheduleOnlineRecovery(attempt + 1);
-        } else {
+        if (result?.synced) {
           onlineRecoveryActive = false;
           stopOfflineWatch();
+          if (!sessionExpiredHold) scheduleChangePoll();
+          return;
         }
+        if (result?.locked) {
+          onlineRecoveryActive = false;
+          stopOfflineWatch();
+          return;
+        }
+        // Probe failed, or pull aborted/failed — retry with backoff.
+        scheduleOnlineRecovery(attempt + 1);
+      }).catch(() => {
+        if (generation !== onlineRecoveryGeneration) return;
+        scheduleOnlineRecovery(attempt + 1);
       });
     }, wait);
   }
@@ -21707,7 +21958,7 @@
           return NotesStore.sync({ quiet, full });
         })
         .then((synced) => {
-          if (synced === false) return;
+          if (synced === false) return false;
           markNetworkReachable();
           pullGlobalPrefs();
           const noteCount = listedActiveNoteCount();
@@ -21733,19 +21984,21 @@
           refreshTotpVault({ migrate: true });
           if (!currentId) openPendingDeepLink({ final: true });
           reconcileReminderSideEffects();
+          // Round 72: resolve true so online-recovery can tell success from abort.
+          return true;
         })
         .catch((err) => {
           if (err?.code === 'VAULT_LOCKED') {
             NotesStore.logSync?.('sync-aborted', { reason: 'locked', quiet: !!quiet });
-            return;
+            return false;
           }
           if (err?.code === 'aborted') {
             NotesStore.logSync?.('sync-aborted', { reason: err.reason || 'aborted', quiet: !!quiet });
-            return;
+            return false;
           }
           if (isLoginRequiredError(err)) {
             showExpiredSessionBanner();
-            return;
+            return false;
           }
           console.warn('sync failed', err);
           const partialNotes = NotesStore.listNotes().filter((n) => !n.content?.trashed).length;
@@ -21770,6 +22023,7 @@
             showSyncBanner('error', err?.message || 'Sync failed');
             toast(err?.message || 'Sync failed', true);
           }
+          return false;
         })
         .finally(() => {
           syncInFlight = null;
@@ -21945,6 +22199,7 @@
     onAppForeground('visibility');
   });
   window.addEventListener('pagehide', () => {
+    stopEmptyDeviceBackgroundRetry();
     if (document.visibilityState !== 'hidden') return;
     NotesStore.flush();
     teardownForBackground();

@@ -60,7 +60,8 @@ assert.ok(renameFolder.includes('currentFolder === uuid'));
 
 // --- 6. Online recovery: 0.5/1/2/4s chain, not gated by 10s watch ---------
 assert.ok(
-  appJs.includes('const delays = [0, 500, 1000, 2000, 4000]')
+  appJs.includes('ONLINE_RECOVERY_DELAYS_MS = [0, 1000, 2000, 4000, 8000]')
+  || appJs.includes('const delays = [0, 500, 1000, 2000, 4000]')
   || appJs.includes('const delays = [500, 1000, 2000, 4000]'),
 );
 assert.ok(appJs.includes("addEventListener('online'"));

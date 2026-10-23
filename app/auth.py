@@ -178,6 +178,10 @@ def _align_session_with_request(_user_id: int, row) -> str:
     ``X-Device-Id`` must not adopt that row or rotate its token (that would
     invalidate the other browser's cookie). Only retitle this cookie's row
     when it already names this device or has no device id yet.
+
+    Round 72: freeze ``device_label`` at login (or the first non-empty label).
+    Later requests may refresh last_seen / IP / location and record the current
+    user_agent, but DevTools emulation must not rename the row.
     """
     ua = str(request.headers.get("User-Agent") or "")
     label = device_label(ua)
@@ -192,13 +196,15 @@ def _align_session_with_request(_user_id: int, row) -> str:
         return ""
     stored_label = str(row["device_label"] or "")
     stored_ua = str(row["user_agent"] or "")
-    if stored_label != label or (ua and stored_ua != ua[:300]):
+    # Freeze label once set; only fill when the row still has no label.
+    next_label = "" if stored_label else label
+    if (next_label and stored_label != next_label) or (ua and stored_ua != ua[:300]):
         touch_user_session(
             int(row["id"]),
             ip=ip,
             ip_location=loc,
             user_agent=ua,
-            device_label=label,
+            device_label=next_label,
         )
     else:
         touch_user_session(int(row["id"]), ip=ip, ip_location=loc)
