@@ -1483,6 +1483,24 @@ html[data-theme="light"] .zk-badge {
   font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+.release-hash-status {
+  font-weight: 600;
+}
+.release-hash-status.release-check-match {
+  color: #15803d;
+}
+.release-hash-status.release-check-mismatch {
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+}
+.release-hash-status.release-check-unavailable,
+.release-hash-status.release-check-pending {
+  color: var(--muted);
+  font-weight: 500;
+}
 .sync-meta {
   margin: 0;
   font-size: 11px;

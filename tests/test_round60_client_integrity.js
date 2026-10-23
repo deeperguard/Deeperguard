@@ -51,7 +51,9 @@ assert.ok(verify.includes('build-client-manifest.py'));
 assert.ok(verify.includes('manifest_sha256'));
 assert.ok(!verify.includes('Placeholder for Round 60'));
 assert.ok(verify.includes('release_signed') || verify.includes('signed releases'));
-assert.ok(!/<script[\s>]/i.test(verify), '/verify must stay script-free');
+// Round 65: /verify may load release-integrity.js via asset_script only (SRI).
+assert.ok(!/<script[\s>]/i.test(verify), '/verify must not use raw <script> tags');
+assert.ok(verify.includes("asset_script('js/release-integrity.js')"));
 
 // Dual-build repro (SOURCE_DATE_EPOCH pinned).
 const out = execFileSync(

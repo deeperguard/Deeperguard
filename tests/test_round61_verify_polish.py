@@ -97,14 +97,27 @@ class Round61VerifyPolishTests(unittest.TestCase):
         import client_assets
 
         os.environ.pop("NOTES_RELEASE_SIGNED", None)
+        # Repo may ship RELEASE_SIGNED=1; isolate so the GitHub probe path runs.
+        (Path(self.tmp.name) / "RELEASE_SIGNED").write_text("maybe\n", encoding="utf-8")
         client_assets._SIGNED_CACHE["tag"] = ""
         client_assets._SIGNED_CACHE["checked_at"] = 0.0
-        with mock.patch.object(client_assets, "_probe_release_has_sigstore", return_value=True):
-            self.assertTrue(client_assets.release_is_signed())
-        client_assets._SIGNED_CACHE["tag"] = ""
-        client_assets._SIGNED_CACHE["checked_at"] = 0.0
-        with mock.patch.object(client_assets, "_probe_release_has_sigstore", return_value=False):
-            self.assertFalse(client_assets.release_is_signed())
+        with mock.patch.object(client_assets, "release_tag", return_value="v0.0.0-test"):
+            with mock.patch(
+                "pathlib.Path.read_text",
+                side_effect=OSError("skip RELEASE_SIGNED files for probe test"),
+            ):
+                with mock.patch.object(
+                    client_assets, "_probe_release_has_sigstore", return_value=True
+                ):
+                    client_assets._SIGNED_CACHE["tag"] = ""
+                    client_assets._SIGNED_CACHE["checked_at"] = 0.0
+                    self.assertTrue(client_assets.release_is_signed())
+                client_assets._SIGNED_CACHE["tag"] = ""
+                client_assets._SIGNED_CACHE["checked_at"] = 0.0
+                with mock.patch.object(
+                    client_assets, "_probe_release_has_sigstore", return_value=False
+                ):
+                    self.assertFalse(client_assets.release_is_signed())
 
 
 if __name__ == "__main__":

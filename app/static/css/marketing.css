@@ -1839,3 +1839,24 @@ a.mk-badge-link:hover {
     color: #172554 !important;
   }
 }
+
+/* Round 65: automatic release hash status on /verify */
+.mk-release-hash-status {
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+.mk-release-hash-status.release-check-match {
+  color: #15803d;
+}
+.mk-release-hash-status.release-check-mismatch {
+  color: var(--mk-danger, #dc2626);
+  border: 1px solid var(--mk-warn-border, #fde68a);
+  background: color-mix(in srgb, var(--mk-danger, #dc2626) 8%, transparent);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+}
+.mk-release-hash-status.release-check-unavailable,
+.mk-release-hash-status.release-check-pending {
+  color: var(--mk-muted, #64748b);
+  font-weight: 500;
+}

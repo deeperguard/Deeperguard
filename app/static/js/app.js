@@ -14262,6 +14262,12 @@
     try { refreshGoogleDriveBackupUi(); } catch (err) { /* ignore */ }
     try { refreshDropboxBackupUi(); } catch (err) { /* ignore */ }
     startSignedInDevicesRefresh();
+    try {
+      if (globalThis.NotesReleaseIntegrity) {
+        NotesReleaseIntegrity.paintAll(NotesReleaseIntegrity.getResult());
+        NotesReleaseIntegrity.ensureChecked().catch(() => {});
+      }
+    } catch (err) { /* ignore */ }
   }
 
   function closeSettings(force = false) {

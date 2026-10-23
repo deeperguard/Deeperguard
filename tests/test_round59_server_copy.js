@@ -52,6 +52,7 @@ assert.ok(verify.includes('/api/sync/items'));
 assert.ok(verify.includes('What these tests'));
 assert.ok(verify.includes('How to check the code'));
 assert.ok(verify.includes('Our claim fails if'));
-assert.ok(!/<script[\s>]/i.test(verify), '/verify must stay script-free for a strict CSP');
+// Round 65: one SRI asset_script for release-hash check is allowed; no raw tags.
+assert.ok(!/<script[\s>]/i.test(verify), '/verify must not use raw <script> tags');
 
 console.log('test_round59_server_copy ok');
