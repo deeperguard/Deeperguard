@@ -9,8 +9,9 @@ const { spawnSync } = require('child_process');
 const root = path.join(__dirname, '..');
 const tag = fs.readFileSync(path.join(root, 'RELEASE_TAG'), 'utf8').trim();
 const deploy = fs.readFileSync(path.join(root, 'deploy/deploy-deeperguard.sh'), 'utf8');
+// Canonical copy until workflow-scoped push can sync .github/workflows.
 const workflow = fs.readFileSync(
-  path.join(root, '.github/workflows/release-client.yml'),
+  path.join(root, 'deploy/github-workflows/release-client.yml'),
   'utf8',
 );
 

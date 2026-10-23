@@ -52,7 +52,11 @@ class Round72_2ReleaseTagTests(unittest.TestCase):
         self.assertIn("RELEASE_TAG)", deploy)
 
     def test_release_workflow_checks_tag(self):
-        wf = (REPO / ".github" / "workflows" / "release-client.yml").read_text(encoding="utf-8")
+        # deploy/github-workflows is the source of truth until a workflow-scoped
+        # token can sync .github/workflows/release-client.yml.
+        wf = (REPO / "deploy" / "github-workflows" / "release-client.yml").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("RELEASE_TAG must match git tag", wf)
         self.assertIn("check-release-tag.sh", wf)
         self.assertIn("GITHUB_REF_NAME", wf)
