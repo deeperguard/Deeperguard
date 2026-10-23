@@ -88,6 +88,8 @@ class Round65ReleaseHashTests(unittest.TestCase):
         self.assertIn("Status:", html)
         self.assertIn("SubtleCrypto", html)
         self.assertIn("newer release", html)
+        self.assertIn("timed out", html)
+        self.assertIn("unlisted asset", html)
 
     def test_about_has_status(self):
         from config import app_entry_path

@@ -3,28 +3,26 @@
  *
  * Local hash: SHA-256 over the canonical manifest form of the same-origin
  * assets listed in /static/client-manifest.json (fetch each asset URL, hash
- * bytes with SubtleCrypto). The shell meta notes-client-hash is only a
- * convenience mirror — if it differs from the computed value, that is flagged.
+ * bytes with SubtleCrypto). Also cross-checks document <script>/<link> (and
+ * crypto-worker meta) against manifest URLs.
  *
- * Expected hash: public GitHub Releases API JSON for the preferred tag. The
- * release body embeds `manifest_sha256` from the signing workflow. Release
- * asset CDN bodies lack CORS ACAO, so the API JSON is the clean path.
+ * Expected hash: public GitHub Releases API JSON. Fetches use AbortController
+ * timeouts plus an overall deadline so a hung request cannot leave the UI on
+ * "Checking signed release…" forever.
  *
- * Also fetches /releases/latest (cached) and warns when the matched tag is
- * older than latest — warning, not an error.
- *
- * Honesty: a match proves the hashed same-origin assets equal the hash
- * published with that release. The checker script itself is served by the
- * same origin, so independent verification still means cosign / building from
- * source. Not Sigstore verification. Never blocks the app; never sends vault data.
+ * Honesty: a match proves the hashed same-origin assets equal the published
+ * release hash. The checker itself is served by the same origin — independent
+ * verification still means cosign / building from source.
  */
 (function (global) {
   const REPO = 'deeperguard/Deeperguard';
   const API = 'https://api.github.com';
   const MANIFEST_URL = '/static/client-manifest.json';
-  const CACHE_KEY = 'notes_release_hash_check_v2';
+  const CACHE_KEY = 'notes_release_hash_check_v3';
   const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
   const RATE_COOLDOWN_MS = 60 * 60 * 1000;
+  let REQUEST_TIMEOUT_MS = 9000;
+  let OVERALL_DEADLINE_MS = 28000;
 
   const STATUS = {
     match: 'match',
@@ -35,6 +33,7 @@
 
   let lastResult = null;
   let inflight = null;
+  let checkGeneration = 0;
   const listeners = [];
 
   function onChange(fn) {
@@ -61,7 +60,6 @@
     }
   }
 
-  /** Convenience mirror from the shell (may be stamped by a tampered origin). */
   function metaClientHash() {
     const fromMeta = metaContent('notes-client-hash').toLowerCase();
     if (/^[a-f0-9]{64}$/.test(fromMeta)) return fromMeta;
@@ -73,7 +71,6 @@
     return '';
   }
 
-  // Back-compat alias used by older tests / callers.
   function localClientHash() {
     return metaClientHash();
   }
@@ -106,7 +103,7 @@
       if (global.localStorage) {
         global.localStorage.setItem(CACHE_KEY, JSON.stringify(doc));
       }
-    } catch (err) { /* quota / private mode */ }
+    } catch (err) { /* ignore */ }
   }
 
   function cacheLooksFresh(doc, computedHash, tag) {
@@ -114,9 +111,8 @@
     if ((tag || '') !== (doc.tag || '')) return false;
     const at = Number(doc.checkedAt || 0);
     if (!at || (Date.now() - at) > CACHE_TTL_MS) return false;
-    return doc.status === STATUS.match
-      || doc.status === STATUS.mismatch
-      || doc.status === STATUS.unavailable;
+    // Do not treat unavailable/timeout as fresh — About must be able to retry.
+    return doc.status === STATUS.match || doc.status === STATUS.mismatch;
   }
 
   function parseTagParts(tag) {
@@ -136,9 +132,77 @@
     return false;
   }
 
+  function remainingMs(deadlineAt) {
+    return Math.max(0, Number(deadlineAt || 0) - Date.now());
+  }
+
+  function timeoutError() {
+    const err = new Error('timed out');
+    err.code = 'timeout';
+    return err;
+  }
+
+  // Prefer window timers, but fall back to lexical setTimeout (vm test harnesses
+  // often pass a plain object as `window` without timer methods).
+  function schedule(fn, ms) {
+    const st = (global && typeof global.setTimeout === 'function')
+      ? global.setTimeout
+      : setTimeout;
+    return st(fn, ms);
+  }
+
+  function unschedule(id) {
+    const ct = (global && typeof global.clearTimeout === 'function')
+      ? global.clearTimeout
+      : clearTimeout;
+    return ct(id);
+  }
+
+  async function fetchWithTimeout(url, init, deadlineAt) {
+    const budget = remainingMs(deadlineAt);
+    if (budget <= 0) throw timeoutError();
+    const ms = Math.min(REQUEST_TIMEOUT_MS, budget);
+    const AbortCtrl = global.AbortController;
+    if (typeof AbortCtrl !== 'function') {
+      // Extremely old engines: still bound by overall Promise.race deadline.
+      return global.fetch(url, init || {});
+    }
+    const ctrl = new AbortCtrl();
+    const outer = init && init.signal;
+    let onOuter = null;
+    if (outer) {
+      if (outer.aborted) {
+        ctrl.abort();
+      } else {
+        onOuter = () => ctrl.abort();
+        outer.addEventListener('abort', onOuter, { once: true });
+      }
+    }
+    const timer = schedule(() => {
+      try { ctrl.abort(); } catch (err) { /* ignore */ }
+    }, ms);
+    try {
+      return await global.fetch(url, Object.assign({}, init || {}, { signal: ctrl.signal }));
+    } catch (err) {
+      if (ctrl.signal.aborted || (err && err.name === 'AbortError')) {
+        throw timeoutError();
+      }
+      throw err;
+    } finally {
+      unschedule(timer);
+      if (outer && onOuter) {
+        try { outer.removeEventListener('abort', onOuter); } catch (err) { /* ignore */ }
+      }
+    }
+  }
+
   function formatMessage(result) {
     if (!result) return 'Checking signed release…';
     if (result.status === STATUS.pending) return 'Checking signed release…';
+
+    if (result.unlistedAssets && result.unlistedAssets.length) {
+      return `Does not match: unlisted asset ${result.unlistedAssets[0]}`;
+    }
 
     if (result.failedAssets && result.failedAssets.length) {
       const list = result.failedAssets.slice(0, 8).join(', ');
@@ -148,12 +212,15 @@
       return `Could not check — failed to hash: ${list}${more}`;
     }
 
+    if (result.reason === 'timeout') {
+      return 'Could not check (timed out)';
+    }
+
     if (result.status === STATUS.mismatch) return 'Does not match';
     if (result.status === STATUS.unavailable) {
       return 'Could not check (offline / rate-limited)';
     }
 
-    // match
     let msg;
     if (result.signed) {
       msg = `Matches signed release ${result.tag || ''}`.trim();
@@ -199,34 +266,122 @@
     return hex;
   }
 
+  function normalizePath(url) {
+    try {
+      const base = (global.location && global.location.href) || 'https://deeperguard.local/';
+      const u = new URL(String(url), base);
+      return u.pathname;
+    } catch (err) {
+      return String(url || '').split('?')[0];
+    }
+  }
+
+  function isStaticClientAssetPath(pathname) {
+    if (!pathname || pathname.indexOf('/static/') !== 0) return false;
+    return /\.(js|mjs|css)$/i.test(pathname);
+  }
+
+  /** Map /static/js/app.<16hex>.js → js/app.js (null if not a hashed URL). */
+  function logicalFromHashedPath(pathname) {
+    const m = String(pathname || '').match(
+      /^\/static\/(.+)\.([a-f0-9]{16})\.(js|mjs|css)$/i,
+    );
+    if (!m) return null;
+    return `${m[1]}.${m[3].toLowerCase()}`;
+  }
+
+  function collectLoadedAssetPaths() {
+    const out = [];
+    const seen = Object.create(null);
+    const doc = global.document;
+    if (!doc) return out;
+
+    function add(raw) {
+      if (!raw) return;
+      const path = normalizePath(raw);
+      if (!isStaticClientAssetPath(path)) return;
+      if (seen[path]) return;
+      seen[path] = 1;
+      out.push(path);
+    }
+
+    try {
+      doc.querySelectorAll('script[src]').forEach((el) => add(el.getAttribute('src') || el.src));
+      doc.querySelectorAll('link[rel="stylesheet"][href]').forEach((el) => {
+        add(el.getAttribute('href') || el.href);
+      });
+    } catch (err) { /* ignore */ }
+
+    add(metaContent('notes-crypto-worker'));
+    return out;
+  }
+
   /**
-   * Fetch same-origin client-manifest.json, hash each listed asset URL, then
-   * SHA-256 the canonical "logical:sha256\\n…" payload (same as build script).
+   * Loaded same-origin JS/CSS/worker must appear in the manifest URL set.
+   * Also: if a loaded hashed URL maps to a logical key whose manifest URL
+   * differs, treat the loaded path as unlisted (listed URL not what loaded).
    */
-  async function computeLocalManifestHash() {
+  function crossCheckLoadedAssets(assets) {
+    const manifestUrls = Object.create(null);
+    const logicalToUrl = Object.create(null);
+    const keys = Object.keys(assets || {});
+    for (let i = 0; i < keys.length; i += 1) {
+      const key = keys[i];
+      const info = assets[key] || {};
+      const path = normalizePath(info.url || `/static/${key}`);
+      manifestUrls[path] = key;
+      logicalToUrl[key] = path;
+    }
+
+    const loaded = collectLoadedAssetPaths();
+    const unlisted = [];
+    for (let i = 0; i < loaded.length; i += 1) {
+      const path = loaded[i];
+      if (manifestUrls[path]) continue;
+      const logical = logicalFromHashedPath(path);
+      if (logical && logicalToUrl[logical] && logicalToUrl[logical] !== path) {
+        // Page loaded a different hash than the manifest lists for this file.
+        unlisted.push(path);
+        continue;
+      }
+      if (logical && !logicalToUrl[logical]) {
+        unlisted.push(path);
+        continue;
+      }
+      if (!logical) {
+        unlisted.push(path);
+      }
+    }
+    return unlisted;
+  }
+
+  async function computeLocalManifestHash(deadlineAt) {
     const metaHash = metaClientHash();
     const failedAssets = [];
     let doc;
     try {
-      const resp = await global.fetch(MANIFEST_URL, {
+      const resp = await fetchWithTimeout(MANIFEST_URL, {
         method: 'GET',
         credentials: 'same-origin',
         cache: 'no-store',
-      });
+      }, deadlineAt);
       if (!resp.ok) {
         return {
           computedHash: '',
           metaHash,
           failedAssets: ['client-manifest.json'],
+          unlistedAssets: [],
           metaMismatch: false,
         };
       }
       doc = await resp.json();
     } catch (err) {
+      if (err && err.code === 'timeout') throw err;
       return {
         computedHash: '',
         metaHash,
         failedAssets: ['client-manifest.json'],
+        unlistedAssets: [],
         metaMismatch: false,
       };
     }
@@ -238,58 +393,87 @@
         computedHash: '',
         metaHash,
         failedAssets: ['client-manifest.json (empty assets)'],
+        unlistedAssets: [],
         metaMismatch: false,
       };
     }
 
-    const lines = [];
-    for (let i = 0; i < keys.length; i += 1) {
-      const key = keys[i];
-      const info = assets[key] || {};
-      const url = String(info.url || `/static/${key}`);
-      try {
-        const resp = await global.fetch(url, {
-          method: 'GET',
-          credentials: 'same-origin',
-          cache: 'force-cache',
-        });
-        if (!resp.ok) {
-          failedAssets.push(key);
-          continue;
-        }
-        const buf = await resp.arrayBuffer();
-        const hex = await sha256Hex(buf);
-        lines.push(`${key}:${hex}`);
-      } catch (err) {
-        failedAssets.push(key);
-      }
-    }
-
-    if (failedAssets.length) {
+    const unlistedAssets = crossCheckLoadedAssets(assets);
+    if (unlistedAssets.length) {
       return {
         computedHash: '',
         metaHash,
-        failedAssets,
+        failedAssets: [],
+        unlistedAssets,
         metaMismatch: false,
       };
     }
 
+    // Parallel fetches; each call still has its own AbortController timeout.
+    const lineByKey = Object.create(null);
+    await Promise.all(keys.map(async (key) => {
+      if (remainingMs(deadlineAt) <= 0) {
+        failedAssets.push(key);
+        return;
+      }
+      const info = assets[key] || {};
+      const url = String(info.url || `/static/${key}`);
+      try {
+        const resp = await fetchWithTimeout(url, {
+          method: 'GET',
+          credentials: 'same-origin',
+          cache: 'force-cache',
+        }, deadlineAt);
+        if (!resp.ok) {
+          failedAssets.push(key);
+          return;
+        }
+        const buf = await resp.arrayBuffer();
+        const hex = await sha256Hex(buf);
+        lineByKey[key] = `${key}:${hex}`;
+      } catch (err) {
+        if (err && err.code === 'timeout') throw err;
+        failedAssets.push(key);
+      }
+    }));
+
+    if (failedAssets.length) {
+      // De-dupe while preserving order
+      const seen = Object.create(null);
+      const uniq = [];
+      for (let i = 0; i < failedAssets.length; i += 1) {
+        const k = failedAssets[i];
+        if (seen[k]) continue;
+        seen[k] = 1;
+        uniq.push(k);
+      }
+      return {
+        computedHash: '',
+        metaHash,
+        failedAssets: uniq,
+        unlistedAssets: [],
+        metaMismatch: false,
+      };
+    }
+
+    const lines = keys.map((k) => lineByKey[k]);
     const payload = new TextEncoder().encode(lines.join('\n'));
     const computedHash = await sha256Hex(payload);
     return {
       computedHash,
       metaHash,
       failedAssets: [],
+      unlistedAssets: [],
       metaMismatch: !!(metaHash && computedHash && metaHash !== computedHash),
     };
   }
 
-  async function fetchReleaseJson(tag) {
+  async function fetchReleaseJson(tag, deadlineAt) {
     const path = tag
       ? `/repos/${REPO}/releases/tags/${encodeURIComponent(tag)}`
       : `/repos/${REPO}/releases/latest`;
     const url = `${API}${path}`;
-    const resp = await global.fetch(url, {
+    const resp = await fetchWithTimeout(url, {
       method: 'GET',
       headers: {
         Accept: 'application/vnd.github+json',
@@ -298,7 +482,7 @@
       credentials: 'omit',
       cache: 'no-store',
       mode: 'cors',
-    });
+    }, deadlineAt);
     const remaining = resp.headers.get('x-ratelimit-remaining');
     const reset = resp.headers.get('x-ratelimit-reset');
     if (resp.status === 403 || resp.status === 429) {
@@ -334,19 +518,20 @@
       metaMismatch: !!parts.metaMismatch,
       newerTag: parts.newerTag || '',
       failedAssets: Array.isArray(parts.failedAssets) ? parts.failedAssets : [],
+      unlistedAssets: Array.isArray(parts.unlistedAssets) ? parts.unlistedAssets : [],
       message: '',
     };
     result.message = formatMessage(result);
     return result;
   }
 
-  async function runCheck(opts) {
+  async function runCheckBody(opts, deadlineAt) {
     const force = !!(opts && opts.force);
     const tag = preferredTag();
 
     let computed;
     try {
-      computed = await computeLocalManifestHash();
+      computed = await computeLocalManifestHash(deadlineAt);
     } catch (err) {
       const code = err && err.code;
       return resultFromParts({
@@ -361,7 +546,19 @@
     const localHash = computed.computedHash;
     const metaHash = computed.metaHash;
     const failedAssets = computed.failedAssets || [];
+    const unlistedAssets = computed.unlistedAssets || [];
     const metaMismatch = !!computed.metaMismatch;
+
+    if (unlistedAssets.length) {
+      return resultFromParts({
+        status: STATUS.mismatch,
+        tag,
+        metaHash,
+        metaMismatch,
+        unlistedAssets,
+        reason: 'unlisted_asset',
+      });
+    }
 
     if (failedAssets.length) {
       return resultFromParts({
@@ -397,6 +594,7 @@
         metaMismatch: cached.metaMismatch != null ? !!cached.metaMismatch : metaMismatch,
         newerTag: cached.newerTag || '',
         failedAssets: [],
+        unlistedAssets: cached.unlistedAssets || [],
         fromCache: true,
       };
       restored.message = formatMessage(restored);
@@ -416,21 +614,20 @@
     }
 
     try {
-      const release = await fetchReleaseJson(tag);
+      const release = await fetchReleaseJson(tag, deadlineAt);
       const releaseTag = String(release.tag_name || tag || '').trim();
       const expectedHash = parseManifestShaFromBody(release.body);
       const signed = releaseHasSigstore(release.assets);
 
       let newerTag = '';
       try {
-        // One extra call; skipped when preferred tag already is latest.
-        const latest = await fetchReleaseJson('');
+        const latest = await fetchReleaseJson('', deadlineAt);
         const latestTag = String(latest.tag_name || '').trim();
         if (latestTag && releaseTag && tagOlderThan(releaseTag, latestTag)) {
           newerTag = latestTag;
         }
       } catch (err) {
-        // Latest probe is best-effort; do not fail the whole check.
+        if (err && err.code === 'timeout') throw err;
         if (err && err.code === 'rate_limited') {
           writeCache({
             ...(readCache() || {}),
@@ -494,6 +691,27 @@
     }
   }
 
+  async function runCheck(opts) {
+    const deadlineAt = Date.now() + OVERALL_DEADLINE_MS;
+    try {
+      const result = await Promise.race([
+        runCheckBody(opts, deadlineAt),
+        new Promise((_, reject) => {
+          schedule(() => reject(timeoutError()), OVERALL_DEADLINE_MS + 50);
+        }),
+      ]);
+      return result;
+    } catch (err) {
+      const code = err && err.code;
+      return resultFromParts({
+        status: STATUS.unavailable,
+        tag: preferredTag(),
+        metaHash: metaClientHash(),
+        reason: code === 'timeout' ? 'timeout' : (code || 'error'),
+      });
+    }
+  }
+
   function paint(el, result) {
     if (!el) return;
     const r = result || lastResult;
@@ -543,8 +761,28 @@
     } catch (err) { /* ignore */ }
   }
 
+  function shouldForceRetry(opts) {
+    if (opts && opts.force) return true;
+    const last = lastResult;
+    if (!last) return false;
+    if (last.status === STATUS.pending) return true;
+    if (last.status === STATUS.unavailable) return true;
+    return false;
+  }
+
   async function ensureChecked(opts) {
-    if (inflight) return inflight;
+    const options = opts || {};
+    const forceRetry = shouldForceRetry(options);
+
+    if (inflight && !forceRetry && !options.force) {
+      return inflight;
+    }
+
+    // Abandon a hung/stale inflight reference so About can retry.
+    // Prior promise may still settle; generation guard ignores late writes.
+    const gen = (checkGeneration += 1);
+    if (inflight) inflight = null;
+
     const pending = resultFromParts({
       status: STATUS.pending,
       tag: preferredTag(),
@@ -552,35 +790,51 @@
     });
     emit(pending);
     paintAll(pending);
-    inflight = runCheck(opts).then((result) => {
-      inflight = null;
-      emit(result);
-      paintAll(result);
+
+    const runOpts = Object.assign({}, options, { force: !!(options.force || forceRetry) });
+    const p = runCheck(runOpts).then((result) => {
+      if (gen === checkGeneration) {
+        inflight = null;
+        emit(result);
+        paintAll(result);
+      }
       return result;
     }, () => {
-      inflight = null;
       const result = resultFromParts({
         status: STATUS.unavailable,
         tag: preferredTag(),
         metaHash: metaClientHash(),
         reason: 'error',
       });
-      emit(result);
-      paintAll(result);
+      if (gen === checkGeneration) {
+        inflight = null;
+        emit(result);
+        paintAll(result);
+      }
       return result;
     });
-    return inflight;
+    inflight = p;
+    return p;
   }
 
   function start(opts) {
+    // Always schedule a timer fallback — requestIdleCallback alone can defer
+    // past unlock / About open on busy main threads.
+    let started = false;
+    const go = () => {
+      if (started) return;
+      started = true;
+      ensureChecked(opts).catch(() => {});
+    };
     try {
       if (typeof global.requestIdleCallback === 'function') {
-        global.requestIdleCallback(() => { ensureChecked(opts); }, { timeout: 4000 });
-      } else {
-        global.setTimeout(() => { ensureChecked(opts); }, 0);
+        global.requestIdleCallback(go, { timeout: 2000 });
       }
+    } catch (err) { /* ignore */ }
+    try {
+      schedule(go, 300);
     } catch (err) {
-      global.setTimeout(() => { ensureChecked(opts); }, 0);
+      go();
     }
   }
 
@@ -609,7 +863,10 @@
     tagOlderThan,
     formatMessage,
     computeLocalManifestHash,
+    crossCheckLoadedAssets,
+    collectLoadedAssetPaths,
     sha256Hex,
+    fetchWithTimeout,
     runCheck,
     ensureChecked,
     start,
@@ -621,6 +878,12 @@
     _writeCache: writeCache,
     _CACHE_KEY: CACHE_KEY,
     _MANIFEST_URL: MANIFEST_URL,
+    get _REQUEST_TIMEOUT_MS() { return REQUEST_TIMEOUT_MS; },
+    get _OVERALL_DEADLINE_MS() { return OVERALL_DEADLINE_MS; },
+    _setTimeoutsForTests(requestMs, overallMs) {
+      if (requestMs != null) REQUEST_TIMEOUT_MS = Number(requestMs);
+      if (overallMs != null) OVERALL_DEADLINE_MS = Number(overallMs);
+    },
   };
 
   global.NotesReleaseIntegrity = api;
