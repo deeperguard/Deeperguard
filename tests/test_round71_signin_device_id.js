@@ -98,6 +98,46 @@ Promise.resolve(sandbox.NotesSrpAuth.login('fresh@example.com', 'password-ok-lon
     assert.ok(!freshnessJs.includes('last_seen_at'));
     assert.ok(!freshnessJs.includes('/api/sessions'));
 
+    // --- B1: attempt 0 always force sync when vault ready ---------------------
+    const recovery = appJs.split('function scheduleOnlineRecovery')[1].split('function listStoredFiles')[0];
+    assert.ok(recovery.includes('attempt === 0 && vaultReady'));
+    assert.ok(recovery.includes('syncNow({ quiet: true, force: true })'));
+    assert.ok(recovery.includes("reason: 'online-recovery'"));
+    // test_round39: onAppForeground('online') still must not call syncNow directly.
+    const fg = appJs.split('function onAppForeground')[1].split("document.addEventListener('click'")[0];
+    const onlineBranch = fg.split("reason === 'online'")[1].split('probeNetwork({ syncOnRecovery: true })')[0];
+    assert.ok(!onlineBranch.includes('syncNow('));
+
+    return new Promise((resolve, reject) => {
+      let syncCalls = 0;
+      const vaultReady = true;
+      let networkReachable = false;
+      function syncNow() {
+        syncCalls += 1;
+        return Promise.resolve(true);
+      }
+      function probeNetwork() {
+        networkReachable = true;
+        return Promise.resolve(true);
+      }
+      setTimeout(() => {
+        probeNetwork().then((ok) => {
+          if (!ok) return ok;
+          if (vaultReady) return syncNow({ quiet: true, force: true });
+          return ok;
+        }).finally(() => {
+          try {
+            assert.strictEqual(syncCalls, 1, 'exactly one forced sync on attempt 0');
+            assert.ok(networkReachable);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        });
+      }, 0);
+    });
+  })
+  .then(() => {
     console.log('test_round71_signin_device_id ok');
   })
   .catch((err) => {

@@ -8510,8 +8510,22 @@
       // Always probe — even when dirty is empty — so the Offline caption clears.
       probeNetwork({ syncOnRecovery: true, forceHealth: true }).then((ok) => {
         if (generation !== onlineRecoveryGeneration) return ok;
+        if (!ok) return ok;
+        // Round 71: first successful probe always force-pulls (abort of the
+        // store online sync + wasOffline gate used to leave remote edits
+        // until the ~25s change poll). syncInFlight coalesces overlapping pulls.
+        if (attempt === 0 && vaultReady) {
+          try {
+            console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
+              reason: 'online-recovery',
+              attempt: 0,
+              pending: NotesStore.state?.dirty?.size || 0,
+            });
+          } catch (err) { /* ignore */ }
+          return syncNow({ quiet: true, force: true });
+        }
         const stillDirty = NotesStore.state?.dirty?.size || 0;
-        if (ok && stillDirty > 0) {
+        if (stillDirty > 0) {
           try {
             console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
               reason: 'online-recovery-retry',
