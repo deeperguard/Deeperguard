@@ -7347,6 +7347,7 @@
   }
 
   async function signOutCompletely() {
+    stopOnlineRecovery('sign-out');
     try {
       await NotesStore.flush();
     } catch (err) {
@@ -8593,7 +8594,9 @@
       if (wasOffline) {
         NotesStore.emitSync('idle', '');
         // Round 72: quiet recovery sync gates on unlocked, not only vaultReady.
-        if (syncOnRecovery && NotesStore.isUnlocked()) {
+        // Round 72.1: when online-recovery owns the wave, do not start a parallel
+        // syncNow here — abortInflightApi('online-recovery') would race it.
+        if (syncOnRecovery && NotesStore.isUnlocked() && !onlineRecoveryActive) {
           const pending = NotesStore.state?.dirty?.size || 0;
           try {
             console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
@@ -8604,6 +8607,8 @@
           // Always force after offline so a dirty note is not skipped by the
           // "synced recently" throttle. syncInFlight coalesces with recovery.
           syncNow({ quiet: true, force: true });
+        }
+        if (NotesStore.isUnlocked()) {
           resumePendingOcr().catch(() => {});
           listPreviewBackfillFailed.clear();
           resumePendingListPreviews().catch(() => {});
@@ -8693,6 +8698,8 @@
         offlineWatchTickActive = false;
         if (ok) {
           offlineWatchDelayMs = 2000;
+          // Round 72.1: probe success must restart recovery (force-pull while
+          // unlocked), not only leave networkReachable=true.
           scheduleOnlineRecovery(0);
           return;
         }
@@ -8720,12 +8727,43 @@
 
   const ONLINE_RECOVERY_DELAYS_MS = [0, 1000, 2000, 4000, 8000];
 
+  function clearOnlineRecoveryCaption() {
+    try {
+      if (
+        ui.saveStatus
+        && !(NotesStore.state?.dirty?.size)
+        && /will sync when online/.test(ui.saveStatus.textContent || '')
+      ) {
+        ui.saveStatus.textContent = 'Saved';
+        ui.saveStatus.classList.remove('error');
+      }
+    } catch (err) { /* ignore */ }
+  }
+
+  function recoveryMayContinue() {
+    if (!NotesStore.isUnlocked()) return false;
+    // Keep slow-tailing while the page is visible or the browser reports online.
+    const visible = typeof document === 'undefined' || document.visibilityState !== 'hidden';
+    const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+    return visible || online;
+  }
+
+  function stopOnlineRecovery(_reason) {
+    clearTimeout(onlineRecoveryTimer);
+    onlineRecoveryTimer = null;
+    if (!onlineRecoveryActive) return;
+    onlineRecoveryActive = false;
+    onlineRecoveryGeneration += 1;
+  }
+
   function scheduleOnlineRecovery(attempt = 0) {
     clearTimeout(onlineRecoveryTimer);
-    // Round 72: probe immediately, then force-pull retries at 1/2/4/8s until
-    // one pull succeeds. Health probes still share one in-flight request and
-    // global backoff — never abort-storm (R39). After the fast window, fall
-    // back to CHANGE_POLL_MS (25s).
+    // Round 72: probe immediately, then force-pull retries at 1/2/4/8s.
+    // Round 72.1: after the fast window, keep recovery ownership and continue
+    // force-pulling every CHANGE_POLL_MS until syncNow returns true (no faster).
+    // Health probes still share one in-flight request and global backoff — never
+    // abort-storm (R39). Aborted pulls (including abortInflightApi at wave start)
+    // are covered by later attempts so no pull is lost.
     const delays = ONLINE_RECOVERY_DELAYS_MS;
     if (attempt === 0) {
       stopOfflineWatch();
@@ -8743,28 +8781,45 @@
       }
     }
     const generation = onlineRecoveryGeneration;
-    if (attempt >= delays.length) {
+    if (!NotesStore.isUnlocked()) {
       onlineRecoveryActive = false;
-      if (!networkReachable) {
+      return;
+    }
+    if (attempt > 0 && !recoveryMayContinue()) {
+      onlineRecoveryActive = false;
+      if (!networkReachable || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
         offlineWatchDelayMs = 2000;
         startOfflineWatch();
-      } else if (!sessionExpiredHold) {
-        scheduleChangePoll();
       }
       return;
     }
+    const inSlowTail = attempt >= delays.length;
+    const baseDelay = inSlowTail ? CHANGE_POLL_MS : delays[attempt];
     // Wait out the shared health backoff instead of clearing it on every
     // attempt (clearing caused an offline health storm when onLine flickered).
     const gateWait = Math.max(0, (Number(window.__notesHealthNextAt) || 0) - Date.now());
-    const wait = Math.max(delays[attempt], gateWait);
+    const wait = Math.max(baseDelay, gateWait);
     onlineRecoveryTimer = setTimeout(() => {
       if (generation !== onlineRecoveryGeneration) return;
+      if (!NotesStore.isUnlocked()) {
+        onlineRecoveryActive = false;
+        return;
+      }
       // Always probe — even when dirty is empty — so the Offline caption clears.
-      probeNetwork({ syncOnRecovery: true, forceHealth: true }).then(async (ok) => {
+      // Recovery owns the force-pull — probe without a parallel syncNow.
+      probeNetwork({ syncOnRecovery: false, forceHealth: true }).then(async (ok) => {
         if (generation !== onlineRecoveryGeneration) return { probeOk: false };
-        if (!ok) return { probeOk: false };
+        if (!ok) {
+          if (!networkReachable) {
+            onlineRecoveryActive = false;
+            offlineWatchDelayMs = 2000;
+            startOfflineWatch();
+            return { probeOk: false, offline: true };
+          }
+          return { probeOk: false };
+        }
         // Quiet recovery: gate on unlocked (not only vaultReady) so a shell
-        // that is crypto-ready still force-pulls remote edits.
+        // that is crypto-ready still force-pulls remote edits (pending:0 too).
         if (!NotesStore.isUnlocked()) {
           return { probeOk: true, synced: false, locked: true };
         }
@@ -8772,16 +8827,22 @@
           console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
             reason: 'online-recovery',
             attempt,
+            slowTail: inSlowTail,
             pending: NotesStore.state?.dirty?.size || 0,
           });
         } catch (err) { /* ignore */ }
         const synced = await syncNow({ quiet: true, force: true });
+        if (!NotesStore.isUnlocked()) {
+          return { probeOk: true, synced: false, locked: true };
+        }
         return { probeOk: true, synced: synced === true };
       }).then((result) => {
         if (generation !== onlineRecoveryGeneration) return;
+        if (result?.offline) return;
         if (result?.synced) {
           onlineRecoveryActive = false;
           stopOfflineWatch();
+          clearOnlineRecoveryCaption();
           if (!sessionExpiredHold) scheduleChangePoll();
           return;
         }
@@ -8790,7 +8851,7 @@
           stopOfflineWatch();
           return;
         }
-        // Probe failed, or pull aborted/failed — retry with backoff.
+        // Probe failed, or pull aborted/failed — retry (fast window, then slow tail).
         scheduleOnlineRecovery(attempt + 1);
       }).catch(() => {
         if (generation !== onlineRecoveryGeneration) return;
@@ -22199,6 +22260,7 @@
     onAppForeground('visibility');
   });
   window.addEventListener('pagehide', () => {
+    stopOnlineRecovery('pagehide');
     stopEmptyDeviceBackgroundRetry();
     if (document.visibilityState !== 'hidden') return;
     NotesStore.flush();
@@ -22288,6 +22350,8 @@
     networkReachable = false;
     NotesStore.emitSync('offline', 'Offline');
     updateNetworkStatusBanner();
+    // Round 72.1: hand recovery back to the offline watch.
+    stopOnlineRecovery('offline');
     // Cancel hung API work so it does not sit for 8s → "Request timed out".
     // Do not start sync or force a health probe on the offline transition.
     NotesStore.abortInflightApi?.('offline');
