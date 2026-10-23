@@ -133,12 +133,23 @@ global.fetch = async (url, options = {}) => {
   if (pathUrl.includes('/api/sync/watermark')) {
     return jsonResponse(200, server.watermark);
   }
+  const itemMatch = pathUrl.match(/\/api\/sync\/item\/([^?]+)/);
+  if (itemMatch) {
+    const uuid = decodeURIComponent(itemMatch[1]);
+    if (server.itemResponder) {
+      const answer = await server.itemResponder(uuid, call);
+      if (answer && answer.__status) return jsonResponse(answer.__status, answer.body || {});
+      return jsonResponse(200, { item: answer });
+    }
+    return jsonResponse(404, { error: 'not found' });
+  }
   return jsonResponse(200, {});
 };
 global.NotesSanitize = require(path.join(jsRoot, 'sanitize.js'));
 
 vm.runInThisContext(fs.readFileSync(path.join(vendorRoot, 'noble-crypto.js'), 'utf8'));
 global.NotesCrypto = require(path.join(jsRoot, 'crypto.js'));
+vm.runInThisContext(fs.readFileSync(path.join(jsRoot, 'freshness.js'), 'utf8'));
 const NotesStore = require(path.join(jsRoot, 'store.js'));
 
 const SALT = '74b797214bcbc094863155104fb361bb';
@@ -169,7 +180,20 @@ async function unlockFresh(password = PASSWORD) {
 }
 
 async function encryptedRow(uuid, content, updatedAt, syncedAt, extra = {}) {
-  const payload = await NotesCrypto.encryptObject(NotesStore.state.cryptoKey, content);
+  const body = content && typeof content === 'object' ? { ...content } : {};
+  // When freshness is loaded, omit __fv to mean "newer than this device's HWM"
+  // so sync tests are not false-rejected as rollbacks. Explicit __fv is kept
+  // (including low values for rollback demos).
+  if (global.NotesFreshness && NotesFreshness.shouldTrackType(body.type || 'note')) {
+    body.__fid = body.__fid || uuid;
+    if (body.__fv == null || body.__fv === '') {
+      const held = NotesFreshness.getHwm(uuid)?.v || 0;
+      body.__fv = held + 1;
+    } else {
+      body.__fv = NotesFreshness.itemVersion(body);
+    }
+  }
+  const payload = await NotesCrypto.encryptObject(NotesStore.state.cryptoKey, body);
   const ciphertext = JSON.stringify(payload);
   return {
     item_uuid: uuid,
@@ -212,6 +236,7 @@ function resetServer() {
   server.pushStatus = 200;
   server.refetchResponder = null;
   server.blobResponder = null;
+  server.itemResponder = null;
   server.route = null;
   fetchCalls.length = 0;
 }
@@ -219,6 +244,7 @@ function resetServer() {
 module.exports = {
   NotesStore,
   NotesCrypto,
+  NotesFreshness: global.NotesFreshness,
   idb,
   blobs,
   meta,

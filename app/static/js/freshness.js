@@ -508,7 +508,13 @@
     emit();
   }
 
-  /** QA-only: stage a synthetic older version check without disabling guards. */
+  /**
+   * QA-only: raise the local high-water mark so the next production freshness
+   * check treats the server copy as a rollback. Does nothing unless
+   * notes_freshness_test=1. Pair with NotesStore.testFreshnessProbeItem(uuid)
+   * or NotesStore.testDemoRollbackWarning(uuid) so a real server ciphertext
+   * runs through applySyncPayload (a quiet sync alone often pulls 0 items).
+   */
   function testInjectRollbackScenario(uuid, heldVersion) {
     if (!isTestHookEnabled()) {
       throw new Error('Freshness test hook disabled (set localStorage notes_freshness_test=1)');

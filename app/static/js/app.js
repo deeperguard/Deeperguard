@@ -3403,7 +3403,7 @@
     stopTotpClock();
     const cached = NotesStore.cachedAccount?.() || {};
     showUnlock(cached.email || undefined);
-    clearUnlockPasswordField();
+    clearUnlockPasswordField({ force: true });
     if (message) {
       const neutralLock = message === 'Vault locked.' || /^Locked after\b/.test(message);
       if (unlockError) {
@@ -5451,8 +5451,11 @@
     });
   }
 
-  function clearUnlockPasswordField() {
+  function clearUnlockPasswordField({ force = false } = {}) {
     if (!unlockPassword) return;
+    // Boot may call showUnlock after awaits; do not wipe keystrokes the user
+    // already typed on the lock screen while auto-unlock was still running.
+    if (!force && String(unlockPassword.value || '')) return;
     unlockPassword.value = '';
   }
 
@@ -5843,7 +5846,7 @@
   }
 
   async function finishUnlocked({ skipReveal = false, deferSync = false } = {}) {
-    clearUnlockPasswordField();
+    clearUnlockPasswordField({ force: true });
     try { sessionStorage.removeItem('notes_post_login_unlock'); } catch (err) { /* ignore */ }
     const needsReload = vaultNeedsReload;
     vaultNeedsReload = false;
@@ -6969,7 +6972,7 @@
   );
 
   async function clearLocalVaultAndLeave(next = '/login') {
-    clearUnlockPasswordField();
+    clearUnlockPasswordField({ force: true });
     try {
       NotesStore.lock();
     } catch (err) {
@@ -8531,27 +8534,45 @@
     return note?.content?.trashed ? 'Delete' : 'Trash';
   }
 
+  function noteRowActionTitle(note) {
+    return String(NotesSearch.effectiveNoteTitle?.(note) || '').trim() || 'Untitled';
+  }
+
+  function syncNoteRowActionLabels(noteId, displayTitle) {
+    if (!ui.noteList || !noteId) return;
+    const row = ui.noteList.querySelector(`.note-row[data-id="${CSS.escape(noteId)}"]`);
+    if (!row) return;
+    const note = NotesStore.get(noteId);
+    const title = String(displayTitle || noteRowActionTitle(note)).trim() || 'Untitled';
+    row.querySelectorAll('.note-swipe-delete, .note-row-delete, .note-row-restore').forEach((btn) => {
+      let verb = noteRowDeleteLabel(note);
+      if (btn.dataset.action === 'restore' || btn.classList.contains('note-row-restore')) verb = 'Restore';
+      else if (btn.dataset.action === 'trash') verb = 'Trash';
+      btn.setAttribute('aria-label', `${verb} note ${title}`);
+    });
+  }
+
   function noteRowSwipeDeleteHtml(note) {
     const trashed = !!note?.content?.trashed;
     const label = trashed ? 'Restore' : noteRowDeleteLabel(note);
     const id = escapeAttr(note.uuid);
     const action = trashed ? 'restore' : 'trash';
     const tone = trashed ? ' is-restore' : '';
-    const title = escapeAttr(NotesSearch.effectiveNoteTitle?.(note) || 'Untitled');
+    const title = escapeAttr(noteRowActionTitle(note));
     return `<button type="button" class="note-swipe-delete${tone}" data-id="${id}" data-action="${action}" aria-label="${label} note ${title}">${label}</button>`;
   }
 
   function noteRowRestoreBtnHtml(note) {
     if (!note?.content?.trashed) return '';
     const id = escapeAttr(note.uuid);
-    const title = escapeAttr(NotesSearch.effectiveNoteTitle?.(note) || 'Untitled');
+    const title = escapeAttr(noteRowActionTitle(note));
     return `<button type="button" class="note-row-restore" data-id="${id}" data-action="restore" aria-label="Restore note ${title}" title="Restore">Restore</button>`;
   }
 
   function noteRowDeleteBtnHtml(note) {
     const label = noteRowDeleteLabel(note);
     const id = escapeAttr(note.uuid);
-    const title = escapeAttr(NotesSearch.effectiveNoteTitle?.(note) || 'Untitled');
+    const title = escapeAttr(noteRowActionTitle(note));
     return `<button type="button" class="note-row-delete" data-id="${id}" aria-label="${label} note ${title}" title="${label}">×</button>`;
   }
 
@@ -12800,6 +12821,7 @@
       rowTitle.textContent = displayTitle || 'Untitled';
       rowTitle.classList.toggle('note-title-placeholder', !displayTitle);
     }
+    syncNoteRowActionLabels(currentId, displayTitle || 'Untitled');
     const rowTime = row?.querySelector('.note-modified[data-edited], .note-modified');
     if (rowTime && savedNote) {
       const editedMs = noteEditedAtMs(savedNote);
@@ -17455,13 +17477,14 @@
     if (!applyingDerivedTitle && note?.content) note.content.title_manual = true;
     // Keep the list row in sync while typing (don't leave a stale derived title).
     if (currentId && ui.noteList) {
+      const typed = String(ui.title.value || '').trim();
+      const display = typed || NotesSearch.derivedTitleFromBody?.(ui.body?.value) || 'Untitled';
       const rowTitle = ui.noteList.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"] h3`);
       if (rowTitle) {
-        const typed = String(ui.title.value || '').trim();
-        const display = typed || NotesSearch.derivedTitleFromBody?.(ui.body?.value) || 'Untitled';
         rowTitle.textContent = display;
         rowTitle.classList.toggle('note-title-placeholder', !typed && display === 'Untitled');
       }
+      syncNoteRowActionLabels(currentId, display);
     }
     scheduleSave();
   });
