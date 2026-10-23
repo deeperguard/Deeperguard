@@ -5998,8 +5998,65 @@
     return unlocked;
   }
 
+  const POST_LOGIN_ACCOUNT_RETRY_MS = 400;
+
+  function isPostLoginBootUnlock() {
+    try {
+      return sessionStorage.getItem('notes_post_login_unlock') === '1'
+        || sessionStorage.getItem('notes_allow_boot_unlock') === '1';
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /** Non-silent unlocks always redirect. Silent post-login boot must not. */
+  function shouldRedirectOnUnlockSessionExpired({ silent = false } = {}) {
+    if (!silent) return true;
+    return !isPostLoginBootUnlock();
+  }
+
+  /**
+   * After SRP login, the first /api/account can briefly 401 before the session
+   * cookie is visible. Retry once; callers decide whether to redirect.
+   */
+  async function loadAccountWithPostLoginRetry(loadAccount, {
+    enabled = false,
+    delayMs = POST_LOGIN_ACCOUNT_RETRY_MS,
+    ensureSession = null,
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    isLoginRequired = isLoginRequiredError,
+  } = {}) {
+    try {
+      return await loadAccount();
+    } catch (err) {
+      if (!enabled || !isLoginRequired(err)) throw err;
+      await sleep(delayMs);
+      if (typeof ensureSession === 'function') {
+        try { await ensureSession(); } catch (ensureErr) { /* ignore */ }
+      }
+      return loadAccount();
+    }
+  }
+
+  // Round 70 helpers — exposed for unit tests (no behavior change by itself).
+  window.NotesPostLoginUnlock = {
+    POST_LOGIN_ACCOUNT_RETRY_MS,
+    isPostLoginBootUnlock,
+    shouldRedirectOnUnlockSessionExpired,
+    loadAccountWithPostLoginRetry,
+  };
+
   function abortUnlockAttempt(err, { silent = false } = {}) {
     if (isLoginRequiredError(err)) {
+      // Round 70: silent post-login auto-unlock must not bounce to
+      // /login?reason=session-expired — fall through to typed unlock instead.
+      if (!shouldRedirectOnUnlockSessionExpired({ silent })) {
+        resetLoginProgress();
+        logLockReason('post-login-session-pending', { message: String(err?.message || '') });
+        try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
+        markVaultShellLocked();
+        throw err;
+      }
       sessionExpiredHold = true;
       stopChangePoll();
       resetLoginProgress();
@@ -6281,16 +6338,22 @@
     vaultReady = true;
   }
 
-  async function bootstrapServerSession(cached) {
-    const data = await NotesStore.loadAccount();
-    NotesStore.cacheAccount({
-      email: data.email || cached?.email,
-      kdf_salt: data.kdf_salt,
-      vault_kdf_version: data.vault_kdf_version,
-      csrf: data.csrf,
+  async function bootstrapServerSession(cached, { retryOnLoginRequired = false } = {}) {
+    const load = async () => {
+      const data = await NotesStore.loadAccount();
+      NotesStore.cacheAccount({
+        email: data.email || cached?.email,
+        kdf_salt: data.kdf_salt,
+        vault_kdf_version: data.vault_kdf_version,
+        csrf: data.csrf,
+      });
+      if (data.password_changed_at) NotesStore.ackPasswordChanged(data.password_changed_at);
+      return data;
+    };
+    return loadAccountWithPostLoginRetry(load, {
+      enabled: !!retryOnLoginRequired,
+      ensureSession: () => ensureServerSession({ prompt: false }),
     });
-    if (data.password_changed_at) NotesStore.ackPasswordChanged(data.password_changed_at);
-    return data;
   }
 
   async function checkRemoteVaultPasswordChange(account) {
@@ -6556,10 +6619,11 @@
         startLoginCreep('decrypt', phaseCeiling('decrypt'));
         setLoginProgressTarget('decrypt', 0, 1);
         await yieldToPaint();
+        const retryOnLoginRequired = !!(silent && isPostLoginBootUnlock());
         const serverCheck = (async () => {
           if (await serverUnreachableNow()) return { offline: true };
           try {
-            await bootstrapServerSession(cached);
+            await bootstrapServerSession(cached, { retryOnLoginRequired });
             return { ok: true };
           } catch (err) {
             return { err };
@@ -6838,7 +6902,9 @@
         if (passwordProven) persistDevicePassword(clean);
         return;
       }
-      const data = await bootstrapServerSession(cached);
+      const data = await bootstrapServerSession(cached, {
+        retryOnLoginRequired: !!(silent && isPostLoginBootUnlock()),
+      });
       await NotesStore.unlock(clean, data.kdf_salt);
       if (NotesStore.state.kdfFastReject) {
         if (silent) deferAutoUnlock();
