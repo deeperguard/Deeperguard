@@ -2304,6 +2304,8 @@
 
   // Empty-device unlock: first online pull retries at 0/1/2/4/8s, then fallback UI.
   const EMPTY_DEVICE_RETRY_DELAYS_MS = [0, 1000, 2000, 4000, 8000];
+  // After the fast window, only probe reachability (no vault key / no Argon2).
+  const EMPTY_DEVICE_BG_PROBE_MS = CHANGE_POLL_MS;
   let emptyDeviceBgRetryTimer = 0;
   let emptyDeviceFetchGeneration = 0;
 
@@ -2312,6 +2314,12 @@
       clearTimeout(emptyDeviceBgRetryTimer);
       emptyDeviceBgRetryTimer = 0;
     }
+  }
+
+  /** Stop background probes and invalidate any in-flight empty-device fetch. */
+  function stopEmptyDeviceBackgroundRetry() {
+    emptyDeviceFetchGeneration += 1;
+    clearEmptyDeviceBgRetry();
   }
 
   function setEmptyDeviceUnlockUi(mode) {
@@ -2370,22 +2378,51 @@
     return err;
   }
 
-  function scheduleEmptyDeviceBackgroundRetry(cached, password) {
+  async function probeEmptyDeviceServerReachable() {
+    // Reachability only — never derive a vault key or start an unlock attempt.
+    try {
+      const data = await fetchHealthJson({ force: true, timeoutMs: 3000 });
+      if (data && data.ok) return true;
+    } catch (err) { /* try account next */ }
+    try {
+      await NotesStore.loadAccount();
+      return true;
+    } catch (err) {
+      // Server answered (session expired / auth) — still reachable.
+      if (isLoginRequiredError(err) || Number(err?.status) > 0) return true;
+      return !isRealNetworkFailure(err);
+    }
+  }
+
+  function scheduleEmptyDeviceBackgroundRetry() {
     clearEmptyDeviceBgRetry();
     const gen = emptyDeviceFetchGeneration;
     emptyDeviceBgRetryTimer = setTimeout(() => {
       emptyDeviceBgRetryTimer = 0;
       if (gen !== emptyDeviceFetchGeneration) return;
-      if (NotesStore.isUnlocked() && vaultKeyProven()) return;
-      const clean = String(password || '').trim();
-      if (!clean) return;
-      verifyAndUnlock(clean, { silent: true }).catch(() => {
-        scheduleEmptyDeviceBackgroundRetry(cached, password);
+      if (NotesStore.isUnlocked() && vaultKeyProven()) {
+        setEmptyDeviceUnlockUi('clear');
+        return;
+      }
+      const status = document.getElementById('unlock-status');
+      if (!status?.classList.contains('is-fallback')) return;
+      probeEmptyDeviceServerReachable().then((reachable) => {
+        if (gen !== emptyDeviceFetchGeneration) return;
+        if (reachable) {
+          // Server is back. Clear the fallback so the unlock form is ready;
+          // typed Unlock (or the existing post-login silent boot path) continues.
+          setEmptyDeviceUnlockUi('clear');
+          return;
+        }
+        scheduleEmptyDeviceBackgroundRetry();
+      }).catch(() => {
+        if (gen !== emptyDeviceFetchGeneration) return;
+        scheduleEmptyDeviceBackgroundRetry();
       });
-    }, 15000);
+    }, EMPTY_DEVICE_BG_PROBE_MS);
   }
 
-  async function fetchEmptyDeviceProofWithRetry(cached, password, { silent = false } = {}) {
+  async function fetchEmptyDeviceProofWithRetry(cached, { silent = false } = {}) {
     emptyDeviceFetchGeneration += 1;
     const gen = emptyDeviceFetchGeneration;
     clearEmptyDeviceBgRetry();
@@ -2424,7 +2461,7 @@
       }
     }
     setEmptyDeviceUnlockUi('fallback');
-    scheduleEmptyDeviceBackgroundRetry(cached, password);
+    scheduleEmptyDeviceBackgroundRetry();
     if (silent) deferAutoUnlock();
     const pending = emptyDeviceFetchPendingError();
     if (lastErr) pending.cause = lastErr;
@@ -2436,10 +2473,15 @@
   // Round 70 vm slice of POST_LOGIN_* helpers does not reference these consts.
   window.NotesEmptyDeviceUnlock = {
     EMPTY_DEVICE_RETRY_DELAYS_MS,
+    EMPTY_DEVICE_BG_PROBE_MS,
     serverUnreachableNow,
     isRealNetworkFailure,
     setEmptyDeviceUnlockUi,
     emptyDeviceFetchPendingError,
+    scheduleEmptyDeviceBackgroundRetry,
+    clearEmptyDeviceBgRetry,
+    stopEmptyDeviceBackgroundRetry,
+    probeEmptyDeviceServerReachable,
   };
 
   let sessionExpiredAlertShown = false;
@@ -3481,6 +3523,9 @@
       ? NotesVaultLock.isAppUpdating(document.body, window.__notesUpdateInFlight)
       : !!(document.body.classList.contains('app-updating') || window.__notesUpdateInFlight);
     if (window.NotesVaultLock?.mayLockVault && !NotesVaultLock.mayLockVault({ updating })) return;
+    // Round 72: never leave empty-device reachability probes running after lock.
+    stopEmptyDeviceBackgroundRetry();
+    setEmptyDeviceUnlockUi('clear');
     const lockReason = reason
       || (message === 'Vault locked.' ? 'manual'
         : (/^Locked after idle/.test(String(message || '')) ? 'idle'
@@ -6908,7 +6953,7 @@
           // /api/account or /api/sync/pull failures exhaust the backoff.
           let freshProof = null;
           try {
-            const fetched = await fetchEmptyDeviceProofWithRetry(cached, clean, { silent });
+            const fetched = await fetchEmptyDeviceProofWithRetry(cached, { silent });
             freshProof = fetched?.proof || null;
           } catch (probeErr) {
             if (isLoginRequiredError(probeErr)) throw sessionExpiredError();
@@ -6935,7 +6980,7 @@
             if (silent) deferAutoUnlock();
             NotesStore.lock();
             setEmptyDeviceUnlockUi('fallback');
-            scheduleEmptyDeviceBackgroundRetry(cached, clean);
+            scheduleEmptyDeviceBackgroundRetry();
             throw emptyDeviceFetchPendingError();
           }
           markOfflineUnlockVerified();
@@ -7183,8 +7228,8 @@
     unlockSubmit.classList.add('is-checking');
     try {
       await verifyAndUnlock(typed);
+      stopEmptyDeviceBackgroundRetry();
       setEmptyDeviceUnlockUi('clear');
-      clearEmptyDeviceBgRetry();
       repairUnlockShellState();
       if (vaultKeyProven() && !isVaultReadyForSync()) showApp();
     } catch (err) {
@@ -7224,8 +7269,7 @@
   });
 
   document.getElementById('unlock-empty-retry')?.addEventListener('click', () => {
-    emptyDeviceFetchGeneration += 1;
-    clearEmptyDeviceBgRetry();
+    stopEmptyDeviceBackgroundRetry();
     setEmptyDeviceUnlockUi('clear');
     showUnlockError('');
     submitUnlockForm().catch(() => {});
@@ -7237,6 +7281,8 @@
   );
 
   async function clearLocalVaultAndLeave(next = '/login') {
+    stopEmptyDeviceBackgroundRetry();
+    setEmptyDeviceUnlockUi('clear');
     clearUnlockPasswordField({ force: true });
     try {
       NotesStore.lock();
@@ -22153,6 +22199,7 @@
     onAppForeground('visibility');
   });
   window.addEventListener('pagehide', () => {
+    stopEmptyDeviceBackgroundRetry();
     if (document.visibilityState !== 'hidden') return;
     NotesStore.flush();
     teardownForBackground();

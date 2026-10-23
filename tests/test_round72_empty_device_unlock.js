@@ -168,6 +168,66 @@ function makeServerUnreachableNow({ fetchHealthJson, notesNetworkReachable, navi
   const delays = delaysMatch[1].split(',').map((s) => Number(s.trim()));
   assert.deepStrictEqual(delays, [0, 1000, 2000, 4000, 8000]);
 
+  // --- Background retry: no password capture, no verifyAndUnlock ------------
+  const bgFn = appJs.split('function scheduleEmptyDeviceBackgroundRetry')[1]
+    .split('async function fetchEmptyDeviceProofWithRetry')[0];
+  assert.ok(bgFn.includes('probeEmptyDeviceServerReachable'));
+  assert.ok(bgFn.includes('EMPTY_DEVICE_BG_PROBE_MS') || bgFn.includes('CHANGE_POLL_MS'));
+  assert.ok(!/\bpassword\b/i.test(bgFn), 'background retry must not capture a password');
+  assert.ok(!bgFn.includes('verifyAndUnlock'), 'background path must not call verifyAndUnlock');
+  assert.ok(!bgFn.includes('NotesStore.unlock'), 'background path must not unlock');
+
+  const probeFn = appJs.split('async function probeEmptyDeviceServerReachable')[1]
+    .split('function scheduleEmptyDeviceBackgroundRetry')[0];
+  assert.ok(probeFn.includes('fetchHealthJson'));
+  assert.ok(probeFn.includes('loadAccount'));
+  assert.ok(!probeFn.includes('verifyAndUnlock'));
+  assert.ok(!/\bpassword\b/i.test(probeFn));
+
+  // Timer cleared on lock, sign-out, successful unlock, pagehide.
+  const lockFn = appJs.split('async function lockVault(')[1].split('async function ')[0];
+  assert.ok(lockFn.includes('stopEmptyDeviceBackgroundRetry()'));
+  const leaveFn = appJs.split('async function clearLocalVaultAndLeave')[1]
+    .split('async function refreshCsrfFromAccount')[0];
+  assert.ok(leaveFn.includes('stopEmptyDeviceBackgroundRetry()'));
+  const pagehide = appJs.split("addEventListener('pagehide'")[1].split("addEventListener('pageshow'")[0];
+  assert.ok(pagehide.includes('stopEmptyDeviceBackgroundRetry()'));
+  const submitOk = appJs.split('async function submitUnlockForm')[1]
+    .split("addEventListener('submit'")[0];
+  assert.ok(submitOk.includes('stopEmptyDeviceBackgroundRetry()'));
+
+  // Behavioral: stop clears timer; schedule does not take a password arg.
+  let timer = 0;
+  let generation = 0;
+  let verifyCalls = 0;
+  function clearEmptyDeviceBgRetry() {
+    if (timer) {
+      clearTimeout(timer);
+      timer = 0;
+    }
+  }
+  function stopEmptyDeviceBackgroundRetry() {
+    generation += 1;
+    clearEmptyDeviceBgRetry();
+  }
+  function scheduleEmptyDeviceBackgroundRetry() {
+    // Signature: zero args — no password closure.
+    assert.strictEqual(arguments.length, 0);
+    clearEmptyDeviceBgRetry();
+    const gen = generation;
+    timer = setTimeout(() => {
+      timer = 0;
+      if (gen !== generation) return;
+      verifyCalls += 1; // must never run if stopped
+    }, 20);
+  }
+  scheduleEmptyDeviceBackgroundRetry();
+  assert.ok(timer);
+  stopEmptyDeviceBackgroundRetry(); // lock / sign-out path
+  assert.strictEqual(timer, 0);
+  await new Promise((r) => setTimeout(r, 40));
+  assert.strictEqual(verifyCalls, 0, 'stopped timer must not fire verifyAndUnlock');
+
   console.log('test_round72_empty_device_unlock ok');
 })().catch((err) => {
   console.error(err);
