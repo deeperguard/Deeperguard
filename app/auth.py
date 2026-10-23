@@ -802,7 +802,9 @@ def content_security_policy() -> str:
             "img-src 'self' data: blob:",
             "font-src 'self'",
             # Widget talks to challenges.cloudflare.com from the browser.
-            f"connect-src 'self'{google_connect}{dropbox_connect}{turnstile}",
+            # api.github.com: client release-hash check (CORS *); release asset
+            # CDN hosts are intentionally omitted — they lack ACAO and are unused.
+            f"connect-src 'self' https://api.github.com{google_connect}{dropbox_connect}{turnstile}",
             "media-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'self'",

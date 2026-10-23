@@ -7,6 +7,8 @@
   <meta name="description" content="How to inspect Deeperguard login and sync traffic yourself and confirm passwords and note contents never leave your device in plaintext.">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <meta name="notes-client-hash" content="{{ client_hash }}">
+  <meta name="notes-release-tag" content="{{ release_tag }}">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
   {{ asset_stylesheet('css/marketing.css') }}
 </head>
@@ -145,12 +147,40 @@ await NotesStore.testDemoRollbackWarning(uuid, 9);
           <li><strong>Colluding malicious clients</strong> — a device that willingly resets high-water marks (or never ran a current client) can accept older tips; compare fingerprints across devices you control.</li>
         </ul>
         <h3>How to check the code you’re running</h3>
+        <p id="verify-release-hash-status" class="mk-release-hash-status" data-release-hash-status role="status">Checking signed release…</p>
+        <p>
+          After load, this page (and <strong>Settings → About</strong>) compares the
+          shell’s <code>notes-client-hash</code> to the <code>manifest_sha256</code>
+          published on the matching
+          <a href="{{ release_url }}" rel="noopener noreferrer">GitHub Release{% if release_tag %} {{ release_tag }}{% endif %}</a>
+          by fetching the public GitHub Releases API in your browser
+          (<code>api.github.com</code>). The expected value does <strong>not</strong>
+          come from the Deeperguard server. Outcomes:
+          <em>Matches signed release vX.Y.Z</em>,
+          <em>Does not match</em> (only when a release hash was fetched and differs — no false alarms on network errors),
+          or <em>Could not check (offline / rate-limited)</em>.
+          The check never blocks the app and never sends note data.
+        </p>
+        <p>
+          <strong>Honesty:</strong> a hash match proves the served client equals the
+          hash published with that release. It is <strong>not</strong> Sigstore
+          signature verification. Release asset download URLs redirect to
+          <code>release-assets.githubusercontent.com</code>, which does not send
+          <code>Access-Control-Allow-Origin</code>, so the browser cannot read
+          <code>client-manifest.json</code> / the Sigstore bundle directly; the
+          Releases API JSON (CORS <code>*</code>) embeds the same
+          <code>manifest_sha256</code> from the signing workflow. Full signature
+          verification is done with <code>cosign</code> below — in-browser Sigstore
+          bundle verification is not implemented.
+        </p>
         <ol>
           <li>
-            In the unlocked app open <strong>Settings → About</strong>. Note the full
+            In the unlocked app open <strong>Settings → About</strong>, or read the
+            status line above. Note the full
             <strong>client code hash</strong> (also in the page’s
             <code>notes-client-hash</code> meta tag and in
-            <code>GET /api/health</code> as <code>client_hash</code>).
+            <code>GET /api/health</code> as <code>client_hash</code> — health is a
+            convenience mirror, not the source of the automatic check).
           </li>
           <li>
             Open the matching
@@ -198,7 +228,7 @@ python3 scripts/build-client-manifest.py --print-hash
             </figure>
           </li>
         </ol>
-        <p>Every script and stylesheet tag on the origin carries a Subresource Integrity digest. A pinned build (extension or desktop app) remains the strongest option if one is published later.</p>
+        <p>Every script and stylesheet tag on the origin carries a Subresource Integrity digest. A pinned build (browser extension or desktop app) remains the strongest option if one is published later.</p>
       </article>
 
       <article class="mk-card">
@@ -214,5 +244,6 @@ python3 scripts/build-client-manifest.py --print-hash
     </section>
     {% include 'partials/mk-footer.html' %}
   </main>
+  {{ asset_script('js/release-integrity.js') }}
 </body>
 </html>
