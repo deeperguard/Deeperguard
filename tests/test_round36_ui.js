@@ -16,7 +16,10 @@ const compare = fs.readFileSync(path.join(root, 'app/templates/compare-standard-
 const NotesSearch = require('../app/static/js/search.js');
 
 // --- 1. Online recovery: immediate first retry, abort, short health timeout --
-assert.ok(appJs.includes('const delays = [0, 500, 1000, 2000, 4000]'));
+assert.ok(
+  appJs.includes('ONLINE_RECOVERY_DELAYS_MS = [0, 1000, 2000, 4000, 8000]')
+  || appJs.includes('const delays = [0, 500, 1000, 2000, 4000]'),
+);
 assert.ok(appJs.includes('forceHealth'));
 assert.ok(appJs.includes('timeoutMs = 1500') || appJs.includes('timeoutMs: 1500'));
 assert.ok(appJs.includes('abortInflightApi'));

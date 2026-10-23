@@ -8546,7 +8546,8 @@
       updateNetworkStatusBanner();
       if (wasOffline) {
         NotesStore.emitSync('idle', '');
-        if (syncOnRecovery && vaultReady) {
+        // Round 72: quiet recovery sync gates on unlocked, not only vaultReady.
+        if (syncOnRecovery && NotesStore.isUnlocked()) {
           const pending = NotesStore.state?.dirty?.size || 0;
           try {
             console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
@@ -8555,7 +8556,7 @@
             });
           } catch (err) { /* ignore */ }
           // Always force after offline so a dirty note is not skipped by the
-          // "synced recently" throttle.
+          // "synced recently" throttle. syncInFlight coalesces with recovery.
           syncNow({ quiet: true, force: true });
           resumePendingOcr().catch(() => {});
           listPreviewBackfillFailed.clear();
@@ -8671,11 +8672,15 @@
 
   let lastRecoveryAbortAt = 0;
 
+  const ONLINE_RECOVERY_DELAYS_MS = [0, 1000, 2000, 4000, 8000];
+
   function scheduleOnlineRecovery(attempt = 0) {
     clearTimeout(onlineRecoveryTimer);
-    // First probe immediately (0ms); then 0.5/1/2/4s. Health probes share one
-    // in-flight request and global backoff — never abort-storm.
-    const delays = [0, 500, 1000, 2000, 4000];
+    // Round 72: probe immediately, then force-pull retries at 1/2/4/8s until
+    // one pull succeeds. Health probes still share one in-flight request and
+    // global backoff — never abort-storm (R39). After the fast window, fall
+    // back to CHANGE_POLL_MS (25s).
+    const delays = ONLINE_RECOVERY_DELAYS_MS;
     if (attempt === 0) {
       stopOfflineWatch();
       onlineRecoveryActive = true;
@@ -8697,6 +8702,8 @@
       if (!networkReachable) {
         offlineWatchDelayMs = 2000;
         startOfflineWatch();
+      } else if (!sessionExpiredHold) {
+        scheduleChangePoll();
       }
       return;
     }
@@ -8707,42 +8714,41 @@
     onlineRecoveryTimer = setTimeout(() => {
       if (generation !== onlineRecoveryGeneration) return;
       // Always probe — even when dirty is empty — so the Offline caption clears.
-      probeNetwork({ syncOnRecovery: true, forceHealth: true }).then((ok) => {
-        if (generation !== onlineRecoveryGeneration) return ok;
-        if (!ok) return ok;
-        // Round 71: first successful probe always force-pulls (abort of the
-        // store online sync + wasOffline gate used to leave remote edits
-        // until the ~25s change poll). syncInFlight coalesces overlapping pulls.
-        if (attempt === 0 && vaultReady) {
-          try {
-            console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
-              reason: 'online-recovery',
-              attempt: 0,
-              pending: NotesStore.state?.dirty?.size || 0,
-            });
-          } catch (err) { /* ignore */ }
-          return syncNow({ quiet: true, force: true });
+      probeNetwork({ syncOnRecovery: true, forceHealth: true }).then(async (ok) => {
+        if (generation !== onlineRecoveryGeneration) return { probeOk: false };
+        if (!ok) return { probeOk: false };
+        // Quiet recovery: gate on unlocked (not only vaultReady) so a shell
+        // that is crypto-ready still force-pulls remote edits.
+        if (!NotesStore.isUnlocked()) {
+          return { probeOk: true, synced: false, locked: true };
         }
-        const stillDirty = NotesStore.state?.dirty?.size || 0;
-        if (stillDirty > 0) {
-          try {
-            console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
-              reason: 'online-recovery-retry',
-              attempt,
-              pending: stillDirty,
-            });
-          } catch (err) { /* ignore */ }
-          return syncNow({ quiet: true, force: true });
-        }
-        return ok;
-      }).finally(() => {
+        try {
+          console.debug('[notes-sync]', new Date().toISOString(), 'sync-start', {
+            reason: 'online-recovery',
+            attempt,
+            pending: NotesStore.state?.dirty?.size || 0,
+          });
+        } catch (err) { /* ignore */ }
+        const synced = await syncNow({ quiet: true, force: true });
+        return { probeOk: true, synced: synced === true };
+      }).then((result) => {
         if (generation !== onlineRecoveryGeneration) return;
-        if (!networkReachable || (NotesStore.state?.dirty?.size || 0) > 0) {
-          scheduleOnlineRecovery(attempt + 1);
-        } else {
+        if (result?.synced) {
           onlineRecoveryActive = false;
           stopOfflineWatch();
+          if (!sessionExpiredHold) scheduleChangePoll();
+          return;
         }
+        if (result?.locked) {
+          onlineRecoveryActive = false;
+          stopOfflineWatch();
+          return;
+        }
+        // Probe failed, or pull aborted/failed — retry with backoff.
+        scheduleOnlineRecovery(attempt + 1);
+      }).catch(() => {
+        if (generation !== onlineRecoveryGeneration) return;
+        scheduleOnlineRecovery(attempt + 1);
       });
     }, wait);
   }
@@ -21906,7 +21912,7 @@
           return NotesStore.sync({ quiet, full });
         })
         .then((synced) => {
-          if (synced === false) return;
+          if (synced === false) return false;
           markNetworkReachable();
           pullGlobalPrefs();
           const noteCount = listedActiveNoteCount();
@@ -21932,19 +21938,21 @@
           refreshTotpVault({ migrate: true });
           if (!currentId) openPendingDeepLink({ final: true });
           reconcileReminderSideEffects();
+          // Round 72: resolve true so online-recovery can tell success from abort.
+          return true;
         })
         .catch((err) => {
           if (err?.code === 'VAULT_LOCKED') {
             NotesStore.logSync?.('sync-aborted', { reason: 'locked', quiet: !!quiet });
-            return;
+            return false;
           }
           if (err?.code === 'aborted') {
             NotesStore.logSync?.('sync-aborted', { reason: err.reason || 'aborted', quiet: !!quiet });
-            return;
+            return false;
           }
           if (isLoginRequiredError(err)) {
             showExpiredSessionBanner();
-            return;
+            return false;
           }
           console.warn('sync failed', err);
           const partialNotes = NotesStore.listNotes().filter((n) => !n.content?.trashed).length;
@@ -21969,6 +21977,7 @@
             showSyncBanner('error', err?.message || 'Sync failed');
             toast(err?.message || 'Sync failed', true);
           }
+          return false;
         })
         .finally(() => {
           syncInFlight = null;
