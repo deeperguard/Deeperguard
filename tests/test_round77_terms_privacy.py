@@ -45,7 +45,10 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             "without prejudice to any mandatory consumer rights to bring a claim in your own country",
             text,
         )
-        self.assertIn("Germany (EU)", text)
+        self.assertIn("Austria (EU)", text)
+        self.assertIn("netcup GmbH", text)
+        self.assertNotIn("see deployment docs", text)
+        self.assertNotIn("Germany (EU)", text)
         self.assertIn("notes@deeperguard.com", text)
         self.assertIn("You use Deeperguard at your own risk.", text)
         self.assertIn("as is</strong> during the public beta", text)
@@ -142,7 +145,10 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             self.assertIn("Schutten Invest", phtml)
             self.assertIn("Schutten Invest", thtml)
             self.assertIn("Dutch law (the Netherlands)", thtml)
-            self.assertIn("Germany (EU)", phtml)
+            self.assertIn("Austria (EU)", phtml)
+            self.assertIn("netcup GmbH", phtml)
+            self.assertNotIn("see deployment docs", phtml)
+            self.assertNotIn("Germany (EU)", phtml)
             self.assertIn("notes@deeperguard.com", phtml)
             self.assertIn("notes@deeperguard.com", thtml)
             self.assertIn("You use Deeperguard at your own risk.", thtml)
