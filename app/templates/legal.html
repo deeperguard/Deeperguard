@@ -18,60 +18,145 @@
 
     {% if page == 'privacy' %}
     <section class="legal-section">
-      <h2>Overview</h2>
-      <p>Deeperguard is an encrypted notes service in <strong>public beta</strong>. We use a <strong>zero-knowledge</strong> protocol: your vault password and note content are never sent to our servers in readable form.</p>
-      <h2>Zero-knowledge protocol</h2>
-      <p>Deeperguard is built so the server stores ciphertext only and cannot decrypt your notes, even if compelled or compromised.</p>
+      <h2 id="data-controller">Data controller</h2>
+      <p>The data controller for personal data processed through Deeperguard is:</p>
       <ul>
-        <li><strong>Client-side encryption</strong> — Notes and attachments are encrypted in your browser or app before upload (AES-GCM).</li>
+        <li><strong>Name:</strong> Schutten Invest</li>
+        <li><strong>Address:</strong> Schutten Invest, Lisdodde 66, 2408 LX Alphen aan den Rijn, Netherlands</li>
+        <li><strong>Chamber of Commerce (KvK):</strong> KvK 99268876</li>
+        <li><strong>Contact email:</strong> notes@deeperguard.com</li>
+      </ul>
+      <p>Questions about this policy: see also <a href="/contact">Contact</a>.</p>
+
+      <h2 id="overview">Overview</h2>
+      <p>Deeperguard is an encrypted notes service in <strong>public beta</strong>. We use a <strong>zero-knowledge</strong> protocol: your vault password and note content are never sent to our servers in readable form, except text you choose to send to Ask AI with Ollama Cloud. We can still see account metadata and encrypted blobs; we cannot read note titles, body text, or attachment contents.</p>
+
+      <h2 id="zero-knowledge-protocol">Zero-knowledge protocol</h2>
+      <ul>
+        <li><strong>Client-side encryption</strong> — Notes and attachments are encrypted in your browser or app before upload (AES-256-GCM, with keys derived from your password using Argon2id).</li>
         <li><strong>Vault password stays local</strong> — Your vault password is used only on your device to derive encryption keys. It is never transmitted to us.</li>
         <li><strong>Zero-knowledge sign-in (SRP)</strong> — Account authentication uses the Secure Remote Password protocol. We store a verifier, not your password.</li>
         <li><strong>Strict mode</strong> — When enabled (default on this deployment), the server rejects endpoints that would require your vault password.</li>
       </ul>
-      <p>We can still see account metadata (email, storage used, sync timing) and encrypted blobs. We cannot read note titles, body text, or attachment contents.</p>
-      <h2>What we store</h2>
+
+      <h2 id="what-is-processed-and-legal-basis">What is processed and legal basis</h2>
+      <p>We process the following categories of data. Where GDPR applies, the legal basis is Article 6 as noted.</p>
       <ul>
-        <li>Your email address and account metadata (sign-in method, 2FA status, storage used).</li>
-        <li>Encrypted ciphertext for notes and attachments.</li>
-        <li><strong>Time warnings</strong> — if you set an email reminder on a note, we store only the note's random identifier and the chosen time so the reminder can be sent. The email contains a link and the time; never the title or contents.</li>
-        <li>Operational logs (sync timing, reminder delivery status, errors) without note content.</li>
+        <li><strong>Account email</strong> — to create and administer your account, send verification and service messages (Art. 6(1)(b) contract; Art. 6(1)(f) legitimate interests for security notices).</li>
+        <li><strong>SRP verifier</strong> — a cryptographic proof that lets you sign in without sending your password. We do <em>not</em> store your account password in plaintext (Art. 6(1)(b)).</li>
+        <li><strong>Encrypted vault data</strong> — ciphertext for notes, attachments, and related sync items. The operator cannot read this content (Art. 6(1)(b)).</li>
+        <li><strong>Account metadata</strong> — sign-in method, 2FA status, storage used, plan, session device labels, sync timing (Art. 6(1)(b) and 6(1)(f)).</li>
+        <li><strong>Time warnings</strong> — if you set an email reminder on a note, we store the note’s random identifier and the chosen time so the reminder can be sent. The email contains a link and the time; never the title or contents (Art. 6(1)(b)).</li>
+        <li><strong>Server IP and request logs</strong> — connection metadata used for security, abuse prevention, and debugging (Art. 6(1)(f)).</li>
+        <li><strong>Cloudflare / Turnstile</strong> — HTTPS proxying and bot checks. Completing Turnstile on sign-up sends a short-lived token to Cloudflare for verification; it does not include your vault password or note content (Art. 6(1)(f)).</li>
+        <li><strong>Secure Send ciphertext</strong> — when you use Secure Send, we store an opaque encrypted blob and length. The link stops working when it expires (max 7 days), when its allowed views are used, or when you cancel it. We do not store the decryption key (which stays in the URL fragment on the devices that share the link) (Art. 6(1)(b)).</li>
       </ul>
-      <h2>What we do not store</h2>
+
+      <h2 id="what-we-do-not-store">What we do not store</h2>
       <ul>
-        <li>Your vault password (client-side only; zero-knowledge by design).</li>
+        <li>Your vault password (client-side only).</li>
         <li>Your account password in plaintext (SRP verifier only).</li>
         <li>Readable note content when strict zero-knowledge mode is enabled.</li>
+        <li>Secure Send decryption keys or optional passphrases (client-side / fragment only).</li>
       </ul>
-      <h2>Third parties</h2>
-      <p>Traffic is proxied through Cloudflare for HTTPS and abuse protection. Cloudflare sees connection metadata (IP, timing) but not decrypted note content.</p>
-      <p>Sign-up uses Cloudflare Turnstile to block bots. Completing that check sends a short-lived token to Cloudflare for verification; it does not include your vault password or note content.</p>
-      <p>Optional <strong>encrypted backups</strong> you choose to save or share (for example to Files / iCloud Drive via the system share sheet, to Google Drive with a browser OAuth token scoped to files the app creates, or to Dropbox via OAuth 2 PKCE into the app’s Dropbox folder) are created on your device. We do not receive your vault password, encryption keys, or plaintext notes for those destinations. Google, Apple, or Dropbox process only the encrypted blob you upload or save under their terms. You may supply your own Google OAuth Client ID or Dropbox App key in Settings (stored in your encrypted vault settings and synced across your devices); app secrets are never requested or stored.</p>
-      <h2>Your responsibilities</h2>
-      <p>Keep your password safe. Enable 2FA when available. Beta may have bugs — maintain your own backups of important data.</p>
-      <h2>Contact</h2>
-      <p>Questions: see <a href="/contact">Contact</a>.</p>
-      <p class="muted">Last updated: 22 October 2026</p>
+
+      <h2 id="retention">Retention</h2>
+      <ul>
+        <li><strong>Account and vault ciphertext</strong> — kept while your account exists, then removed when the account is deleted. Backup copies you export yourself are under your control. We keep up to <strong>14</strong> encrypted server backups.</li>
+        <li><strong>Signed-in sessions</strong> — default cookie lifetime is <strong>30 days</strong>, unless configured otherwise on the deployment.</li>
+        <li><strong>SRP login challenges</strong> — short-lived server challenges expire after <strong>300 seconds</strong> and are pruned.</li>
+        <li><strong>Application logs</strong> — sync and device-report logs on the origin are rotated by size (5&nbsp;MB) with up to <strong>5</strong> rotated copies compressed. Broader edge access logs (for example Cloudflare) follow that provider’s retention; this service does not keep a separate edge access-log archive.</li>
+        <li><strong>Secure Send</strong> — the link stops working when it expires (max 7 days), when its allowed views are used, or when the sender cancels it.</li>
+        <li><strong>Email verification / backup codes</strong> — hashed codes with an expiry timestamp; cleared after use or expiry. Exact code lifetime: <strong>30 minutes</strong>.</li>
+      </ul>
+
+      <h2 id="processors-and-server-location">Processors and server location</h2>
+      <ul>
+        <li><strong>Cloudflare</strong> — reverse proxy, DDoS/abuse protection, and Turnstile. Processes connection metadata and bot-check tokens.</li>
+        <li><strong>Hosting</strong> — netcup GmbH, with the server located in Austria (EU).</li>
+        <li><strong>Email (Proton Mail)</strong> — transactional mail such as verification and service messages, and encrypted account backups sent by email when that backup path is enabled.</li>
+        <li><strong>pCloud</strong> — optional encrypted backups when you connect pCloud in Settings; only ciphertext is uploaded to your pCloud account.</li>
+        <li><strong>AI relay (Ollama Cloud)</strong> — if you use Ask AI with Ollama Cloud, the text you send (which may include note content) passes through the Deeperguard server unencrypted and is forwarded to ollama.com using your own API key. The relay does not store or log the key, the prompt, or the answer. Ollama processes it under its own terms.</li>
+        <li><strong>Optional backups you choose</strong> — encrypted backups you save or share (for example Files / iCloud Drive, Google Drive, or Dropbox) are created on your device. Those providers process only the encrypted blob under their terms; we do not receive your vault password or plaintext notes for those destinations.</li>
+        <li><strong>International transfers</strong> — Cloudflare may process connection data outside the EU under Standard Contractual Clauses.</li>
+      </ul>
+
+      <h2 id="your-rights">Your rights</h2>
+      <p>If GDPR applies to you, you may have the right to:</p>
+      <ul>
+        <li>Access the personal data we hold about you</li>
+        <li>Rectification of inaccurate data</li>
+        <li>Erasure (“right to be forgotten”), subject to legal exceptions</li>
+        <li>Data portability for data you provided, where applicable</li>
+        <li>Object to processing based on legitimate interests</li>
+        <li>Lodge a complaint with the Dutch supervisory authority, the <strong>Autoriteit Persoonsgegevens</strong> (<a href="https://www.autoriteitpersoonsgegevens.nl/" rel="noopener">autoriteitpersoonsgegevens.nl</a>)</li>
+      </ul>
+      <p>To exercise these rights, email notes@deeperguard.com (or use <a href="/contact">Contact</a>). Because of zero-knowledge design, we cannot decrypt your notes to fulfil a content-access request — we can act on account metadata and account deletion.</p>
+
+      <h2 id="your-responsibilities">Your responsibilities</h2>
+      <p>Keep your password and recovery material safe. Enable 2FA when available. Beta may have bugs — maintain your own backups of important data.</p>
+
+      <h2 id="contact">Contact</h2>
+      <p>Privacy questions: notes@deeperguard.com. General contact: <a href="/contact">Contact</a>.</p>
+      <p class="muted">Last updated: 24 October 2026</p>
     </section>
     {% else %}
     <section class="legal-section">
-      <h2>Beta service</h2>
+      <h2 id="operator-identity">Operator identity</h2>
+      <p>Deeperguard is operated by:</p>
+      <ul>
+        <li><strong>Name:</strong> Schutten Invest</li>
+        <li><strong>Address:</strong> Schutten Invest, Lisdodde 66, 2408 LX Alphen aan den Rijn, Netherlands</li>
+        <li><strong>Chamber of Commerce (KvK):</strong> KvK 99268876</li>
+        <li><strong>Contact email:</strong> notes@deeperguard.com</li>
+      </ul>
+
+      <h2 id="beta-service">Beta service</h2>
       <p>Deeperguard is offered <strong>as-is</strong> during public beta. Features, limits, and availability may change without notice.</p>
-      <h2>Zero-knowledge service</h2>
-      <p>This deployment uses a <strong>zero-knowledge</strong> architecture. You are responsible for your vault password — we cannot recover it or decrypt your data for you. If you lose your password, encrypted content cannot be restored from our servers.</p>
-      <p>By using the service you acknowledge that encryption and key handling occur on your devices, and that we operate sync and account infrastructure on ciphertext and metadata only.</p>
-      <h2>Acceptable use</h2>
+
+      <h2 id="zero-knowledge-service">Zero-knowledge service</h2>
+      <p>This deployment uses a <strong>zero-knowledge</strong> architecture. Encryption and key handling occur on your devices. We operate sync and account infrastructure on ciphertext and metadata only. We cannot recover your vault password or decrypt your notes for you. If you lose your password and recovery material, encrypted content cannot be restored from our servers.</p>
+
+      <h2 id="limitation-of-liability">Limitation of liability</h2>
+      <p>You use Deeperguard at your own risk. The service is provided <strong>as is</strong> during the public beta, without warranties. To the extent the law allows, Schutten Invest is not liable for loss of data, except in case of intent or gross negligence. Your mandatory consumer rights are not affected. Keep your own backups using Export; if you lose your password and recovery codes, your encrypted notes cannot be recovered.</p>
+
+      <h2 id="acceptable-use">Acceptable use</h2>
       <ul>
         <li>No illegal content, malware distribution, or attempts to disrupt the service.</li>
-        <li>No automated abuse of registration or authentication endpoints.</li>
+        <li>No automated abuse of registration, authentication, or Secure Send endpoints.</li>
         <li>Respect the storage quota assigned to your account. During the public beta, new accounts receive <strong>Pro with 5&nbsp;GB</strong> encrypted storage. After beta, plan quotas apply (Basic 100&nbsp;MB, Pro 5&nbsp;GB).</li>
+        <li>Do not use Secure Send or any other feature to share content that is illegal to possess or distribute.</li>
       </ul>
-      <h2>Accounts</h2>
+
+      <h2 id="dsa-notice-and-action">DSA notice-and-action</h2>
+      <p>Under the EU Digital Services Act, you can report allegedly illegal content hosted or transmitted through Deeperguard (including a Secure Send link).</p>
+      <p><strong>How to report:</strong> email notes@deeperguard.com with the subject line “DSA notice” (or use <a href="/contact">Contact</a> and mark the message as an abuse report).</p>
+      <p><strong>What a useful report includes:</strong></p>
+      <ul>
+        <li>Your name and contact email</li>
+        <li>The URL or Secure Send link you are reporting (the path is enough; you do not need to send the fragment key after <code>#</code>)</li>
+        <li>A description of the illegal content or activity and why you believe it is illegal</li>
+        <li>A statement that the notice is accurate and submitted in good faith</li>
+      </ul>
+      <p>Because Secure Send and vault notes are end-to-end encrypted, the operator typically <strong>cannot see the content</strong> of a reported link. We can still disable or stop a Secure Send link, suspend an account, or take other action based on the report, metadata, and applicable law — without decrypting the payload.</p>
+      <p><strong>Point of contact for authorities / DSA notices:</strong> notes@deeperguard.com.</p>
+
+      <h2 id="accounts">Accounts</h2>
       <p>We may suspend or delete accounts that violate these terms or threaten service stability. You are responsible for activity under your account.</p>
-      <h2>Data &amp; backups</h2>
-      <p>We do not guarantee recovery of lost passwords or data. Use export/backup features where available. Optional third-party destinations (iCloud Drive via share/save, Google Drive, Dropbox) receive only client-encrypted backup files; you remain responsible for those accounts and for keeping your vault password.</p>
-      <h2>Changes</h2>
-      <p>These terms may be updated as the beta progresses. Continued use means acceptance of the current version.</p>
-      <p class="muted">Last updated: 20 October 2026</p>
+
+      <h2 id="data-and-backups">Data and backups</h2>
+      <p>We do not guarantee recovery of lost passwords or data. Use export and backup features where available. Optional third-party destinations (iCloud Drive via share/save, Google Drive, Dropbox) receive only client-encrypted backup files; you remain responsible for those accounts and for keeping your vault password.</p>
+
+      <h2 id="changes-to-terms">Changes to terms</h2>
+      <p>We may update these terms as the beta progresses. Material changes will be indicated by updating the “Last updated” date on this page. Continued use after a change means you accept the current version, except where mandatory law requires a different process.</p>
+
+      <h2 id="termination">Termination</h2>
+      <p>You can request account deletion at any time by emailing notes@deeperguard.com. Self-service deletion in Settings, with a 7-day undo window, is planned. We may terminate or suspend access for breach of these terms, abuse, legal obligation, or discontinuation of the beta. On termination, account ciphertext and metadata are removed according to our privacy policy; we still cannot recover plaintext you no longer hold keys for.</p>
+
+      <h2 id="governing-law-and-disputes">Governing law and disputes</h2>
+      <p>These terms are governed by <strong>Dutch law (the Netherlands)</strong>, without prejudice to mandatory consumer protections that apply where you live. Disputes may be brought before <strong>the competent court in the Netherlands</strong>, without prejudice to any mandatory consumer rights to bring a claim in your own country.</p>
+
+      <p class="muted">Last updated: 24 October 2026</p>
     </section>
     {% endif %}
 
