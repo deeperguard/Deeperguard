@@ -3308,9 +3308,15 @@ def api_secure_send_open(send_id: str):
     return resp
 
 
-def _receive_page_response(send_id: str, *, stopped: bool):
+def _receive_page_response(
+    send_id: str,
+    *,
+    stopped: bool,
+    views_remaining: int | None = None,
+):
     import secure_send as ss
 
+    remaining = int(views_remaining) if views_remaining is not None else 0
     ctx = {
         "build": NOTES_BUILD,
         "client_hash": client_assets.client_hash(),
@@ -3319,6 +3325,8 @@ def _receive_page_response(send_id: str, *, stopped: bool):
         "send_id": send_id,
         "link_stopped_copy": ss.LINK_STOPPED_FRIENDLY,
         "link_stopped": stopped,
+        "views_remaining": remaining,
+        "receive_intro": ss.receive_opens_intro(remaining) if not stopped else "",
     }
     resp = make_response(render_template("receive.html", **ctx), 200 if not stopped else 404)
     resp.headers["Content-Disposition"] = "inline"
@@ -3330,7 +3338,8 @@ def receive_secure_send(send_id: str):
     """Receive shell only — does NOT count a view or download ciphertext.
 
     Inactive links keep HTTP 404 but render the same friendly stopped copy
-    (no enumeration of expired vs opened vs revoked).
+    (no enumeration of expired vs opened vs revoked vs locked out).
+    Active pages include remaining opens in the boot JSON (still no view burn).
     """
     import secure_send as ss
 
@@ -3341,6 +3350,10 @@ def receive_secure_send(send_id: str):
     if not row:
         return _receive_page_response(send_id, stopped=True)
     has_blob = ss.blob_path(send_id).is_file()
+    try:
+        locked_out = float(row["locked_out_at"]) if row["locked_out_at"] else None
+    except (KeyError, IndexError, TypeError, ValueError):
+        locked_out = None
     status = ss.status_label(
         canceled_at=float(row["canceled_at"]) if row["canceled_at"] else None,
         expires_at=float(row["expires_at"]),
@@ -3348,16 +3361,18 @@ def receive_secure_send(send_id: str):
         max_views=int(row["max_views"]),
         has_blob=has_blob,
         now_ts=ts,
+        locked_out_at=locked_out,
     )
     if status != "active":
         if status == "expired":
             ss.purge_ciphertext(send_id)
         return _receive_page_response(send_id, stopped=True)
+    remaining = max(0, int(row["max_views"]) - int(row["views_used"]))
     if request.method == "HEAD":
         resp = make_response(("", 200))
         resp.headers["Content-Disposition"] = "inline"
         return resp
-    return _receive_page_response(send_id, stopped=False)
+    return _receive_page_response(send_id, stopped=False, views_remaining=remaining)
 
 
 @app.get("/contact")

@@ -13,8 +13,9 @@ from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 ROOT = Path(__file__).resolve().parents[1]
-if str(APP_DIR) not in sys.path:
-    sys.path.insert(0, str(APP_DIR))
+# Always put app/ first: with repo root on sys.path, bare "import app" binds the empty package.
+sys.path = [p for p in sys.path if p != str(APP_DIR)]
+sys.path.insert(0, str(APP_DIR))
 
 
 class D2SecureSendTests(unittest.TestCase):
@@ -161,7 +162,7 @@ class D2SecureSendTests(unittest.TestCase):
         html = page.get_data(as_text=True)
         self.assertIn("receive-open", html)
         self.assertIn("Someone sent you an encrypted note", html)
-        self.assertIn("This can only be opened once", html)
+        self.assertIn("This can be opened once.", html)
         self.assertIn("stops working", html.lower())
         self.assertNotIn("deleted", html.lower())
         self.assertNotIn("fragment", html.lower().split("receive-boot")[0])
@@ -317,6 +318,7 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertFalse(ss.blob_path(send_id).is_file())
 
     def test_passphrase_verifier_lockout_stops_link(self):
+        import db as notes_db
         import secure_send as ss
 
         created = self._create(max_views=1, open_verifier="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
@@ -332,9 +334,65 @@ class D2SecureSendTests(unittest.TestCase):
             else:
                 self.assertEqual(res.status_code, 404)
         self.assertFalse(ss.blob_path(send_id).is_file())
+        row = notes_db.get_secure_send(send_id)
+        self.assertIsNotNone(row["locked_out_at"])
+        self.assertIsNone(row["canceled_at"])
+        listed = self.client.get("/api/secure-send/sent")
+        self.assertEqual(listed.status_code, 200)
+        item = next(i for i in listed.get_json()["items"] if i["id"] == send_id)
+        self.assertEqual(item["status"], "locked_out")
+        self.assertEqual(item["status_label"], "Stopped: too many wrong passphrases")
         stopped = self.client.get(f"/receive/{send_id}")
         self.assertEqual(stopped.status_code, 404)
-        self.assertIn("Ask the sender for a new one", stopped.get_data(as_text=True))
+        html = stopped.get_data(as_text=True)
+        self.assertIn("Ask the sender for a new one", html)
+        self.assertIn('id="receive-heading"', html)
+        self.assertIn("hidden", html.split('id="receive-heading"', 1)[1][:40])
+
+    def test_receive_intro_uses_remaining_opens_without_burning(self):
+        import secure_send as ss
+
+        self.assertEqual(ss.receive_opens_intro(1), "This can be opened once.")
+        self.assertEqual(ss.receive_opens_intro(3), "This can be opened 3 more times.")
+        created = self._create(max_views=3)
+        send_id = created.get_json()["id"]
+        page = self.client.get(f"/receive/{send_id}")
+        self.assertEqual(page.status_code, 200)
+        html = page.get_data(as_text=True)
+        self.assertIn("This can be opened 3 more times.", html)
+        self.assertIn('"viewsRemaining": 3', html)
+        # GET must not burn a view.
+        listed = self.client.get("/api/secure-send/sent")
+        item = next(i for i in listed.get_json()["items"] if i["id"] == send_id)
+        self.assertEqual(int(item["views_used"]), 0)
+        self.assertEqual(item["status"], "active")
+        # Still one open available after a single burn.
+        opened = self.client.post(
+            f"/api/secure-send/{send_id}/open",
+            json={},
+            headers={"Sec-Fetch-Site": "same-origin"},
+        )
+        self.assertEqual(opened.status_code, 200)
+        again = self.client.get(f"/receive/{send_id}")
+        self.assertEqual(again.status_code, 200)
+        self.assertIn("This can be opened 2 more times.", again.get_data(as_text=True))
+
+    def test_receive_intro_once_for_single_open(self):
+        created = self._create(max_views=1)
+        send_id = created.get_json()["id"]
+        page = self.client.get(f"/receive/{send_id}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("This can be opened once.", page.get_data(as_text=True))
+
+    def test_share_link_is_textarea_with_break_all(self):
+        app_html = (ROOT / "app" / "templates" / "app.html").read_text(encoding="utf-8")
+        css = (ROOT / "app" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        self.assertIn('<textarea id="secure-send-link"', app_html)
+        self.assertIn("word-break: break-all", css)
+        self.assertIn(
+            "Send an encrypted note and optional file. The key is in the link itself",
+            app_html,
+        )
 
     def test_no_math_random_in_secure_send_js(self):
         for name in ("secure-send.js", "secure-send-receive.js"):

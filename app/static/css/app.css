@@ -549,6 +549,11 @@ textarea { resize: vertical; min-height: 240px; line-height: 1.55; }
 .secure-send-link-row #secure-send-link {
   width: 100%;
   max-width: 100%;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  resize: vertical;
+  min-height: calc(var(--touch) * 1.5);
+  font-family: inherit;
 }
 .secure-send-link-row #btn-secure-send-copy {
   flex: 0 0 auto;

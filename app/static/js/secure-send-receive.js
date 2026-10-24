@@ -49,6 +49,8 @@
   function showStopped() {
     if (gate) gate.hidden = true;
     if (result) result.hidden = true;
+    const heading = document.getElementById('receive-heading');
+    if (heading) heading.hidden = true;
     if (stopped) {
       stopped.hidden = false;
       const p = stopped.querySelector('[data-stopped-copy]');

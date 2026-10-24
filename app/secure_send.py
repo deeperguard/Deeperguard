@@ -106,7 +106,10 @@ def status_label(
     max_views: int,
     has_blob: bool,
     now_ts: float,
+    locked_out_at: float | None = None,
 ) -> str:
+    if locked_out_at:
+        return "locked_out"
     if canceled_at:
         return "canceled"
     if now_ts >= float(expires_at):
@@ -117,13 +120,29 @@ def status_label(
 
 
 def status_display(status: str) -> str:
-    """Sender-facing Sent list labels (Waiting / Opened / Expired / Revoked)."""
+    """Sender-facing Sent list labels (Waiting / Opened / Expired / Revoked / lockout)."""
     return {
         "active": "Waiting",
         "used": "Opened",
         "expired": "Expired",
         "canceled": "Revoked",
+        "locked_out": "Stopped: too many wrong passphrases",
     }.get(str(status or ""), str(status or "?"))
+
+
+def receive_opens_intro(views_remaining: int) -> str:
+    """Pre-open copy from remaining views (GET /receive does not burn a view)."""
+    try:
+        n = int(views_remaining)
+    except (TypeError, ValueError):
+        n = 0
+    if n == 1:
+        return "This can be opened once."
+    if n > 1:
+        return f"This can be opened {n} more times."
+    return (
+        "This link stops working after it has been opened the number of times the sender chose."
+    )
 
 
 def valid_open_verifier(raw: str) -> bool:

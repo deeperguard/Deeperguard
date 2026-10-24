@@ -20,13 +20,19 @@ const manifest = JSON.parse(
 assert.ok(appHtml.includes('id="secure-send-settings"'));
 assert.ok(appHtml.includes('Number of opens'));
 assert.ok(appHtml.includes('Default 1. The link stops working after this many opens or 7 days.'));
+assert.ok(appHtml.includes('The key is in the link itself and never reaches our server'));
 assert.ok(appHtml.includes('max="10"'));
 assert.ok(appHtml.includes('btn-secure-send-copy'));
+assert.ok(appHtml.includes('<textarea id="secure-send-link"'));
 assert.ok(receiveHtml.includes('receive-open'));
 assert.ok(receiveHtml.includes('Someone sent you an encrypted note'));
-assert.ok(receiveHtml.includes('This can only be opened once'));
+assert.ok(receiveHtml.includes('receive-heading'));
+assert.ok(receiveHtml.includes('viewsRemaining'));
+assert.ok(receiveHtml.includes('receive_intro') || receiveHtml.includes('This can be opened'));
+assert.ok(receiveHtml.includes('This link stops working after it has been opened the number of times the sender chose.'));
 assert.ok(receiveHtml.includes('asset_script'));
 assert.ok(verifyHtml.includes('verify-secure-send'));
+assert.ok(receiveJs.includes("getElementById('receive-heading')"));
 assert.ok(manifest.assets['js/secure-send.js']);
 assert.ok(manifest.assets['js/secure-send-receive.js']);
 for (const key of ['js/secure-send.js', 'js/secure-send-receive.js']) {

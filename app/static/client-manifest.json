@@ -2,10 +2,10 @@
   "asset_count": 55,
   "assets": {
     "css/app.css": {
-      "bytes": 234927,
-      "sha256": "4183e48db8ea4180053fa77e066ac0fd7c71993b28353236abf5b7a7d958b120",
-      "sri": "sha384-U2YXnXVx31lV+kZ0rUa9trDTEIqS+jO+TLrI23lvyuRldkCQcVqVK8RatXcgZwxM",
-      "url": "/static/css/app.4183e48db8ea4180.css"
+      "bytes": 235063,
+      "sha256": "dc00bda66df764211a0e8362f2f9da689f4b54b93f4005dc9cef942595fc6fb0",
+      "sri": "sha384-TObw7LF0AucHCcczN3e7svO6JkKrR01Pfq+Xq6T5suc8RukBWXLHqhNzKl+09n/F",
+      "url": "/static/css/app.dc00bda66df76421.css"
     },
     "css/marketing.css": {
       "bytes": 43725,
@@ -170,10 +170,10 @@
       "url": "/static/js/search.f99cf810d69605b9.js"
     },
     "js/secure-send-receive.js": {
-      "bytes": 6579,
-      "sha256": "5a78b9586193e11cd52d8d679d8446501d9d65e1349eefdf47d43b6d9e89df21",
-      "sri": "sha384-a0ydiHhqh/uLDjuen99P0TdfTJv7iIQ6cNzxYTp8QHayCX4yAP/dQsGD76b9XEHe",
-      "url": "/static/js/secure-send-receive.5a78b9586193e11c.js"
+      "bytes": 6683,
+      "sha256": "a96bddb3827533e18061183fbbc2c427d9eb0714e17fa9efeb3594d072db7b90",
+      "sri": "sha384-GVeuU2FVeAt8If4rAaxzfvBCtAZeYCrm4cw/sc3HNv5hCTcdq2B2zj4t5w8vxrdO",
+      "url": "/static/js/secure-send-receive.a96bddb3827533e1.js"
     },
     "js/secure-send.js": {
       "bytes": 8811,
@@ -333,6 +333,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "e0476f2d5b9f54557ef2070cfe695e3e1dadc39fe98b2ed08223eab9e8c96264",
+  "manifest_sha256": "ec2235569e87c471b0e156ed5e1e90d770ebdd1dbf70c246a0bb083028b27da8",
   "version": 1
 }

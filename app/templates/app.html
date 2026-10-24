@@ -1615,7 +1615,7 @@
       <section class="settings-group" id="secure-send-settings">
         <h3>Secure Send</h3>
         <div class="settings-card stack">
-          <p class="settings-hint">Send an encrypted note (and optional file) with a one-time link. The key stays in the link fragment (#) and never reaches the server. After the allowed views are used or the time runs out, the link stops working.</p>
+          <p class="settings-hint">Send an encrypted note and optional file. The key is in the link itself and never reaches our server. The link stops working after the set number of opens or 7 days.</p>
           <label class="settings-row stacked" for="secure-send-title">Title
             <input id="secure-send-title" type="text" maxlength="500" autocomplete="off">
           </label>
@@ -1641,7 +1641,7 @@
           <p id="secure-send-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
           <div id="secure-send-link-wrap" class="secure-send-link-row" hidden>
             <label class="settings-row stacked" for="secure-send-link">Link (copy and send)
-              <input id="secure-send-link" type="text" readonly autocomplete="off">
+              <textarea id="secure-send-link" rows="3" readonly autocomplete="off" spellcheck="false"></textarea>
             </label>
             <button type="button" id="btn-secure-send-copy" class="btn sm" title="Copy link" aria-label="Copy link">Copy</button>
           </div>

@@ -9,14 +9,14 @@
 <body class="auth-page receive-page">
   <main class="auth-card receive-card">
     <div class="brand">
-      <h1>Someone sent you an encrypted note</h1>
+      <h1 id="receive-heading" {% if link_stopped %}hidden{% endif %}>Someone sent you an encrypted note</h1>
       <p class="muted">Deeperguard Secure Send</p>
     </div>
     <div id="receive-stopped" class="stack" {% if not link_stopped %}hidden{% endif %}>
       <p class="settings-hint" data-stopped-copy>{{ link_stopped_copy }}</p>
     </div>
     <div id="receive-gate" class="stack" {% if link_stopped %}hidden{% endif %}>
-      <p id="receive-intro" class="settings-hint">This can only be opened once. After you open it, the link stops working.</p>
+      <p id="receive-intro" class="settings-hint">{{ receive_intro or 'This link stops working after it has been opened the number of times the sender chose.' }}</p>
       <p id="receive-pass-wrap" class="stack" hidden>
         <label>Passphrase
           <input id="receive-passphrase" type="password" autocomplete="off" spellcheck="false">
@@ -38,7 +38,8 @@
   <script type="application/json" id="receive-boot">{{ {
     "sendId": send_id,
     "linkStopped": link_stopped_copy,
-    "linkStoppedFlag": link_stopped
+    "linkStoppedFlag": link_stopped,
+    "viewsRemaining": views_remaining
   } | tojson }}</script>
   {{ asset_script('js/vendor/noble-crypto.js') }}
   {{ asset_script('js/vendor/noble-argon2.js') }}
