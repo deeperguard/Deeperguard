@@ -574,6 +574,11 @@ def public_path(path: str) -> bool:
         return True
     if base in {"/api/contact", "/api/promo", "/robots.txt", "/sitemap.xml", "/.well-known/security.txt"}:
         return True
+    # D2 Secure Send: receive shell + explicit Open (never GET/HEAD burn).
+    if base.startswith("/receive/"):
+        return True
+    if base.startswith("/api/secure-send/") and base.endswith("/open"):
+        return True
     from config import INDEXNOW_KEY
 
     if INDEXNOW_KEY and base == f"/{INDEXNOW_KEY}.txt":
