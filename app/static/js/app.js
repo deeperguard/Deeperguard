@@ -169,6 +169,8 @@
     compactList: true,
     sort: 'updated',
     autoPreview: false,
+    // Opt-out: new and existing clients auto-open empty single-PDF notes in inline preview.
+    autoOpenPdfOnly: true,
     autoLockMin: 15,
     lockOnUnfocus: '1min',
     rememberDevice: false,
@@ -252,7 +254,7 @@
   // synced like notes, so "hide previews" on the phone also applies on the Mac.
   const GLOBAL_PREF_KEYS = [
     'theme', 'fontSize', 'monospace', 'spellcheck', 'hidePreviews', 'compactList',
-    'sort', 'autoPreview', 'autoLockMin', 'lockOnUnfocus', 'aiChat',
+    'sort', 'autoPreview', 'autoOpenPdfOnly', 'autoLockMin', 'lockOnUnfocus', 'aiChat',
     'googleOauthClientId', 'dropboxAppKey',
     'dropboxRefreshToken', 'dropboxAccessToken', 'dropboxTokenExpiresAt', 'dropboxConnected',
   ];
@@ -2845,10 +2847,49 @@
     return 'Older';
   }
 
+  // Session-only: after dismissing PDF-only auto-preview back to edit, skip
+  // auto-open until the user leaves this note and opens it again.
+  let pdfOnlyAutoOpenSuppressedId = '';
+
+  function noteBodyIsBlank(note) {
+    return !String(note?.content?.content || '').trim();
+  }
+
+  function noteSinglePdfAttachment(noteId) {
+    const atts = NotesStore.listAttachments(noteId);
+    if (atts.length !== 1) return null;
+    const att = atts[0];
+    return attachmentKind(att) === 'pdf' ? att : null;
+  }
+
+  function pdfAttachmentReadyForAutoOpen(att) {
+    if (!att?.content) return false;
+    // Prefer in-memory ciphertext. Light-vault rows that only mark
+    // file_enc_stored are still downloading — stay in edit until reopen.
+    if (att.content.file_enc || att.content.data_b64) return true;
+    if (att.content.file_enc_stored && NotesStore.lightVaultEnabled?.()) return false;
+    return !NotesStore.lightVaultEnabled?.();
+  }
+
+  function shouldAutoOpenPdfOnlyNote(noteId) {
+    // Opt-out: missing/undefined (older localStorage) stays on.
+    if (prefs.autoOpenPdfOnly === false) return false;
+    if (!noteId || pdfOnlyAutoOpenSuppressedId === noteId) return false;
+    const note = NotesStore.get(noteId);
+    if (!note || !noteBodyIsBlank(note)) return false;
+    const att = noteSinglePdfAttachment(noteId);
+    if (!att) return false;
+    if (heavyPreviewDeferred(att.uuid)) return false;
+    if (!pdfAttachmentReadyForAutoOpen(att)) return false;
+    return true;
+  }
+
   function initialEditorMode(noteId) {
     const note = NotesStore.get(noteId);
     if (!note) return 'edit';
     if (noteSpreadsheetSource(note)) return 'preview';
+    // Empty single-PDF notes: inline #doc-inline preview (not full-screen gallery).
+    if (shouldAutoOpenPdfOnlyNote(noteId)) return 'preview';
     if (noteHasVisualDocs(noteId) || noteHasDocs(noteId)) {
       return prefs.autoPreview ? 'preview' : 'edit';
     }
@@ -12755,6 +12796,7 @@
     const previousId = currentId && currentId !== id ? currentId : null;
     if (previousId) {
       unlockedNotes.delete(previousId);
+      if (pdfOnlyAutoOpenSuppressedId === previousId) pdfOnlyAutoOpenSuppressedId = '';
     }
     const gated = !!note.content.locked && !unlockedNotes.has(id) && !skipGate;
     const alreadyEditing = !!currentId && ui.editor && !ui.editor.hidden;
@@ -13999,6 +14041,8 @@
     document.getElementById('pref-mono').checked = !!prefs.monospace;
     document.getElementById('pref-spellcheck').checked = !!prefs.spellcheck;
     document.getElementById('pref-auto-preview').checked = !!prefs.autoPreview;
+    const autoOpenPdf = document.getElementById('pref-auto-open-pdf-only');
+    if (autoOpenPdf) autoOpenPdf.checked = prefs.autoOpenPdfOnly !== false;
     document.getElementById('pref-auto-lock').value = String(prefs.autoLockMin || 0);
     const lockUnfocus = document.getElementById('pref-lock-on-unfocus');
     if (lockUnfocus) lockUnfocus.value = lockOnUnfocusMode();
@@ -18380,7 +18424,13 @@
     if (noteHasDocs(currentId)) {
       if (editorMode === 'edit') editorMode = 'preview';
       else if (editorMode === 'ocr') editorMode = 'preview';
-      else editorMode = 'edit';
+      else {
+        // Dismissing inline PDF auto-preview: stay in edit until they leave the note.
+        if (currentId && noteSinglePdfAttachment(currentId) && noteBodyIsBlank(NotesStore.get(currentId))) {
+          pdfOnlyAutoOpenSuppressedId = currentId;
+        }
+        editorMode = 'edit';
+      }
     } else {
       editorMode = editorMode === 'edit' ? 'preview' : 'edit';
     }
@@ -19624,6 +19674,10 @@
     prefs.autoPreview = e.target.checked;
     savePrefs();
     if (currentId) applyEditorMode();
+  });
+  document.getElementById('pref-auto-open-pdf-only')?.addEventListener('change', (e) => {
+    prefs.autoOpenPdfOnly = !!e.target.checked;
+    savePrefs();
   });
   document.getElementById('pref-auto-lock').addEventListener('change', (e) => {
     prefs.autoLockMin = Number(e.target.value) || 0;
