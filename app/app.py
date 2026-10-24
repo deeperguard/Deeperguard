@@ -1429,31 +1429,40 @@ def api_auth_vault_recovery():
 
 @app.post("/api/auth/srp/upgrade")
 def api_auth_srp_upgrade():
+    """Round 76: promote a just-signed-in legacy account to SRP (session-authenticated).
+
+    Client already proved the password via /api/auth/login. We accept only the
+    derived salt/verifier — no plaintext password on this route. Vault
+    ciphertext and kdf_salt are untouched.
+    """
     uid = auth.current_user_id()
-    user = db.get_user_by_id(uid) if uid else None
+    if not uid:
+        return jsonify({"error": "login required"}), 401
+    user = db.get_user_by_id(uid)
     if not user:
-        return jsonify({"error": "not found"}), 404
+        return jsonify({"error": "login required"}), 401
     if auth.needs_totp():
         return jsonify({"error": "2FA required"}), 403
     email = str(user["email"] or "").strip().lower()
     if _auth_rate_limited("srp-upgrade", email):
         return jsonify({"error": "too many attempts"}), 429
-    if db.user_has_srp(user):
-        return jsonify({"ok": True, "auth_method": "srp"})
+    # Already SRP — refuse (R73 plaintext rules already apply).
+    if db.user_auth_method(user) == "srp" or db.user_has_srp(user):
+        return jsonify({"error": "already srp", "auth_method": "srp"}), 409
     body = request.get_json(silent=True) or {}
     srp_salt = str(body.get("srp_salt") or "").strip().lower()
     srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
     srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
-    current = str(body.get("current_password") or body.get("password") or "").strip()
     if not srp_salt or not srp_verifier:
         return jsonify({"error": "missing srp credentials"}), 400
     if srp_kdf_version < SRP_KDF_V2:
         return jsonify({"error": "srp_kdf_version 2 required"}), 400
     if not db.user_has_legacy_password(user):
-        return jsonify({"error": "invalid credentials"}), 401
-    if not current or not verify_password(user["password_hash"], current):
-        return jsonify({"error": "invalid credentials"}), 401
-    db.upgrade_user_to_srp(uid, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2)
+        return jsonify({"error": "not a legacy account"}), 400
+    ok = db.upgrade_user_to_srp(uid, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2)
+    if not ok:
+        return jsonify({"error": "already srp", "auth_method": "srp"}), 409
+    db.log_auth_event(uid, "srp_legacy_upgrade", "auth_method=srp")
     return jsonify({"ok": True, "auth_method": "srp"})
 
 

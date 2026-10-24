@@ -438,11 +438,12 @@
   }
 
   async function upgrade(email, password) {
+    // Round 76: session from legacy /api/auth/login authenticates the upgrade.
+    // Derive salt+verifier like SRP sign-up; never re-POST the plaintext password.
     const client = new SrpClient();
     const srpSalt = await client.generateRandomSalt();
     const verifier = await client.generateVerifier(srpSalt, email, password, SRP_KDF_V2);
     return postJson('/api/auth/srp/upgrade', {
-      current_password: password,
       srp_salt: srpSalt,
       srp_verifier: verifier,
       srp_kdf_version: SRP_KDF_V2,

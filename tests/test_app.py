@@ -3690,18 +3690,13 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(login.status_code, 200)
         salt_hex, verifier = self._srp_verifier(email, password)
         csrf = self._csrf()
-        hijack = self.client.post(
-            "/api/auth/srp/upgrade",
-            json={"srp_salt": salt_hex, "srp_verifier": verifier},
-            headers={"X-CSRF-Token": csrf},
-        )
-        self.assertEqual(hijack.status_code, 401)
+        # Round 76: fresh legacy session + salt/verifier is enough (no password re-post).
         upgraded = self.client.post(
             "/api/auth/srp/upgrade",
             json={
                 "srp_salt": salt_hex,
                 "srp_verifier": verifier,
-                "current_password": password,
+                "srp_kdf_version": 2,
             },
             headers={"X-CSRF-Token": csrf},
         )
@@ -3720,24 +3715,22 @@ class NotesAppTests(unittest.TestCase):
         self.client.post("/api/auth/login", json={"email": email, "password": password})
         csrf = self._csrf()
         salt_hex, verifier = self._srp_verifier(email, password)
-        for _ in range(2):
-            bad = self.client.post(
-                "/api/auth/srp/upgrade",
-                json={
-                    "srp_salt": salt_hex,
-                    "srp_verifier": verifier,
-                    "current_password": "wrong",
-                },
-                headers={"X-CSRF-Token": csrf},
-            )
-            self.assertEqual(bad.status_code, 401)
+        # First call upgrades; further calls are already-SRP (409) and still rate-limited.
+        first = self.client.post(
+            "/api/auth/srp/upgrade",
+            json={"srp_salt": salt_hex, "srp_verifier": verifier, "srp_kdf_version": 2},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(first.status_code, 200)
+        second = self.client.post(
+            "/api/auth/srp/upgrade",
+            json={"srp_salt": salt_hex, "srp_verifier": verifier, "srp_kdf_version": 2},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(second.status_code, 409)
         blocked = self.client.post(
             "/api/auth/srp/upgrade",
-            json={
-                "srp_salt": salt_hex,
-                "srp_verifier": verifier,
-                "current_password": "wrong",
-            },
+            json={"srp_salt": salt_hex, "srp_verifier": verifier, "srp_kdf_version": 2},
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(blocked.status_code, 429)

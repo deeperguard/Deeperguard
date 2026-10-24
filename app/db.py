@@ -143,6 +143,18 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             created_at REAL NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS auth_event_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            event TEXT NOT NULL,
+            detail TEXT NOT NULL DEFAULT '',
+            created_at REAL NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_auth_event_log_user_created
+            ON auth_event_log(user_id, created_at);
         """
     )
     cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
@@ -438,19 +450,72 @@ def upgrade_user_to_srp(
     srp_verifier: str,
     *,
     srp_kdf_version: int = 2,
-) -> None:
+) -> bool:
+    """Atomically flip a legacy account to SRP. Returns False if already SRP."""
     ts = now()
     kdf_ver = 2 if int(srp_kdf_version or 1) >= 2 else 1
     with tx() as conn:
-        conn.execute(
+        cur = conn.execute(
             """
             UPDATE users
             SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
                 updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND COALESCE(auth_method, '') != 'srp'
             """,
             (srp_salt.strip().lower(), srp_verifier.strip().lower(), kdf_ver, ts, user_id),
         )
+        return int(cur.rowcount or 0) > 0
+
+
+def log_auth_event(user_id: int, event: str, detail: str = "") -> None:
+    """Append a small audit row (Round 76 legacy→SRP upgrade, etc.)."""
+    uid = int(user_id or 0)
+    if uid <= 0:
+        return
+    name = str(event or "").strip()[:80]
+    if not name:
+        return
+    note = str(detail or "")[:500]
+    with tx() as conn:
+        conn.execute(
+            """
+            INSERT INTO auth_event_log (user_id, event, detail, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (uid, name, note, now()),
+        )
+
+
+def list_auth_events(user_id: int, *, event: str = "", limit: int = 20) -> list:
+    uid = int(user_id or 0)
+    if uid <= 0:
+        return []
+    lim = max(1, min(int(limit or 20), 100))
+    name = str(event or "").strip()
+    conn = connection()
+    if name:
+        rows = conn.execute(
+            """
+            SELECT id, user_id, event, detail, created_at
+            FROM auth_event_log
+            WHERE user_id = ? AND event = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (uid, name, lim),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT id, user_id, event, detail, created_at
+            FROM auth_event_log
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (uid, lim),
+        ).fetchall()
+    return list(rows)
 
 
 def update_user_srp_verifier(
