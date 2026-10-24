@@ -98,6 +98,7 @@ class Round82FreeTierAppTests(unittest.TestCase):
         os.environ["NOTES_ALLOW_REGISTER"] = "1"
         os.environ["NOTES_SECURE_COOKIES"] = "0"
         os.environ.pop("NOTES_DEFAULT_PLAN", None)
+        os.environ.pop("NOTES_ADMIN_EMAILS", None)
         (root / "keys").mkdir(parents=True)
         (root / "keys" / "flask-secret").write_text("round82-secret", encoding="utf-8")
 
@@ -362,11 +363,26 @@ class Round82FreeTierAppTests(unittest.TestCase):
         self.assertEqual(ok.status_code, 200, ok.get_json())
 
     def test_admin_accepts_free_plan(self):
+        os.environ["NOTES_ADMIN_EMAILS"] = "admin82@home.local"
+        # Reload config-bound admin email list after env change.
+        import config as notes_config
+
+        if hasattr(notes_config, "admin_emails"):
+            try:
+                notes_config.admin_emails.cache_clear()  # type: ignore[attr-defined]
+            except Exception:
+                pass
         admin_id = self._create_user("admin82@home.local", "admin-secure-pass-ok", plan="pro")
         member_id = self._create_user("member82@home.local", "member-secure-pass-ok", plan="pro")
         self.notes_db.update_user_admin_flag(admin_id, True)
         login = self._srp_login("admin82@home.local", "admin-secure-pass-ok", device_id="admin-dev")
         self.assertEqual(login.status_code, 200)
+        account = self.client.get(
+            "/api/account",
+            headers={"X-CSRF-Token": login.get_json()["csrf"], "X-Device-Id": "admin-dev"},
+        )
+        self.assertEqual(account.status_code, 200)
+        self.assertTrue(account.get_json().get("is_admin"), account.get_json())
         csrf = login.get_json()["csrf"]
         patch = self.client.patch(
             f"/api/admin/users/{member_id}",
