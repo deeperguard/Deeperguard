@@ -19,30 +19,55 @@ const root = path.join(__dirname, '..');
 const marketing = fs.readFileSync(path.join(root, 'app/templates/marketing.html'), 'utf8');
 const compare = fs.readFileSync(path.join(root, 'app/templates/compare-standard-notes.html'), 'utf8');
 const verify = fs.readFileSync(path.join(root, 'app/templates/verify.html'), 'utf8');
+const legal = fs.readFileSync(path.join(root, 'app/templates/legal.html'), 'utf8');
+const zkPlain = fs.readFileSync(path.join(root, 'app/templates/partials/zk-plain.html'), 'utf8');
 const aiChatJs = fs.readFileSync(path.join(root, 'app/static/js/ai-chat.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
 
-const EXCEPTION = 'except text you choose to send to Ask AI with Ollama Cloud, which passes through our server to ollama.com unstored';
+const EXCEPTION = 'except text you choose to send to Ask AI with Ollama Cloud, which passes through our server to ollama.com without being stored';
 
-assert.ok(marketing.includes('The server cannot read your notes'));
+assert.ok(marketing.includes('<strong>The server cannot read your notes</strong>'));
 assert.ok(marketing.includes(EXCEPTION));
-assert.ok(marketing.includes('Can Deeperguard or its host read my notes?'));
 assert.ok(
   marketing.includes(
-    'We only store encrypted binary ciphertext, except text you choose to send to Ask AI with Ollama Cloud',
+    'The server never receives a readable copy unless you send text to Ask AI with Ollama Cloud.',
+  ),
+);
+assert.ok(marketing.includes('stay unreadable to the host unless sent to Ask AI'));
+assert.ok(marketing.includes('Plaintext never touches the server, unless you send text to Ask AI with Ollama Cloud'));
+assert.ok(marketing.includes('no server-side copy of the text, unless you send text to Ask AI with Ollama Cloud'));
+assert.ok(marketing.includes('Stored notes: no.'));
+assert.ok(!marketing.includes('unstored'));
+assert.ok(marketing.includes('Can Deeperguard or its host read my notes?'));
+
+assert.ok(compare.includes('Stored notes: no.'));
+assert.ok(compare.includes(EXCEPTION));
+assert.ok(!compare.includes('unstored'));
+
+assert.ok(verify.includes('never leave your device in plaintext, except text you choose to send to Ask AI with Ollama Cloud'));
+assert.ok(verify.includes(EXCEPTION));
+assert.ok(!verify.includes('unstored'));
+assert.ok(verify.includes('data-claim-version="2"'));
+
+assert.ok(
+  zkPlain.includes(
+    'we cannot read your notes (unless you send text to Ask AI with Ollama Cloud).',
   ),
 );
 
-assert.ok(compare.includes('Can Deeperguard or its host read my notes?'));
-assert.ok(compare.includes(EXCEPTION));
-
-assert.ok(verify.includes('never leave your device in plaintext, except text you choose to send to Ask AI with Ollama Cloud'));
-assert.ok(verify.includes('never appear on the wire, except text you choose to send to Ask AI with Ollama Cloud'));
-assert.ok(verify.includes('data-claim-version="2"'));
+assert.ok(
+  legal.includes(
+    'we cannot read note titles, body text, or attachment contents (unless you send text to Ask AI with Ollama Cloud)',
+  ),
+);
 
 assert.ok(aiChatJs.includes('CLOUD_RELAY_ACK_KEY'));
 assert.ok(aiChatJs.includes('ensureCloudRelayConsent'));
-assert.ok(aiChatJs.includes("through Deeperguard's server to ollama.com. It isn't stored. Continue?"));
+assert.ok(
+  aiChatJs.includes(
+    "Your message and any note content will go through Deeperguard's server to ollama.com. Nothing is stored. Send?",
+  ),
+);
 assert.ok(aiChatJs.includes("confirmLabel: 'Send'"));
 assert.ok(aiChatJs.includes("cancelLabel: 'Cancel'"));
 assert.ok(appJs.includes('confirm: (message, options) => confirmAction(message, options)'));
@@ -70,6 +95,7 @@ async function main() {
     confirm: async (message, options) => {
       confirmCalls += 1;
       assert.ok(message.includes("through Deeperguard's server to ollama.com"));
+      assert.ok(message.includes('Nothing is stored. Send?'));
       assert.strictEqual(options.confirmLabel, 'Send');
       assert.strictEqual(options.cancelLabel, 'Cancel');
       return true;

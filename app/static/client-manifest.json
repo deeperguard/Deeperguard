@@ -20,10 +20,10 @@
       "url": "/static/js/admin.a0379e7bd93fc3b8.js"
     },
     "js/ai-chat.js": {
-      "bytes": 19871,
-      "sha256": "ca8c760b3f005d50c454bfb4083183661c71226010ce1d6d35cf7e3241bba5d6",
-      "sri": "sha384-JCvfpAoFZG/2cARDE2imyBLNU7MnDbhK/xLrTruPAe+p0Hu8ME2lsYJ7LpJTpZz+",
-      "url": "/static/js/ai-chat.ca8c760b3f005d50.js"
+      "bytes": 19832,
+      "sha256": "1a82e44d6c4b43a24b5ea7a485e2e1b08f92e7492dd9c4285eed1b7060b2c70c",
+      "sri": "sha384-TG71QQ6TPOFa3lU0ZTIhKtyIxuxDNeMNGzKLu7AF2Ca0e2LdsaU6I+pGHTyfVuGO",
+      "url": "/static/js/ai-chat.1a82e44d6c4b43a2.js"
     },
     "js/app.js": {
       "bytes": 884623,
@@ -321,6 +321,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "8f2a978ea4b3b8e1161f64327226737cef0cd471ce136223087df33294e8cb06",
+  "manifest_sha256": "d41eaf8017a70428eefdf24206440440ae121caad381c26142da655b8fb18a63",
   "version": 1
 }

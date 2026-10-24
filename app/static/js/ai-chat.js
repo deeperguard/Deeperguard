@@ -23,8 +23,7 @@ const NotesAiChat = (() => {
   const MAX_HISTORY = 12;
   /** Per-device ack that the user saw the Ollama Cloud relay warning before first send. */
   const CLOUD_RELAY_ACK_KEY = 'notes_ai_ollama_cloud_relay_ack';
-  const CLOUD_RELAY_CONFIRM_MESSAGE = 'Ask AI with Ollama Cloud sends this text, including any note content, '
-    + "through Deeperguard's server to ollama.com. It isn't stored. Continue?";
+  const CLOUD_RELAY_CONFIRM_MESSAGE = "Your message and any note content will go through Deeperguard's server to ollama.com. Nothing is stored. Send?";
   // Ollama cloud models (https://ollama.com/api/tags) suited to Q&A over a note.
   const SUGGESTED_MODELS = [
     'gpt-oss:120b',
