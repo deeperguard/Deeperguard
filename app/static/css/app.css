@@ -944,6 +944,49 @@ html[data-theme="light"] .zk-badge {
   line-height: 1.45;
   color: var(--muted);
 }
+/* D2 Secure Send */
+.secure-send-sent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+.secure-send-sent-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #c9d0da);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.secure-send-sent-meta {
+  color: var(--muted);
+  flex: 1 1 12em;
+}
+.receive-page .receive-title {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  word-break: break-word;
+}
+.receive-page .receive-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  max-height: 50vh;
+  overflow: auto;
+}
+.settings-subhead {
+  margin: 16px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .device-phrase-display {
   margin: 10px auto 4px;
   max-width: 22em;

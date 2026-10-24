@@ -317,6 +317,26 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             ON email_send_log(recipient, kind, sent_at);
         CREATE INDEX IF NOT EXISTS idx_email_send_log_user_recipient_kind_sent
             ON email_send_log(user_id, recipient, kind, sent_at);
+
+        -- D2 Secure Send: ciphertext on disk; row is metadata + tombstone after burn.
+        CREATE TABLE IF NOT EXISTS secure_sends (
+            id TEXT PRIMARY KEY,
+            sender_user_id INTEGER NOT NULL,
+            has_passphrase INTEGER NOT NULL DEFAULT 0,
+            has_file INTEGER NOT NULL DEFAULT 0,
+            byte_size INTEGER NOT NULL DEFAULT 0,
+            max_views INTEGER NOT NULL DEFAULT 1,
+            views_used INTEGER NOT NULL DEFAULT 0,
+            expires_at REAL NOT NULL,
+            created_at REAL NOT NULL,
+            canceled_at REAL,
+            last_opened_at REAL,
+            FOREIGN KEY(sender_user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_secure_sends_sender
+            ON secure_sends(sender_user_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_secure_sends_expires
+            ON secure_sends(expires_at);
         """
     )
     conn.commit()
@@ -2381,3 +2401,172 @@ def consume_srp_challenge(
         return None
     return {str(k): str(v) for k, v in state.items()}
 
+
+
+# --- D2 Secure Send -----------------------------------------------------------------
+
+def create_secure_send(
+    send_id: str,
+    sender_user_id: int,
+    *,
+    ciphertext_len: int,
+    max_views: int,
+    expires_at: float,
+) -> None:
+    """Store metadata only — no filename/MIME/passphrase flags (those stay in ciphertext/fragment)."""
+    ts = now()
+    with tx() as conn:
+        conn.execute(
+            """
+            INSERT INTO secure_sends (
+                id, sender_user_id, has_passphrase, has_file, byte_size,
+                max_views, views_used, expires_at, created_at, canceled_at, last_opened_at
+            ) VALUES (?, ?, 0, 0, ?, ?, 0, ?, ?, NULL, NULL)
+            """,
+            (
+                send_id,
+                int(sender_user_id),
+                int(ciphertext_len),
+                int(max_views),
+                float(expires_at),
+                ts,
+            ),
+        )
+
+
+def get_secure_send(send_id: str):
+    row = connection().execute(
+        "SELECT * FROM secure_sends WHERE id = ?",
+        (send_id,),
+    ).fetchone()
+    return row
+
+
+def list_secure_sends_for_user(user_id: int, *, limit: int = 100) -> list[dict[str, Any]]:
+    from secure_send import blob_path, status_label
+
+    ts = now()
+    rows = connection().execute(
+        """
+        SELECT * FROM secure_sends
+        WHERE sender_user_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+        """,
+        (int(user_id), max(1, min(500, int(limit)))),
+    ).fetchall()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        sid = str(row["id"])
+        has_blob = blob_path(sid).is_file()
+        out.append(
+            {
+                "id": sid,
+                "ciphertext_len": int(row["byte_size"] or 0),
+                "max_views": int(row["max_views"]),
+                "views_used": int(row["views_used"]),
+                "expires_at": float(row["expires_at"]),
+                "created_at": float(row["created_at"]),
+                "canceled_at": float(row["canceled_at"]) if row["canceled_at"] else None,
+                "last_opened_at": float(row["last_opened_at"]) if row["last_opened_at"] else None,
+                "status": status_label(
+                    canceled_at=float(row["canceled_at"]) if row["canceled_at"] else None,
+                    expires_at=float(row["expires_at"]),
+                    views_used=int(row["views_used"]),
+                    max_views=int(row["max_views"]),
+                    has_blob=has_blob,
+                    now_ts=ts,
+                ),
+            }
+        )
+    return out
+
+
+def open_secure_send(send_id: str) -> dict[str, Any] | None:
+    """Atomically consume one view and return ciphertext. None → treat as 404.
+
+    A view counts only here (explicit Open), never on GET/HEAD of /receive/<id>.
+    """
+    from secure_send import purge_ciphertext, read_ciphertext
+
+    ts = now()
+    with tx() as conn:
+        row = conn.execute(
+            "SELECT * FROM secure_sends WHERE id = ?",
+            (send_id,),
+        ).fetchone()
+        if not row:
+            return None
+        if row["canceled_at"]:
+            return None
+        if float(row["expires_at"]) <= ts:
+            purge_ciphertext(send_id)
+            return None
+        if int(row["views_used"]) >= int(row["max_views"]):
+            purge_ciphertext(send_id)
+            return None
+        payload = read_ciphertext(send_id)
+        if not payload:
+            return None
+        new_used = int(row["views_used"]) + 1
+        conn.execute(
+            """
+            UPDATE secure_sends
+            SET views_used = ?, last_opened_at = ?
+            WHERE id = ?
+            """,
+            (new_used, ts, send_id),
+        )
+        if new_used >= int(row["max_views"]):
+            purge_ciphertext(send_id)
+        return {
+            "ciphertext": payload,
+            "views_remaining": max(0, int(row["max_views"]) - new_used),
+        }
+
+
+def cancel_secure_send(send_id: str, sender_user_id: int) -> bool:
+    from secure_send import purge_ciphertext
+
+    ts = now()
+    with tx() as conn:
+        cur = conn.execute(
+            """
+            UPDATE secure_sends
+            SET canceled_at = COALESCE(canceled_at, ?)
+            WHERE id = ? AND sender_user_id = ?
+            """,
+            (ts, send_id, int(sender_user_id)),
+        )
+        if cur.rowcount < 1:
+            return False
+    purge_ciphertext(send_id)
+    return True
+
+
+def prune_secure_sends(now_ts: float | None = None) -> int:
+    """Purge ciphertext for expired rows; drop ancient tombstones."""
+    from secure_send import purge_ciphertext
+
+    ts = float(now_ts if now_ts is not None else now())
+    rows = connection().execute(
+        """
+        SELECT id FROM secure_sends
+        WHERE expires_at <= ? OR canceled_at IS NOT NULL
+           OR views_used >= max_views
+        """,
+        (ts,),
+    ).fetchall()
+    for row in rows:
+        purge_ciphertext(str(row["id"]))
+    # Hard-delete tombstones older than 7 days past expiry.
+    cutoff = ts - (7 * 24 * 3600)
+    with tx() as conn:
+        cur = conn.execute(
+            """
+            DELETE FROM secure_sends
+            WHERE expires_at < ? AND (canceled_at IS NOT NULL OR views_used >= max_views OR expires_at <= ?)
+            """,
+            (cutoff, ts),
+        )
+        return int(cur.rowcount or 0)
