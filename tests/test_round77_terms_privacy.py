@@ -37,15 +37,24 @@ class Round77TermsPrivacyTests(unittest.TestCase):
 
     def test_placeholders_present(self):
         text = LEGAL.read_text(encoding="utf-8")
+        # Filled from Dennis (24 Oct); remaining placeholders stay until supplied.
+        self.assertIn("Schutten Invest", text)
+        self.assertIn("Dutch law (the Netherlands)", text)
+        self.assertIn("the competent court in the Netherlands", text)
+        self.assertIn(
+            "without prejudice to any mandatory consumer rights to bring a claim in your own country",
+            text,
+        )
+        self.assertIn("Germany (EU)", text)
+        self.assertNotIn("[OPERATOR NAME]", text)
+        self.assertNotIn("[GOVERNING LAW, e.g. the Netherlands]", text)
+        self.assertNotIn("[COURT]", text)
+        self.assertNotIn("[SERVER LOCATION]", text)
         for ph in (
-            "[OPERATOR NAME]",
             "[ADDRESS]",
             "[KVK NUMBER if any]",
             "[CONTACT EMAIL]",
             "[ABUSE CONTACT EMAIL]",
-            "[GOVERNING LAW, e.g. the Netherlands]",
-            "[COURT]",
-            "[SERVER LOCATION]",
             "[RETENTION PERIOD]",
         ):
             self.assertIn(ph, text)
@@ -103,8 +112,13 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             self.assertIn("DSA notice-and-action", thtml)
             self.assertIn("Governing law and disputes", thtml)
             self.assertIn("Termination", thtml)
-            self.assertIn("[OPERATOR NAME]", phtml)
+            self.assertIn("Schutten Invest", phtml)
+            self.assertIn("Schutten Invest", thtml)
+            self.assertIn("Dutch law (the Netherlands)", thtml)
+            self.assertIn("Germany (EU)", phtml)
             self.assertIn("[ABUSE CONTACT EMAIL]", thtml)
+            self.assertIn("[ADDRESS]", phtml)
+            self.assertIn("[CONTACT EMAIL]", thtml)
             self.assertIn("Last updated: 24 October 2026", phtml)
             self.assertIn("Last updated: 24 October 2026", thtml)
             # Page must stay static / text-safe (no draft banner on the public page).
