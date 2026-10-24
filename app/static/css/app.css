@@ -1912,6 +1912,36 @@ html[data-theme="light"] mark.search-hit {
   border-radius: 10px; border: 1px solid var(--warn, #c77d1a);
   background: color-mix(in srgb, var(--warn, #c77d1a) 12%, transparent);
 }
+/* Round 75: one-time device-phrase nudge (in-app only; not on login/unlock). */
+.device-phrase-prompt {
+  margin: 0 12px 10px;
+  padding: 10px 12px;
+  font-size: .82rem;
+  line-height: 1.4;
+  border-radius: 10px;
+  border: 1px solid var(--border, #c9d0da);
+  background: color-mix(in srgb, var(--accent, #2f6fed) 8%, transparent);
+}
+.device-phrase-prompt-copy { margin: 0; }
+.device-phrase-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+@media (max-width: 390px) {
+  .device-phrase-prompt {
+    margin: 0 8px 8px;
+    padding: 8px 10px;
+  }
+  .device-phrase-prompt-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .device-phrase-prompt-actions .btn {
+    width: 100%;
+  }
+}
 .device-start-banner {
   display: flex;
   flex-wrap: wrap;

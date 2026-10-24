@@ -2,10 +2,10 @@
   "asset_count": 53,
   "assets": {
     "css/app.css": {
-      "bytes": 231446,
-      "sha256": "08b893df6a76ae6f74129262022433af74a2ddaf56faf29a5a8867bdb24826b4",
-      "sri": "sha384-BKJdW4AyHgFRXr1zL1vbgOggVtmj8nrh0llx0pmlBg9Efib/5B0mTY1AUN+XQZF4",
-      "url": "/static/css/app.08b893df6a76ae6f.css"
+      "bytes": 232181,
+      "sha256": "a03ea15e3ba122caf35f1f049eaddc719c9e2215bde55593aebe0631c003fe2a",
+      "sri": "sha384-oQPxQpT/fA3yn39fZ4Y30FieVMISpm3onR+xwlyZxjLU3GrBQEUlAWr2i2WQUCFM",
+      "url": "/static/css/app.a03ea15e3ba122ca.css"
     },
     "css/marketing.css": {
       "bytes": 42355,
@@ -26,10 +26,10 @@
       "url": "/static/js/ai-chat.8c46083ac240aaf6.js"
     },
     "js/app.js": {
-      "bytes": 883043,
-      "sha256": "72aeaa3e26473646f4d9378fa57c467cafdd7778276442d25ce7d8c14ea468e9",
-      "sri": "sha384-WmXQck3lf0VC6JQUpWJZ1wk/OXIQtatg3zLYT67oKwbEB13+ISfwngI0ywrgWLA2",
-      "url": "/static/js/app.72aeaa3e26473646.js"
+      "bytes": 884553,
+      "sha256": "31b9abc421e4b48874e71e1f366878f25157dac51414285ebb83590a42193dba",
+      "sri": "sha384-+zfxJQWry/EsbtJDJvlCkW/Y9QTOtDZcMirV12mN2C4ggcOcUK4t54m1MKcVyv31",
+      "url": "/static/js/app.31b9abc421e4b488.js"
     },
     "js/auth-pages.js": {
       "bytes": 20943,
@@ -68,10 +68,10 @@
       "url": "/static/js/crypto.5ddf526a79559c22.js"
     },
     "js/device-phrase.js": {
-      "bytes": 1313,
-      "sha256": "f68e4cb496ac083a0b5372e78b057501b12f9935066a2b0c558217ee1fd33a29",
-      "sri": "sha384-f8xEC3ar4st3HE2w06vW5LRNJ6ckVkJ29rafLcd7gY8dazlkkADi4Sg3LxerkGWG",
-      "url": "/static/js/device-phrase.f68e4cb496ac083a.js"
+      "bytes": 2606,
+      "sha256": "f31dace01d86927e18f84f7dc7d248c7befefd9ea83cfb611da7c8e806013467",
+      "sri": "sha384-yxAnh972Gm7+dM9RY9EdRSZAOA1EbtuC18SYBby2VRVly8cLyqwvRpQeLbhM2g5g",
+      "url": "/static/js/device-phrase.f31dace01d86927e.js"
     },
     "js/freshness.js": {
       "bytes": 33280,
@@ -188,10 +188,10 @@
       "url": "/static/js/srp-auth.8334c46cde3990aa.js"
     },
     "js/store.js": {
-      "bytes": 224041,
-      "sha256": "eed0f984a44d4378d552783c96a63fbd14ab4334dce8f01e05c626d73c37b15b",
-      "sri": "sha384-NmkjN5cwuX/6L4hR787eU42lJ7K7m5HYgj626vbe9AjxJWc5YBL/qvvXZDdn3Roc",
-      "url": "/static/js/store.eed0f984a44d4378.js"
+      "bytes": 224047,
+      "sha256": "f642c55b403dc8a03d5c9c218eca9aa332e51740b20781b2c2d6233c05746401",
+      "sri": "sha384-GCpuyhrdb5Jao3uuBV4Fgt24Q7sVnMt0xOhm/kft7S3Dt0KB0U9tsEVdQXpim1GW",
+      "url": "/static/js/store.f642c55b403dc8a0.js"
     },
     "js/superscript.js": {
       "bytes": 21142,
@@ -321,6 +321,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "9fdf57fc9f5f4dfc44e4980283295b696e2b29195db5e8435fc0a55c171bbbff",
+  "manifest_sha256": "254eb32d796b12e4104648f2f7bb0b390f6d438fee7368344af640f5290f0a04",
   "version": 1
 }

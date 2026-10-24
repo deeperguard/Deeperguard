@@ -3551,7 +3551,7 @@ const NotesStore = (() => {
       // Stale away-timestamps must not survive sign-out and surprise-lock the
       // next session (Round 53).
       localStorage.removeItem('notes_unfocused_at');
-      // Keep notes_device_phrase across sign-out (Round 74 anti-phishing).
+      // Keep notes_device_phrase (+ prompt dismissal) across sign-out (R74/R75).
     } catch (err) {
       /* ignore */
     }
