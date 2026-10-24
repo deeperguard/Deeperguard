@@ -21,6 +21,9 @@ const NotesAiChat = (() => {
   const DEFAULT_MODEL = 'gpt-oss:120b';
   const MAX_CONTEXT_CHARS = 24000;
   const MAX_HISTORY = 12;
+  /** Per-device ack that the user saw the Ollama Cloud relay warning before first send. */
+  const CLOUD_RELAY_ACK_KEY = 'notes_ai_ollama_cloud_relay_ack';
+  const CLOUD_RELAY_CONFIRM_MESSAGE = "Your message and any note content will go through Deeperguard's server to ollama.com. Nothing is stored. Send?";
   // Ollama cloud models (https://ollama.com/api/tags) suited to Q&A over a note.
   const SUGGESTED_MODELS = [
     'gpt-oss:120b',
@@ -281,6 +284,53 @@ const NotesAiChat = (() => {
     return normalizeSettings(deps.getSettings ? deps.getSettings() : null);
   }
 
+  function storage() {
+    if (deps.storage) return deps.storage;
+    try {
+      return typeof localStorage !== 'undefined' ? localStorage : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function hasCloudRelayAck() {
+    const store = storage();
+    if (!store) return false;
+    try {
+      return store.getItem(CLOUD_RELAY_ACK_KEY) === '1';
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function setCloudRelayAck() {
+    const store = storage();
+    if (!store) return;
+    try {
+      store.setItem(CLOUD_RELAY_ACK_KEY, '1');
+    } catch (err) {
+      /* ignore quota / private mode */
+    }
+  }
+
+  /** One-time confirm before the first Ollama Cloud send on this device. Local Ollama skips. */
+  async function ensureCloudRelayConsent(cfg) {
+    if (!isCloudHost(cfg?.host)) return true;
+    if (hasCloudRelayAck()) return true;
+    let ok = false;
+    if (typeof deps.confirm === 'function') {
+      ok = !!(await deps.confirm(CLOUD_RELAY_CONFIRM_MESSAGE, {
+        title: 'Ask AI',
+        confirmLabel: 'Send',
+        cancelLabel: 'Cancel',
+      }));
+    } else if (typeof globalThis !== 'undefined' && typeof globalThis.confirm === 'function') {
+      ok = !!globalThis.confirm(CLOUD_RELAY_CONFIRM_MESSAGE);
+    }
+    if (ok) setCloudRelayAck();
+    return ok;
+  }
+
   function formatMsgTime(ts) {
     const date = new Date(typeof ts === 'number' ? ts : Date.now());
     const now = new Date();
@@ -398,6 +448,7 @@ const NotesAiChat = (() => {
       renderState();
       return;
     }
+    if (!(await ensureCloudRelayConsent(cfg))) return;
     const context = buildContext(note, deps.getAttachments ? deps.getAttachments(state.noteId) : [], { includeOcr: cfg.includeOcr });
     const history = state.messages.filter((m) => !m.error);
     state.messages.push({ role: 'user', content: question, ts: Date.now() });
@@ -478,9 +529,14 @@ const NotesAiChat = (() => {
     DEFAULT_MODEL,
     MAX_CONTEXT_CHARS,
     SUGGESTED_MODELS,
+    CLOUD_RELAY_ACK_KEY,
+    CLOUD_RELAY_CONFIRM_MESSAGE,
     normalizeSettings,
     isCloudHost,
     isConfigured,
+    hasCloudRelayAck,
+    setCloudRelayAck,
+    ensureCloudRelayConsent,
     buildContext,
     requestBody,
     ask,
@@ -493,6 +549,7 @@ const NotesAiChat = (() => {
     reset,
     onNoteChanged,
     refresh: renderState,
+    submit,
   };
 })();
 

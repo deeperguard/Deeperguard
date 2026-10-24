@@ -100,13 +100,13 @@
           <li>
             <div>
               <strong>The server cannot read your notes</strong>
-              <span class="desc">Notes are encrypted on this device before sync. The server stores ciphertext only.</span>
+              <span class="desc">Notes are encrypted on this device before sync. The server stores ciphertext only, except text you choose to send to Ask AI with Ollama Cloud, which passes through our server to ollama.com without being stored.</span>
             </div>
           </li>
           <li>
             <div>
               <strong>On-Device Document OCR &amp; Search</strong>
-              <span class="desc">Photograph docs and search scanned PDF text entirely in your browser using WebAssembly. Plaintext never touches the server.</span>
+              <span class="desc">Photograph docs and search scanned PDF text entirely in your browser using WebAssembly. Plaintext never touches the server, unless you send text to Ask AI with Ollama Cloud.</span>
             </div>
           </li>
           <li>
@@ -181,7 +181,7 @@
       <div class="mk-section-head">
         <span class="mk-badge">Use cases</span>
         <h2>Where a leak is not an option</h2>
-        <p>Zero-knowledge matters when the note itself is the secret. The server never receives a readable copy.</p>
+        <p>Zero-knowledge matters when the note itself is the secret. The server never receives a readable copy unless you send text to Ask AI with Ollama Cloud.</p>
       </div>
       <div class="mk-grid cols-2">
         <article class="mk-card">
@@ -194,11 +194,11 @@
         </article>
         <article class="mk-card">
           <h3>Confidential work notes</h3>
-          <p>Client names, drafts, and internal notes stay unreadable to the host. Search still works on this device, including offline.</p>
+          <p>Client names, drafts, and internal notes stay unreadable to the host unless sent to Ask AI. Search still works on this device, including offline.</p>
         </article>
         <article class="mk-card">
           <h3>A private journal</h3>
-          <p>Personal notes are encrypted with the same vault. There is no staff view and no server-side copy of the text.</p>
+          <p>Personal notes are encrypted with the same vault. There is no staff view and no server-side copy of the text, unless you send text to Ask AI with Ollama Cloud.</p>
         </article>
       </div>
     </section>
@@ -478,7 +478,7 @@
       </div>
       <details open>
         <summary>Can Deeperguard or its host read my notes?</summary>
-        <p>No. Notes, titles, and attachments are encrypted in your browser using AES-GCM before syncing. We only store encrypted binary ciphertext. Your vault password is never transmitted in readable form.</p>
+        <p>Stored notes: no. Notes, titles, and attachments are encrypted in your browser using AES-GCM before syncing. We only store encrypted binary ciphertext, except text you choose to send to Ask AI with Ollama Cloud, which passes through our server to ollama.com without being stored. Your vault password is never transmitted in readable form.</p>
       </details>
       <details>
         <summary>Can I review the source code?</summary>
