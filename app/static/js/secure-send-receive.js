@@ -1,5 +1,6 @@
 /**
  * D2 receive page — Open burns a view; GET/HEAD of /receive never does.
+ * Passphrase links prove an HMAC of contentKey before the server counts a view.
  */
 (function () {
   'use strict';
@@ -13,10 +14,16 @@
   }
 
   const sendId = String(boot.sendId || '');
-  const linkStopped = String(boot.linkStopped || (window.NotesSecureSend && NotesSecureSend.LINK_STOPPED) || 'This link has stopped working.');
+  const linkStopped = String(
+    boot.linkStopped
+    || (window.NotesSecureSend && NotesSecureSend.LINK_STOPPED)
+    || 'This link has stopped working. Ask the sender for a new one.',
+  );
+  const alreadyStopped = !!boot.linkStoppedFlag;
   const fragment = String(location.hash || '').replace(/^#/, '');
 
   const gate = document.getElementById('receive-gate');
+  const stopped = document.getElementById('receive-stopped');
   const result = document.getElementById('receive-result');
   const errEl = document.getElementById('receive-error');
   const passWrap = document.getElementById('receive-pass-wrap');
@@ -39,13 +46,28 @@
     errEl.textContent = '';
   }
 
-  // Passphrase UI comes only from the fragment (server never stores that flag).
+  function showStopped() {
+    if (gate) gate.hidden = true;
+    if (result) result.hidden = true;
+    if (stopped) {
+      stopped.hidden = false;
+      const p = stopped.querySelector('[data-stopped-copy]');
+      if (p) p.textContent = linkStopped;
+    }
+  }
+
+  if (alreadyStopped) {
+    showStopped();
+    return;
+  }
+
+  // Passphrase UI comes only from the fragment (server never stores that flag on the page).
   if (passWrap && window.NotesSecureSend && NotesSecureSend.fragmentNeedsPassphrase(fragment)) {
     passWrap.hidden = false;
   }
 
   if (!fragment) {
-    showError('This link is missing its key. Ask the sender for the full link (including the part after #).');
+    showError('This link is incomplete. Ask the sender for the full link.');
     if (openBtn) openBtn.disabled = true;
   }
 
@@ -58,14 +80,15 @@
       return;
     }
     if (!fragment) {
-      showError('This link is missing its key.');
+      showError('This link is incomplete. Ask the sender for the full link.');
       return;
     }
     const needsPass = NotesSecureSend.fragmentNeedsPassphrase(fragment);
+    let passphrase = '';
     if (needsPass) {
       if (passWrap) passWrap.hidden = false;
-      const pass = passInput ? String(passInput.value || '') : '';
-      if (!pass) {
+      passphrase = passInput ? String(passInput.value || '') : '';
+      if (!passphrase) {
         showError('Enter the passphrase the sender shared separately. The link alone cannot open this.');
         return;
       }
@@ -74,6 +97,10 @@
     openBtn.textContent = 'Opening…';
     try {
       const body = {};
+      if (needsPass) {
+        const contentKey = await NotesSecureSend.resolveContentKey(fragment, passphrase);
+        body.open_verifier = await NotesSecureSend.computeOpenVerifier(contentKey);
+      }
       NotesSecureSend.assertNoFragmentLeak(`/api/secure-send/${sendId}/open`, body);
       const res = await fetch(`/api/secure-send/${encodeURIComponent(sendId)}/open`, {
         method: 'POST',
@@ -82,9 +109,20 @@
         body: JSON.stringify(body),
       });
       if (res.status === 404) {
-        showError(linkStopped);
-        openBtn.disabled = true;
-        openBtn.textContent = 'Open';
+        showStopped();
+        return;
+      }
+      if (res.status === 401) {
+        const data = await res.json().catch(() => ({}));
+        const left = Number(data.attempts_left);
+        if (data.error === 'wrong_passphrase') {
+          const suffix = Number.isFinite(left) ? ` (${left} attempt${left === 1 ? '' : 's'} left)` : '';
+          showError(`Wrong passphrase${suffix}`);
+          openBtn.disabled = false;
+          openBtn.textContent = 'Open';
+          return;
+        }
+        showStopped();
         return;
       }
       if (!res.ok) {
@@ -94,7 +132,6 @@
         return;
       }
       const data = await res.json();
-      const passphrase = passInput ? passInput.value : '';
       let payload;
       try {
         payload = await NotesSecureSend.openPayload(data.ciphertext, fragment, passphrase);
@@ -106,7 +143,7 @@
           openBtn.textContent = 'Open';
           return;
         }
-        showError('Could not decrypt. Check the passphrase, or the link may be wrong.');
+        showError('Wrong passphrase');
         openBtn.disabled = false;
         openBtn.textContent = 'Open';
         return;
@@ -133,7 +170,7 @@
     if (!pendingFile || !window.NotesSecureSend) return;
     try {
       const bytes = NotesSecureSend.fromB64url(pendingFile.data);
-      // MIME/name come from decrypted ciphertext only — never from the server.
+      // MIME/name come from decrypted payload only — never from the server.
       const blob = new Blob([bytes], {
         type: pendingFile.mime || 'application/octet-stream',
       });

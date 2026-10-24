@@ -331,6 +331,8 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             created_at REAL NOT NULL,
             canceled_at REAL,
             last_opened_at REAL,
+            open_verifier TEXT NOT NULL DEFAULT '',
+            verify_failures INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY(sender_user_id) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE INDEX IF NOT EXISTS idx_secure_sends_sender
@@ -339,6 +341,15 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             ON secure_sends(expires_at);
         """
     )
+    send_cols = {row[1] for row in conn.execute("PRAGMA table_info(secure_sends)").fetchall()}
+    if send_cols and "open_verifier" not in send_cols:
+        conn.execute(
+            "ALTER TABLE secure_sends ADD COLUMN open_verifier TEXT NOT NULL DEFAULT ''"
+        )
+    if send_cols and "verify_failures" not in send_cols:
+        conn.execute(
+            "ALTER TABLE secure_sends ADD COLUMN verify_failures INTEGER NOT NULL DEFAULT 0"
+        )
     conn.commit()
 
 
@@ -2412,16 +2423,23 @@ def create_secure_send(
     ciphertext_len: int,
     max_views: int,
     expires_at: float,
+    open_verifier: str = "",
 ) -> None:
-    """Store metadata only — no filename/MIME/passphrase flags (those stay in ciphertext/fragment)."""
+    """Store metadata only — no filename/MIME (those stay in ciphertext/fragment).
+
+    ``open_verifier`` is an HMAC of the client contentKey for passphrase links;
+    the server cannot derive it from the fragment alone.
+    """
     ts = now()
+    verifier = str(open_verifier or "").strip()[:128]
     with tx() as conn:
         conn.execute(
             """
             INSERT INTO secure_sends (
                 id, sender_user_id, has_passphrase, has_file, byte_size,
-                max_views, views_used, expires_at, created_at, canceled_at, last_opened_at
-            ) VALUES (?, ?, 0, 0, ?, ?, 0, ?, ?, NULL, NULL)
+                max_views, views_used, expires_at, created_at, canceled_at, last_opened_at,
+                open_verifier, verify_failures
+            ) VALUES (?, ?, 0, 0, ?, ?, 0, ?, ?, NULL, NULL, ?, 0)
             """,
             (
                 send_id,
@@ -2430,6 +2448,7 @@ def create_secure_send(
                 int(max_views),
                 float(expires_at),
                 ts,
+                verifier,
             ),
         )
 
@@ -2443,7 +2462,7 @@ def get_secure_send(send_id: str):
 
 
 def list_secure_sends_for_user(user_id: int, *, limit: int = 100) -> list[dict[str, Any]]:
-    from secure_send import blob_path, status_label
+    from secure_send import blob_path, status_display, status_label
 
     ts = now()
     rows = connection().execute(
@@ -2459,37 +2478,48 @@ def list_secure_sends_for_user(user_id: int, *, limit: int = 100) -> list[dict[s
     for row in rows:
         sid = str(row["id"])
         has_blob = blob_path(sid).is_file()
+        status = status_label(
+            canceled_at=float(row["canceled_at"]) if row["canceled_at"] else None,
+            expires_at=float(row["expires_at"]),
+            views_used=int(row["views_used"]),
+            max_views=int(row["max_views"]),
+            has_blob=has_blob,
+            now_ts=ts,
+        )
         out.append(
             {
                 "id": sid,
-                "ciphertext_len": int(row["byte_size"] or 0),
                 "max_views": int(row["max_views"]),
                 "views_used": int(row["views_used"]),
                 "expires_at": float(row["expires_at"]),
                 "created_at": float(row["created_at"]),
                 "canceled_at": float(row["canceled_at"]) if row["canceled_at"] else None,
                 "last_opened_at": float(row["last_opened_at"]) if row["last_opened_at"] else None,
-                "status": status_label(
-                    canceled_at=float(row["canceled_at"]) if row["canceled_at"] else None,
-                    expires_at=float(row["expires_at"]),
-                    views_used=int(row["views_used"]),
-                    max_views=int(row["max_views"]),
-                    has_blob=has_blob,
-                    now_ts=ts,
-                ),
+                "status": status,
+                "status_label": status_display(status),
+                "requires_passphrase": bool(str(row["open_verifier"] or "").strip()),
             }
         )
     return out
 
 
-def open_secure_send(send_id: str) -> dict[str, Any] | None:
+def open_secure_send(
+    send_id: str,
+    *,
+    open_verifier: str = "",
+) -> dict[str, Any] | None:
     """Atomically consume one view and return ciphertext. None → treat as 404.
 
     A view counts only here (explicit Open), never on GET/HEAD of /receive/<id>.
+    Passphrase links store an HMAC verifier: wrong guesses do not burn a view;
+    after MAX_VERIFY_FAILURES the link stops working.
     """
-    from secure_send import purge_ciphertext, read_ciphertext
+    import hmac as hmac_mod
+
+    from secure_send import MAX_VERIFY_FAILURES, purge_ciphertext, read_ciphertext
 
     ts = now()
+    provided = str(open_verifier or "").strip()
     with tx() as conn:
         row = conn.execute(
             "SELECT * FROM secure_sends WHERE id = ?",
@@ -2505,6 +2535,38 @@ def open_secure_send(send_id: str) -> dict[str, Any] | None:
         if int(row["views_used"]) >= int(row["max_views"]):
             purge_ciphertext(send_id)
             return None
+        stored_verifier = str(row["open_verifier"] or "").strip()
+        if stored_verifier:
+            failures = int(row["verify_failures"] or 0)
+            if failures >= MAX_VERIFY_FAILURES:
+                purge_ciphertext(send_id)
+                conn.execute(
+                    "UPDATE secure_sends SET canceled_at = COALESCE(canceled_at, ?) WHERE id = ?",
+                    (ts, send_id),
+                )
+                return {"error": "stopped", "attempts_left": 0}
+            matched = (
+                bool(provided)
+                and len(provided) == len(stored_verifier)
+                and hmac_mod.compare_digest(stored_verifier, provided)
+            )
+            if not matched:
+                failures += 1
+                conn.execute(
+                    "UPDATE secure_sends SET verify_failures = ? WHERE id = ?",
+                    (failures, send_id),
+                )
+                if failures >= MAX_VERIFY_FAILURES:
+                    purge_ciphertext(send_id)
+                    conn.execute(
+                        "UPDATE secure_sends SET canceled_at = COALESCE(canceled_at, ?) WHERE id = ?",
+                        (ts, send_id),
+                    )
+                    return {"error": "stopped", "attempts_left": 0}
+                return {
+                    "error": "wrong_passphrase",
+                    "attempts_left": max(0, MAX_VERIFY_FAILURES - failures),
+                }
         payload = read_ciphertext(send_id)
         if not payload:
             return None
@@ -2512,7 +2574,7 @@ def open_secure_send(send_id: str) -> dict[str, Any] | None:
         conn.execute(
             """
             UPDATE secure_sends
-            SET views_used = ?, last_opened_at = ?
+            SET views_used = ?, last_opened_at = ?, verify_failures = 0
             WHERE id = ?
             """,
             (new_used, ts, send_id),

@@ -3195,6 +3195,9 @@ def api_secure_send_create():
     # Ignore client has_file / has_passphrase / byte_size hints — server stores opaque blob length only.
     expires_in = ss.clamp_expires_in(body.get("expires_in", ss.DEFAULT_EXPIRES_SECONDS))
     max_views = ss.clamp_max_views(body.get("max_views", ss.DEFAULT_MAX_VIEWS))
+    open_verifier = str(body.get("open_verifier") or "").strip()
+    if open_verifier and not ss.valid_open_verifier(open_verifier):
+        return jsonify({"error": "invalid payload"}), 400
     db.prune_secure_sends()
     send_id = ss.new_send_id()
     try:
@@ -3211,6 +3214,7 @@ def api_secure_send_create():
         ciphertext_len=written,
         max_views=max_views,
         expires_at=expires_at,
+        open_verifier=open_verifier,
     )
     return jsonify(
         {
@@ -3249,7 +3253,11 @@ def api_secure_send_cancel(send_id: str):
 
 @app.post("/api/secure-send/<send_id>/open")
 def api_secure_send_open(send_id: str):
-    """Consume one view and return opaque ciphertext. Preview bots must not call this."""
+    """Consume one view and return opaque ciphertext. Preview bots must not call this.
+
+    Passphrase links require ``open_verifier`` (HMAC of contentKey) before a view
+    is counted — wrong guesses return 401 with attempts_left.
+    """
     import secure_send as ss
 
     if not ss.valid_id(send_id):
@@ -3276,8 +3284,17 @@ def api_secure_send_open(send_id: str):
     ):
         if forbidden in body:
             return jsonify({"error": "invalid payload"}), 400
-    result = db.open_secure_send(send_id)
+    open_verifier = str(body.get("open_verifier") or body.get("verifier") or "").strip()
+    result = db.open_secure_send(send_id, open_verifier=open_verifier)
     if not result:
+        return jsonify({"error": "not found"}), 404
+    if result.get("error") == "wrong_passphrase":
+        return jsonify({
+            "error": "wrong_passphrase",
+            "message": "Wrong passphrase",
+            "attempts_left": int(result.get("attempts_left") or 0),
+        }), 401
+    if result.get("error") == "stopped":
         return jsonify({"error": "not found"}), 404
     resp = jsonify(
         {
@@ -3291,17 +3308,38 @@ def api_secure_send_open(send_id: str):
     return resp
 
 
+def _receive_page_response(send_id: str, *, stopped: bool):
+    import secure_send as ss
+
+    ctx = {
+        "build": NOTES_BUILD,
+        "client_hash": client_assets.client_hash(),
+        "release_tag": client_assets.release_tag(),
+        "csp_nonce": auth.csp_nonce(),
+        "send_id": send_id,
+        "link_stopped_copy": ss.LINK_STOPPED_FRIENDLY,
+        "link_stopped": stopped,
+    }
+    resp = make_response(render_template("receive.html", **ctx), 200 if not stopped else 404)
+    resp.headers["Content-Disposition"] = "inline"
+    return resp
+
+
 @app.route("/receive/<send_id>", methods=["GET", "HEAD"])
 def receive_secure_send(send_id: str):
-    """Receive shell only — does NOT count a view or download ciphertext."""
+    """Receive shell only — does NOT count a view or download ciphertext.
+
+    Inactive links keep HTTP 404 but render the same friendly stopped copy
+    (no enumeration of expired vs opened vs revoked).
+    """
     import secure_send as ss
 
     if not ss.valid_id(send_id):
-        return render_template("not-found.html", **_marketing_context()), 404
+        return _receive_page_response(send_id, stopped=True)
     row = db.get_secure_send(send_id)
     ts = time.time()
     if not row:
-        return render_template("not-found.html", **_marketing_context()), 404
+        return _receive_page_response(send_id, stopped=True)
     has_blob = ss.blob_path(send_id).is_file()
     status = ss.status_label(
         canceled_at=float(row["canceled_at"]) if row["canceled_at"] else None,
@@ -3312,25 +3350,14 @@ def receive_secure_send(send_id: str):
         now_ts=ts,
     )
     if status != "active":
-        # Expired / used / canceled: purge leftover bytes and 404.
         if status == "expired":
             ss.purge_ciphertext(send_id)
-        return render_template("not-found.html", **_marketing_context()), 404
+        return _receive_page_response(send_id, stopped=True)
     if request.method == "HEAD":
         resp = make_response(("", 200))
         resp.headers["Content-Disposition"] = "inline"
         return resp
-    ctx = {
-        "build": NOTES_BUILD,
-        "client_hash": client_assets.client_hash(),
-        "release_tag": client_assets.release_tag(),
-        "csp_nonce": auth.csp_nonce(),
-        "send_id": send_id,
-        "link_stopped_copy": ss.LINK_STOPPED,
-    }
-    resp = make_response(render_template("receive.html", **ctx))
-    resp.headers["Content-Disposition"] = "inline"
-    return resp
+    return _receive_page_response(send_id, stopped=False)
 
 
 @app.get("/contact")

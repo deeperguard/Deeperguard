@@ -3,6 +3,8 @@
  * Optional passphrase: Argon2id (vault KDF v2) combined with a fragment key so
  * the link alone cannot decrypt and offline guessing stays expensive.
  * File name / MIME / size live only inside the ciphertext.
+ * Passphrase links also store an HMAC verifier of contentKey so wrong guesses
+ * do not burn an open.
  */
 (function (global) {
   'use strict';
@@ -11,7 +13,9 @@
   const MAX_EXPIRES_SECONDS = 7 * 24 * 3600;
   const DEFAULT_EXPIRES_SECONDS = MAX_EXPIRES_SECONDS;
   const DEFAULT_MAX_VIEWS = 1;
+  const MAX_VIEWS_CAP = 10;
   const LINK_STOPPED = 'This link has stopped working.';
+  const OPEN_VERIFIER_CONTEXT = 'dg-secure-send-verify-v1';
   /** Generic download name — never use a server Content-Disposition filename. */
   const GENERIC_DOWNLOAD_NAME = 'attachment.bin';
 
@@ -33,11 +37,10 @@
 
   function randomBytes(n) {
     const out = new Uint8Array(n);
-    if (global.crypto && global.crypto.getRandomValues) {
-      global.crypto.getRandomValues(out);
-    } else {
-      for (let i = 0; i < n; i += 1) out[i] = Math.floor(Math.random() * 256);
+    if (!(global.crypto && typeof global.crypto.getRandomValues === 'function')) {
+      throw new Error('Secure random unavailable in this browser.');
     }
+    global.crypto.getRandomValues(out);
     return out;
   }
 
@@ -67,6 +70,43 @@
     const raw = new Uint8Array(digest.length);
     raw.set(digest);
     return { raw };
+  }
+
+  /**
+   * HMAC-SHA256(contentKey, 'dg-secure-send-verify-v1') as b64url.
+   * contentKey already depends on the fragment key, so the server cannot forge it.
+   */
+  async function computeOpenVerifier(contentKey) {
+    const keyRaw = contentKey && contentKey.raw;
+    if (!(keyRaw instanceof Uint8Array) || !keyRaw.length) {
+      throw new Error('Missing content key');
+    }
+    // Prefer Node crypto in test harnesses (vm sandboxes often lack a working SubtleCrypto).
+    try {
+      if (typeof require === 'function') {
+        const nodeCrypto = require('crypto');
+        if (nodeCrypto && typeof nodeCrypto.createHmac === 'function') {
+          const h = nodeCrypto.createHmac('sha256', Buffer.from(keyRaw));
+          h.update(OPEN_VERIFIER_CONTEXT);
+          return b64url(new Uint8Array(h.digest()));
+        }
+      }
+    } catch (err) {
+      /* fall through to Web Crypto */
+    }
+    if (!(global.crypto && global.crypto.subtle)) {
+      throw new Error('HMAC unavailable');
+    }
+    const msg = new TextEncoder().encode(OPEN_VERIFIER_CONTEXT);
+    const key = await global.crypto.subtle.importKey(
+      'raw',
+      keyRaw,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const sig = await global.crypto.subtle.sign('HMAC', key, msg);
+    return b64url(new Uint8Array(sig));
   }
 
   /**
@@ -102,12 +142,14 @@
     let contentKey;
     let fragment;
     let hasPassphrase = false;
+    let openVerifier = '';
     if (pass) {
       hasPassphrase = true;
       const salt = randomBytes(16);
       const fragKey = randomBytes(32);
       contentKey = await derivePassphraseContentKey(fragKey, pass, salt);
       fragment = `v1p.${b64url(salt)}.${b64url(fragKey)}`;
+      openVerifier = await computeOpenVerifier(contentKey);
     } else {
       const contentKeyRaw = randomBytes(32);
       contentKey = { raw: contentKeyRaw };
@@ -119,6 +161,7 @@
       ciphertext,
       fragment,
       hasPassphrase,
+      openVerifier,
       hasFile: !!plain.file,
       // Client-side hint only — server uses measured ciphertext length.
       byteSize: String(ciphertext.data || '').length + String(ciphertext.iv || '').length,
@@ -183,11 +226,14 @@
     MAX_EXPIRES_SECONDS,
     DEFAULT_EXPIRES_SECONDS,
     DEFAULT_MAX_VIEWS,
+    MAX_VIEWS_CAP,
     LINK_STOPPED,
+    OPEN_VERIFIER_CONTEXT,
     GENERIC_DOWNLOAD_NAME,
     sealPayload,
     openPayload,
     resolveContentKey,
+    computeOpenVerifier,
     fragmentNeedsPassphrase,
     buildReceiveUrl,
     assertNoFragmentLeak,

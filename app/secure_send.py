@@ -9,20 +9,24 @@ from typing import Any
 
 from config import DATA_DIR
 
-# Defaults / hard caps (Dennis D2 decisions).
+# Defaults / hard caps (Dennis D2 decisions + fix-round correction).
 DEFAULT_MAX_VIEWS = 1
 DEFAULT_EXPIRES_SECONDS = 7 * 24 * 3600
 MAX_EXPIRES_SECONDS = 7 * 24 * 3600
 MIN_EXPIRES_SECONDS = 5 * 60
-MAX_VIEWS_CAP = 50
+MAX_VIEWS_CAP = 10  # server-enforced; UI "Number of opens" defaults to 1
 MAX_FILE_BYTES = 50 * 1024 * 1024
 # Ciphertext envelope JSON (note + optional file) after client encryption.
 MAX_CIPHERTEXT_BYTES = 80 * 1024 * 1024
+MAX_VERIFY_FAILURES = 5
+OPEN_VERIFIER_CONTEXT = "dg-secure-send-verify-v1"
 
-ID_RE = re.compile(r"^[A-Za-z0-9_-]{32,64}$")
+ID_RE = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
+VERIFIER_RE = re.compile(r"^[A-Za-z0-9_-]{32,128}$")
 
 # Copy rule: never tell the user the payload was removed — say the link stopped.
 LINK_STOPPED = "This link has stopped working."
+LINK_STOPPED_FRIENDLY = "This link has stopped working. Ask the sender for a new one."
 
 
 def blob_dir() -> Path:
@@ -110,3 +114,17 @@ def status_label(
     if views_used >= max_views or not has_blob:
         return "used"
     return "active"
+
+
+def status_display(status: str) -> str:
+    """Sender-facing Sent list labels (Waiting / Opened / Expired / Revoked)."""
+    return {
+        "active": "Waiting",
+        "used": "Opened",
+        "expired": "Expired",
+        "canceled": "Revoked",
+    }.get(str(status or ""), str(status or "?"))
+
+
+def valid_open_verifier(raw: str) -> bool:
+    return bool(VERIFIER_RE.match(str(raw or "").strip()))

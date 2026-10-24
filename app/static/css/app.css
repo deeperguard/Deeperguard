@@ -528,6 +528,35 @@ textarea { resize: vertical; min-height: 240px; line-height: 1.55; }
   min-height: var(--touch);
   font-weight: 600;
 }
+.btn.sm {
+  min-height: var(--touch);
+  min-width: var(--touch);
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.secure-send-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+.secure-send-link-row .settings-row {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.secure-send-link-row #secure-send-link {
+  width: 100%;
+  max-width: 100%;
+}
+.secure-send-link-row #btn-secure-send-copy {
+  flex: 0 0 auto;
+  width: var(--touch);
+  min-width: var(--touch);
+  height: var(--touch);
+  padding: 0;
+}
 .btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

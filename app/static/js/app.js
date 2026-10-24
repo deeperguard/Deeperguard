@@ -15126,19 +15126,21 @@
         row.className = 'secure-send-sent-item';
         const meta = document.createElement('div');
         meta.className = 'secure-send-sent-meta';
+        const label = item.status_label
+          || ({ active: 'Waiting', used: 'Opened', expired: 'Expired', canceled: 'Revoked' }[item.status] || item.status || '?');
+        const created = item.created_at ? new Date(item.created_at * 1000).toLocaleString() : '';
         const exp = item.expires_at ? new Date(item.expires_at * 1000).toLocaleString() : '';
-        const len = item.ciphertext_len != null ? ` · ${item.ciphertext_len} B` : '';
-        meta.textContent = `${item.status || '?'} · ${item.views_used || 0}/${item.max_views || 1} views · expires ${exp}${len}`;
+        meta.textContent = `${label} · created ${created} · expires ${exp}`;
         row.appendChild(meta);
         if (item.status === 'active') {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'btn danger sm';
-          btn.textContent = 'Cancel link';
+          btn.textContent = 'Revoke';
           btn.addEventListener('click', async () => {
             const ok = await confirmAction(
-              'Cancel this link? It will stop working for anyone who still has it.',
-              { title: 'Cancel Secure Send', confirmLabel: 'Cancel link' },
+              'Revoke this link? It will stop working for anyone who still has it.',
+              { title: 'Revoke link?', confirmLabel: 'Revoke', cancelLabel: 'Keep' },
             );
             if (!ok) return;
             try {
@@ -15146,10 +15148,10 @@
                 method: 'POST',
                 body: '{}',
               });
-              toast('Link canceled — it stops working now');
+              toast('Link revoked — it stops working now');
               refreshSecureSendList();
             } catch (err) {
-              toast(err?.message || 'Could not cancel', true);
+              toast(err?.message || 'Could not revoke', true);
             }
           });
           row.appendChild(btn);
@@ -19855,10 +19857,11 @@
     const fileInput = document.getElementById('secure-send-file');
     const file = fileInput?.files && fileInput.files[0] ? fileInput.files[0] : null;
     const passphrase = document.getElementById('secure-send-passphrase')?.value || '';
+    const maxViews = Number(NotesSecureSend.MAX_VIEWS_CAP) || 10;
     let views = Number(document.getElementById('secure-send-views')?.value || 1);
     let days = Number(document.getElementById('secure-send-days')?.value || 7);
     if (!Number.isFinite(views) || views < 1) views = 1;
-    if (views > 50) views = 50;
+    if (views > maxViews) views = maxViews;
     if (!Number.isFinite(days) || days < 1) days = 1;
     if (days > 7) days = 7;
     if (!title.trim() && !body.trim() && !file) {
@@ -19880,6 +19883,9 @@
         expires_in: Math.round(days * 24 * 3600),
         max_views: views,
       };
+      if (sealed.hasPassphrase && sealed.openVerifier) {
+        createBody.open_verifier = sealed.openVerifier;
+      }
       NotesSecureSend.assertNoFragmentLeak('/api/secure-send', createBody);
       const created = await NotesStore.api('/api/secure-send', {
         method: 'POST',
@@ -19896,8 +19902,8 @@
       }
       setSecureSendStatus(
         sealed.hasPassphrase
-          ? 'Link ready. Share the passphrase separately — the link alone cannot open it. After views are used, the link stops working.'
-          : 'Link ready. Anyone with the full link can open it. After views are used, the link stops working.',
+          ? 'Link ready. Share the passphrase separately — the link alone cannot open it. After the opens are used, the link stops working.'
+          : 'Link ready. Anyone with the full link can open it. After the opens are used, the link stops working.',
       );
       toast('Secure Send link created');
       refreshSecureSendList();
@@ -19906,6 +19912,21 @@
       toast(err?.message || 'Secure Send failed', true);
     } finally {
       if (btn) btn.disabled = false;
+    }
+  });
+  document.getElementById('btn-secure-send-copy')?.addEventListener('click', async () => {
+    const linkInput = document.getElementById('secure-send-link');
+    const url = linkInput ? String(linkInput.value || '') : '';
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Link copied');
+    } catch (err) {
+      try {
+        linkInput.focus();
+        linkInput.select();
+      } catch (e) { /* ignore */ }
+      toast('Select the link and copy it', true);
     }
   });
 

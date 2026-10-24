@@ -1628,20 +1628,23 @@
           <label class="settings-row stacked" for="secure-send-passphrase">Optional passphrase (share separately from the link)
             <input id="secure-send-passphrase" type="password" autocomplete="new-password" spellcheck="false">
           </label>
-          <label class="settings-row" for="secure-send-views">Views
-            <input id="secure-send-views" type="number" min="1" max="50" value="1">
+          <label class="settings-row stacked" for="secure-send-views">Number of opens
+            <input id="secure-send-views" type="number" min="1" max="10" value="1">
           </label>
+          <p class="settings-hint">Default 1. The link stops working after this many opens or 7 days.</p>
           <label class="settings-row" for="secure-send-days">Expires (days, max 7)
             <input id="secure-send-days" type="number" min="1" max="7" value="7" step="1">
           </label>
-          <p class="settings-hint">A view counts only when the recipient taps Open and the ciphertext downloads. Link previews do not use a view. Default is 1 view and up to 7 days.</p>
           <div class="settings-actions">
             <button type="button" id="btn-secure-send-create" class="btn primary">Create link</button>
           </div>
           <p id="secure-send-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
-          <label class="settings-row stacked" for="secure-send-link" hidden id="secure-send-link-wrap">Link (copy and send)
-            <input id="secure-send-link" type="text" readonly autocomplete="off">
-          </label>
+          <div id="secure-send-link-wrap" class="secure-send-link-row" hidden>
+            <label class="settings-row stacked" for="secure-send-link">Link (copy and send)
+              <input id="secure-send-link" type="text" readonly autocomplete="off">
+            </label>
+            <button type="button" id="btn-secure-send-copy" class="btn sm" title="Copy link" aria-label="Copy link">Copy</button>
+          </div>
           <h4 class="settings-subhead">Sent</h4>
           <div id="secure-send-sent-list" class="secure-send-sent-list"></div>
           <button type="button" id="btn-secure-send-refresh" class="btn ghost sm">Refresh sent list</button>

@@ -18,7 +18,13 @@ const manifest = JSON.parse(
 );
 
 assert.ok(appHtml.includes('id="secure-send-settings"'));
+assert.ok(appHtml.includes('Number of opens'));
+assert.ok(appHtml.includes('Default 1. The link stops working after this many opens or 7 days.'));
+assert.ok(appHtml.includes('max="10"'));
+assert.ok(appHtml.includes('btn-secure-send-copy'));
 assert.ok(receiveHtml.includes('receive-open'));
+assert.ok(receiveHtml.includes('Someone sent you an encrypted note'));
+assert.ok(receiveHtml.includes('This can only be opened once'));
 assert.ok(receiveHtml.includes('asset_script'));
 assert.ok(verifyHtml.includes('verify-secure-send'));
 assert.ok(manifest.assets['js/secure-send.js']);
@@ -29,9 +35,15 @@ for (const key of ['js/secure-send.js', 'js/secure-send-receive.js']) {
 }
 assert.ok(secureJs.includes('VAULT_KDF_V2'));
 assert.ok(secureJs.includes('derivePassphraseContentKey'));
+assert.ok(secureJs.includes('computeOpenVerifier'));
+assert.ok(secureJs.includes('dg-secure-send-verify-v1'));
 assert.ok(secureJs.includes('size: buf.length') || /size:\s*buf\.length/.test(secureJs));
+assert.ok(!secureJs.includes('Math.random'));
+assert.ok(!receiveJs.includes('Math.random'));
 assert.ok(appJs.includes('NotesSecureSend.sealPayload'));
 assert.ok(appJs.includes('assertNoFragmentLeak'));
+assert.ok(appJs.includes('open_verifier'));
+assert.ok(appJs.includes('Revoke link?'));
 assert.ok(!/\bdeleted\b/i.test(secureJs));
 assert.ok(!/\bdeleted\b/i.test(receiveJs));
 
@@ -40,8 +52,11 @@ const nobleArgon = fs.readFileSync(path.join(root, 'app/static/js/vendor/noble-a
 const cryptoJs = fs.readFileSync(path.join(root, 'app/static/js/crypto.js'), 'utf8');
 
 function loadCrypto() {
+  const nodeCrypto = require('crypto');
+  const webcrypto = nodeCrypto.webcrypto;
   const sandbox = {
     console,
+    Buffer,
     atob: (s) => Buffer.from(s, 'base64').toString('binary'),
     btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
     TextEncoder,
@@ -49,11 +64,10 @@ function loadCrypto() {
     Uint8Array,
     setTimeout,
     clearTimeout,
+    require,
     crypto: {
-      getRandomValues: (arr) => {
-        require('crypto').randomFillSync(arr);
-        return arr;
-      },
+      getRandomValues: (arr) => webcrypto.getRandomValues(arr),
+      subtle: webcrypto.subtle,
     },
     globalThis: null,
     window: null,
@@ -63,6 +77,19 @@ function loadCrypto() {
   sandbox.window = sandbox;
   vm.runInNewContext(nobleCrypto, sandbox, { filename: 'noble-crypto.js' });
   vm.runInNewContext(nobleArgon, sandbox, { filename: 'noble-argon2.js' });
+  // Full vault Argon2id (~64 MiB) is ~90s+ per derive in this harness; stub a
+  // deterministic stand-in so passphrase/fragment logic still exercises end-to-end.
+  const realArgon = sandbox.NobleArgon2;
+  sandbox.NobleArgon2 = {
+    ...realArgon,
+    argon2idAsync: async (pwd, saltBytes) => {
+      const h = nodeCrypto.createHash('sha256');
+      h.update(Buffer.from(pwd));
+      h.update(Buffer.from(saltBytes));
+      h.update(Buffer.from('dg-secure-send-test-kdf'));
+      return new Uint8Array(h.digest());
+    },
+  };
   vm.runInNewContext(cryptoJs, sandbox, { filename: 'crypto.js' });
   vm.runInNewContext(secureJs, sandbox, { filename: 'secure-send.js' });
   return sandbox.NotesSecureSend;
@@ -71,6 +98,8 @@ function loadCrypto() {
 async function main() {
   const SS = loadCrypto();
   assert.strictEqual(SS.MAX_FILE_BYTES, 50 * 1024 * 1024);
+  assert.strictEqual(SS.MAX_VIEWS_CAP, 10);
+  assert.strictEqual(SS.DEFAULT_MAX_VIEWS, 1);
 
   // File name/MIME/size encrypted inside ciphertext (spec §1).
   const fakeFile = {
@@ -131,11 +160,19 @@ async function main() {
   assert.ok(forgedFail, 'passphrase without correct fragment key must fail');
   const ok = await SS.openPayload(sealedP.ciphertext, sealedP.fragment, 'correct horse');
   assert.strictEqual(ok.body, 'with pass');
+  assert.ok(sealedP.openVerifier, 'passphrase seal must produce open_verifier');
+  const key = await SS.resolveContentKey(sealedP.fragment, 'correct horse');
+  const verifier = await SS.computeOpenVerifier(key);
+  assert.strictEqual(verifier, sealedP.openVerifier);
+  const wrongKey = await SS.resolveContentKey(sealedP.fragment, 'wrong horse');
+  const wrongVer = await SS.computeOpenVerifier(wrongKey);
+  assert.notStrictEqual(wrongVer, sealedP.openVerifier);
 
   SS.assertNoFragmentLeak('/api/secure-send', {
     ciphertext: sealedP.ciphertext,
     expires_in: 3600,
     max_views: 1,
+    open_verifier: sealedP.openVerifier,
   });
 
   console.log('test_round_d2_secure_send ok');

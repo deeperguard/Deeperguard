@@ -114,7 +114,9 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertEqual(listed.status_code, 200)
         item = listed.get_json()["items"][0]
         self.assertEqual(item["status"], "active")
-        self.assertIn("ciphertext_len", item)
+        self.assertEqual(item["status_label"], "Waiting")
+        self.assertIn("created_at", item)
+        self.assertNotIn("ciphertext_len", item)
         self.assertNotIn("has_file", item)
         self.assertNotIn("filename", json.dumps(item))
 
@@ -158,8 +160,12 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         html = page.get_data(as_text=True)
         self.assertIn("receive-open", html)
+        self.assertIn("Someone sent you an encrypted note", html)
+        self.assertIn("This can only be opened once", html)
         self.assertIn("stops working", html.lower())
         self.assertNotIn("deleted", html.lower())
+        self.assertNotIn("fragment", html.lower().split("receive-boot")[0])
+        self.assertNotIn("ciphertext", html.lower().split("receive-boot")[0])
         self.assertRegex(html, r"secure-send\.[0-9a-f]{16}\.js")
         self.assertRegex(html, r"secure-send-receive\.[0-9a-f]{16}\.js")
         self.assertIn("integrity=", html)
@@ -199,7 +205,11 @@ class D2SecureSendTests(unittest.TestCase):
                 "UPDATE secure_sends SET expires_at = ? WHERE id = ?",
                 (time.time() - 10, send_id),
             )
-        self.assertEqual(self.client.get(f"/receive/{send_id}").status_code, 404)
+        stopped = self.client.get(f"/receive/{send_id}")
+        self.assertEqual(stopped.status_code, 404)
+        stopped_html = stopped.get_data(as_text=True)
+        self.assertIn("Ask the sender for a new one", stopped_html)
+        self.assertIn("Someone sent you an encrypted note", stopped_html)
 
     def test_ciphertext_too_large(self):
         import secure_send as ss
@@ -260,6 +270,76 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertNotIn("send_plain_email", chunk)
         self.assertNotIn("send_contact_email", chunk)
         self.assertNotIn("mailer", chunk)
+
+    def test_max_views_capped_at_ten(self):
+        import secure_send as ss
+        import db as notes_db
+
+        self.assertEqual(ss.MAX_VIEWS_CAP, 10)
+        self.assertEqual(ss.DEFAULT_MAX_VIEWS, 1)
+        self.assertEqual(ss.clamp_max_views(50), 10)
+        self.assertEqual(ss.clamp_max_views(None), 1)
+        created = self._create(max_views=50)
+        self.assertEqual(created.status_code, 200)
+        row = notes_db.get_secure_send(created.get_json()["id"])
+        self.assertEqual(int(row["max_views"]), 10)
+
+    def test_passphrase_verifier_required_before_view_burn(self):
+        import db as notes_db
+        import secure_send as ss
+
+        created = self._create(max_views=1, open_verifier="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        self.assertEqual(created.status_code, 200)
+        send_id = created.get_json()["id"]
+        self.assertTrue(ss.blob_path(send_id).is_file())
+
+        # Wrong verifier must not burn the open.
+        wrong = self.client.post(
+            f"/api/secure-send/{send_id}/open",
+            json={"open_verifier": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"},
+            headers={"Sec-Fetch-Site": "same-origin"},
+        )
+        self.assertEqual(wrong.status_code, 401, wrong.get_json())
+        self.assertEqual(wrong.get_json().get("error"), "wrong_passphrase")
+        self.assertEqual(wrong.get_json().get("attempts_left"), 4)
+        self.assertTrue(ss.blob_path(send_id).is_file())
+        row = notes_db.get_secure_send(send_id)
+        self.assertEqual(int(row["views_used"]), 0)
+
+        # Correct verifier burns the open and returns ciphertext.
+        ok = self.client.post(
+            f"/api/secure-send/{send_id}/open",
+            json={"open_verifier": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
+            headers={"Sec-Fetch-Site": "same-origin"},
+        )
+        self.assertEqual(ok.status_code, 200, ok.get_json())
+        self.assertIn("ciphertext", ok.get_json())
+        self.assertFalse(ss.blob_path(send_id).is_file())
+
+    def test_passphrase_verifier_lockout_stops_link(self):
+        import secure_send as ss
+
+        created = self._create(max_views=1, open_verifier="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        send_id = created.get_json()["id"]
+        for i in range(5):
+            res = self.client.post(
+                f"/api/secure-send/{send_id}/open",
+                json={"open_verifier": "wrongwrongwrongwrongwrongwrongwrongwrongwo"},
+                headers={"Sec-Fetch-Site": "same-origin"},
+            )
+            if i < 4:
+                self.assertEqual(res.status_code, 401)
+            else:
+                self.assertEqual(res.status_code, 404)
+        self.assertFalse(ss.blob_path(send_id).is_file())
+        stopped = self.client.get(f"/receive/{send_id}")
+        self.assertEqual(stopped.status_code, 404)
+        self.assertIn("Ask the sender for a new one", stopped.get_data(as_text=True))
+
+    def test_no_math_random_in_secure_send_js(self):
+        for name in ("secure-send.js", "secure-send-receive.js"):
+            src = (ROOT / "app" / "static" / "js" / name).read_text(encoding="utf-8")
+            self.assertNotIn("Math.random", src, name)
 
 
 if __name__ == "__main__":
