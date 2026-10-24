@@ -194,11 +194,7 @@ def _session_cap_payload(user_id: int, *, limit: int, plan: str) -> dict:
     rows = list_user_sessions(int(user_id), active_since=time.time() - SESSION_SECONDS)
     sessions = [session_cap_public_row(row) for row in rows]
     return {
-        "error": (
-            f"Your {str(plan or 'free').capitalize()} plan allows "
-            f"{int(limit)} signed-in device{'s' if int(limit) != 1 else ''}. "
-            "Revoke one below, then sign in again."
-        ),
+        "error": session_cap_message(limit=int(limit), plan=plan, totp_required=False),
         "code": "session_cap",
         "limit": int(limit),
         "plan": str(plan or ""),
@@ -208,19 +204,13 @@ def _session_cap_payload(user_id: int, *, limit: int, plan: str) -> dict:
 
 def session_cap_message(*, limit: int, plan: str, totp_required: bool = False) -> str:
     """Plain session-cap copy (no device list). Used when TOTP is still required."""
-    devices = (
-        f"{int(limit)} signed-in device{'s' if int(limit) != 1 else ''}"
-    )
+    n = int(limit)
     plan_label = str(plan or "free").capitalize()
+    devices = f"{n} signed-in device{'s' if n != 1 else ''}"
+    base = f"Your {plan_label} plan allows {devices}, and all {n} are in use. "
     if totp_required:
-        return (
-            f"Your {plan_label} plan allows {devices}. "
-            "Enter your 2FA code, then revoke a device to continue."
-        )
-    return (
-        f"Your {plan_label} plan allows {devices}. "
-        "Revoke one below, then sign in again."
-    )
+        return base + "Enter your 2FA code, then sign out a device to continue."
+    return base + "Sign out one below, then sign in again, or upgrade."
 
 
 def _assert_session_slot_available(user_id: int) -> None:

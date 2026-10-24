@@ -145,6 +145,15 @@ function mapPasswordSignInError(err) {
   return err;
 }
 
+function stashSessionCapTotpHint(err) {
+  try {
+    sessionStorage.setItem('notes_session_cap_totp', JSON.stringify({
+      message: err?.message || err?.error || '',
+      pending: true,
+    }));
+  } catch (stashErr) { /* ignore */ }
+}
+
 function showSecureSignInReload(errorId) {
   const el = document.getElementById(errorId || 'login-error');
   if (!el) return;
@@ -229,12 +238,18 @@ if (loginForm) {
     const panel = document.getElementById('session-cap-panel');
     const list = document.getElementById('session-cap-list');
     const status = document.getElementById('session-cap-status');
+    const capMessage = err?.message || err?.error || 'Device limit reached';
     if (!panel || !list) {
-      showError('login-error', err?.message || 'Device limit reached');
+      showError('login-error', capMessage);
       return;
     }
     sessionCapRevokeToken = String(err?.revokeToken || '');
-    showError('login-error', err?.message || 'Device limit reached');
+    showError('login-error', capMessage);
+    if (status) {
+      status.hidden = true;
+      status.textContent = '';
+      status.classList.remove('error');
+    }
     const sessions = Array.isArray(err?.sessions) ? err.sessions : [];
     list.innerHTML = '';
     if (!sessions.length) {
@@ -258,17 +273,23 @@ if (loginForm) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'btn subtle';
-        btn.textContent = 'Revoke';
+        btn.textContent = 'Sign out';
         btn.dataset.sessionId = String(row.id);
         btn.addEventListener('click', async () => {
           if (!sessionCapRevokeToken) {
             showError('login-error', 'Sign in again to manage devices');
             return;
           }
+          if (!window.confirm(
+            'Sign out this device? Its session will end there. Your notes are not deleted.',
+          )) {
+            return;
+          }
           btn.disabled = true;
           if (status) {
             status.hidden = false;
-            status.textContent = 'Revoking…';
+            status.classList.remove('error');
+            status.textContent = 'Signing out…';
           }
           try {
             const data = await postJson('/api/auth/session-cap/revoke', {
@@ -276,12 +297,13 @@ if (loginForm) {
               revoke_token: sessionCapRevokeToken,
             });
             if (status) {
+              status.classList.remove('error');
               status.textContent = data.can_sign_in
-                ? 'Device revoked. Sign in again.'
-                : 'Device revoked. Revoke another if you still hit the limit.';
+                ? 'Device signed out. Sign in again.'
+                : 'Device signed out. Sign out another if you still hit the limit.';
             }
             renderSessionCapPanel({
-              message: document.getElementById('login-error')?.textContent || err.message,
+              message: document.getElementById('login-error')?.textContent || capMessage,
               sessions: data.sessions || [],
               revokeToken: sessionCapRevokeToken,
             });
@@ -289,7 +311,8 @@ if (loginForm) {
             btn.disabled = false;
             if (status) {
               status.hidden = false;
-              status.textContent = revokeErr?.message || 'Could not revoke device';
+              status.classList.add('error');
+              status.textContent = "Couldn't sign out that device. Sign in again to see your devices.";
             }
           }
         });
@@ -353,6 +376,7 @@ if (loginForm) {
           try {
             localStorage.setItem('notes_email', email);
           } catch (stashErr) { /* ignore */ }
+          stashSessionCapTotpHint(err);
           location.replace(afterAuthUrl('/totp'));
           return;
         }
@@ -680,6 +704,7 @@ if (webauthnLoginBtn) {
           try {
             localStorage.setItem('notes_email', email);
           } catch (stashErr) { /* ignore */ }
+          stashSessionCapTotpHint(err);
           location.replace(afterAuthUrl('/totp'));
           return;
         }

@@ -229,7 +229,7 @@
             <li class="pro"><strong>Public beta:</strong> Pro features included at no charge, including 5&nbsp;GB storage.</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Ciphertext-only sync (except Ask AI), OCR on the device, and a browser app you can use offline. After beta, Basic is encrypted sync, attachments, and import on 100&nbsp;MB; Pro adds passkeys, account 2FA, daily email and pCloud backups, document OCR, and the vault authenticator on 5&nbsp;GB.
+            <strong>Difference:</strong> Ciphertext-only sync (except Ask AI), OCR on the device, and a browser app you can use offline. After beta, Basic is encrypted sync, attachments, import, and on-device OCR on 100&nbsp;MB; Pro adds passkeys, account 2FA, daily email and pCloud backups, and the vault authenticator on 5&nbsp;GB.
           </div>
         </article>
 
@@ -318,7 +318,7 @@
         <article class="mk-card">
           <div class="mk-icon" aria-hidden="true">🔐</div>
           <h3>Local Key Derivation</h3>
-          <p>Your password is processed with Argon2id directly on your device. The server receives an SRP verification proof and only stores unreadable encrypted chunks.</p>
+          <p>Your password is processed with Argon2id directly on your device. The server receives an SRP verification proof and only stores unreadable encrypted chunks, except text you choose to send to Ask AI with Ollama Cloud, which passes through our server to ollama.com without being stored.</p>
         </article>
 
         <article class="mk-card">
@@ -382,7 +382,7 @@
         <span class="mk-badge ok">Public Beta Schedule</span>
         <h2>Transparent pricing schedule</h2>
         <p>
-          <strong>Free during public beta.</strong> No payment details are collected. Plans: Free ({{ free.storage_quota_mb }}&nbsp;MB), Basic (€{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo, {{ basic.storage_quota_mb }}&nbsp;MB), and Pro (€{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo, {{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB) with backups, passkeys, and the vault authenticator. Billing starts only after advance notice.
+          Every new account gets full Pro free during the public beta. No payment details are collected. After beta: Free ({{ free.storage_quota_mb }}&nbsp;MB, always €0), Basic €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr, Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr.
         </p>
         <div class="mk-trust-strip" role="note">
           <span>Server in Vienna, Austria (EU)</span>
@@ -391,11 +391,6 @@
           <span><a href="/verify">Check it yourself</a></span>
           <span><a href="/verify#signed-releases">Signed releases</a></span>
         </div>
-      </div>
-
-      <div class="mk-pricing-beta-highlight">
-        <h3>Free during public beta</h3>
-        <p>Existing accounts keep their current plan. The cards below are the Free / Basic / Pro tiers — no billing yet.</p>
       </div>
 
       <div class="mk-pricing">
@@ -409,7 +404,7 @@
             <div class="mk-price-beta">Free</div>
             <div class="mk-price-post-beta">Always free</div>
           </div>
-          <p><strong>{{ free.storage_quota_mb }}&nbsp;MB</strong> encrypted storage. On-device OCR, sync, attachments, and import/export.</p>
+          <p><strong>{{ free.storage_quota_mb }}&nbsp;MB</strong> encrypted storage. Up to <strong>{{ free.active_sessions }}</strong> signed-in devices. On-device OCR, sync, attachments, and import/export.</p>
           <ul>
             {% for feat in free_features %}
             <li>{{ feat }}</li>
@@ -429,13 +424,13 @@
           </div>
           <div class="mk-price-block">
             <div class="mk-price-beta">
-              Free during beta
+              €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo after beta
             </div>
             <div class="mk-price-post-beta">
-              After beta: <strong>€{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo</strong> or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr
+              or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr
             </div>
           </div>
-          <p><strong>{{ basic.storage_quota_mb }}&nbsp;MB</strong> encrypted storage.</p>
+          <p><strong>{{ basic.storage_quota_mb }}&nbsp;MB</strong> encrypted storage. Up to <strong>{{ basic.active_sessions }}</strong> signed-in devices.</p>
           <ul>
             {% for feat in basic_features %}
             <li>{{ feat }}</li>
@@ -461,7 +456,7 @@
               After beta: <strong>€{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo</strong> or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr
             </div>
           </div>
-          <p><strong>{{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB</strong> encrypted storage, plus backups, passkeys, and the vault authenticator.</p>
+          <p><strong>{{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB</strong> encrypted storage, unlimited signed-in devices, plus backups, passkeys, and the vault authenticator.</p>
           <ul>
             {% for feat in pro_features %}
             <li>{{ feat }}</li>
@@ -489,6 +484,12 @@
                 <td>{{ free.storage_quota_mb }} MB</td>
                 <td>{{ basic.storage_quota_mb }} MB</td>
                 <td><strong>{{ (pro.storage_quota_mb / 1024)|int }} GB</strong></td>
+              </tr>
+              <tr>
+                <td>Signed-in devices</td>
+                <td>{{ free.active_sessions }}</td>
+                <td>{{ basic.active_sessions }}</td>
+                <td><strong>Unlimited</strong></td>
               </tr>
               {% for key, feat in features.items() %}
               <tr>
@@ -528,7 +529,11 @@
       </details>
       <details>
         <summary>What is the pricing schedule during and after the beta?</summary>
-        <p>Free during public beta — no payment info is collected. Free includes encrypted sync, attachments, import/export, and on-device OCR ({{ free.storage_quota_mb }}&nbsp;MB). Basic adds more storage; Pro adds backups, passkeys, account 2FA, reminders, and the vault authenticator. Existing accounts keep their current plan. When billing launches, Basic will be €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo and Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo, with advance notice.</p>
+        <p>Every new account gets full Pro free during the public beta — no payment info is collected. After beta: Free ({{ free.storage_quota_mb }}&nbsp;MB, always €0, {{ free.active_sessions }} signed-in devices), Basic €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr ({{ basic.storage_quota_mb }}&nbsp;MB, {{ basic.active_sessions }} devices), Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr ({{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB, unlimited devices) with backups, passkeys, account 2FA, reminders, and the vault authenticator. Existing accounts keep their current plan. Billing starts only after advance notice.</p>
+      </details>
+      <details>
+        <summary>How many devices can I stay signed in on?</summary>
+        <p>Free allows {{ free.active_sessions }} signed-in devices at once, Basic allows {{ basic.active_sessions }}, and Pro is unlimited. If you hit the limit, sign out one device from the sign-in screen, then sign in again. Signing out ends that device’s session; your notes are not deleted.</p>
       </details>
       <details>
         <summary>What happens if I lose my password?</summary>

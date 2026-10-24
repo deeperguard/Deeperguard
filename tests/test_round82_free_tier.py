@@ -555,13 +555,49 @@ class Round82FreeTierAppTests(unittest.TestCase):
         app_html = (ROOT / "app/templates/app.html").read_text(encoding="utf-8")
         admin_js = (ROOT / "app/static/js/admin.js").read_text(encoding="utf-8")
         app_js = (ROOT / "app/static/js/app.js").read_text(encoding="utf-8")
+        auth_pages = (ROOT / "app/static/js/auth-pages.js").read_text(encoding="utf-8")
+        login_html = (ROOT / "app/templates/login.html").read_text(encoding="utf-8")
+        css = (ROOT / "app/static/css/marketing.css").read_text(encoding="utf-8")
         self.assertIn("{{ free.label }}", marketing)
-        self.assertIn("Free during public beta", marketing)
+        self.assertIn("Every new account gets full Pro free during the public beta", marketing)
+        self.assertIn("/mo after beta", marketing)
+        self.assertIn("Signed-in devices", marketing)
+        self.assertIn("How many devices can I stay signed in on?", marketing)
+        self.assertIn("Ask AI with Ollama Cloud", marketing)
+        self.assertNotIn("document OCR, and the vault authenticator", marketing)
+        self.assertIn('content: "Free"', css)
+        self.assertIn('content: "Basic"', css)
+        self.assertIn('content: "Pro (free in beta)"', css)
+        self.assertIn(".mk-distinction-grid > *", css)
         self.assertIn("Compare Free, Basic &amp; Pro", app_html)
         self.assertIn('value="free"', admin_js)
         self.assertIn("plan-badge-free", app_js)
-        self.assertIn("session_cap", (ROOT / "app/static/js/auth-pages.js").read_text(encoding="utf-8"))
-        self.assertIn("session-cap-panel", (ROOT / "app/templates/login.html").read_text(encoding="utf-8"))
+        self.assertIn("Free forever", app_js)
+        self.assertIn("session_cap", auth_pages)
+        self.assertIn("Sign out", auth_pages)
+        self.assertIn("Couldn't sign out that device", auth_pages)
+        self.assertIn("notes_session_cap_totp", auth_pages)
+        self.assertIn("Signing out a device ends its session there", login_html)
+        freelancers = (ROOT / "app/templates/for-freelancers.html").read_text(encoding="utf-8")
+        compare_sn = (ROOT / "app/templates/compare-standard-notes.html").read_text(encoding="utf-8")
+        self.assertNotIn("with OCR, backups, passkeys", freelancers)
+        self.assertIn("WASM OCR in the browser", compare_sn)
+        self.assertNotIn("WASM OCR in the browser <span class=\"mk-pro-tag\">Pro</span>", compare_sn)
+
+    def test_session_cap_message_and_free_forever_billing_note(self):
+        import auth as auth_mod
+        import plans
+
+        msg = auth_mod.session_cap_message(limit=3, plan="free", totp_required=False)
+        self.assertIn("Your Free plan allows 3 signed-in devices, and all 3 are in use", msg)
+        self.assertIn("Sign out one below", msg)
+        self.assertIn("or upgrade", msg)
+        totp_msg = auth_mod.session_cap_message(limit=3, plan="free", totp_required=True)
+        self.assertIn("Enter your 2FA code", totp_msg)
+        free_note = plans.plan_pricing_payload("free")["billing_note"]
+        pro_note = plans.plan_pricing_payload("pro")["billing_note"]
+        self.assertEqual(free_note, "Free forever")
+        self.assertEqual(pro_note, "Free during public beta")
 
 
 if __name__ == "__main__":

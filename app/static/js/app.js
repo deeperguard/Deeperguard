@@ -742,7 +742,8 @@
         ? `€${pricing.price_eur_month.toFixed(2)}/month`
         : 'Included';
     } else {
-      price.textContent = pricing.billing_note || 'Free during public beta';
+      price.textContent = pricing.billing_note
+        || (plan === 'free' ? 'Free forever' : 'Free during public beta');
     }
     if (tagline) tagline.textContent = account.plan_tagline || '';
     if (storage) {

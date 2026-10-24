@@ -3,6 +3,18 @@
   if (!form) return;
   const csrf = form.dataset.csrf || '';
   const err = document.getElementById('totp-error');
+  const capHint = document.getElementById('totp-session-cap-hint');
+
+  try {
+    const rawCap = sessionStorage.getItem('notes_session_cap_totp');
+    if (rawCap && capHint) {
+      const saved = JSON.parse(rawCap);
+      if (saved && typeof saved === 'object') {
+        capHint.textContent = 'Enter the 6-digit code from your authenticator app first, then you can sign out a device.';
+        capHint.hidden = false;
+      }
+    }
+  } catch (e) { /* ignore */ }
 
   async function bootCredentials() {
     const email = String((function () {
@@ -86,6 +98,7 @@
     // After 2FA at the session soft-cap: hand the device list to /login (no IP leak before TOTP).
     if (data.code === 'session_cap') {
       try {
+        sessionStorage.removeItem('notes_session_cap_totp');
         sessionStorage.setItem('notes_session_cap', JSON.stringify({
           message: data.error || 'Device limit reached',
           sessions: Array.isArray(data.sessions) ? data.sessions : [],

@@ -584,6 +584,14 @@ textarea { resize: vertical; min-height: 240px; line-height: 1.55; }
   gap: 2px;
   min-width: 0;
 }
+.session-cap-list .btn {
+  min-height: 44px;
+  min-width: 88px;
+  flex-shrink: 0;
+}
+.session-cap-status.error {
+  color: var(--danger);
+}
 .center { text-align: center; }
 .stack { display: grid; gap: 12px; }
 .checkbox { display: flex; align-items: center; gap: 8px; }

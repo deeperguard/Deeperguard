@@ -178,7 +178,8 @@ def plan_pricing_payload(plan: str | None) -> dict[str, Any]:
         "suggested_price_eur_month": meta["suggested_price_eur_month"],
         "suggested_price_eur_year": meta["suggested_price_eur_year"],
         "billing_active": False,
-        "billing_note": "Free during public beta",
+        # Free tier stays €0 after beta; Basic/Pro show the public-beta note.
+        "billing_note": "Free forever" if current == PLAN_FREE else "Free during public beta",
         "active_sessions": meta.get("active_sessions"),
         "secure_send_per_day": meta.get("secure_send_per_day"),
     }
