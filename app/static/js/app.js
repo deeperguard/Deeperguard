@@ -19505,6 +19505,7 @@
       getAttachments: (id) => (id ? NotesStore.listAttachments(id) : []),
       getSettings: () => prefs.aiChat,
       getCsrf: () => resolveDeviceReportCsrf(),
+      confirm: (message, options) => confirmAction(message, options),
       openSettings: () => {
         openSettings();
         initSettings().catch(() => {});
