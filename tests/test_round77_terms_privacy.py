@@ -48,6 +48,8 @@ class Round77TermsPrivacyTests(unittest.TestCase):
         self.assertIn("Germany (EU)", text)
         self.assertIn("notes@deeperguard.com", text)
         self.assertIn("You use Deeperguard at your own risk.", text)
+        self.assertIn("as is</strong> during the public beta", text)
+        self.assertIn("keeping your own backups using Export", text)
         self.assertIn(
             "Nothing in these terms limits liability that cannot be limited under Dutch law",
             text,
@@ -125,6 +127,8 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             self.assertIn("notes@deeperguard.com", phtml)
             self.assertIn("notes@deeperguard.com", thtml)
             self.assertIn("You use Deeperguard at your own risk.", thtml)
+            self.assertIn("during the public beta", thtml)
+            self.assertIn("using Export", thtml)
             self.assertIn("[ADDRESS]", phtml)
             self.assertIn("[KVK NUMBER if any]", thtml)
             self.assertIn("[RETENTION PERIOD]", phtml)
