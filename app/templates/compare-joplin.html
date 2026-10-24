@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Deeperguard vs Joplin — notes comparison">
-  <meta property="og:description" content="Open-source notebooks: Joplin’s plugins and storage vs Deeperguard’s hosted zero-knowledge vault and browser OCR.">
+  <meta property="og:description" content="Open-source notebooks: Joplin’s plugins and storage vs Deeperguard’s hosted zero-knowledge vault, ciphertext-only sync (except Ask AI), and browser OCR.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="{{ canonical_url }}">
   <meta property="og:image" content="{{ og_image }}">
@@ -52,7 +52,7 @@
     <section class="mk-hero mk-hero--compact">
       <div>
         <h1>Deeperguard vs Joplin</h1>
-        <p class="mk-lede">Joplin is a flexible open-source notebook with <a href="https://joplinapp.org/plans" target="_blank" rel="noopener noreferrer">optional cloud sync</a> and rich plugins. Deeperguard is a hosted zero-knowledge vault with OCR in the browser. Joplin’s <a href="https://joplinapp.org/help/apps/ocr" target="_blank" rel="noopener noreferrer">desktop OCR</a> runs offline; encryption is off until you enable it.</p>
+        <p class="mk-lede">Joplin is a flexible open-source notebook with <a href="https://joplinapp.org/plans" target="_blank" rel="noopener noreferrer">optional cloud sync</a> and rich plugins. Deeperguard is a hosted zero-knowledge vault with OCR in the browser. Joplin’s <a href="https://joplinapp.org/help/apps/ocr" target="_blank" rel="noopener noreferrer">desktop OCR</a> runs offline; <a href="https://joplinapp.org/help/apps/sync/e2ee" target="_blank" rel="noopener noreferrer">encryption is off until you enable it</a>.</p>
         <div class="mk-hero-actions">
           <a class="mk-btn mk-btn-lg" href="{{ register_url }}">Create free vault</a>
           <a class="mk-btn secondary mk-btn-lg" href="/verify">check it yourself</a>
@@ -66,7 +66,7 @@
         <h2>Side by side</h2>
       </div>
       <div class="mk-card mk-compare-wrap">
-        <table class="mk-compare mk-compare-stack mk-compare-sn" aria-label="Deeperguard vs Joplin">
+        <table class="mk-compare mk-compare-stack mk-compare-joplin" aria-label="Deeperguard vs Joplin">
           <thead>
             <tr>
               <th scope="col" class="mk-compare-feature-col">Topic</th>
@@ -78,11 +78,11 @@
             <tr>
               <td>Encryption default</td>
               <td class="mk-col-highlight"><span class="yes">On from the first note</span></td>
-              <td><span class="partial">Optional E2EE</span> — must be turned on</td>
+              <td><span class="partial">Optional E2EE</span> — <a href="https://joplinapp.org/help/apps/sync/e2ee" target="_blank" rel="noopener noreferrer">off until you enable it</a></td>
             </tr>
             <tr>
               <td>Sync</td>
-              <td class="mk-col-highlight"><span class="yes">Hosted ciphertext-only</span></td>
+              <td class="mk-col-highlight"><span class="yes">Hosted ciphertext-only</span> (except Ask AI)</td>
               <td><span class="yes">Your choice</span> — Dropbox, WebDAV, Joplin Cloud, etc.</td>
             </tr>
             <tr>
@@ -103,7 +103,7 @@
             <tr>
               <td>Storage per euro</td>
               <td class="mk-col-highlight"><span class="partial">5&nbsp;GB on Pro</span> — see <a href="/#pricing">pricing</a></td>
-              <td><span class="yes">Bring your own storage</span> — often cheapest at scale</td>
+              <td><span class="yes">Bring your own storage</span> — you pay your sync provider</td>
             </tr>
           </tbody>
         </table>
@@ -117,7 +117,7 @@
           <ul class="mk-distinction-points">
             <li class="pro"><strong>Plugins:</strong> Extend editors, sync, and workflows.</li>
             <li class="pro"><strong>Sync choice:</strong> Use your own cloud or self-host.</li>
-            <li class="pro"><strong>Storage per euro:</strong> Pay your sync provider, not a notes host.</li>
+            <li class="pro"><strong>Storage:</strong> Bring your own storage — you pay your sync provider.</li>
           </ul>
         </article>
         <article class="mk-card">

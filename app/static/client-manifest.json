@@ -8,10 +8,10 @@
       "url": "/static/css/app.620dae81201b1144.css"
     },
     "css/marketing.css": {
-      "bytes": 42863,
-      "sha256": "b475d4fe647096c0b4d9962606184f7cbeb4565a34e97441e9835c8fa43c2c0a",
-      "sri": "sha384-mCBDIkH+HnEeF40eWC4SIMcDDyBVdsl29U2v0axt06BibghMstZ1/9zo4HtR9oQf",
-      "url": "/static/css/marketing.b475d4fe647096c0.css"
+      "bytes": 43524,
+      "sha256": "b085c65cbe71f39c0ac29f1503cb08223ff43f1fa9a3f7e2b37bc2ffe585734d",
+      "sri": "sha384-A/Ia1Id2ZI4fpvqwDHpHT6nahN2wWi4HXXSRfnTouoF9Husi6ez8fPoL6ISDkt7p",
+      "url": "/static/css/marketing.b085c65cbe71f39c.css"
     },
     "js/admin.js": {
       "bytes": 8038,
@@ -321,6 +321,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "b0a0315243a56a1add81d9a4044e74cedd70f2b5190100dbe89ba6c201bf689d",
+  "manifest_sha256": "7fa25679c8012bcd93aac6c7f834cb0a7403f28efe1b97d32ed5b7726ef3c536",
   "version": 1
 }

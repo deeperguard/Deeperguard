@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Deeperguard for freelancers — encrypted receipts and contracts">
-  <meta property="og:description" content="Your receipts and invoices, searchable and encrypted. EU-hosted zero-knowledge notes for freelancers and Dutch ZZP'ers.">
+  <meta property="og:description" content="Your receipts and invoices, searchable and encrypted. Ciphertext-only sync (except Ask AI). EU-hosted zero-knowledge notes for freelancers and Dutch ZZP'ers.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="{{ canonical_url }}">
   <meta property="og:image" content="{{ og_image }}">
@@ -77,8 +77,8 @@
           <p>Store drafts and signed PDFs in one vault. Search inside scans without uploading plaintext to a cloud notebook.</p>
         </article>
         <article class="mk-card">
-          <h3>2FA recovery codes</h3>
-          <p>Keep banking and tax-portal authenticator codes in the vault authenticator (Pro) — same encryption as your notes.</p>
+          <h3>2FA authenticator codes</h3>
+          <p>Keep banking and tax-portal TOTP codes in the vault authenticator — same encryption as your notes.</p>
         </article>
         <article class="mk-card">
           <h3>EU hosting</h3>
@@ -92,9 +92,11 @@
         <span class="mk-badge ok">Public beta</span>
         <h2>Pricing</h2>
         <p><strong>Free during beta: Pro, 5&nbsp;GB.</strong> After beta, Basic is €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo (€{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr, 100&nbsp;MB). Pro is €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo (€{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr, 5&nbsp;GB) with OCR, backups, passkeys, and vault authenticator.</p>
-        <p class="mk-trust-strip">
-          Server in Vienna, Austria (EU) · <a href="/terms#operator-identity">Imprint</a> · <a href="/verify">Check the encryption yourself</a>
-        </p>
+        <div class="mk-trust-strip" role="note">
+          <span>Server in Vienna, Austria (EU)</span>
+          <span><a href="/terms#operator-identity">Imprint</a></span>
+          <span><a href="/verify">Check the encryption yourself</a></span>
+        </div>
       </div>
       <div class="mk-pricing">
         <article class="mk-plan featured">

@@ -149,7 +149,7 @@
         <span class="mk-badge">Encrypted notes app</span>
         <h2>Zero-knowledge notes PWA for work you cannot leak</h2>
         <p>
-          Deeperguard is a <strong>zero-knowledge notes PWA</strong> for <strong>encrypted notes</strong>: ciphertext-only sync and on-device OCR.
+          Deeperguard is a <strong>zero-knowledge notes PWA</strong> for <strong>encrypted notes</strong>: ciphertext-only sync (except Ask AI) and on-device OCR.
         </p>
       </div>
     </section>
@@ -160,12 +160,12 @@
         <p>Every account includes Pro during the beta. No payment details are collected.</p>
       </article>
       <article>
-        <strong>Ciphertext only</strong>
-        <p>The server stores encrypted notes. It does not hold a copy it can read.</p>
+        <strong>Ciphertext only (except Ask AI)</strong>
+        <p>The server stores encrypted notes. It does not hold a readable copy, except note text you send to Ask AI.</p>
       </article>
       <article>
         <strong>Encrypted before sync</strong>
-        <p>AES-GCM 256 runs on your device. Sync moves ciphertext, not the note.</p>
+        <p>AES-GCM 256 runs on your device. Sync moves ciphertext (except Ask AI), not the note.</p>
       </article>
       <article>
         <strong>Open source</strong>
@@ -221,15 +221,15 @@
           <h3>Deeperguard</h3>
           <p class="mk-distinction-subtitle">Browser notes with client-side encryption, on-device OCR, and offline use.</p>
           <ul class="mk-distinction-points">
-            <li class="pro"><strong>True zero-knowledge:</strong> Server stores only encrypted ciphertext blobs.</li>
+            <li class="pro"><strong>True zero-knowledge:</strong> Server stores only ciphertext, except note text you send to Ask AI, which passes through our server to Ollama Cloud and is not stored.</li>
             <li class="pro"><strong>Client-side OCR:</strong> Search scanned receipts and PDFs without cloud AI parsing.</li>
             <li class="pro"><strong>No app store lock-in:</strong> Installable PWA with full offline vault support.</li>
-            <li class="pro"><strong>2FA codes in your vault, plus passkey and TOTP sign-in:</strong> Store authenticator codes in the encrypted vault; sign in with passkeys or account TOTP on Pro.</li>
+            <li class="pro"><strong>2FA codes in your vault:</strong> Keep 2FA codes in your encrypted vault. On Pro, sign in with a passkey or a code from your authenticator app.</li>
             <li class="pro"><strong>Standard Notes Import:</strong> Easy migration with 1-click vault JSON import.</li>
             <li class="pro"><strong>Public beta:</strong> Pro features included at no charge, including 5&nbsp;GB storage.</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Ciphertext-only sync, OCR on the device, and a browser app you can use offline. After beta, Basic is encrypted sync, attachments, and import on 100&nbsp;MB; Pro adds passkeys, account 2FA, daily email and pCloud backups, document OCR, and the vault authenticator on 5&nbsp;GB.
+            <strong>Difference:</strong> Ciphertext-only sync (except Ask AI), OCR on the device, and a browser app you can use offline. After beta, Basic is encrypted sync, attachments, and import on 100&nbsp;MB; Pro adds passkeys, account 2FA, daily email and pCloud backups, document OCR, and the vault authenticator on 5&nbsp;GB.
           </div>
         </article>
 
@@ -241,10 +241,9 @@
           <ul class="mk-distinction-points">
             <li class="pro"><strong>Zero-knowledge:</strong> Mature end-to-end encrypted architecture.</li>
             <li class="pro"><strong>Free plan includes 2FA and daily encrypted email backups.</strong></li>
-            <li class="pro"><strong>Owned by Proton since 2024; independently audited.</strong></li>
+            <li class="pro"><strong>Owned by Proton since 2024.</strong></li>
             <li class="pro"><strong>Extensible:</strong> Plentiful editors, themes, and extensions on paid tiers.</li>
-            <li class="con"><strong>Paid advanced features:</strong> Published plans are about €4–€10/mo (~$90–$120/yr for top tiers).</li>
-            <li class="con"><strong>No on-device OCR:</strong> Searching text inside a scanned page is not part of the product.</li>
+            <li class="con"><strong>Paid plans:</strong> About $90/year (Productivity) or $120/year (Professional) — see <a href="https://standardnotes.com/plans" target="_blank" rel="noopener noreferrer">Standard Notes plans</a>.</li>
             <li class="con"><strong>Apps:</strong> Desktop and mobile clients are the usual way to use it. A web app also exists.</li>
           </ul>
           <div class="mk-distinction-verdict">
@@ -261,7 +260,7 @@
           <ul class="mk-distinction-points">
             <li class="pro"><strong>Rich features:</strong> Web clipper, audio recording, and extensive templates.</li>
             <li class="con"><strong>Not zero-knowledge:</strong> The service can access note plaintext on its servers.</li>
-            <li class="con"><strong>Cloud OCR:</strong> Text from scans is processed on Evernote’s servers.</li>
+            <li class="con"><strong>Cloud features:</strong> Scans and AI features may run on Evernote&rsquo;s servers — see <a href="https://evernote.com/compare-plans" target="_blank" rel="noopener noreferrer">Evernote plans</a>.</li>
             <li class="con"><strong>Paid plans:</strong> Paid plans; the free plan is limited (<a href="https://evernote.com/compare-plans" target="_blank" rel="noopener noreferrer">Evernote plans</a>).</li>
           </ul>
           <div class="mk-distinction-verdict">
@@ -297,7 +296,7 @@
             <li class="pro"><strong>Optional E2EE:</strong> End-to-end encryption is available when enabled; sync provider may still see metadata depending on setup.</li>
             <li class="con"><strong>Not ciphertext-only by default:</strong> Without E2EE, sync targets can hold readable note bodies.</li>
             <li class="con"><strong>App-centric:</strong> Desktop and mobile apps are the usual workflow; web clipper is separate.</li>
-            <li class="con"><strong>OCR:</strong> Built in and offline, but only in the desktop app. Encryption is off until you turn it on (<a href="https://joplinapp.org/help/apps/ocr" target="_blank" rel="noopener noreferrer">Joplin OCR</a>).</li>
+            <li class="con"><strong>OCR:</strong> Built in and offline, but only in the desktop app. <a href="https://joplinapp.org/help/apps/sync/e2ee" target="_blank" rel="noopener noreferrer">Encryption is off until you turn it on</a> (<a href="https://joplinapp.org/help/apps/ocr" target="_blank" rel="noopener noreferrer">Joplin OCR</a>).</li>
           </ul>
           <div class="mk-distinction-verdict">
             <strong>Difference:</strong> Deeperguard is encrypted from the first note and runs OCR in any browser, including on your phone, with nothing to install.
@@ -359,7 +358,7 @@
       <div class="mk-section-head" id="security">
         <span class="mk-badge">How encryption works</span>
         <h2>How Deeperguard works</h2>
-        <p>Create an account, unlock the vault on this device, then write and sync. The cryptography stays on the device. You can <a href="/verify">verify zero-knowledge yourself</a> in DevTools — SRP proofs on login, ciphertext-only sync — or open <strong>View server copy</strong> on any item in the app.</p>
+        <p>Create an account, unlock the vault on this device, then write and sync. The cryptography stays on the device. You can <a href="/verify">verify zero-knowledge yourself</a> in DevTools — SRP proofs on login, ciphertext-only sync (except Ask AI) — or open <strong>View server copy</strong> on any item in the app.</p>
       </div>
       <div class="mk-steps">
         <article class="mk-step">
@@ -383,11 +382,15 @@
         <span class="mk-badge ok">Public Beta Schedule</span>
         <h2>Transparent pricing schedule</h2>
         <p>
-          <strong>Free during beta: Pro, 5&nbsp;GB.</strong> No payment details are collected. After the beta, Basic is €2.99/month or €29/year (100&nbsp;MB). Pro is €6.99/month or €69/year (5&nbsp;GB) and keeps backups, passkeys, OCR, and the vault authenticator. Billing starts only after advance notice.
+          <strong>Free during beta: Pro, 5&nbsp;GB.</strong> No payment details are collected. After the beta, Basic is €2.99/month or €29/year (100&nbsp;MB). Pro is €6.99/month or €69/year (5&nbsp;GB) and keeps backups, passkeys, account 2FA, OCR, and the vault authenticator. Billing starts only after advance notice.
         </p>
-        <p class="mk-trust-strip">
-          Server in Vienna, Austria (EU) · Operated by <a href="/terms#operator-identity">Schutten Invest</a> · Open source under <a href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">AGPL-3.0</a> · <a href="/verify">Check the encryption yourself</a> · <a href="/verify#signed-releases">Signed releases</a>
-        </p>
+        <div class="mk-trust-strip" role="note">
+          <span>Server in Vienna, Austria (EU)</span>
+          <span>Operated by <a href="/terms#operator-identity">Schutten Invest</a></span>
+          <span>Open source under <a href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">AGPL-3.0</a></span>
+          <span><a href="/verify">Check the encryption yourself</a></span>
+          <span><a href="/verify#signed-releases">Signed releases</a></span>
+        </div>
       </div>
 
       <div class="mk-pricing-beta-highlight">

@@ -1095,8 +1095,26 @@ a.mk-badge-link:hover {
   .mk-compare-sn td:nth-child(3)::before {
     content: "Standard Notes";
   }
+  .mk-compare-nn td:nth-child(2)::before {
+    content: "Deeperguard";
+    color: var(--mk-col-highlight-fg);
+  }
+  .mk-compare-nn td:nth-child(3)::before {
+    content: "Notesnook";
+  }
+  .mk-compare-joplin td:nth-child(2)::before {
+    content: "Deeperguard";
+    color: var(--mk-col-highlight-fg);
+  }
+  .mk-compare-joplin td:nth-child(3)::before {
+    content: "Joplin";
+  }
   .mk-compare-sn th:nth-child(2),
-  .mk-compare-sn td:nth-child(2) {
+  .mk-compare-sn td:nth-child(2),
+  .mk-compare-nn th:nth-child(2),
+  .mk-compare-nn td:nth-child(2),
+  .mk-compare-joplin th:nth-child(2),
+  .mk-compare-joplin td:nth-child(2) {
     min-width: 0;
   }
   .mk-compare-plans td:nth-child(2)::before {
@@ -1176,10 +1194,17 @@ a.mk-badge-link:hover {
   font-size: 0.88rem;
   line-height: 1.55;
   color: var(--mk-muted);
-  text-align: center;
   max-width: 52rem;
   margin-left: auto;
   margin-right: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  justify-content: center;
+  align-items: center;
+}
+.mk-trust-strip > span {
+  white-space: nowrap;
 }
 .mk-trust-strip a {
   color: var(--mk-accent);
