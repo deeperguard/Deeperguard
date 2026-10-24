@@ -46,15 +46,21 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             text,
         )
         self.assertIn("Germany (EU)", text)
+        self.assertIn("notes@deeperguard.com", text)
+        self.assertIn("You use Deeperguard at your own risk.", text)
+        self.assertIn(
+            "Nothing in these terms limits liability that cannot be limited under Dutch law",
+            text,
+        )
         self.assertNotIn("[OPERATOR NAME]", text)
         self.assertNotIn("[GOVERNING LAW, e.g. the Netherlands]", text)
         self.assertNotIn("[COURT]", text)
         self.assertNotIn("[SERVER LOCATION]", text)
+        self.assertNotIn("[CONTACT EMAIL]", text)
+        self.assertNotIn("[ABUSE CONTACT EMAIL]", text)
         for ph in (
             "[ADDRESS]",
             "[KVK NUMBER if any]",
-            "[CONTACT EMAIL]",
-            "[ABUSE CONTACT EMAIL]",
             "[RETENTION PERIOD]",
         ):
             self.assertIn(ph, text)
@@ -116,9 +122,12 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             self.assertIn("Schutten Invest", thtml)
             self.assertIn("Dutch law (the Netherlands)", thtml)
             self.assertIn("Germany (EU)", phtml)
-            self.assertIn("[ABUSE CONTACT EMAIL]", thtml)
+            self.assertIn("notes@deeperguard.com", phtml)
+            self.assertIn("notes@deeperguard.com", thtml)
+            self.assertIn("You use Deeperguard at your own risk.", thtml)
             self.assertIn("[ADDRESS]", phtml)
-            self.assertIn("[CONTACT EMAIL]", thtml)
+            self.assertIn("[KVK NUMBER if any]", thtml)
+            self.assertIn("[RETENTION PERIOD]", phtml)
             self.assertIn("Last updated: 24 October 2026", phtml)
             self.assertIn("Last updated: 24 October 2026", thtml)
             # Page must stay static / text-safe (no draft banner on the public page).
