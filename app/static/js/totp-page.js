@@ -7,10 +7,12 @@
 
   try {
     const rawCap = sessionStorage.getItem('notes_session_cap_totp');
+    // Consume immediately so a later normal 2FA sign-in in this tab stays clean.
+    sessionStorage.removeItem('notes_session_cap_totp');
     if (rawCap && capHint) {
       const saved = JSON.parse(rawCap);
       if (saved && typeof saved === 'object') {
-        capHint.textContent = 'Enter the 6-digit code from your authenticator app first, then you can sign out a device.';
+        capHint.textContent = "You're signed in on the most devices your plan allows. Enter the code from your authenticator app first, then you can sign out one of them.";
         capHint.hidden = false;
       }
     }

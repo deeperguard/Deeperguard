@@ -13,7 +13,7 @@
       {% include 'partials/zk-plain.html' %}
     </div>
     <form id="totp-form" class="stack" data-csrf="{{ csrf_token }}">
-      <p id="totp-session-cap-hint" class="hint" hidden></p>
+      <p id="totp-session-cap-hint" class="hint session-cap-panel" hidden></p>
       <label>Code
         <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required class="totp-code-input">
       </label>

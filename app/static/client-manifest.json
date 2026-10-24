@@ -32,10 +32,10 @@
       "url": "/static/js/app.27883c3774323528.js"
     },
     "js/auth-pages.js": {
-      "bytes": 27000,
-      "sha256": "891a084a6306009bdf39b7ed2c99e4006c6b25775e9516c68417a9d3db8f1c22",
-      "sri": "sha384-pSH4djsRy/f2GWSCX+ZMFedtUOzURmZpkS/+Tr6qriw6NAmqAFyJAFB1sWMmnZFg",
-      "url": "/static/js/auth-pages.891a084a6306009b.js"
+      "bytes": 27198,
+      "sha256": "087d15b68c3b43b3bc9d3d9896679c66135946a9c3381513007790e4490f07a5",
+      "sri": "sha384-SEs89h2OoPRtQYB2gZRy/VvizV2kYQ5wv6+pmGdWnnWebL+UQBezSBMTTxG4nNwG",
+      "url": "/static/js/auth-pages.087d15b68c3b43b3.js"
     },
     "js/checklist.js": {
       "bytes": 2734,
@@ -212,10 +212,10 @@
       "url": "/static/js/tagsuggest.a1570c6c241dd88c.js"
     },
     "js/totp-page.js": {
-      "bytes": 4859,
-      "sha256": "d30f5acbdef236580e2dd54136f0814e859290bd1e5fcc67ddc31cd387707205",
-      "sri": "sha384-996xvs23CDbCaTk28IiSxjkSv95ANparUlGBCvCAjkDGvivs0wpjFLsVcY1Uj3ns",
-      "url": "/static/js/totp-page.d30f5acbdef23658.js"
+      "bytes": 5048,
+      "sha256": "ffa4f5fd1b4b772c0a1aff460f52f7b2bf11a6f81802a640463f532a40aa235f",
+      "sri": "sha384-vjqrcb9GDR2mcTfZ1FxQb9PMvuZmHwv9SMycjMByYIdds21BiEBScg6aLo9w7Ml+",
+      "url": "/static/js/totp-page.ffa4f5fd1b4b772c.js"
     },
     "js/totp.js": {
       "bytes": 22393,
@@ -321,6 +321,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "8304dd6e1febec23e677bd1e6572bea7ac4f39d17d4d161e02a3f5befdcc26d9",
+  "manifest_sha256": "dc2e9d038c2e2c7a1eefebc39c498aa2e5e36856c47e837731cdf5f4125db02b",
   "version": 1
 }

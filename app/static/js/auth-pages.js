@@ -344,6 +344,7 @@ if (loginForm) {
     e.preventDefault();
     showError('login-error', '');
     hideSessionCapPanel();
+    try { sessionStorage.removeItem('notes_session_cap_totp'); } catch (clearErr) { /* ignore */ }
     const fd = new FormData(loginForm);
     const email = String(fd.get('email') || '').trim().toLowerCase();
     const password = String(fd.get('password') || '');
@@ -665,6 +666,7 @@ const webauthnLoginBtn = document.getElementById('webauthn-login');
 if (webauthnLoginBtn) {
   webauthnLoginBtn.addEventListener('click', async () => {
     showError('login-error', '');
+    try { sessionStorage.removeItem('notes_session_cap_totp'); } catch (clearErr) { /* ignore */ }
     const emailInput = document.querySelector('#login-form [name="email"]');
     const email = String(emailInput?.value || '').trim().toLowerCase();
     if (!email) {

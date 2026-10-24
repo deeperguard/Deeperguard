@@ -205,12 +205,26 @@ def _session_cap_payload(user_id: int, *, limit: int, plan: str) -> dict:
 def session_cap_message(*, limit: int, plan: str, totp_required: bool = False) -> str:
     """Plain session-cap copy (no device list). Used when TOTP is still required."""
     n = int(limit)
-    plan_label = str(plan or "free").capitalize()
+    plan_key = str(plan or "free").strip().lower()
+    plan_label = plan_key.capitalize()
     devices = f"{n} signed-in device{'s' if n != 1 else ''}"
     base = f"Your {plan_label} plan allows {devices}, and all {n} are in use. "
     if totp_required:
-        return base + "Enter your 2FA code, then sign out a device to continue."
-    return base + "Sign out one below, then sign in again, or upgrade."
+        return (
+            base
+            + "Enter the code from your authenticator app, then sign out a device to continue."
+        )
+    upgrade = ""
+    if plan_key == "free":
+        basic_n = plan_active_session_limit("basic")
+        upgrade = (
+            f", or upgrade to Basic ({int(basic_n)} devices) or Pro (unlimited)"
+            if basic_n is not None
+            else ", or upgrade to Basic or Pro (unlimited)"
+        )
+    elif plan_key == "basic":
+        upgrade = ", or upgrade to Pro (unlimited)"
+    return base + f"Sign out one below, then sign in again{upgrade}."
 
 
 def _assert_session_slot_available(user_id: int) -> None:
