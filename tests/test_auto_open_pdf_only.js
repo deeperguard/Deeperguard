@@ -22,8 +22,8 @@ assert.ok(html.includes('pref-auto-open-pdf-only') && html.includes('type="check
 assert.ok(html.includes('Open notes in preview (documents &amp; markdown)'));
 assert.ok(html.includes('id="pref-auto-preview"'));
 assert.ok(
-  html.includes('on-device preview') || html.includes('Runs on this device'),
-  'hint must say preview runs on this device',
+  html.includes('When a note has no text and one PDF, open the preview instead of a blank editor. The preview stays on this device.'),
+  'settings hint must match Marketing copy',
 );
 assert.ok(!html.includes('marketing') || true);
 
