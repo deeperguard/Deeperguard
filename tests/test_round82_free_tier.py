@@ -141,6 +141,7 @@ class Round82FreeTierAppTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
         os.environ.pop("NOTES_DEFAULT_PLAN", None)
+        os.environ.pop("NOTES_ADMIN_EMAILS", None)
 
     def _create_user(self, email: str, password: str, *, plan: str | None = None) -> int:
         salt = self.new_srp_salt_hex()
@@ -365,16 +366,22 @@ class Round82FreeTierAppTests(unittest.TestCase):
         self.assertEqual(ok.status_code, 200, ok.get_json())
 
     def test_admin_accepts_free_plan(self):
-        os.environ["NOTES_ADMIN_EMAILS"] = "admin82@home.local"
         admin_id = self._create_user("admin82@home.local", "admin-secure-pass-ok", plan="pro")
         member_id = self._create_user("member82@home.local", "member-secure-pass-ok", plan="pro")
         self.notes_db.update_user_admin_flag(admin_id, True)
         login = self._srp_login("admin82@home.local", "admin-secure-pass-ok", device_id="admin-dev")
-        self.assertEqual(login.status_code, 200)
+        self.assertEqual(login.status_code, 200, login.get_json())
         csrf = login.get_json()["csrf"]
+        # Confirm session sees admin before the plan patch (guards stale admin_api imports).
+        account = self.client.get(
+            "/api/account",
+            headers={"X-CSRF-Token": csrf, "X-Device-Id": "admin-dev"},
+        )
+        self.assertEqual(account.status_code, 200, account.get_json())
+        self.assertTrue(account.get_json().get("is_admin"), account.get_json())
         patch = self.client.patch(
             f"/api/admin/users/{member_id}",
-            headers={"X-CSRF-Token": csrf},
+            headers={"X-CSRF-Token": csrf, "X-Device-Id": "admin-dev"},
             json={"plan": "free"},
         )
         self.assertEqual(patch.status_code, 200, patch.get_json())
