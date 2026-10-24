@@ -29,7 +29,7 @@
       <p>Questions about this policy: see also <a href="/contact">Contact</a>.</p>
 
       <h2 id="overview">Overview</h2>
-      <p>Deeperguard is an encrypted notes service in <strong>public beta</strong>. We use a <strong>zero-knowledge</strong> protocol: your vault password and note content are never sent to our servers in readable form. We can still see account metadata and encrypted blobs; we cannot read note titles, body text, or attachment contents.</p>
+      <p>Deeperguard is an encrypted notes service in <strong>public beta</strong>. We use a <strong>zero-knowledge</strong> protocol: your vault password and note content are never sent to our servers in readable form, except text you choose to send to Ask AI with Ollama Cloud. We can still see account metadata and encrypted blobs; we cannot read note titles, body text, or attachment contents.</p>
 
       <h2 id="zero-knowledge-protocol">Zero-knowledge protocol</h2>
       <ul>
@@ -76,7 +76,7 @@
         <li><strong>Hosting</strong> — netcup GmbH, with the server located in Austria (EU).</li>
         <li><strong>Email (Proton Mail)</strong> — transactional mail such as verification and service messages, and encrypted account backups sent by email when that backup path is enabled.</li>
         <li><strong>pCloud</strong> — optional encrypted backups when you connect pCloud in Settings; only ciphertext is uploaded to your pCloud account.</li>
-        <li><strong>AI relay (Ollama Cloud)</strong> — if you use Ask AI with Ollama Cloud, the Deeperguard server relays the request to ollama.com using your own API key. The relay does not store the key, the prompt, or the answer.</li>
+        <li><strong>AI relay (Ollama Cloud)</strong> — if you use Ask AI with Ollama Cloud, the text you send (which may include note content) passes through the Deeperguard server unencrypted and is forwarded to ollama.com using your own API key. The relay does not store or log the key, the prompt, or the answer. Ollama processes it under its own terms.</li>
         <li><strong>Optional backups you choose</strong> — encrypted backups you save or share (for example Files / iCloud Drive, Google Drive, or Dropbox) are created on your device. Those providers process only the encrypted blob under their terms; we do not receive your vault password or plaintext notes for those destinations.</li>
         <li><strong>International transfers</strong> — Cloudflare may process connection data outside the EU under Standard Contractual Clauses.</li>
       </ul>

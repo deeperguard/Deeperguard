@@ -72,6 +72,16 @@ class Round77TermsPrivacyTests(unittest.TestCase):
         self.assertIn("pCloud", text)
         self.assertIn("AI relay (Ollama Cloud)", text)
         self.assertIn(
+            "except text you choose to send to Ask AI with Ollama Cloud",
+            text,
+        )
+        self.assertIn(
+            "passes through the Deeperguard server unencrypted and is forwarded to ollama.com",
+            text,
+        )
+        self.assertIn("does not store or log the key, the prompt, or the answer", text)
+        self.assertIn("Ollama processes it under its own terms", text)
+        self.assertIn(
             "Cloudflare may process connection data outside the EU under Standard Contractual Clauses.",
             text,
         )
@@ -161,6 +171,12 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             self.assertIn("Proton Mail", phtml)
             self.assertIn("pCloud", phtml)
             self.assertIn("AI relay (Ollama Cloud)", phtml)
+            self.assertIn(
+                "except text you choose to send to Ask AI with Ollama Cloud",
+                phtml,
+            )
+            self.assertIn("passes through the Deeperguard server unencrypted", phtml)
+            self.assertIn("Ollama processes it under its own terms", phtml)
             self.assertIn("Standard Contractual Clauses", phtml)
             self.assertIn("AES-256-GCM", phtml)
             self.assertIn("Argon2id", phtml)
