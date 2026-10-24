@@ -944,6 +944,19 @@ html[data-theme="light"] .zk-badge {
   line-height: 1.45;
   color: var(--muted);
 }
+.device-phrase-display {
+  margin: 10px auto 4px;
+  max-width: 22em;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.device-phrase-hint {
+  margin: 0 auto 10px !important;
+  max-width: 22em;
+  font-size: 12px !important;
+}
 .brand .auth-hint,
 .auth-hint {
   margin: 12px 0 0;
