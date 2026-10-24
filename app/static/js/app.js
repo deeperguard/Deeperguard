@@ -19898,7 +19898,13 @@
       return;
     }
     const body = { code };
-    if (password) body.password = password;
+    // Round 73: never send plaintext password for SRP accounts (server ignores it anyway).
+    const authMethod = String(
+      NotesStore.cachedAccount?.()?.auth_method
+      || NotesStore.state?.account?.auth_method
+      || '',
+    );
+    if (password && authMethod !== 'srp') body.password = password;
     try {
       await NotesStore.api('/api/totp/disable', {
         method: 'POST',

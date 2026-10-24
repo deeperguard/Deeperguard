@@ -136,9 +136,32 @@ function mapPasswordSignInError(err) {
   return err;
 }
 
+function showSecureSignInReload(errorId) {
+  const el = document.getElementById(errorId || 'login-error');
+  if (!el) return;
+  el.hidden = false;
+  el.textContent = '';
+  const msg = document.createElement('span');
+  msg.textContent = "Secure sign-in didn't load. Reload the page and try again.";
+  el.appendChild(msg);
+  el.appendChild(document.createElement('br'));
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn';
+  btn.id = 'login-srp-reload';
+  btn.textContent = 'Reload';
+  btn.addEventListener('click', () => {
+    try { location.reload(); } catch (err) { /* ignore */ }
+  });
+  el.appendChild(btn);
+}
+
 async function signInWithPassword(email, password) {
+  // Round 73: never POST {email, password} when the SRP client failed to load.
   if (!window.NotesSrpAuth?.passwordSignIn) {
-    return postJson('/api/auth/repair-login', { email, password });
+    const err = new Error("Secure sign-in didn't load. Reload the page and try again.");
+    err.srpMissing = true;
+    throw err;
   }
   setLoginBusy(true, 'Signing in…');
   try {
@@ -197,6 +220,10 @@ if (loginForm) {
       location.replace(afterAuthUrl('/app'));
     } catch (err) {
       setLoginBusy(false, '');
+      if (err?.srpMissing) {
+        showSecureSignInReload('login-error');
+        return;
+      }
       const msg = String(err?.message || 'Sign-in failed');
       if (err?.status === 429 || /too many attempts/i.test(msg)) {
         showError('login-error', 'Too many sign-in attempts. Wait a few minutes and try again.');

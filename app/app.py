@@ -1214,6 +1214,10 @@ def api_auth_repair_login():
     Prove-only (C1): never rotates salt/verifier here. Credential rotation requires
     a totp_ok session via /api/account/password (or vault-recovery after 2FA).
     Submitted srp_salt/srp_verifier are ignored.
+
+    Round 73: plaintext password is never accepted for SRP accounts (even when
+    NOTES_REPAIR_LOGIN_PASSWORD=1). Legacy Argon2-only accounts may get
+    code=legacy_login so the client can use /api/auth/login without guessing.
     """
     body = request.get_json(silent=True) or {}
     email = str(body.get("email") or "").strip().lower()
@@ -1228,7 +1232,10 @@ def api_auth_repair_login():
     if not user:
         return jsonify({"error": "invalid credentials", "repair_exhausted": True}), 401
 
-    if repair_login_password_enabled() and password:
+    is_srp = db.user_has_srp(user) or db.user_auth_method(user) == "srp"
+
+    # Round 73: never verify plaintext against an SRP verifier.
+    if repair_login_password_enabled() and password and not is_srp:
         if len(password) < min_password_length():
             return jsonify({"error": "invalid credentials"}), 401
         verified, repair_exhausted = _verify_login_password(user, email, password)
@@ -1241,6 +1248,12 @@ def api_auth_repair_login():
         payload = _login_payload(user, totp_required=totp_required)
         payload["login_repaired"] = True
         return jsonify(payload)
+
+    if not is_srp:
+        # Point leftover Argon2 accounts at /api/auth/login; never invite this for SRP.
+        if db.user_has_legacy_password(user):
+            return jsonify({"error": "invalid credentials", "code": "legacy_login"}), 401
+        return jsonify({"error": "invalid credentials", "repair_exhausted": True}), 401
 
     if not a_hex or not m1:
         return jsonify({"error": "invalid credentials"}), 400
@@ -1446,13 +1459,15 @@ def api_auth_srp_upgrade():
 
 @app.post("/api/auth/login")
 def api_login():
+    """Legacy Argon2 password login only. SRP accounts must use A/M1 proofs."""
     body = request.get_json(silent=True) or {}
     email = str(body.get("email") or "").strip().lower()
     password = str(body.get("password") or "").strip()
     if _auth_rate_limited("legacy-login", email or auth.client_ip()):
         return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
-    if user and db.user_auth_method(user) == "srp":
+    # Round 73: refuse before any password check when the account is SRP.
+    if user and (db.user_auth_method(user) == "srp" or db.user_has_srp(user)):
         return jsonify({"error": "invalid credentials"}), 401
     user_id, totp_required = auth.verify_credentials(email, password)
     if not user_id:
@@ -2057,6 +2072,7 @@ def api_totp_disable():
     body = request.get_json(silent=True) or {}
     password = str(body.get("password") or "")
     code = str(body.get("code") or "")
+    # Round 73: SRP accounts prove with the session + TOTP code only — ignore password.
     if db.user_auth_method(user) != "srp":
         if not verify_password(user["password_hash"], password):
             return jsonify({"error": "invalid password"}), 401

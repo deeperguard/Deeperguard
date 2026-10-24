@@ -241,6 +241,8 @@
       const err = new Error(message);
       err.status = res.status;
       if (data.repair_exhausted) err.repairExhausted = true;
+      if (data.code) err.code = String(data.code);
+      if (data.code === 'legacy_login') err.legacyLogin = true;
       throw err;
     }
     return data;
@@ -299,6 +301,9 @@
   /**
    * SRP sign-in with repair-login fallback (PWA login + in-app session refresh).
    * Only retries repair on credential-style SRP failures, not network/5xx.
+   * Round 73: never POST plaintext password for SRP accounts. Legacy Argon2
+   * accounts may use /api/auth/login only when the server returns code
+   * legacy_login (auth_method is not srp).
    */
   async function passwordSignIn(email, password, options) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
@@ -319,13 +324,19 @@
         result = await repairLogin(normalizedEmail, password);
       } catch (repairErr) {
         if (repairErr?.status === 429) throw repairErr;
-        // Leftover Argon2-only accounts still sign in here, then upgrade to SRP
-        // after TOTP (or immediately when 2FA is off).
-        if (onStatus) onStatus('Signing in…');
-        result = await postJson('/api/auth/login', {
-          email: normalizedEmail,
-          password,
-        });
+        // Leftover Argon2-only: server advertises legacy_login (never for auth_method srp).
+        if (repairErr?.legacyLogin || repairErr?.code === 'legacy_login') {
+          if (onStatus) onStatus('Signing in…');
+          result = await postJson('/api/auth/login', {
+            email: normalizedEmail,
+            password,
+          });
+        } else {
+          const err = new Error('Email or password is incorrect');
+          err.status = repairErr?.status || 401;
+          err.incorrectPassword = true;
+          throw err;
+        }
       }
     }
     if (result?.totp_required) return result;

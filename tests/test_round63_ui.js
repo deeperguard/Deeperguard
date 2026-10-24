@@ -38,7 +38,10 @@ const signIn = srp.slice(
   srp.indexOf('async function passwordSignIn'),
   srp.indexOf('async function register'),
 );
+// Round 73: /api/auth/login only after server code legacy_login (never for SRP).
 assert.ok(signIn.includes("postJson('/api/auth/login'"));
+assert.ok(signIn.includes("legacy_login") || signIn.includes('legacyLogin'));
+assert.ok(signIn.includes('incorrectPassword'));
 assert.ok(signIn.includes('if (result?.totp_required) return result;'));
 assert.ok(signIn.indexOf('if (result?.totp_required) return result;') < signIn.indexOf('maybeUpgradeLegacySrp'));
 assert.ok(srp.includes('async function maybeUpgradeLegacySrp'));

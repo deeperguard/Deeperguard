@@ -4034,12 +4034,14 @@ class NotesAppTests(unittest.TestCase):
         self.assertTrue(wrong.get_json().get("repair_exhausted"))
 
     def test_repair_login_skips_client_srp(self):
-        os.environ["NOTES_REPAIR_LOGIN_PASSWORD"] = "1"
-        for name in list(sys.modules):
-            if name in {"app", "config", "auth"} or name.startswith("app."):
-                sys.modules.pop(name, None)
-        self.app_mod = importlib.import_module("app")
-        self.client = self.app_mod.app.test_client()
+        """Round 73: plaintext repair-login never succeeds for SRP accounts.
+
+        Even with NOTES_REPAIR_LOGIN_PASSWORD=1 and a leftover password_hash on a
+        hybrid SRP row, the server must refuse plaintext and must not return
+        code=legacy_login (that hint is Argon2-only).
+        """
+        from unittest import mock
+
         import db as notes_db
         from passwords import hash_password, new_kdf_salt
 
@@ -4052,18 +4054,32 @@ class NotesAppTests(unittest.TestCase):
         notes_db.update_user_password(user_id, hash_password(password))
         with self.client.session_transaction() as sess:
             sess.clear()
-        repaired = self.client.post(
-            "/api/auth/repair-login",
-            json={"email": email, "password": password},
-        )
+        with mock.patch.object(self.app_mod, "repair_login_password_enabled", return_value=True):
+            denied = self.client.post(
+                "/api/auth/repair-login",
+                json={"email": email, "password": password},
+            )
+        self.assertIn(denied.status_code, (400, 401), denied.get_json())
+        data = denied.get_json() or {}
+        self.assertNotEqual(data.get("code"), "legacy_login")
+        self.assertFalse(data.get("login_repaired"))
+        self.assertNotIn("csrf", data)
+        with self.client.session_transaction() as sess:
+            self.assertFalse(sess.get("authed"))
+
+        # Flag still allows plaintext repair for pure Argon2 (no SRP verifier).
+        legacy_email = "repair-login-legacy@home.local"
+        legacy_password = "repair-login-legacy-pass"
+        notes_db.create_user(legacy_email, hash_password(legacy_password), new_kdf_salt())
+        with self.client.session_transaction() as sess:
+            sess.clear()
+        with mock.patch.object(self.app_mod, "repair_login_password_enabled", return_value=True):
+            repaired = self.client.post(
+                "/api/auth/repair-login",
+                json={"email": legacy_email, "password": legacy_password},
+            )
         self.assertEqual(repaired.status_code, 200, repaired.get_json())
         self.assertTrue(repaired.get_json().get("login_repaired"))
-        wrong = self.client.post(
-            "/api/auth/repair-login",
-            json={"email": email, "password": "nope-not-it-xx"},
-        )
-        self.assertEqual(wrong.status_code, 401)
-        self.assertTrue(wrong.get_json().get("repair_exhausted"))
 
     def test_login_page_falls_back_to_repair_login_after_srp_failure(self):
         auth_js = (APP_DIR / "static" / "js" / "auth-pages.js").read_text(encoding="utf-8")
