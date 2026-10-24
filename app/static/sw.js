@@ -116,6 +116,8 @@ function isMarketingPage(url) {
   const path = url.pathname;
   return path === '/' || path === ''
     || path === '/pricing' || path === '/compare/standard-notes'
+    || path === '/compare/notesnook' || path === '/compare/joplin'
+    || path === '/evernote-alternative' || path === '/for/freelancers'
     || path === '/privacy' || path === '/terms'
     || path === '/contact' || path === '/download'
     || path === '/self-host' || path === '/robots.txt' || path === '/sitemap.xml';

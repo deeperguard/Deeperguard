@@ -516,8 +516,9 @@ def _headers(response):
         session.modified = False
         _drop_set_cookie(response)
     elif request.path in {
-        "/", "/pricing", "/compare/standard-notes", "/contact", "/download",
-        "/privacy", "/terms", "/verify",
+        "/", "/pricing", "/compare/standard-notes", "/compare/notesnook",
+        "/compare/joplin", "/evernote-alternative", "/for/freelancers",
+        "/contact", "/download", "/privacy", "/terms", "/verify",
     }:
         # Marketing HTML is public and cookie-free. A short cache keeps repeat
         # visits off the origin. Clear-Site-Data must not be set here: the
@@ -3141,14 +3142,38 @@ def pricing_page():
     return redirect("/#pricing", code=302)
 
 
-@app.get("/compare/standard-notes")
-def compare_standard_notes_page():
+def _render_marketing_page(template: str, canonical_path: str):
     host = _request_host()
     if request.scheme != "https" and host not in {"localhost", "127.0.0.1", "::1"}:
         return render_template("https-setup.html", host=_lan_https_host(), build=NOTES_BUILD)
     ctx = _marketing_context()
-    ctx["canonical_url"] = f"{NOTES_PUBLIC_URL.rstrip('/')}/compare/standard-notes"
-    return make_response(render_template("compare-standard-notes.html", **ctx))
+    ctx["canonical_url"] = f"{NOTES_PUBLIC_URL.rstrip('/')}{canonical_path}"
+    return make_response(render_template(template, **ctx))
+
+
+@app.get("/compare/standard-notes")
+def compare_standard_notes_page():
+    return _render_marketing_page("compare-standard-notes.html", "/compare/standard-notes")
+
+
+@app.get("/compare/notesnook")
+def compare_notesnook_page():
+    return _render_marketing_page("compare-notesnook.html", "/compare/notesnook")
+
+
+@app.get("/compare/joplin")
+def compare_joplin_page():
+    return _render_marketing_page("compare-joplin.html", "/compare/joplin")
+
+
+@app.get("/evernote-alternative")
+def evernote_alternative_page():
+    return _render_marketing_page("evernote-alternative.html", "/evernote-alternative")
+
+
+@app.get("/for/freelancers")
+def for_freelancers_page():
+    return _render_marketing_page("for-freelancers.html", "/for/freelancers")
 
 
 @app.get("/api/promo")
@@ -3177,6 +3202,10 @@ def sitemap_xml():
         "/",
         "/pricing",
         "/compare/standard-notes",
+        "/compare/notesnook",
+        "/compare/joplin",
+        "/evernote-alternative",
+        "/for/freelancers",
         entry,
         "/register",
         "/login",

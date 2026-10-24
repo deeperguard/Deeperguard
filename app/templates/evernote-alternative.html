@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Evernote alternative — private, searchable scans | Deeperguard</title>
+  <meta name="description" content="Leaving Evernote? Keep receipts and contracts searchable with client-side encryption, EU hosting, and on-device OCR. Honest limits and import options.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <meta property="og:title" content="Evernote alternative — Deeperguard">
+  <meta property="og:description" content="Zero-knowledge notes with searchable scans in your browser. Ciphertext-only sync except Ask AI. Servers in the EU.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ og_image }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="notes-build" content="{{ build }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
+</head>
+<body>
+  <div class="mk-beta-banner" role="status">
+    <span class="mk-beta-pill">Public Beta</span>
+    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — Pro free, no payment yet</span>
+  </div>
+
+  <header class="mk-topbar">
+    <div class="wrap mk-topbar-inner">
+      <a class="mk-brand" href="/">
+        <img src="/static/images/deeperguard-mark.svg" width="36" height="36" alt="Deeperguard Logo">
+        <span>
+          Deeperguard
+          <small>Zero-Knowledge Notes</small>
+        </span>
+      </a>
+      <input id="mk-nav-check" class="mk-nav-check" type="checkbox">
+      <label class="mk-nav-toggle" for="mk-nav-check" aria-label="Menu"><span aria-hidden="true">☰</span></label>
+      <label class="mk-nav-backdrop" for="mk-nav-check" aria-hidden="true"></label>
+      <nav class="mk-nav" aria-label="Sections">
+        <a href="/#compare">Comparisons</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <div class="mk-topbar-actions">
+        <a class="mk-btn ghost mk-topbar-signin" href="{{ login_url }}">Sign in</a>
+        <a class="mk-btn mk-topbar-cta" href="{{ register_url }}">Create free vault</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap" id="top">
+    <section class="mk-hero mk-hero--compact">
+      <div>
+        <h1>Leaving Evernote? Keep your scans searchable, without your notes being readable on someone else&rsquo;s server.</h1>
+        <p class="mk-lede">Deeperguard encrypts notes on your device before sync. Text recognition for receipts and PDFs runs in your browser. Compare <a href="https://evernote.com/compare-plans" target="_blank" rel="noopener noreferrer">Evernote&rsquo;s current plans</a> with <a href="/#pricing">Deeperguard pricing</a>.</p>
+        <div class="mk-hero-actions">
+          <a class="mk-btn mk-btn-lg" href="{{ register_url }}">Create free vault</a>
+          <a class="mk-btn secondary mk-btn-lg" href="/verify">check it yourself</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="mk-section">
+      <div class="mk-section-head">
+        <span class="mk-badge">Why people leave</span>
+        <h2>Price and forced AI</h2>
+      </div>
+      <div class="mk-grid cols-2">
+        <article class="mk-card">
+          <h3>Paid plans and limits</h3>
+          <p>Plan limits and pricing change over time. See what is included today on <a href="https://evernote.com/compare-plans" target="_blank" rel="noopener noreferrer">evernote.com/compare-plans</a>.</p>
+        </article>
+        <article class="mk-card">
+          <h3>Cloud-first AI</h3>
+          <p>Not zero-knowledge — see <a href="https://evernote.com/compare-plans" target="_blank" rel="noopener noreferrer">Evernote plans</a>. Deeperguard stores ciphertext only (except Ask AI).</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="mk-section">
+      <div class="mk-section-head">
+        <span class="mk-badge">What you keep</span>
+        <h2>Search, web access, offline</h2>
+      </div>
+      <ul class="mk-bullet-list">
+        <li><strong>Search inside scans</strong> — on-device OCR indexes text from photos and PDFs before encryption.</li>
+        <li><strong>Web access</strong> — use Deeperguard in the browser; add it to your home screen as a PWA.</li>
+        <li><strong>Offline</strong> — read and write in your local vault without a connection.</li>
+      </ul>
+    </section>
+
+    <section class="mk-section">
+      <div class="mk-section-head">
+        <span class="mk-badge">What&rsquo;s different</span>
+        <h2>Encryption, EU server, Ask AI</h2>
+      </div>
+      <ul class="mk-bullet-list">
+        <li><strong>Zero-knowledge by design</strong> — AES-GCM on your device; sync moves ciphertext (except Ask AI), not readable notes.</li>
+        <li><strong>Server in Vienna, Austria (EU)</strong> — operated by <a href="/terms#operator-identity">Schutten Invest (Netherlands)</a> on netcup hosting.</li>
+        <li><strong>Ask AI exception</strong> — only when you send text to Ask AI with Ollama Cloud; it passes through our server to ollama.com without being stored.</li>
+      </ul>
+    </section>
+
+    <section class="mk-section">
+      <div class="mk-section-head">
+        <span class="mk-badge">Import</span>
+        <h2>Moving your notes</h2>
+      </div>
+      <p>An Evernote import is in the works. For now, export to Markdown or HTML from Evernote and paste or upload into Deeperguard. Standard Notes users can use the built-in Standard Notes backup import in Settings.</p>
+    </section>
+
+    <section class="mk-cta">
+      <h2>Start a private vault — Pro free during public beta</h2>
+      <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
+      <a class="mk-btn secondary" href="/">Compare all apps</a>
+    </section>
+
+    {% include 'partials/mk-footer.html' %}
+  </main>
+</body>
+</html>
