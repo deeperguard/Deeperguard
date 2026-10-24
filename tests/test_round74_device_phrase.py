@@ -30,10 +30,7 @@ class Round74DevicePhraseTests(unittest.TestCase):
         self.assertIn("js/device-phrase.js", app_html)
         self.assertIn("js/device-phrase.js", login_html)
         self.assertIn('id="device-phrase-display"', banner)
-        self.assertIn(
-            "If you don't see your phrase here, you may be on a fake page.",
-            banner,
-        )
+        self.assertIn('id="device-phrase-hint"', banner)
         self.assertIn('id="device-phrase-input"', app_html)
         self.assertIn("maxlength=\"64\"", app_html)
 
@@ -45,6 +42,11 @@ class Round74DevicePhraseTests(unittest.TestCase):
         self.assertIn("MAX_LEN = 64", js)
         self.assertIn("textContent", js)
         self.assertNotIn("innerHTML", js)
+        self.assertIn(
+            "If you don't see your phrase here, you may be on a fake page.",
+            js,
+        )
+        self.assertIn("No device phrase yet.", js)
 
 
 if __name__ == "__main__":
