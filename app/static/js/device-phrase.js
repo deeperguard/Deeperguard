@@ -1,7 +1,8 @@
 /**
- * Round 74/75: user-chosen anti-phishing device phrase (this browser only).
+ * Round 74/75/75.1: user-chosen anti-phishing device phrase (this browser only).
  * Stored in localStorage under notes_device_phrase — never sent to the server.
  * Round 75: one-time in-app prompt when the phrase is unset (not on login/unlock).
+ * Round 75.1: unset state shows a calm neutral line; fake-page warning only when set.
  */
 (function (global) {
   'use strict';
@@ -10,6 +11,10 @@
   const DISMISS_KEY = 'notes_device_phrase_prompt_dismissed';
   const MAX_LEN = 64;
   const PROMPT_COPY = 'Set a device phrase so you can spot fake sign-in pages';
+  const UNSET_COPY =
+    'No device phrase yet. After you unlock, you can set one in Settings to help spot fake sign-in pages.';
+  const WARN_COPY =
+    "If you don't see your phrase here, you may be on a fake page.";
 
   function getPhrase() {
     try {
@@ -64,13 +69,27 @@
     return !getPhrase() && !isPromptDismissed();
   }
 
-  /** Fill an element with the phrase line using textContent only (XSS-safe). */
+  /** Fill banner lines using textContent only (XSS-safe). Warning only when set. */
   function renderDisplay(el) {
     if (!el) return;
     const phrase = getPhrase();
-    el.textContent = phrase
-      ? `Your phrase: ${phrase}`
-      : 'No phrase on this device yet';
+    const doc = el.ownerDocument || document;
+    const hint = doc.getElementById ? doc.getElementById('device-phrase-hint') : null;
+    if (phrase) {
+      el.textContent = `Your phrase: ${phrase}`;
+      el.classList.remove('is-unset');
+      if (hint) {
+        hint.hidden = false;
+        hint.textContent = WARN_COPY;
+      }
+    } else {
+      el.textContent = UNSET_COPY;
+      el.classList.add('is-unset');
+      if (hint) {
+        hint.hidden = true;
+        hint.textContent = '';
+      }
+    }
   }
 
   /** Paint the in-app prompt card with textContent only. */
@@ -89,6 +108,8 @@
     DISMISS_KEY,
     MAX_LEN,
     PROMPT_COPY,
+    UNSET_COPY,
+    WARN_COPY,
     getPhrase,
     setPhrase,
     clearPhrase,

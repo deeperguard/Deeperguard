@@ -28,8 +28,10 @@ assert.ok(loginHtml.includes("device-phrase-banner.html"), 'login brand includes
 assert.ok(loginHtml.includes("js/device-phrase.js"), 'login loads device-phrase.js');
 assert.ok(appHtml.includes("js/device-phrase.js"), 'app loads device-phrase.js');
 assert.ok(bannerHtml.includes('id="device-phrase-display"'));
+assert.ok(bannerHtml.includes('id="device-phrase-hint"'));
 assert.ok(
-  bannerHtml.includes("If you don't see your phrase here, you may be on a fake page."),
+  phraseJs.includes("If you don't see your phrase here, you may be on a fake page."),
+  'fake-page warning copy lives in device-phrase.js',
 );
 assert.ok(appHtml.includes('id="device-phrase-input"'));
 assert.ok(appHtml.includes('id="btn-device-phrase-save"'));
@@ -70,7 +72,17 @@ for (const [name, src] of [
 
 // --- Storage + rendering (vm sandbox) ----------------------------------------
 function loadModule(storage) {
-  const display = { textContent: '', innerHTML: 'SHOULD_NOT_USE' };
+  const display = {
+    textContent: '',
+    innerHTML: 'SHOULD_NOT_USE',
+    classList: {
+      _c: new Set(),
+      add(c) { this._c.add(c); },
+      remove(c) { this._c.delete(c); },
+      contains(c) { return this._c.has(c); },
+    },
+  };
+  const hint = { textContent: '', innerHTML: 'SHOULD_NOT_USE', hidden: true };
   const sandbox = {
     window: {},
     localStorage: {
@@ -79,23 +91,31 @@ function loadModule(storage) {
       removeItem: (k) => { delete storage[k]; },
     },
     document: {
-      getElementById: (id) => (id === 'device-phrase-display' ? display : null),
+      getElementById: (id) => {
+        if (id === 'device-phrase-display') return display;
+        if (id === 'device-phrase-hint') return hint;
+        return null;
+      },
     },
     globalThis: null,
   };
   sandbox.globalThis = sandbox;
   sandbox.window = sandbox;
+  display.ownerDocument = sandbox.document;
   vm.runInNewContext(phraseJs, sandbox, { filename: 'device-phrase.js' });
-  return { api: sandbox.NotesDevicePhrase, display, storage };
+  return { api: sandbox.NotesDevicePhrase, display, hint, storage };
 }
 
 {
   const storage = {};
-  const { api, display } = loadModule(storage);
+  const { api, display, hint } = loadModule(storage);
   assert.strictEqual(api.KEY, 'notes_device_phrase');
   assert.strictEqual(api.MAX_LEN, 64);
   api.renderDisplay(display);
-  assert.strictEqual(display.textContent, 'No phrase on this device yet');
+  assert.strictEqual(display.textContent, api.UNSET_COPY);
+  assert.ok(display.classList.contains('is-unset'));
+  assert.strictEqual(hint.hidden, true);
+  assert.strictEqual(hint.textContent, '');
   assert.strictEqual(display.innerHTML, 'SHOULD_NOT_USE', 'must use textContent, not innerHTML');
 
   const saved = api.setPhrase('  coral lighthouse  ');
@@ -103,12 +123,16 @@ function loadModule(storage) {
   assert.strictEqual(storage.notes_device_phrase, 'coral lighthouse');
   api.renderDisplay(display);
   assert.strictEqual(display.textContent, 'Your phrase: coral lighthouse');
+  assert.ok(!display.classList.contains('is-unset'));
+  assert.strictEqual(hint.hidden, false);
+  assert.strictEqual(hint.textContent, api.WARN_COPY);
 
   // XSS: angle brackets must not become HTML.
   api.setPhrase('<img src=x onerror=alert(1)>');
   api.renderDisplay(display);
   assert.strictEqual(display.textContent, 'Your phrase: <img src=x onerror=alert(1)>');
   assert.strictEqual(display.innerHTML, 'SHOULD_NOT_USE');
+  assert.strictEqual(hint.innerHTML, 'SHOULD_NOT_USE');
 
   // Length cap.
   const long = 'a'.repeat(100);
@@ -119,7 +143,8 @@ function loadModule(storage) {
   api.clearPhrase();
   assert.strictEqual(storage.notes_device_phrase, undefined);
   api.renderDisplay(display);
-  assert.strictEqual(display.textContent, 'No phrase on this device yet');
+  assert.strictEqual(display.textContent, api.UNSET_COPY);
+  assert.strictEqual(hint.hidden, true);
 }
 
 // Survival across sign-out: clearDeviceData key list must leave phrase intact.

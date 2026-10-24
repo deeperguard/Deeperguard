@@ -952,10 +952,28 @@ html[data-theme="light"] .zk-badge {
   font-weight: 600;
   line-height: 1.4;
 }
+/* Round 75.1: calm unset copy on login/unlock (no warning box). */
+.device-phrase-display.is-unset {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+}
 .device-phrase-hint {
   margin: 0 auto 10px !important;
   max-width: 22em;
   font-size: 12px !important;
+}
+.device-phrase-hint[hidden] {
+  display: none !important;
+}
+@media (max-width: 390px) {
+  .device-phrase-display,
+  .device-phrase-display.is-unset,
+  .device-phrase-hint {
+    max-width: 100%;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
 }
 .brand .auth-hint,
 .auth-hint {
