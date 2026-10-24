@@ -33,6 +33,8 @@ class ReminderTests(unittest.TestCase):
         os.environ["NOTES_SKIP_LOGIN"] = "0"
         os.environ["NOTES_BUILD"] = "192"
         os.environ["NOTES_PUBLIC_URL"] = "https://192.168.178.143"
+        # Reminders are Pro-gated; pin Pro so these tests stay on the feature path.
+        os.environ["NOTES_DEFAULT_PLAN"] = "pro"
         (root / "keys").mkdir(parents=True)
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
         for name in list(sys.modules):
@@ -63,6 +65,7 @@ class ReminderTests(unittest.TestCase):
             "NOTES_SKIP_LOGIN",
             "NOTES_BUILD",
             "NOTES_PUBLIC_URL",
+            "NOTES_DEFAULT_PLAN",
         ):
             os.environ.pop(key, None)
 

@@ -2,22 +2,22 @@
   "asset_count": 53,
   "assets": {
     "css/app.css": {
-      "bytes": 232594,
-      "sha256": "620dae81201b114449ff3922fd7d97da5001a91247e78d13a7b19071b6c48032",
-      "sri": "sha384-0TtLzJkORiEEEptp+U6RL4iSNIraJHiPOozo+Shyw308fRxeDNKYNxgvCt9n6cSC",
-      "url": "/static/css/app.620dae81201b1144.css"
+      "bytes": 233348,
+      "sha256": "e2dee11ff90f38a03717df523a107d361bda8b1aa76b499bc0389f2cd2bea73d",
+      "sri": "sha384-LT6eTw021BpkoFKlYJON1ZCQW+AsNUqCpbyHpNCn09I4XIOUXUgQCvXA6SRdQqzA",
+      "url": "/static/css/app.e2dee11ff90f38a0.css"
     },
     "css/marketing.css": {
-      "bytes": 43524,
-      "sha256": "b085c65cbe71f39c0ac29f1503cb08223ff43f1fa9a3f7e2b37bc2ffe585734d",
-      "sri": "sha384-A/Ia1Id2ZI4fpvqwDHpHT6nahN2wWi4HXXSRfnTouoF9Husi6ez8fPoL6ISDkt7p",
-      "url": "/static/css/marketing.b085c65cbe71f39c.css"
+      "bytes": 43725,
+      "sha256": "40eea2407187b54abe7f9385ccff0aad0f949b655e468be4bf6b625c6e2b3257",
+      "sri": "sha384-k72aZ5GoMJSNn5daogABuJ4Ws2qtehGbH6luwPruIgqs2CZAQGRQXqIUtzNO4HOk",
+      "url": "/static/css/marketing.40eea2407187b54a.css"
     },
     "js/admin.js": {
-      "bytes": 8038,
-      "sha256": "a0379e7bd93fc3b8454c7c420f1cfdd8c5c6766bab6861c82d39d44add3d0846",
-      "sri": "sha384-AnPZpQLCfD2G7b5jPfBhLZSz49AqtAEA8fMn/sd6VK3m5DE629UjyfhGb01qb3Xt",
-      "url": "/static/js/admin.a0379e7bd93fc3b8.js"
+      "bytes": 8122,
+      "sha256": "da5308df76c2a61e71598ac8d370bfbf42ef29501135e6b0a106fad5d03198f7",
+      "sri": "sha384-Eyq+ji9xL1quPthvCdKofGxmK3kjt+fU4oFhA1Ra9H6Y2sIC4/Ndgf69q1x8Fxm4",
+      "url": "/static/js/admin.da5308df76c2a61e.js"
     },
     "js/ai-chat.js": {
       "bytes": 19832,
@@ -26,16 +26,16 @@
       "url": "/static/js/ai-chat.1a82e44d6c4b43a2.js"
     },
     "js/app.js": {
-      "bytes": 884623,
-      "sha256": "995f32e2d33e3b5a6aa4adc2c97d685da74edc5bf939735b70a08d6a3d6ff32b",
-      "sri": "sha384-Art0JkzxhN+3BZDIfKk6hySLQOPR0XPAj82wUjyNNQL+d/NsdvOs4wv918/aP9n5",
-      "url": "/static/js/app.995f32e2d33e3b5a.js"
+      "bytes": 885008,
+      "sha256": "27883c37743235281d7d6624dfcc30438fddee26ad9221d22e668855d646878f",
+      "sri": "sha384-jU45tHAmJ/YXky/JJqvM2C9XAQt6OaS3YR0z6kfcGx82cKZfu38yGREktXnM9Jfk",
+      "url": "/static/js/app.27883c3774323528.js"
     },
     "js/auth-pages.js": {
-      "bytes": 20943,
-      "sha256": "d22fea45b3f2fbe1b7a5a38fe22612475c6dbccb32aa4461f3891efef4765b1b",
-      "sri": "sha384-2Eusolr8l5TANtuExbNB56Z5uRsv1OnvAu3/CNa91vqwX53EradEVMhgGGuXz5Ft",
-      "url": "/static/js/auth-pages.d22fea45b3f2fbe1.js"
+      "bytes": 27198,
+      "sha256": "087d15b68c3b43b3bc9d3d9896679c66135946a9c3381513007790e4490f07a5",
+      "sri": "sha384-SEs89h2OoPRtQYB2gZRy/VvizV2kYQ5wv6+pmGdWnnWebL+UQBezSBMTTxG4nNwG",
+      "url": "/static/js/auth-pages.087d15b68c3b43b3.js"
     },
     "js/checklist.js": {
       "bytes": 2734,
@@ -182,10 +182,10 @@
       "url": "/static/js/spreadsheet.385167a74e238c1d.js"
     },
     "js/srp-auth.js": {
-      "bytes": 21058,
-      "sha256": "8334c46cde3990aa3e678c518e807dd823349c3125c79fab88119eae8c459d46",
-      "sri": "sha384-m+7aDjubY66v97yN+KqO9EQrDRJ5SwVy3fRkpktS1XwL4oeBaO8HGBLifTKQuFpc",
-      "url": "/static/js/srp-auth.8334c46cde3990aa.js"
+      "bytes": 21380,
+      "sha256": "28b708c4dd2f4a5d18b0263fde9e5def24aac727d1b0019e40eacbdd081c9363",
+      "sri": "sha384-PnDOorhDIEEwO5ooxohR4irMhMrkahL6xsY0Si82OJFL91LG7utYQu9EuGecHfwk",
+      "url": "/static/js/srp-auth.28b708c4dd2f4a5d.js"
     },
     "js/store.js": {
       "bytes": 224047,
@@ -212,10 +212,10 @@
       "url": "/static/js/tagsuggest.a1570c6c241dd88c.js"
     },
     "js/totp-page.js": {
-      "bytes": 3776,
-      "sha256": "54383610ce8395d9b3e67de898baa2174bf042d227ce4e549edf889251d178e3",
-      "sri": "sha384-/FL34sjZ6jQw7JWKpkDROHJW/5Z/RtTenAKW3yODS3YClim5N3yL3D1ZNfc7s6Lq",
-      "url": "/static/js/totp-page.54383610ce8395d9.js"
+      "bytes": 5048,
+      "sha256": "ffa4f5fd1b4b772c0a1aff460f52f7b2bf11a6f81802a640463f532a40aa235f",
+      "sri": "sha384-vjqrcb9GDR2mcTfZ1FxQb9PMvuZmHwv9SMycjMByYIdds21BiEBScg6aLo9w7Ml+",
+      "url": "/static/js/totp-page.ffa4f5fd1b4b772c.js"
     },
     "js/totp.js": {
       "bytes": 22393,
@@ -321,6 +321,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "7fa25679c8012bcd93aac6c7f834cb0a7403f28efe1b97d32ed5b7726ef3c536",
+  "manifest_sha256": "dc2e9d038c2e2c7a1eefebc39c498aa2e5e36856c47e837731cdf5f4125db02b",
   "version": 1
 }

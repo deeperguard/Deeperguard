@@ -26,6 +26,8 @@ class VerificationSendLimitTests(unittest.TestCase):
         os.environ["NOTES_VERIFY_SEND_DAILY_CAP"] = "5"
         os.environ["NOTES_BACKUP_EMAIL_DAILY_CAP"] = "3"
         os.environ["NOTES_ALLOWED_CIDRS"] = "130.0.0.1/32"
+        # Backup email paths are Pro-gated; pin Pro for this suite.
+        os.environ["NOTES_DEFAULT_PLAN"] = "pro"
         (root / "keys").mkdir(parents=True)
         (root / "keys" / "flask-secret").write_text("unit-test-pepper", encoding="utf-8")
         for name in list(sys.modules):
@@ -63,6 +65,7 @@ class VerificationSendLimitTests(unittest.TestCase):
             "NOTES_VERIFY_SEND_DAILY_CAP",
             "NOTES_BACKUP_EMAIL_DAILY_CAP",
             "NOTES_ALLOWED_CIDRS",
+            "NOTES_DEFAULT_PLAN",
         ):
             os.environ.pop(key, None)
 

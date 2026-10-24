@@ -31,7 +31,9 @@ class NotesAppTests(unittest.TestCase):
         os.environ.pop("NOTES_SERVER_OCR", None)
         os.environ.pop("NOTES_ADMIN_EMAILS", None)
         os.environ.pop("NOTES_DEFAULT_USER_QUOTA_MB", None)
-        os.environ.pop("NOTES_DEFAULT_PLAN", None)
+        # Suite coverage for Pro-gated features assumes Vienna-style default.
+        # Code default remains Free when unset (see test_round82_free_tier).
+        os.environ["NOTES_DEFAULT_PLAN"] = "pro"
         os.environ.pop("NOTES_DISABLE_CIDR_GATE", None)
         (root / "keys").mkdir(parents=True)
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
@@ -4551,11 +4553,16 @@ class NotesAppTests(unittest.TestCase):
         res = self.client.get("/api/account", headers={"X-CSRF-Token": self._csrf()})
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
+        # NotesAppTests set NOTES_DEFAULT_PLAN=pro (Vienna-style). Free default: Round 82.
         self.assertEqual(data["plan"], "pro")
         self.assertIn("plan_features", data)
         self.assertTrue(data["plan_features"]["passkeys"])
+        self.assertTrue(data["plan_features"]["document_ocr"])
         self.assertIn("plan_pricing", data)
         self.assertFalse(data["plan_pricing"]["billing_active"])
+        self.assertIn("free", data["plan_catalog"])
+        self.assertIn("basic", data["plan_catalog"])
+        self.assertIn("pro", data["plan_catalog"])
 
     def test_basic_plan_blocks_passkey_registration(self):
         import db as notes_db
@@ -4781,8 +4788,13 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("scroll-margin-top: 5.75rem", css)
         self.assertIn("align-content: start", css)
         home = self.client.get("/")
-        self.assertIn(b"Free during beta: Pro, 5", home.data)
-        self.assertNotIn("€0".encode(), home.data)
+        self.assertIn(b"Free during public beta", home.data)
+        self.assertIn(b">Free</h3>", home.data)
+        self.assertIn(b">Basic</h3>", home.data)
+        self.assertIn(b">Pro</h3>", home.data)
+        # After-beta Free schedule is explicit (€0); Free card still says Always free.
+        self.assertIn("always €0".encode(), home.data)
+        self.assertIn(b"Always free", home.data)
         self.assertIn(b'class="is-unavailable">Not included: Passkey sign-in', home.data)
         self.assertIn(b"mk-hash-open", home.data)
         marketing_js = (APP_DIR / "static" / "js" / "marketing.js").read_text(encoding="utf-8")

@@ -3,6 +3,20 @@
   if (!form) return;
   const csrf = form.dataset.csrf || '';
   const err = document.getElementById('totp-error');
+  const capHint = document.getElementById('totp-session-cap-hint');
+
+  try {
+    const rawCap = sessionStorage.getItem('notes_session_cap_totp');
+    // Consume immediately so a later normal 2FA sign-in in this tab stays clean.
+    sessionStorage.removeItem('notes_session_cap_totp');
+    if (rawCap && capHint) {
+      const saved = JSON.parse(rawCap);
+      if (saved && typeof saved === 'object') {
+        capHint.textContent = "You're signed in on the most devices your plan allows. Enter the code from your authenticator app first, then you can sign out one of them.";
+        capHint.hidden = false;
+      }
+    }
+  } catch (e) { /* ignore */ }
 
   async function bootCredentials() {
     const email = String((function () {
@@ -66,6 +80,7 @@
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
       body: JSON.stringify({ code }),
     });
+    const data = await res.json().catch(() => ({}));
     if (res.ok) {
       try { sessionStorage.setItem('notes_allow_boot_unlock', '1'); } catch (e) {}
       try { sessionStorage.setItem('notes_post_login_unlock', '1'); } catch (e) {}
@@ -82,7 +97,21 @@
       location.replace(next);
       return;
     }
-    const data = await res.json().catch(() => ({}));
+    // After 2FA at the session soft-cap: hand the device list to /login (no IP leak before TOTP).
+    if (data.code === 'session_cap') {
+      try {
+        sessionStorage.removeItem('notes_session_cap_totp');
+        sessionStorage.setItem('notes_session_cap', JSON.stringify({
+          message: data.error || 'Device limit reached',
+          sessions: Array.isArray(data.sessions) ? data.sessions : [],
+          revokeToken: data.revoke_token || '',
+          limit: data.limit,
+          plan: data.plan || '',
+        }));
+      } catch (e) { /* ignore */ }
+      location.replace('/login');
+      return;
+    }
     if (err) {
       err.textContent = data.error || 'Invalid code';
       err.hidden = false;

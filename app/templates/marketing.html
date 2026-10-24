@@ -229,7 +229,7 @@
             <li class="pro"><strong>Public beta:</strong> Pro features included at no charge, including 5&nbsp;GB storage.</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Ciphertext-only sync (except Ask AI), OCR on the device, and a browser app you can use offline. After beta, Basic is encrypted sync, attachments, and import on 100&nbsp;MB; Pro adds passkeys, account 2FA, daily email and pCloud backups, document OCR, and the vault authenticator on 5&nbsp;GB.
+            <strong>Difference:</strong> Ciphertext-only sync (except Ask AI), OCR on the device, and a browser app you can use offline. After beta, Basic is encrypted sync, attachments, import, and on-device OCR on 100&nbsp;MB; Pro adds passkeys, account 2FA, daily email and pCloud backups, and the vault authenticator on 5&nbsp;GB.
           </div>
         </article>
 
@@ -241,7 +241,7 @@
           <ul class="mk-distinction-points">
             <li class="pro"><strong>Zero-knowledge:</strong> Mature end-to-end encrypted architecture.</li>
             <li class="pro"><strong>Free plan includes 2FA and daily encrypted email backups.</strong></li>
-            <li class="pro"><strong>Owned by Proton since 2024.</strong></li>
+            <li class="pro"><strong>Part of Proton since April 2024.</strong></li>
             <li class="pro"><strong>Extensible:</strong> Plentiful editors, themes, and extensions on paid tiers.</li>
             <li class="con"><strong>Paid plans:</strong> About $90/year (Productivity) or $120/year (Professional) — see <a href="https://standardnotes.com/plans" target="_blank" rel="noopener noreferrer">Standard Notes plans</a>.</li>
             <li class="con"><strong>Apps:</strong> Desktop and mobile clients are the usual way to use it. A web app also exists.</li>
@@ -318,7 +318,7 @@
         <article class="mk-card">
           <div class="mk-icon" aria-hidden="true">🔐</div>
           <h3>Local Key Derivation</h3>
-          <p>Your password is processed with Argon2id directly on your device. The server receives an SRP verification proof and only stores unreadable encrypted chunks.</p>
+          <p>Your password is processed with Argon2id directly on your device. The server receives an SRP verification proof and only stores unreadable encrypted chunks, except text you choose to send to Ask AI with Ollama Cloud, which passes through our server to ollama.com without being stored.</p>
         </article>
 
         <article class="mk-card">
@@ -382,7 +382,7 @@
         <span class="mk-badge ok">Public Beta Schedule</span>
         <h2>Transparent pricing schedule</h2>
         <p>
-          <strong>Free during beta: Pro, 5&nbsp;GB.</strong> No payment details are collected. After the beta, Basic is €2.99/month or €29/year (100&nbsp;MB). Pro is €6.99/month or €69/year (5&nbsp;GB) and keeps backups, passkeys, account 2FA, OCR, and the vault authenticator. Billing starts only after advance notice.
+          Every new account gets full Pro free during the public beta. No payment details are collected. After beta: Free ({{ free.storage_quota_mb }}&nbsp;MB, always €0), Basic €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr, Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr.
         </p>
         <div class="mk-trust-strip" role="note">
           <span>Server in Vienna, Austria (EU)</span>
@@ -393,12 +393,29 @@
         </div>
       </div>
 
-      <div class="mk-pricing-beta-highlight">
-        <h3>Free during beta: Pro, 5 GB</h3>
-        <p>The cards below are the post-beta prices. During the public beta every new account is Pro with 5&nbsp;GB, not the Basic 100&nbsp;MB plan.</p>
-      </div>
-
       <div class="mk-pricing">
+        <!-- Free Plan -->
+        <article class="mk-plan">
+          <div class="mk-plan-header">
+            <h3>{{ free.label }}</h3>
+            <p class="mk-plan-tagline">{{ free.tagline }}</p>
+          </div>
+          <div class="mk-price-block">
+            <div class="mk-price-beta">Free</div>
+            <div class="mk-price-post-beta">Always free</div>
+          </div>
+          <p><strong>{{ free.storage_quota_mb }}&nbsp;MB</strong> encrypted storage. Up to <strong>{{ free.active_sessions }}</strong> signed-in devices. On-device OCR, sync, attachments, and import/export.</p>
+          <ul>
+            {% for feat in free_features %}
+            <li>{{ feat }}</li>
+            {% endfor %}
+            {% for feat in pro_only_features %}
+            <li class="is-unavailable">Not included: {{ feat }}</li>
+            {% endfor %}
+          </ul>
+          <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
+        </article>
+
         <!-- Basic Plan -->
         <article class="mk-plan">
           <div class="mk-plan-header">
@@ -407,13 +424,13 @@
           </div>
           <div class="mk-price-block">
             <div class="mk-price-beta">
-              After beta
+              €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo after beta
             </div>
             <div class="mk-price-post-beta">
-              <strong>€{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo</strong> or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr
+              or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr
             </div>
           </div>
-          <p><strong>{{ basic.storage_quota_mb }}&nbsp;MB</strong> after beta. During beta you get Pro, 5&nbsp;GB.</p>
+          <p><strong>{{ basic.storage_quota_mb }}&nbsp;MB</strong> encrypted storage. Up to <strong>{{ basic.active_sessions }}</strong> signed-in devices.</p>
           <ul>
             {% for feat in basic_features %}
             <li>{{ feat }}</li>
@@ -422,12 +439,11 @@
             <li class="is-unavailable">Not included: {{ feat }}</li>
             {% endfor %}
           </ul>
-          <p class="mk-plan-tagline">Not what you get in the beta. Beta accounts are Pro.</p>
         </article>
 
         <!-- Pro Plan (Featured) -->
         <article class="mk-plan featured">
-          <span class="mk-plan-badge">Free in Public Beta</span>
+          <span class="mk-plan-badge">Free during public beta</span>
           <div class="mk-plan-header">
             <h3>{{ pro.label }}</h3>
             <p class="mk-plan-tagline">{{ pro.tagline }}</p>
@@ -440,7 +456,7 @@
               After beta: <strong>€{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo</strong> or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr
             </div>
           </div>
-          <p><strong>{{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB</strong> encrypted storage during beta and on Pro after beta.</p>
+          <p><strong>{{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB</strong> encrypted storage, unlimited signed-in devices, plus backups, passkeys, and the vault authenticator.</p>
           <ul>
             {% for feat in pro_features %}
             <li>{{ feat }}</li>
@@ -456,20 +472,29 @@
           <table class="mk-compare mk-compare-stack mk-compare-plans" aria-label="Detailed Plan Feature Comparison">
             <thead>
               <tr>
-                <th scope="col" style="width: 50%;">Feature</th>
-                <th scope="col" style="width: 25%;">{{ basic.label }}</th>
-                <th scope="col" style="width: 25%;">{{ pro.label }} (Free in Beta)</th>
+                <th scope="col">Feature</th>
+                <th scope="col">{{ free.label }}</th>
+                <th scope="col">{{ basic.label }}</th>
+                <th scope="col">{{ pro.label }}</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>Encrypted Cloud Storage</td>
+                <td>{{ free.storage_quota_mb }} MB</td>
                 <td>{{ basic.storage_quota_mb }} MB</td>
                 <td><strong>{{ (pro.storage_quota_mb / 1024)|int }} GB</strong></td>
+              </tr>
+              <tr>
+                <td>Signed-in devices</td>
+                <td>{{ free.active_sessions }}</td>
+                <td>{{ basic.active_sessions }}</td>
+                <td><strong>Unlimited</strong></td>
               </tr>
               {% for key, feat in features.items() %}
               <tr>
                 <td>{{ feat.label }}</td>
+                <td>{% if plan_free in feat.plans %}<span class="yes">✓ Included</span>{% else %}<span class="no">—</span>{% endif %}</td>
                 <td>{% if plan_basic in feat.plans %}<span class="yes">✓ Included</span>{% else %}<span class="no">—</span>{% endif %}</td>
                 <td>{% if plan_pro in feat.plans %}<span class="yes">✓ Included</span>{% else %}<span class="no">—</span>{% endif %}</td>
               </tr>
@@ -504,12 +529,16 @@
       </details>
       <details>
         <summary>What is the pricing schedule during and after the beta?</summary>
-        <p>During the public beta, all accounts receive full Pro features (5 GB storage, passkeys, OCR, backups) completely free of charge. No payment info is collected. When billing launches in the future, Pro will be €6.99/mo (or €69/year) and Basic will be €2.99/mo (or €29/year).</p>
+        <p>Every new account gets full Pro free during the public beta — no payment info is collected. After beta: Free ({{ free.storage_quota_mb }}&nbsp;MB, always €0, {{ free.active_sessions }} signed-in devices), Basic €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr ({{ basic.storage_quota_mb }}&nbsp;MB, {{ basic.active_sessions }} devices), Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr ({{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB, unlimited devices) with backups, passkeys, account 2FA, reminders, and the vault authenticator. Existing accounts keep their current plan. Billing starts only after advance notice.</p>
+      </details>
+      <details>
+        <summary>How many devices can I stay signed in on?</summary>
+        <p>Free allows {{ free.active_sessions }} signed-in devices at once, Basic allows {{ basic.active_sessions }}, and Pro is unlimited. If you hit the limit, sign out one device from the sign-in screen, then sign in again. Signing out ends that device’s session; your notes are not deleted.</p>
       </details>
       <details>
         <summary>What happens if I lose my password?</summary>
         <p>Because Deeperguard is zero-knowledge, we <strong>cannot reset or recover your master vault password</strong>. Without it, ciphertext on our servers cannot be decrypted — there is no “forgot password” email that restores access.</p>
-        <p><strong>Set up protection early:</strong> During the public beta every account includes Pro. Turn on <strong>daily encrypted email backups</strong> and/or <strong>pCloud encrypted backups</strong> in Settings as soon as your vault is ready. Archives stay encrypted; you still need the vault password to open them, but you will not lose the only copy if a device fails.</p>
+        <p><strong>Set up protection early:</strong> On Pro, turn on <strong>daily encrypted email backups</strong> and/or <strong>pCloud encrypted backups</strong> in Settings as soon as your vault is ready. Archives stay encrypted; you still need the vault password to open them, but you will not lose the only copy if a device fails.</p>
         <p>If sign-in credentials drift but you still know your vault password, the app can guide you through vault login recovery using encrypted samples on the server — that is not a master-password reset.</p>
       </details>
       <details>

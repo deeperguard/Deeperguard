@@ -23,6 +23,15 @@ async function postJson(path, body) {
     const err = new Error(message);
     err.status = res.status;
     if (data.repair_exhausted) err.repairExhausted = true;
+    if (data.code) err.code = String(data.code);
+    if (data.code === 'session_cap') {
+      err.sessionCap = true;
+      err.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+      err.revokeToken = data.revoke_token || '';
+      err.limit = data.limit;
+      err.plan = data.plan || '';
+      err.totpRequired = !!data.totp_required;
+    }
     throw err;
   }
   return data;
@@ -136,6 +145,15 @@ function mapPasswordSignInError(err) {
   return err;
 }
 
+function stashSessionCapTotpHint(err) {
+  try {
+    sessionStorage.setItem('notes_session_cap_totp', JSON.stringify({
+      message: err?.message || err?.error || '',
+      pending: true,
+    }));
+  } catch (stashErr) { /* ignore */ }
+}
+
 function showSecureSignInReload(errorId) {
   const el = document.getElementById(errorId || 'login-error');
   if (!el) return;
@@ -201,9 +219,132 @@ if (loginForm) {
   } catch (err) {
     /* ignore */
   }
+  let sessionCapRevokeToken = '';
+
+  function hideSessionCapPanel() {
+    const panel = document.getElementById('session-cap-panel');
+    const list = document.getElementById('session-cap-list');
+    const status = document.getElementById('session-cap-status');
+    if (panel) panel.hidden = true;
+    if (list) list.innerHTML = '';
+    if (status) {
+      status.hidden = true;
+      status.textContent = '';
+    }
+    sessionCapRevokeToken = '';
+  }
+
+  function renderSessionCapPanel(err) {
+    const panel = document.getElementById('session-cap-panel');
+    const list = document.getElementById('session-cap-list');
+    const status = document.getElementById('session-cap-status');
+    const capMessage = err?.message || err?.error || 'Device limit reached';
+    if (!panel || !list) {
+      showError('login-error', capMessage);
+      return;
+    }
+    sessionCapRevokeToken = String(err?.revokeToken || '');
+    showError('login-error', capMessage);
+    if (status) {
+      status.hidden = true;
+      status.textContent = '';
+      status.classList.remove('error');
+    }
+    const sessions = Array.isArray(err?.sessions) ? err.sessions : [];
+    list.innerHTML = '';
+    if (!sessions.length) {
+      const empty = document.createElement('li');
+      empty.textContent = 'No active devices listed. Try signing in again in a moment.';
+      list.appendChild(empty);
+    } else {
+      sessions.forEach((row) => {
+        const li = document.createElement('li');
+        const meta = document.createElement('div');
+        meta.className = 'session-cap-meta';
+        const title = document.createElement('strong');
+        title.textContent = String(row.device || 'Unknown device');
+        meta.appendChild(title);
+        const loc = document.createElement('span');
+        loc.className = 'muted';
+        // Location only — never show the full IP on the sign-in cap panel.
+        loc.textContent = String(row.ip_location || '').trim() || 'Unknown location';
+        meta.appendChild(loc);
+        li.appendChild(meta);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn subtle';
+        btn.textContent = 'Sign out';
+        btn.dataset.sessionId = String(row.id);
+        btn.addEventListener('click', async () => {
+          if (!sessionCapRevokeToken) {
+            showError('login-error', 'Sign in again to manage devices');
+            return;
+          }
+          if (!window.confirm(
+            'Sign out this device? Its session will end there. Your notes are not deleted.',
+          )) {
+            return;
+          }
+          btn.disabled = true;
+          if (status) {
+            status.hidden = false;
+            status.classList.remove('error');
+            status.textContent = 'Signing out…';
+          }
+          try {
+            const data = await postJson('/api/auth/session-cap/revoke', {
+              session_id: Number(row.id),
+              revoke_token: sessionCapRevokeToken,
+            });
+            if (status) {
+              status.classList.remove('error');
+              status.textContent = data.can_sign_in
+                ? 'Device signed out. Sign in again.'
+                : 'Device signed out. Sign out another if you still hit the limit.';
+            }
+            renderSessionCapPanel({
+              message: document.getElementById('login-error')?.textContent || capMessage,
+              sessions: data.sessions || [],
+              revokeToken: sessionCapRevokeToken,
+            });
+          } catch (revokeErr) {
+            btn.disabled = false;
+            if (status) {
+              status.hidden = false;
+              status.classList.add('error');
+              status.textContent = "Couldn't sign out that device. Sign in again to see your devices.";
+            }
+          }
+        });
+        li.appendChild(btn);
+        list.appendChild(li);
+      });
+    }
+    panel.hidden = false;
+  }
+
+  window.__notesRenderSessionCapPanel = renderSessionCapPanel;
+
+  try {
+    const rawCap = sessionStorage.getItem('notes_session_cap');
+    if (rawCap) {
+      sessionStorage.removeItem('notes_session_cap');
+      const saved = JSON.parse(rawCap);
+      if (saved && typeof saved === 'object') {
+        renderSessionCapPanel({
+          message: saved.message || saved.error || 'Device limit reached',
+          sessions: Array.isArray(saved.sessions) ? saved.sessions : [],
+          revokeToken: saved.revokeToken || saved.revoke_token || '',
+        });
+      }
+    }
+  } catch (capBootErr) { /* ignore */ }
+
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     showError('login-error', '');
+    hideSessionCapPanel();
+    try { sessionStorage.removeItem('notes_session_cap_totp'); } catch (clearErr) { /* ignore */ }
     const fd = new FormData(loginForm);
     const email = String(fd.get('email') || '').trim().toLowerCase();
     const password = String(fd.get('password') || '');
@@ -229,6 +370,18 @@ if (loginForm) {
       setLoginBusy(false, '');
       if (err?.srpMissing) {
         showSecureSignInReload('login-error');
+        return;
+      }
+      if (err?.sessionCap || err?.code === 'session_cap') {
+        if (err?.totpRequired) {
+          try {
+            localStorage.setItem('notes_email', email);
+          } catch (stashErr) { /* ignore */ }
+          stashSessionCapTotpHint(err);
+          location.replace(afterAuthUrl('/totp'));
+          return;
+        }
+        renderSessionCapPanel(err);
         return;
       }
       const msg = String(err?.message || 'Sign-in failed');
@@ -513,6 +666,7 @@ const webauthnLoginBtn = document.getElementById('webauthn-login');
 if (webauthnLoginBtn) {
   webauthnLoginBtn.addEventListener('click', async () => {
     showError('login-error', '');
+    try { sessionStorage.removeItem('notes_session_cap_totp'); } catch (clearErr) { /* ignore */ }
     const emailInput = document.querySelector('#login-form [name="email"]');
     const email = String(emailInput?.value || '').trim().toLowerCase();
     if (!email) {
@@ -547,6 +701,20 @@ if (webauthnLoginBtn) {
       location.replace(afterAuthUrl('/app'));
     } catch (err) {
       setLoginBusy(false, '');
+      if (err?.sessionCap || err?.code === 'session_cap') {
+        if (err?.totpRequired) {
+          try {
+            localStorage.setItem('notes_email', email);
+          } catch (stashErr) { /* ignore */ }
+          stashSessionCapTotpHint(err);
+          location.replace(afterAuthUrl('/totp'));
+          return;
+        }
+        if (typeof window.__notesRenderSessionCapPanel === 'function') {
+          window.__notesRenderSessionCapPanel(err);
+          return;
+        }
+      }
       showError('login-error', err.message || 'Passkey sign-in failed');
     }
   });

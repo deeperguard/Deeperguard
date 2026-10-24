@@ -31,6 +31,11 @@
       </label>
       <p class="hint">This password signs you in. It also decrypts notes on this device until you change the vault password in Settings. It never leaves your browser.</p>
       <p id="login-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
+      <div id="session-cap-panel" class="session-cap-panel" hidden>
+        <p class="hint">Signing out a device ends its session there. Your notes are not deleted.</p>
+        <ul id="session-cap-list" class="session-cap-list"></ul>
+        <p id="session-cap-status" class="auth-status muted" hidden></p>
+      </div>
       <p id="login-status" class="auth-status muted" hidden></p>
       <button type="submit" class="btn primary block">Sign in</button>
       <button type="button" class="btn subtle block" id="webauthn-login">Sign in with passkey</button>

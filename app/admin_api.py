@@ -20,7 +20,7 @@ from config import (
     user_is_admin,
     user_is_admin_email,
 )
-from plans import PLAN_BASIC, PLAN_PRO, normalize_plan
+from plans import PLAN_BASIC, PLAN_FREE, PLAN_PRO, VALID_PLANS, normalize_plan
 
 log = logging.getLogger("deeperguard.admin")
 
@@ -264,7 +264,7 @@ def register_admin_routes(app, build_id: str) -> None:
             )
         if "plan" in body:
             plan = str(body.get("plan") or "").strip().lower()
-            if plan not in {PLAN_BASIC, PLAN_PRO}:
+            if plan not in VALID_PLANS:
                 return jsonify({"error": "invalid plan"}), 400
             db.update_user_plan(user_id, plan)
             log.info(
