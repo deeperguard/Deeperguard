@@ -1494,6 +1494,13 @@ def _device_id_suffix(device_id: str) -> str:
     return raw.replace("-", "")[:4].lower()
 
 
+def _device_phrase(device_id: str) -> str:
+    """Round 74: memorable adjective+noun from device_id (not a secret)."""
+    from device_phrase import device_phrase
+
+    return device_phrase(device_id)
+
+
 def _public_session(row, *, current_token: str, now: float | None = None) -> dict:
     token_match = False
     if current_token:
@@ -1507,6 +1514,7 @@ def _public_session(row, *, current_token: str, now: float | None = None) -> dic
         "id": int(row["id"]),
         "device": str(row["device_label"] or "Unknown device"),
         "device_id_suffix": _device_id_suffix(device_id),
+        "device_phrase": _device_phrase(device_id),
         "ip": str(row["ip"] or ""),
         "ip_location": str(row["ip_location"] or "Unknown"),
         "last_login_at": float(row["last_login_at"] or 0),

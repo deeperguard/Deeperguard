@@ -88,6 +88,8 @@ Promise.resolve(sandbox.NotesSrpAuth.login('fresh@example.com', 'password-ok-lon
     // --- A3: device list suffix + Inactive ------------------------------------
     assert.ok(appJs.includes('formatDeviceRowName'));
     assert.ok(appJs.includes('device_id_suffix'));
+    // Round 74: memorable phrase is preferred in the row title when present.
+    assert.ok(appJs.includes('device_phrase'));
     assert.ok(appJs.includes('Last seen'));
     assert.ok(appJs.includes("'Inactive'") || appJs.includes('"Inactive"'));
     assert.ok(appJs.includes('device-row-inactive') || appJs.includes('device-inactive'));

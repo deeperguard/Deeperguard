@@ -13296,6 +13296,9 @@
 
   function formatDeviceRowName(item) {
     const base = item?.device || 'Unknown device';
+    // Round 74: prefer memorable device_phrase over the short hex stub.
+    const phrase = String(item?.device_phrase || '').trim();
+    if (phrase) return `${base} · ${phrase}`;
     const suffix = String(item?.device_id_suffix || '').trim();
     return suffix ? `${base} · ${suffix}` : base;
   }
