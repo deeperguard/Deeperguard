@@ -10,6 +10,7 @@
       {% include 'partials/auth-brand.html' %}
       <h1>Deeperguard</h1>
       {% include 'partials/zk-plain.html' %}
+      {% include 'partials/device-phrase-banner.html' %}
       <p class="auth-hint">Sign in with your account password. The vault unlocks with that same password, unless you changed the vault password in Settings. They start as one password. We cannot recover it.</p>
     </div>
     {% if signed_in_email %}
@@ -39,6 +40,7 @@
     {% include 'partials/auth-footer.html' %}
   </main>
   {{ asset_script('js/vault-secrets.js') }}
+  {{ asset_script('js/device-phrase.js') }}
   {{ asset_script('js/vendor/noble-argon2.js') }}
   {{ asset_script('js/webauthn-client.js') }}
   {{ asset_script('js/srp-auth.js') }}

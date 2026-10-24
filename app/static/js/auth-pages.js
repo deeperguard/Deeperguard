@@ -173,6 +173,13 @@ async function signInWithPassword(email, password) {
   }
 }
 
+// Round 74: anti-phishing phrase before password entry (localStorage only).
+try {
+  if (window.NotesDevicePhrase) {
+    NotesDevicePhrase.renderDisplay(document.getElementById('device-phrase-display'));
+  }
+} catch (err) { /* ignore */ }
+
 const loginForm = document.getElementById('login-form');
 if (loginForm) {
   try {

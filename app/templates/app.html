@@ -539,6 +539,7 @@
         <h1>Unlock your vault</h1>
         <p id="unlock-email" class="muted">Enter your vault password. It starts as the password you created the account with, and you can change it in Settings. Notes decrypt on this device.</p>
         {% include 'partials/zk-plain.html' %}
+        {% include 'partials/device-phrase-banner.html' %}
         <p id="unlock-first-hint" class="auth-hint" hidden>Use the vault password you just created.</p>
         <p class="zk-badge">Encrypted on this device</p>
       </div>
@@ -1621,6 +1622,17 @@
           </label>
           <label class="settings-row checkbox"><span>Remember password on this device</span><input id="pref-remember-device" type="checkbox"></label>
           <p class="settings-hint">Saves the vault password on this device so offline unlock can use it after you type it. Opening Notes still asks for the password every time — it is not filled in for you. Disable on shared devices.</p>
+          <div id="device-phrase-settings" class="settings-nested stack">
+            <label class="settings-row stacked" for="device-phrase-input">Device phrase
+              <input id="device-phrase-input" type="text" maxlength="64" autocomplete="off" spellcheck="false" autocapitalize="off">
+            </label>
+            <p class="settings-hint">Shown on this device before you type your password. Stored only in this browser — never sent to the server. Helps you spot a fake sign-in page.</p>
+            <div class="settings-actions">
+              <button type="button" id="btn-device-phrase-save" class="btn primary">Save</button>
+              <button type="button" id="btn-device-phrase-clear" class="btn ghost">Clear</button>
+            </div>
+            <p id="device-phrase-settings-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
+          </div>
           <p id="totp-status" class="settings-hint" hidden></p>
           <div id="passkey-settings" class="settings-nested stack" data-plan-feature="passkeys">
             <p class="settings-hint">Passkeys sign you into your account without typing your password. Vault unlock still requires your master password locally.</p>
@@ -2201,6 +2213,7 @@
   {{ asset_script('js/webauthn-client.js') }}
   {{ asset_script('js/passkeys.js') }}
   {{ asset_script('js/vault-secrets.js') }}
+  {{ asset_script('js/device-phrase.js') }}
   {{ asset_script('js/srp-auth.js') }}
   {{ asset_script('js/idb.js') }}
   {{ asset_script('js/vendor/qrcode-generator.js') }}

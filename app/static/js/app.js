@@ -15056,6 +15056,7 @@
     // and must not be what the user sees when deeperguard-prefs has real values.
     initSettings().catch(() => {});
     refreshSettingsDiagnostics().catch(() => {});
+    try { refreshDevicePhraseUi(); } catch (err) { /* ignore */ }
     try { refreshGoogleDriveBackupUi(); } catch (err) { /* ignore */ }
     try { refreshDropboxBackupUi(); } catch (err) { /* ignore */ }
     startSignedInDevicesRefresh();
@@ -19628,6 +19629,43 @@
       enableRememberDevice();
     });
   }
+
+  // Round 74: user-chosen anti-phishing phrase (localStorage only; survives sign-out).
+  function refreshDevicePhraseUi() {
+    try {
+      if (!window.NotesDevicePhrase) return;
+      NotesDevicePhrase.renderDisplay(document.getElementById('device-phrase-display'));
+      const input = document.getElementById('device-phrase-input');
+      if (input) input.value = NotesDevicePhrase.getPhrase();
+    } catch (err) {
+      /* ignore */
+    }
+  }
+  function setDevicePhraseStatus(message) {
+    const el = document.getElementById('device-phrase-settings-status');
+    if (!el) return;
+    el.textContent = message || '';
+    el.hidden = !message;
+  }
+  refreshDevicePhraseUi();
+  document.getElementById('btn-device-phrase-save')?.addEventListener('click', () => {
+    if (!window.NotesDevicePhrase) return;
+    const input = document.getElementById('device-phrase-input');
+    const saved = NotesDevicePhrase.setPhrase(input?.value || '');
+    if (input) input.value = saved;
+    refreshDevicePhraseUi();
+    setDevicePhraseStatus(saved ? 'Saved on this device.' : 'Cleared — no phrase on this device.');
+    toast(saved ? 'Device phrase saved' : 'Device phrase cleared');
+  });
+  document.getElementById('btn-device-phrase-clear')?.addEventListener('click', () => {
+    if (!window.NotesDevicePhrase) return;
+    NotesDevicePhrase.clearPhrase();
+    const input = document.getElementById('device-phrase-input');
+    if (input) input.value = '';
+    refreshDevicePhraseUi();
+    setDevicePhraseStatus('Cleared — no phrase on this device.');
+    toast('Device phrase cleared');
+  });
   document.getElementById('btn-show-vault-password')?.addEventListener('click', async () => {
     const saved = savedVaultPasswordForReveal();
     if (!saved) {
