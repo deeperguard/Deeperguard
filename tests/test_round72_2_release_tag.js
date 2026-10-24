@@ -16,7 +16,7 @@ const workflow = fs.readFileSync(
 );
 
 assert.ok(/^v0\.\d+\.\d+/.test(tag), `RELEASE_TAG=${tag}`);
-assert.strictEqual(tag, 'v0.64.7', 'repo RELEASE_TAG must be current live release');
+assert.strictEqual(tag, 'v0.64.8', 'repo RELEASE_TAG must be current live release');
 
 assert.ok(deploy.includes('NOTES_RELEASE_TAG'), 'deploy requires/writes release tag');
 assert.ok(deploy.includes('check-release-tag.sh'), 'deploy runs check-release-tag');
