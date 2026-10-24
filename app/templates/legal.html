@@ -22,7 +22,7 @@
       <p>The data controller for personal data processed through Deeperguard is:</p>
       <ul>
         <li><strong>Name:</strong> Schutten Invest</li>
-        <li><strong>Address:</strong> [ADDRESS]</li>
+        <li><strong>Address:</strong> Schutten Invest, Lisdodde 66, 2408 LX Alphen aan den Rijn, Netherlands</li>
         <li><strong>Chamber of Commerce (KvK), if any:</strong> KvK 99268876</li>
         <li><strong>Contact email:</strong> notes@deeperguard.com</li>
       </ul>
@@ -62,12 +62,12 @@
 
       <h2>Retention</h2>
       <ul>
-        <li><strong>Account and vault ciphertext</strong> — kept while your account exists, then removed when the account is deleted. Backup copies you export yourself are under your control. Longer archival of operator backups: [RETENTION PERIOD].</li>
+        <li><strong>Account and vault ciphertext</strong> — kept while your account exists, then removed when the account is deleted. Backup copies you export yourself are under your control. Longer archival of operator local backups on the origin defaults to the newest <strong>14</strong> full copies (<code>NOTES_BACKUP_LOCAL_KEEP</code>), unless configured otherwise.</li>
         <li><strong>Signed-in sessions</strong> — default cookie lifetime is <strong>30 days</strong> (<code>NOTES_SESSION_SECONDS</code> default in this codebase), unless configured otherwise on the deployment.</li>
         <li><strong>SRP login challenges</strong> — short-lived server challenges expire after <strong>300 seconds</strong> and are pruned.</li>
-        <li><strong>Application logs</strong> — sync and device-report logs on the origin are rotated by size (5&nbsp;MB) with up to <strong>5</strong> rotated copies compressed (see <code>deploy/logrotate/deeperguard</code>). Broader access-log retention at the edge or host: [RETENTION PERIOD].</li>
-        <li><strong>Secure Send</strong> — ciphertext is purged when a link expires, when its allowed views are used, or when the sender cancels it. Maximum link lifetime: [RETENTION PERIOD] (product max when the feature is enabled).</li>
-        <li><strong>Email verification / backup codes</strong> — hashed codes with an expiry timestamp; cleared after use or expiry. Exact code lifetime: [RETENTION PERIOD].</li>
+        <li><strong>Application logs</strong> — sync and device-report logs on the origin are rotated by size (5&nbsp;MB) with up to <strong>5</strong> rotated copies compressed (see <code>deploy/logrotate/deeperguard</code>). Broader edge access logs (for example Cloudflare) follow that provider’s retention; this codebase does not keep a separate edge access-log archive.</li>
+        <li><strong>Secure Send</strong> — ciphertext is purged when a link expires, when its allowed views are used, or when the sender cancels it. Maximum link lifetime: <strong>7 days</strong> (product max when the feature is enabled).</li>
+        <li><strong>Email verification / backup codes</strong> — hashed codes with an expiry timestamp; cleared after use or expiry. Exact code lifetime: <strong>30 minutes</strong>.</li>
       </ul>
 
       <h2>Processors and server location</h2>
@@ -102,7 +102,7 @@
       <p>Deeperguard is operated by:</p>
       <ul>
         <li><strong>Name:</strong> Schutten Invest</li>
-        <li><strong>Address:</strong> [ADDRESS]</li>
+        <li><strong>Address:</strong> Schutten Invest, Lisdodde 66, 2408 LX Alphen aan den Rijn, Netherlands</li>
         <li><strong>Chamber of Commerce (KvK), if any:</strong> KvK 99268876</li>
         <li><strong>Contact email:</strong> notes@deeperguard.com</li>
       </ul>

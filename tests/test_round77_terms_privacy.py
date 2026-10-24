@@ -62,11 +62,29 @@ class Round77TermsPrivacyTests(unittest.TestCase):
         self.assertNotIn("[ABUSE CONTACT EMAIL]", text)
         self.assertIn("KvK 99268876", text)
         self.assertNotIn("[KVK NUMBER if any]", text)
+        self.assertIn("Lisdodde 66, 2408 LX Alphen aan den Rijn", text)
+        self.assertIn("30 days", text)
+        self.assertIn("300 seconds", text)
+        self.assertIn("7 days", text)
+        self.assertIn("30 minutes", text)
+        self.assertIn("NOTES_BACKUP_LOCAL_KEEP", text)
         for ph in (
             "[ADDRESS]",
             "[RETENTION PERIOD]",
+            "[OPERATOR NAME]",
+            "[KVK NUMBER if any]",
+            "[CONTACT EMAIL]",
+            "[ABUSE CONTACT EMAIL]",
+            "[SERVER LOCATION]",
+            "[GOVERNING LAW, e.g. the Netherlands]",
+            "[COURT]",
         ):
-            self.assertIn(ph, text)
+            self.assertNotIn(ph, text)
+        # No square-bracket placeholders left in the public legal copy.
+        import re
+
+        leftover = re.findall(r"\[[A-Z][A-Z0-9 /.,_-]*\]", text)
+        self.assertEqual(leftover, [], f"leftover placeholders: {leftover}")
 
     def test_last_updated_and_no_draft_banner_on_page(self):
         text = LEGAL.read_text(encoding="utf-8")
@@ -130,10 +148,16 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             self.assertIn("You use Deeperguard at your own risk.", thtml)
             self.assertIn("during the public beta", thtml)
             self.assertIn("using Export", thtml)
-            self.assertIn("[ADDRESS]", phtml)
+            self.assertIn("Lisdodde 66, 2408 LX Alphen aan den Rijn", phtml)
+            self.assertIn("Lisdodde 66, 2408 LX Alphen aan den Rijn", thtml)
             self.assertIn("KvK 99268876", phtml)
             self.assertIn("KvK 99268876", thtml)
-            self.assertIn("[RETENTION PERIOD]", phtml)
+            self.assertNotIn("[ADDRESS]", phtml)
+            self.assertNotIn("[RETENTION PERIOD]", phtml)
+            self.assertIn("30 days", phtml)
+            self.assertIn("300 seconds", phtml)
+            self.assertIn("7 days", phtml)
+            self.assertIn("30 minutes", phtml)
             self.assertIn("Last updated: 24 October 2026", phtml)
             self.assertIn("Last updated: 24 October 2026", thtml)
             # Page must stay static / text-safe (no draft banner on the public page).
