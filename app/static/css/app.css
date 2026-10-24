@@ -6276,6 +6276,10 @@ body.search-filters-open .fab-stack,
   body.editor-mobile-doc-preview .editor-actions-overflow-panel #btn-desktop-doc-fullscreen {
     display: none !important;
   }
+  /* Keep the primary row single-line when Close is shown in doc preview. */
+  body.editor-mobile-doc-preview .editor-actions-mobile-bar [data-editor-proxy="btn-pin"] {
+    display: none !important;
+  }
   body.editor-mobile-doc-preview .attachment-item-actions .btn[data-share] {
     display: none !important;
   }

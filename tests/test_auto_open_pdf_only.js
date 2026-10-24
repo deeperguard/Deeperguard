@@ -22,7 +22,7 @@ assert.ok(html.includes('pref-auto-open-pdf-only') && html.includes('type="check
 assert.ok(html.includes('Open notes in preview (documents &amp; markdown)'));
 assert.ok(html.includes('id="pref-auto-preview"'));
 assert.ok(
-  html.includes('When a note has no text and one PDF, open the PDF preview instead of a blank editor. The preview stays on this device.'),
+  html.includes("When a note has no text and one PDF, open the PDF preview instead of a blank editor. Preview runs in your browser — the file isn't sent to our servers."),
   'settings hint must match Marketing copy',
 );
 
@@ -63,9 +63,18 @@ assert.ok(appJs.includes('prefs.autoOpenPdfOnly !== false'));
 // Mobile Close on doc toolbar → existing btn-preview (session dismiss path).
 assert.ok(html.includes('id="btn-mobile-doc-close"'));
 assert.ok(html.includes('aria-label="Close"'));
+const closeBtnMatch = html.match(/<button[^>]*id="btn-mobile-doc-close"[^>]*>/);
+assert.ok(closeBtnMatch, 'Close button markup present');
+assert.ok(!/\btoolbar-secondary\b/.test(closeBtnMatch[0]), 'Close must not use toolbar-secondary (phone hides that class)');
+assert.ok(/\beditor-mobile-doc-action\b/.test(closeBtnMatch[0]), 'Close keeps editor-mobile-doc-action');
 assert.ok(appJs.includes("getElementById('btn-mobile-doc-close')"));
 assert.ok(appJs.includes("getElementById('btn-preview')?.click()"));
 assert.ok(appJs.includes('closeBtn.hidden = !show') || appJs.includes('closeBtn.hidden = !show;'));
+const css = fs.readFileSync(path.join(root, 'app/static/css/app.css'), 'utf8');
+assert.ok(
+  css.includes('body.editor-mobile-doc-preview .editor-actions-mobile-bar [data-editor-proxy="btn-pin"]'),
+  'hide Pin in mobile doc-preview so Close fits one row',
+);
 
 // Behavioral unit: same decision rules as shouldAutoOpenPdfOnlyNote + Set suppress.
 function noteBodyIsBlank(note) {
