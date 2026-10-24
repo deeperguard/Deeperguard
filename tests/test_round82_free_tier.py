@@ -307,6 +307,9 @@ class Round82FreeTierAppTests(unittest.TestCase):
         self.assertEqual(body["limit"], 3)
         self.assertEqual(len(body["sessions"]), 3)
         self.assertTrue(body.get("revoke_token"))
+        for row in body["sessions"]:
+            self.assertNotIn("ip", row)
+            self.assertTrue(row.get("ip_location"))
         live_after = self.notes_db.list_user_sessions(
             uid, active_since=time.time() - 86400
         )
@@ -364,6 +367,164 @@ class Round82FreeTierAppTests(unittest.TestCase):
             )
         ok = self._srp_login("pro-cap@home.local", "pro-cap-secure-pass", device_id="pro-device-new")
         self.assertEqual(ok.status_code, 200, ok.get_json())
+
+    def test_totp_user_at_cap_gets_no_sessions_until_totp(self):
+        """TOTP-required accounts must not see sessions/IPs/revoke from password proof alone."""
+        import pyotp
+        import totp as totp_mod
+
+        email = "cap-totp@home.local"
+        password = "cap-totp-secure-pass"
+        uid = self._create_user(email, password, plan="free")
+        secret = totp_mod.new_secret()
+        self.notes_db.update_user_totp(uid, secret, enabled=True)
+        for i in range(3):
+            self.notes_db.create_user_session(
+                uid,
+                device_label=f"TDevice {i}",
+                user_agent=f"TUA/{i}",
+                ip=f"203.0.113.{10 + i}",
+                ip_location="Vienna, AT",
+                device_id=f"totp-cap-{i}",
+                login=True,
+            )
+        blocked = self._srp_login(email, password, device_id="totp-cap-new")
+        self.assertEqual(blocked.status_code, 403, blocked.get_json())
+        body = blocked.get_json()
+        self.assertEqual(body["code"], "session_cap")
+        self.assertTrue(body.get("totp_required"))
+        self.assertNotIn("sessions", body)
+        self.assertFalse(body.get("sessions"))
+        self.assertNotIn("revoke_token", body)
+        self.assertFalse(body.get("revoke_token"))
+        dumped = str(body)
+        self.assertNotIn("203.0.113.", dumped)
+        self.assertNotIn("Vienna", dumped)
+
+        # Revoke must fail — no token was issued before TOTP.
+        denied = self.client.post(
+            "/api/auth/session-cap/revoke",
+            json={"session_id": 1, "revoke_token": "forged"},
+        )
+        self.assertIn(denied.status_code, {401, 429})
+
+        # Complete TOTP — then the session list + revoke token are available.
+        csrf = None
+        with self.client.session_transaction() as sess:
+            csrf = sess.get("csrf")
+            self.assertTrue(sess.get("session_cap_pending"))
+            self.assertFalse(sess.get("totp_ok"))
+            self.assertFalse(sess.get("sid"))
+        code = pyotp.TOTP(secret).now()
+        verified = self.client.post(
+            "/api/totp/verify",
+            headers={"X-CSRF-Token": csrf},
+            json={"code": code},
+        )
+        self.assertEqual(verified.status_code, 403, verified.get_json())
+        after = verified.get_json()
+        self.assertEqual(after["code"], "session_cap")
+        self.assertEqual(len(after["sessions"]), 3)
+        self.assertTrue(after.get("revoke_token"))
+        for row in after["sessions"]:
+            self.assertNotIn("ip", row)
+            self.assertEqual(row.get("ip_location"), "Vienna, AT")
+
+        victim = after["sessions"][0]["id"]
+        revoked = self.client.post(
+            "/api/auth/session-cap/revoke",
+            json={"session_id": victim, "revoke_token": after["revoke_token"]},
+        )
+        self.assertEqual(revoked.status_code, 200, revoked.get_json())
+        self.assertTrue(revoked.get_json()["can_sign_in"])
+
+    def test_session_cap_revoke_token_bound_to_uid(self):
+        """A revoke token for user A cannot revoke user B's session."""
+        email_a = "cap-a@home.local"
+        email_b = "cap-b@home.local"
+        password = "cap-cross-secure-pass"
+        uid_a = self._create_user(email_a, password, plan="free")
+        uid_b = self._create_user(email_b, password, plan="free")
+        for i in range(3):
+            self.notes_db.create_user_session(
+                uid_a,
+                device_label=f"A{i}",
+                user_agent=f"AUA/{i}",
+                ip="127.0.0.1",
+                ip_location="Local network",
+                device_id=f"a-dev-{i}",
+                login=True,
+            )
+        for i in range(3):
+            self.notes_db.create_user_session(
+                uid_b,
+                device_label=f"B{i}",
+                user_agent=f"BUA/{i}",
+                ip="127.0.0.1",
+                ip_location="Local network",
+                device_id=f"b-dev-{i}",
+                login=True,
+            )
+        b_rows = self.notes_db.list_user_sessions(uid_b, active_since=time.time() - 86400)
+        self.assertEqual(len(b_rows), 3)
+        b_victim = int(b_rows[0]["id"])
+
+        blocked = self._srp_login(email_a, password, device_id="a-new")
+        self.assertEqual(blocked.status_code, 403, blocked.get_json())
+        token_a = blocked.get_json()["revoke_token"]
+        cross = self.client.post(
+            "/api/auth/session-cap/revoke",
+            json={"session_id": b_victim, "revoke_token": token_a},
+        )
+        self.assertEqual(cross.status_code, 404, cross.get_json())
+        still = self.notes_db.get_user_session(b_victim, uid_b)
+        self.assertIsNotNone(still)
+        self.assertEqual(float(still["revoked_at"] or 0), 0)
+
+    def test_totp_enable_relogin_ignores_session_cap(self):
+        """Enabling TOTP must re-establish the current device even if the soft-cap is full."""
+        from unittest.mock import patch
+
+        import auth as auth_mod
+
+        email = "totp-relogin@home.local"
+        password = "totp-relogin-secure-pass"
+        uid = self._create_user(email, password, plan="pro")
+        login = self._srp_login(email, password, device_id="relogin-dev")
+        self.assertEqual(login.status_code, 200, login.get_json())
+        csrf = login.get_json()["csrf"]
+        headers = {"X-CSRF-Token": csrf, "X-Device-Id": "relogin-dev"}
+        secret = "BASE32SECRETBASE32SECRETBASE"
+        self.notes_db.update_user_totp(uid, secret, enabled=False)
+
+        def _cap(*_a, **_k):
+            raise auth_mod.SessionCapExceeded(
+                {
+                    "error": "cap",
+                    "code": "session_cap",
+                    "limit": 3,
+                    "plan": "free",
+                    "sessions": [],
+                },
+                user_id=uid,
+            )
+
+        with patch("deeperguard_app.totp_mod.verify_and_step", return_value=(True, 1)), patch(
+            "auth._assert_session_slot_available", side_effect=_cap
+        ):
+            enabled = self.client.post(
+                "/api/totp/enable",
+                headers=headers,
+                json={"code": "123456"},
+            )
+        self.assertEqual(enabled.status_code, 200, enabled.get_json())
+        self.assertTrue(enabled.get_json().get("ok"))
+        user = self.notes_db.get_user_by_id(uid)
+        self.assertTrue(user["totp_enabled"])
+        # Contract: enable/disable pass check_cap=False so a full soft-cap cannot
+        # block an already-signed-in user refreshing their device session.
+        src = (ROOT / "app/app.py").read_text(encoding="utf-8")
+        self.assertIn("_login_user(uid, totp_ok=True, check_cap=False)", src)
 
     def test_admin_accepts_free_plan(self):
         admin_id = self._create_user("admin82@home.local", "admin-secure-pass-ok", plan="pro")

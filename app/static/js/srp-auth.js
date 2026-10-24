@@ -249,6 +249,7 @@
         err.revokeToken = data.revoke_token || '';
         err.limit = data.limit;
         err.plan = data.plan || '';
+        err.totpRequired = !!data.totp_required;
       }
       throw err;
     }

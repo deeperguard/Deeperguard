@@ -66,6 +66,7 @@
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
       body: JSON.stringify({ code }),
     });
+    const data = await res.json().catch(() => ({}));
     if (res.ok) {
       try { sessionStorage.setItem('notes_allow_boot_unlock', '1'); } catch (e) {}
       try { sessionStorage.setItem('notes_post_login_unlock', '1'); } catch (e) {}
@@ -82,7 +83,20 @@
       location.replace(next);
       return;
     }
-    const data = await res.json().catch(() => ({}));
+    // After 2FA at the session soft-cap: hand the device list to /login (no IP leak before TOTP).
+    if (data.code === 'session_cap') {
+      try {
+        sessionStorage.setItem('notes_session_cap', JSON.stringify({
+          message: data.error || 'Device limit reached',
+          sessions: Array.isArray(data.sessions) ? data.sessions : [],
+          revokeToken: data.revoke_token || '',
+          limit: data.limit,
+          plan: data.plan || '',
+        }));
+      } catch (e) { /* ignore */ }
+      location.replace('/login');
+      return;
+    }
     if (err) {
       err.textContent = data.error || 'Invalid code';
       err.hidden = false;

@@ -49,6 +49,7 @@ class SessionCapExceeded(Exception):
 SESSION_USER = "uid"
 SESSION_CAP_REVOKE = "session_cap_revoke"
 SESSION_CAP_REVOKE_SECONDS = 600
+SESSION_CAP_PENDING = "session_cap_pending"
 SESSION_AUTH = "authed"
 SESSION_EXP = "exp"
 SESSION_CSRF = "csrf"
@@ -176,23 +177,22 @@ def request_device_id() -> str:
     return normalize_device_id(str(request.headers.get("X-Device-Id") or ""))
 
 
+def session_cap_public_row(row) -> dict:
+    """Cap UI row: location only (no full IP), matching new-device email (#186)."""
+    return {
+        "id": int(row["id"]),
+        "device": str(row["device_label"] or "Unknown device"),
+        "ip_location": str(row["ip_location"] or "Unknown"),
+        "last_login_at": float(row["last_login_at"] or 0),
+        "last_seen_at": float(row["last_seen_at"] or 0),
+    }
+
+
 def _session_cap_payload(user_id: int, *, limit: int, plan: str) -> dict:
     """Public sessions list for the sign-in device-limit error (no auto-revoke)."""
     prune_user_sessions(int(user_id), older_than=time.time() - SESSION_SECONDS)
     rows = list_user_sessions(int(user_id), active_since=time.time() - SESSION_SECONDS)
-    sessions = []
-    for row in rows:
-        last_seen = float(row["last_seen_at"] or 0)
-        sessions.append(
-            {
-                "id": int(row["id"]),
-                "device": str(row["device_label"] or "Unknown device"),
-                "ip": str(row["ip"] or ""),
-                "ip_location": str(row["ip_location"] or "Unknown"),
-                "last_login_at": float(row["last_login_at"] or 0),
-                "last_seen_at": last_seen,
-            }
-        )
+    sessions = [session_cap_public_row(row) for row in rows]
     return {
         "error": (
             f"Your {str(plan or 'free').capitalize()} plan allows "
@@ -204,6 +204,23 @@ def _session_cap_payload(user_id: int, *, limit: int, plan: str) -> dict:
         "plan": str(plan or ""),
         "sessions": sessions,
     }
+
+
+def session_cap_message(*, limit: int, plan: str, totp_required: bool = False) -> str:
+    """Plain session-cap copy (no device list). Used when TOTP is still required."""
+    devices = (
+        f"{int(limit)} signed-in device{'s' if int(limit) != 1 else ''}"
+    )
+    plan_label = str(plan or "free").capitalize()
+    if totp_required:
+        return (
+            f"Your {plan_label} plan allows {devices}. "
+            "Enter your 2FA code, then revoke a device to continue."
+        )
+    return (
+        f"Your {plan_label} plan allows {devices}. "
+        "Revoke one below, then sign in again."
+    )
 
 
 def _assert_session_slot_available(user_id: int) -> None:
@@ -242,6 +259,7 @@ def issue_session_cap_revoke(user_id: int) -> str:
     """Short-lived proof after a successful password/SRP check at the session cap.
 
     Lets the blocked client revoke a listed device without creating a new session.
+    Bound to ``user_id`` for SESSION_CAP_REVOKE_SECONDS (not transferable).
     """
     token = secrets.token_urlsafe(24)
     session[SESSION_CAP_REVOKE] = {
@@ -254,7 +272,11 @@ def issue_session_cap_revoke(user_id: int) -> str:
 
 
 def session_cap_revoke_uid(token: str) -> int | None:
-    """Return user id when ``token`` matches a live session-cap revoke proof."""
+    """Return user id when ``token`` matches a live session-cap revoke proof.
+
+    The token is bound to the uid stored in the Flask session; it cannot revoke
+    another user's devices even if a foreign session_id is supplied.
+    """
     data = session.get(SESSION_CAP_REVOKE)
     if not isinstance(data, dict):
         return None
@@ -274,6 +296,60 @@ def clear_session_cap_revoke() -> None:
     if SESSION_CAP_REVOKE in session:
         session.pop(SESSION_CAP_REVOKE, None)
         session.modified = True
+
+
+def begin_session_cap_totp(user_id: int) -> None:
+    """Partial auth after password/SRP/passkey at the session cap when TOTP is required.
+
+    Establishes a Flask session so ``/totp`` can run, but does not create a device
+    session row and does not issue a revoke token or session list.
+    """
+    session.clear()
+    session.permanent = True
+    session[SESSION_USER] = int(user_id)
+    session[SESSION_AUTH] = True
+    session[SESSION_EXP] = time.time() + SESSION_SECONDS
+    session[SESSION_CSRF] = secrets.token_urlsafe(32)
+    session[SESSION_TOTP] = False
+    session[SESSION_CAP_PENDING] = True
+    session.modified = True
+
+
+def session_cap_pending() -> bool:
+    return bool(session.get(SESSION_CAP_PENDING))
+
+
+def finish_session_cap_pending() -> None:
+    """After TOTP on a session-cap-pending login, create the device session or raise."""
+    if not session.get(SESSION_CAP_PENDING):
+        return
+    try:
+        uid = int(session.get(SESSION_USER))
+    except (TypeError, ValueError):
+        session.pop(SESSION_CAP_PENDING, None)
+        session.modified = True
+        return
+    _assert_session_slot_available(uid)
+    session.pop(SESSION_CAP_PENDING, None)
+    session[SESSION_TOTP] = True
+    session[SESSION_SID] = _record_device_session(uid, check_cap=False)
+    session.modified = True
+
+
+def issue_session_cap_revoke_exclusive(user_id: int) -> str:
+    """Replace the Flask session with only a uid-bound revoke proof.
+
+    Used after TOTP when the soft-cap still blocks a new device session.
+    """
+    token = secrets.token_urlsafe(24)
+    session.clear()
+    session[SESSION_CAP_REVOKE] = {
+        "uid": int(user_id),
+        "token": token,
+        "exp": time.time() + SESSION_CAP_REVOKE_SECONDS,
+    }
+    session.modified = True
+    return token
 
 
 def _record_device_session(
@@ -337,6 +413,9 @@ def _align_session_with_request(_user_id: int, row) -> str:
 def ensure_device_session() -> None:
     if not session.get(SESSION_AUTH):
         return
+    # Cap-pending logins must not create a device row (or leak slots) before TOTP.
+    if session.get(SESSION_CAP_PENDING):
+        return
     try:
         uid = int(session.get(SESSION_USER))
     except (TypeError, ValueError):
@@ -387,10 +466,11 @@ def client_allowed() -> bool:
     return False
 
 
-def login_user(user_id: int, *, totp_ok: bool) -> None:
+def login_user(user_id: int, *, totp_ok: bool, check_cap: bool = True) -> None:
     # Cap check before clearing the Flask session so a blocked sign-in leaves
     # the browser's prior anonymous/CSRF state intact.
-    _assert_session_slot_available(int(user_id))
+    if check_cap:
+        _assert_session_slot_available(int(user_id))
     session.clear()
     session.permanent = True
     session[SESSION_USER] = int(user_id)

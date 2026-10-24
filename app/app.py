@@ -358,14 +358,47 @@ def _plan_block(user, feature: str):
     return jsonify(payload), 403
 
 
-def _login_user(user_id: int, *, totp_ok: bool):
-    """Establish a session or return a 403 session_cap response (never auto-revokes)."""
+def _login_user(user_id: int, *, totp_ok: bool, check_cap: bool = True):
+    """Establish a session or return a 403 session_cap response (never auto-revokes).
+
+    When TOTP is still required (``totp_ok`` is False) and the soft-cap is full,
+    return a plain ``session_cap`` + ``totp_required`` message with no session
+    list and no revoke token. The client must complete ``/api/totp/verify``
+    before listing or revoking devices.
+    """
     try:
-        auth.login_user(int(user_id), totp_ok=totp_ok)
+        auth.login_user(int(user_id), totp_ok=totp_ok, check_cap=check_cap)
         auth.clear_session_cap_revoke()
         return None
     except auth.SessionCapExceeded as exc:
+        if not totp_ok:
+            auth.begin_session_cap_totp(exc.user_id)
+            return jsonify({
+                "error": auth.session_cap_message(
+                    limit=int(exc.payload.get("limit") or 0),
+                    plan=str(exc.payload.get("plan") or ""),
+                    totp_required=True,
+                ),
+                "code": "session_cap",
+                "totp_required": True,
+                "limit": exc.payload.get("limit"),
+                "plan": exc.payload.get("plan") or "",
+                "csrf": auth.csrf_token(),
+            }), 403
         revoke_token = auth.issue_session_cap_revoke(exc.user_id)
+        body = dict(exc.payload)
+        body["revoke_token"] = revoke_token
+        return jsonify(body), 403
+
+
+def _complete_session_cap_after_totp():
+    """Finish a cap-pending login after TOTP, or return the session list + revoke token."""
+    try:
+        auth.finish_session_cap_pending()
+        auth.clear_session_cap_revoke()
+        return None
+    except auth.SessionCapExceeded as exc:
+        revoke_token = auth.issue_session_cap_revoke_exclusive(exc.user_id)
         body = dict(exc.payload)
         body["revoke_token"] = revoke_token
         return jsonify(body), 403
@@ -1566,6 +1599,12 @@ def api_list_sessions():
 @app.post("/api/auth/session-cap/revoke")
 def api_session_cap_revoke():
     """Revoke one device while blocked at the plan session soft-cap (no new session)."""
+    if not auth_rate_allow(
+        f"{auth.client_ip()}:session-cap-revoke",
+        limit=12,
+        window=300.0,
+    ):
+        return jsonify({"error": "too many attempts"}), 429
     body = request.get_json(silent=True) or {}
     revoke_token = str(body.get("revoke_token") or "").strip()
     try:
@@ -1591,17 +1630,7 @@ def api_session_cap_revoke():
 
         plan = db.user_plan(user)
         limit = plan_active_session_limit(plan)
-    sessions = [
-        {
-            "id": int(row["id"]),
-            "device": str(row["device_label"] or "Unknown device"),
-            "ip": str(row["ip"] or ""),
-            "ip_location": str(row["ip_location"] or "Unknown"),
-            "last_login_at": float(row["last_login_at"] or 0),
-            "last_seen_at": float(row["last_seen_at"] or 0),
-        }
-        for row in rows
-    ]
+    sessions = [auth.session_cap_public_row(row) for row in rows]
     return jsonify({
         "ok": True,
         "sessions": sessions,
@@ -1795,8 +1824,13 @@ def api_totp_verify():
         return jsonify({"error": "too many attempts"}), 429
     body = request.get_json(silent=True) or {}
     code = str(body.get("code") or "")
+    pending_cap = auth.session_cap_pending()
     if not auth.verify_totp_for_current_user(code):
         return jsonify({"error": "invalid code"}), 401
+    if pending_cap:
+        blocked = _complete_session_cap_after_totp()
+        if blocked:
+            return blocked
     return jsonify({"ok": True})
 
 
@@ -2148,7 +2182,8 @@ def api_totp_enable():
     if step:
         db.set_user_totp_last_step(uid, step)
     db.update_user_totp(uid, str(user["totp_secret"]), enabled=True)
-    blocked = _login_user(uid, totp_ok=True)
+    # Already signed in on this device — never block re-login on the session soft-cap.
+    blocked = _login_user(uid, totp_ok=True, check_cap=False)
     if blocked:
         return blocked
     _revoke_other_sessions(uid, reason="totp")
@@ -2179,7 +2214,8 @@ def api_totp_disable():
         if step:
             db.set_user_totp_last_step(uid, step)
     db.update_user_totp(uid, "", enabled=False)
-    blocked = _login_user(uid, totp_ok=True)
+    # Already signed in on this device — never block re-login on the session soft-cap.
+    blocked = _login_user(uid, totp_ok=True, check_cap=False)
     if blocked:
         return blocked
     _revoke_other_sessions(uid, reason="totp")

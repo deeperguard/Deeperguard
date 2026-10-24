@@ -23,6 +23,15 @@ async function postJson(path, body) {
     const err = new Error(message);
     err.status = res.status;
     if (data.repair_exhausted) err.repairExhausted = true;
+    if (data.code) err.code = String(data.code);
+    if (data.code === 'session_cap') {
+      err.sessionCap = true;
+      err.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+      err.revokeToken = data.revoke_token || '';
+      err.limit = data.limit;
+      err.plan = data.plan || '';
+      err.totpRequired = !!data.totp_required;
+    }
     throw err;
   }
   return data;
@@ -242,8 +251,8 @@ if (loginForm) {
         meta.appendChild(title);
         const loc = document.createElement('span');
         loc.className = 'muted';
-        const parts = [row.ip_location, row.ip].filter(Boolean);
-        loc.textContent = parts.length ? parts.join(' · ') : 'Unknown location';
+        // Location only — never show the full IP on the sign-in cap panel.
+        loc.textContent = String(row.ip_location || '').trim() || 'Unknown location';
         meta.appendChild(loc);
         li.appendChild(meta);
         const btn = document.createElement('button');
@@ -291,6 +300,23 @@ if (loginForm) {
     panel.hidden = false;
   }
 
+  window.__notesRenderSessionCapPanel = renderSessionCapPanel;
+
+  try {
+    const rawCap = sessionStorage.getItem('notes_session_cap');
+    if (rawCap) {
+      sessionStorage.removeItem('notes_session_cap');
+      const saved = JSON.parse(rawCap);
+      if (saved && typeof saved === 'object') {
+        renderSessionCapPanel({
+          message: saved.message || saved.error || 'Device limit reached',
+          sessions: Array.isArray(saved.sessions) ? saved.sessions : [],
+          revokeToken: saved.revokeToken || saved.revoke_token || '',
+        });
+      }
+    }
+  } catch (capBootErr) { /* ignore */ }
+
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     showError('login-error', '');
@@ -323,6 +349,13 @@ if (loginForm) {
         return;
       }
       if (err?.sessionCap || err?.code === 'session_cap') {
+        if (err?.totpRequired) {
+          try {
+            localStorage.setItem('notes_email', email);
+          } catch (stashErr) { /* ignore */ }
+          location.replace(afterAuthUrl('/totp'));
+          return;
+        }
         renderSessionCapPanel(err);
         return;
       }
@@ -642,6 +675,19 @@ if (webauthnLoginBtn) {
       location.replace(afterAuthUrl('/app'));
     } catch (err) {
       setLoginBusy(false, '');
+      if (err?.sessionCap || err?.code === 'session_cap') {
+        if (err?.totpRequired) {
+          try {
+            localStorage.setItem('notes_email', email);
+          } catch (stashErr) { /* ignore */ }
+          location.replace(afterAuthUrl('/totp'));
+          return;
+        }
+        if (typeof window.__notesRenderSessionCapPanel === 'function') {
+          window.__notesRenderSessionCapPanel(err);
+          return;
+        }
+      }
       showError('login-error', err.message || 'Passkey sign-in failed');
     }
   });
