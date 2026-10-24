@@ -340,6 +340,16 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             ON secure_sends(sender_user_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_secure_sends_expires
             ON secure_sends(expires_at);
+
+        CREATE TABLE IF NOT EXISTS signin_alert_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            device_key TEXT NOT NULL,
+            sent_at REAL NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_signin_alert_user_device_sent
+            ON signin_alert_log(user_id, device_key, sent_at);
         """
     )
     send_cols = {row[1] for row in conn.execute("PRAGMA table_info(secure_sends)").fetchall()}
@@ -1333,6 +1343,60 @@ def count_email_sends_for_user(user_id: int, kind: str, since: float) -> int:
         (int(user_id), kind, float(since)),
     ).fetchone()
     return int(row[0] if row else 0)
+
+
+def last_signin_alert(user_id: int, device_key: str) -> float:
+    key = str(device_key or "").strip()[:200]
+    if not key:
+        return 0.0
+    row = connection().execute(
+        """
+        SELECT sent_at FROM signin_alert_log
+        WHERE user_id = ? AND device_key = ?
+        ORDER BY sent_at DESC
+        LIMIT 1
+        """,
+        (int(user_id), key),
+    ).fetchone()
+    if not row:
+        return 0.0
+    try:
+        return float(row[0] or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def claim_signin_alert(user_id: int, device_key: str, *, window_seconds: float = 86400.0) -> bool:
+    """Record a sign-in alert slot. Return True if this call may send.
+
+    At most one alert per (user, device_key) inside ``window_seconds``.
+    """
+    key = str(device_key or "").strip()[:200]
+    if not key:
+        return False
+    uid = int(user_id)
+    now_ts = now()
+    since = now_ts - float(window_seconds)
+    with tx() as conn:
+        row = conn.execute(
+            """
+            SELECT sent_at FROM signin_alert_log
+            WHERE user_id = ? AND device_key = ? AND sent_at >= ?
+            ORDER BY sent_at DESC
+            LIMIT 1
+            """,
+            (uid, key, since),
+        ).fetchone()
+        if row:
+            return False
+        conn.execute(
+            """
+            INSERT INTO signin_alert_log (user_id, device_key, sent_at)
+            VALUES (?, ?, ?)
+            """,
+            (uid, key, now_ts),
+        )
+    return True
 
 
 def count_email_sends_global(kind: str, since: float) -> int:
