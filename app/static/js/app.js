@@ -2848,8 +2848,9 @@
   }
 
   // Session-only: after dismissing PDF-only auto-preview back to edit, skip
-  // auto-open until the user leaves this note and opens it again.
-  let pdfOnlyAutoOpenSuppressedId = '';
+  // auto-open for that note id for the rest of this page session (survive
+  // leave/reopen). Cleared only on full reload.
+  const pdfOnlyAutoOpenSuppressedIds = new Set();
 
   function noteBodyIsBlank(note) {
     return !String(note?.content?.content || '').trim();
@@ -2874,7 +2875,7 @@
   function shouldAutoOpenPdfOnlyNote(noteId) {
     // Opt-out: missing/undefined (older localStorage) stays on.
     if (prefs.autoOpenPdfOnly === false) return false;
-    if (!noteId || pdfOnlyAutoOpenSuppressedId === noteId) return false;
+    if (!noteId || pdfOnlyAutoOpenSuppressedIds.has(noteId)) return false;
     const note = NotesStore.get(noteId);
     if (!note || !noteBodyIsBlank(note)) return false;
     const att = noteSinglePdfAttachment(noteId);
@@ -12796,7 +12797,6 @@
     const previousId = currentId && currentId !== id ? currentId : null;
     if (previousId) {
       unlockedNotes.delete(previousId);
-      if (pdfOnlyAutoOpenSuppressedId === previousId) pdfOnlyAutoOpenSuppressedId = '';
     }
     const gated = !!note.content.locked && !unlockedNotes.has(id) && !skipGate;
     const alreadyEditing = !!currentId && ui.editor && !ui.editor.hidden;
@@ -12997,6 +12997,7 @@
 
   function syncEditorMobileDocActions() {
     const fsBtn = document.getElementById('btn-mobile-doc-fullscreen');
+    const closeBtn = document.getElementById('btn-mobile-doc-close');
     const shareBtn = document.getElementById('btn-mobile-doc-attachment-share');
     const desktopFsBtn = document.getElementById('btn-desktop-doc-fullscreen');
     const show = mobileDocToolbarActive();
@@ -13004,11 +13005,13 @@
     if (!fsBtn || !shareBtn) return;
     if (!isPhoneShell()) {
       fsBtn.hidden = true;
+      if (closeBtn) closeBtn.hidden = true;
       shareBtn.hidden = true;
       syncShareLabels();
       return;
     }
     fsBtn.hidden = !show;
+    if (closeBtn) closeBtn.hidden = !show;
     /* Primary row Share is always shown on phone; route attachment share through it. */
     shareBtn.hidden = true;
     shareBtn.title = 'Share attachment';
@@ -18425,9 +18428,10 @@
       if (editorMode === 'edit') editorMode = 'preview';
       else if (editorMode === 'ocr') editorMode = 'preview';
       else {
-        // Dismissing inline PDF auto-preview: stay in edit until they leave the note.
+        // Dismissing inline PDF auto-preview: stay in edit for this note id
+        // for the rest of the page session (including leave/reopen).
         if (currentId && noteSinglePdfAttachment(currentId) && noteBodyIsBlank(NotesStore.get(currentId))) {
-          pdfOnlyAutoOpenSuppressedId = currentId;
+          pdfOnlyAutoOpenSuppressedIds.add(currentId);
         }
         editorMode = 'edit';
       }
@@ -19443,6 +19447,11 @@
     const attId = inlineDocPreviewAttId();
     if (!attId) return;
     openInlineDocFullscreen(attId, event);
+  });
+  // Close → same path as ⋯ → Edit (btn-preview), so PDF-only session suppress applies.
+  document.getElementById('btn-mobile-doc-close')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    document.getElementById('btn-preview')?.click();
   });
   document.getElementById('btn-mobile-doc-attachment-share')?.addEventListener('click', (event) => {
     event.preventDefault();

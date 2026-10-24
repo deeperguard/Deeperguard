@@ -1,6 +1,6 @@
 /**
  * Auto-open PDF-only notes: prefs, settings copy, initialEditorMode hook,
- * session suppress after dismiss-to-edit.
+ * session Set suppress after dismiss-to-edit, mobile Close → btn-preview.
  */
 const assert = require('assert');
 const fs = require('fs');
@@ -25,15 +25,19 @@ assert.ok(
   html.includes('When a note has no text and one PDF, open the PDF preview instead of a blank editor. The preview stays on this device.'),
   'settings hint must match Marketing copy',
 );
-assert.ok(!html.includes('marketing') || true);
 
 // Decision helpers + initialEditorMode hook (before generic autoPreview docs path).
 assert.ok(appJs.includes('function shouldAutoOpenPdfOnlyNote'));
 assert.ok(appJs.includes('function noteBodyIsBlank'));
 assert.ok(appJs.includes('function noteSinglePdfAttachment'));
 assert.ok(appJs.includes('function pdfAttachmentReadyForAutoOpen'));
-assert.ok(appJs.includes('pdfOnlyAutoOpenSuppressedId'));
+assert.ok(appJs.includes('pdfOnlyAutoOpenSuppressedIds = new Set()'));
+assert.ok(appJs.includes('pdfOnlyAutoOpenSuppressedIds.has(noteId)'));
+assert.ok(appJs.includes('pdfOnlyAutoOpenSuppressedIds.add(currentId)'));
 assert.ok(appJs.includes("if (shouldAutoOpenPdfOnlyNote(noteId)) return 'preview'"));
+// Must NOT clear suppression when leaving a note (desktop reopen bug).
+assert.ok(!appJs.includes('pdfOnlyAutoOpenSuppressedId === previousId'));
+assert.ok(!/\bpdfOnlyAutoOpenSuppressedId\b/.test(appJs), 'old single-id suppress var must be gone');
 
 const initialMode = appJs.slice(
   appJs.indexOf('function initialEditorMode(noteId)'),
@@ -46,10 +50,6 @@ assert.ok(
 );
 assert.ok(initialMode.includes('noteSpreadsheetSource'), 'spreadsheet preview path kept');
 
-// Dismiss-to-edit suppresses auto-open for that note until leave/reopen.
-assert.ok(appJs.includes('pdfOnlyAutoOpenSuppressedId = currentId'));
-assert.ok(appJs.includes("if (pdfOnlyAutoOpenSuppressedId === previousId) pdfOnlyAutoOpenSuppressedId = ''"));
-
 // Ready / heavy / opt-out gates.
 assert.ok(appJs.includes('prefs.autoOpenPdfOnly === false'));
 assert.ok(appJs.includes('heavyPreviewDeferred(att.uuid)'));
@@ -60,7 +60,14 @@ assert.ok(appJs.includes("getElementById('pref-auto-open-pdf-only')"));
 assert.ok(appJs.includes('prefs.autoOpenPdfOnly = !!e.target.checked'));
 assert.ok(appJs.includes('prefs.autoOpenPdfOnly !== false'));
 
-// Behavioral unit: same decision rules as shouldAutoOpenPdfOnlyNote.
+// Mobile Close on doc toolbar → existing btn-preview (session dismiss path).
+assert.ok(html.includes('id="btn-mobile-doc-close"'));
+assert.ok(html.includes('aria-label="Close"'));
+assert.ok(appJs.includes("getElementById('btn-mobile-doc-close')"));
+assert.ok(appJs.includes("getElementById('btn-preview')?.click()"));
+assert.ok(appJs.includes('closeBtn.hidden = !show') || appJs.includes('closeBtn.hidden = !show;'));
+
+// Behavioral unit: same decision rules as shouldAutoOpenPdfOnlyNote + Set suppress.
 function noteBodyIsBlank(note) {
   return !String(note?.content?.content || '').trim();
 }
@@ -77,14 +84,15 @@ function pdfAttachmentReadyForAutoOpen(att, lightVault) {
 }
 function shouldAutoOpen({
   pref = true,
-  suppressed = false,
+  suppressedIds = new Set(),
+  noteId = 'n1',
   body = '',
   atts = [{ kind: 'pdf', uuid: 'a1', content: { file_enc: {} } }],
   heavy = false,
   lightVault = false,
 } = {}) {
   if (pref === false) return false;
-  if (suppressed) return false;
+  if (!noteId || suppressedIds.has(noteId)) return false;
   if (!noteBodyIsBlank({ content: { content: body } })) return false;
   const att = noteSinglePdfAttachment(atts);
   if (!att) return false;
@@ -97,7 +105,6 @@ assert.strictEqual(shouldAutoOpen(), true, 'empty body + one ready PDF → open'
 assert.strictEqual(shouldAutoOpen({ body: '   \n\t  ' }), true, 'whitespace-only body → open');
 assert.strictEqual(shouldAutoOpen({ body: 'hello' }), false, 'text body → no');
 assert.strictEqual(shouldAutoOpen({ pref: false }), false, 'pref off → no');
-assert.strictEqual(shouldAutoOpen({ suppressed: true }), false, 'session suppress → no');
 assert.strictEqual(shouldAutoOpen({ atts: [] }), false, 'zero attachments → no');
 assert.strictEqual(
   shouldAutoOpen({ atts: [{ kind: 'pdf', uuid: 'a', content: { file_enc: {} } }, { kind: 'image', uuid: 'b', content: {} }] }),
@@ -125,6 +132,21 @@ assert.strictEqual(
   }),
   true,
   'in-memory bytes → open even with light vault',
+);
+
+// Session Set: dismiss sticks across leave/reopen; other notes unaffected.
+const sessionSuppressed = new Set();
+assert.strictEqual(shouldAutoOpen({ noteId: 'pdf-a', suppressedIds: sessionSuppressed }), true);
+sessionSuppressed.add('pdf-a'); // dismiss → edit
+assert.strictEqual(
+  shouldAutoOpen({ noteId: 'pdf-a', suppressedIds: sessionSuppressed }),
+  false,
+  'dismissed note stays suppressed after leave/reopen in same session',
+);
+assert.strictEqual(
+  shouldAutoOpen({ noteId: 'pdf-b', suppressedIds: sessionSuppressed }),
+  true,
+  'other PDF-only notes still auto-open',
 );
 
 // autoPreview default / meaning unchanged for multi-doc notes (separate path).
