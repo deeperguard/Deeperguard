@@ -1919,6 +1919,7 @@
       /* ignore quota */
     }
     updateOfflineSetupBanner();
+    updateDevicePhrasePrompt();
   }
 
   function pendingDeviceReportUpload() {
@@ -2001,6 +2002,20 @@
     if (!el) return;
     el.hidden = !offlineSetupNeeded() || !vaultReady;
     el.classList.toggle('ios-remember-callout', IS_IOS && isStandalonePwa());
+  }
+
+  // Round 75: one-time in-app device-phrase prompt (never on login/unlock).
+  function updateDevicePhrasePrompt() {
+    try {
+      if (!window.NotesDevicePhrase) return;
+      const unlocked = !!(vaultReady && !document.body.classList.contains('locked'));
+      NotesDevicePhrase.renderPromptCard(
+        document.getElementById('device-phrase-prompt'),
+        { unlocked },
+      );
+    } catch (err) {
+      /* ignore */
+    }
   }
 
   function updateNetworkStatusBanner() {
@@ -2199,6 +2214,7 @@
     if (rememberDevice) rememberDevice.checked = true;
     refreshSettingsDiagnostics().catch(() => {});
     updateOfflineSetupBanner();
+    updateDevicePhrasePrompt();
     try {
       localStorage.removeItem('notes_remember_device_declined');
     } catch (err) {
@@ -5949,6 +5965,7 @@
       consumeUnlockGates();
       showApp();
       updateOfflineSetupBanner();
+      updateDevicePhrasePrompt();
     }
     dismissLoginProgress();
     vaultReady = true;
@@ -19618,6 +19635,7 @@
         savePrefs();
         refreshSettingsDiagnostics().catch(() => {});
         updateOfflineSetupBanner();
+        updateDevicePhrasePrompt();
         try {
           localStorage.setItem('notes_remember_device_declined', '1');
         } catch (err) {
@@ -19654,6 +19672,7 @@
     const saved = NotesDevicePhrase.setPhrase(input?.value || '');
     if (input) input.value = saved;
     refreshDevicePhraseUi();
+    updateDevicePhrasePrompt();
     setDevicePhraseStatus(saved ? 'Saved on this device.' : 'Cleared — no phrase on this device.');
     toast(saved ? 'Device phrase saved' : 'Device phrase cleared');
   });
@@ -19663,8 +19682,27 @@
     const input = document.getElementById('device-phrase-input');
     if (input) input.value = '';
     refreshDevicePhraseUi();
+    updateDevicePhrasePrompt();
     setDevicePhraseStatus('Cleared — no phrase on this device.');
     toast('Device phrase cleared');
+  });
+  document.getElementById('btn-device-phrase-prompt-set')?.addEventListener('click', () => {
+    try {
+      if (window.NotesDevicePhrase) NotesDevicePhrase.dismissPrompt();
+    } catch (err) { /* ignore */ }
+    updateDevicePhrasePrompt();
+    try { openSettings(); } catch (err) { /* ignore */ }
+    const input = document.getElementById('device-phrase-input');
+    if (input) {
+      try { input.focus(); } catch (err) { /* ignore */ }
+      try { input.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (err) { /* ignore */ }
+    }
+  });
+  document.getElementById('btn-device-phrase-prompt-dismiss')?.addEventListener('click', () => {
+    try {
+      if (window.NotesDevicePhrase) NotesDevicePhrase.dismissPrompt();
+    } catch (err) { /* ignore */ }
+    updateDevicePhrasePrompt();
   });
   document.getElementById('btn-show-vault-password')?.addEventListener('click', async () => {
     const saved = savedVaultPasswordForReveal();
@@ -19824,6 +19862,7 @@
         /* ignore quota */
       }
       updateOfflineSetupBanner();
+      updateDevicePhrasePrompt();
     });
   }
   const appUpdateBtn = document.getElementById('btn-app-update');
@@ -22537,6 +22576,7 @@
       /* stay on the list */
     }
     updateOfflineSetupBanner();
+    updateDevicePhrasePrompt();
     updateNetworkStatusBanner();
     setTimeout(() => flushPendingUpdatePrompt(), 1200);
     maybeAutoEnableRememberDevice();

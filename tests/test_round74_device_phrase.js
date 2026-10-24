@@ -39,7 +39,11 @@ assert.ok(appHtml.includes('maxlength="64"'));
 assert.ok(authPagesJs.includes('NotesDevicePhrase.renderDisplay'));
 assert.ok(appJs.includes('NotesDevicePhrase.setPhrase'));
 assert.ok(appJs.includes('NotesDevicePhrase.clearPhrase'));
-assert.ok(storeJs.includes('Keep notes_device_phrase across sign-out'));
+assert.ok(
+  storeJs.includes('Keep notes_device_phrase')
+    || storeJs.includes('notes_device_phrase (+ prompt dismissal)'),
+  'sign-out keeps notes_device_phrase',
+);
 assert.ok(
   !storeJs.includes("removeItem('notes_device_phrase')")
     && !storeJs.includes('removeItem("notes_device_phrase")'),
