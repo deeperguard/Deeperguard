@@ -37,7 +37,7 @@ class NotesAppTests(unittest.TestCase):
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
 
         for name in list(sys.modules):
-            if name in {"app", "auth", "db", "config", "passwords", "totp", "ocr", "ocr_index", "ocr_jobs", "server_info_cache", "backup_pcloud", "backup_mail", "srp_auth", "webauthn_helper", "admin_api", "admin_notify", "auth_rate_limit", "plans", "ai_relay", "uploads", "email_verify", "verification_send_limit", "mailer"} or name.startswith("app."):
+            if name in {"app", "auth", "db", "config", "passwords", "totp", "ocr", "ocr_index", "ocr_jobs", "server_info_cache", "backup_pcloud", "backup_mail", "srp_auth", "webauthn_helper", "admin_api", "admin_notify", "auth_rate_limit", "plans", "ai_relay", "uploads", "email_verify", "verification_send_limit", "mailer", "signin_alert"} or name.startswith("app."):
                 sys.modules.pop(name, None)
         self.app_mod = importlib.import_module("app")
         self.client = self.app_mod.app.test_client()
@@ -5696,6 +5696,7 @@ _APP_RELOAD_MODULES = {
     "auth_rate_limit",
     "plans",
     "ai_relay",
+    "signin_alert",
 }
 
 
