@@ -147,7 +147,7 @@ await NotesStore.testDemoRollbackWarning(uuid, 9);
           <li><strong>Integrity of the delivered client code</strong> — if a compromised origin shipped a malicious <code>app.js</code>, it could exfiltrate secrets before encryption or skip freshness checks. Checking the code you run is a separate step.</li>
           <li><strong>Colluding malicious clients</strong> — a device that willingly resets high-water marks (or never ran a current client) can accept older tips; compare fingerprints across devices you control.</li>
         </ul>
-        <h3>How to check the code you’re running</h3>
+        <h3 id="signed-releases">How to check the code you’re running</h3>
         <p>
           After load, this page (and <strong>Settings → About</strong>) fetches
           same-origin assets listed in <code>/static/client-manifest.json</code>,

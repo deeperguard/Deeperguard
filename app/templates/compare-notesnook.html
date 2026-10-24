@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Deeperguard vs Notesnook — encrypted notes with in-browser OCR</title>
+  <meta name="description" content="Honest comparison: Notesnook’s free plan and native apps vs Deeperguard’s browser OCR, vault 2FA codes, and public /verify checks. Full Pro free during public beta.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <meta property="og:title" content="Deeperguard vs Notesnook — encrypted notes comparison">
+  <meta property="og:description" content="Privacy-first encrypted notes: where Notesnook wins on apps and free tier, and where Deeperguard adds in-browser OCR and vault authenticator codes.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ og_image }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="notes-build" content="{{ build }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
+</head>
+<body>
+  <div class="mk-beta-banner" role="status">
+    <span class="mk-beta-pill">Public Beta</span>
+    <span class="mk-beta-copy mk-beta-copy--desktop">
+      <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups. No payment details yet.
+    </span>
+    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — Pro free, no payment yet</span>
+  </div>
+
+  <header class="mk-topbar">
+    <div class="wrap mk-topbar-inner">
+      <a class="mk-brand" href="/">
+        <img src="/static/images/deeperguard-mark.svg" width="36" height="36" alt="Deeperguard Logo">
+        <span>
+          Deeperguard
+          <small>Zero-Knowledge Notes</small>
+        </span>
+      </a>
+      <input id="mk-nav-check" class="mk-nav-check" type="checkbox">
+      <label class="mk-nav-toggle" for="mk-nav-check" aria-label="Menu"><span aria-hidden="true">☰</span></label>
+      <label class="mk-nav-backdrop" for="mk-nav-check" aria-hidden="true"></label>
+      <nav class="mk-nav" aria-label="Sections">
+        <a href="/#compare">All comparisons</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <div class="mk-topbar-actions">
+        <a class="mk-btn ghost mk-topbar-signin" href="{{ login_url }}">Sign in</a>
+        <a class="mk-btn mk-topbar-cta" href="{{ register_url }}">Create free vault</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap" id="top">
+    <section class="mk-hero mk-hero--compact">
+      <div>
+        <div class="mk-eyebrow">
+          <span class="mk-badge ok">Zero-knowledge by design</span>
+          <a class="mk-badge mk-badge-link ok" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">Open source · GitHub</a>
+        </div>
+        <h1>Deeperguard vs Notesnook</h1>
+        <p class="mk-lede">Two privacy-first, open-source encrypted note apps — different strengths. Compare plans on <a href="https://notesnook.com/pricing" target="_blank" rel="noopener noreferrer">Notesnook pricing</a>.</p>
+        <div class="mk-hero-actions">
+          <a class="mk-btn mk-btn-lg" href="{{ register_url }}">Create free vault</a>
+          <a class="mk-btn secondary mk-btn-lg" href="/verify">check it yourself</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="mk-section" id="compare-table">
+      <div class="mk-section-head">
+        <span class="mk-badge">Comparison</span>
+        <h2>Side by side</h2>
+      </div>
+      <div class="mk-card mk-compare-wrap">
+        <table class="mk-compare mk-compare-stack mk-compare-sn" aria-label="Deeperguard vs Notesnook">
+          <thead>
+            <tr>
+              <th scope="col" class="mk-compare-feature-col">Topic</th>
+              <th scope="col" class="mk-col-highlight">Deeperguard</th>
+              <th scope="col">Notesnook</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Privacy model</td>
+              <td class="mk-col-highlight"><span class="yes">Zero-knowledge</span> — ciphertext on the server</td>
+              <td><span class="yes">Zero-knowledge</span> — E2EE notes and attachments</td>
+            </tr>
+            <tr>
+              <td>Apps</td>
+              <td class="mk-col-highlight"><span class="yes">Browser PWA</span> — Add to Home Screen, offline vault</td>
+              <td><span class="yes">Web + native</span> — desktop and mobile clients</td>
+            </tr>
+            <tr>
+              <td>Free plan</td>
+              <td class="mk-col-highlight"><span class="yes">Full Pro</span> during public beta</td>
+              <td><span class="yes">Generous free tier</span> — see Notesnook pricing</td>
+            </tr>
+            <tr>
+              <td>In-browser OCR</td>
+              <td class="mk-col-highlight"><span class="yes">Yes</span> — WASM OCR in the browser <span class="mk-pro-tag">Pro</span></td>
+              <td><span class="no">Not a focus</span></td>
+            </tr>
+            <tr>
+              <td>2FA codes in the vault</td>
+              <td class="mk-col-highlight"><span class="yes">Vault authenticator</span> <span class="mk-pro-tag">Pro</span></td>
+              <td><span class="partial">Account security</span> — not the same in-vault TOTP store</td>
+            </tr>
+            <tr>
+              <td>Verify claims yourself</td>
+              <td class="mk-col-highlight"><span class="yes"><a href="/verify">check it yourself</a></span></td>
+              <td><span class="partial">Open-source clients</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="mk-section" id="wins">
+      <div class="mk-section-head">
+        <span class="mk-badge">Honest fit</span>
+        <h2>Where each product wins</h2>
+      </div>
+      <div class="mk-grid cols-2">
+        <article class="mk-card">
+          <h3>Where Notesnook wins</h3>
+          <ul class="mk-distinction-points">
+            <li class="pro"><strong>Free plan:</strong> Mature free tier for everyday encrypted notes.</li>
+            <li class="pro"><strong>Native apps:</strong> Polished desktop and mobile clients as the default workflow.</li>
+            <li class="pro"><strong>User base:</strong> Established privacy-notes community and sync service.</li>
+          </ul>
+        </article>
+        <article class="mk-card">
+          <h3>Where Deeperguard wins</h3>
+          <ul class="mk-distinction-points">
+            <li class="pro"><strong>In-browser OCR:</strong> Search scans and PDFs without installing a desktop app.</li>
+            <li class="pro"><strong>Vault 2FA codes:</strong> Keep authenticator secrets in the same encrypted vault.</li>
+            <li class="pro"><strong><a href="/verify">check it yourself</a>:</strong> Public guide to inspect login and sync traffic.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="mk-section mk-faq" id="faq">
+      <div class="mk-section-head">
+        <span class="mk-badge">FAQ</span>
+        <h2>Common questions</h2>
+      </div>
+      <details open>
+        <summary>Can Deeperguard or its host read my notes?</summary>
+        <p>Stored notes: no. Notes, titles, and attachments are encrypted in your browser before sync. The service stores ciphertext only, except text you choose to send to Ask AI with Ollama Cloud, which passes through our server to ollama.com without being stored.</p>
+      </details>
+    </section>
+
+    <section class="mk-cta">
+      <h2>Try Deeperguard — full Pro free during public beta</h2>
+      <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
+      <a class="mk-btn secondary" href="/">Back to homepage</a>
+    </section>
+
+    {% include 'partials/mk-footer.html' %}
+  </main>
+</body>
+</html>

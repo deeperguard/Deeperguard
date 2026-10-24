@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Deeperguard vs Joplin — encrypted-by-default notes with browser OCR</title>
+  <meta name="description" content="Joplin vs Deeperguard: plugins and sync choice vs encryption by default, in-browser OCR on mobile, and zero setup. Compare Joplin plans and OCR docs.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <meta property="og:title" content="Deeperguard vs Joplin — notes comparison">
+  <meta property="og:description" content="Open-source notebooks: Joplin’s plugins and storage vs Deeperguard’s hosted zero-knowledge vault and browser OCR.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ og_image }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="notes-build" content="{{ build }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
+</head>
+<body>
+  <div class="mk-beta-banner" role="status">
+    <span class="mk-beta-pill">Public Beta</span>
+    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — Pro free, no payment yet</span>
+  </div>
+
+  <header class="mk-topbar">
+    <div class="wrap mk-topbar-inner">
+      <a class="mk-brand" href="/">
+        <img src="/static/images/deeperguard-mark.svg" width="36" height="36" alt="Deeperguard Logo">
+        <span>
+          Deeperguard
+          <small>Zero-Knowledge Notes</small>
+        </span>
+      </a>
+      <input id="mk-nav-check" class="mk-nav-check" type="checkbox">
+      <label class="mk-nav-toggle" for="mk-nav-check" aria-label="Menu"><span aria-hidden="true">☰</span></label>
+      <label class="mk-nav-backdrop" for="mk-nav-check" aria-hidden="true"></label>
+      <nav class="mk-nav" aria-label="Sections">
+        <a href="/#compare">All comparisons</a>
+        <a href="/#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <div class="mk-topbar-actions">
+        <a class="mk-btn ghost mk-topbar-signin" href="{{ login_url }}">Sign in</a>
+        <a class="mk-btn mk-topbar-cta" href="{{ register_url }}">Create free vault</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap" id="top">
+    <section class="mk-hero mk-hero--compact">
+      <div>
+        <h1>Deeperguard vs Joplin</h1>
+        <p class="mk-lede">Joplin is a flexible open-source notebook with <a href="https://joplinapp.org/plans" target="_blank" rel="noopener noreferrer">optional cloud sync</a> and rich plugins. Deeperguard is a hosted zero-knowledge vault with OCR in the browser. Joplin’s <a href="https://joplinapp.org/help/apps/ocr" target="_blank" rel="noopener noreferrer">desktop OCR</a> runs offline; encryption is off until you enable it.</p>
+        <div class="mk-hero-actions">
+          <a class="mk-btn mk-btn-lg" href="{{ register_url }}">Create free vault</a>
+          <a class="mk-btn secondary mk-btn-lg" href="/verify">check it yourself</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="mk-section" id="compare-table">
+      <div class="mk-section-head">
+        <span class="mk-badge">Comparison</span>
+        <h2>Side by side</h2>
+      </div>
+      <div class="mk-card mk-compare-wrap">
+        <table class="mk-compare mk-compare-stack mk-compare-sn" aria-label="Deeperguard vs Joplin">
+          <thead>
+            <tr>
+              <th scope="col" class="mk-compare-feature-col">Topic</th>
+              <th scope="col" class="mk-col-highlight">Deeperguard</th>
+              <th scope="col">Joplin</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Encryption default</td>
+              <td class="mk-col-highlight"><span class="yes">On from the first note</span></td>
+              <td><span class="partial">Optional E2EE</span> — must be turned on</td>
+            </tr>
+            <tr>
+              <td>Sync</td>
+              <td class="mk-col-highlight"><span class="yes">Hosted ciphertext-only</span></td>
+              <td><span class="yes">Your choice</span> — Dropbox, WebDAV, Joplin Cloud, etc.</td>
+            </tr>
+            <tr>
+              <td>Plugins &amp; Markdown</td>
+              <td class="mk-col-highlight"><span class="partial">Focused editor</span></td>
+              <td><span class="yes">Large plugin ecosystem</span></td>
+            </tr>
+            <tr>
+              <td>OCR</td>
+              <td class="mk-col-highlight"><span class="yes">In any browser</span>, including phones</td>
+              <td><span class="partial">Desktop app only</span> — offline OCR</td>
+            </tr>
+            <tr>
+              <td>Setup</td>
+              <td class="mk-col-highlight"><span class="yes">Zero install</span> — PWA in the browser</td>
+              <td><span class="partial">App + sync target</span></td>
+            </tr>
+            <tr>
+              <td>Storage per euro</td>
+              <td class="mk-col-highlight"><span class="partial">5&nbsp;GB on Pro</span> — see <a href="/#pricing">pricing</a></td>
+              <td><span class="yes">Bring your own storage</span> — often cheapest at scale</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="mk-section" id="wins">
+      <div class="mk-grid cols-2">
+        <article class="mk-card">
+          <h3>Where Joplin wins</h3>
+          <ul class="mk-distinction-points">
+            <li class="pro"><strong>Plugins:</strong> Extend editors, sync, and workflows.</li>
+            <li class="pro"><strong>Sync choice:</strong> Use your own cloud or self-host.</li>
+            <li class="pro"><strong>Storage per euro:</strong> Pay your sync provider, not a notes host.</li>
+          </ul>
+        </article>
+        <article class="mk-card">
+          <h3>Where Deeperguard wins</h3>
+          <ul class="mk-distinction-points">
+            <li class="pro"><strong>Encryption by default:</strong> No optional E2EE step.</li>
+            <li class="pro"><strong>Browser + mobile OCR:</strong> Scan and search without a desktop install.</li>
+            <li class="pro"><strong>Zero setup:</strong> Create a vault and write — <a href="/verify">check it yourself</a>.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="mk-section mk-faq" id="faq">
+      <details open>
+        <summary>Can Deeperguard or its host read my notes?</summary>
+        <p>Stored notes: no, except text you choose to send to Ask AI with Ollama Cloud, which passes through our server to ollama.com without being stored.</p>
+      </details>
+    </section>
+
+    <section class="mk-cta">
+      <h2>Encrypted from the first note — try Deeperguard free in beta</h2>
+      <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
+    </section>
+
+    {% include 'partials/mk-footer.html' %}
+  </main>
+</body>
+</html>

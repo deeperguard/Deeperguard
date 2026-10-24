@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Encrypted notes for freelancers and ZZP | Deeperguard</title>
+  <meta name="description" content="Receipts, invoices, and client contracts — searchable with in-browser OCR and encrypted before sync. Vault 2FA codes for banking and tax portals. Pro free in beta.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <meta property="og:title" content="Deeperguard for freelancers — encrypted receipts and contracts">
+  <meta property="og:description" content="Your receipts and invoices, searchable and encrypted. EU-hosted zero-knowledge notes for freelancers and Dutch ZZP'ers.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ og_image }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="notes-build" content="{{ build }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
+</head>
+<body>
+  <div class="mk-beta-banner" role="status">
+    <span class="mk-beta-pill">Public Beta</span>
+    <span class="mk-beta-copy mk-beta-copy--desktop">
+      <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups.
+    </span>
+    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — Pro free</span>
+  </div>
+
+  <header class="mk-topbar">
+    <div class="wrap mk-topbar-inner">
+      <a class="mk-brand" href="/">
+        <img src="/static/images/deeperguard-mark.svg" width="36" height="36" alt="Deeperguard Logo">
+        <span>
+          Deeperguard
+          <small>Zero-Knowledge Notes</small>
+        </span>
+      </a>
+      <input id="mk-nav-check" class="mk-nav-check" type="checkbox">
+      <label class="mk-nav-toggle" for="mk-nav-check" aria-label="Menu"><span aria-hidden="true">☰</span></label>
+      <label class="mk-nav-backdrop" for="mk-nav-check" aria-hidden="true"></label>
+      <nav class="mk-nav" aria-label="Sections">
+        <a href="#use-cases">Use cases</a>
+        <a href="#pricing">Pricing</a>
+        <a href="/verify">Verify</a>
+      </nav>
+      <div class="mk-topbar-actions">
+        <a class="mk-btn ghost mk-topbar-signin" href="{{ login_url }}">Sign in</a>
+        <a class="mk-btn mk-topbar-cta" href="{{ register_url }}">Create free vault</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap" id="top">
+    <section class="mk-hero mk-hero--compact">
+      <div>
+        <h1>Your receipts and invoices, searchable and encrypted.</h1>
+        <p class="mk-lede">For freelancers and ZZP&rsquo;ers: photograph paperwork, search it later, and sync ciphertext only — except when you choose Ask AI with Ollama Cloud. <a href="/verify">check it yourself</a>.</p>
+        <div class="mk-hero-actions">
+          <a class="mk-btn mk-btn-lg" href="{{ register_url }}">Create free vault</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="mk-section" id="use-cases">
+      <div class="mk-section-head">
+        <span class="mk-badge">Use cases</span>
+        <h2>Built for self-employed paperwork</h2>
+      </div>
+      <div class="mk-grid cols-2">
+        <article class="mk-card">
+          <h3>Tax-time receipts</h3>
+          <p>Scan receipts and invoices with your phone. OCR runs in the browser; the image and text are encrypted before they leave your device.</p>
+        </article>
+        <article class="mk-card">
+          <h3>Client contracts</h3>
+          <p>Store drafts and signed PDFs in one vault. Search inside scans without uploading plaintext to a cloud notebook.</p>
+        </article>
+        <article class="mk-card">
+          <h3>2FA recovery codes</h3>
+          <p>Keep banking and tax-portal authenticator codes in the vault authenticator (Pro) — same encryption as your notes.</p>
+        </article>
+        <article class="mk-card">
+          <h3>EU hosting</h3>
+          <p>Sync goes to netcup in Vienna, Austria (EU). Operator details: <a href="/terms#operator-identity">Schutten Invest</a>.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="mk-section" id="pricing">
+      <div class="mk-section-head">
+        <span class="mk-badge ok">Public beta</span>
+        <h2>Pricing</h2>
+        <p><strong>Free during beta: Pro, 5&nbsp;GB.</strong> After beta, Basic is €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo (€{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr, 100&nbsp;MB). Pro is €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo (€{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr, 5&nbsp;GB) with OCR, backups, passkeys, and vault authenticator.</p>
+        <p class="mk-trust-strip">
+          Server in Vienna, Austria (EU) · <a href="/terms#operator-identity">Imprint</a> · <a href="/verify">Check the encryption yourself</a>
+        </p>
+      </div>
+      <div class="mk-pricing">
+        <article class="mk-plan featured">
+          <span class="mk-plan-badge">Free in Public Beta</span>
+          <div class="mk-plan-header">
+            <h3>{{ pro.label }}</h3>
+            <p class="mk-plan-tagline">{{ pro.tagline }}</p>
+          </div>
+          <p><strong>{{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB</strong> during beta.</p>
+          <ul>
+            {% for feat in pro_features %}
+            <li>{{ feat }}</li>
+            {% endfor %}
+          </ul>
+          <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
+        </article>
+      </div>
+      <p><a href="/#pricing">Full plan comparison on the homepage</a></p>
+    </section>
+
+    <section class="mk-cta">
+      <h2>Start your encrypted freelance vault</h2>
+      <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
+    </section>
+
+    {% include 'partials/mk-footer.html' %}
+  </main>
+</body>
+</html>
