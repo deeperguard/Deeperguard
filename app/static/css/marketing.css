@@ -1202,6 +1202,9 @@ a.mk-badge-link:hover {
 @media (min-width: 760px) {
   .mk-pricing { grid-template-columns: 1fr 1fr; }
 }
+@media (min-width: 1100px) {
+  .mk-pricing { grid-template-columns: 1fr 1fr 1fr; }
+}
 .mk-plan {
   position: relative;
   background: var(--mk-panel);

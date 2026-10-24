@@ -201,9 +201,100 @@ if (loginForm) {
   } catch (err) {
     /* ignore */
   }
+  let sessionCapRevokeToken = '';
+
+  function hideSessionCapPanel() {
+    const panel = document.getElementById('session-cap-panel');
+    const list = document.getElementById('session-cap-list');
+    const status = document.getElementById('session-cap-status');
+    if (panel) panel.hidden = true;
+    if (list) list.innerHTML = '';
+    if (status) {
+      status.hidden = true;
+      status.textContent = '';
+    }
+    sessionCapRevokeToken = '';
+  }
+
+  function renderSessionCapPanel(err) {
+    const panel = document.getElementById('session-cap-panel');
+    const list = document.getElementById('session-cap-list');
+    const status = document.getElementById('session-cap-status');
+    if (!panel || !list) {
+      showError('login-error', err?.message || 'Device limit reached');
+      return;
+    }
+    sessionCapRevokeToken = String(err?.revokeToken || '');
+    showError('login-error', err?.message || 'Device limit reached');
+    const sessions = Array.isArray(err?.sessions) ? err.sessions : [];
+    list.innerHTML = '';
+    if (!sessions.length) {
+      const empty = document.createElement('li');
+      empty.textContent = 'No active devices listed. Try signing in again in a moment.';
+      list.appendChild(empty);
+    } else {
+      sessions.forEach((row) => {
+        const li = document.createElement('li');
+        const meta = document.createElement('div');
+        meta.className = 'session-cap-meta';
+        const title = document.createElement('strong');
+        title.textContent = String(row.device || 'Unknown device');
+        meta.appendChild(title);
+        const loc = document.createElement('span');
+        loc.className = 'muted';
+        const parts = [row.ip_location, row.ip].filter(Boolean);
+        loc.textContent = parts.length ? parts.join(' · ') : 'Unknown location';
+        meta.appendChild(loc);
+        li.appendChild(meta);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn subtle';
+        btn.textContent = 'Revoke';
+        btn.dataset.sessionId = String(row.id);
+        btn.addEventListener('click', async () => {
+          if (!sessionCapRevokeToken) {
+            showError('login-error', 'Sign in again to manage devices');
+            return;
+          }
+          btn.disabled = true;
+          if (status) {
+            status.hidden = false;
+            status.textContent = 'Revoking…';
+          }
+          try {
+            const data = await postJson('/api/auth/session-cap/revoke', {
+              session_id: Number(row.id),
+              revoke_token: sessionCapRevokeToken,
+            });
+            if (status) {
+              status.textContent = data.can_sign_in
+                ? 'Device revoked. Sign in again.'
+                : 'Device revoked. Revoke another if you still hit the limit.';
+            }
+            renderSessionCapPanel({
+              message: document.getElementById('login-error')?.textContent || err.message,
+              sessions: data.sessions || [],
+              revokeToken: sessionCapRevokeToken,
+            });
+          } catch (revokeErr) {
+            btn.disabled = false;
+            if (status) {
+              status.hidden = false;
+              status.textContent = revokeErr?.message || 'Could not revoke device';
+            }
+          }
+        });
+        li.appendChild(btn);
+        list.appendChild(li);
+      });
+    }
+    panel.hidden = false;
+  }
+
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     showError('login-error', '');
+    hideSessionCapPanel();
     const fd = new FormData(loginForm);
     const email = String(fd.get('email') || '').trim().toLowerCase();
     const password = String(fd.get('password') || '');
@@ -229,6 +320,10 @@ if (loginForm) {
       setLoginBusy(false, '');
       if (err?.srpMissing) {
         showSecureSignInReload('login-error');
+        return;
+      }
+      if (err?.sessionCap || err?.code === 'session_cap') {
+        renderSessionCapPanel(err);
         return;
       }
       const msg = String(err?.message || 'Sign-in failed');

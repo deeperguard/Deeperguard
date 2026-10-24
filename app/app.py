@@ -46,7 +46,16 @@ from srp_auth import (
 from vault_crypto import password_unlocks_samples
 import webauthn_helper as webauthn_mod
 from auth_rate_limit import allow as auth_rate_allow
-from plans import FEATURE_CATALOG, PLAN_BASIC, PLAN_CATALOG, PLAN_PRO, account_plan_payload, plan_has, plan_required_error
+from plans import (
+    FEATURE_CATALOG,
+    PLAN_BASIC,
+    PLAN_CATALOG,
+    PLAN_FREE,
+    PLAN_PRO,
+    account_plan_payload,
+    plan_has,
+    plan_required_error,
+)
 from verification_send_limit import (
     VerificationSendLimited,
     backup_attachment_cap_message,
@@ -347,6 +356,19 @@ def _plan_block(user, feature: str):
         return None
     payload = plan_required_error(db.user_plan(user), feature)
     return jsonify(payload), 403
+
+
+def _login_user(user_id: int, *, totp_ok: bool):
+    """Establish a session or return a 403 session_cap response (never auto-revokes)."""
+    try:
+        auth.login_user(int(user_id), totp_ok=totp_ok)
+        auth.clear_session_cap_revoke()
+        return None
+    except auth.SessionCapExceeded as exc:
+        revoke_token = auth.issue_session_cap_revoke(exc.user_id)
+        body = dict(exc.payload)
+        body["revoke_token"] = revoke_token
+        return jsonify(body), 403
 
 
 def _user_plan_guard(uid: int | None, feature: str):
@@ -1046,7 +1068,9 @@ def api_auth_srp_register():
         srp_verifier,
         srp_kdf_version=SRP_KDF_V2,
     )
-    auth.login_user(user_id, totp_ok=True)
+    blocked = _login_user(user_id, totp_ok=True)
+    if blocked:
+        return blocked
     notify_new_user_signup(email)
     user = db.get_user_by_id(user_id)
     try:
@@ -1109,7 +1133,9 @@ def api_auth_srp_verify():
     except ValueError:
         return jsonify({"error": "invalid credentials"}), 401
     totp_required = bool(user["totp_enabled"])
-    auth.login_user(int(user["id"]), totp_ok=not totp_required)
+    blocked = _login_user(int(user["id"]), totp_ok=not totp_required)
+    if blocked:
+        return blocked
     payload = _login_payload(user, totp_required=totp_required)
     payload["M2"] = m2
     kdf_ver = db.user_srp_kdf_version(user)
@@ -1243,7 +1269,9 @@ def api_auth_repair_login():
             return jsonify({"error": "invalid credentials", "repair_exhausted": repair_exhausted}), 401
         uid = int(user["id"])
         totp_required = bool(user["totp_enabled"])
-        auth.login_user(uid, totp_ok=not totp_required)
+        blocked = _login_user(uid, totp_ok=not totp_required)
+        if blocked:
+            return blocked
         user = db.get_user_by_id(uid)
         payload = _login_payload(user, totp_required=totp_required)
         payload["login_repaired"] = True
@@ -1261,7 +1289,9 @@ def api_auth_repair_login():
         return jsonify({"error": "invalid credentials", "repair_exhausted": True}), 401
     uid = int(user["id"])
     totp_required = bool(user["totp_enabled"])
-    auth.login_user(uid, totp_ok=not totp_required)
+    blocked = _login_user(uid, totp_ok=not totp_required)
+    if blocked:
+        return blocked
     user = db.get_user_by_id(uid)
     payload = _login_payload(user, totp_required=totp_required)
     payload["login_repaired"] = True
@@ -1299,7 +1329,9 @@ def api_auth_srp_resync():
         uid, email, password, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
     )
     totp_required = bool(user["totp_enabled"])
-    auth.login_user(uid, totp_ok=not totp_required)
+    blocked = _login_user(uid, totp_ok=not totp_required)
+    if blocked:
+        return blocked
     user = db.get_user_by_id(int(user["id"]))
     payload = _login_payload(user, totp_required=totp_required)
     payload["srp_resynced"] = True
@@ -1472,7 +1504,9 @@ def api_login():
     user_id, totp_required = auth.verify_credentials(email, password)
     if not user_id:
         return jsonify({"error": "invalid credentials"}), 401
-    auth.login_user(user_id, totp_ok=not totp_required)
+    blocked = _login_user(user_id, totp_ok=not totp_required)
+    if blocked:
+        return blocked
     user = db.get_user_by_id(user_id)
     return jsonify(_login_payload(user, totp_required=totp_required))
 
@@ -1526,6 +1560,54 @@ def api_list_sessions():
     token = auth.current_session_token()
     rows = db.list_user_sessions(uid, active_since=time.time() - SESSION_SECONDS)
     return jsonify({"sessions": [_public_session(row, current_token=token) for row in rows]})
+
+
+@app.post("/api/auth/session-cap/revoke")
+def api_session_cap_revoke():
+    """Revoke one device while blocked at the plan session soft-cap (no new session)."""
+    body = request.get_json(silent=True) or {}
+    revoke_token = str(body.get("revoke_token") or "").strip()
+    try:
+        session_id = int(body.get("session_id"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid session"}), 400
+    uid = auth.session_cap_revoke_uid(revoke_token)
+    if not uid:
+        return jsonify({"error": "sign in again to manage devices"}), 401
+    row = db.get_user_session(session_id, uid)
+    if not row or row["revoked_at"]:
+        return jsonify({"error": "not found"}), 404
+    if not db.revoke_user_session(session_id, uid, reason="user"):
+        return jsonify({"error": "not found"}), 404
+    # Refresh the listed sessions for the login UI (still no auto-login).
+    db.prune_user_sessions(uid, older_than=time.time() - SESSION_SECONDS)
+    rows = db.list_user_sessions(uid, active_since=time.time() - SESSION_SECONDS)
+    limit = None
+    plan = ""
+    user = db.get_user_by_id(uid)
+    if user:
+        from plans import plan_active_session_limit
+
+        plan = db.user_plan(user)
+        limit = plan_active_session_limit(plan)
+    sessions = [
+        {
+            "id": int(row["id"]),
+            "device": str(row["device_label"] or "Unknown device"),
+            "ip": str(row["ip"] or ""),
+            "ip_location": str(row["ip_location"] or "Unknown"),
+            "last_login_at": float(row["last_login_at"] or 0),
+            "last_seen_at": float(row["last_seen_at"] or 0),
+        }
+        for row in rows
+    ]
+    return jsonify({
+        "ok": True,
+        "sessions": sessions,
+        "limit": limit,
+        "plan": plan,
+        "can_sign_in": limit is None or len(sessions) < int(limit),
+    })
 
 
 @app.delete("/api/sessions/<int:session_id>")
@@ -1684,7 +1766,9 @@ def api_webauthn_login_verify():
     except Exception as exc:
         return _generic_client_error("webauthn login verify failed", exc, status=401)
     totp_required = bool(user["totp_enabled"])
-    auth.login_user(int(user["id"]), totp_ok=not totp_required)
+    blocked = _login_user(int(user["id"]), totp_ok=not totp_required)
+    if blocked:
+        return blocked
     return jsonify(_login_payload(user, totp_required=totp_required))
 
 
@@ -1721,7 +1805,12 @@ def _account_unlock_user():
     if not user and skip_login():
         user = db.get_first_user()
         if user:
-            auth.login_user(int(user["id"]), totp_ok=not bool(user["totp_enabled"]))
+            try:
+                auth.login_user(
+                    int(user["id"]), totp_ok=not bool(user["totp_enabled"])
+                )
+            except auth.SessionCapExceeded:
+                return None
     if not user:
         return None
     if not auth.authenticated() or auth.current_user_id() != int(user["id"]):
@@ -2058,7 +2147,9 @@ def api_totp_enable():
     if step:
         db.set_user_totp_last_step(uid, step)
     db.update_user_totp(uid, str(user["totp_secret"]), enabled=True)
-    auth.login_user(uid, totp_ok=True)
+    blocked = _login_user(uid, totp_ok=True)
+    if blocked:
+        return blocked
     _revoke_other_sessions(uid, reason="totp")
     return jsonify({"ok": True})
 
@@ -2087,7 +2178,9 @@ def api_totp_disable():
         if step:
             db.set_user_totp_last_step(uid, step)
     db.update_user_totp(uid, "", enabled=False)
-    auth.login_user(uid, totp_ok=True)
+    blocked = _login_user(uid, totp_ok=True)
+    if blocked:
+        return blocked
     _revoke_other_sessions(uid, reason="totp")
     return jsonify({"ok": True})
 
@@ -2816,11 +2909,17 @@ def _promo_payload() -> dict:
 
 
 def _marketing_context() -> dict:
+    free = PLAN_CATALOG[PLAN_FREE]
     basic = PLAN_CATALOG[PLAN_BASIC]
     pro = PLAN_CATALOG[PLAN_PRO]
+    free_features = [feat["label"] for key, feat in FEATURE_CATALOG.items() if PLAN_FREE in feat["plans"]]
     basic_features = [feat["label"] for key, feat in FEATURE_CATALOG.items() if PLAN_BASIC in feat["plans"]]
     pro_features = [feat["label"] for key, feat in FEATURE_CATALOG.items() if PLAN_PRO in feat["plans"]]
-    pro_only = [feat["label"] for key, feat in FEATURE_CATALOG.items() if PLAN_PRO in feat["plans"] and PLAN_BASIC not in feat["plans"]]
+    pro_only = [
+        feat["label"]
+        for key, feat in FEATURE_CATALOG.items()
+        if PLAN_PRO in feat["plans"] and PLAN_BASIC not in feat["plans"] and PLAN_FREE not in feat["plans"]
+    ]
     entry = app_entry_path()
     base = NOTES_PUBLIC_URL.rstrip("/")
     promo = _promo_payload()
@@ -2839,12 +2938,15 @@ def _marketing_context() -> dict:
         "app_path": entry,
         "register_url": f"{base}/register",
         "login_url": f"{base}/login",
+        "free": free,
         "basic": basic,
         "pro": pro,
+        "free_features": free_features,
         "basic_features": basic_features,
         "pro_features": pro_features,
         "pro_only_features": pro_only,
         "features": FEATURE_CATALOG,
+        "plan_free": PLAN_FREE,
         "plan_basic": PLAN_BASIC,
         "plan_pro": PLAN_PRO,
         "billing_note": "Free during public beta",

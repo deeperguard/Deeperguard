@@ -243,6 +243,13 @@
       if (data.repair_exhausted) err.repairExhausted = true;
       if (data.code) err.code = String(data.code);
       if (data.code === 'legacy_login') err.legacyLogin = true;
+      if (data.code === 'session_cap') {
+        err.sessionCap = true;
+        err.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+        err.revokeToken = data.revoke_token || '';
+        err.limit = data.limit;
+        err.plan = data.plan || '';
+      }
       throw err;
     }
     return data;

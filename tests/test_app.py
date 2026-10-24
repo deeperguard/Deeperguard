@@ -4551,11 +4551,17 @@ class NotesAppTests(unittest.TestCase):
         res = self.client.get("/api/account", headers={"X-CSRF-Token": self._csrf()})
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
-        self.assertEqual(data["plan"], "pro")
+        # Code default is Free when NOTES_DEFAULT_PLAN is unset (Vienna may still set pro).
+        self.assertEqual(data["plan"], "free")
         self.assertIn("plan_features", data)
-        self.assertTrue(data["plan_features"]["passkeys"])
+        self.assertTrue(data["plan_features"]["sync"])
+        self.assertTrue(data["plan_features"]["document_ocr"])
+        self.assertFalse(data["plan_features"]["passkeys"])
         self.assertIn("plan_pricing", data)
         self.assertFalse(data["plan_pricing"]["billing_active"])
+        self.assertIn("free", data["plan_catalog"])
+        self.assertIn("basic", data["plan_catalog"])
+        self.assertIn("pro", data["plan_catalog"])
 
     def test_basic_plan_blocks_passkey_registration(self):
         import db as notes_db
@@ -4781,7 +4787,10 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("scroll-margin-top: 5.75rem", css)
         self.assertIn("align-content: start", css)
         home = self.client.get("/")
-        self.assertIn(b"Free during beta: Pro, 5", home.data)
+        self.assertIn(b"Free during public beta", home.data)
+        self.assertIn(b">Free</h3>", home.data)
+        self.assertIn(b">Basic</h3>", home.data)
+        self.assertIn(b">Pro</h3>", home.data)
         self.assertNotIn("€0".encode(), home.data)
         self.assertIn(b'class="is-unavailable">Not included: Passkey sign-in', home.data)
         self.assertIn(b"mk-hash-open", home.data)

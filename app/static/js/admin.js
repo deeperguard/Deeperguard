@@ -59,6 +59,7 @@
         <td>${escapeHtml(user.email)}${envBadge}</td>
         <td>
           <select class="admin-plan-select">
+            <option value="free"${plan === 'free' ? ' selected' : ''}>Free</option>
             <option value="basic"${plan === 'basic' ? ' selected' : ''}>Basic</option>
             <option value="pro"${plan === 'pro' ? ' selected' : ''}>Pro</option>
           </select>
