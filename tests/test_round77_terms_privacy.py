@@ -1,43 +1,45 @@
-"""Round 77: Terms and Privacy page content (static HTML only)."""
+"""Round 77: Terms and Privacy page content (static HTML + marketing CSS)."""
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LEGAL = ROOT / "app" / "templates" / "legal.html"
+MARKETING_CSS = ROOT / "app" / "static" / "css" / "marketing.css"
 
 
 class Round77TermsPrivacyTests(unittest.TestCase):
     def test_legal_template_has_terms_headings(self):
         text = LEGAL.read_text(encoding="utf-8")
         self.assertIn("page == 'terms'", text)
-        for heading in (
-            "Operator identity",
-            "Limitation of liability",
-            "DSA notice-and-action",
-            "Changes to terms",
-            "Termination",
-            "Governing law and disputes",
-            "Acceptable use",
+        for heading, anchor in (
+            ("Operator identity", "operator-identity"),
+            ("Limitation of liability", "limitation-of-liability"),
+            ("DSA notice-and-action", "dsa-notice-and-action"),
+            ("Changes to terms", "changes-to-terms"),
+            ("Termination", "termination"),
+            ("Governing law and disputes", "governing-law-and-disputes"),
+            ("Acceptable use", "acceptable-use"),
         ):
-            self.assertIn(f"<h2>{heading}</h2>", text)
+            self.assertIn(f'<h2 id="{anchor}">{heading}</h2>', text)
 
     def test_legal_template_has_privacy_headings(self):
         text = LEGAL.read_text(encoding="utf-8")
         self.assertIn("page == 'privacy'", text)
-        for heading in (
-            "Data controller",
-            "What is processed and legal basis",
-            "Retention",
-            "Processors and server location",
-            "Your rights",
+        for heading, anchor in (
+            ("Data controller", "data-controller"),
+            ("What is processed and legal basis", "what-is-processed-and-legal-basis"),
+            ("Retention", "retention"),
+            ("Processors and server location", "processors-and-server-location"),
+            ("Your rights", "your-rights"),
         ):
-            self.assertIn(f"<h2>{heading}</h2>", text)
+            self.assertIn(f'<h2 id="{anchor}">{heading}</h2>', text)
 
-    def test_placeholders_present(self):
+    def test_webdesigner_fix_round_copy(self):
         text = LEGAL.read_text(encoding="utf-8")
-        # Filled from Dennis (24 Oct); remaining placeholders stay until supplied.
+        css = MARKETING_CSS.read_text(encoding="utf-8")
         self.assertIn("Schutten Invest", text)
         self.assertIn("Dutch law (the Netherlands)", text)
         self.assertIn("the competent court in the Netherlands", text)
@@ -52,25 +54,37 @@ class Round77TermsPrivacyTests(unittest.TestCase):
         self.assertIn("notes@deeperguard.com", text)
         self.assertIn("You use Deeperguard at your own risk.", text)
         self.assertIn("as is</strong> during the public beta", text)
-        self.assertIn("keeping your own backups using Export", text)
+        self.assertIn("Keep your own backups using Export", text)
+        self.assertIn("To the extent the law allows, Schutten Invest is not liable for loss of data", text)
+        self.assertIn("except in case of intent or gross negligence", text)
+        self.assertIn("Chamber of Commerce (KvK):", text)
+        self.assertNotIn("(KvK), if any:", text)
+        self.assertIn("AES-256-GCM, with keys derived from your password using Argon2id", text)
+        self.assertIn("default on this deployment", text)
+        self.assertNotIn("always on", text)
+        self.assertIn("We keep up to <strong>14</strong> encrypted server backups", text)
+        self.assertNotIn("NOTES_BACKUP_LOCAL_KEEP", text)
+        self.assertNotIn("NOTES_SESSION_SECONDS", text)
+        self.assertIn("the link stops working when it expires (max 7 days)", text)
+        self.assertNotIn("purged", text)
+        self.assertIn("Proton Mail", text)
+        self.assertIn("encrypted account backups sent by email", text)
+        self.assertIn("pCloud", text)
+        self.assertIn("AI relay (Ollama Cloud)", text)
         self.assertIn(
-            "Nothing in these terms limits liability that cannot be limited under Dutch law",
+            "Cloudflare may process connection data outside the EU under Standard Contractual Clauses.",
             text,
         )
-        self.assertNotIn("[OPERATOR NAME]", text)
-        self.assertNotIn("[GOVERNING LAW, e.g. the Netherlands]", text)
-        self.assertNotIn("[COURT]", text)
-        self.assertNotIn("[SERVER LOCATION]", text)
-        self.assertNotIn("[CONTACT EMAIL]", text)
-        self.assertNotIn("[ABUSE CONTACT EMAIL]", text)
-        self.assertIn("KvK 99268876", text)
-        self.assertNotIn("[KVK NUMBER if any]", text)
-        self.assertIn("Lisdodde 66, 2408 LX Alphen aan den Rijn", text)
-        self.assertIn("30 days", text)
-        self.assertIn("300 seconds", text)
-        self.assertIn("7 days", text)
-        self.assertIn("30 minutes", text)
-        self.assertIn("NOTES_BACKUP_LOCAL_KEEP", text)
+        self.assertIn(
+            "You can request account deletion at any time by emailing notes@deeperguard.com. "
+            "Self-service deletion in Settings, with a 7-day undo window, is planned.",
+            text,
+        )
+        self.assertNotIn("Settings or notes@deeperguard.com", text)
+        self.assertIn(".mk-legal { max-width: 46rem; overflow-wrap: anywhere; }", css)
+        # Brand spelling unchanged.
+        self.assertIn("Deeperguard", text)
+        self.assertNotIn("DeeperGuard", text)
         for ph in (
             "[ADDRESS]",
             "[RETENTION PERIOD]",
@@ -83,9 +97,6 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             "[COURT]",
         ):
             self.assertNotIn(ph, text)
-        # No square-bracket placeholders left in the public legal copy.
-        import re
-
         leftover = re.findall(r"\[[A-Z][A-Z0-9 /.,_-]*\]", text)
         self.assertEqual(leftover, [], f"leftover placeholders: {leftover}")
 
@@ -131,7 +142,7 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             self.assertEqual(terms.status_code, 200)
             phtml = privacy.get_data(as_text=True)
             thtml = terms.get_data(as_text=True)
-            self.assertIn("Data controller", phtml)
+            self.assertIn('id="data-controller"', phtml)
             self.assertIn("What is processed and legal basis", phtml)
             self.assertIn("Retention", phtml)
             self.assertIn("Processors and server location", phtml)
@@ -147,26 +158,40 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             self.assertIn("Dutch law (the Netherlands)", thtml)
             self.assertIn("Austria (EU)", phtml)
             self.assertIn("netcup GmbH", phtml)
+            self.assertIn("Proton Mail", phtml)
+            self.assertIn("pCloud", phtml)
+            self.assertIn("AI relay (Ollama Cloud)", phtml)
+            self.assertIn("Standard Contractual Clauses", phtml)
+            self.assertIn("AES-256-GCM", phtml)
+            self.assertIn("Argon2id", phtml)
+            self.assertIn("We keep up to", phtml)
+            self.assertIn("14", phtml)
+            self.assertIn("the link stops working when it expires (max 7 days)", phtml)
+            self.assertIn(
+                "Self-service deletion in Settings, with a 7-day undo window, is planned.",
+                thtml,
+            )
+            self.assertIn("To the extent the law allows", thtml)
             self.assertNotIn("see deployment docs", phtml)
             self.assertNotIn("Germany (EU)", phtml)
+            self.assertNotIn("purged", phtml)
+            self.assertNotIn("NOTES_BACKUP_LOCAL_KEEP", phtml)
             self.assertIn("notes@deeperguard.com", phtml)
             self.assertIn("notes@deeperguard.com", thtml)
             self.assertIn("You use Deeperguard at your own risk.", thtml)
             self.assertIn("during the public beta", thtml)
             self.assertIn("using Export", thtml)
             self.assertIn("Lisdodde 66, 2408 LX Alphen aan den Rijn", phtml)
-            self.assertIn("Lisdodde 66, 2408 LX Alphen aan den Rijn", thtml)
+            self.assertIn("Chamber of Commerce (KvK):", phtml)
             self.assertIn("KvK 99268876", phtml)
             self.assertIn("KvK 99268876", thtml)
             self.assertNotIn("[ADDRESS]", phtml)
             self.assertNotIn("[RETENTION PERIOD]", phtml)
             self.assertIn("30 days", phtml)
             self.assertIn("300 seconds", phtml)
-            self.assertIn("7 days", phtml)
             self.assertIn("30 minutes", phtml)
             self.assertIn("Last updated: 24 October 2026", phtml)
             self.assertIn("Last updated: 24 October 2026", thtml)
-            # Page must stay static / text-safe (no draft banner on the public page).
             self.assertNotIn("Draft – to be reviewed by a lawyer", phtml)
             self.assertNotIn("Draft – to be reviewed by a lawyer", thtml)
         finally:
