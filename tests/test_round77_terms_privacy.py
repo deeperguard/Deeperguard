@@ -60,9 +60,10 @@ class Round77TermsPrivacyTests(unittest.TestCase):
         self.assertNotIn("[SERVER LOCATION]", text)
         self.assertNotIn("[CONTACT EMAIL]", text)
         self.assertNotIn("[ABUSE CONTACT EMAIL]", text)
+        self.assertIn("KvK 99268876", text)
+        self.assertNotIn("[KVK NUMBER if any]", text)
         for ph in (
             "[ADDRESS]",
-            "[KVK NUMBER if any]",
             "[RETENTION PERIOD]",
         ):
             self.assertIn(ph, text)
@@ -130,7 +131,8 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             self.assertIn("during the public beta", thtml)
             self.assertIn("using Export", thtml)
             self.assertIn("[ADDRESS]", phtml)
-            self.assertIn("[KVK NUMBER if any]", thtml)
+            self.assertIn("KvK 99268876", phtml)
+            self.assertIn("KvK 99268876", thtml)
             self.assertIn("[RETENTION PERIOD]", phtml)
             self.assertIn("Last updated: 24 October 2026", phtml)
             self.assertIn("Last updated: 24 October 2026", thtml)
