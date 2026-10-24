@@ -3156,6 +3156,183 @@ def api_backup_email_resend():
     return _verification_sent_response(user, recipient)
 
 
+# --- D2 Secure Send -----------------------------------------------------------------
+
+@app.post("/api/secure-send")
+def api_secure_send_create():
+    """Authenticated: store opaque ciphertext blob + length; key stays in the fragment."""
+    import secure_send as ss
+
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "login required"}), 401
+    ip = auth.client_ip()
+    # Separate buckets: per IP and per sender (Dennis D2 rate-limit rule).
+    if not auth_rate_allow(f"secure-send-create-ip:{ip}", limit=20, window=3600.0):
+        return jsonify({"error": "rate limited"}), 429
+    if not auth_rate_allow(f"secure-send-create-user:{uid}", limit=30, window=3600.0):
+        return jsonify({"error": "rate limited"}), 429
+    body = request.get_json(silent=True) or {}
+    # Reject key material and any plaintext file metadata (name/MIME/size belong inside ciphertext).
+    for forbidden in (
+        "key",
+        "fragment",
+        "passphrase",
+        "password",
+        "wrapping_key",
+        "content_key",
+        "filename",
+        "file_name",
+        "mime",
+        "content_type",
+        "file_size",
+    ):
+        if forbidden in body:
+            return jsonify({"error": "invalid payload"}), 400
+    ciphertext = body.get("ciphertext")
+    if not isinstance(ciphertext, dict) or not ciphertext.get("iv") or not ciphertext.get("data"):
+        return jsonify({"error": "ciphertext required"}), 400
+    # Ignore client has_file / has_passphrase / byte_size hints — server stores opaque blob length only.
+    expires_in = ss.clamp_expires_in(body.get("expires_in", ss.DEFAULT_EXPIRES_SECONDS))
+    max_views = ss.clamp_max_views(body.get("max_views", ss.DEFAULT_MAX_VIEWS))
+    db.prune_secure_sends()
+    send_id = ss.new_send_id()
+    try:
+        written = ss.write_ciphertext(send_id, ciphertext)
+    except ValueError:
+        return jsonify({"error": "too large"}), 413
+    except OSError:
+        log.exception("secure-send write failed")
+        return jsonify({"error": "store failed"}), 500
+    expires_at = time.time() + expires_in
+    db.create_secure_send(
+        send_id,
+        int(uid),
+        ciphertext_len=written,
+        max_views=max_views,
+        expires_at=expires_at,
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "id": send_id,
+            "expires_at": expires_at,
+            "max_views": max_views,
+            "ciphertext_len": written,
+            "receive_path": f"/receive/{send_id}",
+        }
+    )
+
+
+@app.get("/api/secure-send/sent")
+def api_secure_send_list():
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "login required"}), 401
+    db.prune_secure_sends()
+    return jsonify({"items": db.list_secure_sends_for_user(int(uid))})
+
+
+@app.post("/api/secure-send/<send_id>/cancel")
+def api_secure_send_cancel(send_id: str):
+    import secure_send as ss
+
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "login required"}), 401
+    if not ss.valid_id(send_id):
+        return jsonify({"error": "not found"}), 404
+    if not db.cancel_secure_send(send_id, int(uid)):
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True, "message": ss.LINK_STOPPED})
+
+
+@app.post("/api/secure-send/<send_id>/open")
+def api_secure_send_open(send_id: str):
+    """Consume one view and return opaque ciphertext. Preview bots must not call this."""
+    import secure_send as ss
+
+    if not ss.valid_id(send_id):
+        return jsonify({"error": "not found"}), 404
+    ip = auth.client_ip()
+    if not auth_rate_allow(f"secure-send-open-ip:{ip}", limit=60, window=300.0):
+        return jsonify({"error": "rate limited"}), 429
+    row = db.get_secure_send(send_id)
+    if row is not None:
+        sender_id = int(row["sender_user_id"])
+        if not auth_rate_allow(f"secure-send-open-sender:{sender_id}", limit=120, window=300.0):
+            return jsonify({"error": "rate limited"}), 429
+    body = request.get_json(silent=True) or {}
+    for forbidden in (
+        "key",
+        "fragment",
+        "passphrase",
+        "password",
+        "wrapping_key",
+        "content_key",
+        "filename",
+        "file_name",
+        "mime",
+    ):
+        if forbidden in body:
+            return jsonify({"error": "invalid payload"}), 400
+    result = db.open_secure_send(send_id)
+    if not result:
+        return jsonify({"error": "not found"}), 404
+    resp = jsonify(
+        {
+            "ok": True,
+            "ciphertext": result["ciphertext"],
+            "views_remaining": result["views_remaining"],
+        }
+    )
+    # Never attach a real filename — downloads are assembled client-side after decrypt.
+    resp.headers["Content-Disposition"] = "inline"
+    return resp
+
+
+@app.route("/receive/<send_id>", methods=["GET", "HEAD"])
+def receive_secure_send(send_id: str):
+    """Receive shell only — does NOT count a view or download ciphertext."""
+    import secure_send as ss
+
+    if not ss.valid_id(send_id):
+        return render_template("not-found.html", **_marketing_context()), 404
+    row = db.get_secure_send(send_id)
+    ts = time.time()
+    if not row:
+        return render_template("not-found.html", **_marketing_context()), 404
+    has_blob = ss.blob_path(send_id).is_file()
+    status = ss.status_label(
+        canceled_at=float(row["canceled_at"]) if row["canceled_at"] else None,
+        expires_at=float(row["expires_at"]),
+        views_used=int(row["views_used"]),
+        max_views=int(row["max_views"]),
+        has_blob=has_blob,
+        now_ts=ts,
+    )
+    if status != "active":
+        # Expired / used / canceled: purge leftover bytes and 404.
+        if status == "expired":
+            ss.purge_ciphertext(send_id)
+        return render_template("not-found.html", **_marketing_context()), 404
+    if request.method == "HEAD":
+        resp = make_response(("", 200))
+        resp.headers["Content-Disposition"] = "inline"
+        return resp
+    ctx = {
+        "build": NOTES_BUILD,
+        "client_hash": client_assets.client_hash(),
+        "release_tag": client_assets.release_tag(),
+        "csp_nonce": auth.csp_nonce(),
+        "send_id": send_id,
+        "link_stopped_copy": ss.LINK_STOPPED,
+    }
+    resp = make_response(render_template("receive.html", **ctx))
+    resp.headers["Content-Disposition"] = "inline"
+    return resp
+
+
 @app.get("/contact")
 def contact_page():
     return render_template("contact.html", **_marketing_context())
