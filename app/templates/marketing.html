@@ -11,7 +11,7 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Deeperguard (encrypted notes) — Zero-knowledge notes PWA">
-  <meta property="og:description" content="Private encrypted notes in your browser. Ciphertext-only sync, on-device OCR, offline PWA. Full Pro free during public beta — unrelated to DeepGuard AI video tools.">
+  <meta property="og:description" content="Encrypted notes and searchable scans in your browser. OCR on your device, ciphertext-only sync (except Ask AI), servers in the EU. Free Pro during the beta.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="{{ canonical_url }}">
   <meta property="og:image" content="{{ og_image }}">
@@ -77,8 +77,8 @@
           <span class="mk-badge">No app store required</span>
           <span class="mk-badge warn">Public beta · Free access</span>
         </div>
-        <h1>Private notes for people who cannot risk a leak.</h1>
-        <p class="mk-lede">Encrypted on your device. Searchable offline. Syncs everywhere.</p>
+        <h1>Private notes and documents you can search. Encrypted before they leave your device.</h1>
+        <p class="mk-lede">Scan receipts, invoices and contracts. Text recognition runs in your browser, and sync only ever sees ciphertext. The one exception is Ask AI, which sends the text you choose through our server to Ollama Cloud. Don't take our word for it: <a href="/verify">check it yourself</a>.</p>
         <div class="mk-hero-actions">
           <a class="mk-btn mk-btn-lg" href="{{ register_url }}">Create free vault</a>
           <a class="mk-btn secondary mk-btn-lg" href="#security">How encryption works</a>
@@ -149,7 +149,7 @@
         <span class="mk-badge">Encrypted notes app</span>
         <h2>Zero-knowledge notes PWA for work you cannot leak</h2>
         <p>
-          Deeperguard is a <strong>zero-knowledge notes PWA</strong> for <strong>encrypted notes</strong>: ciphertext-only sync and on-device OCR.
+          Deeperguard is a <strong>zero-knowledge notes PWA</strong> for <strong>encrypted notes</strong>: ciphertext-only sync (except Ask AI) and on-device OCR.
         </p>
       </div>
     </section>
@@ -160,12 +160,12 @@
         <p>Every account includes Pro during the beta. No payment details are collected.</p>
       </article>
       <article>
-        <strong>Ciphertext only</strong>
-        <p>The server stores encrypted notes. It does not hold a copy it can read.</p>
+        <strong>Ciphertext only (except Ask AI)</strong>
+        <p>The server stores encrypted notes. It does not hold a readable copy, except note text you send to Ask AI.</p>
       </article>
       <article>
         <strong>Encrypted before sync</strong>
-        <p>AES-GCM 256 runs on your device. Sync moves ciphertext, not the note.</p>
+        <p>AES-GCM 256 runs on your device. Sync moves ciphertext (except Ask AI), not the note.</p>
       </article>
       <article>
         <strong>Open source</strong>
@@ -221,15 +221,15 @@
           <h3>Deeperguard</h3>
           <p class="mk-distinction-subtitle">Browser notes with client-side encryption, on-device OCR, and offline use.</p>
           <ul class="mk-distinction-points">
-            <li class="pro"><strong>True zero-knowledge:</strong> Server stores only encrypted ciphertext blobs.</li>
+            <li class="pro"><strong>True zero-knowledge:</strong> Server stores only ciphertext, except note text you send to Ask AI, which passes through our server to Ollama Cloud and is not stored.</li>
             <li class="pro"><strong>Client-side OCR:</strong> Search scanned receipts and PDFs without cloud AI parsing.</li>
             <li class="pro"><strong>No app store lock-in:</strong> Installable PWA with full offline vault support.</li>
-            <li class="pro"><strong>Built-in 2FA &amp; Passkeys:</strong> Modern WebAuthn hardware key support.</li>
+            <li class="pro"><strong>2FA codes in your vault:</strong> Keep 2FA codes in your encrypted vault. On Pro, sign in with a passkey or a code from your authenticator app.</li>
             <li class="pro"><strong>Standard Notes Import:</strong> Easy migration with 1-click vault JSON import.</li>
             <li class="pro"><strong>Public beta:</strong> Pro features included at no charge, including 5&nbsp;GB storage.</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Ciphertext-only sync, OCR on the device, and a browser app you can use offline. Pro after beta adds passkeys, backups, and the vault authenticator.
+            <strong>Difference:</strong> Ciphertext-only sync (except Ask AI), OCR on the device, and a browser app you can use offline. After beta, Basic is encrypted sync, attachments, and import on 100&nbsp;MB; Pro adds passkeys, account 2FA, daily email and pCloud backups, document OCR, and the vault authenticator on 5&nbsp;GB.
           </div>
         </article>
 
@@ -240,13 +240,14 @@
           <p class="mk-distinction-subtitle">Established encrypted notes ecosystem with extensive desktop apps and plugin extensions.</p>
           <ul class="mk-distinction-points">
             <li class="pro"><strong>Zero-knowledge:</strong> Mature end-to-end encrypted architecture.</li>
+            <li class="pro"><strong>Free plan includes 2FA and daily encrypted email backups.</strong></li>
+            <li class="pro"><strong>Owned by Proton since 2024.</strong></li>
             <li class="pro"><strong>Extensible:</strong> Plentiful editors, themes, and extensions on paid tiers.</li>
-            <li class="con"><strong>Paid advanced features:</strong> Published plans are about €4–€10/mo (~$90–$120/yr for top tiers).</li>
-            <li class="con"><strong>No on-device OCR:</strong> Searching text inside a scanned page is not part of the product.</li>
+            <li class="con"><strong>Paid plans:</strong> About $90/year (Productivity) or $120/year (Professional) — see <a href="https://standardnotes.com/plans" target="_blank" rel="noopener noreferrer">Standard Notes plans</a>.</li>
             <li class="con"><strong>Apps:</strong> Desktop and mobile clients are the usual way to use it. A web app also exists.</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Also zero-knowledge. It does not offer on-device OCR for scanned pages.
+            <strong>Difference:</strong> Also zero-knowledge. Deeperguard adds text recognition for scans and PDFs in your browser.
           </div>
           <a class="mk-distinction-card-link" href="/compare/standard-notes">Full Standard Notes comparison →</a>
         </article>
@@ -259,29 +260,30 @@
           <ul class="mk-distinction-points">
             <li class="pro"><strong>Rich features:</strong> Web clipper, audio recording, and extensive templates.</li>
             <li class="con"><strong>Not zero-knowledge:</strong> The service can access note plaintext on its servers.</li>
-            <li class="con"><strong>Cloud OCR:</strong> Text from scans is processed on Evernote’s servers.</li>
-            <li class="con"><strong>Paid plans:</strong> Published tiers are about €8–€15 per month. The free tier is limited.</li>
+            <li class="con"><strong>Not zero-knowledge</strong> — see <a href="https://evernote.com/compare-plans" target="_blank" rel="noopener noreferrer">Evernote plans</a>.</li>
+            <li class="con"><strong>Paid plans:</strong> Paid plans; the free plan is limited (<a href="https://evernote.com/compare-plans" target="_blank" rel="noopener noreferrer">Evernote plans</a>).</li>
           </ul>
           <div class="mk-distinction-verdict">
             <strong>Difference:</strong> A full-featured notebook. It is not zero-knowledge: the server can access plaintext.
           </div>
+          <a class="mk-distinction-card-link" href="/evernote-alternative">Evernote alternative guide →</a>
         </article>
 
         <!-- Notesnook -->
         <article class="mk-distinction-card">
           <span class="mk-distinction-badge neutral">Encrypted notes</span>
           <h3>Notesnook</h3>
-          <p class="mk-distinction-subtitle">Open-source encrypted notes with native apps and a focus on privacy-first writing.</p>
+          <p class="mk-distinction-subtitle">Open-source encrypted notes with a web app plus native desktop and mobile apps, and a generous free plan.</p>
           <ul class="mk-distinction-points">
             <li class="pro"><strong>Zero-knowledge:</strong> End-to-end encrypted notes and attachments on Notesnook sync.</li>
             <li class="pro"><strong>Open source:</strong> Client code is published for review (server components vary by deployment).</li>
-            <li class="pro"><strong>Native apps:</strong> Desktop and mobile clients are a primary experience.</li>
+            <li class="pro"><strong>Web and native apps:</strong> A browser app plus desktop and mobile clients.</li>
             <li class="con"><strong>Paid Pro tier:</strong> Advanced features and higher limits on published plans.</li>
-            <li class="con"><strong>No browser on-device OCR:</strong> Not positioned as a private receipt/PDF OCR workflow in the browser.</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Also privacy-first encrypted notes. Deeperguard adds a browser PWA with on-device OCR and Standard Notes import; Notesnook fits teams already on its apps.
+            <strong>Difference:</strong> Also privacy-first and open source. Deeperguard adds in-browser OCR for scans and PDFs, plus 2FA codes kept in the same vault.
           </div>
+          <a class="mk-distinction-card-link" href="/compare/notesnook">Full Notesnook comparison →</a>
         </article>
 
         <!-- Joplin -->
@@ -294,11 +296,12 @@
             <li class="pro"><strong>Optional E2EE:</strong> End-to-end encryption is available when enabled; sync provider may still see metadata depending on setup.</li>
             <li class="con"><strong>Not ciphertext-only by default:</strong> Without E2EE, sync targets can hold readable note bodies.</li>
             <li class="con"><strong>App-centric:</strong> Desktop and mobile apps are the usual workflow; web clipper is separate.</li>
-            <li class="con"><strong>OCR:</strong> Not a built-in private receipt scanner comparable to client-side WASM OCR in the browser.</li>
+            <li class="con"><strong>OCR:</strong> Built in and offline, but only in the desktop app. <a href="https://joplinapp.org/help/apps/sync/e2ee" target="_blank" rel="noopener noreferrer">Encryption is off until you turn it on</a> (<a href="https://joplinapp.org/help/apps/ocr" target="_blank" rel="noopener noreferrer">Joplin OCR</a>).</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Flexible open notebook + sync choice. Deeperguard is a single hosted zero-knowledge vault with strict ciphertext-only sync and a notes PWA — closer to Standard Notes/Notesnook than to Joplin’s sync-anywhere model.
+            <strong>Difference:</strong> Deeperguard is encrypted from the first note and runs OCR in any browser, including on your phone, with nothing to install.
           </div>
+          <a class="mk-distinction-card-link" href="/compare/joplin">Full Joplin comparison →</a>
         </article>
       </div>
     </section>
@@ -355,7 +358,7 @@
       <div class="mk-section-head" id="security">
         <span class="mk-badge">How encryption works</span>
         <h2>How Deeperguard works</h2>
-        <p>Create an account, unlock the vault on this device, then write and sync. The cryptography stays on the device. You can <a href="/verify">verify zero-knowledge yourself</a> in DevTools — SRP proofs on login, ciphertext-only sync — or open <strong>View server copy</strong> on any item in the app.</p>
+        <p>Create an account, unlock the vault on this device, then write and sync. The cryptography stays on the device. You can <a href="/verify">verify zero-knowledge yourself</a> in DevTools — SRP proofs on login, ciphertext-only sync (except Ask AI) — or open <strong>View server copy</strong> on any item in the app.</p>
       </div>
       <div class="mk-steps">
         <article class="mk-step">
@@ -379,8 +382,15 @@
         <span class="mk-badge ok">Public Beta Schedule</span>
         <h2>Transparent pricing schedule</h2>
         <p>
-          <strong>Free during beta: Pro, 5&nbsp;GB.</strong> No payment details are collected. After the beta, Basic is €2.99/month or €29/year (100&nbsp;MB). Pro is €6.99/month or €69/year (5&nbsp;GB) and keeps backups, passkeys, OCR, and the vault authenticator. Billing starts only after advance notice.
+          <strong>Free during beta: Pro, 5&nbsp;GB.</strong> No payment details are collected. After the beta, Basic is €2.99/month or €29/year (100&nbsp;MB). Pro is €6.99/month or €69/year (5&nbsp;GB) and keeps backups, passkeys, account 2FA, OCR, and the vault authenticator. Billing starts only after advance notice.
         </p>
+        <div class="mk-trust-strip" role="note">
+          <span>Server in Vienna, Austria (EU)</span>
+          <span>Operated by <a href="/terms#operator-identity">Schutten Invest</a></span>
+          <span>Open source under <a href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">AGPL-3.0</a></span>
+          <span><a href="/verify">Check it yourself</a></span>
+          <span><a href="/verify#signed-releases">Signed releases</a></span>
+        </div>
       </div>
 
       <div class="mk-pricing-beta-highlight">
@@ -579,6 +589,10 @@
         <a href="mailto:notes@deeperguard.com?subject=Vulnerability%20report">Report a vulnerability</a>
         <a href="/download">Download</a>
         <a href="/contact">Contact</a>
+        <a href="/compare/notesnook">vs Notesnook</a>
+        <a href="/compare/joplin">vs Joplin</a>
+        <a href="/evernote-alternative">Evernote alternative</a>
+        <a href="/for/freelancers">For freelancers</a>
         <a href="{{ app_url }}">Open notes app</a>
       </nav>
     </footer>
