@@ -384,6 +384,21 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn("This can be opened once.", page.get_data(as_text=True))
 
+    def test_sent_detail_sheet_stacks_above_settings_panel(self):
+        import re
+
+        css = (ROOT / "app" / "static" / "css" / "app.css").read_text(encoding="utf-8")
+        settings_z = int(
+            re.search(r"\.settings-panel\s*\{[\s\S]*?z-index:\s*(\d+)", css).group(1)
+        )
+        backdrop_z = int(
+            re.search(r"#secure-send-detail-backdrop\s*\{\s*z-index:\s*(\d+)", css).group(1)
+        )
+        sheet_z = int(re.search(r"#secure-send-detail\s*\{\s*z-index:\s*(\d+)", css).group(1))
+        self.assertGreater(backdrop_z, settings_z)
+        self.assertGreater(sheet_z, settings_z)
+        self.assertIn("padding-bottom: 12px", css.split(".secure-send-detail-actions")[1])
+
     def test_share_link_is_textarea_with_break_all(self):
         app_html = (ROOT / "app" / "templates" / "app.html").read_text(encoding="utf-8")
         css = (ROOT / "app" / "static" / "css" / "app.css").read_text(encoding="utf-8")

@@ -1103,8 +1103,7 @@ html[data-theme="light"] .zk-badge {
   color: var(--muted);
   flex: 1 1 12em;
 }
-.secure-send-detail-backdrop { z-index: 59; }
-.secure-send-detail { z-index: 60; }
+/* z-index for sent-detail sheet is set after .settings-panel / .note-options (see below). */
 .secure-send-detail-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -1129,6 +1128,7 @@ html[data-theme="light"] .zk-badge {
 }
 .secure-send-detail-actions {
   margin-top: 12px;
+  padding-bottom: 12px;
 }
 .receive-page .receive-title {
   margin: 0 0 8px;
@@ -5997,6 +5997,11 @@ body.note-readonly #checklist:not([hidden]) {
   flex-shrink: 0;
 }
 #note-options-backdrop { z-index: 30; }
+
+/* Secure Send sent-detail must paint above the settings side panel (49/50). Class-only
+   rules lose to later .settings-backdrop / .note-options, so pin stacking with IDs. */
+#secure-send-detail-backdrop { z-index: 59; }
+#secure-send-detail { z-index: 60; }
 
 .mobile-only { display: none; }
 .desktop-only { display: inline-flex; }
