@@ -583,16 +583,35 @@ textarea { resize: vertical; min-height: 240px; line-height: 1.55; }
 .secure-send-file-inclusion-list li {
   margin: 0 0 2px;
 }
+.secure-send-file-inclusion-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: disc;
+  margin: 0 0 4px;
+}
+.secure-send-file-inclusion-name {
+  flex: 1;
+  min-width: 0;
+}
+.secure-send-file-remove {
+  flex: 0 0 auto;
+  width: var(--touch);
+  min-width: var(--touch);
+  height: var(--touch);
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--muted);
+}
+.secure-send-file-inclusion-actions {
+  margin: 10px 0 0;
+}
 .secure-send-file-inclusion-note {
   margin: 8px 0 0;
   font-size: 12px;
   line-height: 1.4;
   color: var(--muted);
-}
-.secure-send-use-different-file {
-  margin: 10px 0 0;
-  padding-left: 0;
-  padding-right: 0;
 }
 .btn:focus-visible {
   outline: 2px solid var(--accent);

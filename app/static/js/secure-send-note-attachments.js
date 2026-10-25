@@ -35,16 +35,23 @@ const NotesSecureSendNoteAttachments = (() => {
     return bytes.byteLength != null ? bytes.byteLength : bytes.length;
   }
 
+  function normalizeStagedEntry(entry) {
+    const name = String(entry?.name || 'file').trim() || 'file';
+    const raw = entry?.bytes;
+    const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw || []);
+    const mime = String(entry?.mime || 'application/octet-stream').trim() || 'application/octet-stream';
+    return { name, bytes, mime };
+  }
+
   /**
+   * @param {Array<{name: string, bytes: Uint8Array, mime?: string}>} entries
    * @param {object} opts
-   * @param {Array} opts.attachments note attachment records (non-deleted)
-   * @param {function} opts.loadBytes async (att) => Uint8Array
    * @param {string} [opts.noteTitle]
    * @param {number} [opts.maxFileBytes]
    * @param {function} [opts.zipStored]
    * @param {function} [opts.fileFromBytes]
    */
-  async function stageSecureSendNoteAttachments(opts) {
+  function stageSecureSendEntries(entries, opts) {
     const maxBytes = Number.isFinite(opts?.maxFileBytes) ? opts.maxFileBytes : DEFAULT_MAX_BYTES;
     const zipStored = opts?.zipStored
       || (typeof NotesSnImport !== 'undefined' && NotesSnImport.zipStored);
@@ -53,25 +60,19 @@ const NotesSecureSendNoteAttachments = (() => {
     if (typeof fileFromBytes !== 'function') {
       throw new Error('Secure Send file helper is unavailable.');
     }
-    const loadBytes = opts?.loadBytes;
-    if (typeof loadBytes !== 'function') {
-      throw new Error('Missing attachment loader.');
-    }
-    const atts = (opts?.attachments || []).filter((a) => a && !a.deleted);
-    const count = atts.length;
+    const staged = (entries || []).map(normalizeStagedEntry).filter((e) => e.bytes);
+    const count = staged.length;
     if (count === 0) {
-      return { file: null, includedNames: [], zipNote: '' };
+      return { file: null, includedNames: [], zipNote: '', entries: [] };
     }
 
     if (count === 1) {
-      const att = atts[0];
-      const bytes = await loadBytes(att);
+      const { name, bytes, mime } = staged[0];
       if (byteLength(bytes) > maxBytes) {
         throw new Error('This attachment is over the 50 MB Secure Send limit.');
       }
-      const name = attachmentFilename(att);
-      const file = fileFromBytes(bytes, name, att.content?.mime);
-      return { file, includedNames: [name], zipNote: '' };
+      const file = fileFromBytes(bytes, name, mime);
+      return { file, includedNames: [name], zipNote: '', entries: staged };
     }
 
     if (typeof zipStored !== 'function') {
@@ -81,13 +82,11 @@ const NotesSecureSendNoteAttachments = (() => {
     const used = new Set();
     const zipEntries = [];
     const includedNames = [];
-    for (const att of atts) {
-      const bytes = await loadBytes(att);
-      const name = disambiguateZipName(attachmentFilename(att), used);
+    for (const row of staged) {
+      const name = disambiguateZipName(row.name, used);
       used.add(name.toLowerCase());
       includedNames.push(name);
-      const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-      zipEntries.push({ name, bytes: data });
+      zipEntries.push({ name, bytes: row.bytes });
     }
     const zipBytes = zipStored(zipEntries);
     if (byteLength(zipBytes) > maxBytes) {
@@ -101,11 +100,40 @@ const NotesSecureSendNoteAttachments = (() => {
       file,
       includedNames,
       zipNote: 'Sent as one zip file in the link.',
+      entries: staged,
     };
+  }
+
+  /**
+   * @param {object} opts
+   * @param {Array} opts.attachments note attachment records (non-deleted)
+   * @param {function} opts.loadBytes async (att) => Uint8Array
+   * @param {string} [opts.noteTitle]
+   * @param {number} [opts.maxFileBytes]
+   * @param {function} [opts.zipStored]
+   * @param {function} [opts.fileFromBytes]
+   */
+  async function stageSecureSendNoteAttachments(opts) {
+    const loadBytes = opts?.loadBytes;
+    if (typeof loadBytes !== 'function') {
+      throw new Error('Missing attachment loader.');
+    }
+    const atts = (opts?.attachments || []).filter((a) => a && !a.deleted);
+    const entries = [];
+    for (const att of atts) {
+      const bytes = await loadBytes(att);
+      entries.push({
+        name: attachmentFilename(att),
+        bytes: bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes),
+        mime: att.content?.mime,
+      });
+    }
+    return stageSecureSendEntries(entries, opts);
   }
 
   return {
     stageSecureSendNoteAttachments,
+    stageSecureSendEntries,
     attachmentFilename,
     disambiguateZipName,
     zipBasename,

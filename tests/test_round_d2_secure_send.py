@@ -425,16 +425,19 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertIn("secure-send-note-attachments.js", app_html)
         self.assertIn("secure-send-file-inclusion", app_html)
         self.assertIn("secure-send-file-picker-wrap", app_html)
-        self.assertIn("btn-secure-send-use-different-file", app_html)
-        self.assertIn("setSecureSendFileInclusion", app_js)
+        self.assertIn("btn-secure-send-add-files", app_html)
+        self.assertIn("secure-send-file-add", app_html)
+        self.assertIn("paintSecureSendFileInclusion", app_js)
+        self.assertIn("stageSecureSendEntries", app_js)
+        self.assertIn("mergeSecureSendPickedFiles", app_js)
+        self.assertIn("scrollSecureSendSectionIntoView", app_js)
         self.assertIn("From this note", app_js)
-        self.assertIn("Use a different file", app_html)
+        self.assertNotIn("Use a different file", app_html)
+        self.assertNotIn("btn-secure-send-use-different-file", app_html)
         self.assertIn("updateSecureSendFilePickerUi", app_js)
         self.assertNotIn("secureSendFilePickerRevealed", app_js)
-        self.assertRegex(
-            app_js,
-            r"btn-secure-send-use-different-file[\s\S]{0,500}clearSecureSendFileInclusion",
-        )
+        self.assertIn("clearSecureSendStagedFiles", app_js)
+        self.assertIn("secure-send-file-remove", app_js)
 
 
 if __name__ == "__main__":

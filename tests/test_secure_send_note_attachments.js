@@ -6,6 +6,7 @@ const root = path.join(__dirname, '..');
 const NotesSnImport = require(path.join(root, 'app/static/js/snimport.js'));
 const {
   stageSecureSendNoteAttachments,
+  stageSecureSendEntries,
   disambiguateZipName,
 } = require(path.join(root, 'app/static/js/secure-send-note-attachments.js'));
 
@@ -106,6 +107,27 @@ function att(uuid, filename) {
   assert.strictEqual(disambiguateZipName('doc.pdf', used), 'doc.pdf');
   used.add('doc.pdf');
   assert.strictEqual(disambiguateZipName('doc.pdf', used), 'doc (2).pdf');
+
+  const restageOne = stageSecureSendEntries(
+    [{ name: 'solo.bin', bytes: Uint8Array.from([1]) }],
+    { fileFromBytes, zipStored: NotesSnImport.zipStored },
+  );
+  assert.strictEqual(restageOne.file.name, 'solo.bin');
+  assert.deepStrictEqual(restageOne.includedNames, ['solo.bin']);
+
+  const restageZip = stageSecureSendEntries(
+    [
+      { name: 'a.txt', bytes: Uint8Array.from([1]) },
+      { name: 'b.txt', bytes: Uint8Array.from([2, 3]) },
+    ],
+    { fileFromBytes, zipStored: NotesSnImport.zipStored, noteTitle: 'Zip me' },
+  );
+  assert.ok(restageZip.zipNote.includes('zip'));
+  assert.deepStrictEqual(restageZip.includedNames, ['a.txt', 'b.txt']);
+
+  const restageEmpty = stageSecureSendEntries([], { fileFromBytes, zipStored: NotesSnImport.zipStored });
+  assert.strictEqual(restageEmpty.file, null);
+  assert.deepStrictEqual(restageEmpty.includedNames, []);
 
   console.log('test_secure_send_note_attachments ok');
 })().catch((err) => {
