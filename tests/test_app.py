@@ -1954,6 +1954,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_dirty_queue_survives_lock_and_synced_cursor(self):
         self._run_node_script("test_sync_dirty_queue.js")
 
+    def test_client_secure_send_sent_sync(self):
+        self._run_node_script("test_secure_send_sent_sync.js")
+
     def test_client_lock_and_foreground_sync_do_not_stall(self):
         """Lock must not wait on a slow push; returning to the app must always
         check the server; quiet-sync throttling must use the local clock."""

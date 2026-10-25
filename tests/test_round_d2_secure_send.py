@@ -431,6 +431,23 @@ class D2SecureSendTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
 
+    def test_secure_send_sent_vault_sync_js(self):
+        import shutil
+        import subprocess
+
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not installed")
+        script = ROOT / "tests" / "test_secure_send_sent_sync.js"
+        completed = subprocess.run(
+            [node, str(script)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+
     def test_share_by_link_stages_note_attachments_in_app_js(self):
         app_js = (ROOT / "app" / "static" / "js" / "app.js").read_text(encoding="utf-8")
         self.assertIn("NotesSecureSendNoteAttachments", app_js)
