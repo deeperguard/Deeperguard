@@ -428,8 +428,13 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertIn("btn-secure-send-use-different-file", app_html)
         self.assertIn("setSecureSendFileInclusion", app_js)
         self.assertIn("From this note", app_js)
-        self.assertIn("Use a different file", app_js)
+        self.assertIn("Use a different file", app_html)
         self.assertIn("updateSecureSendFilePickerUi", app_js)
+        self.assertNotIn("secureSendFilePickerRevealed", app_js)
+        self.assertRegex(
+            app_js,
+            r"btn-secure-send-use-different-file[\s\S]{0,500}clearSecureSendFileInclusion",
+        )
 
 
 if __name__ == "__main__":

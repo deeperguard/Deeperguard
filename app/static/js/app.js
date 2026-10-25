@@ -19953,7 +19953,6 @@
   // D2 Secure Send — compose + Sent list (ciphertext only; key in fragment).
   let secureSendPendingFile = null;
   let secureSendInclusionFromNote = false;
-  let secureSendFilePickerRevealed = false;
 
   function setSecureSendStatus(message) {
     const el = document.getElementById('secure-send-status');
@@ -19967,9 +19966,8 @@
     const inclusionWrap = document.getElementById('secure-send-file-inclusion');
     const differentBtn = document.getElementById('btn-secure-send-use-different-file');
     const hasStaged = inclusionWrap && !inclusionWrap.hidden;
-    const hidePicker = hasStaged && !secureSendFilePickerRevealed;
-    if (pickerWrap) pickerWrap.hidden = hidePicker;
-    if (differentBtn) differentBtn.hidden = !hasStaged || secureSendFilePickerRevealed;
+    if (pickerWrap) pickerWrap.hidden = hasStaged;
+    if (differentBtn) differentBtn.hidden = !hasStaged;
   }
 
   function setSecureSendFileInclusion(includedNames, zipNote, options) {
@@ -19985,7 +19983,6 @@
     if (!names.length) {
       wrap.hidden = true;
       secureSendInclusionFromNote = false;
-      secureSendFilePickerRevealed = false;
       if (headingEl) headingEl.textContent = 'Including:';
       if (noteEl) {
         noteEl.textContent = '';
@@ -20017,7 +20014,6 @@
       noteEl.hidden = !note;
     }
     wrap.hidden = false;
-    secureSendFilePickerRevealed = false;
     updateSecureSendFilePickerUi();
   }
 
@@ -20036,7 +20032,6 @@
     const linkInput = document.getElementById('secure-send-link');
     secureSendPendingFile = null;
     secureSendInclusionFromNote = false;
-    secureSendFilePickerRevealed = false;
     if (titleEl) titleEl.value = NotesSearch.effectiveNoteTitle(note) || '';
     if (bodyEl) bodyEl.value = String(note.content?.content || '');
     if (fileInput) fileInput.value = '';
@@ -20105,8 +20100,10 @@
   try { window.__notesOpenSecureSendForNote = openSecureSendForNote; } catch (err) { /* ignore */ }
 
   document.getElementById('btn-secure-send-use-different-file')?.addEventListener('click', () => {
-    secureSendFilePickerRevealed = true;
-    updateSecureSendFilePickerUi();
+    secureSendPendingFile = null;
+    const fileInput = document.getElementById('secure-send-file');
+    if (fileInput) fileInput.value = '';
+    clearSecureSendFileInclusion();
     try { document.getElementById('secure-send-file')?.focus(); } catch (err) { /* ignore */ }
   });
   document.getElementById('secure-send-file')?.addEventListener('change', () => {
