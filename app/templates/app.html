@@ -2004,13 +2004,14 @@
           </div>
           <p id="secure-send-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
           <div id="secure-send-link-wrap" class="secure-send-link-row" hidden>
-            <label class="settings-row stacked" for="secure-send-link">Link (copy and send)
+            <label class="settings-row stacked" for="secure-send-link">Copy or share
               <textarea id="secure-send-link" rows="3" readonly autocomplete="off" spellcheck="false"></textarea>
             </label>
             <div class="secure-send-link-actions">
               <button type="button" id="btn-secure-send-copy" class="btn sm" title="Copy link" aria-label="Copy link">Copy</button>
               <button type="button" id="btn-secure-send-share" class="btn sm" title="Share link" aria-label="Share link" hidden>Share</button>
             </div>
+            <p class="settings-hint secure-send-link-fragment-hint">Some apps drop the part after # — if Open fails, copy and paste the link.</p>
           </div>
         </div>
       </section>
@@ -2070,13 +2071,14 @@
         <div><dt>Expires</dt><dd id="secure-send-detail-expires">—</dd></div>
       </dl>
       <div id="secure-send-detail-link-wrap" class="secure-send-link-row" hidden>
-        <label class="settings-row stacked" for="secure-send-detail-link">Link (copy and send)
+        <label class="settings-row stacked" for="secure-send-detail-link">Copy or share
           <textarea id="secure-send-detail-link" rows="3" readonly autocomplete="off" spellcheck="false"></textarea>
         </label>
         <div class="secure-send-link-actions">
           <button type="button" id="btn-secure-send-detail-copy" class="btn sm" title="Copy link" aria-label="Copy link">Copy</button>
           <button type="button" id="btn-secure-send-detail-share" class="btn sm" title="Share link" aria-label="Share link" hidden>Share</button>
         </div>
+        <p class="settings-hint secure-send-link-fragment-hint">Some apps drop the part after # — if Open fails, copy and paste the link.</p>
       </div>
       <p id="secure-send-detail-copy-hint" class="settings-hint" hidden>This send was created before multi-device Sent — open it on the device that made the link, or create a new send.</p>
       <div class="secure-send-detail-actions">
