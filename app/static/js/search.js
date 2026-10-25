@@ -348,10 +348,52 @@ const NotesSearch = (() => {
 
   function clearMemoryIndex() {
     noteIndex.clear();
+    termCache.clear();
   }
 
   function memoryIndexActive() {
     return noteIndex.size > 0;
+  }
+
+  function memoryIndexNoteCount() {
+    return noteIndex.size;
+  }
+
+  function countSearchIndexTargets(notes) {
+    let total = 0;
+    for (const note of notes || []) {
+      if (!note || note.deleted) continue;
+      if (note.content?.type !== 'note') continue;
+      total += 1;
+    }
+    return total;
+  }
+
+  function searchIndexCoverage(notes) {
+    const total = countSearchIndexTargets(notes);
+    const indexed = memoryIndexNoteCount();
+    return { indexed, total, complete: total === 0 || indexed >= total };
+  }
+
+  function searchCoverageSuffix(coverage) {
+    if (!coverage || coverage.complete) return '';
+    const parts = ['Still indexing — some notes may be missing from results.'];
+    if (coverage.total > 0) {
+      parts.push(`Searched ${coverage.indexed} of ${coverage.total} notes`);
+    }
+    return parts.join(' ');
+  }
+
+  function composeSearchListMeta(summary, coverage, { titlesOnlyFallback = false } = {}) {
+    const bits = [String(summary || '').trim()].filter(Boolean);
+    if (!titlesOnlyFallback && coverage && !coverage.complete) {
+      const hint = searchCoverageSuffix(coverage);
+      if (hint) bits.push(hint);
+    }
+    if (titlesOnlyFallback) {
+      bits.push('titles only, note text and scans were skipped');
+    }
+    return bits.join(' · ');
   }
 
   function indexNote(note, tagMap, folderMap) {
@@ -1051,6 +1093,11 @@ const NotesSearch = (() => {
     snippetAround,
     clearMemoryIndex,
     memoryIndexActive,
+    memoryIndexNoteCount,
+    countSearchIndexTargets,
+    searchIndexCoverage,
+    searchCoverageSuffix,
+    composeSearchListMeta,
     sameNoteContent,
     highlightPlain,
     applyHighlights,

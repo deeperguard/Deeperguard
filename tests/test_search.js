@@ -16,6 +16,10 @@ const {
   buildSearchBlob,
   clearMemoryIndex,
   memoryIndexActive,
+  searchIndexCoverage,
+  searchCoverageSuffix,
+  composeSearchListMeta,
+  parseQueryTerms,
   listCountLabel,
   documentHighlightLabel,
   noteBodyReading,
@@ -529,8 +533,28 @@ assert.strictEqual(fileRowMatches(
 
 indexNote(invoice136, tagMap);
 assert.strictEqual(memoryIndexActive(), true);
+parseQueryTerms('invoice 136');
 clearMemoryIndex();
 assert.strictEqual(memoryIndexActive(), false);
+assert.deepStrictEqual(searchIndexCoverage([invoice136]), { indexed: 0, total: 1, complete: false });
+indexNote(invoice136, tagMap);
+assert.deepStrictEqual(searchIndexCoverage([invoice136]), { indexed: 1, total: 1, complete: true });
+assert.match(
+  searchCoverageSuffix({ indexed: 2, total: 5, complete: false }),
+  /Still indexing/,
+);
+assert.match(
+  searchCoverageSuffix({ indexed: 2, total: 5, complete: false }),
+  /Searched 2 of 5 notes/,
+);
+assert.strictEqual(
+  composeSearchListMeta('No notes match that search', { indexed: 1, total: 4, complete: false }),
+  'No notes match that search · Still indexing — some notes may be missing from results. Searched 1 of 4 notes',
+);
+assert.strictEqual(
+  composeSearchListMeta('3 notes', { indexed: 3, total: 3, complete: true }, { titlesOnlyFallback: true }),
+  '3 notes · titles only, note text and scans were skipped',
+);
 
 const folderMap = new Map([
   ['folder-travel', { content: { title: 'Travelbox' } }],

@@ -8327,11 +8327,14 @@
       toast('Trash is already empty');
       return;
     }
-    if (!(await confirmAction(`Permanently delete ${total} note${total === 1 ? '' : 's'} in trash?`, {
-      title: 'Empty trash',
-      confirmLabel: 'Empty trash',
-      danger: true,
-    }))) return;
+    if (!(await confirmAction(
+      `Permanently delete ${total} note${total === 1 ? '' : 's'} in Trash? They leave this device now and sync a delete. Other devices drop them on next sync unless they have a newer edit. No undo.`,
+      {
+        title: 'Empty trash',
+        confirmLabel: 'Empty trash',
+        danger: true,
+      },
+    )) return;
     let protectedCount = 0;
     for (const note of trashedNotes()) {
       if (isNoteProtected(note)) {
@@ -9347,6 +9350,9 @@
     }
     const searchOptions = searchFilterOptions();
     const listingFiles = currentFilter === 'documents';
+    const searchCoverage = query && !listingFiles
+      ? NotesSearch.searchIndexCoverage(NotesStore.listNotes())
+      : null;
     const filtered = listingFiles ? [] : NotesSearch.filterNotes(NotesStore.listNotes(), {
       query: ui.search.value,
       filter: currentFilter,
@@ -9380,15 +9386,8 @@
         ? countLabel
         : (query ? (listingFiles ? 'No files match that search' : 'No notes match that search') : 'No notes match these filters');
       if (meta) {
-        if (titlesOnlyFallback) {
-          // The vault was too large to search note text; say so instead of
-          // quietly listing titles only.
-          meta.textContent = `${summary} · titles only, note text and scans were skipped`;
-          meta.hidden = false;
-        } else {
-          meta.textContent = summary;
-          meta.hidden = !!query;
-        }
+        meta.textContent = NotesSearch.composeSearchListMeta(summary, searchCoverage, { titlesOnlyFallback });
+        meta.hidden = false;
       }
     } else if (meta) {
       meta.hidden = true;
@@ -9443,8 +9442,11 @@
           return;
         }
       }
+      const searchCoverageHint = (query && searchCoverage && !searchCoverage.complete && !titlesOnlyFallback)
+        ? `<p class="muted">${escapeHtml(NotesSearch.searchCoverageSuffix(searchCoverage))}</p>`
+        : '';
       ui.noteList.innerHTML = query
-        ? `<div class="note-list-empty"><p class="note-list-empty-title">No ${listingFiles ? 'files' : 'notes'} match “${escapeHtml(query)}”</p><p class="muted">${listingFiles ? 'Try a filename or the note the file is attached to.' : 'Clear the search or filters to see every note.'}</p></div>`
+        ? `<div class="note-list-empty"><p class="note-list-empty-title">No ${listingFiles ? 'files' : 'notes'} match “${escapeHtml(query)}”</p><p class="muted">${listingFiles ? 'Try a filename or the note the file is attached to.' : 'Clear the search or filters to see every note.'}</p>${searchCoverageHint}</div>`
         : currentFilter === 'trash'
           ? '<div class="note-list-empty"><p class="note-list-empty-title">Trash is empty</p><p class="muted">Notes you delete appear here until you empty trash.</p></div>'
         : currentFilter === 'documents'
@@ -19286,11 +19288,14 @@
       toast('This note is protected', true);
       return;
     }
-    if (!(await confirmAction('Permanently delete this note?', {
-      title: 'Delete forever',
-      confirmLabel: 'Delete',
-      danger: true,
-    }))) return;
+    if (!(await confirmAction(
+      'This removes it from Trash on this device and syncs a delete. Other devices drop it on their next sync unless they have a newer edit.',
+      {
+        title: 'Delete forever',
+        confirmLabel: 'Delete',
+        danger: true,
+      },
+    )) return;
     if (id === currentId) {
       currentId = null;
       ui.shell.classList.remove('editor-open');
