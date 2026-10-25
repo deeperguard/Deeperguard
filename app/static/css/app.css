@@ -1130,6 +1130,82 @@ html[data-theme="light"] .zk-badge {
   margin-top: 12px;
   padding-bottom: 12px;
 }
+.receive-brand {
+  margin-bottom: 18px;
+}
+.receive-brand h1 {
+  margin: 14px 0 0;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+.receive-home-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 auto;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 10px;
+  padding: 4px 6px;
+}
+.receive-home-link:hover,
+.receive-home-link:focus-visible {
+  color: var(--text);
+  text-decoration: none;
+}
+.receive-home-mark {
+  display: flex;
+  flex: 0 0 auto;
+}
+.receive-home-title {
+  line-height: 1.3;
+  text-align: left;
+}
+.receive-footer {
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.receive-footer a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.receive-footer a:hover,
+.receive-footer a:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+.receive-download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  min-width: 0;
+  max-width: 100%;
+}
+.receive-download-prefix {
+  flex: 0 0 auto;
+}
+.receive-download-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .receive-download-name {
+    max-width: 11em;
+  }
+}
 .receive-page .receive-title {
   margin: 0 0 8px;
   font-size: 1.15rem;

@@ -33,6 +33,20 @@
   const bodyEl = document.getElementById('receive-body');
   const fileRow = document.getElementById('receive-file-row');
   const downloadBtn = document.getElementById('receive-download');
+  const downloadNameEl = document.getElementById('receive-download-name');
+
+  function setDownloadFileLabel(name) {
+    const label = String(name || '').trim() || 'file';
+    if (downloadNameEl) {
+      downloadNameEl.textContent = label;
+      downloadNameEl.setAttribute('title', label);
+      return;
+    }
+    if (downloadBtn) {
+      downloadBtn.textContent = `Download ${label}`;
+      downloadBtn.setAttribute('title', `Download ${label}`);
+    }
+  }
 
   function showError(msg) {
     if (!errEl) return;
@@ -157,9 +171,7 @@
       if (payload.file && payload.file.data) {
         pendingFile = payload.file;
         if (fileRow) fileRow.hidden = false;
-        if (downloadBtn) {
-          downloadBtn.textContent = `Download ${payload.file.name || 'file'}`;
-        }
+        setDownloadFileLabel(payload.file.name || 'file');
       }
     } catch (err) {
       showError(linkStopped);
