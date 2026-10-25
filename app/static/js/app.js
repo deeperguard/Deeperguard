@@ -20005,24 +20005,30 @@
     try { section?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (err) { /* ignore */ }
     try { document.getElementById('secure-send-title')?.focus(); } catch (err) { /* ignore */ }
     const atts = NotesStore.listAttachments(id).filter((att) => !att.deleted);
-    if (atts.length === 1) {
-      setSecureSendStatus('Loading attachment…');
-      try {
-        const att = atts[0];
-        const bytes = await NotesStore.getAttachmentBytes(att.uuid);
-        secureSendPendingFile = NotesPreview.fileFromBytes(
-          bytes,
-          att.content.filename || att.content.original_filename || 'attachment',
-          att.content.mime,
-        );
-        setSecureSendStatus('First attachment will be included when you create the link.');
-      } catch (err) {
-        secureSendPendingFile = null;
-        setSecureSendStatus('Could not load attachment. You can still share the note text.');
-        toast(err?.message || 'Attachment load failed', true);
-      }
-    } else if (atts.length > 1) {
-      setSecureSendStatus('This note has multiple attachments. Pick a file below if needed.');
+    if (!atts.length) return;
+    const stage = window.NotesSecureSendNoteAttachments;
+    if (!stage?.stageSecureSendNoteAttachments) {
+      setSecureSendStatus('Could not include attachments on this build.');
+      return;
+    }
+    setSecureSendStatus(
+      atts.length === 1 ? 'Loading attachment…' : `Preparing ${atts.length} files…`,
+    );
+    try {
+      const maxFileBytes = Number(NotesSecureSend?.MAX_FILE_BYTES) || 50 * 1024 * 1024;
+      const { file, status } = await stage.stageSecureSendNoteAttachments({
+        attachments: atts,
+        noteTitle: NotesSearch.effectiveNoteTitle(note),
+        maxFileBytes,
+        loadBytes: (att) => NotesStore.getAttachmentBytes(att.uuid),
+      });
+      secureSendPendingFile = file;
+      if (status) setSecureSendStatus(status);
+    } catch (err) {
+      secureSendPendingFile = null;
+      const msg = err?.message || 'Could not prepare attachments.';
+      setSecureSendStatus(msg);
+      toast(msg, true);
     }
   }
   try { window.__notesOpenSecureSendForNote = openSecureSendForNote; } catch (err) { /* ignore */ }

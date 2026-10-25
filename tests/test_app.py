@@ -1993,6 +1993,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_standard_notes_import(self):
         self._run_node_script("test_snimport.js")
 
+    def test_client_secure_send_note_attachments(self):
+        self._run_node_script("test_secure_send_note_attachments.js")
+
     def test_client_checklist(self):
         self._run_node_script("test_checklist.js")
 
