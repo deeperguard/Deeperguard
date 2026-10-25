@@ -15121,6 +15121,46 @@
   const SECURE_SEND_NO_VAULT_RECORD_MSG =
     'This send was created before multi-device Sent — open it on the device that made the link, or create a new send.';
 
+  function secureSendLinkCanWebShare() {
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
+    if (typeof globalThis.isSecureContext === 'boolean' && !globalThis.isSecureContext) return false;
+    try {
+      const probe = { url: 'https://example.com/receive/test#v1.probe' };
+      return !navigator.canShare || navigator.canShare(probe);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function syncSecureSendShareButtons() {
+    const show = secureSendLinkCanWebShare();
+    for (const id of ['btn-secure-send-share', 'btn-secure-send-detail-share']) {
+      const btn = document.getElementById(id);
+      if (btn) btn.hidden = !show;
+    }
+  }
+
+  async function shareSecureSendLink(url, { title } = {}) {
+    const link = String(url || '').trim();
+    if (!link || !secureSendLinkCanWebShare()) return;
+    const payload = { url: link };
+    const label = String(title || '').trim();
+    if (label) {
+      payload.title = label;
+      payload.text = label;
+    }
+    try {
+      if (navigator.canShare && !navigator.canShare(payload)) {
+        await navigator.share({ url: link });
+      } else {
+        await navigator.share(payload);
+      }
+    } catch (err) {
+      if (err && (err.name === 'AbortError' || /cancel/i.test(String(err.message || '')))) return;
+      throw err;
+    }
+  }
+
   function secureSendStatusLabel(item) {
     return item?.status_label
       || ({ active: 'Waiting', used: 'Opened', expired: 'Expired', canceled: 'Revoked' }[item?.status]
@@ -15209,6 +15249,7 @@
     if (linkWrap) linkWrap.hidden = !shareUrl;
     if (linkInput) linkInput.value = shareUrl;
     if (copyHint) copyHint.hidden = !!shareUrl;
+    syncSecureSendShareButtons();
     if (revokeBtn) {
       revokeBtn.hidden = item.status !== 'active';
       revokeBtn.disabled = item.status !== 'active';
@@ -15320,6 +15361,7 @@
     }
     document.body.classList.add('secure-send-open');
     window.__notesSecureSendOpenedAt = Date.now();
+    syncSecureSendShareButtons();
     try { refreshSecureSendList(); } catch (err) { /* ignore */ }
   }
 
@@ -20447,6 +20489,23 @@
       toast('Select the link and copy it', true);
     }
   });
+  document.getElementById('btn-secure-send-detail-share')?.addEventListener('click', async () => {
+    const linkInput = document.getElementById('secure-send-detail-link');
+    const url = linkInput ? String(linkInput.value || '') : '';
+    if (!url) {
+      toast(SECURE_SEND_NO_VAULT_RECORD_MSG, true);
+      return;
+    }
+    const local = secureSendDetailServerItem?.id && NotesStore.getSecureSendSentRecord
+      ? NotesStore.getSecureSendSentRecord(secureSendDetailServerItem.id)
+      : null;
+    const title = local?.snapshot?.title ? String(local.snapshot.title).trim() : '';
+    try {
+      await shareSecureSendLink(url, { title });
+    } catch (err) {
+      toast(err?.message || 'Share failed', true);
+    }
+  });
   document.getElementById('btn-secure-send-create')?.addEventListener('click', async () => {
     if (!window.NotesSecureSend || !window.NotesStore || !window.NotesCrypto) {
       setSecureSendStatus('Secure Send is unavailable on this build.');
@@ -20501,6 +20560,7 @@
         linkInput.value = url;
         try { linkInput.select(); } catch (err) { /* ignore */ }
       }
+      syncSecureSendShareButtons();
       setSecureSendStatus(
         sealed.hasPassphrase
           ? 'Link ready. Share the passphrase separately — the link alone cannot open it. After the opens are used, the link stops working.'
@@ -20540,6 +20600,18 @@
         linkInput.select();
       } catch (e) { /* ignore */ }
       toast('Select the link and copy it', true);
+    }
+  });
+  document.getElementById('btn-secure-send-share')?.addEventListener('click', async () => {
+    const linkInput = document.getElementById('secure-send-link');
+    const url = linkInput ? String(linkInput.value || '') : '';
+    if (!url) return;
+    const titleInput = document.getElementById('secure-send-title');
+    const title = titleInput ? String(titleInput.value || '').trim() : '';
+    try {
+      await shareSecureSendLink(url, { title });
+    } catch (err) {
+      toast(err?.message || 'Share failed', true);
     }
   });
 

@@ -554,7 +554,8 @@ textarea { resize: vertical; min-height: 240px; line-height: 1.55; }
   flex: 1 1 220px;
   min-width: 0;
 }
-.secure-send-link-row #secure-send-link {
+.secure-send-link-row #secure-send-link,
+.secure-send-link-row #secure-send-detail-link {
   width: 100%;
   max-width: 100%;
   word-break: break-all;
@@ -563,12 +564,17 @@ textarea { resize: vertical; min-height: 240px; line-height: 1.55; }
   min-height: calc(var(--touch) * 1.5);
   font-family: inherit;
 }
-.secure-send-link-row #btn-secure-send-copy {
+.secure-send-link-row .secure-send-link-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   flex: 0 0 auto;
-  width: var(--touch);
+  align-items: stretch;
+}
+.secure-send-link-row .secure-send-link-actions .btn.sm {
+  min-height: var(--touch);
   min-width: var(--touch);
-  height: var(--touch);
-  padding: 0;
+  padding: 8px 12px;
 }
 .secure-send-file-inclusion {
   margin: -4px 0 8px;
