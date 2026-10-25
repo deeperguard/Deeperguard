@@ -8,9 +8,12 @@
 </head>
 <body class="auth-page receive-page">
   <main class="auth-card receive-card">
-    <div class="brand">
+    <div class="brand receive-brand">
+      <a class="receive-home-link" href="https://www.deeperguard.com/" rel="noopener noreferrer">
+        <span class="receive-home-mark" aria-hidden="true">{% with size='sm', mark_tag='span' %}{% include 'partials/brand-mark.html' %}{% endwith %}</span>
+        <span class="receive-home-title">Deeperguard Secure Send</span>
+      </a>
       <h1 id="receive-heading" {% if link_stopped %}hidden{% endif %}>Someone sent you an encrypted note</h1>
-      <p class="muted">Deeperguard Secure Send</p>
     </div>
     <div id="receive-stopped" class="stack" {% if not link_stopped %}hidden{% endif %}>
       <p class="settings-hint" data-stopped-copy>{{ link_stopped_copy }}</p>
@@ -30,10 +33,16 @@
       <h2 id="receive-title" class="receive-title"></h2>
       <pre id="receive-body" class="receive-body"></pre>
       <p id="receive-file-row" hidden>
-        <button type="button" id="receive-download" class="btn block">Download file</button>
+        <button type="button" id="receive-download" class="btn primary block receive-download-btn">
+          <span class="receive-download-prefix">Download</span>
+          <span class="receive-download-name" id="receive-download-name"></span>
+        </button>
       </p>
       <p id="receive-done-hint" class="hint">When no opens remain, the link stops working.</p>
     </div>
+    <footer class="receive-footer">
+      <a href="https://www.deeperguard.com/" rel="noopener noreferrer">Private notes — deeperguard.com</a>
+    </footer>
   </main>
   <script type="application/json" id="receive-boot">{{ {
     "sendId": send_id,
