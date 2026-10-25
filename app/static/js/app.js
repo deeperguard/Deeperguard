@@ -3666,6 +3666,7 @@
     hideScanDialog();
     hideTotpAddDialog();
     closeSettings(true);
+    closeSecureSendPanel(true);
     stopTotpClock();
     const cached = NotesStore.cachedAccount?.() || {};
     showUnlock(cached.email || undefined);
@@ -15289,7 +15290,41 @@
     }
   }
 
+  function closeSecureSendPanel(force = false) {
+    if (!force && Date.now() - (window.__notesSecureSendOpenedAt || 0) < 500) return;
+    const panel = document.getElementById('secure-send-panel');
+    const backdrop = document.getElementById('secure-send-backdrop');
+    if (panel) panel.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+    document.body.classList.remove('secure-send-open');
+  }
+
+  function openSecureSendPanel() {
+    if (!NotesStore.isUnlocked()) {
+      toast('Unlock the vault first', true);
+      return;
+    }
+    closeSettings(true);
+    closeNoteOptions();
+    closeEditorToolbarMenu();
+    closeNoteRowMenu();
+    const panel = document.getElementById('secure-send-panel');
+    const backdrop = document.getElementById('secure-send-backdrop');
+    if (panel) {
+      panel.hidden = false;
+      panel.removeAttribute('hidden');
+    }
+    if (backdrop) {
+      backdrop.hidden = false;
+      backdrop.removeAttribute('hidden');
+    }
+    document.body.classList.add('secure-send-open');
+    window.__notesSecureSendOpenedAt = Date.now();
+    try { refreshSecureSendList(); } catch (err) { /* ignore */ }
+  }
+
   function openSettings() {
+    closeSecureSendPanel(true);
     if (ui.settings) {
       ui.settings.hidden = false;
       ui.settings.removeAttribute('hidden');
@@ -15310,7 +15345,6 @@
     initSettings().catch(() => {});
     refreshSettingsDiagnostics().catch(() => {});
     try { refreshDevicePhraseUi(); } catch (err) { /* ignore */ }
-    try { refreshSecureSendList(); } catch (err) { /* ignore */ }
     try { refreshGoogleDriveBackupUi(); } catch (err) { /* ignore */ }
     try { refreshDropboxBackupUi(); } catch (err) { /* ignore */ }
     startSignedInDevicesRefresh();
@@ -19620,6 +19654,30 @@
   bindSettingsOpen(document.getElementById('btn-settings-head'));
   bindSettingsOpen(document.getElementById('btn-settings-nav'));
   bindSettingsOpen(document.getElementById('btn-editor-settings'));
+  function bindSecureSendOpen(el) {
+    if (!el) return;
+    el.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openSecureSendPanel();
+      scrollSecureSendComposeIntoView();
+    });
+  }
+  bindSecureSendOpen(document.getElementById('btn-secure-send-head'));
+  bindSecureSendOpen(document.getElementById('btn-secure-send-nav'));
+  document.getElementById('btn-settings-open-secure-send')?.addEventListener('click', () => {
+    closeSettings(true);
+    openSecureSendPanel();
+    scrollSecureSendComposeIntoView();
+  });
+  document.getElementById('secure-send-close')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    closeSecureSendPanel(true);
+  });
+  document.getElementById('secure-send-backdrop')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    closeSecureSendPanel();
+  });
   document.getElementById('settings-close').addEventListener('click', (event) => {
     event.stopPropagation();
     closeSettings(true);
@@ -20076,8 +20134,12 @@
     el.hidden = !message;
   }
 
-  function scrollSecureSendSectionIntoView() {
-    const section = document.getElementById('secure-send-settings');
+  function scrollSecureSendComposeIntoView() {
+    const section = document.getElementById('secure-send-compose');
+    const body = document.querySelector('#secure-send-panel .settings-body');
+    if (body) {
+      try { body.scrollTop = 0; } catch (err) { /* ignore */ }
+    }
     if (!section) return;
     try {
       section.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -20287,8 +20349,8 @@
     closeEditorToolbarMenu();
     closeNoteRowMenu();
     prefillSecureSendFromNote(note);
-    openSettings();
-    scrollSecureSendSectionIntoView();
+    openSecureSendPanel();
+    scrollSecureSendComposeIntoView();
     try { document.getElementById('secure-send-title')?.focus(); } catch (err) { /* ignore */ }
     const atts = NotesStore.listAttachments(id).filter((att) => !att.deleted);
     if (!atts.length) return;

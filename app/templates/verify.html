@@ -138,7 +138,7 @@ await NotesStore.testDemoRollbackWarning(uuid, 9);
         <h2>5. Secure Send (share / receive)</h2>
         <p>Secure Send encrypts a note (and optional file) in the browser, then stores only an opaque ciphertext blob on the server. The decryption key lives in the URL fragment (<code>#…</code>), which browsers never send to any server. An optional passphrase is stretched with the same client Argon2id parameters as vault KDF v2 and combined with a random fragment key so the link alone cannot decrypt.</p>
         <ol>
-          <li>Create a link from Settings → Secure Send. Copy the full URL including the <code>#</code> part.</li>
+          <li>Open <strong>Secure Send</strong> from the sidebar (link icon) or <strong>Share by link</strong> on a note. Copy the full URL including the <code>#</code> part.</li>
           <li>Open DevTools → Network on the sender. <code>POST /api/secure-send</code> must contain only <code>ciphertext</code> (<code>v</code>/<code>iv</code>/<code>data</code>), <code>expires_in</code>, and <code>max_views</code> — never a filename, MIME type, passphrase, or fragment key.</li>
           <li>Open the receive URL in a private window with Network open. A plain <code>GET</code> or <code>HEAD</code> of <code>/receive/&lt;id&gt;</code> must not call <code>/open</code> (link-preview bots do not burn a view).</li>
           <li>Tap <strong>Open</strong>. <code>POST /api/secure-send/&lt;id&gt;/open</code> returns the same opaque ciphertext JSON. Response headers must not carry a real filename (<code>Content-Disposition</code> stays generic). File name, MIME, and size appear only after local decrypt.</li>

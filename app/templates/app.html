@@ -691,6 +691,12 @@
             <span class="sync-glyph" aria-hidden="true"></span>
             <span class="sync-caption" id="sync-caption">Sync</span>
           </button>
+          <button type="button" id="btn-secure-send-head" class="btn icon" title="Secure Send" aria-label="Secure Send">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+          </button>
           <button type="button" id="btn-lock-head" class="btn icon vault-lock-btn is-locked" title="Vault locked" aria-label="Vault locked">
             <svg class="ui-icon lock-closed" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -818,6 +824,12 @@
       </div>
       <footer class="sidebar-foot">
         <div class="sidebar-foot-actions">
+        <button type="button" id="btn-secure-send-nav" class="btn icon" title="Secure Send" aria-label="Secure Send">
+          <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+        </button>
         <button type="button" id="btn-settings-nav" class="btn icon" title="Settings" aria-label="Settings">
           <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -1625,53 +1637,13 @@
         </div>
       </section>
 
-      <section class="settings-group" id="secure-send-settings">
+      <section class="settings-group" id="settings-secure-send-link">
         <h3>Secure Send</h3>
-        <div class="settings-card stack">
-          <p class="settings-hint">Send an encrypted note and optional file. The key is in the link itself and never reaches our server. The link stops working after the set number of opens or 7 days.</p>
-          <label class="settings-row stacked" for="secure-send-title">Title
-            <input id="secure-send-title" type="text" maxlength="500" autocomplete="off">
-          </label>
-          <label class="settings-row stacked" for="secure-send-body">Note
-            <textarea id="secure-send-body" rows="5" maxlength="2000000"></textarea>
-          </label>
-          <div id="secure-send-file-picker-wrap">
-            <label class="settings-row stacked" for="secure-send-file">Optional file (max 50 MB)
-              <input id="secure-send-file" type="file">
-            </label>
-          </div>
-          <div id="secure-send-file-inclusion" class="secure-send-file-inclusion" hidden>
-            <p id="secure-send-file-inclusion-heading" class="secure-send-file-inclusion-heading">Including:</p>
-            <ul id="secure-send-file-inclusion-list" class="secure-send-file-inclusion-list"></ul>
-            <p id="secure-send-file-inclusion-note" class="secure-send-file-inclusion-note" hidden></p>
-            <div class="secure-send-file-inclusion-actions">
-              <button type="button" id="btn-secure-send-add-files" class="btn ghost sm">Add files</button>
-              <input id="secure-send-file-add" type="file" multiple hidden>
-            </div>
-          </div>
-          <label class="settings-row stacked" for="secure-send-passphrase">Optional passphrase (share separately from the link)
-            <input id="secure-send-passphrase" type="password" autocomplete="new-password" spellcheck="false">
-          </label>
-          <label class="settings-row stacked" for="secure-send-views">Number of opens
-            <input id="secure-send-views" type="number" min="1" max="10" value="1">
-          </label>
-          <p class="settings-hint">Default 1. The link stops working after this many opens or 7 days.</p>
-          <label class="settings-row" for="secure-send-days">Expires (days, max 7)
-            <input id="secure-send-days" type="number" min="1" max="7" value="7" step="1">
-          </label>
+        <div class="settings-card">
+          <p class="settings-hint">Send an encrypted note or file by link. The key stays in the URL fragment; the server stores ciphertext only.</p>
           <div class="settings-actions">
-            <button type="button" id="btn-secure-send-create" class="btn primary">Create link</button>
+            <button type="button" id="btn-settings-open-secure-send" class="btn ghost sm">Open Secure Send →</button>
           </div>
-          <p id="secure-send-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
-          <div id="secure-send-link-wrap" class="secure-send-link-row" hidden>
-            <label class="settings-row stacked" for="secure-send-link">Link (copy and send)
-              <textarea id="secure-send-link" rows="3" readonly autocomplete="off" spellcheck="false"></textarea>
-            </label>
-            <button type="button" id="btn-secure-send-copy" class="btn sm" title="Copy link" aria-label="Copy link">Copy</button>
-          </div>
-          <h4 class="settings-subhead">Sent</h4>
-          <div id="secure-send-sent-list" class="secure-send-sent-list"></div>
-          <button type="button" id="btn-secure-send-refresh" class="btn ghost sm">Refresh sent list</button>
         </div>
       </section>
 
@@ -1986,6 +1958,68 @@
     </div>
   </aside>
 
+  <div id="secure-send-backdrop" class="settings-backdrop" hidden></div>
+  <aside id="secure-send-panel" class="settings-panel secure-send-panel" hidden aria-label="Secure Send">
+    <header class="settings-head">
+      <h2>Secure Send</h2>
+      <button type="button" class="btn icon" id="secure-send-close" aria-label="Close">×</button>
+    </header>
+    <div class="settings-body">
+      <section class="settings-group" id="secure-send-compose">
+        <h3 class="sr-only">Compose</h3>
+        <div class="settings-card stack">
+          <p class="settings-hint">Send an encrypted note and optional file. The key is in the link itself and never reaches our server. The link stops working after the set number of opens or 7 days.</p>
+          <label class="settings-row stacked" for="secure-send-title">Title
+            <input id="secure-send-title" type="text" maxlength="500" autocomplete="off">
+          </label>
+          <label class="settings-row stacked" for="secure-send-body">Note
+            <textarea id="secure-send-body" rows="5" maxlength="2000000"></textarea>
+          </label>
+          <div id="secure-send-file-picker-wrap">
+            <label class="settings-row stacked" for="secure-send-file">Optional file (max 50 MB)
+              <input id="secure-send-file" type="file">
+            </label>
+          </div>
+          <div id="secure-send-file-inclusion" class="secure-send-file-inclusion" hidden>
+            <p id="secure-send-file-inclusion-heading" class="secure-send-file-inclusion-heading">Including:</p>
+            <ul id="secure-send-file-inclusion-list" class="secure-send-file-inclusion-list"></ul>
+            <p id="secure-send-file-inclusion-note" class="secure-send-file-inclusion-note" hidden></p>
+            <div class="secure-send-file-inclusion-actions">
+              <button type="button" id="btn-secure-send-add-files" class="btn ghost sm">Add files</button>
+              <input id="secure-send-file-add" type="file" multiple hidden>
+            </div>
+          </div>
+          <label class="settings-row stacked" for="secure-send-passphrase">Optional passphrase (share separately from the link)
+            <input id="secure-send-passphrase" type="password" autocomplete="new-password" spellcheck="false">
+          </label>
+          <label class="settings-row stacked" for="secure-send-views">Number of opens
+            <input id="secure-send-views" type="number" min="1" max="10" value="1">
+          </label>
+          <p class="settings-hint">Default 1. The link stops working after this many opens or 7 days.</p>
+          <label class="settings-row" for="secure-send-days">Expires (days, max 7)
+            <input id="secure-send-days" type="number" min="1" max="7" value="7" step="1">
+          </label>
+          <div class="settings-actions">
+            <button type="button" id="btn-secure-send-create" class="btn primary">Create link</button>
+          </div>
+          <p id="secure-send-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
+          <div id="secure-send-link-wrap" class="secure-send-link-row" hidden>
+            <label class="settings-row stacked" for="secure-send-link">Link (copy and send)
+              <textarea id="secure-send-link" rows="3" readonly autocomplete="off" spellcheck="false"></textarea>
+            </label>
+            <button type="button" id="btn-secure-send-copy" class="btn sm" title="Copy link" aria-label="Copy link">Copy</button>
+          </div>
+        </div>
+      </section>
+      <section class="settings-group" id="secure-send-sent-section">
+        <h3>Sent</h3>
+        <div class="settings-card stack">
+          <div id="secure-send-sent-list" class="secure-send-sent-list"></div>
+          <button type="button" id="btn-secure-send-refresh" class="btn ghost sm">Refresh sent list</button>
+        </div>
+      </section>
+    </div>
+  </aside>
   <div id="ai-chat-backdrop" class="settings-backdrop" hidden></div>
   <aside id="ai-chat-panel" class="settings-panel ai-chat-panel" hidden aria-label="Ask AI about this note">
     <header class="settings-head">

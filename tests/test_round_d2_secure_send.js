@@ -17,7 +17,12 @@ const manifest = JSON.parse(
   fs.readFileSync(path.join(root, 'app/static/client-manifest.json'), 'utf8'),
 );
 
-assert.ok(appHtml.includes('id="secure-send-settings"'));
+assert.ok(appHtml.includes('id="secure-send-panel"'));
+assert.ok(appHtml.includes('id="secure-send-compose"'));
+assert.ok(appHtml.includes('id="secure-send-sent-section"'));
+assert.ok(appHtml.includes('btn-secure-send-head'));
+assert.ok(appHtml.includes('btn-settings-open-secure-send'));
+assert.ok(!appHtml.includes('id="secure-send-settings"'));
 assert.ok(appHtml.includes('Number of opens'));
 assert.ok(appHtml.includes('Default 1. The link stops working after this many opens or 7 days.'));
 assert.ok(appHtml.includes('The key is in the link itself and never reaches our server'));
@@ -103,7 +108,9 @@ assert.ok(appJs.includes('paintSecureSendFileInclusion'));
 assert.ok(appJs.includes('stageSecureSendEntries'));
 assert.ok(appJs.includes('mergeSecureSendPickedFiles'));
 assert.ok(appJs.includes('removeSecureSendStagedFile'));
-assert.ok(appJs.includes('scrollSecureSendSectionIntoView'));
+assert.ok(appJs.includes('openSecureSendPanel'));
+assert.ok(appJs.includes('scrollSecureSendComposeIntoView'));
+assert.ok(!appJs.includes('scrollSecureSendSectionIntoView'));
 assert.ok(appJs.includes('Including (as zip):'));
 assert.ok(appJs.includes('From this note'));
 assert.ok(appHtml.includes('btn-secure-send-add-files'));
