@@ -562,6 +562,33 @@ textarea { resize: vertical; min-height: 240px; line-height: 1.55; }
   height: var(--touch);
   padding: 0;
 }
+.secure-send-file-inclusion {
+  margin: -4px 0 8px;
+  padding: 0 0 0 2px;
+}
+.secure-send-file-inclusion-heading {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.secure-send-file-inclusion-list {
+  margin: 0;
+  padding: 0 0 0 1.15rem;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+  word-break: break-word;
+}
+.secure-send-file-inclusion-list li {
+  margin: 0 0 2px;
+}
+.secure-send-file-inclusion-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
 .btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

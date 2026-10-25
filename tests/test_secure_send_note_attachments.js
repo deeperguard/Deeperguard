@@ -31,7 +31,8 @@ function att(uuid, filename) {
     zipStored: NotesSnImport.zipStored,
   });
   assert.strictEqual(zero.file, null);
-  assert.strictEqual(zero.status, '');
+  assert.deepStrictEqual(zero.includedNames, []);
+  assert.strictEqual(zero.zipNote, '');
 
   const one = await stageSecureSendNoteAttachments({
     attachments: [att('a', 'report.pdf')],
@@ -40,7 +41,8 @@ function att(uuid, filename) {
     zipStored: NotesSnImport.zipStored,
     maxFileBytes: 50,
   });
-  assert.strictEqual(one.status, '1 file will be included.');
+  assert.deepStrictEqual(one.includedNames, ['report.pdf']);
+  assert.strictEqual(one.zipNote, '');
   assert.strictEqual(one.file.name, 'report.pdf');
   assert.strictEqual(one.file.size, 3);
 
@@ -65,7 +67,8 @@ function att(uuid, filename) {
     zipStored: NotesSnImport.zipStored,
     maxFileBytes: 1024 * 1024,
   });
-  assert.strictEqual(multi.status, '2 files will be included.');
+  assert.deepStrictEqual(multi.includedNames, ['alpha.txt', 'beta.txt']);
+  assert.ok(multi.zipNote.includes('zip'));
   assert.ok(/\.zip$/i.test(multi.file.name));
   assert.ok(multi.file.size > 0);
 
@@ -86,6 +89,7 @@ function att(uuid, filename) {
     dupEntries.map((e) => e.name).sort(),
     ['same (2).png', 'same.png'],
   );
+  assert.deepStrictEqual(dup.includedNames, ['same.png', 'same (2).png']);
 
   const oversizeZip = await stageSecureSendNoteAttachments({
     attachments: [att('1', 'a.bin'), att('2', 'b.bin')],

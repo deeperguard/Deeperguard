@@ -60,7 +60,7 @@ const NotesSecureSendNoteAttachments = (() => {
     const atts = (opts?.attachments || []).filter((a) => a && !a.deleted);
     const count = atts.length;
     if (count === 0) {
-      return { file: null, status: '' };
+      return { file: null, includedNames: [], zipNote: '' };
     }
 
     if (count === 1) {
@@ -69,8 +69,9 @@ const NotesSecureSendNoteAttachments = (() => {
       if (byteLength(bytes) > maxBytes) {
         throw new Error('This attachment is over the 50 MB Secure Send limit.');
       }
-      const file = fileFromBytes(bytes, attachmentFilename(att), att.content?.mime);
-      return { file, status: '1 file will be included.' };
+      const name = attachmentFilename(att);
+      const file = fileFromBytes(bytes, name, att.content?.mime);
+      return { file, includedNames: [name], zipNote: '' };
     }
 
     if (typeof zipStored !== 'function') {
@@ -79,10 +80,12 @@ const NotesSecureSendNoteAttachments = (() => {
 
     const used = new Set();
     const zipEntries = [];
+    const includedNames = [];
     for (const att of atts) {
       const bytes = await loadBytes(att);
       const name = disambiguateZipName(attachmentFilename(att), used);
       used.add(name.toLowerCase());
+      includedNames.push(name);
       const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
       zipEntries.push({ name, bytes: data });
     }
@@ -94,7 +97,11 @@ const NotesSecureSendNoteAttachments = (() => {
       );
     }
     const file = fileFromBytes(zipBytes, zipBasename(opts?.noteTitle), 'application/zip');
-    return { file, status: `${count} files will be included.` };
+    return {
+      file,
+      includedNames,
+      zipNote: 'Sent as one zip file in the link.',
+    };
   }
 
   return {

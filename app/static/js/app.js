@@ -19960,6 +19960,45 @@
     el.hidden = !message;
   }
 
+  function setSecureSendFileInclusion(includedNames, zipNote) {
+    const wrap = document.getElementById('secure-send-file-inclusion');
+    const headingEl = document.getElementById('secure-send-file-inclusion-heading');
+    const list = document.getElementById('secure-send-file-inclusion-list');
+    const noteEl = document.getElementById('secure-send-file-inclusion-note');
+    const names = Array.isArray(includedNames)
+      ? includedNames.map((n) => String(n || '').trim()).filter(Boolean)
+      : [];
+    if (!wrap || !list) return;
+    list.replaceChildren();
+    if (!names.length) {
+      wrap.hidden = true;
+      if (headingEl) headingEl.textContent = 'Including:';
+      if (noteEl) {
+        noteEl.textContent = '';
+        noteEl.hidden = true;
+      }
+      return;
+    }
+    const note = String(zipNote || '').trim();
+    if (headingEl) {
+      headingEl.textContent = note ? 'Including (as zip):' : 'Including:';
+    }
+    for (const name of names) {
+      const li = document.createElement('li');
+      li.textContent = name;
+      list.appendChild(li);
+    }
+    if (noteEl) {
+      noteEl.textContent = note;
+      noteEl.hidden = !note;
+    }
+    wrap.hidden = false;
+  }
+
+  function clearSecureSendFileInclusion() {
+    setSecureSendFileInclusion([], '');
+  }
+
   function prefillSecureSendFromNote(note) {
     const titleEl = document.getElementById('secure-send-title');
     const bodyEl = document.getElementById('secure-send-body');
@@ -19981,6 +20020,7 @@
     if (wrap) wrap.hidden = true;
     if (linkInput) linkInput.value = '';
     setSecureSendStatus('');
+    clearSecureSendFileInclusion();
   }
 
   async function openSecureSendForNote(noteId) {
@@ -20016,16 +20056,18 @@
     );
     try {
       const maxFileBytes = Number(NotesSecureSend?.MAX_FILE_BYTES) || 50 * 1024 * 1024;
-      const { file, status } = await stage.stageSecureSendNoteAttachments({
+      const { file, includedNames, zipNote } = await stage.stageSecureSendNoteAttachments({
         attachments: atts,
         noteTitle: NotesSearch.effectiveNoteTitle(note),
         maxFileBytes,
         loadBytes: (att) => NotesStore.getAttachmentBytes(att.uuid),
       });
       secureSendPendingFile = file;
-      if (status) setSecureSendStatus(status);
+      setSecureSendStatus('');
+      setSecureSendFileInclusion(includedNames, zipNote);
     } catch (err) {
       secureSendPendingFile = null;
+      clearSecureSendFileInclusion();
       const msg = err?.message || 'Could not prepare attachments.';
       setSecureSendStatus(msg);
       toast(msg, true);
@@ -20036,6 +20078,7 @@
   document.getElementById('secure-send-file')?.addEventListener('change', () => {
     if (document.getElementById('secure-send-file')?.files?.length) {
       secureSendPendingFile = null;
+      clearSecureSendFileInclusion();
     }
   });
   document.getElementById('btn-secure-send-refresh')?.addEventListener('click', () => {
@@ -20102,6 +20145,7 @@
       );
       toast('Secure Send link created');
       secureSendPendingFile = null;
+      clearSecureSendFileInclusion();
       refreshSecureSendList();
     } catch (err) {
       setSecureSendStatus(err?.message || 'Could not create link');
