@@ -96,14 +96,13 @@ class Round59ServerCopyTests(unittest.TestCase):
         self.assertIn("What these tests can’t prove", body)
         self.assertIn("How to check the code you’re running", body)
         self.assertIn("Our claim fails if", body)
-        # Round 65: one SRI'd release-integrity.js is allowed at the end for the
-        # automatic GitHub release-hash status. No early / inline scripts.
+        # Round 65+: SRI'd release-integrity.js and verify-ask-ai-provider.js at
+        # the end only. No early / inline scripts.
         head = body.lower().split("marketing.", 1)[0]
         self.assertNotIn("<script", head)
-        scripts = [s for s in body.lower().split("<script") if s.strip()]
-        # split leaves preamble then each script; expect exactly one script tag
-        self.assertEqual(body.lower().count("<script"), 1)
+        self.assertEqual(body.lower().count("<script"), 2)
         self.assertIn("release-integrity", body.lower())
+        self.assertIn("verify-ask-ai-provider", body.lower())
         self.assertIn("integrity=", body.lower())
 
         home = self.client.get("/")

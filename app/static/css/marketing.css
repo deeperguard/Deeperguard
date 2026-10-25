@@ -1925,3 +1925,21 @@ a.mk-badge-link:hover {
   color: var(--mk-muted, #64748b);
   font-weight: 500;
 }
+
+.mk-verify-ask-ai-pointer {
+  margin: 0.65rem 0 0;
+  font-size: 0.95rem;
+}
+.mk-verify-ask-ai-pointer a {
+  font-weight: 600;
+}
+.mk-verify-pin-hash {
+  margin: 1rem 0 0;
+  color: var(--mk-muted, #64748b);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.mk-verify-pin-hash code {
+  font-size: 0.8rem;
+}
