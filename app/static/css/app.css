@@ -6506,7 +6506,6 @@ body.search-filters-open .fab-stack,
     display: flex;
     flex-direction: column;
   }
-  body.list-search-active .list-pane .search-meta { display: none !important; }
   body.list-search-active .sidebar-nav .tag-section.is-empty,
   body.list-search-active .sidebar-nav .folder-section { display: none; }
   body.list-search-active .note-list-head-copy .note-list-count {
