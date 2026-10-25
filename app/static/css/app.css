@@ -2777,6 +2777,73 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
+.note-row-more {
+  display: none;
+  position: absolute;
+  top: 10px;
+  right: 42px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s ease, background .15s ease, color .15s ease;
+}
+.note-row:hover .note-row-more,
+.note-row-more:focus-visible {
+  opacity: 0.75;
+}
+.note-row-more:hover {
+  opacity: 1;
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.note-row-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: transparent;
+}
+.note-row-menu {
+  position: fixed;
+  z-index: 121;
+  min-width: 168px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--shadow) 28%, transparent);
+}
+.note-row-menu-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+}
+.note-row-menu-item:hover,
+.note-row-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: none;
+}
 .note-row-restore {
   display: inline-flex;
   align-items: center;
@@ -2805,6 +2872,9 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 }
 .note-row:has(.note-row-restore) .note-row-delete {
   right: 86px;
+}
+.note-row:has(.note-row-restore) .note-row-more {
+  right: 118px;
 }
 .note-pin {
   width: 16px;
@@ -7371,14 +7441,29 @@ body.search-filters-open .fab-stack,
     align-items: center;
     justify-content: center;
   }
+  .note-row-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.75;
+  }
+  .note-row:has(.note-row-more) .note-item-body {
+    padding-right: 58px;
+  }
   .note-row:has(.note-row-delete) .note-item-body {
     padding-right: 30px;
+  }
+  .note-row:has(.note-row-more):has(.note-row-delete) .note-item-body {
+    padding-right: 58px;
   }
   .note-row:has(.note-row-restore) .note-item-body {
     padding-right: 78px;
   }
   .note-row:has(.note-row-restore) .note-row-delete {
     right: 86px;
+  }
+  .note-row:has(.note-row-restore) .note-row-more {
+    right: 118px;
   }
   .sn-add {
     width: 36px;
