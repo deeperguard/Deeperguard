@@ -13,6 +13,7 @@ from pathlib import Path
 from flask import Flask, jsonify, make_response, redirect, render_template, request, send_from_directory, session, url_for
 
 import admin_api
+import ask_ai_provider_pin
 import ai_relay
 import auth
 import client_assets
@@ -136,8 +137,6 @@ app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
 
 @app.context_processor
 def _inject_template_globals():
-    import ask_ai_provider_pin
-
     return {
         **client_assets.jinja_globals(),
         **ask_ai_provider_pin.template_globals(),

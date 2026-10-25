@@ -51,14 +51,19 @@ class MoltbookVerifyAskAiProviderTests(unittest.TestCase):
         self.assertIn("6. Ask AI with Ollama Cloud", html)
         self.assertIn("7. Optional: mitmproxy", html)
         self.assertIn('href="#verify-ask-ai">Ask AI details → section 6.', html)
+        self.assertIn("What our server does:", html)
         self.assertIn("relays the request to ollama.com", html)
         self.assertIn("does <strong>not</strong> store your API key", html)
+        self.assertNotIn("Deeperguard's server", html)
+        self.assertNotIn("Deeperguard’s server", html)
         self.assertIn("Use the in-app send preview to see the exact payload", html)
         self.assertIn("checked 25 Oct 2026", html)
         self.assertIn(ask_ai_provider_pin.VERIFY_ASK_AI_PIN_ID, html)
         self.assertIn('name="notes-verify-ask-ai-pin"', html)
         self.assertIn("verify-ask-ai-provider.", html)
         self.assertNotIn("never logs", html.lower())
+        self.assertIn("we update this section and show a notice in Ask AI Settings", html)
+        self.assertNotIn("update this section and show a one-line", html)
 
     def test_app_shell_meta_and_notice(self):
         import ask_ai_provider_pin
@@ -76,6 +81,11 @@ class MoltbookVerifyAskAiProviderTests(unittest.TestCase):
         self.assertIn('id="ai-chat-verify-pin-notice"', html)
         self.assertIn("review section 6 before sending note text", html)
         self.assertIn("verify-ask-ai-provider.", html)
+        self.assertIn("our server relays the request to ollama.com", html)
+        self.assertIn("checked 25 Oct 2026", html)
+        self.assertIn("not stored beyond fulfilling the request", html)
+        self.assertNotIn("never logs", html.lower())
+        self.assertNotIn("Deeperguard server relays", html)
 
 
 if __name__ == "__main__":
