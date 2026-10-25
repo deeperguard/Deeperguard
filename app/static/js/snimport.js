@@ -548,6 +548,95 @@ const NotesSnImport = (() => {
     return -1;
   }
 
+  function writeU16LE(arr, offset, value) {
+    arr[offset] = value & 0xff;
+    arr[offset + 1] = (value >>> 8) & 0xff;
+  }
+
+  function writeU32LE(arr, offset, value) {
+    arr[offset] = value & 0xff;
+    arr[offset + 1] = (value >>> 8) & 0xff;
+    arr[offset + 2] = (value >>> 16) & 0xff;
+    arr[offset + 3] = (value >>> 24) & 0xff;
+  }
+
+  function crc32(bytes) {
+    const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+    let crc = ~0;
+    for (let i = 0; i < arr.length; i += 1) {
+      crc ^= arr[i];
+      for (let j = 0; j < 8; j += 1) {
+        crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+      }
+    }
+    return (~crc) >>> 0;
+  }
+
+  /** Store-only zip (method 0) for client-side packaging — e.g. Secure Send multi-attach. */
+  function zipStored(entries) {
+    const list = entries || [];
+    const locals = [];
+    const centrals = [];
+    let offset = 0;
+    for (const entry of list) {
+      const nameBytes = new TextEncoder().encode(String(entry.name || 'file'));
+      const data = entry.bytes instanceof Uint8Array ? entry.bytes : new Uint8Array(entry.bytes || []);
+      const crc = crc32(data);
+      const local = new Uint8Array(30 + nameBytes.length + data.length);
+      writeU32LE(local, 0, 0x04034b50);
+      writeU16LE(local, 4, 20);
+      writeU16LE(local, 8, 0);
+      writeU16LE(local, 10, 0);
+      writeU32LE(local, 14, crc);
+      writeU32LE(local, 18, data.length);
+      writeU32LE(local, 22, data.length);
+      writeU16LE(local, 26, nameBytes.length);
+      local.set(nameBytes, 30);
+      local.set(data, 30 + nameBytes.length);
+
+      const central = new Uint8Array(46 + nameBytes.length);
+      writeU32LE(central, 0, 0x02014b50);
+      writeU16LE(central, 4, 20);
+      writeU16LE(central, 6, 20);
+      writeU16LE(central, 8, 0);
+      writeU16LE(central, 10, 0);
+      writeU32LE(central, 16, crc);
+      writeU32LE(central, 20, data.length);
+      writeU32LE(central, 24, data.length);
+      writeU16LE(central, 28, nameBytes.length);
+      writeU32LE(central, 42, offset);
+      central.set(nameBytes, 46);
+
+      locals.push(local);
+      centrals.push(central);
+      offset += local.length;
+    }
+    let cdLen = 0;
+    for (const c of centrals) cdLen += c.length;
+    const cd = new Uint8Array(cdLen);
+    let cdPos = 0;
+    for (const c of centrals) {
+      cd.set(c, cdPos);
+      cdPos += c.length;
+    }
+    const eocd = new Uint8Array(22);
+    writeU32LE(eocd, 0, 0x06054b50);
+    writeU16LE(eocd, 8, list.length);
+    writeU16LE(eocd, 10, list.length);
+    writeU32LE(eocd, 12, cd.length);
+    writeU32LE(eocd, 16, offset);
+
+    const out = new Uint8Array(offset + cd.length + eocd.length);
+    let pos = 0;
+    for (const l of locals) {
+      out.set(l, pos);
+      pos += l.length;
+    }
+    out.set(cd, pos);
+    out.set(eocd, pos + cd.length);
+    return out;
+  }
+
   async function inflateRaw(bytes) {
     if (typeof DecompressionStream === 'undefined') {
       throw new Error('This browser cannot open compressed zip backups. Import the unzipped .txt, then add the files.');
@@ -649,6 +738,7 @@ const NotesSnImport = (() => {
     applyBackupBlobs,
     matchLooseFile,
     unzip,
+    zipStored,
     openBackupFile,
     isEncryptedSnItem,
     isDecryptedSn,

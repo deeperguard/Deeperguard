@@ -399,6 +399,31 @@ class D2SecureSendTests(unittest.TestCase):
             src = (ROOT / "app" / "static" / "js" / name).read_text(encoding="utf-8")
             self.assertNotIn("Math.random", src, name)
 
+    def test_secure_send_note_attachment_staging_js(self):
+        import shutil
+        import subprocess
+
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not installed")
+        script = ROOT / "tests" / "test_secure_send_note_attachments.js"
+        completed = subprocess.run(
+            [node, str(script)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+
+    def test_share_by_link_stages_note_attachments_in_app_js(self):
+        app_js = (ROOT / "app" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("NotesSecureSendNoteAttachments", app_js)
+        self.assertIn("stageSecureSendNoteAttachments", app_js)
+        self.assertNotIn("multiple attachments. Pick a file", app_js)
+        app_html = (ROOT / "app" / "templates" / "app.html").read_text(encoding="utf-8")
+        self.assertIn("secure-send-note-attachments.js", app_html)
+
 
 if __name__ == "__main__":
     unittest.main()

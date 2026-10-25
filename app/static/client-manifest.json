@@ -1,5 +1,5 @@
 {
-  "asset_count": 56,
+  "asset_count": 57,
   "assets": {
     "css/app.css": {
       "bytes": 238270,
@@ -26,10 +26,10 @@
       "url": "/static/js/ai-chat.486704f1ab1903eb.js"
     },
     "js/app.js": {
-      "bytes": 902470,
-      "sha256": "03155673aa1b7e398fc9ccbd808dcd9d537c111ee32ab70f8b1da7babac08b64",
-      "sri": "sha384-NK9oiLpWBNiJFPC6NtLZEuPLkB5LiFTgMNbtinCBdSs2hSwCVMv0aKaWJb35Qyvk",
-      "url": "/static/js/app.03155673aa1b7e39.js"
+      "bytes": 902611,
+      "sha256": "5352bef379acf54a89a556af5e072bf9b557b351170ee47ea98025383065746c",
+      "sri": "sha384-aO7pizj2czqCsi66w9AKl/miKcGW1eQF2xgAa3BhsogV41NMKBtcAOeoPgHupySx",
+      "url": "/static/js/app.5352bef379acf54a.js"
     },
     "js/auth-pages.js": {
       "bytes": 27198,
@@ -169,6 +169,12 @@
       "sri": "sha384-ltbwPizUEk2INrtlvCTm5KcW1MxOgLRj+GqQyEIKHzlhAEaJymlo9br0QF43T2ac",
       "url": "/static/js/search.f99cf810d69605b9.js"
     },
+    "js/secure-send-note-attachments.js": {
+      "bytes": 4126,
+      "sha256": "d0952ad119ebb7181a29577f63e8ec1b016bbdcc3f0f4bcda68ccd2524e38435",
+      "sri": "sha384-rCRlfRmIWhthUUyoj69l31Pw3B8wqGmYPcGyLjqinYpEwTC1ZtYLLT8776Jm5BHT",
+      "url": "/static/js/secure-send-note-attachments.d0952ad119ebb718.js"
+    },
     "js/secure-send-receive.js": {
       "bytes": 6683,
       "sha256": "a96bddb3827533e18061183fbbc2c427d9eb0714e17fa9efeb3594d072db7b90",
@@ -182,10 +188,10 @@
       "url": "/static/js/secure-send.e66a0321640175ab.js"
     },
     "js/snimport.js": {
-      "bytes": 24056,
-      "sha256": "32b267ebac33ddc04176c7737b06902a59f326230eb633014faa0890cb63ce5e",
-      "sri": "sha384-oePTXtTJ9w83C2HD7Ty9O9PBkXnfH1LXdimjWANMGil8g3i93XMys5XknTYZ+Cx0",
-      "url": "/static/js/snimport.32b267ebac33ddc0.js"
+      "bytes": 26926,
+      "sha256": "1cb2e3f7c0ee6dbd3b967f6c1e9e4f1c79a981c7e0ced409e34b9a04ad6798a8",
+      "sri": "sha384-p/F+RbQ1MgHfH7fhIXLSgHfVh0t0bGgK42JKjfIF5TnFSWSl2kyxT6YqwfBEbkJ2",
+      "url": "/static/js/snimport.1cb2e3f7c0ee6dbd.js"
     },
     "js/spreadsheet.js": {
       "bytes": 5486,
@@ -339,6 +345,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "fc97cc102e6a49b2082590f008910b48ecb2141be3302555fdb95c9a47d1ad2d",
+  "manifest_sha256": "66d53b86ac6161cb6c27d183d3c23663b1b8c8304b80ffdf5b3e93a087825762",
   "version": 1
 }
