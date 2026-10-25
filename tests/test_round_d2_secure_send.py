@@ -424,7 +424,12 @@ class D2SecureSendTests(unittest.TestCase):
         app_html = (ROOT / "app" / "templates" / "app.html").read_text(encoding="utf-8")
         self.assertIn("secure-send-note-attachments.js", app_html)
         self.assertIn("secure-send-file-inclusion", app_html)
+        self.assertIn("secure-send-file-picker-wrap", app_html)
+        self.assertIn("btn-secure-send-use-different-file", app_html)
         self.assertIn("setSecureSendFileInclusion", app_js)
+        self.assertIn("From this note", app_js)
+        self.assertIn("Use a different file", app_js)
+        self.assertIn("updateSecureSendFilePickerUi", app_js)
 
 
 if __name__ == "__main__":

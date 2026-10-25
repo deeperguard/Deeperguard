@@ -589,6 +589,11 @@ textarea { resize: vertical; min-height: 240px; line-height: 1.55; }
   line-height: 1.4;
   color: var(--muted);
 }
+.secure-send-use-different-file {
+  margin: 10px 0 0;
+  padding-left: 0;
+  padding-right: 0;
+}
 .btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

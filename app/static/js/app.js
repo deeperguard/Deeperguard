@@ -19952,6 +19952,8 @@
 
   // D2 Secure Send — compose + Sent list (ciphertext only; key in fragment).
   let secureSendPendingFile = null;
+  let secureSendInclusionFromNote = false;
+  let secureSendFilePickerRevealed = false;
 
   function setSecureSendStatus(message) {
     const el = document.getElementById('secure-send-status');
@@ -19960,7 +19962,17 @@
     el.hidden = !message;
   }
 
-  function setSecureSendFileInclusion(includedNames, zipNote) {
+  function updateSecureSendFilePickerUi() {
+    const pickerWrap = document.getElementById('secure-send-file-picker-wrap');
+    const inclusionWrap = document.getElementById('secure-send-file-inclusion');
+    const differentBtn = document.getElementById('btn-secure-send-use-different-file');
+    const hasStaged = inclusionWrap && !inclusionWrap.hidden;
+    const hidePicker = hasStaged && !secureSendFilePickerRevealed;
+    if (pickerWrap) pickerWrap.hidden = hidePicker;
+    if (differentBtn) differentBtn.hidden = !hasStaged || secureSendFilePickerRevealed;
+  }
+
+  function setSecureSendFileInclusion(includedNames, zipNote, options) {
     const wrap = document.getElementById('secure-send-file-inclusion');
     const headingEl = document.getElementById('secure-send-file-inclusion-heading');
     const list = document.getElementById('secure-send-file-inclusion-list');
@@ -19972,16 +19984,28 @@
     list.replaceChildren();
     if (!names.length) {
       wrap.hidden = true;
+      secureSendInclusionFromNote = false;
+      secureSendFilePickerRevealed = false;
       if (headingEl) headingEl.textContent = 'Including:';
       if (noteEl) {
         noteEl.textContent = '';
         noteEl.hidden = true;
       }
+      updateSecureSendFilePickerUi();
       return;
+    }
+    if (options && typeof options.fromNote === 'boolean') {
+      secureSendInclusionFromNote = options.fromNote;
     }
     const note = String(zipNote || '').trim();
     if (headingEl) {
-      headingEl.textContent = note ? 'Including (as zip):' : 'Including:';
+      if (note) {
+        headingEl.textContent = 'Including (as zip):';
+      } else if (secureSendInclusionFromNote) {
+        headingEl.textContent = 'From this note';
+      } else {
+        headingEl.textContent = 'Including:';
+      }
     }
     for (const name of names) {
       const li = document.createElement('li');
@@ -19993,6 +20017,8 @@
       noteEl.hidden = !note;
     }
     wrap.hidden = false;
+    secureSendFilePickerRevealed = false;
+    updateSecureSendFilePickerUi();
   }
 
   function clearSecureSendFileInclusion() {
@@ -20009,6 +20035,8 @@
     const wrap = document.getElementById('secure-send-link-wrap');
     const linkInput = document.getElementById('secure-send-link');
     secureSendPendingFile = null;
+    secureSendInclusionFromNote = false;
+    secureSendFilePickerRevealed = false;
     if (titleEl) titleEl.value = NotesSearch.effectiveNoteTitle(note) || '';
     if (bodyEl) bodyEl.value = String(note.content?.content || '');
     if (fileInput) fileInput.value = '';
@@ -20021,6 +20049,7 @@
     if (linkInput) linkInput.value = '';
     setSecureSendStatus('');
     clearSecureSendFileInclusion();
+    updateSecureSendFilePickerUi();
   }
 
   async function openSecureSendForNote(noteId) {
@@ -20064,7 +20093,7 @@
       });
       secureSendPendingFile = file;
       setSecureSendStatus('');
-      setSecureSendFileInclusion(includedNames, zipNote);
+      setSecureSendFileInclusion(includedNames, zipNote, { fromNote: true });
     } catch (err) {
       secureSendPendingFile = null;
       clearSecureSendFileInclusion();
@@ -20075,11 +20104,18 @@
   }
   try { window.__notesOpenSecureSendForNote = openSecureSendForNote; } catch (err) { /* ignore */ }
 
+  document.getElementById('btn-secure-send-use-different-file')?.addEventListener('click', () => {
+    secureSendFilePickerRevealed = true;
+    updateSecureSendFilePickerUi();
+    try { document.getElementById('secure-send-file')?.focus(); } catch (err) { /* ignore */ }
+  });
   document.getElementById('secure-send-file')?.addEventListener('change', () => {
-    if (document.getElementById('secure-send-file')?.files?.length) {
-      secureSendPendingFile = null;
-      clearSecureSendFileInclusion();
-    }
+    const fileInput = document.getElementById('secure-send-file');
+    const picked = fileInput?.files?.[0];
+    if (!picked) return;
+    secureSendPendingFile = null;
+    secureSendInclusionFromNote = false;
+    setSecureSendFileInclusion([picked.name], '', { fromNote: false });
   });
   document.getElementById('btn-secure-send-refresh')?.addEventListener('click', () => {
     refreshSecureSendList();
