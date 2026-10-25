@@ -65,7 +65,7 @@ assert.ok(aiChatJs.includes('CLOUD_RELAY_ACK_KEY'));
 assert.ok(aiChatJs.includes('ensureCloudRelayConsent'));
 assert.ok(
   aiChatJs.includes(
-    "Your message and any note content will go through Deeperguard's server to ollama.com. Nothing is stored. Send?",
+    "Your message and any note content will go through our server to ollama.com. Nothing is stored. Send?",
   ),
 );
 assert.ok(aiChatJs.includes("confirmLabel: 'Send'"));
@@ -94,7 +94,7 @@ async function main() {
     storage: store,
     confirm: async (message, options) => {
       confirmCalls += 1;
-      assert.ok(message.includes("through Deeperguard's server to ollama.com"));
+      assert.ok(message.includes('through our server to ollama.com'));
       assert.ok(message.includes('Nothing is stored. Send?'));
       assert.strictEqual(options.confirmLabel, 'Send');
       assert.strictEqual(options.cancelLabel, 'Cancel');

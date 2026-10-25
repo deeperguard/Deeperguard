@@ -55,7 +55,7 @@ class Round80AskAiHonestyTests(unittest.TestCase):
         self.assertIn("ensureCloudSendConsent", ai)
         self.assertIn("CLOUD_ROUTE_LABEL", ai)
         self.assertIn(
-            "Your message and any note content will go through Deeperguard's server to ollama.com. Nothing is stored. Send?",
+            "Your message and any note content will go through our server to ollama.com. Nothing is stored. Send?",
             ai,
         )
         self.assertIn("confirm: (message, options) => confirmAction(message, options)", app)

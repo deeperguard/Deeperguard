@@ -5244,6 +5244,13 @@ html[data-theme="light"] .doc-search-hit {
   background: color-mix(in srgb, var(--warning, #ff9f1c) 10%, transparent);
 }
 .settings-hint.ai-chat-warning strong { color: var(--warning, #ff9f1c); }
+.settings-hint.ai-chat-verify-pin-notice {
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent, #3b82f6) 8%, transparent);
+}
+.settings-hint.ai-chat-verify-pin-notice a { font-weight: 600; }
 
 /* Ask AI panel — same shell as settings. */
 .ai-chat-panel .ai-chat-body { display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; }

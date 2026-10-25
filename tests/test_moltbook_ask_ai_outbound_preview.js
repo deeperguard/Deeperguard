@@ -93,7 +93,7 @@ async function main() {
   assert.ok(prompts[0].preview.includes('How much?'));
   assert.ok(prompts[0].preview.includes('Scan line 1'));
   assert.strictEqual(prompts[0].loud, true);
-  assert.ok(prompts[0].warnLines.some((l) => l.includes("Deeperguard's server to ollama.com")));
+  assert.ok(prompts[0].warnLines.some((l) => l.includes('our server to ollama.com')));
   assert.ok(prompts[0].warnLines.includes(NotesAiChat.CONTENT_WARN_NOTE));
   assert.ok(prompts[0].warnLines.includes(NotesAiChat.CONTENT_WARN_OCR));
   assert.strictEqual(store.getItem(NotesAiChat.CLOUD_RELAY_ACK_KEY), '1');

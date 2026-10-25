@@ -25,7 +25,7 @@ const NotesAiChat = (() => {
   const CLOUD_RELAY_ACK_KEY = 'notes_ai_ollama_cloud_relay_ack';
   /** Per-device ack for note body/title and scanned attachment text on Ollama Cloud sends. */
   const CLOUD_CONTENT_ACK_KEY = 'notes_ai_ollama_cloud_content_ack';
-  const CLOUD_RELAY_CONFIRM_MESSAGE = "Your message and any note content will go through Deeperguard's server to ollama.com. Nothing is stored. Send?";
+  const CLOUD_RELAY_CONFIRM_MESSAGE = "Your message and any note content will go through our server to ollama.com. Nothing is stored. Send?";
   const CLOUD_ROUTE_LABEL = 'This request goes through our server to ollama.com. Nothing is stored.';
   const CONTENT_WARN_NOTE = "This send includes this note's title and body text.";
   const CONTENT_WARN_OCR = 'This send includes scanned text from attachments.';

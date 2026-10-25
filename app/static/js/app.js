@@ -15212,6 +15212,9 @@
           || last.status === 'unavailable';
         NotesReleaseIntegrity.ensureChecked({ force }).catch(() => {});
       }
+      if (globalThis.NotesVerifyAskAiPin) {
+        NotesVerifyAskAiPin.paintSettingsNotice();
+      }
     } catch (err) { /* ignore */ }
   }
 
@@ -22888,6 +22891,9 @@
 
   async function boot() {
     if (await reloadIfShellStale()) return;
+    try {
+      if (globalThis.NotesVerifyAskAiPin) NotesVerifyAskAiPin.start();
+    } catch (err) { /* ignore */ }
     updateSecureContextHint();
     if (typeof NotesStore.setSessionRevokedHandler === 'function') {
       NotesStore.setSessionRevokedHandler(() => { wipeAfterRemoteSignOut(); });
@@ -22968,6 +22974,9 @@
       // case the idle callback was deferred behind vault work / hung earlier.
       if (globalThis.NotesReleaseIntegrity) {
         NotesReleaseIntegrity.start();
+      }
+      if (globalThis.NotesVerifyAskAiPin) {
+        NotesVerifyAskAiPin.start();
       }
     } catch (err) { /* ignore */ }
     initPullToSync();

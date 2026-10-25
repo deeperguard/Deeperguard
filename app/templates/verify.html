@@ -9,6 +9,7 @@
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta name="notes-client-hash" content="{{ client_hash }}">
   <meta name="notes-release-tag" content="{{ release_tag }}">
+  <meta name="notes-verify-ask-ai-pin" content="{{ verify_ask_ai_pin_id }}">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
   {{ asset_stylesheet('css/marketing.css') }}
 </head>
@@ -20,6 +21,7 @@
         <span class="mk-badge">Independent check</span>
         <h1>Verify zero-knowledge</h1>
         <p data-claim-version="2">Claim version <strong>2</strong> — zero-knowledge sync plus client-side rollback / freeze / fork detection. You do not have to trust our marketing copy. During sign-in and sync you can watch the real HTTP requests in your browser and confirm that passwords, vault keys, and note plaintext never appear on the wire, except text you choose to send to Ask AI with Ollama Cloud, which passes through our server to ollama.com without being stored.</p>
+        <p class="mk-verify-ask-ai-pointer"><a href="#verify-ask-ai">Ask AI details → section 6.</a></p>
       </div>
 
       <article class="mk-card">
@@ -144,8 +146,20 @@ await NotesStore.testDemoRollbackWarning(uuid, 9);
         </ol>
       </article>
 
+      <article class="mk-card" id="verify-ask-ai" data-verify-ask-ai-pin="{{ verify_ask_ai_pin_id }}">
+        <h2>6. Ask AI with Ollama Cloud</h2>
+        <p>Ask AI is opt-in and is the one place note text can leave your vault in readable form.</p>
+        <ul>
+          <li><strong>Provider:</strong> Ollama Cloud at <a href="https://ollama.com" rel="noopener noreferrer">ollama.com</a>. Your own API key is stored inside your encrypted vault.</li>
+          <li><strong>What our server does:</strong> relays the request to ollama.com. It does <strong>not</strong> store your API key, the prompt, or the answer (same claim as Privacy / Settings).</li>
+          <li><strong>What leaves your device:</strong> the text you choose to send for that request (title, body, and scanned text if enabled) — not the rest of your vault. Use the in-app send preview to see the exact payload.</li>
+          <li><strong>Provider terms (checked {{ verify_ask_ai_date_checked }}):</strong> <a href="{{ verify_ask_ai_privacy_url }}" rel="noopener noreferrer">Privacy</a> and <a href="{{ verify_ask_ai_terms_url }}" rel="noopener noreferrer">Terms</a>. Ollama’s privacy page (last updated March 2026) states that cloud prompts are processed transiently, not stored beyond fulfilling the request, and not used to train models. We do not control their policy. If their page changes, we update this section and show a notice in Ask AI Settings.</li>
+        </ul>
+        <p class="mk-verify-pin-hash">SHA-256 of <code>ollama.com/privacy</code> HTML as fetched {{ verify_ask_ai_date_checked }} (Europe/Amsterdam): <code>{{ verify_ask_ai_pin_id }}</code></p>
+      </article>
+
       <article class="mk-card">
-        <h2>6. Optional: mitmproxy (and why Wireshark is not enough)</h2>
+        <h2>7. Optional: mitmproxy (and why Wireshark is not enough)</h2>
         <p>To inspect HTTPS as cleartext HTTP, point the browser at a local TLS-intercepting proxy such as <a href="https://mitmproxy.org/" rel="noopener noreferrer">mitmproxy</a>, install its CA in the OS/browser trust store, and filter for <code>deeperguard.com</code>. You should still see only SRP proofs and ciphertext envelopes.</p>
         <p><strong>Wireshark</strong> on the wire without TLS keys shows only TLS records — encrypted blobs. That proves transport encryption, not that the application payload is ciphertext. Use DevTools or mitmproxy for application JSON.</p>
       </article>
@@ -270,5 +284,6 @@ python3 scripts/build-client-manifest.py --print-hash
     {% include 'partials/mk-footer.html' %}
   </main>
   {{ asset_script('js/release-integrity.js') }}
+  {{ asset_script('js/verify-ask-ai-provider.js') }}
 </body>
 </html>

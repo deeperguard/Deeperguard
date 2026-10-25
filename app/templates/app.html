@@ -12,6 +12,7 @@
   <meta name="notes-build" content="{{ build }}">
   <meta name="notes-client-hash" content="{{ client_hash }}">
   <meta name="notes-release-tag" content="{{ release_tag }}">
+  <meta name="notes-verify-ask-ai-pin" content="{{ verify_ask_ai_pin_id }}">
   <meta name="notes-crypto-worker" content="{{ asset_url('js/crypto-worker.js') }}">
   <meta name="google-oauth-client-id" content="{{ google_oauth_client_id|default('', true) }}">
   <meta name="dropbox-app-key" content="{{ dropbox_app_key|default('', true) }}">
@@ -1596,10 +1597,11 @@
         </div>
       </section>
 
-      <section class="settings-group">
+      <section class="settings-group" id="settings-ai-chat">
         <h3>AI chat (optional)</h3>
         <div class="settings-card">
-          <p class="settings-hint ai-chat-warning"><strong>Less private.</strong> Chat sends the text of the note you have open (and, if enabled, its scanned text) from this browser to the Ollama server below. That text leaves the end-to-end encrypted vault. Nothing else is sent: no other notes, tags, file names, e-mail address or passwords. With your own Ollama server the browser talks to it directly. With Ollama Cloud the Deeperguard server relays the request to ollama.com (browsers cannot call it directly); the relay forwards and forgets, it stores neither your key, the prompt nor the answer. Ollama Cloud states it processes prompts transiently and never logs or trains on them. Do not use it on notes you would not paste into a chatbot.</p>
+          <p id="ai-chat-verify-pin-notice" class="settings-hint ai-chat-verify-pin-notice" hidden role="status">The Ask AI provider disclosure on <a href="/verify#verify-ask-ai">/verify</a> was updated — review section 6 before sending note text.</p>
+          <p class="settings-hint ai-chat-warning"><strong>Less private.</strong> Chat sends the text of the note you have open (and, if enabled, its scanned text) from this browser to the Ollama server below. That text leaves the end-to-end encrypted vault. Nothing else is sent: no other notes, tags, file names, e-mail address or passwords. With your own Ollama server the browser talks to it directly. With Ollama Cloud our server relays the request to ollama.com (browsers cannot call it directly); the relay forwards and forgets — it does not store your API key, the prompt, or the answer. Ollama’s privacy page (checked 25 Oct 2026) states that cloud prompts are processed transiently, not stored beyond fulfilling the request, and not used to train models. Do not use it on notes you would not paste into a chatbot.</p>
           <label class="settings-row stacked">Ollama server
             <input id="ai-chat-host" type="url" autocomplete="off" spellcheck="false" placeholder="https://ollama.com">
           </label>
@@ -1980,7 +1982,7 @@
       <button type="button" class="btn icon" id="ai-chat-close" aria-label="Close">×</button>
     </header>
     <div class="settings-body ai-chat-body">
-      <p class="settings-hint ai-chat-warning"><strong>Less private:</strong> your question and this note's text (title, body, scanned text) go to the Ollama server you configured (Ollama Cloud requests are relayed without being stored by the Deeperguard server). Nothing else from your vault is sent.</p>
+      <p class="settings-hint ai-chat-warning"><strong>Less private:</strong> your question and this note's text (title, body, scanned text) go to the Ollama server you configured (Ollama Cloud requests go through our server to ollama.com without storing your key, the prompt, or the answer). Nothing else from your vault is sent.</p>
       <div id="ai-chat-setup" class="settings-card" hidden>
         <p class="settings-hint">Add your own Ollama API key (or your own Ollama server) to chat with your notes.</p>
         <div class="settings-actions">
@@ -2319,6 +2321,7 @@
   {{ asset_script('js/ios-tune.js') }}
   {{ asset_script('js/vaultlock.js') }}
   {{ asset_script('js/ai-chat.js') }}
+  {{ asset_script('js/verify-ask-ai-provider.js') }}
   {{ asset_script('js/note-history.js') }}
   {{ asset_script('js/vault-sync-progress.js') }}
   {{ asset_script('js/cloud-backup.js') }}
