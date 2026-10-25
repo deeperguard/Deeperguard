@@ -52,6 +52,8 @@ class Round80AskAiHonestyTests(unittest.TestCase):
         app = (ROOT / "app/static/js/app.js").read_text(encoding="utf-8")
         self.assertIn("CLOUD_RELAY_ACK_KEY", ai)
         self.assertIn("ensureCloudRelayConsent", ai)
+        self.assertIn("ensureCloudSendConsent", ai)
+        self.assertIn("CLOUD_ROUTE_LABEL", ai)
         self.assertIn(
             "Your message and any note content will go through Deeperguard's server to ollama.com. Nothing is stored. Send?",
             ai,

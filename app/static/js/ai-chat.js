@@ -23,7 +23,12 @@ const NotesAiChat = (() => {
   const MAX_HISTORY = 12;
   /** Per-device ack that the user saw the Ollama Cloud relay warning before first send. */
   const CLOUD_RELAY_ACK_KEY = 'notes_ai_ollama_cloud_relay_ack';
+  /** Per-device ack for note body/title and scanned attachment text on Ollama Cloud sends. */
+  const CLOUD_CONTENT_ACK_KEY = 'notes_ai_ollama_cloud_content_ack';
   const CLOUD_RELAY_CONFIRM_MESSAGE = "Your message and any note content will go through Deeperguard's server to ollama.com. Nothing is stored. Send?";
+  const CLOUD_ROUTE_LABEL = 'This request goes through our server to ollama.com. Nothing is stored.';
+  const CONTENT_WARN_NOTE = "This send includes this note's title and body text.";
+  const CONTENT_WARN_OCR = 'This send includes scanned text from attachments.';
   // Ollama cloud models (https://ollama.com/api/tags) suited to Q&A over a note.
   const SUGGESTED_MODELS = [
     'gpt-oss:120b',
@@ -313,6 +318,209 @@ const NotesAiChat = (() => {
     }
   }
 
+  function readContentAck() {
+    const store = storage();
+    if (!store) return { note: false, ocr: false };
+    try {
+      const raw = store.getItem(CLOUD_CONTENT_ACK_KEY);
+      if (!raw) return { note: false, ocr: false };
+      const parsed = JSON.parse(raw);
+      return {
+        note: !!parsed?.note,
+        ocr: !!parsed?.ocr,
+      };
+    } catch (err) {
+      return { note: false, ocr: false };
+    }
+  }
+
+  function setContentAck(flags) {
+    const store = storage();
+    if (!store) return;
+    const prev = readContentAck();
+    const next = {
+      note: prev.note || !!flags?.note,
+      ocr: prev.ocr || !!flags?.ocr,
+    };
+    try {
+      store.setItem(CLOUD_CONTENT_ACK_KEY, JSON.stringify(next));
+    } catch (err) {
+      /* ignore quota / private mode */
+    }
+  }
+
+  function classifyOutboundContent(note, attachments = [], { includeOcr = true } = {}) {
+    const title = String(note?.content?.title || '').trim();
+    const body = String(note?.content?.content || '').trim();
+    const noteText = !!(title || body);
+    let ocrText = false;
+    if (includeOcr) {
+      ocrText = (attachments || []).some((att) => String(att?.content?.ocr_text || '').trim());
+    }
+    return { noteText, ocrText };
+  }
+
+  function formatOutboundPreview(body) {
+    const messages = body?.messages || [];
+    const parts = messages.map((m) => `[${m.role}]\n${String(m.content || '')}`);
+    return parts.join('\n\n');
+  }
+
+  function describeOutboundRoute(cfg) {
+    if (isCloudHost(cfg?.host)) {
+      return { cloud: true, label: CLOUD_ROUTE_LABEL };
+    }
+    const host = normalizeHost(cfg?.host);
+    return {
+      cloud: false,
+      label: `This request goes directly from this browser to ${host}.`,
+    };
+  }
+
+  function outboundPromptPlan({ cfg, note, attachments, includeOcr, question, history, model }) {
+    const context = buildContext(note, attachments, { includeOcr });
+    const body = requestBody({ model, context, history, question });
+    const preview = formatOutboundPreview(body);
+    const route = describeOutboundRoute(cfg);
+    const sensitivity = classifyOutboundContent(note, attachments, { includeOcr });
+    const contentAck = readContentAck();
+    const needRelayAck = !hasCloudRelayAck();
+    const needNoteAck = sensitivity.noteText && !contentAck.note;
+    const needOcrAck = sensitivity.ocrText && !contentAck.ocr;
+    const loud = needRelayAck || needNoteAck || needOcrAck;
+    const warnLines = [];
+    if (needRelayAck) warnLines.push(CLOUD_RELAY_CONFIRM_MESSAGE.replace(/\s*Send\?$/, ''));
+    if (needNoteAck) warnLines.push(CONTENT_WARN_NOTE);
+    if (needOcrAck) warnLines.push(CONTENT_WARN_OCR);
+    return {
+      context,
+      body,
+      preview,
+      route,
+      sensitivity,
+      loud,
+      warnLines,
+      needRelayAck,
+      needNoteAck,
+      needOcrAck,
+    };
+  }
+
+  function showOutboundDialog({
+    title,
+    routeLabel,
+    warnLines = [],
+    previewText,
+    loud = false,
+    confirmLabel = 'Send',
+    cancelLabel = 'Cancel',
+  } = {}) {
+    const backdrop = el('ai-outbound-backdrop');
+    const dialog = el('ai-outbound-dialog');
+    const titleEl = el('ai-outbound-title');
+    const routeEl = el('ai-outbound-route');
+    const warnEl = el('ai-outbound-warn');
+    const detailsEl = el('ai-outbound-details');
+    const previewEl = el('ai-outbound-preview');
+    const cancelBtn = el('ai-outbound-cancel');
+    const sendBtn = el('ai-outbound-send');
+    if (!backdrop || !dialog || !titleEl || !routeEl || !warnEl || !detailsEl || !previewEl || !cancelBtn || !sendBtn) {
+      return Promise.resolve(!!globalThis.confirm?.(CLOUD_RELAY_CONFIRM_MESSAGE));
+    }
+    return new Promise((resolve) => {
+      titleEl.textContent = title || 'Send to Ask AI';
+      routeEl.textContent = routeLabel || '';
+      warnEl.replaceChildren();
+      const lines = (warnLines || []).filter(Boolean);
+      if (lines.length) {
+        warnEl.hidden = false;
+        for (const line of lines) {
+          const p = document.createElement('p');
+          if (loud && line === lines[0]) {
+            const strong = document.createElement('strong');
+            strong.textContent = 'Review: ';
+            p.appendChild(strong);
+            p.append(line.replace(/^Review:\s*/, ''));
+          } else {
+            p.textContent = line;
+          }
+          warnEl.appendChild(p);
+        }
+      } else {
+        warnEl.hidden = true;
+      }
+      previewEl.textContent = previewText || '';
+      detailsEl.open = !!loud;
+      sendBtn.textContent = confirmLabel;
+      cancelBtn.textContent = cancelLabel;
+      sendBtn.classList.toggle('danger', !!loud);
+      backdrop.hidden = false;
+      dialog.hidden = false;
+      document.body.classList.add('ai-outbound-open');
+      const cleanup = (value) => {
+        backdrop.hidden = true;
+        dialog.hidden = true;
+        document.body.classList.remove('ai-outbound-open');
+        sendBtn.removeEventListener('click', onSend);
+        cancelBtn.removeEventListener('click', onCancel);
+        backdrop.removeEventListener('click', onCancel);
+        document.removeEventListener('keydown', onKey, true);
+        resolve(value);
+      };
+      const onSend = () => cleanup(true);
+      const onCancel = () => cleanup(false);
+      const onKey = (event) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        event.stopPropagation();
+        onCancel();
+      };
+      sendBtn.addEventListener('click', onSend);
+      cancelBtn.addEventListener('click', onCancel);
+      backdrop.addEventListener('click', onCancel);
+      document.addEventListener('keydown', onKey, true);
+      window.setTimeout(() => {
+        if (!dialog.hidden) (loud ? cancelBtn : sendBtn).focus();
+      }, 0);
+    });
+  }
+
+  async function promptCloudOutboundSend(plan) {
+    if (typeof deps.promptOutboundSend === 'function') {
+      return !!(await deps.promptOutboundSend(plan));
+    }
+    const title = plan.loud ? 'Ask AI — review before sending' : 'Send to Ollama Cloud?';
+    return !!(await showOutboundDialog({
+      title,
+      routeLabel: plan.route?.label,
+      warnLines: plan.warnLines,
+      previewText: plan.preview,
+      loud: plan.loud,
+      confirmLabel: 'Send',
+      cancelLabel: 'Cancel',
+    }));
+  }
+
+  /** Cloud: preview + consent before each send. Local Ollama skips the prompt. */
+  async function ensureCloudSendConsent({ cfg, note, attachments, includeOcr, question, history, model }) {
+    if (!isCloudHost(cfg?.host)) return true;
+    const plan = outboundPromptPlan({
+      cfg,
+      note,
+      attachments,
+      includeOcr,
+      question,
+      history,
+      model: model || cfg.model,
+    });
+    const ok = await promptCloudOutboundSend(plan);
+    if (!ok) return false;
+    if (plan.needRelayAck) setCloudRelayAck();
+    if (plan.sensitivity.noteText) setContentAck({ note: true });
+    if (plan.sensitivity.ocrText) setContentAck({ ocr: true });
+    return true;
+  }
+
   /** One-time confirm before the first Ollama Cloud send on this device. Local Ollama skips. */
   async function ensureCloudRelayConsent(cfg) {
     if (!isCloudHost(cfg?.host)) return true;
@@ -448,8 +656,17 @@ const NotesAiChat = (() => {
       renderState();
       return;
     }
-    if (!(await ensureCloudRelayConsent(cfg))) return;
-    const context = buildContext(note, deps.getAttachments ? deps.getAttachments(state.noteId) : [], { includeOcr: cfg.includeOcr });
+    const attachments = deps.getAttachments ? deps.getAttachments(state.noteId) : [];
+    if (!(await ensureCloudSendConsent({
+      cfg,
+      note,
+      attachments,
+      includeOcr: cfg.includeOcr,
+      question,
+      history: state.messages.filter((m) => !m.error),
+      model: cfg.model,
+    }))) return;
+    const context = buildContext(note, attachments, { includeOcr: cfg.includeOcr });
     const history = state.messages.filter((m) => !m.error);
     state.messages.push({ role: 'user', content: question, ts: Date.now() });
     state.busy = true;
@@ -530,13 +747,22 @@ const NotesAiChat = (() => {
     MAX_CONTEXT_CHARS,
     SUGGESTED_MODELS,
     CLOUD_RELAY_ACK_KEY,
+    CLOUD_CONTENT_ACK_KEY,
     CLOUD_RELAY_CONFIRM_MESSAGE,
+    CLOUD_ROUTE_LABEL,
+    CONTENT_WARN_NOTE,
+    CONTENT_WARN_OCR,
     normalizeSettings,
     isCloudHost,
     isConfigured,
     hasCloudRelayAck,
     setCloudRelayAck,
     ensureCloudRelayConsent,
+    ensureCloudSendConsent,
+    classifyOutboundContent,
+    formatOutboundPreview,
+    describeOutboundRoute,
+    outboundPromptPlan,
     buildContext,
     requestBody,
     ask,
