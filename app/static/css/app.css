@@ -326,6 +326,12 @@ body.settings-open #settings-panel {
 body.settings-open #settings-backdrop {
   display: block !important;
 }
+body.secure-send-open #secure-send-panel {
+  display: flex !important;
+}
+body.secure-send-open #secure-send-backdrop {
+  display: block !important;
+}
 body.doc-preview-open {
   overflow: hidden;
   position: fixed;
@@ -6186,6 +6192,8 @@ body.note-readonly #checklist:not([hidden]) {
 .fab:active { filter: brightness(0.94); }
 body.settings-open .fab,
 body.settings-open .fab-stack,
+body.secure-send-open .fab,
+body.secure-send-open .fab-stack,
 body.doc-preview-open .fab,
 body.doc-preview-open .fab-stack,
 body.search-filters-open .fab,
