@@ -5449,8 +5449,13 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('id="btn-trash"', menu_panel)
         self.assertNotIn('id="btn-download-note"', menu_panel)
         self.assertEqual(menu_panel.count('id="btn-trash"'), 1)
-        for label in ('Undo', 'Redo', 'Note info', 'Star', 'Pin', 'Archive', 'Duplicate', 'Trash', 'Delete forever'):
+        for label in ('Undo', 'Redo', 'Note info', 'Share by link', 'Star', 'Pin', 'Archive', 'Duplicate', 'Trash', 'Delete forever'):
             self.assertIn(f'class="editor-menu-label">{label}<', menu_panel)
+        self.assertIn('id="btn-note-secure-send"', menu_panel)
+        share_pos = menu_panel.find('id="btn-share"')
+        secure_pos = menu_panel.find('id="btn-note-secure-send"')
+        self.assertGreater(share_pos, 0)
+        self.assertGreater(secure_pos, share_pos)
         self.assertIn('class="share-label editor-menu-label">Copy<', menu_panel)
         self.assertIn('class="editor-menu-label">Settings<', html)
         self.assertIn('async function downloadOpenNote()', js)

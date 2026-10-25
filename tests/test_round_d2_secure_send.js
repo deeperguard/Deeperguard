@@ -50,6 +50,13 @@ assert.ok(appJs.includes('NotesSecureSend.sealPayload'));
 assert.ok(appJs.includes('assertNoFragmentLeak'));
 assert.ok(appJs.includes('open_verifier'));
 assert.ok(appJs.includes('Revoke link?'));
+assert.ok(appJs.includes('function openSecureSendForNote'));
+assert.ok(appJs.includes('function prefillSecureSendFromNote'));
+assert.ok(appJs.includes('secureSendPendingFile'));
+assert.ok(appHtml.includes('id="btn-note-secure-send"'));
+assert.ok(appHtml.includes('id="note-row-menu-secure-send"'));
+assert.ok(appJs.includes('note-row-more'));
+assert.ok(appJs.includes('openNoteRowMenu'));
 assert.ok(!/\bdeleted\b/i.test(secureJs));
 assert.ok(!/\bdeleted\b/i.test(receiveJs));
 

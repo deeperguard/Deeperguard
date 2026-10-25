@@ -9034,6 +9034,14 @@
     return `<button type="button" class="note-row-delete" data-id="${id}" aria-label="${label} note ${title}" title="${label}">×</button>`;
   }
 
+  function noteRowMoreBtnHtml(note) {
+    if (note?.deleted || note?.content?.trashed) return '';
+    if (note?.content?.locked && !unlockedNotes.has(note.uuid)) return '';
+    const id = escapeAttr(note.uuid);
+    const title = escapeAttr(noteRowActionTitle(note));
+    return `<button type="button" class="note-row-more" data-id="${id}" aria-label="More actions for ${title}" title="More actions" aria-haspopup="menu">⋯</button>`;
+  }
+
   function noteRowStatusGlyphs(note) {
     if (!note?.content) return '';
     const parts = [];
@@ -9113,6 +9121,7 @@
     return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(note.uuid)}">
       ${noteRowSwipeDeleteHtml(note)}
       ${noteRowRestoreBtnHtml(note)}
+      ${noteRowMoreBtnHtml(note)}
       ${noteRowDeleteBtnHtml(note)}
       <button type="button" class="note-item ${active}" data-id="${escapeAttr(note.uuid)}">
         ${showThumb
@@ -9189,6 +9198,7 @@
     return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(n.uuid)}">
       ${noteRowSwipeDeleteHtml(n)}
       ${noteRowRestoreBtnHtml(n)}
+      ${noteRowMoreBtnHtml(n)}
       ${noteRowDeleteBtnHtml(n)}
       <button type="button" class="note-item ${active}" data-id="${escapeAttr(n.uuid)}">
         ${showListThumb
@@ -12693,7 +12703,7 @@
     if (tagShell) tagShell.hidden = !!gated;
     if (ui.editorType) ui.editorType.hidden = !!gated;
     document.getElementById('btn-note-type-menu')?.toggleAttribute('hidden', !!gated);
-    ['btn-share', 'btn-note-info', 'btn-trash', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate', 'btn-download-note'].forEach((id) => {
+    ['btn-share', 'btn-note-info', 'btn-trash', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate', 'btn-note-secure-send', 'btn-download-note'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.hidden = !!gated;
     });
@@ -13088,7 +13098,7 @@
     syncEditorMobileDocActions();
     syncEditorMobileProxies();
     if (note && note.content?.locked && !unlockedNotes.has(note.uuid)) {
-      ['btn-share', 'btn-note-info', 'btn-note-type-menu', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate', 'btn-download-note', 'note-folder-control'].forEach((id) => {
+      ['btn-share', 'btn-note-info', 'btn-note-type-menu', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate', 'btn-note-secure-send', 'btn-download-note', 'note-folder-control'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.hidden = true;
       });
@@ -18982,6 +18992,14 @@
   document.getElementById('note-info-share-bottom')?.addEventListener('click', () => {
     shareNote(currentId).catch((err) => toast(err.message || 'Share failed', true));
   });
+  const openSecureSendFromCurrentNote = () => {
+    openSecureSendForNote(currentId).catch((err) => toast(err?.message || 'Secure Send failed', true));
+  };
+  document.getElementById('btn-note-secure-send')?.addEventListener('click', () => {
+    openSecureSendFromCurrentNote();
+  });
+  document.getElementById('note-info-secure-send')?.addEventListener('click', openSecureSendFromCurrentNote);
+  document.getElementById('note-info-secure-send-bottom')?.addEventListener('click', openSecureSendFromCurrentNote);
   document.getElementById('note-info-archive')?.addEventListener('click', () => {
     document.getElementById('btn-archive')?.click();
     if (currentId) updateNoteInfoPanel(NotesStore.get(currentId));
@@ -19110,6 +19128,43 @@
     else trashNote(id);
   }
 
+  let noteRowMenuNoteId = '';
+  const NOTE_ROW_LONG_PRESS_MS = 520;
+
+  function closeNoteRowMenu() {
+    const menu = document.getElementById('note-row-menu');
+    const backdrop = document.getElementById('note-row-menu-backdrop');
+    if (menu) menu.hidden = true;
+    if (backdrop) {
+      backdrop.hidden = true;
+      backdrop.setAttribute('aria-hidden', 'true');
+    }
+    noteRowMenuNoteId = '';
+    document.body.classList.remove('note-row-menu-open');
+  }
+
+  function openNoteRowMenu(noteId, anchorEl) {
+    const menu = document.getElementById('note-row-menu');
+    const backdrop = document.getElementById('note-row-menu-backdrop');
+    const id = String(noteId || '').trim();
+    if (!menu || !backdrop || !id) return;
+    noteRowMenuNoteId = id;
+    const anchor = anchorEl
+      || ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(id)}"] .note-row-more`);
+    const rect = anchor?.getBoundingClientRect();
+    if (rect) {
+      const top = Math.min(rect.bottom + 4, window.innerHeight - 72);
+      const left = Math.max(8, Math.min(rect.right - 176, window.innerWidth - 184));
+      menu.style.top = `${top}px`;
+      menu.style.left = `${left}px`;
+    }
+    menu.hidden = false;
+    backdrop.hidden = false;
+    backdrop.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('note-row-menu-open');
+    try { document.getElementById('note-row-menu-secure-send')?.focus(); } catch (err) { /* ignore */ }
+  }
+
   function bindNoteList() {
     const list = ui.noteList;
     const width = () => (window.NotesSwipe && NotesSwipe.ACTION_WIDTH) || 88;
@@ -19122,6 +19177,15 @@
     let dragging = false;
     let opened = null;
     let suppressClick = false;
+    let longPressTimer = 0;
+    let longPressFired = false;
+
+    function clearLongPress() {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = 0;
+      }
+    }
 
     function itemOf(el) {
       return el ? el.querySelector('.note-item') : null;
@@ -19137,7 +19201,7 @@
 
     list.addEventListener('pointerdown', (event) => {
       if (event.button && event.button !== 0) return;
-      if (event.target.closest('.note-swipe-delete, .note-row-delete, .note-row-restore')) return;
+      if (event.target.closest('.note-swipe-delete, .note-row-delete, .note-row-restore, .note-row-more')) return;
       if (opened && !opened.isConnected) opened = null;
       const next = event.target.closest('.note-row');
       if (!next) return;
@@ -19149,6 +19213,22 @@
       axis = null;
       dragging = true;
       suppressClick = false;
+      longPressFired = false;
+      clearLongPress();
+      const longPressRow = next;
+      longPressTimer = window.setTimeout(() => {
+        if (row !== longPressRow || axis === 'h') return;
+        longPressFired = true;
+        suppressClick = true;
+        clearLongPress();
+        closeOpened();
+        dragging = false;
+        longPressRow.classList.remove('swiping', 'open');
+        const item = itemOf(longPressRow);
+        if (item) item.style.transform = '';
+        openNoteRowMenu(longPressRow.dataset.id, longPressRow.querySelector('.note-row-more'));
+        try { navigator.vibrate?.(12); } catch (err) { /* ignore */ }
+      }, NOTE_ROW_LONG_PRESS_MS);
       row.classList.add('swiping');
     });
 
@@ -19156,9 +19236,11 @@
       if (!dragging || !row) return;
       const dx = event.clientX - startX;
       const dy = event.clientY - startY;
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) clearLongPress();
       if (!axis) {
         axis = NotesSwipe.axisLock(dx, dy);
         if (axis === 'h') {
+          clearLongPress();
           try { row.setPointerCapture(event.pointerId); } catch (e) { /* ignore */ }
           row.style.touchAction = 'none';
         }
@@ -19173,6 +19255,7 @@
     }, { passive: false });
 
     function finish() {
+      clearLongPress();
       if (!dragging) return;
       const current = row;
       const dx = lastX - startX;
@@ -19205,6 +19288,21 @@
     list.addEventListener('pointerup', finish);
     list.addEventListener('pointercancel', finish);
     list.addEventListener('click', (event) => {
+      if (longPressFired) {
+        event.preventDefault();
+        longPressFired = false;
+        return;
+      }
+      const moreBtn = event.target.closest('.note-row-more');
+      if (moreBtn?.dataset?.id) {
+        event.preventDefault();
+        event.stopPropagation();
+        const id = moreBtn.dataset.id;
+        const menu = document.getElementById('note-row-menu');
+        if (!menu?.hidden && noteRowMenuNoteId === id) closeNoteRowMenu();
+        else openNoteRowMenu(id, moreBtn);
+        return;
+      }
       const del = event.target.closest('.note-swipe-delete, .note-row-delete, .note-row-restore');
       if (del) {
         event.preventDefault();
@@ -19237,6 +19335,20 @@
   }
 
   bindNoteList();
+  document.getElementById('note-row-menu-backdrop')?.addEventListener('click', closeNoteRowMenu);
+  document.getElementById('note-row-menu-secure-send')?.addEventListener('click', () => {
+    const id = noteRowMenuNoteId;
+    closeNoteRowMenu();
+    if (id) {
+      openSecureSendForNote(id).catch((err) => toast(err?.message || 'Secure Send failed', true));
+    }
+  });
+  ui.noteList?.addEventListener('scroll', closeNoteRowMenu, { passive: true });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !document.body.classList.contains('note-row-menu-open')) return;
+    event.preventDefault();
+    closeNoteRowMenu();
+  }, true);
 
   document.getElementById('btn-trash').addEventListener('click', () => {
     if (!currentId) return;
@@ -19838,12 +19950,87 @@
   });
 
   // D2 Secure Send — compose + Sent list (ciphertext only; key in fragment).
+  let secureSendPendingFile = null;
+
   function setSecureSendStatus(message) {
     const el = document.getElementById('secure-send-status');
     if (!el) return;
     el.textContent = message || '';
     el.hidden = !message;
   }
+
+  function prefillSecureSendFromNote(note) {
+    const titleEl = document.getElementById('secure-send-title');
+    const bodyEl = document.getElementById('secure-send-body');
+    const fileInput = document.getElementById('secure-send-file');
+    const passEl = document.getElementById('secure-send-passphrase');
+    const viewsEl = document.getElementById('secure-send-views');
+    const daysEl = document.getElementById('secure-send-days');
+    const wrap = document.getElementById('secure-send-link-wrap');
+    const linkInput = document.getElementById('secure-send-link');
+    secureSendPendingFile = null;
+    if (titleEl) titleEl.value = NotesSearch.effectiveNoteTitle(note) || '';
+    if (bodyEl) bodyEl.value = String(note.content?.content || '');
+    if (fileInput) fileInput.value = '';
+    if (passEl) passEl.value = '';
+    if (viewsEl && window.NotesSecureSend) {
+      viewsEl.value = String(NotesSecureSend.DEFAULT_MAX_VIEWS || 1);
+    }
+    if (daysEl) daysEl.value = '7';
+    if (wrap) wrap.hidden = true;
+    if (linkInput) linkInput.value = '';
+    setSecureSendStatus('');
+  }
+
+  async function openSecureSendForNote(noteId) {
+    if (!NotesStore.isUnlocked()) {
+      toast('Unlock the vault first', true);
+      return;
+    }
+    const id = String(noteId || '').trim();
+    if (!id) return;
+    const note = NotesStore.get(id);
+    if (!note) return;
+    if (note.content?.locked && !unlockedNotes.has(id)) {
+      toast('Unlock this protected note first', true);
+      return;
+    }
+    closeNoteOptions();
+    closeEditorToolbarMenu();
+    closeNoteRowMenu();
+    prefillSecureSendFromNote(note);
+    openSettings();
+    const section = document.getElementById('secure-send-settings');
+    try { section?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (err) { /* ignore */ }
+    try { document.getElementById('secure-send-title')?.focus(); } catch (err) { /* ignore */ }
+    const atts = NotesStore.listAttachments(id).filter((att) => !att.deleted);
+    if (atts.length === 1) {
+      setSecureSendStatus('Loading attachment…');
+      try {
+        const att = atts[0];
+        const bytes = await NotesStore.getAttachmentBytes(att.uuid);
+        secureSendPendingFile = NotesPreview.fileFromBytes(
+          bytes,
+          att.content.filename || att.content.original_filename || 'attachment',
+          att.content.mime,
+        );
+        setSecureSendStatus('First attachment will be included when you create the link.');
+      } catch (err) {
+        secureSendPendingFile = null;
+        setSecureSendStatus('Could not load attachment. You can still share the note text.');
+        toast(err?.message || 'Attachment load failed', true);
+      }
+    } else if (atts.length > 1) {
+      setSecureSendStatus('This note has multiple attachments. Pick a file below if needed.');
+    }
+  }
+  try { window.__notesOpenSecureSendForNote = openSecureSendForNote; } catch (err) { /* ignore */ }
+
+  document.getElementById('secure-send-file')?.addEventListener('change', () => {
+    if (document.getElementById('secure-send-file')?.files?.length) {
+      secureSendPendingFile = null;
+    }
+  });
   document.getElementById('btn-secure-send-refresh')?.addEventListener('click', () => {
     refreshSecureSendList();
   });
@@ -19855,7 +20042,8 @@
     const title = document.getElementById('secure-send-title')?.value || '';
     const body = document.getElementById('secure-send-body')?.value || '';
     const fileInput = document.getElementById('secure-send-file');
-    const file = fileInput?.files && fileInput.files[0] ? fileInput.files[0] : null;
+    const file = secureSendPendingFile
+      || (fileInput?.files && fileInput.files[0] ? fileInput.files[0] : null);
     const passphrase = document.getElementById('secure-send-passphrase')?.value || '';
     const maxViews = Number(NotesSecureSend.MAX_VIEWS_CAP) || 10;
     let views = Number(document.getElementById('secure-send-views')?.value || 1);
@@ -19906,6 +20094,7 @@
           : 'Link ready. Anyone with the full link can open it. After the opens are used, the link stops working.',
       );
       toast('Secure Send link created');
+      secureSendPendingFile = null;
       refreshSecureSendList();
     } catch (err) {
       setSecureSendStatus(err?.message || 'Could not create link');

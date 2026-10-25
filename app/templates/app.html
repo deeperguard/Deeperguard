@@ -972,6 +972,10 @@
         <button type="button" id="btn-empty-trash-list" class="btn danger sm">Empty trash</button>
       </div>
       <div id="note-list" class="note-list"></div>
+      <div id="note-row-menu-backdrop" class="note-row-menu-backdrop" hidden aria-hidden="true"></div>
+      <div id="note-row-menu" class="note-row-menu" role="menu" aria-label="Note actions" hidden>
+        <button type="button" id="note-row-menu-secure-send" class="note-row-menu-item" role="menuitem">Share by link</button>
+      </div>
       </div>
     </aside>
 
@@ -1238,6 +1242,13 @@
                 <path d="M8 8H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
               <span class="share-label editor-menu-label">Copy</span>
+            </button>
+            <button type="button" id="btn-note-secure-send" class="btn ghost sm toolbar-secondary editor-toolbar-menu-item" role="menuitem" title="Share by link" aria-label="Share by link">
+              <svg class="editor-menu-icon ui-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+              <span class="editor-menu-label">Share by link</span>
             </button>
             <button type="button" id="btn-mobile-doc-attachment-share" class="btn ghost sm toolbar-secondary editor-mobile-doc-action editor-toolbar-menu-item" role="menuitem" hidden title="Share file" aria-label="Share file">
               <svg class="editor-menu-icon ui-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2002,6 +2013,7 @@
           <button type="button" id="note-info-star" class="btn ghost sm">Star</button>
           <button type="button" id="note-info-pin" class="btn ghost sm">Pin</button>
           <button type="button" id="note-info-share" class="btn ghost sm">Copy</button>
+          <button type="button" id="note-info-secure-send" class="btn ghost sm">Share by link</button>
           <button type="button" id="note-info-archive" class="btn ghost sm">Archive</button>
           <button type="button" id="note-info-duplicate" class="btn ghost sm">Duplicate</button>
           <button type="button" id="note-info-trash" class="btn ghost sm">Trash</button>
@@ -2035,6 +2047,7 @@
       </dl>
       <div class="note-info-actions note-info-actions-bottom">
         <button type="button" id="note-info-share-bottom" class="btn ghost sm desktop-only">Copy note</button>
+        <button type="button" id="note-info-secure-send-bottom" class="btn ghost sm desktop-only">Share by link</button>
         <button type="button" id="note-info-server-copy" class="btn ghost sm">View server copy</button>
         <button type="button" id="note-info-protect" class="btn ghost sm note-info-protect-btn">
           <span class="note-info-protect-icon" aria-hidden="true">
