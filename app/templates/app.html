@@ -2221,6 +2221,20 @@
       <button type="button" class="btn primary" id="confirm-ok">Confirm</button>
     </div>
   </div>
+  <div id="ai-outbound-backdrop" class="settings-backdrop" hidden></div>
+  <div id="ai-outbound-dialog" class="confirm-dialog ai-outbound-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="ai-outbound-title">
+    <h2 id="ai-outbound-title">Send to Ask AI</h2>
+    <p id="ai-outbound-route" class="settings-hint ai-outbound-route"></p>
+    <div id="ai-outbound-warn" class="ai-outbound-warn" hidden></div>
+    <details id="ai-outbound-details" class="ai-outbound-details">
+      <summary>Preview text leaving this device</summary>
+      <pre id="ai-outbound-preview" class="ai-outbound-preview"></pre>
+    </details>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn ghost" id="ai-outbound-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="ai-outbound-send">Send</button>
+    </div>
+  </div>
   <div id="doc-viewer" class="doc-viewer" hidden role="dialog" aria-modal="true" aria-labelledby="doc-title">
     <svg class="doc-enhance-defs" aria-hidden="true" focusable="false">
       <defs>
