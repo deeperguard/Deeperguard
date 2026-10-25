@@ -15117,6 +15117,9 @@
     else toast('Could not copy diagnostics', true);
   }
 
+  const SECURE_SEND_NO_VAULT_RECORD_MSG =
+    'This send was created before multi-device Sent — open it on the device that made the link, or create a new send.';
+
   function secureSendStatusLabel(item) {
     return item?.status_label
       || ({ active: 'Waiting', used: 'Opened', expired: 'Expired', canceled: 'Revoked' }[item?.status]
@@ -20368,7 +20371,7 @@
     const linkInput = document.getElementById('secure-send-detail-link');
     const url = linkInput ? String(linkInput.value || '') : '';
     if (!url) {
-      toast('Link key isn’t on this device.', true);
+      toast(SECURE_SEND_NO_VAULT_RECORD_MSG, true);
       return;
     }
     try {

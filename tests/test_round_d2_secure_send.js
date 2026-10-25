@@ -52,7 +52,13 @@ assert.ok(appJs.includes('open_verifier'));
 assert.ok(appJs.includes('Revoke link?'));
 assert.ok(appHtml.includes('id="secure-send-detail"'));
 assert.ok(appHtml.includes('secure-send-detail-no-local'));
-assert.ok(appHtml.includes('Full link and contents stay on the device that created this link.'));
+assert.ok(
+  appHtml.includes('This send was created before multi-device Sent'),
+  'missing-vault copy explains pre-v0.65.8 sends',
+);
+assert.ok(!appHtml.includes('Link key isn’t on this device'));
+assert.ok(!appHtml.includes('Full link and contents stay on the device that created this link'));
+assert.ok(appJs.includes('SECURE_SEND_NO_VAULT_RECORD_MSG'));
 assert.ok(appHtml.includes('btn-secure-send-detail-copy'));
 const appCss = fs.readFileSync(path.join(root, 'app/static/css/app.css'), 'utf8');
 const detailBackdropZ = appCss.match(/#secure-send-detail-backdrop\s*\{\s*z-index:\s*(\d+)/);
@@ -72,7 +78,6 @@ assert.ok(
 assert.ok(appJs.includes('saveSecureSendSentRecord'));
 assert.ok(appJs.includes('getSecureSendSentRecord'));
 assert.ok(appJs.includes('openSecureSendSentDetail'));
-assert.ok(appJs.includes('secure_send_sent'));
 const detailBlock = appJs.match(/function openSecureSendSentDetail\([\s\S]*?\n  async function revokeSecureSendSentItem/);
 assert.ok(detailBlock, 'openSecureSendSentDetail must exist');
 assert.ok(!detailBlock[0].includes('/open'), 'sent detail must not call /open');
