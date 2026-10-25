@@ -82,4 +82,4 @@ git add .github/workflows && git commit -m "Enable client integrity GitHub Actio
 
 ## Source
 
-[AGPL-3.0](LICENSE) · [Privacy](docs/PRIVACY.md) · [Self-host](docs/SELF_HOST.md) · [Verify](https://www.deeperguard.com/verify)
+[AGPL-3.0](LICENSE) · [Privacy](docs/PRIVACY.md) · [Security](SECURITY.md) · [Self-host](docs/SELF_HOST.md) · [Verify](https://www.deeperguard.com/verify)
