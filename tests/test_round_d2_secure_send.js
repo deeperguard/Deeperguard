@@ -54,6 +54,21 @@ assert.ok(appHtml.includes('id="secure-send-detail"'));
 assert.ok(appHtml.includes('secure-send-detail-no-local'));
 assert.ok(appHtml.includes('Full link and contents stay on the device that created this link.'));
 assert.ok(appHtml.includes('btn-secure-send-detail-copy'));
+const appCss = fs.readFileSync(path.join(root, 'app/static/css/app.css'), 'utf8');
+const detailBackdropZ = appCss.match(/#secure-send-detail-backdrop\s*\{\s*z-index:\s*(\d+)/);
+const detailSheetZ = appCss.match(/#secure-send-detail\s*\{\s*z-index:\s*(\d+)/);
+const settingsPanelZ = appCss.match(/\.settings-panel\s*\{[\s\S]*?z-index:\s*(\d+)/);
+assert.ok(detailBackdropZ, 'sent-detail backdrop needs ID z-index above settings');
+assert.ok(detailSheetZ, 'sent-detail sheet needs ID z-index above settings');
+assert.ok(settingsPanelZ, 'settings panel z-index must be documented in CSS');
+assert.ok(
+  Number(detailBackdropZ[1]) > Number(settingsPanelZ[1]),
+  'sent-detail backdrop must stack above settings panel',
+);
+assert.ok(
+  Number(detailSheetZ[1]) > Number(settingsPanelZ[1]),
+  'sent-detail sheet must stack above settings panel',
+);
 assert.ok(appJs.includes('saveSecureSendSentRecord'));
 assert.ok(appJs.includes('getSecureSendSentRecord'));
 assert.ok(appJs.includes('openSecureSendSentDetail'));
