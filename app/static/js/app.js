@@ -15107,6 +15107,66 @@
     else toast('Could not copy diagnostics', true);
   }
 
+  async function refreshSecureSendList() {
+    const list = document.getElementById('secure-send-sent-list');
+    if (!list || !window.NotesStore) return;
+    try {
+      const data = await NotesStore.api('/api/secure-send/sent');
+      const items = Array.isArray(data?.items) ? data.items : [];
+      list.textContent = '';
+      if (!items.length) {
+        const empty = document.createElement('p');
+        empty.className = 'settings-hint';
+        empty.textContent = 'No Secure Send links yet.';
+        list.appendChild(empty);
+        return;
+      }
+      for (const item of items) {
+        const row = document.createElement('div');
+        row.className = 'secure-send-sent-item';
+        const meta = document.createElement('div');
+        meta.className = 'secure-send-sent-meta';
+        const label = item.status_label
+          || ({ active: 'Waiting', used: 'Opened', expired: 'Expired', canceled: 'Revoked' }[item.status] || item.status || '?');
+        const created = item.created_at ? new Date(item.created_at * 1000).toLocaleString() : '';
+        const exp = item.expires_at ? new Date(item.expires_at * 1000).toLocaleString() : '';
+        meta.textContent = `${label} · created ${created} · expires ${exp}`;
+        row.appendChild(meta);
+        if (item.status === 'active') {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn danger sm';
+          btn.textContent = 'Revoke';
+          btn.addEventListener('click', async () => {
+            const ok = await confirmAction(
+              'Revoke this link? It will stop working for anyone who still has it.',
+              { title: 'Revoke link?', confirmLabel: 'Revoke', cancelLabel: 'Keep' },
+            );
+            if (!ok) return;
+            try {
+              await NotesStore.api(`/api/secure-send/${encodeURIComponent(item.id)}/cancel`, {
+                method: 'POST',
+                body: '{}',
+              });
+              toast('Link revoked — it stops working now');
+              refreshSecureSendList();
+            } catch (err) {
+              toast(err?.message || 'Could not revoke', true);
+            }
+          });
+          row.appendChild(btn);
+        }
+        list.appendChild(row);
+      }
+    } catch (err) {
+      list.textContent = '';
+      const p = document.createElement('p');
+      p.className = 'settings-hint';
+      p.textContent = 'Could not load sent links.';
+      list.appendChild(p);
+    }
+  }
+
   function openSettings() {
     if (ui.settings) {
       ui.settings.hidden = false;
@@ -15128,6 +15188,7 @@
     initSettings().catch(() => {});
     refreshSettingsDiagnostics().catch(() => {});
     try { refreshDevicePhraseUi(); } catch (err) { /* ignore */ }
+    try { refreshSecureSendList(); } catch (err) { /* ignore */ }
     try { refreshGoogleDriveBackupUi(); } catch (err) { /* ignore */ }
     try { refreshDropboxBackupUi(); } catch (err) { /* ignore */ }
     startSignedInDevicesRefresh();
@@ -19775,6 +19836,100 @@
     } catch (err) { /* ignore */ }
     updateDevicePhrasePrompt();
   });
+
+  // D2 Secure Send — compose + Sent list (ciphertext only; key in fragment).
+  function setSecureSendStatus(message) {
+    const el = document.getElementById('secure-send-status');
+    if (!el) return;
+    el.textContent = message || '';
+    el.hidden = !message;
+  }
+  document.getElementById('btn-secure-send-refresh')?.addEventListener('click', () => {
+    refreshSecureSendList();
+  });
+  document.getElementById('btn-secure-send-create')?.addEventListener('click', async () => {
+    if (!window.NotesSecureSend || !window.NotesStore || !window.NotesCrypto) {
+      setSecureSendStatus('Secure Send is unavailable on this build.');
+      return;
+    }
+    const title = document.getElementById('secure-send-title')?.value || '';
+    const body = document.getElementById('secure-send-body')?.value || '';
+    const fileInput = document.getElementById('secure-send-file');
+    const file = fileInput?.files && fileInput.files[0] ? fileInput.files[0] : null;
+    const passphrase = document.getElementById('secure-send-passphrase')?.value || '';
+    const maxViews = Number(NotesSecureSend.MAX_VIEWS_CAP) || 10;
+    let views = Number(document.getElementById('secure-send-views')?.value || 1);
+    let days = Number(document.getElementById('secure-send-days')?.value || 7);
+    if (!Number.isFinite(views) || views < 1) views = 1;
+    if (views > maxViews) views = maxViews;
+    if (!Number.isFinite(days) || days < 1) days = 1;
+    if (days > 7) days = 7;
+    if (!title.trim() && !body.trim() && !file) {
+      setSecureSendStatus('Add a title, note, or file.');
+      return;
+    }
+    const btn = document.getElementById('btn-secure-send-create');
+    if (btn) btn.disabled = true;
+    setSecureSendStatus('Encrypting…');
+    try {
+      const sealed = await NotesSecureSend.sealPayload({
+        title,
+        body,
+        file,
+        passphrase,
+      });
+      const createBody = {
+        ciphertext: sealed.ciphertext,
+        expires_in: Math.round(days * 24 * 3600),
+        max_views: views,
+      };
+      if (sealed.hasPassphrase && sealed.openVerifier) {
+        createBody.open_verifier = sealed.openVerifier;
+      }
+      NotesSecureSend.assertNoFragmentLeak('/api/secure-send', createBody);
+      const created = await NotesStore.api('/api/secure-send', {
+        method: 'POST',
+        body: JSON.stringify(createBody),
+        timeoutMs: sealed.hasFile ? 120000 : 30000,
+      });
+      const url = NotesSecureSend.buildReceiveUrl(location.origin, created.id, sealed.fragment);
+      const wrap = document.getElementById('secure-send-link-wrap');
+      const linkInput = document.getElementById('secure-send-link');
+      if (wrap) wrap.hidden = false;
+      if (linkInput) {
+        linkInput.value = url;
+        try { linkInput.select(); } catch (err) { /* ignore */ }
+      }
+      setSecureSendStatus(
+        sealed.hasPassphrase
+          ? 'Link ready. Share the passphrase separately — the link alone cannot open it. After the opens are used, the link stops working.'
+          : 'Link ready. Anyone with the full link can open it. After the opens are used, the link stops working.',
+      );
+      toast('Secure Send link created');
+      refreshSecureSendList();
+    } catch (err) {
+      setSecureSendStatus(err?.message || 'Could not create link');
+      toast(err?.message || 'Secure Send failed', true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+  document.getElementById('btn-secure-send-copy')?.addEventListener('click', async () => {
+    const linkInput = document.getElementById('secure-send-link');
+    const url = linkInput ? String(linkInput.value || '') : '';
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Link copied');
+    } catch (err) {
+      try {
+        linkInput.focus();
+        linkInput.select();
+      } catch (e) { /* ignore */ }
+      toast('Select the link and copy it', true);
+    }
+  });
+
   document.getElementById('btn-show-vault-password')?.addEventListener('click', async () => {
     const saved = savedVaultPasswordForReveal();
     if (!saved) {

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Secure Send — Deeperguard</title>
+  {% include 'partials/auth-head.html' %}
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="notes-release-tag" content="{{ release_tag }}">
+</head>
+<body class="auth-page receive-page">
+  <main class="auth-card receive-card">
+    <div class="brand">
+      <h1 id="receive-heading" {% if link_stopped %}hidden{% endif %}>Someone sent you an encrypted note</h1>
+      <p class="muted">Deeperguard Secure Send</p>
+    </div>
+    <div id="receive-stopped" class="stack" {% if not link_stopped %}hidden{% endif %}>
+      <p class="settings-hint" data-stopped-copy>{{ link_stopped_copy }}</p>
+    </div>
+    <div id="receive-gate" class="stack" {% if link_stopped %}hidden{% endif %}>
+      <p id="receive-intro" class="settings-hint">{{ receive_intro or 'This link stops working after it has been opened the number of times the sender chose.' }}</p>
+      <p id="receive-pass-wrap" class="stack" hidden>
+        <label>Passphrase
+          <input id="receive-passphrase" type="password" autocomplete="off" spellcheck="false">
+        </label>
+        <span class="hint">The sender shared a separate passphrase. The link alone cannot open this.</span>
+      </p>
+      <p id="receive-error" class="error" role="alert" hidden></p>
+      <button type="button" id="receive-open" class="btn primary block">Open</button>
+    </div>
+    <div id="receive-result" class="stack" hidden>
+      <h2 id="receive-title" class="receive-title"></h2>
+      <pre id="receive-body" class="receive-body"></pre>
+      <p id="receive-file-row" hidden>
+        <button type="button" id="receive-download" class="btn block">Download file</button>
+      </p>
+      <p id="receive-done-hint" class="hint">When no opens remain, the link stops working.</p>
+    </div>
+  </main>
+  <script type="application/json" id="receive-boot">{{ {
+    "sendId": send_id,
+    "linkStopped": link_stopped_copy,
+    "linkStoppedFlag": link_stopped,
+    "viewsRemaining": views_remaining
+  } | tojson }}</script>
+  {{ asset_script('js/vendor/noble-crypto.js') }}
+  {{ asset_script('js/vendor/noble-argon2.js') }}
+  {{ asset_script('js/crypto.js') }}
+  {{ asset_script('js/sanitize.js') }}
+  {{ asset_script('js/secure-send.js') }}
+  {{ asset_script('js/secure-send-receive.js') }}
+</body>
+</html>

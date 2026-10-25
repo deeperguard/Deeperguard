@@ -1,11 +1,11 @@
 {
-  "asset_count": 53,
+  "asset_count": 55,
   "assets": {
     "css/app.css": {
-      "bytes": 233551,
-      "sha256": "5244d82e006c5dda8efba7e3f277496194a1a8df673b734fda5d309b996b1091",
-      "sri": "sha384-osmrP1sONfl71s32shIs3T4xrdQp4rl/MfZX4F/LuJjaxx4gxDnF4Y2Cbyg7ZO9I",
-      "url": "/static/css/app.5244d82e006c5dda.css"
+      "bytes": 235063,
+      "sha256": "dc00bda66df764211a0e8362f2f9da689f4b54b93f4005dc9cef942595fc6fb0",
+      "sri": "sha384-TObw7LF0AucHCcczN3e7svO6JkKrR01Pfq+Xq6T5suc8RukBWXLHqhNzKl+09n/F",
+      "url": "/static/css/app.dc00bda66df76421.css"
     },
     "css/marketing.css": {
       "bytes": 43725,
@@ -26,10 +26,10 @@
       "url": "/static/js/ai-chat.1a82e44d6c4b43a2.js"
     },
     "js/app.js": {
-      "bytes": 887929,
-      "sha256": "5097f0f322794829cb52bc0e87d7b515bc337198113c977304c9516b0ef699e8",
-      "sri": "sha384-klSPuJTNSH3qZ5OQ6dFKUrrOWE2p+M6NEwRMPzj33ee5WaTl/LWNyJPHD3zBZTCm",
-      "url": "/static/js/app.5097f0f322794829.js"
+      "bytes": 894432,
+      "sha256": "f376f96f3b10b623675d6a59cab8d1467966ac10f5a0349f42604ec6145bc247",
+      "sri": "sha384-F0KgWC8iv206r0A0byGec7K29nA0pOqkqZDYiquFgB7DzR0eFnCSvpkE6iZF1IFs",
+      "url": "/static/js/app.f376f96f3b10b623.js"
     },
     "js/auth-pages.js": {
       "bytes": 27198,
@@ -168,6 +168,18 @@
       "sha256": "f99cf810d69605b94fd232c28e2d5ba19ee2b2cd17cc49b37bc6b675938598d7",
       "sri": "sha384-ltbwPizUEk2INrtlvCTm5KcW1MxOgLRj+GqQyEIKHzlhAEaJymlo9br0QF43T2ac",
       "url": "/static/js/search.f99cf810d69605b9.js"
+    },
+    "js/secure-send-receive.js": {
+      "bytes": 6683,
+      "sha256": "a96bddb3827533e18061183fbbc2c427d9eb0714e17fa9efeb3594d072db7b90",
+      "sri": "sha384-GVeuU2FVeAt8If4rAaxzfvBCtAZeYCrm4cw/sc3HNv5hCTcdq2B2zj4t5w8vxrdO",
+      "url": "/static/js/secure-send-receive.a96bddb3827533e1.js"
+    },
+    "js/secure-send.js": {
+      "bytes": 8811,
+      "sha256": "e66a0321640175ab7715673495b13a66937fd32cacf83926178cc8a0a5bbb1fd",
+      "sri": "sha384-u0o9G5XnZ6MgUgJecp4unMGDniqSxbYdfDNx8xj0idtSRImFUY6g5xsO3OC9ZyYP",
+      "url": "/static/js/secure-send.e66a0321640175ab.js"
     },
     "js/snimport.js": {
       "bytes": 24056,
@@ -321,6 +333,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "d59ed5af4527e21cdeda2c4e5d510f977c00ec29c7ad6b8d90d518105e9e8750",
+  "manifest_sha256": "ec2235569e87c471b0e156ed5e1e90d770ebdd1dbf70c246a0bb083028b27da8",
   "version": 1
 }
