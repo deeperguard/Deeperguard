@@ -31,6 +31,12 @@ assert.ok(appHtml.includes('btn-secure-send-copy'));
 assert.ok(appHtml.includes('btn-secure-send-share'));
 assert.ok(appHtml.includes('secure-send-link-actions'));
 assert.ok(appHtml.includes('<textarea id="secure-send-link"'));
+assert.ok(appHtml.includes('Copy or share'));
+assert.ok(
+  appHtml.includes('Some apps drop the part after # — if Open fails, copy and paste the link.'),
+  'fragment hint under compose and sent-detail link rows',
+);
+assert.ok(appHtml.includes('secure-send-link-fragment-hint'));
 assert.ok(receiveHtml.includes('receive-open'));
 assert.ok(receiveHtml.includes('Someone sent you an encrypted note'));
 assert.ok(receiveHtml.includes('receive-heading'));
@@ -80,6 +86,7 @@ assert.ok(appJs.includes("btn-secure-send-detail-share"));
 assert.ok(/navigator\.share\(\{ url: link \}\)/.test(appJs), 'share must pass full url including fragment');
 const appCss = fs.readFileSync(path.join(root, 'app/static/css/app.css'), 'utf8');
 assert.ok(appCss.includes('.secure-send-link-actions'));
+assert.ok(appCss.includes('.secure-send-link-fragment-hint'));
 const detailBackdropZ = appCss.match(/#secure-send-detail-backdrop\s*\{\s*z-index:\s*(\d+)/);
 const detailSheetZ = appCss.match(/#secure-send-detail\s*\{\s*z-index:\s*(\d+)/);
 const settingsPanelZ = appCss.match(/\.settings-panel\s*\{[\s\S]*?z-index:\s*(\d+)/);
