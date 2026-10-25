@@ -18998,8 +18998,6 @@
   document.getElementById('btn-note-secure-send')?.addEventListener('click', () => {
     openSecureSendFromCurrentNote();
   });
-  document.getElementById('note-info-secure-send')?.addEventListener('click', openSecureSendFromCurrentNote);
-  document.getElementById('note-info-secure-send-bottom')?.addEventListener('click', openSecureSendFromCurrentNote);
   document.getElementById('note-info-archive')?.addEventListener('click', () => {
     document.getElementById('btn-archive')?.click();
     if (currentId) updateNoteInfoPanel(NotesStore.get(currentId));

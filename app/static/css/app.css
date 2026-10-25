@@ -7445,6 +7445,7 @@ body.search-filters-open .fab-stack,
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    opacity: 0.75;
   }
   .note-row:has(.note-row-more) .note-item-body {
     padding-right: 58px;
