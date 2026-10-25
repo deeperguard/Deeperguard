@@ -19953,6 +19953,9 @@
   // D2 Secure Send — compose + Sent list (ciphertext only; key in fragment).
   let secureSendPendingFile = null;
   let secureSendInclusionFromNote = false;
+  /** @type {Array<{name: string, bytes: Uint8Array, mime?: string}>} */
+  let secureSendStagedEntries = [];
+  let secureSendZipNoteTitle = '';
 
   function setSecureSendStatus(message) {
     const el = document.getElementById('secure-send-status');
@@ -19961,16 +19964,24 @@
     el.hidden = !message;
   }
 
+  function scrollSecureSendSectionIntoView() {
+    const section = document.getElementById('secure-send-settings');
+    if (!section) return;
+    try {
+      section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    } catch (err) {
+      try { section.scrollIntoView(true); } catch (e) { /* ignore */ }
+    }
+  }
+
   function updateSecureSendFilePickerUi() {
     const pickerWrap = document.getElementById('secure-send-file-picker-wrap');
     const inclusionWrap = document.getElementById('secure-send-file-inclusion');
-    const differentBtn = document.getElementById('btn-secure-send-use-different-file');
     const hasStaged = inclusionWrap && !inclusionWrap.hidden;
     if (pickerWrap) pickerWrap.hidden = hasStaged;
-    if (differentBtn) differentBtn.hidden = !hasStaged;
   }
 
-  function setSecureSendFileInclusion(includedNames, zipNote, options) {
+  function paintSecureSendFileInclusion(includedNames, zipNote) {
     const wrap = document.getElementById('secure-send-file-inclusion');
     const headingEl = document.getElementById('secure-send-file-inclusion-heading');
     const list = document.getElementById('secure-send-file-inclusion-list');
@@ -19982,7 +19993,6 @@
     list.replaceChildren();
     if (!names.length) {
       wrap.hidden = true;
-      secureSendInclusionFromNote = false;
       if (headingEl) headingEl.textContent = 'Including:';
       if (noteEl) {
         noteEl.textContent = '';
@@ -19990,9 +20000,6 @@
       }
       updateSecureSendFilePickerUi();
       return;
-    }
-    if (options && typeof options.fromNote === 'boolean') {
-      secureSendInclusionFromNote = options.fromNote;
     }
     const note = String(zipNote || '').trim();
     if (headingEl) {
@@ -20004,11 +20011,24 @@
         headingEl.textContent = 'Including:';
       }
     }
-    for (const name of names) {
+    names.forEach((name, index) => {
       const li = document.createElement('li');
-      li.textContent = name;
+      li.className = 'secure-send-file-inclusion-item';
+      const label = document.createElement('span');
+      label.className = 'secure-send-file-inclusion-name';
+      label.textContent = name;
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'btn icon sm secure-send-file-remove';
+      removeBtn.setAttribute('aria-label', `Remove ${name}`);
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', () => {
+        removeSecureSendStagedFile(index);
+      });
+      li.appendChild(label);
+      li.appendChild(removeBtn);
       list.appendChild(li);
-    }
+    });
     if (noteEl) {
       noteEl.textContent = note;
       noteEl.hidden = !note;
@@ -20017,8 +20037,97 @@
     updateSecureSendFilePickerUi();
   }
 
-  function clearSecureSendFileInclusion() {
-    setSecureSendFileInclusion([], '');
+  function clearSecureSendStagedFiles() {
+    secureSendPendingFile = null;
+    secureSendStagedEntries = [];
+    secureSendInclusionFromNote = false;
+    secureSendZipNoteTitle = '';
+    const fileInput = document.getElementById('secure-send-file');
+    if (fileInput) fileInput.value = '';
+    const addInput = document.getElementById('secure-send-file-add');
+    if (addInput) addInput.value = '';
+    paintSecureSendFileInclusion([], '');
+  }
+
+  async function restageSecureSendFromEntries() {
+    const stage = window.NotesSecureSendNoteAttachments;
+    if (!stage?.stageSecureSendEntries) {
+      throw new Error('Could not prepare files on this build.');
+    }
+    const maxFileBytes = Number(NotesSecureSend?.MAX_FILE_BYTES) || 50 * 1024 * 1024;
+    const { file, includedNames, zipNote } = stage.stageSecureSendEntries(secureSendStagedEntries, {
+      noteTitle: secureSendZipNoteTitle,
+      maxFileBytes,
+    });
+    secureSendPendingFile = file;
+    paintSecureSendFileInclusion(includedNames, zipNote);
+  }
+
+  async function setSecureSendStagedEntries(entries, options) {
+    secureSendStagedEntries = (entries || []).map((row) => ({
+      name: String(row?.name || 'file').trim() || 'file',
+      bytes: row.bytes instanceof Uint8Array ? row.bytes : new Uint8Array(row.bytes || []),
+      mime: row.mime || 'application/octet-stream',
+    }));
+    if (options && typeof options.fromNote === 'boolean') {
+      secureSendInclusionFromNote = options.fromNote;
+    }
+    if (options && options.noteTitle != null) {
+      secureSendZipNoteTitle = String(options.noteTitle || '');
+    }
+    if (!secureSendStagedEntries.length) {
+      clearSecureSendStagedFiles();
+      return;
+    }
+    await restageSecureSendFromEntries();
+  }
+
+  async function removeSecureSendStagedFile(index) {
+    const i = Number(index);
+    if (!Number.isFinite(i) || i < 0 || i >= secureSendStagedEntries.length) return;
+    secureSendStagedEntries.splice(i, 1);
+    if (!secureSendStagedEntries.length) {
+      clearSecureSendStagedFiles();
+      return;
+    }
+    try {
+      await restageSecureSendFromEntries();
+    } catch (err) {
+      const msg = err?.message || 'Could not update files.';
+      setSecureSendStatus(msg);
+      toast(msg, true);
+    }
+  }
+
+  async function mergeSecureSendPickedFiles(fileList, options) {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (!files.length) return;
+    const stage = window.NotesSecureSendNoteAttachments;
+    const disambiguate = stage?.disambiguateZipName;
+    const used = new Set(
+      secureSendStagedEntries.map((row) => String(row.name || '').toLowerCase()),
+    );
+    const merged = secureSendStagedEntries.slice();
+    for (const picked of files) {
+      let name = String(picked.name || 'file').trim() || 'file';
+      if (typeof disambiguate === 'function') {
+        name = disambiguate(name, used);
+      }
+      used.add(name.toLowerCase());
+      const buf = await picked.arrayBuffer();
+      merged.push({
+        name,
+        bytes: new Uint8Array(buf),
+        mime: picked.type || 'application/octet-stream',
+      });
+    }
+    if (options?.fromNote !== true) {
+      secureSendInclusionFromNote = false;
+    }
+    await setSecureSendStagedEntries(merged, {
+      fromNote: secureSendInclusionFromNote,
+      noteTitle: secureSendZipNoteTitle,
+    });
   }
 
   function prefillSecureSendFromNote(note) {
@@ -20032,6 +20141,8 @@
     const linkInput = document.getElementById('secure-send-link');
     secureSendPendingFile = null;
     secureSendInclusionFromNote = false;
+    secureSendStagedEntries = [];
+    secureSendZipNoteTitle = '';
     if (titleEl) titleEl.value = NotesSearch.effectiveNoteTitle(note) || '';
     if (bodyEl) bodyEl.value = String(note.content?.content || '');
     if (fileInput) fileInput.value = '';
@@ -20043,7 +20154,7 @@
     if (wrap) wrap.hidden = true;
     if (linkInput) linkInput.value = '';
     setSecureSendStatus('');
-    clearSecureSendFileInclusion();
+    clearSecureSendStagedFiles();
     updateSecureSendFilePickerUi();
   }
 
@@ -20065,8 +20176,7 @@
     closeNoteRowMenu();
     prefillSecureSendFromNote(note);
     openSettings();
-    const section = document.getElementById('secure-send-settings');
-    try { section?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (err) { /* ignore */ }
+    scrollSecureSendSectionIntoView();
     try { document.getElementById('secure-send-title')?.focus(); } catch (err) { /* ignore */ }
     const atts = NotesStore.listAttachments(id).filter((att) => !att.deleted);
     if (!atts.length) return;
@@ -20080,18 +20190,17 @@
     );
     try {
       const maxFileBytes = Number(NotesSecureSend?.MAX_FILE_BYTES) || 50 * 1024 * 1024;
-      const { file, includedNames, zipNote } = await stage.stageSecureSendNoteAttachments({
+      const noteTitle = NotesSearch.effectiveNoteTitle(note);
+      const { entries } = await stage.stageSecureSendNoteAttachments({
         attachments: atts,
-        noteTitle: NotesSearch.effectiveNoteTitle(note),
+        noteTitle,
         maxFileBytes,
         loadBytes: (att) => NotesStore.getAttachmentBytes(att.uuid),
       });
-      secureSendPendingFile = file;
       setSecureSendStatus('');
-      setSecureSendFileInclusion(includedNames, zipNote, { fromNote: true });
+      await setSecureSendStagedEntries(entries, { fromNote: true, noteTitle });
     } catch (err) {
-      secureSendPendingFile = null;
-      clearSecureSendFileInclusion();
+      clearSecureSendStagedFiles();
       const msg = err?.message || 'Could not prepare attachments.';
       setSecureSendStatus(msg);
       toast(msg, true);
@@ -20099,20 +20208,42 @@
   }
   try { window.__notesOpenSecureSendForNote = openSecureSendForNote; } catch (err) { /* ignore */ }
 
-  document.getElementById('btn-secure-send-use-different-file')?.addEventListener('click', () => {
-    secureSendPendingFile = null;
-    const fileInput = document.getElementById('secure-send-file');
-    if (fileInput) fileInput.value = '';
-    clearSecureSendFileInclusion();
-    try { document.getElementById('secure-send-file')?.focus(); } catch (err) { /* ignore */ }
+  document.getElementById('btn-secure-send-add-files')?.addEventListener('click', () => {
+    try { document.getElementById('secure-send-file-add')?.click(); } catch (err) { /* ignore */ }
   });
-  document.getElementById('secure-send-file')?.addEventListener('change', () => {
+  document.getElementById('secure-send-file-add')?.addEventListener('change', async () => {
+    const addInput = document.getElementById('secure-send-file-add');
+    const files = addInput?.files;
+    if (!files?.length) return;
+    try {
+      setSecureSendStatus('Adding files…');
+      await mergeSecureSendPickedFiles(files);
+      setSecureSendStatus('');
+    } catch (err) {
+      const msg = err?.message || 'Could not add files.';
+      setSecureSendStatus(msg);
+      toast(msg, true);
+    } finally {
+      if (addInput) addInput.value = '';
+    }
+  });
+  document.getElementById('secure-send-file')?.addEventListener('change', async () => {
     const fileInput = document.getElementById('secure-send-file');
     const picked = fileInput?.files?.[0];
     if (!picked) return;
-    secureSendPendingFile = null;
-    secureSendInclusionFromNote = false;
-    setSecureSendFileInclusion([picked.name], '', { fromNote: false });
+    try {
+      setSecureSendStatus('Loading file…');
+      secureSendInclusionFromNote = false;
+      secureSendZipNoteTitle = '';
+      await mergeSecureSendPickedFiles([picked], { fromNote: false });
+      setSecureSendStatus('');
+    } catch (err) {
+      const msg = err?.message || 'Could not load file.';
+      setSecureSendStatus(msg);
+      toast(msg, true);
+    } finally {
+      if (fileInput) fileInput.value = '';
+    }
   });
   document.getElementById('btn-secure-send-refresh')?.addEventListener('click', () => {
     refreshSecureSendList();
@@ -20177,8 +20308,7 @@
           : 'Link ready. Anyone with the full link can open it. After the opens are used, the link stops working.',
       );
       toast('Secure Send link created');
-      secureSendPendingFile = null;
-      clearSecureSendFileInclusion();
+      clearSecureSendStagedFiles();
       refreshSecureSendList();
     } catch (err) {
       setSecureSendStatus(err?.message || 'Could not create link');
