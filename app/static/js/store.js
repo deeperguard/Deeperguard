@@ -4647,6 +4647,65 @@ const NotesStore = (() => {
     return removed;
   }
 
+  // Secure Send sent-list rows: full share URL (with # fragment) + local preview snapshot.
+  const SECURE_SEND_SENT_TYPE = 'secure_send_sent';
+
+  function secureSendSentItem(sendId) {
+    const id = String(sendId || '').trim();
+    if (!id) return null;
+    for (const item of state.items.values()) {
+      if (item.deleted || item.content?.type !== SECURE_SEND_SENT_TYPE) continue;
+      if (String(item.content?.send_id || '') === id) return item;
+    }
+    return null;
+  }
+
+  function getSecureSendSentRecord(sendId) {
+    const item = secureSendSentItem(sendId);
+    if (!item) return null;
+    const snap = item.content?.snapshot;
+    return {
+      uuid: item.uuid,
+      sendId: String(item.content?.send_id || ''),
+      shareUrl: String(item.content?.share_url || ''),
+      snapshot: snap && typeof snap === 'object'
+        ? {
+          title: String(snap.title || ''),
+          body: String(snap.body || ''),
+          attachment_names: Array.isArray(snap.attachment_names)
+            ? snap.attachment_names.map((n) => String(n || '')).filter(Boolean)
+            : [],
+        }
+        : { title: '', body: '', attachment_names: [] },
+      updatedAt: Number(item.updated_at) || 0,
+    };
+  }
+
+  function saveSecureSendSentRecord({ sendId, shareUrl, snapshot } = {}) {
+    if (!state.cryptoKey) return false;
+    const sid = String(sendId || '').trim();
+    if (!sid) return false;
+    const existing = secureSendSentItem(sid);
+    const uuid = existing?.uuid || newUuid();
+    const now = new Date().toISOString();
+    const names = Array.isArray(snapshot?.attachment_names)
+      ? snapshot.attachment_names.map((n) => String(n || '').trim().slice(0, 255)).filter(Boolean)
+      : [];
+    upsert(uuid, {
+      type: SECURE_SEND_SENT_TYPE,
+      send_id: sid,
+      share_url: String(shareUrl || ''),
+      snapshot: {
+        title: String(snapshot?.title || '').slice(0, 500),
+        body: String(snapshot?.body || '').slice(0, 2_000_000),
+        attachment_names: names,
+      },
+      created_at: existing?.content?.created_at || now,
+      updated_at: now,
+    });
+    return true;
+  }
+
   // Account-wide settings travel as one encrypted vault item (type "settings").
   const SETTINGS_TYPE = 'settings';
 
@@ -5961,6 +6020,8 @@ const NotesStore = (() => {
     lightVaultEnabled,
     getGlobalSettings,
     saveGlobalSettings,
+    getSecureSendSentRecord,
+    saveSecureSendSentRecord,
     ackPasswordChanged,
     remotePasswordChanged,
     prepareForRemotePasswordRotation,

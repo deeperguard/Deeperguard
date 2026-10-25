@@ -15117,6 +15117,126 @@
     else toast('Could not copy diagnostics', true);
   }
 
+  function secureSendStatusLabel(item) {
+    return item?.status_label
+      || ({ active: 'Waiting', used: 'Opened', expired: 'Expired', canceled: 'Revoked' }[item?.status]
+        || item?.status
+        || '?');
+  }
+
+  function secureSendSnapshotAttachmentNames() {
+    const fromStaged = secureSendStagedEntries
+      .map((row) => String(row.name || '').trim())
+      .filter(Boolean);
+    if (fromStaged.length) return fromStaged;
+    if (secureSendPendingFile?.name) return [String(secureSendPendingFile.name)];
+    return [];
+  }
+
+  let secureSendDetailServerItem = null;
+
+  function closeSecureSendSentDetail() {
+    secureSendDetailServerItem = null;
+    const sheet = document.getElementById('secure-send-detail');
+    const backdrop = document.getElementById('secure-send-detail-backdrop');
+    if (sheet) sheet.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+  }
+
+  function openSecureSendSentDetail(item) {
+    if (!item?.id) return;
+    secureSendDetailServerItem = item;
+    const local = NotesStore.getSecureSendSentRecord
+      ? NotesStore.getSecureSendSentRecord(item.id)
+      : null;
+    const sheet = document.getElementById('secure-send-detail');
+    const backdrop = document.getElementById('secure-send-detail-backdrop');
+    const preview = document.getElementById('secure-send-detail-preview');
+    const titleEl = document.getElementById('secure-send-detail-snapshot-title');
+    const bodyEl = document.getElementById('secure-send-detail-snapshot-body');
+    const attList = document.getElementById('secure-send-detail-attachments');
+    const noLocal = document.getElementById('secure-send-detail-no-local');
+    const statusEl = document.getElementById('secure-send-detail-status');
+    const createdEl = document.getElementById('secure-send-detail-created');
+    const expiresEl = document.getElementById('secure-send-detail-expires');
+    const linkWrap = document.getElementById('secure-send-detail-link-wrap');
+    const linkInput = document.getElementById('secure-send-detail-link');
+    const copyHint = document.getElementById('secure-send-detail-copy-hint');
+    const revokeBtn = document.getElementById('btn-secure-send-detail-revoke');
+
+    const snap = local?.snapshot;
+    const hasPreview = !!(snap && (snap.title || snap.body || (snap.attachment_names && snap.attachment_names.length)));
+    if (preview) preview.hidden = !hasPreview;
+    if (noLocal) noLocal.hidden = !!local;
+    if (titleEl) {
+      titleEl.textContent = snap?.title ? String(snap.title) : '';
+      titleEl.hidden = !snap?.title;
+    }
+    if (bodyEl) {
+      bodyEl.textContent = snap?.body ? String(snap.body) : '';
+      bodyEl.hidden = !snap?.body;
+    }
+    if (attList) {
+      attList.textContent = '';
+      const names = Array.isArray(snap?.attachment_names) ? snap.attachment_names : [];
+      if (names.length) {
+        attList.hidden = false;
+        for (const name of names) {
+          const li = document.createElement('li');
+          li.textContent = name;
+          attList.appendChild(li);
+        }
+      } else {
+        attList.hidden = true;
+      }
+    }
+    if (statusEl) statusEl.textContent = secureSendStatusLabel(item);
+    if (createdEl) {
+      createdEl.textContent = item.created_at
+        ? new Date(item.created_at * 1000).toLocaleString()
+        : '—';
+    }
+    if (expiresEl) {
+      expiresEl.textContent = item.expires_at
+        ? new Date(item.expires_at * 1000).toLocaleString()
+        : '—';
+    }
+    const shareUrl = local?.shareUrl ? String(local.shareUrl) : '';
+    if (linkWrap) linkWrap.hidden = !shareUrl;
+    if (linkInput) linkInput.value = shareUrl;
+    if (copyHint) copyHint.hidden = !!shareUrl;
+    if (revokeBtn) {
+      revokeBtn.hidden = item.status !== 'active';
+      revokeBtn.disabled = item.status !== 'active';
+    }
+    if (sheet) {
+      sheet.hidden = false;
+      const body = sheet.querySelector('.secure-send-detail-body');
+      if (body) body.scrollTop = 0;
+    }
+    if (backdrop) backdrop.hidden = false;
+  }
+
+  async function revokeSecureSendSentItem(item) {
+    if (!item?.id || item.status !== 'active') return;
+    const ok = await confirmAction(
+      'Revoke this link? It will stop working for anyone who still has it.',
+      { title: 'Revoke link?', confirmLabel: 'Revoke', cancelLabel: 'Keep' },
+    );
+    if (!ok) return;
+    try {
+      await NotesStore.api(`/api/secure-send/${encodeURIComponent(item.id)}/cancel`, {
+        method: 'POST',
+        body: '{}',
+      });
+      toast('Link revoked — it stops working now');
+      closeSecureSendSentDetail();
+      refreshSecureSendList();
+    } catch (err) {
+      toast(err?.message || 'Could not revoke', true);
+    }
+  }
+
   async function refreshSecureSendList() {
     const list = document.getElementById('secure-send-sent-list');
     if (!list || !window.NotesStore) return;
@@ -15132,40 +15252,29 @@
         return;
       }
       for (const item of items) {
-        const row = document.createElement('div');
+        const row = document.createElement('button');
+        row.type = 'button';
         row.className = 'secure-send-sent-item';
+        const local = NotesStore.getSecureSendSentRecord
+          ? NotesStore.getSecureSendSentRecord(item.id)
+          : null;
+        const snapTitle = local?.snapshot?.title ? String(local.snapshot.title).trim() : '';
+        if (snapTitle) {
+          const title = document.createElement('div');
+          title.className = 'secure-send-sent-title';
+          title.textContent = snapTitle;
+          row.appendChild(title);
+        }
         const meta = document.createElement('div');
         meta.className = 'secure-send-sent-meta';
-        const label = item.status_label
-          || ({ active: 'Waiting', used: 'Opened', expired: 'Expired', canceled: 'Revoked' }[item.status] || item.status || '?');
+        const label = secureSendStatusLabel(item);
         const created = item.created_at ? new Date(item.created_at * 1000).toLocaleString() : '';
         const exp = item.expires_at ? new Date(item.expires_at * 1000).toLocaleString() : '';
         meta.textContent = `${label} · created ${created} · expires ${exp}`;
         row.appendChild(meta);
-        if (item.status === 'active') {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'btn danger sm';
-          btn.textContent = 'Revoke';
-          btn.addEventListener('click', async () => {
-            const ok = await confirmAction(
-              'Revoke this link? It will stop working for anyone who still has it.',
-              { title: 'Revoke link?', confirmLabel: 'Revoke', cancelLabel: 'Keep' },
-            );
-            if (!ok) return;
-            try {
-              await NotesStore.api(`/api/secure-send/${encodeURIComponent(item.id)}/cancel`, {
-                method: 'POST',
-                body: '{}',
-              });
-              toast('Link revoked — it stops working now');
-              refreshSecureSendList();
-            } catch (err) {
-              toast(err?.message || 'Could not revoke', true);
-            }
-          });
-          row.appendChild(btn);
-        }
+        row.addEventListener('click', () => {
+          openSecureSendSentDetail(item);
+        });
         list.appendChild(row);
       }
     } catch (err) {
@@ -20248,6 +20357,31 @@
   document.getElementById('btn-secure-send-refresh')?.addEventListener('click', () => {
     refreshSecureSendList();
   });
+  document.getElementById('secure-send-detail-close')?.addEventListener('click', closeSecureSendSentDetail);
+  document.getElementById('secure-send-detail-backdrop')?.addEventListener('click', closeSecureSendSentDetail);
+  document.getElementById('btn-secure-send-detail-revoke')?.addEventListener('click', () => {
+    if (secureSendDetailServerItem) {
+      revokeSecureSendSentItem(secureSendDetailServerItem);
+    }
+  });
+  document.getElementById('btn-secure-send-detail-copy')?.addEventListener('click', async () => {
+    const linkInput = document.getElementById('secure-send-detail-link');
+    const url = linkInput ? String(linkInput.value || '') : '';
+    if (!url) {
+      toast('Link key isn’t on this device.', true);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Link copied');
+    } catch (err) {
+      try {
+        linkInput.focus();
+        linkInput.select();
+      } catch (e) { /* ignore */ }
+      toast('Select the link and copy it', true);
+    }
+  });
   document.getElementById('btn-secure-send-create')?.addEventListener('click', async () => {
     if (!window.NotesSecureSend || !window.NotesStore || !window.NotesCrypto) {
       setSecureSendStatus('Secure Send is unavailable on this build.');
@@ -20308,6 +20442,17 @@
           : 'Link ready. Anyone with the full link can open it. After the opens are used, the link stops working.',
       );
       toast('Secure Send link created');
+      if (NotesStore.saveSecureSendSentRecord) {
+        NotesStore.saveSecureSendSentRecord({
+          sendId: created.id,
+          shareUrl: url,
+          snapshot: {
+            title,
+            body,
+            attachment_names: secureSendSnapshotAttachmentNames(),
+          },
+        });
+      }
       clearSecureSendStagedFiles();
       refreshSecureSendList();
     } catch (err) {

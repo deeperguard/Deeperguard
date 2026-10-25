@@ -98,6 +98,8 @@ input[type="file"].sr-file {
 }
 body.locked #note-options,
 body.locked #note-options-backdrop,
+body.locked #secure-send-detail,
+body.locked #secure-send-detail-backdrop,
 body.locked #doc-viewer,
 body.locked #doc-backdrop,
 body.locked #app { display: none !important; }
@@ -1081,10 +1083,52 @@ html[data-theme="light"] .zk-badge {
   border: 1px solid var(--border, #c9d0da);
   border-radius: 8px;
   font-size: 13px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-elevated);
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+}
+.secure-send-sent-item:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+}
+.secure-send-sent-title {
+  flex: 1 1 100%;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
 }
 .secure-send-sent-meta {
   color: var(--muted);
   flex: 1 1 12em;
+}
+.secure-send-detail-backdrop { z-index: 59; }
+.secure-send-detail { z-index: 60; }
+.secure-send-detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.secure-send-detail-snapshot-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 650;
+  word-break: break-word;
+}
+.secure-send-detail-snapshot-body {
+  margin: 0 0 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  max-height: 40vh;
+  overflow: auto;
+}
+.secure-send-detail-actions {
+  margin-top: 12px;
 }
 .receive-page .receive-title {
   margin: 0 0 8px;
