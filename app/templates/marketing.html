@@ -11,7 +11,7 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Deeperguard (encrypted notes) — Zero-knowledge notes PWA">
-  <meta property="og:description" content="Encrypted notes and searchable scans in your browser. OCR on your device, ciphertext-only sync (except Ask AI), servers in the EU. Free Pro during the beta.">
+  <meta property="og:description" content="Encrypted notes and searchable scans in your browser. OCR on your device, ciphertext-only sync (except Ask AI), encrypted share-by-link (Secure Send), servers in the EU. Free Pro during the beta.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="{{ canonical_url }}">
   <meta property="og:image" content="{{ og_image }}">
@@ -119,6 +119,12 @@
             <div>
               <strong>Automated Encrypted Backups</strong>
               <span class="desc">Daily ciphertext archives delivered directly to your inbox or synced straight to your personal pCloud.</span>
+            </div>
+          </li>
+          <li>
+            <div>
+              <strong>Secure Send — share by link</strong>
+              <span class="desc">Share a note by link encrypted in the browser; the key stays in the # part of the URL, so our server stores ciphertext only. Attachments from the note come along — edit what is included before you create the link. Recipients open once (or up to N times you choose); reopen sent items from Sent in your vault on your devices. To verify: <a href="/verify#verify-secure-send">Secure Send on /verify</a>.</span>
             </div>
           </li>
         </ul>
