@@ -2013,6 +2013,37 @@
       </form>
     </div>
   </aside>
+  <div id="secure-send-detail-backdrop" class="settings-backdrop secure-send-detail-backdrop" hidden></div>
+  <div id="secure-send-detail" class="note-options secure-send-detail" hidden role="dialog" aria-modal="true" aria-labelledby="secure-send-detail-heading">
+    <div class="note-options-handle" aria-hidden="true"></div>
+    <header class="note-options-head">
+      <h2 id="secure-send-detail-heading">Secure Send</h2>
+      <button type="button" class="btn ghost sm" id="secure-send-detail-close">Done</button>
+    </header>
+    <section class="secure-send-detail-body">
+      <div id="secure-send-detail-preview" class="secure-send-detail-preview" hidden>
+        <h3 id="secure-send-detail-snapshot-title" class="secure-send-detail-snapshot-title"></h3>
+        <pre id="secure-send-detail-snapshot-body" class="secure-send-detail-snapshot-body"></pre>
+        <ul id="secure-send-detail-attachments" class="secure-send-file-inclusion-list" hidden></ul>
+      </div>
+      <p id="secure-send-detail-no-local" class="settings-hint" hidden>Full link and contents stay on the device that created this link.</p>
+      <dl class="note-info-grid secure-send-detail-meta">
+        <div><dt>Status</dt><dd id="secure-send-detail-status">—</dd></div>
+        <div><dt>Created</dt><dd id="secure-send-detail-created">—</dd></div>
+        <div><dt>Expires</dt><dd id="secure-send-detail-expires">—</dd></div>
+      </dl>
+      <div id="secure-send-detail-link-wrap" class="secure-send-link-row" hidden>
+        <label class="settings-row stacked" for="secure-send-detail-link">Link (copy and send)
+          <textarea id="secure-send-detail-link" rows="3" readonly autocomplete="off" spellcheck="false"></textarea>
+        </label>
+        <button type="button" id="btn-secure-send-detail-copy" class="btn sm" title="Copy link" aria-label="Copy link">Copy</button>
+      </div>
+      <p id="secure-send-detail-copy-hint" class="settings-hint" hidden>Link key isn’t on this device.</p>
+      <div class="secure-send-detail-actions">
+        <button type="button" id="btn-secure-send-detail-revoke" class="btn danger sm" hidden>Revoke</button>
+      </div>
+    </section>
+  </div>
   <div id="note-options-backdrop" class="settings-backdrop" hidden></div>
   <div id="note-options" class="note-options" hidden>
     <div class="note-options-handle"></div>
