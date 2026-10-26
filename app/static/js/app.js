@@ -4081,21 +4081,31 @@
     }
   }
 
+  function toastSensitiveClipboard(message) {
+    toast(message);
+  }
+
+  async function copySensitiveToClipboard(text, { label = 'Value', seconds } = {}) {
+    const CS = window.NotesClipboardSensitive;
+    if (!CS?.copySensitive) {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+      else throw new Error('Could not copy');
+      toast(`Copied ${label}`);
+      return;
+    }
+    await CS.copySensitive(text, {
+      label,
+      seconds,
+      onToast: toastSensitiveClipboard,
+    });
+  }
+
   async function copyTotpEntry(id) {
     const item = totpEntries.find((entry) => entry.id === id);
     if (!item) return;
     try {
       const totp = await NotesTotp.generate(item);
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(totp.code);
-      else {
-        const helper = document.createElement('textarea');
-        helper.value = totp.code;
-        document.body.appendChild(helper);
-        helper.select();
-        document.execCommand('copy');
-        helper.remove();
-      }
-      toast('Copied code');
+      await copySensitiveToClipboard(totp.code, { label: 'Code', seconds: 30 });
     } catch (err) {
       toast('Could not copy code', true);
     }
@@ -5286,7 +5296,14 @@
     end: () => endVaultPull(),
   });
   NotesStore.setConflictCopyCallback(({ title }) => {
-    toast(`“${title || 'Note'}” was changed on another device too — kept both; see “${title || 'Note'} (conflict copy)”`);
+    const msg = window.NotesConflictCopy?.toastMessage
+      ? NotesConflictCopy.toastMessage(title)
+      : `Sync kept both versions as separate notes — neither was discarded.`;
+    toast(msg);
+    if (ui.saveStatus) {
+      ui.saveStatus.textContent = 'Kept both versions — see “(conflict copy)” in the list';
+      ui.saveStatus.classList.remove('error');
+    }
     lastNotesRenderKey = '';
     renderNotes();
   });
@@ -15503,6 +15520,19 @@
       warnInput.value = toDatetimeLocalValue(note.content.warn_at);
       syncWarnFieldState(warnInput);
     }
+    const conflictRow = document.getElementById('note-info-conflict-row');
+    const conflictHint = document.getElementById('note-info-conflict-hint');
+    if (conflictRow && conflictHint) {
+      if (note.content?.conflict_of) {
+        conflictHint.textContent = window.NotesConflictCopy?.noteInfoHint
+          ? NotesConflictCopy.noteInfoHint()
+          : 'This is the other device’s text, saved as its own note. Your main note kept its version.';
+        conflictRow.hidden = false;
+      } else {
+        conflictHint.textContent = '';
+        conflictRow.hidden = true;
+      }
+    }
     const warnHint = document.getElementById('note-warn-hint');
     if (warnHint) {
       const warnMs = parseTimestampMs(note.content.warn_at);
@@ -20646,8 +20676,7 @@
       reveal.hidden = false;
     }
     try {
-      await navigator.clipboard.writeText(saved);
-      toast('Password shown below and copied');
+      await copySensitiveToClipboard(saved, { label: 'Password', seconds: 45 });
     } catch (err) {
       toast('Password shown below');
     }

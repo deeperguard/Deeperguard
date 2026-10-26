@@ -2134,6 +2134,10 @@
         <div><dt>Attachments</dt><dd id="note-info-attachments">—</dd></div>
         <div><dt>Editor</dt><dd id="note-info-editor">—</dd></div>
         <div><dt>Protection</dt><dd id="note-info-locked">—</dd></div>
+        <div class="note-info-wide" id="note-info-conflict-row" hidden>
+          <dt>Conflict copy</dt>
+          <dd id="note-info-conflict-hint" class="note-warn-hint"></dd>
+        </div>
         <div class="note-info-wide"><dt>Tags</dt><dd id="note-info-tags">—</dd></div>
         <div class="note-info-wide"><dt>ID</dt><dd id="note-info-id" class="note-info-id"><code id="note-info-id-text"></code> <button type="button" class="btn ghost sm" id="note-info-copy">Copy</button></dd></div>
         <div class="note-info-wide note-warn-row">
@@ -2400,6 +2404,8 @@
   {{ asset_script('js/webauthn-client.js') }}
   {{ asset_script('js/passkeys.js') }}
   {{ asset_script('js/vault-secrets.js') }}
+  {{ asset_script('js/conflict-copy.js') }}
+  {{ asset_script('js/clipboard-sensitive.js') }}
   {{ asset_script('js/device-phrase.js') }}
   {{ asset_script('js/secure-send.js') }}
   {{ asset_script('js/srp-auth.js') }}
