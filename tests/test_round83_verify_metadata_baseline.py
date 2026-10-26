@@ -63,15 +63,18 @@ class Round83VerifyMetadataBaseline(unittest.TestCase):
         self.assertIn("Compare this with your own DevTools", body)
         self.assertIn("Unlock vault", body)
         self.assertIn("Sends nothing", body)
+        self.assertIn("Static source analysis", body)
+        self.assertIn("Actions not in this table yet", body)
         verify_tpl = (REPO / "app/templates/verify.html").read_text(encoding="utf-8")
-        self.assertIn("UNCHECKED", verify_tpl)
+        self.assertIn("Anchors missing", verify_tpl)
         self.assertIn("mk-verify-measure unchecked", verify_tpl)
 
     def test_baseline_json_loads(self):
         import verify_metadata_baseline as vmb
 
         data = vmb.load_baseline()
-        self.assertGreaterEqual(data.get("baseline_version", 0), 1)
+        self.assertGreaterEqual(data.get("baseline_version", 0), 2)
+        self.assertTrue(data.get("uncovered_actions"))
         path = REPO / "app" / "verify-metadata-baseline.json"
         on_disk = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(data["schema_version"], on_disk["schema_version"])

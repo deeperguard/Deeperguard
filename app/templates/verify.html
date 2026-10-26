@@ -29,17 +29,25 @@
         <p class="mk-verify-metadata-lede">Compare this with your own DevTools — open <strong>Network</strong>, enable <strong>Preserve log</strong>, filter <strong>Fetch/XHR</strong>, then perform each action in the app.</p>
         <p class="mk-verify-metadata-meta">Metadata baseline v{{ verify_metadata_baseline_version }}{% if verify_metadata_release_tag %} · release <code>{{ verify_metadata_release_tag }}</code>{% endif %}{% if verify_metadata_baseline.generated_at %} · generated <time datetime="{{ verify_metadata_baseline.generated_at }}">{{ verify_metadata_baseline.generated_at }}</time>{% endif %}. Regenerate with <code>python3 scripts/regenerate-verify-metadata-baseline.py</code> after client traffic changes.</p>
         <p class="mk-verify-metadata-honesty"><strong>Honesty:</strong> this table describes typical same-origin API traffic from the shipped client — not every edge case, not third-party hosts (except Ask AI in <a href="#verify-ask-ai">section 6</a>). Note titles and bodies stay inside AES-GCM ciphertext on sync routes; the server still sees account email, item UUIDs, timestamps, hashes, and ciphertext sizes (see <a href="#verify-sync-metadata">sync metadata</a> below).</p>
+        <p class="mk-verify-metadata-evidence-lede"><strong>Evidence types:</strong> <span class="mk-verify-evidence static">Static source analysis</span> means we read the shipped client source (code anchors), not a stranger’s live Network capture. <span class="mk-verify-evidence live">Live traffic capture</span> would mean someone reproduced the action in DevTools and recorded the requests — no baseline row uses that yet. <strong>Anchors OK</strong> only means those static anchors still match this release; confirm any row yourself in DevTools.</p>
 
         <div class="mk-verify-metadata-cards" aria-label="Per-action server traffic (mobile)">
           {% for row in verify_metadata_baseline.actions %}
           <div class="mk-verify-metadata-card" data-action-id="{{ row.id }}">
             <div class="mk-verify-metadata-card-head">
               <h3>{{ row.label }}</h3>
-              {% if row.measurement == 'checked' %}
-              <span class="mk-verify-measure checked">Checked</span>
-              {% else %}
-              <span class="mk-verify-measure unchecked">UNCHECKED</span>
-              {% endif %}
+              <div class="mk-verify-metadata-evidence-badges">
+                {% if row.evidence_type == 'live_traffic_capture' %}
+                <span class="mk-verify-evidence live">Live traffic capture</span>
+                {% else %}
+                <span class="mk-verify-evidence static">Static source analysis</span>
+                {% endif %}
+                {% if row.measurement == 'checked' %}
+                <span class="mk-verify-measure checked" title="Required code anchors found in shipped client JS">Anchors OK</span>
+                {% else %}
+                <span class="mk-verify-measure unchecked" title="Missing or changed code anchor">Anchors missing</span>
+                {% endif %}
+              </div>
             </div>
             <p class="mk-verify-metadata-summary">{{ row.summary }}</p>
             {% if row.sends_nothing_typical %}
@@ -68,7 +76,7 @@
                 <th scope="col">Typical HTTP (same-origin)</th>
                 <th scope="col">Note plaintext</th>
                 <th scope="col">Password / vault key</th>
-                <th scope="col">Baseline</th>
+                <th scope="col">Evidence</th>
               </tr>
             </thead>
             <tbody>
@@ -94,17 +102,36 @@
                 <td>{% if row.note_plaintext_on_wire %}Yes{% else %}No{% endif %}</td>
                 <td>{% if row.password_or_vault_key_on_wire %}Yes{% else %}No{% endif %}</td>
                 <td>
-                  {% if row.measurement == 'checked' %}
-                  <span class="mk-verify-measure checked">Checked</span>
-                  {% else %}
-                  <span class="mk-verify-measure unchecked">UNCHECKED</span>
-                  {% endif %}
+                  <div class="mk-verify-metadata-evidence-badges stack">
+                    {% if row.evidence_type == 'live_traffic_capture' %}
+                    <span class="mk-verify-evidence live">Live traffic capture</span>
+                    {% else %}
+                    <span class="mk-verify-evidence static">Static source analysis</span>
+                    {% endif %}
+                    {% if row.measurement == 'checked' %}
+                    <span class="mk-verify-measure checked" title="Required code anchors found in shipped client JS">Anchors OK</span>
+                    {% else %}
+                    <span class="mk-verify-measure unchecked" title="Missing or changed code anchor">Anchors missing</span>
+                    {% endif %}
+                  </div>
                 </td>
               </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
+        {% if verify_metadata_baseline.uncovered_actions %}
+        <h3 class="mk-verify-metadata-uncovered-title">Actions not in this table yet</h3>
+        <p class="mk-verify-metadata-meta">These in-app flows are not baseline rows today. Gaps that are printed are gaps you can check.</p>
+        <ul class="mk-verify-metadata-uncovered">
+          {% for item in verify_metadata_baseline.uncovered_actions %}
+          <li>
+            <strong>{{ item.label }}</strong> — {{ item.note }}
+            {% if item.id == 'secure-send' %} (<a href="#verify-secure-send">section 5</a>){% elif item.id == 'ask-ai' %} (<a href="#verify-ask-ai">section 6</a>){% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
         <p class="mk-verify-metadata-meta">In the unlocked app, <strong>View server copy</strong> on a note (or file, folder, tag, 2FA entry) shows one row beside your local plaintext — same data as the <code>view-server-copy</code> row above.</p>
       </article>
 

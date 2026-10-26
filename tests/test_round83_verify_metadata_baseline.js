@@ -36,9 +36,13 @@ assert.deepStrictEqual(ids, [
 for (const row of baseline.actions) {
   assert.ok(row.label);
   assert.ok(['checked', 'unchecked'].includes(row.measurement));
+  assert.strictEqual(row.evidence_type, 'static_source_analysis');
   assert.strictEqual(row.note_plaintext_on_wire, false);
   assert.strictEqual(row.password_or_vault_key_on_wire, false);
 }
+assert.ok(Array.isArray(baseline.uncovered_actions));
+assert.ok(baseline.uncovered_actions.length >= 5);
+assert.ok(baseline.evidence_legend);
 assert.ok(
   baseline.actions.filter((a) => a.measurement !== 'checked').length === 0,
   `unchecked rows: ${baseline.actions.filter((a) => a.measurement !== 'checked').map((a) => a.id).join(', ')}`,
@@ -48,6 +52,9 @@ assert.ok(verify.includes('id="verify-metadata-baseline"'));
 assert.ok(verify.includes('Compare this with your own DevTools'));
 assert.ok(verify.includes('mk-verify-metadata-cards'));
 assert.ok(verify.includes('mk-verify-metadata-table'));
+assert.ok(verify.includes('mk-verify-evidence static'));
+assert.ok(verify.includes('Actions not in this table yet'));
+assert.ok(verify.includes('Anchors OK'));
 assert.ok(verify.includes('mk-verify-sends-none'));
 assert.ok(verify.includes('verify_metadata_baseline.actions'));
 assert.ok(verify.includes('id="verify-sync-metadata"'));

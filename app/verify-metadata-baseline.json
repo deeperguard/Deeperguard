@@ -1,9 +1,55 @@
 {
   "schema_version": 1,
-  "baseline_version": 1,
+  "baseline_version": 2,
   "release_tag": "v0.65.23",
-  "generated_at": "2026-10-26T15:52:02Z",
+  "generated_at": "2026-10-26T18:16:37Z",
   "generation": "scripts/regenerate-verify-metadata-baseline.py (static code anchors)",
+  "evidence_legend": {
+    "static_source_analysis": "Static source analysis — required strings found in shipped client JS; not a live Network capture.",
+    "live_traffic_capture": "Live traffic capture — someone reproduced the action in DevTools and saved the requests (none in this baseline yet)."
+  },
+  "uncovered_actions": [
+    {
+      "id": "sign-in-register",
+      "label": "Sign in (SRP-6a) and register",
+      "note": "Auth traffic is described in section 2 on /verify, not as a per-action row here."
+    },
+    {
+      "id": "sign-out",
+      "label": "Sign out",
+      "note": "Typically POST /api/auth/logout; not baseline-checked yet."
+    },
+    {
+      "id": "delete-item",
+      "label": "Delete note, file, folder, tag, or 2FA entry",
+      "note": "Usually ciphertext tombstones via POST /api/sync/items; not a separate row yet."
+    },
+    {
+      "id": "passkeys",
+      "label": "Passkeys (WebAuthn register / sign-in)",
+      "note": "Separate /api/auth/webauthn/* routes; not in this table yet."
+    },
+    {
+      "id": "account-settings",
+      "label": "Account password change, vault KDF upgrade, repair login",
+      "note": "Additional /api/account/* and /api/auth/* proof routes; not baseline rows yet."
+    },
+    {
+      "id": "import-export",
+      "label": "Import / export vault backup",
+      "note": "Mostly local file I/O; any sync afterward follows edit/unlock rows."
+    },
+    {
+      "id": "secure-send",
+      "label": "Secure Send (share / receive link)",
+      "note": "See section 5 (#verify-secure-send); different routes than sync."
+    },
+    {
+      "id": "ask-ai",
+      "label": "Ask AI (Ollama Cloud relay)",
+      "note": "Note plaintext can leave the vault; see section 6 (#verify-ask-ai)."
+    }
+  ],
   "actions": [
     {
       "id": "unlock",
@@ -17,6 +63,7 @@
       "sends_nothing_typical": false,
       "note_plaintext_on_wire": false,
       "password_or_vault_key_on_wire": false,
+      "evidence_type": "static_source_analysis",
       "measurement": "checked",
       "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
     },
@@ -29,6 +76,7 @@
       "sends_nothing_caveat": "Switching away from another note with unsaved edits may push ciphertext first.",
       "note_plaintext_on_wire": false,
       "password_or_vault_key_on_wire": false,
+      "evidence_type": "static_source_analysis",
       "measurement": "checked",
       "measurement_note": "Checked: openNote has no direct /api/ calls (switching notes may flush/sync first)."
     },
@@ -43,6 +91,7 @@
       "sends_nothing_typical": false,
       "note_plaintext_on_wire": false,
       "password_or_vault_key_on_wire": false,
+      "evidence_type": "static_source_analysis",
       "measurement": "checked",
       "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
     },
@@ -56,6 +105,7 @@
       "sends_nothing_typical": false,
       "note_plaintext_on_wire": false,
       "password_or_vault_key_on_wire": false,
+      "evidence_type": "static_source_analysis",
       "measurement": "checked",
       "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
     },
@@ -71,6 +121,7 @@
       "sends_nothing_typical": false,
       "note_plaintext_on_wire": false,
       "password_or_vault_key_on_wire": false,
+      "evidence_type": "static_source_analysis",
       "measurement": "checked",
       "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
     },
@@ -86,6 +137,7 @@
       "sends_nothing_caveat": "No requests when there is nothing dirty and background locked-sync is quiet.",
       "note_plaintext_on_wire": false,
       "password_or_vault_key_on_wire": false,
+      "evidence_type": "static_source_analysis",
       "measurement": "checked",
       "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
     }
