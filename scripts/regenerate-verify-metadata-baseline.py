@@ -22,6 +22,9 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app"
 OUT = APP / "verify-metadata-baseline.json"
 
+EVIDENCE_STATIC_SOURCE = "static_source_analysis"
+EVIDENCE_LIVE_CAPTURE = "live_traffic_capture"
+
 STORE = (APP / "static" / "js" / "store.js").read_text(encoding="utf-8")
 APP_JS = (APP / "static" / "js" / "app.js").read_text(encoding="utf-8")
 SRP = (APP / "static" / "js" / "srp-auth.js").read_text(encoding="utf-8")
@@ -50,6 +53,57 @@ def _open_note_block() -> str:
             depth -= 1
         i += 1
     return APP_JS[start : i - 1]
+
+
+def _static_evidence() -> dict:
+    """Per-row evidence backing (generator output is always static source today)."""
+    return {"evidence_type": EVIDENCE_STATIC_SOURCE}
+
+
+def _uncovered_actions() -> list[dict]:
+    """In-app actions not yet modeled as baseline rows (honesty gap list)."""
+    return [
+        {
+            "id": "sign-in-register",
+            "label": "Sign in (SRP-6a) and register",
+            "note": "Auth traffic is described in section 2 on /verify, not as a per-action row here.",
+        },
+        {
+            "id": "sign-out",
+            "label": "Sign out",
+            "note": "Typically POST /api/auth/logout; not baseline-checked yet.",
+        },
+        {
+            "id": "delete-item",
+            "label": "Delete note, file, folder, tag, or 2FA entry",
+            "note": "Usually ciphertext tombstones via POST /api/sync/items; not a separate row yet.",
+        },
+        {
+            "id": "passkeys",
+            "label": "Passkeys (WebAuthn register / sign-in)",
+            "note": "Separate /api/auth/webauthn/* routes; not in this table yet.",
+        },
+        {
+            "id": "account-settings",
+            "label": "Account password change, vault KDF upgrade, repair login",
+            "note": "Additional /api/account/* and /api/auth/* proof routes; not baseline rows yet.",
+        },
+        {
+            "id": "import-export",
+            "label": "Import / export vault backup",
+            "note": "Mostly local file I/O; any sync afterward follows edit/unlock rows.",
+        },
+        {
+            "id": "secure-send",
+            "label": "Secure Send (share / receive link)",
+            "note": "See section 5 (#verify-secure-send); different routes than sync.",
+        },
+        {
+            "id": "ask-ai",
+            "label": "Ask AI (Ollama Cloud relay)",
+            "note": "Note plaintext can leave the vault; see section 6 (#verify-ask-ai).",
+        },
+    ]
 
 
 def _checked(required: list[tuple[str, str]]) -> tuple[str, str]:
@@ -116,6 +170,7 @@ def _actions() -> list[dict]:
         ]
     )
 
+    static = _static_evidence()
     return [
         {
             "id": "unlock",
@@ -129,6 +184,7 @@ def _actions() -> list[dict]:
             "sends_nothing_typical": False,
             "note_plaintext_on_wire": False,
             "password_or_vault_key_on_wire": False,
+            **static,
             "measurement": unlock_meas,
             "measurement_note": unlock_note,
         },
@@ -141,6 +197,7 @@ def _actions() -> list[dict]:
             "sends_nothing_caveat": "Switching away from another note with unsaved edits may push ciphertext first.",
             "note_plaintext_on_wire": False,
             "password_or_vault_key_on_wire": False,
+            **static,
             "measurement": open_meas,
             "measurement_note": open_note,
         },
@@ -155,6 +212,7 @@ def _actions() -> list[dict]:
             "sends_nothing_typical": False,
             "note_plaintext_on_wire": False,
             "password_or_vault_key_on_wire": False,
+            **static,
             "measurement": edit_meas,
             "measurement_note": edit_note,
         },
@@ -168,6 +226,7 @@ def _actions() -> list[dict]:
             "sends_nothing_typical": False,
             "note_plaintext_on_wire": False,
             "password_or_vault_key_on_wire": False,
+            **static,
             "measurement": view_meas,
             "measurement_note": view_note,
         },
@@ -183,6 +242,7 @@ def _actions() -> list[dict]:
             "sends_nothing_typical": False,
             "note_plaintext_on_wire": False,
             "password_or_vault_key_on_wire": False,
+            **static,
             "measurement": idle_meas,
             "measurement_note": idle_note,
         },
@@ -198,6 +258,7 @@ def _actions() -> list[dict]:
             "sends_nothing_caveat": "No requests when there is nothing dirty and background locked-sync is quiet.",
             "note_plaintext_on_wire": False,
             "password_or_vault_key_on_wire": False,
+            **static,
             "measurement": lock_meas,
             "measurement_note": lock_note,
         },
@@ -207,10 +268,15 @@ def _actions() -> list[dict]:
 def build_document() -> dict:
     return {
         "schema_version": 1,
-        "baseline_version": 1,
+        "baseline_version": 2,
         "release_tag": _release_tag(),
         "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "generation": "scripts/regenerate-verify-metadata-baseline.py (static code anchors)",
+        "evidence_legend": {
+            EVIDENCE_STATIC_SOURCE: "Static source analysis — required strings found in shipped client JS; not a live Network capture.",
+            EVIDENCE_LIVE_CAPTURE: "Live traffic capture — someone reproduced the action in DevTools and saved the requests (none in this baseline yet).",
+        },
+        "uncovered_actions": _uncovered_actions(),
         "actions": _actions(),
     }
 
