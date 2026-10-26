@@ -125,8 +125,8 @@ def main() -> int:
     try:
         driver.get(f"{base}/register")
         driver.find_element(By.NAME, "email").send_keys(EMAIL)
-        driver.find_element(By.NAME, "password").send_keys(PASSWORD)
-        driver.find_element(By.NAME, "password2").send_keys(PASSWORD)
+        driver.find_element(By.CSS_SELECTOR, "#register-password").send_keys(PASSWORD)
+        driver.find_element(By.CSS_SELECTOR, "#register-password2").send_keys(PASSWORD)
         driver.find_element(By.CSS_SELECTOR, "#register-submit").click()
         wait.until(EC.presence_of_element_located((By.ID, "app")))
         wait.until(lambda d: d.execute_script(
