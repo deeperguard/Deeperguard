@@ -1470,6 +1470,12 @@
           </div>
         </div>
       </div>
+      <div id="totp-list-head" class="totp-list-head" hidden aria-hidden="true">
+        <span class="totp-list-head-account">Account</span>
+        <span class="totp-list-head-changed">Changed</span>
+        <span class="totp-list-head-used">Last used</span>
+        <span class="totp-list-head-code">Code</span>
+      </div>
       <div id="totp-list" class="totp-list"></div>
       <p id="totp-empty" class="totp-empty muted" hidden></p>
     </section>
@@ -2410,6 +2416,7 @@
   {{ asset_script('js/vault-secrets.js') }}
   {{ asset_script('js/conflict-copy.js') }}
   {{ asset_script('js/clipboard-sensitive.js') }}
+  {{ asset_script('js/vault-copy-meta.js') }}
   {{ asset_script('js/device-phrase.js') }}
   {{ asset_script('js/secure-send.js') }}
   {{ asset_script('js/srp-auth.js') }}

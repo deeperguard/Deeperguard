@@ -73,6 +73,7 @@ assert.ok(CS);
 
 assert.ok(CS.countdownMessage('Code', 12).includes('not older clipboard items'));
 assert.ok(CS.countdownMessage('Password', 45, { shownBelow: true }).includes('shown below and copied'));
+assert.ok(CS.countdownMessage('Code', 30, { rotateHint: 'Copied twice on this device.' }).includes('Copied twice'));
 assert.ok(appJs.includes('shownBelow: true'));
 assert.ok(!clipboardJs.includes('setInterval'));
 assert.ok(CS.resultMessage('Code', 'cleared').includes('we copied'));

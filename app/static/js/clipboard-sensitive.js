@@ -56,12 +56,14 @@
     }
   }
 
-  function countdownMessage(label, secondsLeft, { shownBelow = false } = {}) {
+  function countdownMessage(label, secondsLeft, { shownBelow = false, rotateHint = '' } = {}) {
     const noun = String(label || 'value').toLowerCase();
     const lead = shownBelow
       ? `${label} shown below and copied.`
       : `Copied ${label}.`;
-    return `${lead} Clearing in ${secondsLeft}s if the clipboard still holds only this ${noun} — not older clipboard items.`;
+    const hint = String(rotateHint || '').trim();
+    const hintPart = hint ? ` ${hint}` : '';
+    return `${lead}${hintPart} Clearing in ${secondsLeft}s if the clipboard still holds only this ${noun} — not older clipboard items.`;
   }
 
   function manualClearHint(label) {
@@ -99,13 +101,14 @@
 
   /**
    * @param {string} text
-   * @param {{ seconds?: number, label?: string, shownBelow?: boolean, onToast?: (msg: string) => void }} opts
+   * @param {{ seconds?: number, label?: string, shownBelow?: boolean, rotateHint?: string, onToast?: (msg: string) => void }} opts
    */
   async function copySensitive(text, opts = {}) {
     cancelPendingClear();
     const value = String(text ?? '');
     const label = String(opts.label || 'Value').trim() || 'Value';
     const shownBelow = !!opts.shownBelow;
+    const rotateHint = String(opts.rotateHint || '').trim();
     let seconds = Number(opts.seconds);
     if (!Number.isFinite(seconds) || seconds < 5) seconds = DEFAULT_SECONDS;
     if (seconds > 120) seconds = 120;
@@ -120,7 +123,7 @@
     // Probe read permission right after write so Chrome does not prompt only when the timer ends.
     const canAutoClear = (await readClipboardText()) !== null;
 
-    let initial = countdownMessage(label, remaining, { shownBelow });
+    let initial = countdownMessage(label, remaining, { shownBelow, rotateHint });
     if (!canAutoClear) {
       initial = `${initial} ${manualClearHint(label)}`;
     }
