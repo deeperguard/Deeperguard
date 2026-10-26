@@ -30,6 +30,9 @@ jobs:
           diff -u /tmp/manifest-a.json /tmp/manifest-b.json
           test "$(python3 scripts/build-client-manifest.py --print-hash)" = "$(python3 -c 'import json;print(json.load(open("/tmp/manifest-a.json"))["manifest_sha256"])')"
 
+      - name: Verify metadata baseline (Round 83)
+        run: python3 scripts/regenerate-verify-metadata-baseline.py --check
+
       - name: Unit tests (Round 60)
         env:
           SOURCE_DATE_EPOCH: "0"
@@ -38,3 +41,5 @@ jobs:
           python3 -m pip install -q -r requirements.lock
           python3 -m unittest tests.test_round60_client_integrity -v
           node tests/test_round60_client_integrity.js
+          python3 -m unittest tests.test_round83_verify_metadata_baseline -v
+          node tests/test_round83_verify_metadata_baseline.js

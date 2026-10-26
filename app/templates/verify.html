@@ -21,8 +21,92 @@
         <span class="mk-badge">Independent check</span>
         <h1>Verify zero-knowledge</h1>
         <p data-claim-version="2">Claim version <strong>2</strong> — zero-knowledge sync plus client-side rollback / freeze / fork detection. You do not have to trust our marketing copy. During sign-in and sync you can watch the real HTTP requests in your browser and confirm that passwords, vault keys, and note plaintext never appear on the wire, except text you choose to send to Ask AI with Ollama Cloud, which passes through our server to ollama.com without being stored.</p>
-        <p class="mk-verify-ask-ai-pointer"><a href="#verify-ask-ai">Ask AI details → section 6.</a></p>
+        <p class="mk-verify-ask-ai-pointer"><a href="#verify-metadata-baseline">What the server sees (per action)</a> · <a href="#verify-ask-ai">Ask AI details → section 6.</a></p>
       </div>
+
+      <article class="mk-card" id="verify-metadata-baseline">
+        <h2>What the server sees (per action)</h2>
+        <p class="mk-verify-metadata-lede">Compare this with your own DevTools — open <strong>Network</strong>, enable <strong>Preserve log</strong>, filter <strong>Fetch/XHR</strong>, then perform each action in the app.</p>
+        <p class="mk-verify-metadata-meta">Metadata baseline v{{ verify_metadata_baseline_version }}{% if verify_metadata_release_tag %} · release <code>{{ verify_metadata_release_tag }}</code>{% endif %}{% if verify_metadata_baseline.generated_at %} · generated <time datetime="{{ verify_metadata_baseline.generated_at }}">{{ verify_metadata_baseline.generated_at }}</time>{% endif %}. Regenerate with <code>python3 scripts/regenerate-verify-metadata-baseline.py</code> after client traffic changes.</p>
+        <p class="mk-verify-metadata-honesty"><strong>Honesty:</strong> this table describes typical same-origin API traffic from the shipped client — not every edge case, not third-party hosts (except Ask AI in <a href="#verify-ask-ai">section 6</a>). Note titles and bodies stay inside AES-GCM ciphertext on sync routes; the server still sees account email, item UUIDs, timestamps, hashes, and ciphertext sizes (see <a href="#verify-sync-metadata">sync metadata</a> below).</p>
+
+        <div class="mk-verify-metadata-cards" aria-label="Per-action server traffic (mobile)">
+          {% for row in verify_metadata_baseline.actions %}
+          <div class="mk-verify-metadata-card" data-action-id="{{ row.id }}">
+            <div class="mk-verify-metadata-card-head">
+              <h3>{{ row.label }}</h3>
+              {% if row.measurement == 'checked' %}
+              <span class="mk-verify-measure checked">Checked</span>
+              {% else %}
+              <span class="mk-verify-measure unchecked">UNCHECKED</span>
+              {% endif %}
+            </div>
+            <p class="mk-verify-metadata-summary">{{ row.summary }}</p>
+            {% if row.sends_nothing_typical %}
+            <p class="mk-verify-sends-none">Sends nothing</p>
+            {% if row.sends_nothing_caveat %}
+            <p class="mk-verify-metadata-caveat">{{ row.sends_nothing_caveat }}</p>
+            {% endif %}
+            {% elif row.typical_requests %}
+            <ul class="mk-verify-metadata-requests">
+              {% for req in row.typical_requests %}
+              <li><code>{{ req }}</code></li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+            <p class="mk-verify-metadata-foot">Note plaintext on wire: <strong>{% if row.note_plaintext_on_wire %}Yes{% else %}No{% endif %}</strong> · Password / vault key on wire: <strong>{% if row.password_or_vault_key_on_wire %}Yes{% else %}No{% endif %}</strong></p>
+            <p class="mk-verify-metadata-measure-note">{{ row.measurement_note }}</p>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="mk-verify-metadata-table-wrap" aria-label="Per-action server traffic (desktop)">
+          <table class="mk-verify-metadata-table">
+            <thead>
+              <tr>
+                <th scope="col">Action</th>
+                <th scope="col">Typical HTTP (same-origin)</th>
+                <th scope="col">Note plaintext</th>
+                <th scope="col">Password / vault key</th>
+                <th scope="col">Baseline</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in verify_metadata_baseline.actions %}
+              <tr data-action-id="{{ row.id }}">
+                <th scope="row">{{ row.label }}</th>
+                <td>
+                  {% if row.sends_nothing_typical %}
+                  <span class="mk-verify-sends-none">Sends nothing</span>
+                  {% if row.sends_nothing_caveat %}
+                  <span class="mk-verify-metadata-caveat block">{{ row.sends_nothing_caveat }}</span>
+                  {% endif %}
+                  {% elif row.typical_requests %}
+                  <ul class="mk-verify-metadata-requests compact">
+                    {% for req in row.typical_requests %}
+                    <li><code>{{ req }}</code></li>
+                    {% endfor %}
+                  </ul>
+                  {% else %}
+                  <span class="mk-verify-metadata-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>{% if row.note_plaintext_on_wire %}Yes{% else %}No{% endif %}</td>
+                <td>{% if row.password_or_vault_key_on_wire %}Yes{% else %}No{% endif %}</td>
+                <td>
+                  {% if row.measurement == 'checked' %}
+                  <span class="mk-verify-measure checked">Checked</span>
+                  {% else %}
+                  <span class="mk-verify-measure unchecked">UNCHECKED</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="mk-verify-metadata-meta">In the unlocked app, <strong>View server copy</strong> on a note (or file, folder, tag, 2FA entry) shows one row beside your local plaintext — same data as the <code>view-server-copy</code> row above.</p>
+      </article>
 
       <article class="mk-card">
         <h2>1. Open DevTools Network</h2>
@@ -72,7 +156,7 @@
         </figure>
       </article>
 
-      <article class="mk-card">
+      <article class="mk-card" id="verify-sync-metadata">
         <h2>3. What to look for during sync</h2>
         <p>After unlock, create or edit a note and wait for sync (or pull to refresh). Filter Network for <code>sync</code>.</p>
         <ul>

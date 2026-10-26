@@ -14,6 +14,7 @@ from flask import Flask, jsonify, make_response, redirect, render_template, requ
 
 import admin_api
 import ask_ai_provider_pin
+import verify_metadata_baseline
 import ai_relay
 import auth
 import client_assets
@@ -3409,7 +3410,8 @@ def download_page():
 @app.get("/verify")
 def verify_page():
     """Public guide: inspect login/sync traffic and confirm zero-knowledge claims."""
-    return render_template("verify.html", **_marketing_context())
+    ctx = {**_marketing_context(), **verify_metadata_baseline.template_context()}
+    return render_template("verify.html", **ctx)
 
 
 @app.get("/pricing")

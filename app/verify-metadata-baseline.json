@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "baseline_version": 1,
+  "release_tag": "v0.65.22",
+  "generated_at": "2026-10-26T15:36:39Z",
+  "generation": "scripts/regenerate-verify-metadata-baseline.py (static code anchors)",
+  "actions": [
+    {
+      "id": "unlock",
+      "label": "Unlock vault",
+      "summary": "Derive the vault key locally, then refresh session and sync ciphertext.",
+      "typical_requests": [
+        "GET /api/account (session refresh)",
+        "POST /api/sync/pull (ciphertext rows; probe + post-unlock sync)",
+        "POST /api/account/unlock/challenge + POST /api/account/unlock (SRP proofs only — empty vault / account proof)"
+      ],
+      "sends_nothing_typical": false,
+      "note_plaintext_on_wire": false,
+      "password_or_vault_key_on_wire": false,
+      "measurement": "checked",
+      "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
+    },
+    {
+      "id": "open",
+      "label": "Open a note",
+      "summary": "Load decrypted content from this device; no server read of note bodies.",
+      "typical_requests": [],
+      "sends_nothing_typical": true,
+      "sends_nothing_caveat": "Switching away from another note with unsaved edits may push ciphertext first.",
+      "note_plaintext_on_wire": false,
+      "password_or_vault_key_on_wire": false,
+      "measurement": "checked",
+      "measurement_note": "Checked: openNote has no direct /api/ calls (switching notes may flush/sync first)."
+    },
+    {
+      "id": "edit-save",
+      "label": "Edit + save",
+      "summary": "Autosave encrypts in the browser, then pushes ciphertext envelopes.",
+      "typical_requests": [
+        "POST /api/sync/items (ciphertext + plaintext metadata fields)",
+        "POST /api/sync/blobs (encrypted attachment blobs, when applicable)"
+      ],
+      "sends_nothing_typical": false,
+      "note_plaintext_on_wire": false,
+      "password_or_vault_key_on_wire": false,
+      "measurement": "checked",
+      "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
+    },
+    {
+      "id": "view-server-copy",
+      "label": "View server copy",
+      "summary": "Fetch one stored row exactly as the API keeps it (metadata + ciphertext).",
+      "typical_requests": [
+        "GET /api/sync/item/<uuid>?include_blobs=…"
+      ],
+      "sends_nothing_typical": false,
+      "note_plaintext_on_wire": false,
+      "password_or_vault_key_on_wire": false,
+      "measurement": "checked",
+      "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
+    },
+    {
+      "id": "idle",
+      "label": "Idle (vault unlocked)",
+      "summary": "Background poll while you are not editing; may pull when the server watermark moves.",
+      "typical_requests": [
+        "GET /api/sync/watermark (lightweight poll)",
+        "POST /api/sync/pull (only when watermark advances or dirty items exist)",
+        "POST /api/sync/items (when local edits are still dirty)"
+      ],
+      "sends_nothing_typical": false,
+      "note_plaintext_on_wire": false,
+      "password_or_vault_key_on_wire": false,
+      "measurement": "checked",
+      "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
+    },
+    {
+      "id": "lock",
+      "label": "Lock vault",
+      "summary": "Flush pending ciphertext, drop keys from memory, keep optional locked sync.",
+      "typical_requests": [
+        "POST /api/sync/items (pending edits, before lock)",
+        "POST /api/sync/pull / push while locked (ciphertext only, when enabled)"
+      ],
+      "sends_nothing_typical": false,
+      "sends_nothing_caveat": "No requests when there is nothing dirty and background locked-sync is quiet.",
+      "note_plaintext_on_wire": false,
+      "password_or_vault_key_on_wire": false,
+      "measurement": "checked",
+      "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
+    }
+  ]
+}
