@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "baseline_version": 1,
-  "release_tag": "v0.65.22",
-  "generated_at": "2026-10-26T15:36:39Z",
+  "release_tag": "v0.65.23",
+  "generated_at": "2026-10-26T15:46:03Z",
   "generation": "scripts/regenerate-verify-metadata-baseline.py (static code anchors)",
   "actions": [
     {
