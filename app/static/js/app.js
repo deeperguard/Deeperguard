@@ -8342,7 +8342,7 @@
         confirmLabel: 'Empty trash',
         danger: true,
       },
-    )) return;
+    ))) return;
     let protectedCount = 0;
     for (const note of trashedNotes()) {
       if (isNoteProtected(note)) {
@@ -19303,7 +19303,7 @@
         confirmLabel: 'Delete',
         danger: true,
       },
-    )) return;
+    ))) return;
     if (id === currentId) {
       currentId = null;
       ui.shell.classList.remove('editor-open');
