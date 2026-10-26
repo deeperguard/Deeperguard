@@ -3862,12 +3862,23 @@ const NotesStore = (() => {
             next.account = extra.content.account;
             changed = true;
           }
+          if (!String(next.host || '').trim() && extra.content.host) {
+            next.host = extra.content.host;
+            changed = true;
+          }
           if (changed) upsert(keepItem.uuid, next);
         }
       }
       if (removeTotpAccount(id)) removed += 1;
     }
     return { removed, kept: keepById.size || live.length - removed };
+  }
+
+  function normalizeTotpBoundHost(raw) {
+    if (typeof NotesTotp !== 'undefined' && NotesTotp.normalizeBoundHost) {
+      return NotesTotp.normalizeBoundHost(raw);
+    }
+    return String(raw || '').trim().toLowerCase();
   }
 
   function addTotpAccount(entry) {
@@ -3877,11 +3888,13 @@ const NotesStore = (() => {
     if (existing) return { uuid: existing.uuid, created: false, item: existing };
     const now = new Date().toISOString();
     const id = newUuid();
+    const boundHost = normalizeTotpBoundHost(entry && entry.host);
     upsert(id, {
       type: 'totp',
       issuer: String((entry && entry.issuer) || '').trim(),
       account: String((entry && (entry.account || entry.issuer)) || 'Account').trim() || 'Account',
       secret,
+      host: boundHost,
       digits: Number((entry && entry.digits) || 6) || 6,
       period: Number((entry && entry.period) || 30) || 30,
       algorithm: String((entry && entry.algorithm) || 'SHA1').toUpperCase().replace('-', ''),
@@ -3891,12 +3904,14 @@ const NotesStore = (() => {
     return { uuid: id, created: true, item: get(id) };
   }
 
-  function updateTotpAccount(uuid, { issuer = '', account = '' } = {}) {
+  function updateTotpAccount(uuid, { issuer = '', account = '', host } = {}) {
     const item = get(uuid);
     if (!item || item.content?.type !== 'totp') return false;
     const nextIssuer = String(issuer || '').trim();
     const nextAccount = String(account || '').trim() || nextIssuer || 'Account';
-    upsert(uuid, { ...item.content, issuer: nextIssuer, account: nextAccount });
+    const next = { ...item.content, issuer: nextIssuer, account: nextAccount };
+    if (host !== undefined) next.host = normalizeTotpBoundHost(host);
+    upsert(uuid, next);
     return true;
   }
 

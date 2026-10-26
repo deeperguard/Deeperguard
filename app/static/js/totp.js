@@ -518,7 +518,39 @@ const NotesTotp = (() => {
     return String(secret || '').toUpperCase().replace(/[\s\-]/g, '').replace(/=+$/g, '');
   }
 
-  function entryFromFields({ issuer = '', account = '', secret = '', digits, period, algorithm } = {}) {
+  /** Exact sign-in hostname for vault TOTP (no eTLD+1 / related-domain matching). */
+  function normalizeBoundHost(raw) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return '';
+    if (/\s/.test(trimmed)) return '';
+    let host = trimmed;
+    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('//')) {
+      try {
+        const url = new URL(trimmed.startsWith('//') ? `https:${trimmed}` : trimmed);
+        host = url.host || '';
+      } catch (err) {
+        return '';
+      }
+    } else {
+      host = trimmed.split('/')[0].split('?')[0].split('#')[0];
+    }
+    host = String(host || '').trim().toLowerCase().replace(/\.$/, '');
+    if (!host || host.length > 253 || /[/\s]/.test(host)) return '';
+    return host;
+  }
+
+  function hostsMatchExact(left, right) {
+    const a = normalizeBoundHost(left);
+    const b = normalizeBoundHost(right);
+    return !!(a && b && a === b);
+  }
+
+  function formatTotpCopyLabel(host) {
+    const bound = normalizeBoundHost(host);
+    return bound ? `Code · ${bound}` : 'Code · no site set';
+  }
+
+  function entryFromFields({ issuer = '', account = '', secret = '', host = '', digits, period, algorithm } = {}) {
     const raw = String(secret || '').trim();
     if (/otpauth:\/\//i.test(raw)) {
       OTP_AUTH_RE.lastIndex = 0;
@@ -526,18 +558,22 @@ const NotesTotp = (() => {
       OTP_AUTH_RE.lastIndex = 0;
       const parsed = parseOtpauth(match ? match[0] : raw);
       if (!parsed) return null;
+      const bound = normalizeBoundHost(host);
       return {
         ...parsed,
         issuer: String(issuer || parsed.issuer || '').trim(),
         account: String(account || parsed.account || parsed.issuer || 'Account').trim() || 'Account',
+        host: bound,
       };
     }
     if (!looksLikeSecret(raw)) return null;
     const iss = String(issuer || '').trim();
+    const bound = normalizeBoundHost(host);
     return {
       issuer: iss,
       account: String(account || iss || 'Account').trim() || 'Account',
       secret: normalizeSecret(raw),
+      host: bound,
       digits: Number(digits || 6) || 6,
       period: Number(period || 30) || 30,
       algorithm: String(algorithm || 'SHA1').toUpperCase().replace('-', ''),
@@ -637,6 +673,9 @@ const NotesTotp = (() => {
     migrateFromNotes,
     planDedupe,
     normalizeSecret,
+    normalizeBoundHost,
+    hostsMatchExact,
+    formatTotpCopyLabel,
     generate,
   };
 })();

@@ -2259,6 +2259,10 @@
       <label class="scan-name-field">Account
         <input id="totp-add-account" type="text" maxlength="160" autocomplete="username" placeholder="you@example.com">
       </label>
+      <label class="scan-name-field">Site hostname <span class="muted">(optional)</span>
+        <input id="totp-add-host" type="text" maxlength="253" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url" placeholder="login.example.com">
+      </label>
+      <p class="scan-dialog-lead muted totp-host-hint">Exact hostname only (e.g. <code>login.example.com</code>). Shown when you copy a code — advisory label, not sign-in blocking.</p>
       <label class="scan-name-field">Secret or otpauth URL
         <input id="totp-add-secret" type="text" maxlength="512" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="JBSW Y3DP EHPK 3PXP">
       </label>
