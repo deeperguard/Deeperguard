@@ -7335,6 +7335,14 @@
     submitUnlockForm().catch(() => {});
   });
 
+  window.__notesSubmitUnlock = () => {
+    submitUnlockForm().catch(() => {});
+  };
+  if (window.__notesUnlockQueued) {
+    window.__notesUnlockQueued = false;
+    window.__notesSubmitUnlock();
+  }
+
   document.getElementById('unlock-empty-retry')?.addEventListener('click', () => {
     stopEmptyDeviceBackgroundRetry();
     setEmptyDeviceUnlockUi('clear');
