@@ -475,6 +475,31 @@ def login_user(user_id: int, *, totp_ok: bool, check_cap: bool = True) -> None:
     # the browser's prior anonymous/CSRF state intact.
     if check_cap:
         _assert_session_slot_available(int(user_id))
+    # Peek before session create so Round 78 can alert on unseen devices only.
+    # Do not change session creation / SRP / crypto — alert is best-effort after.
+    ip = client_ip()
+    ua = str(request.headers.get("User-Agent") or "")
+    label = device_label(ua)
+    device_id = request_device_id()
+    try:
+        was_known = (
+            find_reusable_session(
+                int(user_id),
+                device_id=device_id,
+                ip=ip,
+                device_label=label,
+            )
+            is not None
+        )
+    except Exception:
+        was_known = True  # fail closed: skip alert rather than spam
+    try:
+        from signin_alert import request_country
+
+        country = request_country()
+    except Exception:
+        country = "Unknown"
+
     session.clear()
     session.permanent = True
     session[SESSION_USER] = int(user_id)
@@ -483,6 +508,20 @@ def login_user(user_id: int, *, totp_ok: bool, check_cap: bool = True) -> None:
     session[SESSION_CSRF] = secrets.token_urlsafe(32)
     session[SESSION_TOTP] = bool(totp_ok)
     session[SESSION_SID] = _record_device_session(int(user_id), check_cap=False)
+
+    try:
+        from signin_alert import maybe_alert_after_login
+
+        maybe_alert_after_login(
+            int(user_id),
+            was_known_device=was_known,
+            device_id=device_id,
+            ip=ip,
+            device_label=label,
+            country=country,
+        )
+    except Exception:
+        pass
 
 
 def logout() -> None:
