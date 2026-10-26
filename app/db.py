@@ -258,6 +258,20 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("ALTER TABLE user_sessions ADD COLUMN device_id TEXT NOT NULL DEFAULT ''")
     if session_cols and "revoke_reason" not in session_cols:
         conn.execute("ALTER TABLE user_sessions ADD COLUMN revoke_reason TEXT NOT NULL DEFAULT ''")
+    session_cols = {row[1] for row in conn.execute("PRAGMA table_info(user_sessions)").fetchall()}
+    if session_cols and "trusted_at" not in session_cols:
+        conn.execute(
+            "ALTER TABLE user_sessions ADD COLUMN trusted_at REAL NOT NULL DEFAULT 0"
+        )
+        ts_backfill = now()
+        conn.execute(
+            """
+            UPDATE user_sessions
+            SET trusted_at = COALESCE(NULLIF(last_login_at, 0), NULLIF(created_at, 0), ?)
+            WHERE trusted_at = 0
+            """,
+            (ts_backfill,),
+        )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_user_sessions_device ON user_sessions(user_id, device_id, revoked_at)"
     )
@@ -906,13 +920,24 @@ def create_user_session(
             )
             keep_id = int(existing["id"])
         else:
+            has_other = conn.execute(
+                """
+                SELECT 1 FROM user_sessions
+                WHERE user_id = ? AND revoked_at = 0
+                LIMIT 1
+                """,
+                (uid,),
+            ).fetchone()
+            # First device on the account is trusted immediately; later sign-ins
+            # stay pending until the user approves them in Settings (no login gate).
+            trusted_at = ts if not has_other else 0.0
             conn.execute(
                 """
                 INSERT INTO user_sessions (
                     user_id, token_hash, device_id, device_label, user_agent, ip, ip_location,
-                    created_at, last_seen_at, last_login_at, revoked_at
+                    created_at, last_seen_at, last_login_at, revoked_at, trusted_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
                 """,
                 (
                     uid,
@@ -925,6 +950,7 @@ def create_user_session(
                     ts,
                     ts,
                     ts,
+                    trusted_at,
                 ),
             )
             keep_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
@@ -1047,6 +1073,28 @@ def touch_user_session(
             f"UPDATE user_sessions SET {', '.join(sets)} WHERE id = ? AND revoked_at = 0",
             params,
         )
+
+
+def session_is_trusted(row) -> bool:
+    try:
+        return float(row["trusted_at"] or 0) > 0
+    except (KeyError, TypeError, ValueError):
+        return True
+
+
+def approve_user_session(session_id: int, user_id: int) -> bool:
+    """Mark a live session as trusted (in-app new-device approval)."""
+    ts = now()
+    with tx() as conn:
+        cur = conn.execute(
+            """
+            UPDATE user_sessions
+            SET trusted_at = ?
+            WHERE id = ? AND user_id = ? AND revoked_at = 0 AND trusted_at = 0
+            """,
+            (ts, int(session_id), int(user_id)),
+        )
+        return int(cur.rowcount or 0) > 0
 
 
 def revoke_user_session(session_id: int, user_id: int, *, reason: str = "user") -> bool:
