@@ -123,6 +123,24 @@ Secret: JBSWY3DPEHPK3PXP`);
   assert.equal(fromUrl.issuer, 'GitHub');
   assert.ok(!NotesTotp.entryFromFields({ secret: 'short' }));
 
+  assert.equal(NotesTotp.normalizeBoundHost('login.example.com'), 'login.example.com');
+  assert.equal(NotesTotp.normalizeBoundHost('HTTPS://Login.Example.COM/path'), 'login.example.com');
+  assert.equal(NotesTotp.normalizeBoundHost('https://bank.co.uk:8443/foo'), 'bank.co.uk:8443');
+  assert.equal(NotesTotp.normalizeBoundHost(''), '');
+  assert.equal(NotesTotp.normalizeBoundHost('not a host'), '');
+  assert.ok(NotesTotp.hostsMatchExact('login.example.com', 'https://login.example.com/'));
+  assert.ok(!NotesTotp.hostsMatchExact('login.example.com', 'example.com'));
+  assert.equal(NotesTotp.formatTotpCopyLabel('login.example.com'), 'Code · login.example.com');
+  assert.equal(NotesTotp.formatTotpCopyLabel(''), 'Code · no site set');
+
+  const withHost = NotesTotp.entryFromFields({
+    issuer: 'Bank',
+    account: 'me',
+    host: 'https://login.bank.com',
+    secret: 'JBSWY3DPEHPK3PXP',
+  });
+  assert.equal(withHost.host, 'login.bank.com');
+
   const migrate = NotesTotp.migrateFromNotes([
     note('2FA', 'Google\nJBSWY3DPEHPK3PXP'),
     note('Passwords', 'otpauth://totp/Amazon:dennis@example.com?secret=MFRGGZDFMZTWQ2LK&issuer=Amazon'),

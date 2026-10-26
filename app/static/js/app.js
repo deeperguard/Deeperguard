@@ -3785,6 +3785,7 @@
     backdrop: document.getElementById('totp-add-backdrop'),
     issuer: document.getElementById('totp-add-issuer'),
     account: document.getElementById('totp-add-account'),
+    host: document.getElementById('totp-add-host'),
     secret: document.getElementById('totp-add-secret'),
     error: document.getElementById('totp-add-error'),
     video: document.getElementById('totp-qr-video'),
@@ -3890,15 +3891,30 @@
 
   function totpAccountFromItem(item) {
     const content = item && item.content ? item.content : {};
+    const host = NotesTotp?.normalizeBoundHost
+      ? NotesTotp.normalizeBoundHost(content.host)
+      : String(content.host || '').trim().toLowerCase();
     return {
       id: item.uuid,
       issuer: content.issuer || '',
       account: content.account || content.issuer || 'Account',
       secret: content.secret || '',
+      host,
       digits: Number(content.digits || 6) || 6,
       period: Number(content.period || 30) || 30,
       algorithm: String(content.algorithm || 'SHA1').toUpperCase().replace('-', ''),
     };
+  }
+
+  function totpBoundHostDisplay(entry) {
+    const host = entry && entry.host ? NotesTotp.normalizeBoundHost(entry.host) : '';
+    return host || '';
+  }
+
+  function totpCopyLabelForEntry(entry) {
+    if (NotesTotp?.formatTotpCopyLabel) return NotesTotp.formatTotpCopyLabel(entry && entry.host);
+    const host = totpBoundHostDisplay(entry);
+    return host ? `Code · ${host}` : 'Code · no site set';
   }
 
   function migrateTotpFromNotes() {
@@ -4002,7 +4018,7 @@
   function filteredTotpEntries() {
     const q = String(totpUi.search?.value || '').trim().toLowerCase();
     if (!q) return totpEntries;
-    return totpEntries.filter((item) => `${item.issuer} ${item.account}`.toLowerCase().includes(q));
+    return totpEntries.filter((item) => `${item.issuer} ${item.account} ${item.host || ''}`.toLowerCase().includes(q));
   }
 
   function totpRingSvg(progress, ending) {
@@ -4044,14 +4060,19 @@
         ? item.account
         : (item.account || item.issuer || 'Account');
       const issuer = item.issuer && item.issuer !== label ? item.issuer : '';
+      const boundHost = totpBoundHostDisplay(item);
+      const hostLine = boundHost
+        ? `<span class="note-preview totp-bound-host">Site: ${escapeHtml(boundHost)}</span>`
+        : '<span class="note-preview totp-bound-host muted">Site: no site set</span>';
       const pretty = `${totp.code.slice(0, 3)} ${totp.code.slice(3)}`;
       const remaining = Math.max(0, Math.round(Number(totp.remaining) || 0));
       return `<div class="totp-item" data-totp-id="${escapeAttr(item.id)}">
-        <button type="button" class="totp-item-main" data-totp-copy>
+        <button type="button" class="totp-item-main" data-totp-copy aria-label="Copy code for ${escapeAttr(label)}${boundHost ? ` (${boundHost})` : ' (no site set)'}">
           <span class="note-kind-icon note-kind-icon--totp" aria-hidden="true">${kindIconSvg('totp')}</span>
           <span class="totp-item-body">
             <span class="note-title-row"><strong>${escapeHtml(label)}</strong></span>
             ${issuer ? `<span class="note-preview">${escapeHtml(issuer)}</span>` : ''}
+            ${hostLine}
             <span class="note-modified">Expires in ${remaining}s</span>
           </span>
           <span class="totp-item-code">
@@ -4106,7 +4127,7 @@
     if (!item) return;
     try {
       const totp = await NotesTotp.generate(item);
-      await copySensitiveToClipboard(totp.code, { label: 'Code', seconds: 30 });
+      await copySensitiveToClipboard(totp.code, { label: totpCopyLabelForEntry(item), seconds: 30 });
     } catch (err) {
       toast('Could not copy code', true);
     }
@@ -4187,6 +4208,7 @@
     document.body.classList.remove('scan-dialog-open');
     if (totpUi.issuer) totpUi.issuer.value = '';
     if (totpUi.account) totpUi.account.value = '';
+    if (totpUi.host) totpUi.host.value = '';
     if (totpUi.secret) {
       totpUi.secret.value = '';
       totpUi.secret.readOnly = false;
@@ -4209,6 +4231,7 @@
     hideScanDialog();
     if (totpUi.issuer) totpUi.issuer.value = '';
     if (totpUi.account) totpUi.account.value = '';
+    if (totpUi.host) totpUi.host.value = '';
     if (totpUi.secret) totpUi.secret.value = '';
     syncTotpDialogMode();
     setTotpAddError('');
@@ -4227,6 +4250,7 @@
     hideScanDialog();
     if (totpUi.issuer) totpUi.issuer.value = item.issuer || '';
     if (totpUi.account) totpUi.account.value = item.account || '';
+    if (totpUi.host) totpUi.host.value = item.host || '';
     syncTotpDialogMode();
     setTotpAddError('');
     if (totpUi.backdrop) totpUi.backdrop.hidden = false;
@@ -4235,12 +4259,25 @@
     totpUi.issuer?.focus();
   }
 
+  function readTotpDialogHost() {
+    const raw = String(totpUi.host?.value || '').trim();
+    if (!raw) return '';
+    const normalized = NotesTotp.normalizeBoundHost(raw);
+    if (!normalized) {
+      setTotpAddError('Enter a valid hostname (e.g. login.example.com) or leave Site blank.');
+      totpUi.host?.focus();
+      return null;
+    }
+    return normalized;
+  }
+
   function applyTotpQrPayload(raw) {
     const text = String(raw || '').trim();
     if (!text) return false;
     const entry = NotesTotp.entryFromFields({
       issuer: totpUi.issuer?.value || '',
       account: totpUi.account?.value || '',
+      host: totpUi.host?.value || '',
       secret: text,
     });
     if (!entry) {
@@ -4362,7 +4399,9 @@
         totpUi.issuer?.focus();
         return;
       }
-      const saved = NotesStore.updateTotpAccount(totpEditingId, { issuer, account });
+      const boundHost = readTotpDialogHost();
+      if (boundHost === null) return;
+      const saved = NotesStore.updateTotpAccount(totpEditingId, { issuer, account, host: boundHost });
       if (!saved) {
         setTotpAddError('That account is no longer in the vault.');
         return;
@@ -4372,9 +4411,12 @@
       toast('Account updated');
       return;
     }
+    const boundHost = readTotpDialogHost();
+    if (boundHost === null) return;
     const entry = NotesTotp.entryFromFields({
       issuer: totpUi.issuer?.value || '',
       account: totpUi.account?.value || '',
+      host: boundHost,
       secret: totpUi.secret?.value || '',
     });
     if (!entry) {
