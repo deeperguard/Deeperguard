@@ -1573,6 +1573,7 @@ def _public_session(row, *, current_token: str, now: float | None = None) -> dic
     device_id = str(row["device_id"] or "")
     at = float(now if now is not None else time.time())
     inactive = bool(last_seen > 0 and (at - last_seen) >= _SESSION_INACTIVE_SECONDS)
+    trusted = db.session_is_trusted(row)
     return {
         "id": int(row["id"]),
         "device": str(row["device_label"] or "Unknown device"),
@@ -1583,6 +1584,8 @@ def _public_session(row, *, current_token: str, now: float | None = None) -> dic
         "last_seen_at": last_seen,
         "inactive": inactive,
         "current": token_match,
+        "pending": not trusted,
+        "trusted": trusted,
     }
 
 
@@ -1640,6 +1643,22 @@ def api_session_cap_revoke():
         "plan": plan,
         "can_sign_in": limit is None or len(sessions) < int(limit),
     })
+
+
+@app.post("/api/sessions/<int:session_id>/approve")
+def api_approve_session(session_id: int):
+    """Mark a pending device session as trusted (optional post-sign-in hardening)."""
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "login required"}), 401
+    row = db.get_user_session(session_id, uid)
+    if not row or row["revoked_at"]:
+        return jsonify({"error": "not found"}), 404
+    if db.session_is_trusted(row):
+        return jsonify({"ok": True, "id": int(session_id), "pending": False})
+    if not db.approve_user_session(session_id, uid):
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"ok": True, "id": int(session_id), "pending": False})
 
 
 @app.delete("/api/sessions/<int:session_id>")

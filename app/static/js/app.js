@@ -13436,6 +13436,12 @@
         badge.textContent = 'This device';
         head.appendChild(badge);
       }
+      if (item.pending) {
+        const pendingBadge = document.createElement('span');
+        pendingBadge.className = 'device-pending';
+        pendingBadge.textContent = 'New sign-in';
+        head.appendChild(pendingBadge);
+      }
       if (item.inactive) {
         const inactive = document.createElement('span');
         inactive.className = 'device-inactive';
@@ -13444,23 +13450,45 @@
       }
       const meta = document.createElement('p');
       meta.className = 'device-meta';
+      const loc = String(item.ip_location || '').trim();
       const parts = [
         `Last seen ${formatDeviceLogin(item.last_seen_at || item.last_login_at)}`,
         `Last login ${formatDeviceLogin(item.last_login_at)}`,
-        item.ip ? `IP ${item.ip}` : '',
-        item.ip_location || '',
+        loc && loc !== 'Unknown' ? loc : '',
       ].filter(Boolean);
       meta.textContent = parts.join(' · ');
       row.appendChild(head);
       row.appendChild(meta);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = item.current ? 'btn danger sm' : 'btn ghost sm';
-      btn.textContent = item.current ? 'Sign out this device' : 'Sign out';
-      btn.addEventListener('click', () => {
-        revokeSignedInDevice(item).catch((err) => toast(err.message || 'Could not sign out device', true));
-      });
-      row.appendChild(btn);
+      const actions = document.createElement('div');
+      actions.className = 'device-row-actions';
+      if (item.pending) {
+        const approveBtn = document.createElement('button');
+        approveBtn.type = 'button';
+        approveBtn.className = 'btn primary sm';
+        approveBtn.textContent = 'Approve';
+        approveBtn.addEventListener('click', () => {
+          approvePendingDevice(item).catch((err) => toast(err.message || 'Could not approve device', true));
+        });
+        actions.appendChild(approveBtn);
+        const denyBtn = document.createElement('button');
+        denyBtn.type = 'button';
+        denyBtn.className = item.current ? 'btn danger sm' : 'btn ghost sm';
+        denyBtn.textContent = 'Deny';
+        denyBtn.addEventListener('click', () => {
+          denyPendingDevice(item).catch((err) => toast(err.message || 'Could not deny device', true));
+        });
+        actions.appendChild(denyBtn);
+      } else {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = item.current ? 'btn danger sm' : 'btn ghost sm';
+        btn.textContent = item.current ? 'Sign out this device' : 'Sign out';
+        btn.addEventListener('click', () => {
+          revokeSignedInDevice(item).catch((err) => toast(err.message || 'Could not sign out device', true));
+        });
+        actions.appendChild(btn);
+      }
+      row.appendChild(actions);
       return row;
     }));
   }
@@ -13967,6 +13995,35 @@
       lastSignedInDevicesJson = '';
       el.innerHTML = '<p class="settings-hint">Could not load signed-in devices.</p>';
     }
+  }
+
+  async function approvePendingDevice(item) {
+    await NotesStore.api(`/api/sessions/${item.id}/approve`, { method: 'POST' });
+    lastSignedInDevicesJson = '';
+    await loadSignedInDevices();
+  }
+
+  async function denyPendingDevice(item) {
+    const current = !!item.current;
+    const ok = await confirmAction(
+      current
+        ? `${SIGN_OUT_WARNING}\n\nDeny removes this new sign-in and signs out here.`
+        : `Deny “${item.device || 'this device'}”? That ends the session and deletes its local vault copy when it next connects.`,
+      {
+        title: current ? 'Deny this sign-in?' : 'Deny device?',
+        confirmLabel: 'Deny',
+        cancelLabel: 'Cancel',
+        danger: true,
+      },
+    );
+    if (!ok) return;
+    const data = await NotesStore.api(`/api/sessions/${item.id}`, { method: 'DELETE' });
+    if (data.current) {
+      await signOutCompletely();
+      return;
+    }
+    lastSignedInDevicesJson = '';
+    await loadSignedInDevices();
   }
 
   async function revokeSignedInDevice(item) {
