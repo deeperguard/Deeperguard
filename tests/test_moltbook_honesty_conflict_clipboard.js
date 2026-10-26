@@ -72,6 +72,9 @@ const CS = sandbox.window.NotesClipboardSensitive;
 assert.ok(CS);
 
 assert.ok(CS.countdownMessage('Code', 12).includes('not older clipboard items'));
+assert.ok(CS.countdownMessage('Password', 45, { shownBelow: true }).includes('shown below and copied'));
+assert.ok(appJs.includes('shownBelow: true'));
+assert.ok(!clipboardJs.includes('setInterval'));
 assert.ok(CS.resultMessage('Code', 'cleared').includes('we copied'));
 assert.ok(CS.resultMessage('Code', 'changed').includes('left as-is'));
 assert.ok(!CS.resultMessage('Code', 'cleared').match(/history/i));
@@ -85,6 +88,48 @@ assert.ok(!CS.resultMessage('Code', 'cleared').match(/history/i));
   readValue = 'other';
   const unchanged = await CS.clearIfStillOurs('123456');
   assert.strictEqual(unchanged, 'changed');
+
+  let toasts = [];
+  let timers = 0;
+  const timerSandbox = {
+    window: {},
+    module: { exports: {} },
+    setTimeout(fn) {
+      timers += 1;
+      return timers;
+    },
+    clearTimeout() {},
+    navigator: {
+      clipboard: {
+        writeText: async (t) => { writes.push(t); },
+        readText: async () => null,
+      },
+    },
+    document: {
+      createElement: () => ({
+        value: '',
+        style: {},
+        setAttribute() {},
+        select() {},
+        remove() {},
+      }),
+      execCommand: () => false,
+      body: { appendChild() {}, removeChild() {} },
+    },
+  };
+  timerSandbox.window = timerSandbox;
+  vm.runInNewContext(clipboardJs, timerSandbox);
+  const CSTimer = timerSandbox.window.NotesClipboardSensitive;
+  toasts = [];
+  await CSTimer.copySensitive('secret', {
+    label: 'Password',
+    shownBelow: true,
+    onToast: (m) => toasts.push(m),
+  });
+  assert.strictEqual(timers, 0, 'no auto-clear timer when clipboard read is unavailable');
+  assert.ok(toasts.length === 1, 'single initial toast without countdown spam');
+  assert.ok(toasts[0].includes('shown below and copied'));
+  assert.ok(toasts[0].includes('clear it yourself'));
 
   console.log('test_moltbook_honesty_conflict_clipboard ok');
 })().catch((err) => {

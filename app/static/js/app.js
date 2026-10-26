@@ -4085,17 +4085,18 @@
     toast(message);
   }
 
-  async function copySensitiveToClipboard(text, { label = 'Value', seconds } = {}) {
+  async function copySensitiveToClipboard(text, { label = 'Value', seconds, shownBelow } = {}) {
     const CS = window.NotesClipboardSensitive;
     if (!CS?.copySensitive) {
       if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
       else throw new Error('Could not copy');
-      toast(`Copied ${label}`);
+      toast(shownBelow ? `${label} shown below and copied` : `Copied ${label}`);
       return;
     }
     await CS.copySensitive(text, {
       label,
       seconds,
+      shownBelow,
       onToast: toastSensitiveClipboard,
     });
   }
@@ -20676,9 +20677,9 @@
       reveal.hidden = false;
     }
     try {
-      await copySensitiveToClipboard(saved, { label: 'Password', seconds: 45 });
+      await copySensitiveToClipboard(saved, { label: 'Password', seconds: 45, shownBelow: true });
     } catch (err) {
-      toast('Password shown below');
+      toast('Password shown below (could not copy)', true);
     }
   });
   const noteInfoCopy = document.getElementById('note-info-copy');
