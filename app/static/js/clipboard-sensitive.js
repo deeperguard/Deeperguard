@@ -9,16 +9,11 @@
 
   let pendingValue = '';
   let clearTimer = null;
-  let tickTimer = null;
 
   function cancelPendingClear() {
     if (clearTimer) {
       clearTimeout(clearTimer);
       clearTimer = null;
-    }
-    if (tickTimer) {
-      clearInterval(tickTimer);
-      tickTimer = null;
     }
     pendingValue = '';
   }
@@ -61,9 +56,17 @@
     }
   }
 
-  function countdownMessage(label, secondsLeft) {
+  function countdownMessage(label, secondsLeft, { shownBelow = false } = {}) {
     const noun = String(label || 'value').toLowerCase();
-    return `Copied ${label}. Clearing in ${secondsLeft}s if the clipboard still holds only this ${noun} — not older clipboard items.`;
+    const lead = shownBelow
+      ? `${label} shown below and copied.`
+      : `Copied ${label}.`;
+    return `${lead} Clearing in ${secondsLeft}s if the clipboard still holds only this ${noun} — not older clipboard items.`;
+  }
+
+  function manualClearHint(label) {
+    const noun = String(label || 'value').toLowerCase();
+    return `Could not read the clipboard to auto-clear this ${noun}; paste elsewhere or clear it yourself if needed.`;
   }
 
   function resultMessage(label, result) {
@@ -96,12 +99,13 @@
 
   /**
    * @param {string} text
-   * @param {{ seconds?: number, label?: string, onToast?: (msg: string) => void }} opts
+   * @param {{ seconds?: number, label?: string, shownBelow?: boolean, onToast?: (msg: string) => void }} opts
    */
   async function copySensitive(text, opts = {}) {
     cancelPendingClear();
     const value = String(text ?? '');
     const label = String(opts.label || 'Value').trim() || 'Value';
+    const shownBelow = !!opts.shownBelow;
     let seconds = Number(opts.seconds);
     if (!Number.isFinite(seconds) || seconds < 5) seconds = DEFAULT_SECONDS;
     if (seconds > 120) seconds = 120;
@@ -111,29 +115,24 @@
 
     pendingValue = value;
     const onToast = typeof opts.onToast === 'function' ? opts.onToast : null;
-    let remaining = Math.ceil(seconds);
+    const remaining = Math.ceil(seconds);
 
-    const ping = () => {
-      if (onToast) onToast(countdownMessage(label, remaining));
-    };
-    ping();
+    // Probe read permission right after write so Chrome does not prompt only when the timer ends.
+    const canAutoClear = (await readClipboardText()) !== null;
 
-    tickTimer = setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        clearInterval(tickTimer);
-        tickTimer = null;
-        return;
-      }
-      ping();
-    }, 1000);
+    let initial = countdownMessage(label, remaining, { shownBelow });
+    if (!canAutoClear) {
+      initial = `${initial} ${manualClearHint(label)}`;
+    }
+    if (onToast) onToast(initial);
+
+    if (!canAutoClear) {
+      pendingValue = '';
+      return true;
+    }
 
     clearTimer = setTimeout(async () => {
       clearTimer = null;
-      if (tickTimer) {
-        clearInterval(tickTimer);
-        tickTimer = null;
-      }
       const expected = pendingValue;
       pendingValue = '';
       const outcome = await clearIfStillOurs(expected);
@@ -150,6 +149,7 @@
     cancelPendingClear,
     clearIfStillOurs,
     countdownMessage,
+    manualClearHint,
     resultMessage,
   };
 
