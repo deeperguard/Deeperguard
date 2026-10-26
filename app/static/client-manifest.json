@@ -1,11 +1,11 @@
 {
-  "asset_count": 57,
+  "asset_count": 59,
   "assets": {
     "css/app.css": {
-      "bytes": 242168,
-      "sha256": "9b9039f24e4228ce52c83c0802d6ca63a176194e14c91a475b9b044384388d40",
-      "sri": "sha384-cb9WYKv0qPig+XTLVNLWKnStJnslMF3f9SJuu3wKOTIBCMJthmOAcSZWxgGlMEG+",
-      "url": "/static/css/app.9b9039f24e4228ce.css"
+      "bytes": 242463,
+      "sha256": "639382187992c02f9a2902b14b1e0f1c10646e5b921583dcbac671f2124a8d4f",
+      "sri": "sha384-eArIOZDzuqrmwjwI9fp9yZAh965cDvQFnHzz+q1Uav7TaS+ScaU9js670r9TqBWt",
+      "url": "/static/css/app.639382187992c02f.css"
     },
     "css/marketing.css": {
       "bytes": 44049,
@@ -26,16 +26,16 @@
       "url": "/static/js/ai-chat.486704f1ab1903eb.js"
     },
     "js/app.js": {
-      "bytes": 918008,
-      "sha256": "3d2d97718c0e4e93424b94633efe7866f6c8a67e7acfe8de2984d7282aae9dfd",
-      "sri": "sha384-lMufckQ57AU+G7TetgEclc3aAZq14uhJU1ohHU2cvowuGgSzlYJAiZP4zRHIoGXK",
-      "url": "/static/js/app.3d2d97718c0e4e93.js"
+      "bytes": 922402,
+      "sha256": "5463b4a9e248b43f8fc9dec1c6eff77eecf100e486ba97f57c704756876fc1fd",
+      "sri": "sha384-Qpc+CT3HV93vIP5U/oktvSUps2Shoq86ASNLKVeTLkk5MeWY21+RbUx8+YaRZ8uf",
+      "url": "/static/js/app.5463b4a9e248b43f.js"
     },
     "js/auth-pages.js": {
-      "bytes": 27198,
-      "sha256": "087d15b68c3b43b3bc9d3d9896679c66135946a9c3381513007790e4490f07a5",
-      "sri": "sha384-SEs89h2OoPRtQYB2gZRy/VvizV2kYQ5wv6+pmGdWnnWebL+UQBezSBMTTxG4nNwG",
-      "url": "/static/js/auth-pages.087d15b68c3b43b3.js"
+      "bytes": 27717,
+      "sha256": "40ba74239726f3984de0a968b4fc82f0694bb36209acf74fe6ac1a4d738cca87",
+      "sri": "sha384-H9LQCID0gR6Yc2HwXfvJJ6FO+ItRfXwOuFAiwDveouChv86aupLT5AtNUu6/tXF1",
+      "url": "/static/js/auth-pages.40ba74239726f398.js"
     },
     "js/checklist.js": {
       "bytes": 2734,
@@ -49,11 +49,23 @@
       "sri": "sha384-sM14A8FANqfx5lU5HkFu4+w06aaMV2OP4c83riwNpRMOvBZfgRXGhe5abUvsu0v6",
       "url": "/static/js/client-ocr-engine.0d3617064d4605e1.js"
     },
+    "js/clipboard-sensitive.js": {
+      "bytes": 4416,
+      "sha256": "a46d4176941a28382ea9e2c4790eade8aa6b356e147c7d2815d032bd349c19fe",
+      "sri": "sha384-uWP0rHLurWW/9m9cXhsbczs6PHT+Gi9XkLG85Eh1/AMFOLocFUJxfUucCQHQ+ViI",
+      "url": "/static/js/clipboard-sensitive.a46d4176941a2838.js"
+    },
     "js/cloud-backup.js": {
       "bytes": 35639,
       "sha256": "8b7b9db7c47de5d7124df06ccdd47b0198d76226db8bcb5a1bf11cdaf4c8aea9",
       "sri": "sha384-UTZhDqlxV/QJTzImLJiau3wOcAvyOKVKdEHyq30J8vL9swlMLMQSP7orbbRRZumi",
       "url": "/static/js/cloud-backup.8b7b9db7c47de5d7.js"
+    },
+    "js/conflict-copy.js": {
+      "bytes": 942,
+      "sha256": "b8dc7a91c94051a9a203d346440e73729ed55ad9116e6fe0fe3f67b15f8333c9",
+      "sri": "sha384-RmDHnAqqZdylICGZSiK50KIdfedbLDLKq5YO0I1yF5ZO46QYnHmHLgS1v7H7SOhu",
+      "url": "/static/js/conflict-copy.b8dc7a91c94051a9.js"
     },
     "js/crypto-worker.js": {
       "bytes": 3543,
@@ -164,10 +176,10 @@
       "url": "/static/js/sanitize.6ca641a979a2b9b0.js"
     },
     "js/search.js": {
-      "bytes": 40155,
-      "sha256": "f99cf810d69605b94fd232c28e2d5ba19ee2b2cd17cc49b37bc6b675938598d7",
-      "sri": "sha384-ltbwPizUEk2INrtlvCTm5KcW1MxOgLRj+GqQyEIKHzlhAEaJymlo9br0QF43T2ac",
-      "url": "/static/js/search.f99cf810d69605b9.js"
+      "bytes": 41605,
+      "sha256": "fdea197107cf446d0882acd0664d68b9d17953b65d19a2146020c0e95df5ccbd",
+      "sri": "sha384-n6QKbn4Ki8csdVwl6cXoZKzzVBnRiBuRlO30fuFg59MhiynA4txt1DGaHCd8VF8R",
+      "url": "/static/js/search.fdea197107cf446d.js"
     },
     "js/secure-send-note-attachments.js": {
       "bytes": 5257,
@@ -206,10 +218,10 @@
       "url": "/static/js/srp-auth.28b708c4dd2f4a5d.js"
     },
     "js/store.js": {
-      "bytes": 226221,
-      "sha256": "2907c2711dc520e3b53b035f68da1ead8ac817112a17624c2c63837c52fac08c",
-      "sri": "sha384-vbKbO5NA609IupW6e17YMO6Ip7SzP5JrKZ+fSHWY56Ou6NBg53eJKXrLJDcw4nBE",
-      "url": "/static/js/store.2907c2711dc520e3.js"
+      "bytes": 226376,
+      "sha256": "817c59f0be700208f4f048ace35b15c416d2a7871a0cfbc4d901efbba6b2fc47",
+      "sri": "sha384-Fk1EJ2XBQcluPnqg2l/VGnzQNnh4OGoTKSDA2s559jAWtZwDDGqKcNETBiiak6BQ",
+      "url": "/static/js/store.817c59f0be700208.js"
     },
     "js/superscript.js": {
       "bytes": 21142,
@@ -345,6 +357,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "3cea4e1df2e7c81aa12aaa3b8bf431ff66763a0cf3fa73358f3705655b690464",
+  "manifest_sha256": "cdc591dc8abd41d70a808988680cf307be964be33de8a1b3b6f0e7693d8beea9",
   "version": 1
 }

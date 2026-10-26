@@ -1421,7 +1421,9 @@ const NotesStore = (() => {
       || String(a?.content || '') !== String(b?.content || '');
   }
 
-  const CONFLICT_SUFFIX = ' (conflict copy)';
+  const CONFLICT_SUFFIX = (typeof NotesConflictCopy !== 'undefined' && NotesConflictCopy.SUFFIX)
+    ? NotesConflictCopy.SUFFIX
+    : ' (conflict copy)';
   let onConflictCopy = null;
   // Recent note title+body fingerprints per uuid. Used to skip conflict copies
   // when the "remote" text is one of our own earlier local saves (same device).
@@ -6008,6 +6010,7 @@ const NotesStore = (() => {
     mergeCrossDeviceProtection,
     noteTextDiffers,
     keepConflictCopy,
+    conflictCopySuffix: () => CONFLICT_SUFFIX,
     setConflictCopyCallback,
     blockedItems,
     chunkPushRows,
