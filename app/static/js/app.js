@@ -1244,6 +1244,16 @@
       const next = listTimeLabel(ms);
       if (next && el.textContent !== next) el.textContent = next;
     });
+    document.querySelectorAll('.totp-meta-changed[data-changed-ms]').forEach((el) => {
+      const ms = Number(el.dataset.changedMs);
+      const full = `Changed ${totpVaultMetaLabel(ms, '—')}`;
+      if (el.textContent !== full) el.textContent = full;
+    });
+    document.querySelectorAll('.totp-meta-used[data-used-ms]').forEach((el) => {
+      const ms = Number(el.dataset.usedMs);
+      const full = `Used ${totpVaultMetaLabel(ms, '—')}`;
+      if (el.textContent !== full) el.textContent = full;
+    });
     if (currentId && NotesStore.isUnlocked()) {
       const open = NotesStore.get(currentId);
       if (open) updateNoteMeta(open);
@@ -3896,6 +3906,7 @@
       : String(content.host || '').trim().toLowerCase();
     return {
       id: item.uuid,
+      uuid: item.uuid,
       issuer: content.issuer || '',
       account: content.account || content.issuer || 'Account',
       secret: content.secret || '',
@@ -3903,6 +3914,8 @@
       digits: Number(content.digits || 6) || 6,
       period: Number(content.period || 30) || 30,
       algorithm: String(content.algorithm || 'SHA1').toUpperCase().replace('-', ''),
+      created_at: content.created_at || '',
+      updated_at: content.updated_at || item.updated_at || '',
     };
   }
 
@@ -3915,6 +3928,23 @@
     if (NotesTotp?.formatTotpCopyLabel) return NotesTotp.formatTotpCopyLabel(entry && entry.host);
     const host = totpBoundHostDisplay(entry);
     return host ? `Code · ${host}` : 'Code · no site set';
+  }
+
+  function totpVaultChangedMs(entry) {
+    return Math.max(
+      parseTimestampMs(entry?.updated_at),
+      parseTimestampMs(entry?.created_at),
+    );
+  }
+
+  function totpVaultLastUsedMs(entry) {
+    const meta = window.NotesVaultCopyMeta?.getMeta?.('totp', entry?.id);
+    return meta?.lastUsedAt || 0;
+  }
+
+  function totpVaultMetaLabel(ms, emptyLabel) {
+    if (!Number.isFinite(ms) || ms <= 0) return emptyLabel || '—';
+    return listTimeLabel(ms) || formatDateTime(ms);
   }
 
   function migrateTotpFromNotes() {
@@ -4038,6 +4068,11 @@
     if (!rows.length) {
       if (token !== totpRenderToken) return;
       totpUi.list.replaceChildren();
+      const listHeadEmpty = document.getElementById('totp-list-head');
+      if (listHeadEmpty) {
+        listHeadEmpty.hidden = true;
+        listHeadEmpty.setAttribute('aria-hidden', 'true');
+      }
       if (totpUi.empty) {
         totpUi.empty.hidden = false;
         totpUi.empty.textContent = totpEmptyCopy();
@@ -4045,6 +4080,11 @@
       return;
     }
     if (totpUi.empty) totpUi.empty.hidden = true;
+    const listHead = document.getElementById('totp-list-head');
+    if (listHead) {
+      listHead.hidden = false;
+      listHead.setAttribute('aria-hidden', 'false');
+    }
     const now = Date.now();
     const codes = await Promise.all(rows.map(async (item) => {
       try {
@@ -4066,6 +4106,12 @@
         : '<span class="note-preview totp-bound-host muted">Site: no site set</span>';
       const pretty = `${totp.code.slice(0, 3)} ${totp.code.slice(3)}`;
       const remaining = Math.max(0, Math.round(Number(totp.remaining) || 0));
+      const changedMs = totpVaultChangedMs(item);
+      const usedMs = totpVaultLastUsedMs(item);
+      const changedTitle = changedMs ? listTimeAbsolute(changedMs) : '';
+      const usedTitle = usedMs ? listTimeAbsolute(usedMs) : '';
+      const changedLabel = totpVaultMetaLabel(changedMs, '—');
+      const usedLabel = totpVaultMetaLabel(usedMs, '—');
       return `<div class="totp-item" data-totp-id="${escapeAttr(item.id)}">
         <button type="button" class="totp-item-main" data-totp-copy aria-label="Copy code for ${escapeAttr(label)}${boundHost ? ` (${boundHost})` : ' (no site set)'}">
           <span class="note-kind-icon note-kind-icon--totp" aria-hidden="true">${kindIconSvg('totp')}</span>
@@ -4073,7 +4119,11 @@
             <span class="note-title-row"><strong>${escapeHtml(label)}</strong></span>
             ${issuer ? `<span class="note-preview">${escapeHtml(issuer)}</span>` : ''}
             ${hostLine}
-            <span class="note-modified">Expires in ${remaining}s</span>
+            <span class="totp-item-meta">
+              <span class="totp-meta-cell totp-meta-changed" data-changed-ms="${changedMs || ''}" title="${escapeAttr(changedTitle)}"><span class="totp-meta-k">Changed</span> ${escapeHtml(changedLabel)}</span>
+              <span class="totp-meta-cell totp-meta-used" data-used-ms="${usedMs || ''}" title="${escapeAttr(usedTitle)}"><span class="totp-meta-k">Used</span> ${escapeHtml(usedLabel)}</span>
+            </span>
+            <span class="note-modified totp-expires">Expires in ${remaining}s</span>
           </span>
           <span class="totp-item-code">
             <span class="totp-code">${escapeHtml(pretty)}</span>
@@ -4106,18 +4156,25 @@
     toast(message);
   }
 
-  async function copySensitiveToClipboard(text, { label = 'Value', seconds, shownBelow } = {}) {
+  async function copySensitiveToClipboard(text, { label = 'Value', seconds, shownBelow, copyScope, copyId } = {}) {
+    let rotateHint = '';
+    if (copyScope && copyId && window.NotesVaultCopyMeta?.recordCopy) {
+      const meta = NotesVaultCopyMeta.recordCopy(copyScope, copyId);
+      rotateHint = NotesVaultCopyMeta.rotateHint?.(meta.count) || '';
+    }
     const CS = window.NotesClipboardSensitive;
     if (!CS?.copySensitive) {
       if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
       else throw new Error('Could not copy');
-      toast(shownBelow ? `${label} shown below and copied` : `Copied ${label}`);
+      const base = shownBelow ? `${label} shown below and copied` : `Copied ${label}`;
+      toast(rotateHint ? `${base}. ${rotateHint}` : base);
       return;
     }
     await CS.copySensitive(text, {
       label,
       seconds,
       shownBelow,
+      rotateHint,
       onToast: toastSensitiveClipboard,
     });
   }
@@ -4127,7 +4184,13 @@
     if (!item) return;
     try {
       const totp = await NotesTotp.generate(item);
-      await copySensitiveToClipboard(totp.code, { label: totpCopyLabelForEntry(item), seconds: 30 });
+      await copySensitiveToClipboard(totp.code, {
+        label: totpCopyLabelForEntry(item),
+        seconds: 30,
+        copyScope: 'totp',
+        copyId: item.id,
+      });
+      if (currentAppTab() === '2fa') renderTotpList();
     } catch (err) {
       toast('Could not copy code', true);
     }
@@ -20776,7 +20839,13 @@
       reveal.hidden = false;
     }
     try {
-      await copySensitiveToClipboard(saved, { label: 'Password', seconds: 45, shownBelow: true });
+      await copySensitiveToClipboard(saved, {
+        label: 'Password',
+        seconds: 45,
+        shownBelow: true,
+        copyScope: 'vault-password',
+        copyId: 'device',
+      });
     } catch (err) {
       toast('Password shown below (could not copy)', true);
     }
