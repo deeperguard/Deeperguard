@@ -1,0 +1,25 @@
+<script nonce="{{ csp_nonce }}">
+  (function () {
+    function preventAuthFormNavigation(event) {
+      try { event.preventDefault(); } catch (err) {}
+    }
+    function requestAuthFormSubmit() {
+      var fnName = '{{ auth_guard_fn }}';
+      var queuedKey = '{{ auth_guard_queued }}';
+      if (typeof window[fnName] === 'function') {
+        window[fnName]();
+        return;
+      }
+      window[queuedKey] = true;
+    }
+    var formEl = document.getElementById('{{ auth_guard_form_id }}');
+    if (formEl) {
+      formEl.addEventListener('submit', preventAuthFormNavigation, true);
+    }
+    var btn = document.getElementById('{{ auth_guard_submit_id }}');
+    if (btn) {
+      btn.type = 'button';
+      btn.addEventListener('click', function () { requestAuthFormSubmit(); });
+    }
+  })();
+</script>

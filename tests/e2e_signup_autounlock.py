@@ -120,8 +120,8 @@ def main() -> int:
             page.wait_for_selector("#register-form")
 
             page.fill('input[name="email"]', email)
-            page.fill('input[name="password"]', PASSWORD)
-            page.fill('input[name="password2"]', PASSWORD)
+            page.fill('#register-password', PASSWORD)
+            page.fill('#register-password2', PASSWORD)
             page.check("#register-terms")
             page.check("#register-recover-ack")
 
@@ -140,7 +140,7 @@ def main() -> int:
                   input.value = 'e2e-dummy-turnstile-token';
                 }"""
             )
-            page.click('#register-form button[type="submit"]')
+            page.click('#register-submit')
 
             page.wait_for_function(
                 """() => {

@@ -2900,6 +2900,26 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("if (!vaultHydrated)", app_js)
         self.assertIn("lastNotesRenderKey = ''", app_js)
 
+    def test_login_register_forms_do_not_leak_password_in_query(self):
+        auth_js = (APP_DIR / "static" / "js" / "auth-pages.js").read_text(encoding="utf-8")
+        login = self.client.get("/login", follow_redirects=False)
+        self.assertEqual(login.status_code, 200)
+        login_html = login.get_data(as_text=True)
+        self.assertIn('id="login-form"', login_html)
+        self.assertIn('type="button" id="login-submit"', login_html)
+        self.assertNotIn('id="login-password" type="password" name="password"', login_html)
+        self.assertIn("preventAuthFormNavigation", login_html)
+        self.assertIn("window.__notesSubmitLogin", auth_js)
+        register = self.client.get("/register", follow_redirects=False)
+        self.assertEqual(register.status_code, 200)
+        register_html = register.get_data(as_text=True)
+        self.assertIn('id="register-form"', register_html)
+        self.assertIn('type="button" id="register-submit"', register_html)
+        self.assertNotIn('id="register-password" type="password" name="password"', register_html)
+        self.assertNotIn('name="password2"', register_html)
+        self.assertIn("preventAuthFormNavigation", register_html)
+        self.assertIn("window.__notesSubmitRegister", auth_js)
+
     def test_note_swipe_delete_hidden_until_open(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")

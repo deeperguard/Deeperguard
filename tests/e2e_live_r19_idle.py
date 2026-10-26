@@ -32,9 +32,9 @@ def main() -> int:
 
             page.goto(f"{BASE}/login", wait_until="domcontentloaded", timeout=90000)
             page.fill('#login-form [name="email"]', EMAIL)
-            page.fill('#login-form [name="password"]', PASSWORD)
+            page.fill('#login-password', PASSWORD)
             with page.expect_navigation(wait_until="domcontentloaded", timeout=90000):
-                page.click('#login-form button[type="submit"]')
+                page.click('#login-submit')
             page.wait_for_function(
                 "() => !!window.NotesStore && (document.body.classList.contains('unlocked') || !!NotesStore.state?.keyVerified)",
                 timeout=90000,

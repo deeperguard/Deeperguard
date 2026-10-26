@@ -63,7 +63,7 @@ function showError(id, message) {
 }
 
 function setLoginBusy(busy, message) {
-  const btn = document.querySelector('#login-form button[type="submit"]');
+  const btn = document.getElementById('login-submit');
   const passkeyBtn = document.getElementById('webauthn-login');
   const status = document.getElementById('login-status');
   if (btn) {
@@ -340,14 +340,12 @@ if (loginForm) {
     }
   } catch (capBootErr) { /* ignore */ }
 
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  async function submitLoginForm() {
     showError('login-error', '');
     hideSessionCapPanel();
     try { sessionStorage.removeItem('notes_session_cap_totp'); } catch (clearErr) { /* ignore */ }
-    const fd = new FormData(loginForm);
-    const email = String(fd.get('email') || '').trim().toLowerCase();
-    const password = String(fd.get('password') || '');
+    const email = String(loginForm.querySelector('[name="email"]')?.value || '').trim().toLowerCase();
+    const password = String(document.getElementById('login-password')?.value || '');
     if (!email) {
       showError('login-error', 'Enter your email');
       return;
@@ -399,6 +397,19 @@ if (loginForm) {
       }
       showError('login-error', msg);
     }
+  }
+
+  window.__notesSubmitLogin = () => {
+    submitLoginForm();
+  };
+  if (window.__notesLoginQueued) {
+    window.__notesLoginQueued = false;
+    window.__notesSubmitLogin();
+  }
+
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await submitLoginForm();
   });
 }
 
@@ -555,8 +566,7 @@ if (registerForm) {
     if (recoverInput.checked) setFieldError('register-recover-ack', 'register-recover-error', '');
   });
 
-  registerForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  async function submitRegisterForm() {
     showError('register-error', '');
     const email = String(emailInput?.value || '').trim().toLowerCase();
     const password = String(passwordInput?.value || '');
@@ -599,7 +609,7 @@ if (registerForm) {
       showError('register-error', 'Please complete the security check and try again.');
       return;
     }
-    const submitBtn = registerForm.querySelector('[type="submit"]');
+    const submitBtn = document.getElementById('register-submit');
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.textContent = 'Creating account…';
@@ -645,6 +655,19 @@ if (registerForm) {
       }
       showError('register-error', err.message);
     }
+  }
+
+  window.__notesSubmitRegister = () => {
+    submitRegisterForm();
+  };
+  if (window.__notesRegisterQueued) {
+    window.__notesRegisterQueued = false;
+    window.__notesSubmitRegister();
+  }
+
+  registerForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await submitRegisterForm();
   });
 }
 
