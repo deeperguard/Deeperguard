@@ -29,7 +29,7 @@
       <div class="auth-field">
         <label id="register-password-label" for="register-password">Password</label>
         <span class="password-field-wrap">
-          <input id="register-password" type="password" name="password" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-labelledby="register-password-label" aria-describedby="register-password-hint register-password-error register-strength">
+          <input id="register-password" type="password" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-labelledby="register-password-label" aria-describedby="register-password-hint register-password-error register-strength">
           <button type="button" class="password-toggle btn ghost sm" data-target="register-password" aria-label="Show password">Show</button>
         </span>
       </div>
@@ -42,7 +42,7 @@
       <div class="auth-field">
         <label id="register-password2-label" for="register-password2">Confirm password</label>
         <span class="password-field-wrap">
-          <input id="register-password2" type="password" name="password2" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-labelledby="register-password2-label" aria-describedby="register-password2-error">
+          <input id="register-password2" type="password" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-labelledby="register-password2-label" aria-describedby="register-password2-error">
           <button type="button" class="password-toggle btn ghost sm" data-target="register-password2" aria-label="Show password">Show</button>
         </span>
       </div>
@@ -67,8 +67,11 @@
       {% endif %}
       <p class="auth-hint">Public beta: new accounts start on <strong>Pro</strong> (free for now) with <strong>5&nbsp;GB</strong> encrypted storage. After the beta, <strong>Basic</strong> is €2.99/month or €29/year (100&nbsp;MB) and <strong>Pro</strong> is €6.99/month or €69/year (5&nbsp;GB). Creating an account does not ask for a code. We email a verification code to this address, and you only enter it in Settings before encrypted backups are sent.</p>
       <p id="register-error" class="error" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
-      <button type="submit" class="btn primary block">Create account</button>
+      <button type="button" id="register-submit" class="btn primary block">Create account</button>
     </form>
+    {% with auth_guard_form_id='register-form', auth_guard_submit_id='register-submit', auth_guard_fn='__notesSubmitRegister', auth_guard_queued='__notesRegisterQueued' %}
+    {% include 'partials/auth-native-submit-guard.html' %}
+    {% endwith %}
     <p class="muted center auth-switch">Already have an account? <a href="/login">Sign in</a></p>
     {% endif %}
     {% include 'partials/auth-footer.html' %}

@@ -78,11 +78,11 @@ def main() -> int:
             page = browser.new_page()
             page.goto(f"{base}/register", wait_until="domcontentloaded")
             page.fill('input[name="email"]', email)
-            page.fill('input[name="password"]', PASSWORD)
-            page.fill('input[name="password2"]', PASSWORD)
+            page.fill('#register-password', PASSWORD)
+            page.fill('#register-password2', PASSWORD)
             page.check("#register-terms")
             page.check("#register-recover-ack")
-            page.click('#register-form button[type="submit"]')
+            page.click('#register-submit')
             page.wait_for_function(
                 """() => location.pathname === '/app'
                   && !!(window.NotesStore && NotesStore.isUnlocked && NotesStore.isUnlocked())
