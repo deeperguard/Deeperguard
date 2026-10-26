@@ -13,6 +13,12 @@ const historyJs = fs.readFileSync(path.join(root, 'app/static/js/note-history.js
 
 // 1. Unlock / login / register use novalidate so custom alerts can show.
 assert.ok(appHtml.includes('id="unlock-form" class="stack" novalidate'));
+const unlockPwTag = appHtml.match(/id="unlock-password"[^>]*>/);
+assert.ok(unlockPwTag, 'unlock password input');
+assert.ok(!/\bname="password"/.test(unlockPwTag[0]), 'unlock password must not use name=password');
+assert.ok(appHtml.includes('type="button" id="unlock-submit"'), 'unlock button must not be type=submit');
+assert.ok(appHtml.includes('preventUnlockNavigation'), 'inline guard blocks native unlock GET');
+assert.ok(appJs.includes('window.__notesSubmitUnlock'));
 assert.ok(loginHtml.includes('id="login-form" class="stack" novalidate'));
 assert.ok(registerHtml.includes('id="register-form" class="stack" novalidate'));
 assert.ok(appJs.includes("showUnlockError('Enter your password')"));

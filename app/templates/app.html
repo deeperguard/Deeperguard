@@ -544,9 +544,9 @@
         <p id="unlock-first-hint" class="auth-hint" hidden>Use the vault password you just created.</p>
         <p class="zk-badge">Encrypted on this device</p>
       </div>
-      <form id="unlock-form" class="stack" novalidate>
+      <form id="unlock-form" class="stack" novalidate autocomplete="off">
         <label>Vault password
-          <input id="unlock-password" type="password" name="password" autocomplete="current-password" required aria-required="true">
+          <input id="unlock-password" type="password" autocomplete="current-password" required aria-required="true">
         </label>
         <p id="unlock-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" hidden></p>
         <p id="unlock-recovery-hint" class="auth-hint" hidden>If you changed it in Settings, the vault password is different from the password you use to sign in. They start as the same password.</p>
@@ -558,7 +558,7 @@
           <span id="unlock-progress-bar"></span>
         </div>
         <button type="button" id="unlock-empty-retry" class="btn ghost block" hidden>Try again</button>
-        <button type="submit" id="unlock-submit" class="btn primary block">Unlock</button>
+        <button type="button" id="unlock-submit" class="btn primary block">Unlock</button>
         <p id="unlock-saved-hint" class="auth-hint" hidden>A password is saved on this device for offline unlock. You still enter it each time Notes opens.</p>
         <button type="button" id="unlock-clear-saved" class="btn ghost block" hidden>Clear saved password</button>
         <button type="button" id="unlock-signout" class="btn ghost block"{% if skip_login %} hidden{% endif %}>Sign out</button>
@@ -580,10 +580,33 @@
   </div>
   <script nonce="{{ csp_nonce }}">
     (function () {
+      function preventUnlockNavigation(event) {
+        try { event.preventDefault(); } catch (err) {}
+      }
+      function requestUnlock() {
+        if (typeof window.__notesSubmitUnlock === 'function') {
+          window.__notesSubmitUnlock();
+          return;
+        }
+        window.__notesUnlockQueued = true;
+      }
+      var unlockFormEl = document.getElementById('unlock-form');
+      if (unlockFormEl) {
+        unlockFormEl.addEventListener('submit', preventUnlockNavigation, true);
+        unlockFormEl.addEventListener('keydown', function (event) {
+          if (event.key !== 'Enter' || event.defaultPrevented) return;
+          if (event.target && event.target.id === 'unlock-password') {
+            preventUnlockNavigation(event);
+            requestUnlock();
+          }
+        });
+      }
       var btn = document.getElementById('unlock-submit');
       if (btn) {
+        btn.type = 'button';
         btn.disabled = false;
         btn.textContent = 'Unlock';
+        btn.addEventListener('click', function () { requestUnlock(); });
       }
       var support = document.getElementById('unlock-support-email');
       if (support) support.textContent = ['notes', '@', 'deeperguard.com'].join('');
