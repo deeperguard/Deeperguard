@@ -1713,11 +1713,27 @@
           </div>
           <p id="totp-status" class="settings-hint" hidden></p>
           <div id="passkey-settings" class="settings-nested stack" data-plan-feature="passkeys">
-            <p class="settings-hint">Passkeys sign you into your account without typing your password. Vault unlock still requires your master password locally.</p>
+            <p class="settings-hint">Passkeys sign you into your account without typing your account password. Vault unlock still requires your master password on this device — passkeys do not replace it.</p>
             <div id="passkey-list"></div>
             <div class="settings-actions">
               <button type="button" id="btn-add-passkey" class="btn">Add passkey</button>
             </div>
+          </div>
+          <div id="passkey-signin-settings" class="settings-nested stack" data-plan-feature="passkeys">
+            <p class="settings-subtitle">Passkey-only account sign-in</p>
+            <p id="passkey-signin-passkey-count" class="settings-hint">—</p>
+            <p id="passkey-signin-status" class="settings-hint" role="status" aria-live="polite"></p>
+            <label class="settings-row">Waiting period before new recovery codes work
+              <select id="passkey-signin-wait"></select>
+            </label>
+            <p class="settings-hint">Recovery codes are a last resort for account sign-in. A waiting period always applies (at least 72 hours). Requesting new codes resets the wait. Any signed-in device can cancel a pending batch.</p>
+            <div class="settings-actions">
+              <button type="button" id="btn-passkey-signin-generate-codes" class="btn">Generate recovery codes</button>
+              <button type="button" id="btn-passkey-signin-cancel-codes" class="btn ghost" hidden>Cancel pending codes</button>
+            </div>
+            <div id="passkey-signin-code-reveal" class="settings-nested stack" hidden></div>
+            <label class="settings-row checkbox"><span>Disable password sign-in</span><input id="pref-disable-password-login" type="checkbox"></label>
+            <p id="passkey-signin-toggle-hint" class="settings-hint"></p>
           </div>
           <div id="password-change" class="settings-nested stack">
             <label class="settings-row stacked" for="password-change-current">Current vault password
@@ -2413,6 +2429,7 @@
   {{ asset_script('js/sanitize.js') }}
   {{ asset_script('js/webauthn-client.js') }}
   {{ asset_script('js/passkeys.js') }}
+  {{ asset_script('js/passkey-signin.js') }}
   {{ asset_script('js/vault-secrets.js') }}
   {{ asset_script('js/conflict-copy.js') }}
   {{ asset_script('js/clipboard-sensitive.js') }}

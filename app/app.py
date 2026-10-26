@@ -46,6 +46,7 @@ from srp_auth import (
     normalize_srp_kdf_version,
 )
 from vault_crypto import password_unlocks_samples
+import passkey_signin
 import webauthn_helper as webauthn_mod
 from auth_rate_limit import allow as auth_rate_allow
 from plans import (
@@ -1129,6 +1130,9 @@ def api_auth_srp_challenge():
         # Report the current signup default (v2) so v1/v2 accounts are not enumerable (L-20).
         salt_hex, b_hex = fake_srp_challenge(email, app.secret_key)
         return jsonify({"srp_salt": salt_hex, "B": b_hex, "srp_kdf_version": SRP_KDF_V2})
+    if passkey_signin.password_login_disabled(user):
+        salt_hex, b_hex = fake_srp_challenge(email, app.secret_key)
+        return jsonify({"srp_salt": salt_hex, "B": b_hex, "srp_kdf_version": SRP_KDF_V2})
     try:
         sess = SrpServerSession()
         b_hex = sess.step1(email, str(user["srp_salt"]), str(user["srp_verifier"]))
@@ -1159,6 +1163,8 @@ def api_auth_srp_verify():
         return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if not user or not db.user_has_srp(user):
+        return jsonify({"error": "invalid credentials"}), 401
+    if passkey_signin.password_login_disabled(user):
         return jsonify({"error": "invalid credentials"}), 401
     state = auth.pop_srp_state(email, str(user["srp_salt"]), str(user["srp_verifier"]))
     if not state:
@@ -1259,6 +1265,9 @@ def api_auth_repair_login_challenge():
         # Same shape as login challenge for unknown emails (M1).
         salt_hex, b_hex = fake_srp_challenge(email, app.secret_key)
         return jsonify({"srp_salt": salt_hex, "B": b_hex, "srp_kdf_version": SRP_KDF_V2})
+    if passkey_signin.password_login_disabled(user):
+        salt_hex, b_hex = fake_srp_challenge(email, app.secret_key)
+        return jsonify({"srp_salt": salt_hex, "B": b_hex, "srp_kdf_version": SRP_KDF_V2})
     try:
         b_hex = _stored_srp_challenge(email, user, auth.SRP_PURPOSE_REPAIR_LOGIN)
     except ValueError:
@@ -1293,6 +1302,8 @@ def api_auth_repair_login():
         return jsonify({"error": "too many attempts"}), 429
     user = db.get_user_by_email(email)
     if not user:
+        return jsonify({"error": "invalid credentials", "repair_exhausted": True}), 401
+    if passkey_signin.password_login_disabled(user):
         return jsonify({"error": "invalid credentials", "repair_exhausted": True}), 401
 
     is_srp = db.user_has_srp(user) or db.user_auth_method(user) == "srp"
@@ -1734,6 +1745,65 @@ def api_webauthn_register_verify():
     return jsonify({"ok": True})
 
 
+@app.post("/api/account/passkey-signin/recovery-codes")
+def api_account_passkey_signin_recovery_codes():
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    blocked = _plan_block(user, "passkeys")
+    if blocked:
+        return blocked
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    if passkey_signin.passkey_count(uid) < 2:
+        return jsonify({"error": "Register at least two passkeys before generating recovery codes."}), 400
+    body = request.get_json(silent=True) or {}
+    wait_seconds = passkey_signin.normalize_wait_seconds(body.get("wait_seconds"))
+    try:
+        payload = passkey_signin.issue_recovery_codes(uid, wait_seconds)
+    except Exception as exc:
+        return _generic_client_error("recovery codes failed", exc, status=400)
+    _revoke_other_sessions(uid, reason="recovery-codes")
+    return jsonify({"ok": True, **payload, "passkey_signin": passkey_signin.public_status(user)})
+
+
+@app.post("/api/account/passkey-signin/recovery-codes/cancel")
+def api_account_passkey_signin_recovery_cancel():
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    if not passkey_signin.cancel_pending_recovery(uid):
+        return jsonify({"error": "No pending recovery codes to cancel"}), 400
+    user = db.get_user_by_id(uid)
+    return jsonify({"ok": True, "passkey_signin": passkey_signin.public_status(user)})
+
+
+@app.post("/api/account/passkey-signin/password-login")
+def api_account_passkey_signin_password_login():
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    blocked = _plan_block(user, "passkeys")
+    if blocked:
+        return blocked
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    body = request.get_json(silent=True) or {}
+    disabled = bool(body.get("disabled"))
+    ok, reason = passkey_signin.set_password_login_disabled(uid, disabled)
+    if not ok:
+        return jsonify({"error": reason}), 400
+    if disabled:
+        _revoke_other_sessions(uid, reason="passkey-only")
+    user = db.get_user_by_id(uid)
+    return jsonify({"ok": True, "passkey_signin": passkey_signin.public_status(user)})
+
+
 @app.get("/api/auth/webauthn/credentials")
 def api_webauthn_list_credentials():
     uid = auth.current_user_id()
@@ -1764,6 +1834,9 @@ def api_webauthn_remove_credential():
     credential_id = str(body.get("credential_id") or "").strip()
     if not credential_id:
         return jsonify({"error": "missing credential_id"}), 400
+    allowed, reason = passkey_signin.passkey_removal_allowed(uid)
+    if not allowed:
+        return jsonify({"error": reason}), 400
     if not db.delete_webauthn_credential(uid, credential_id):
         return jsonify({"error": "not found"}), 404
     _revoke_other_sessions(uid, reason="passkey")
@@ -1819,6 +1892,45 @@ def api_webauthn_login_verify():
         return _generic_client_error("webauthn login verify failed", exc, status=401)
     totp_required = bool(user["totp_enabled"])
     blocked = _login_user(int(user["id"]), totp_ok=not totp_required)
+    if blocked:
+        return blocked
+    return jsonify(_login_payload(user, totp_required=totp_required))
+
+
+@app.post("/api/auth/sign-in/methods")
+def api_auth_sign_in_methods():
+    body = request.get_json(silent=True) or {}
+    email = str(body.get("email") or "").strip().lower()
+    if _auth_rate_limited("sign-in-methods", email or auth.client_ip()):
+        return jsonify({"error": "too many attempts"}), 429
+    user = db.get_user_by_email(email) if email else None
+    methods = (
+        passkey_signin.sign_in_methods_for_user(user)
+        if user
+        else passkey_signin.sign_in_methods_unknown()
+    )
+    return jsonify({"ok": True, **methods})
+
+
+@app.post("/api/auth/recovery-code")
+def api_auth_recovery_code_login():
+    body = request.get_json(silent=True) or {}
+    email = str(body.get("email") or "").strip().lower()
+    code = str(body.get("code") or "")
+    if not email or not code:
+        return jsonify({"error": "invalid credentials"}), 400
+    if _auth_rate_limited("recovery-code-login", email):
+        return jsonify({"error": "too many attempts"}), 429
+    uid, status = passkey_signin.verify_recovery_login(email, code)
+    if status == "not_ready":
+        return jsonify({"error": "Recovery codes are not active yet"}), 403
+    if not uid:
+        return jsonify({"error": "invalid credentials"}), 401
+    user = db.get_user_by_id(uid)
+    if not user:
+        return jsonify({"error": "invalid credentials"}), 401
+    totp_required = bool(user["totp_enabled"])
+    blocked = _login_user(int(uid), totp_ok=not totp_required)
     if blocked:
         return blocked
     return jsonify(_login_payload(user, totp_required=totp_required))
@@ -2143,6 +2255,7 @@ def api_account():
             "webauthn_enabled": len(db.list_webauthn_credentials(uid)) > 0,
             "passkey_host_ok": webauthn_mod.passkey_host_error() is None,
             "passkey_url": f"https://{webauthn_preferred_host()}/",
+            "passkey_signin": passkey_signin.public_status(user),
             "storage_used_bytes": int(stats["storage_bytes"]),
             "storage_quota_bytes": quota,
             "storage_quota_effective": db.user_storage_quota_effective(user),

@@ -5690,6 +5690,14 @@ body.ai-outbound-open { overflow: hidden; }
   margin: 0;
 }
 .settings-nested { padding: 0 14px 14px; }
+
+.recovery-code-list {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
 .settings-advanced { margin-top: 12px; }
 .settings-advanced > summary {
   cursor: pointer;

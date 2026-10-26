@@ -81,7 +81,7 @@
     if (!rows.length) {
       const hint = document.createElement('p');
       hint.className = 'settings-hint';
-      hint.textContent = 'No passkeys yet. Add one to sign in without typing your password.';
+      hint.textContent = 'No passkeys yet. Add one for passwordless account sign-in (vault unlock still uses your master password).';
       container.appendChild(hint);
       return;
     }
@@ -98,7 +98,10 @@
         btn.disabled = true;
         try {
           await removePasskey(row.credential_id);
-          await renderPasskeyList(container);
+          await renderPasskeyList(container, preferredUrl);
+          if (typeof window.__notesRefreshAccountPasskeySignin === 'function') {
+            await window.__notesRefreshAccountPasskeySignin();
+          }
         } catch (err) {
           btn.disabled = false;
           throw err;

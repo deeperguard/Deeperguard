@@ -813,6 +813,8 @@ def public_path(path: str) -> bool:
         "/api/auth/logout",
         "/api/auth/webauthn/login/options",
         "/api/auth/webauthn/login/verify",
+        "/api/auth/sign-in/methods",
+        "/api/auth/recovery-code",
         # Login-adjacent recovery / drift repair (password never leaves the client
         # as a stored verifier proof). Kept public so sign-in still works.
         "/api/auth/repair-login",

@@ -14154,6 +14154,10 @@
     await loadSignedInDevices();
   }
 
+  window.__notesRefreshAccountPasskeySignin = async () => {
+    await initSettings();
+  };
+
   async function initSettings() {
     let account;
     try {
@@ -14227,6 +14231,9 @@
           addPasskeyBtn.dataset.passkeyMode = 'register';
         }
       }
+    }
+    if (window.NotesPasskeySignin) {
+      NotesPasskeySignin.bindPasskeySigninSettings(account);
     }
     const totpDisablePw = document.getElementById('totp-disable-password-wrap');
     const totpDisableHint = document.getElementById('totp-disable-srp-hint');

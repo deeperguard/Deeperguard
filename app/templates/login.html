@@ -26,10 +26,19 @@
       <label>Email
         <input type="email" name="email" autocomplete="username" required aria-required="true">
       </label>
-      <label>Account password
-        <input id="login-password" type="password" autocomplete="current-password" required aria-required="true">
-      </label>
-      <p class="hint">This password signs you in. It also decrypts notes on this device until you change the vault password in Settings. It never leaves your browser.</p>
+      <div id="login-password-block">
+        <label>Account password
+          <input id="login-password" type="password" autocomplete="current-password" required aria-required="true">
+        </label>
+        <p class="hint">This password signs you in. It also decrypts notes on this device until you change the vault password in Settings. It never leaves your browser.</p>
+      </div>
+      <div id="login-recovery-block" class="stack" hidden>
+        <label>Recovery code
+          <input id="login-recovery-code" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" inputmode="text" placeholder="XXXX-XXXX-XXXX">
+        </label>
+        <p class="hint">One-time recovery codes work only after their waiting period ends. They sign you into your account — you still unlock the vault with your master password.</p>
+        <button type="button" id="login-recovery-submit" class="btn subtle block">Sign in with recovery code</button>
+      </div>
       <p id="login-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
       <div id="session-cap-panel" class="session-cap-panel" hidden>
         <p class="hint">Signing out a device ends its session there. Your notes are not deleted.</p>
@@ -39,7 +48,8 @@
       <p id="login-status" class="auth-status muted" hidden></p>
       <button type="button" id="login-submit" class="btn primary block">Sign in</button>
       <button type="button" class="btn subtle block" id="webauthn-login">Sign in with passkey</button>
-      <p class="hint center">Passkeys sign you in only — you still unlock your vault with your password afterward.</p>
+      <p class="hint center">Passkeys sign you into your account only — vault unlock still needs your master password on this device.</p>
+      <p class="hint center"><button type="button" class="btn link" id="login-toggle-recovery" hidden>Use a recovery code</button></p>
     </form>
     {% with auth_guard_form_id='login-form', auth_guard_submit_id='login-submit', auth_guard_fn='__notesSubmitLogin', auth_guard_queued='__notesLoginQueued' %}
     {% include 'partials/auth-native-submit-guard.html' %}
@@ -52,6 +62,7 @@
   {{ asset_script('js/vendor/noble-argon2.js') }}
   {{ asset_script('js/webauthn-client.js') }}
   {{ asset_script('js/srp-auth.js') }}
+  {{ asset_script('js/passkey-signin.js') }}
   {{ asset_script('js/auth-pages.js') }}
 </body>
 </html>
