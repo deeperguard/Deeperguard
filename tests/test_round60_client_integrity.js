@@ -12,6 +12,8 @@ const verify = fs.readFileSync(path.join(root, 'app/templates/verify.html'), 'ut
 const sw = fs.readFileSync(path.join(root, 'app/static/sw.js'), 'utf8');
 const cryptoJs = fs.readFileSync(path.join(root, 'app/static/js/crypto.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
+const appJsPath = path.join(root, 'app/static/js/app.js');
+execFileSync(process.execPath, ['--check', appJsPath]);
 const appPy = fs.readFileSync(path.join(root, 'app/app.py'), 'utf8');
 const authHead = fs.readFileSync(path.join(root, 'app/templates/partials/auth-head.html'), 'utf8');
 
