@@ -127,7 +127,7 @@ def main() -> int:
         driver.find_element(By.NAME, "email").send_keys(EMAIL)
         driver.find_element(By.NAME, "password").send_keys(PASSWORD)
         driver.find_element(By.NAME, "password2").send_keys(PASSWORD)
-        driver.find_element(By.CSS_SELECTOR, "#register-form button[type=submit]").click()
+        driver.find_element(By.CSS_SELECTOR, "#register-submit").click()
         wait.until(EC.presence_of_element_located((By.ID, "app")))
         wait.until(lambda d: d.execute_script(
             "return !!window.NotesStore && NotesStore.isUnlocked();"))

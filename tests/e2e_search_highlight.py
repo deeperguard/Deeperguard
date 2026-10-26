@@ -213,7 +213,7 @@ def unlock_app(driver, wait, base: str) -> None:
     driver.find_element(By.NAME, "email").send_keys("e2e@home.local")
     driver.find_element(By.NAME, "password").send_keys("e2e-password-1234")
     driver.find_element(By.NAME, "password2").send_keys("e2e-password-1234")
-    driver.find_element(By.CSS_SELECTOR, "#register-form button[type=submit]").click()
+    driver.find_element(By.CSS_SELECTOR, "#register-submit").click()
 
     wait.until(EC.presence_of_element_located((By.ID, "app")))
     unlock = driver.find_elements(By.ID, "unlock-password")
