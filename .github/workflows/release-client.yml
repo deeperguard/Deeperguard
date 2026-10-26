@@ -21,6 +21,13 @@ jobs:
         with:
           python-version-file: .python-version
 
+      # Round 72.2: refuse to publish a signed release when RELEASE_TAG in the
+      # tree does not match the git tag (About would point at the wrong release).
+      - name: RELEASE_TAG must match git tag
+        run: |
+          chmod +x scripts/check-release-tag.sh
+          NOTES_RELEASE_TAG="${GITHUB_REF_NAME}" bash scripts/check-release-tag.sh
+
       - name: Build client manifest
         env:
           SOURCE_DATE_EPOCH: "0"
