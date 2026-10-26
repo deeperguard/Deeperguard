@@ -198,6 +198,10 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN backup_verify_expires REAL NOT NULL DEFAULT 0")
     if "backup_verify_attempts" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN backup_verify_attempts INTEGER NOT NULL DEFAULT 0")
+    if "password_login_disabled" not in cols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN password_login_disabled INTEGER NOT NULL DEFAULT 0"
+        )
     if "plan" not in cols:
         from plans import PLAN_PRO, plan_storage_quota_bytes
 
@@ -364,6 +368,30 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_signin_alert_user_device_sent
             ON signin_alert_log(user_id, device_key, sent_at);
+
+        CREATE TABLE IF NOT EXISTS account_recovery_batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            created_at REAL NOT NULL,
+            activates_at REAL NOT NULL,
+            cancelled_at REAL NOT NULL DEFAULT 0,
+            wait_seconds INTEGER NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_recovery_batches_user_created
+            ON account_recovery_batches(user_id, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS account_recovery_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            code_hash TEXT NOT NULL,
+            used_at REAL NOT NULL DEFAULT 0,
+            FOREIGN KEY(batch_id) REFERENCES account_recovery_batches(id) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_recovery_codes_batch_hash
+            ON account_recovery_codes(batch_id, code_hash);
         """
     )
     send_cols = {row[1] for row in conn.execute("PRAGMA table_info(secure_sends)").fetchall()}
@@ -737,6 +765,104 @@ def delete_webauthn_credential(user_id: int, credential_id: str) -> bool:
             WHERE user_id = ? AND credential_id = ?
             """,
             (user_id, credential_id),
+        )
+        return int(cur.rowcount or 0) > 0
+
+
+def user_password_login_disabled_by_id(user_id: int) -> bool:
+    row = connection().execute(
+        "SELECT password_login_disabled FROM users WHERE id = ?",
+        (int(user_id),),
+    ).fetchone()
+    if not row:
+        return False
+    return int(row["password_login_disabled"] or 0) == 1
+
+
+def set_password_login_disabled(user_id: int, disabled: bool) -> None:
+    with tx() as conn:
+        conn.execute(
+            "UPDATE users SET password_login_disabled = ?, updated_at = ? WHERE id = ?",
+            (1 if disabled else 0, now(), int(user_id)),
+        )
+
+
+def get_latest_recovery_batch(user_id: int) -> sqlite3.Row | None:
+    return connection().execute(
+        """
+        SELECT * FROM account_recovery_batches
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (int(user_id),),
+    ).fetchone()
+
+
+def cancel_all_recovery_batches(user_id: int, *, cancelled_at: float) -> None:
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE account_recovery_batches
+            SET cancelled_at = ?
+            WHERE user_id = ? AND cancelled_at = 0
+            """,
+            (float(cancelled_at), int(user_id)),
+        )
+
+
+def create_recovery_batch(
+    user_id: int,
+    created_at: float,
+    activates_at: float,
+    wait_seconds: int,
+) -> int:
+    with tx() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO account_recovery_batches (
+                user_id, created_at, activates_at, cancelled_at, wait_seconds
+            )
+            VALUES (?, ?, ?, 0, ?)
+            """,
+            (int(user_id), float(created_at), float(activates_at), int(wait_seconds)),
+        )
+        return int(cur.lastrowid)
+
+
+def cancel_recovery_batch(batch_id: int, cancelled_at: float) -> None:
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE account_recovery_batches
+            SET cancelled_at = ?
+            WHERE id = ? AND cancelled_at = 0
+            """,
+            (float(cancelled_at), int(batch_id)),
+        )
+
+
+def insert_recovery_code_hashes(user_id: int, batch_id: int, hashes: list[str]) -> None:
+    with tx() as conn:
+        for digest in hashes:
+            conn.execute(
+                """
+                INSERT INTO account_recovery_codes (batch_id, user_id, code_hash, used_at)
+                VALUES (?, ?, ?, 0)
+                """,
+                (int(batch_id), int(user_id), str(digest)),
+            )
+
+
+def consume_recovery_code(batch_id: int, user_id: int, code_hash: str, *, used_at: float) -> bool:
+    with tx() as conn:
+        cur = conn.execute(
+            """
+            UPDATE account_recovery_codes
+            SET used_at = ?
+            WHERE batch_id = ? AND user_id = ? AND code_hash = ? AND used_at = 0
+            """,
+            (float(used_at), int(batch_id), int(user_id), str(code_hash)),
         )
         return int(cur.rowcount or 0) > 0
 

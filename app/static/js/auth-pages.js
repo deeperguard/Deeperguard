@@ -198,6 +198,48 @@ try {
   }
 } catch (err) { /* ignore */ }
 
+function applyLoginSignInMethods(methods) {
+  const passwordBlock = document.getElementById('login-password-block');
+  const passwordInput = document.getElementById('login-password');
+  const submitBtn = document.getElementById('login-submit');
+  const recoveryBlock = document.getElementById('login-recovery-block');
+  const recoveryToggle = document.getElementById('login-toggle-recovery');
+  const passkeyBtn = document.getElementById('webauthn-login');
+  const passwordOn = methods?.password !== false;
+  const recoveryOn = !!methods?.recovery;
+  if (passwordBlock) passwordBlock.hidden = !passwordOn;
+  if (passwordInput) {
+    passwordInput.required = passwordOn;
+    passwordInput.disabled = !passwordOn;
+    if (!passwordOn) passwordInput.value = '';
+  }
+  if (submitBtn) submitBtn.hidden = !passwordOn;
+  if (passkeyBtn && methods?.passkey === false && !passwordOn && !recoveryOn) {
+    passkeyBtn.hidden = false;
+  }
+  if (recoveryToggle) {
+    const showLink = recoveryOn || (!passwordOn && methods?.passkey);
+    recoveryToggle.hidden = !showLink;
+    recoveryToggle.textContent = recoveryBlock?.hidden
+      ? 'Use a recovery code'
+      : 'Back to passkey sign-in';
+  }
+}
+
+async function refreshLoginSignInMethods(email) {
+  const trimmed = String(email || '').trim().toLowerCase();
+  if (!trimmed || !window.NotesPasskeySignin?.fetchSignInMethods) {
+    applyLoginSignInMethods({ password: true, passkey: true, recovery: false });
+    return;
+  }
+  try {
+    const methods = await NotesPasskeySignin.fetchSignInMethods(trimmed);
+    applyLoginSignInMethods(methods);
+  } catch (err) {
+    applyLoginSignInMethods({ password: true, passkey: true, recovery: false });
+  }
+}
+
 const loginForm = document.getElementById('login-form');
 if (loginForm) {
   try {
@@ -219,6 +261,65 @@ if (loginForm) {
   } catch (err) {
     /* ignore */
   }
+  const emailInput = loginForm.querySelector('[name="email"]');
+  let methodsTimer = 0;
+  const scheduleMethodsRefresh = () => {
+    window.clearTimeout(methodsTimer);
+    methodsTimer = window.setTimeout(() => {
+      refreshLoginSignInMethods(emailInput?.value).catch(() => {});
+    }, 350);
+  };
+  emailInput?.addEventListener('input', scheduleMethodsRefresh);
+  emailInput?.addEventListener('blur', scheduleMethodsRefresh);
+  scheduleMethodsRefresh();
+
+  document.getElementById('login-toggle-recovery')?.addEventListener('click', () => {
+    const block = document.getElementById('login-recovery-block');
+    if (!block) return;
+    block.hidden = !block.hidden;
+    const toggle = document.getElementById('login-toggle-recovery');
+    if (toggle) {
+      toggle.textContent = block.hidden ? 'Use a recovery code' : 'Back to passkey sign-in';
+    }
+  });
+
+  document.getElementById('login-recovery-submit')?.addEventListener('click', async () => {
+    showError('login-error', '');
+    const email = String(emailInput?.value || '').trim().toLowerCase();
+    const code = String(document.getElementById('login-recovery-code')?.value || '').trim();
+    if (!email) {
+      showError('login-error', 'Enter your email first');
+      return;
+    }
+    if (!code) {
+      showError('login-error', 'Enter a recovery code');
+      return;
+    }
+    setLoginBusy(true, 'Checking recovery code…');
+    try {
+      const data = await postJson('/api/auth/recovery-code', { email, code });
+      setLoginBusy(true, 'Opening your vault…');
+      await stashLoginSession(data, email, '');
+      if (data.totp_required) {
+        location.replace(afterAuthUrl('/totp'));
+        return;
+      }
+      location.replace(afterAuthUrl('/app'));
+    } catch (err) {
+      setLoginBusy(false, '');
+      const msg = String(err?.message || '');
+      if (err?.status === 403 && /not active/i.test(msg)) {
+        showError('login-error', 'Recovery codes are not active yet. Use a passkey or wait until the waiting period ends.');
+        return;
+      }
+      if (err?.incorrectPassword || /invalid credentials/i.test(msg)) {
+        showError('login-error', 'Recovery code is incorrect or already used');
+        return;
+      }
+      showError('login-error', msg || 'Recovery sign-in failed');
+    }
+  });
+
   let sessionCapRevokeToken = '';
 
   function hideSessionCapPanel() {
