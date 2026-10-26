@@ -18,13 +18,13 @@ sys.path.insert(0, str(APP_DIR))
 class Round72_2ReleaseTagTests(unittest.TestCase):
     def test_repo_release_tag_is_current(self):
         tag = (REPO / "RELEASE_TAG").read_text(encoding="utf-8").strip()
-        self.assertEqual(tag, "v0.65.17")
+        self.assertEqual(tag, "v0.65.18")
 
     def test_check_release_tag_script(self):
         script = REPO / "scripts" / "check-release-tag.sh"
         self.assertTrue(script.is_file())
         ok = subprocess.run(
-            ["bash", str(script), "--expect", "v0.65.17"],
+            ["bash", str(script), "--expect", "v0.65.18"],
             cwd=str(REPO),
             capture_output=True,
             text=True,
