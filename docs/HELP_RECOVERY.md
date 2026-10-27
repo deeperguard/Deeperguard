@@ -1,15 +1,13 @@
-# Account recovery codes
+Deeperguard support will never ask for your password, recovery codes, or 2FA codes. No one outside the app can restore your account — only the recovery steps shown here.
 
-Recovery codes are a **last resort for account sign-in** when you use passkey-only sign-in. They do not replace your vault password — after you sign in with a code, you still unlock notes with your master password on that device.
+## How recovery works
 
-## Waiting period
+If you lose access to a device or passkey, use the recovery codes you saved when you set up passkeys (or from Settings → recovery). You need the wait period and the codes you stored offline. Deeperguard cannot reset your vault password or decrypt your notes for you.
 
-New recovery codes always have a waiting period (at least 72 hours) before they work. Requesting a new batch resets the wait. Any device already signed in to your account can cancel a pending batch.
+## What we will never do
 
-## Scams and impersonation
+We will never ask you to paste your master password, recovery codes, or 2FA codes into email, chat, or a website that isn’t this app.
 
-Deeperguard will never ask for your master password, recovery codes, or 2FA codes. Nobody outside your devices can restore your account. The only recovery path is the one shown in this app.
+## Restore from backup
 
-## What we cannot do
-
-We cannot reset your vault password or decrypt your notes. If you lose your vault password and your backups, encrypted content on our servers cannot be restored.
+Encrypted backups restore only with your account password in Settings → Import backup.

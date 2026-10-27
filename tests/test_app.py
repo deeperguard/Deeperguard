@@ -493,6 +493,14 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b"Self-host guide", res.data)
         self.assertIn(b"deploy/deeperguard.env.example", res.data)
 
+    def test_help_recovery_page_is_public(self):
+        res = self.client.get("/help/recovery")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Account recovery", res.data)
+        self.assertNotIn(b"Recovery help not found", res.data)
+        self.assertIn(b"will never ask for your password, recovery codes", res.data)
+        self.assertIn(b"cannot reset your vault password or decrypt your notes", res.data)
+
     def test_sync_watermark(self):
         self._register_user("wm@home.local", "wm-secure-pass")
         csrf = self._csrf()
