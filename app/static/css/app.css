@@ -191,12 +191,11 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 }
 .totp-list-head {
   display: none;
-  grid-template-columns: minmax(0, 1fr) 5.5rem 5.5rem 6.5rem;
-  gap: 8px;
+  gap: 12px;
   align-items: end;
   width: min(720px, 100%);
   margin-inline: auto;
-  padding: 4px 16px 2px 52px;
+  padding: 4px 8px 2px 16px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -205,6 +204,10 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 }
 .totp-list-head:not([hidden]) {
   display: none;
+}
+.totp-list-head-icon {
+  width: 28px;
+  flex-shrink: 0;
 }
 .totp-list-head-code {
   text-align: right;
@@ -370,6 +373,7 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 @media (min-width: 1000px) {
   .totp-list-head:not([hidden]) {
     display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 5.5rem 5.5rem 6.5rem;
   }
   .totp-item-main {
     grid-template-columns: auto minmax(0, 1fr) 5.5rem 5.5rem 6.5rem;
