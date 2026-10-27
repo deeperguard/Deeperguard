@@ -8238,10 +8238,12 @@
         <div class="folder-head">
           <button type="button" class="folder-toggle" data-folder-toggle="${escapeAttr(folder.uuid)}" aria-expanded="${open ? 'true' : 'false'}" aria-label="${open ? 'Collapse' : 'Expand'} ${escapeAttr(folder.content.title || 'Folder')}">${open ? '▾' : '▸'}</button>
           <button type="button" class="folder-select" data-folder-select="${escapeAttr(folder.uuid)}">${escapeHtml(folder.content.title || 'Folder')}</button>
-          <span class="tag-count">${notes.length}</span>
-          <button type="button" class="folder-rename" data-folder-rename="${escapeAttr(folder.uuid)}" aria-label="Rename folder ${escapeAttr(folder.content.title || 'Folder')}">✎</button>
-          <button type="button" class="folder-server-copy" data-server-copy="${escapeAttr(folder.uuid)}" aria-label="View server copy for folder ${escapeAttr(folder.content.title || 'Folder')}" title="View server copy">ⓘ</button>
-          <button type="button" class="tag-remove folder-remove" data-folder-remove="${escapeAttr(folder.uuid)}" aria-label="Delete folder ${escapeAttr(folder.content.title || 'Folder')}">×</button>
+          <span class="tag-count folder-count">${notes.length}</span>
+          <div class="folder-head-actions" role="group" aria-label="Folder actions">
+            <button type="button" class="folder-rename" data-folder-rename="${escapeAttr(folder.uuid)}" aria-label="Rename folder ${escapeAttr(folder.content.title || 'Folder')}">✎</button>
+            <button type="button" class="folder-server-copy" data-server-copy="${escapeAttr(folder.uuid)}" aria-label="View server copy for folder ${escapeAttr(folder.content.title || 'Folder')}" title="View server copy">ⓘ</button>
+            <button type="button" class="tag-remove folder-remove" data-folder-remove="${escapeAttr(folder.uuid)}" aria-label="Delete folder ${escapeAttr(folder.content.title || 'Folder')}">×</button>
+          </div>
         </div>
         <div class="folder-notes"${open ? '' : ' hidden'}>${kids || '<p class="folder-empty muted">Empty</p>'}</div>
       </div>`;
