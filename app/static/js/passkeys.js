@@ -4,6 +4,8 @@
 (function (global) {
   'use strict';
 
+  let passkeyListRenderToken = 0;
+
   async function listPasskeys() {
     const data = await NotesStore.api('/api/auth/webauthn/credentials');
     return Array.isArray(data.credentials) ? data.credentials : [];
@@ -47,6 +49,7 @@
 
   async function renderPasskeyList(container, preferredUrl) {
     if (!container) return;
+    const token = ++passkeyListRenderToken;
     container.replaceChildren();
     if (!NotesWebAuthn?.supported()) {
       const hint = document.createElement('p');
@@ -72,6 +75,7 @@
     try {
       rows = await listPasskeys();
     } catch (err) {
+      if (token !== passkeyListRenderToken) return;
       const hint = document.createElement('p');
       hint.className = 'settings-hint error';
       hint.textContent = err.message || 'Could not load passkeys';
@@ -79,12 +83,14 @@
       return;
     }
     if (!rows.length) {
+      if (token !== passkeyListRenderToken) return;
       const hint = document.createElement('p');
       hint.className = 'settings-hint';
       hint.textContent = 'No passkeys yet. Add one for passwordless account sign-in (vault unlock still uses your master password).';
       container.appendChild(hint);
       return;
     }
+    if (token !== passkeyListRenderToken) return;
     rows.forEach((row, index) => {
       const item = document.createElement('div');
       item.className = 'settings-row passkey-row';

@@ -204,7 +204,7 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   color: var(--muted);
 }
 .totp-list-head:not([hidden]) {
-  display: grid;
+  display: none;
 }
 .totp-list-head-code {
   text-align: right;
@@ -253,6 +253,12 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   border-radius: 0;
 }
 .totp-item-main:active { background: var(--bg-hover); }
+.totp-item-account {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .totp-item-body { min-width: 0; }
 .totp-item-edit,
 .totp-item-server-copy,
@@ -360,6 +366,49 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 .totp-ring .totp-ring-track { stroke: var(--border); }
 .totp-ring .totp-ring-value { stroke: var(--accent); stroke-linecap: round; }
 .totp-ring.is-ending .totp-ring-value { stroke: var(--warning); }
+
+@media (min-width: 1000px) {
+  .totp-list-head:not([hidden]) {
+    display: grid;
+  }
+  .totp-item-main {
+    grid-template-columns: auto minmax(0, 1fr) 5.5rem 5.5rem 6.5rem;
+    align-items: center;
+  }
+  .totp-item-account {
+    display: contents;
+  }
+  .totp-item-body {
+    grid-column: 2;
+    align-self: start;
+    padding-top: 2px;
+  }
+  .totp-item-meta {
+    display: contents;
+  }
+  .totp-meta-changed {
+    grid-column: 3;
+    align-self: center;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.35;
+    margin: 0;
+  }
+  .totp-meta-used {
+    grid-column: 4;
+    align-self: center;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.35;
+    margin: 0;
+  }
+  .totp-item-meta .totp-meta-k {
+    display: none;
+  }
+  .totp-item-code {
+    grid-column: 5;
+  }
+}
 /* Settings lives outside #app — must stay showable even during remembered-shell
    boot while body still has .locked (otherwise taps look like a no-op). */
 body.settings-open #settings-panel {
