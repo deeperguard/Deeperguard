@@ -16322,16 +16322,72 @@
     return document.querySelector('input[name="scan-save-as"]:checked')?.value === 'folder';
   }
 
+  function syncScanFolderSelect() {
+    const select = document.getElementById('scan-folder-select');
+    if (!select) return;
+    const folders = NotesStore.listFolders?.() || [];
+    const prev = select.value;
+    const options = folders.map((folder) => (
+      `<option value="${escapeAttr(folder.uuid)}">${escapeHtml(folder.content?.title || 'Folder')}</option>`
+    )).concat(['<option value="__new__">New folder…</option>']);
+    select.innerHTML = options.join('');
+    if (prev === '__new__' || folders.some((folder) => folder.uuid === prev)) {
+      select.value = prev;
+    } else {
+      select.value = '__new__';
+    }
+  }
+
+  function scanFolderTargetIsNew() {
+    const select = document.getElementById('scan-folder-select');
+    const folders = NotesStore.listFolders?.() || [];
+    if (!folders.length) return true;
+    const field = document.getElementById('scan-folder-select-field');
+    if (!field || field.hidden) return true;
+    return select?.value === '__new__';
+  }
+
+  function resolveScanFolderTarget() {
+    const folders = NotesStore.listFolders?.() || [];
+    const select = document.getElementById('scan-folder-select');
+    const field = document.getElementById('scan-folder-select-field');
+    if (folders.length && select && field && !field.hidden && select.value && select.value !== '__new__') {
+      return { folderId: select.value };
+    }
+    const title = document.getElementById('scan-name')?.value?.trim() || '';
+    return { title };
+  }
+
   function syncScanSaveMode() {
     const box = document.getElementById('scan-save-as');
     const label = document.getElementById('scan-name-label');
     const name = document.getElementById('scan-name');
+    const nameField = document.getElementById('scan-name-field');
+    const folderField = document.getElementById('scan-folder-select-field');
     const show = !!pendingScan?.createIfNeeded;
     if (box) box.hidden = !show;
     const asFolder = show && scanSaveAsFolder();
-    if (label) label.textContent = asFolder ? 'Folder name' : 'Document name';
-    if (name) {
-      name.placeholder = asFolder ? 'e.g. Receipts, Trip photos' : 'e.g. Passport, June invoice';
+    const folders = NotesStore.listFolders?.() || [];
+    if (asFolder && folders.length) {
+      syncScanFolderSelect();
+      if (folderField) folderField.hidden = false;
+      const pickingNew = scanFolderTargetIsNew();
+      if (nameField) nameField.hidden = !pickingNew;
+      if (label) label.textContent = 'Folder name';
+      if (name) name.placeholder = 'e.g. Receipts, Trip photos';
+    } else {
+      if (folderField) folderField.hidden = true;
+      if (nameField) nameField.hidden = false;
+      if (label) label.textContent = asFolder ? 'Folder name' : 'Document name';
+      if (name) {
+        name.placeholder = asFolder ? 'e.g. Receipts, Trip photos' : 'e.g. Passport, June invoice';
+      }
+    }
+    const err = document.getElementById('scan-name-error');
+    if (err && !err.hidden) {
+      err.textContent = asFolder
+        ? (scanFolderTargetIsNew() ? 'Enter a folder name.' : 'Choose a folder or enter a new folder name.')
+        : 'Enter a name for this document.';
     }
   }
 
@@ -16407,6 +16463,8 @@
   function openScanComposer({ createIfNeeded = true } = {}) {
     pendingScan = { file: null, pages: [], createIfNeeded, sourceRemoval: emptyUploadSource() };
     document.getElementById('scan-name').value = '';
+    const scanFolderSelect = document.getElementById('scan-folder-select');
+    if (scanFolderSelect) scanFolderSelect.value = '__new__';
     clearScanFeedback();
     showScanDialog();
   }
@@ -16500,11 +16558,36 @@
   }
 
   async function confirmScanDialog() {
-    const name = document.getElementById('scan-name').value.trim();
-    if (!name) {
-      document.getElementById('scan-name-error').hidden = false;
-      document.getElementById('scan-name').focus();
-      return;
+    const asFolderEarly = !!pendingScan?.createIfNeeded && scanSaveAsFolder();
+    let name = '';
+    let folderId = '';
+    if (asFolderEarly) {
+      const target = resolveScanFolderTarget();
+      folderId = target.folderId || '';
+      name = target.title || '';
+      if (!folderId && !name) {
+        const err = document.getElementById('scan-name-error');
+        if (err) {
+          err.textContent = scanFolderTargetIsNew()
+            ? 'Enter a folder name.'
+            : 'Choose a folder or enter a new folder name.';
+          err.hidden = false;
+        }
+        if (scanFolderTargetIsNew()) document.getElementById('scan-name')?.focus();
+        else document.getElementById('scan-folder-select')?.focus();
+        return;
+      }
+    } else {
+      name = document.getElementById('scan-name').value.trim();
+      if (!name) {
+        const err = document.getElementById('scan-name-error');
+        if (err) {
+          err.textContent = 'Enter a name for this document.';
+          err.hidden = false;
+        }
+        document.getElementById('scan-name').focus();
+        return;
+      }
     }
     const pending = pendingScan;
     if (!pending) return;
@@ -16524,7 +16607,7 @@
       const asFolder = !!pending.createIfNeeded && scanSaveAsFolder();
       const batch = pending.batchFiles.slice();
       hideScanDialog();
-      if (asFolder) await ingestFilesAsFolder(batch, name);
+      if (asFolder) await ingestFilesAsFolder(batch, folderId ? { folderId } : { title: name });
       else await ingestDocumentBatch(batch, { createIfNeeded: true, title: name });
       return;
     }
@@ -16536,7 +16619,7 @@
     hideScanDialog();
     const sourceRemoval = sourceRemovalFromPending(pending);
     if (asFolder) {
-      await ingestFilesAsFolder([file], name);
+      await ingestFilesAsFolder([file], folderId ? { folderId } : { title: name });
       return;
     }
     await ingestDocument(file, {
@@ -16750,7 +16833,10 @@
     return saved;
   }
 
-  async function ingestFilesAsFolder(files, title) {
+  async function ingestFilesAsFolder(files, titleOrOpts) {
+    const opts = (typeof titleOrOpts === 'object' && titleOrOpts !== null)
+      ? titleOrOpts
+      : { title: titleOrOpts };
     const list = [];
     for (const file of toFileArray(files)) {
       const copy = await snapshotPickedFile(file);
@@ -16761,10 +16847,23 @@
       toast('Unlock the vault first', true);
       return 0;
     }
-    const name = String(title || '').trim() || fileStem(list[0].name) || 'Folder';
-    hideScanDialog();
-    const folderId = NotesStore.createFolder(name);
+    let folderId = String(opts.folderId || '').trim();
+    let createdFolder = false;
+    let name = '';
+    if (folderId) {
+      const folder = NotesStore.get(folderId);
+      if (!folder || folder.content?.type !== 'folder') {
+        toast('Folder not found', true);
+        return 0;
+      }
+      name = String(folder.content?.title || '').trim() || 'Folder';
+    } else {
+      name = String(opts.title || '').trim() || fileStem(list[0].name) || 'Folder';
+      folderId = NotesStore.createFolder(name);
+      createdFolder = true;
+    }
     if (!folderId) return 0;
+    hideScanDialog();
     setFolderOpen(folderId, true);
     prefs.foldersCollapsed = false;
     try { localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs)); } catch (err) { /* ignore */ }
@@ -16789,7 +16888,7 @@
       else if (!NotesStore.listAttachments(noteId).length) NotesStore.remove(noteId);
     }
     if (!saved) {
-      NotesStore.deleteFolder(folderId);
+      if (createdFolder) NotesStore.deleteFolder(folderId);
       renderFolders();
       renderNotes();
       toast('No documents saved', true);
@@ -18186,6 +18285,13 @@
   document.getElementById('scan-confirm').addEventListener('click', confirmScanDialog);
   document.querySelectorAll('input[name="scan-save-as"]').forEach((input) => {
     input.addEventListener('change', () => syncScanSaveMode());
+  });
+  document.getElementById('scan-folder-select')?.addEventListener('change', () => {
+    document.getElementById('scan-name-error').hidden = true;
+    syncScanSaveMode();
+    if (scanFolderTargetIsNew()) {
+      requestAnimationFrame(() => document.getElementById('scan-name')?.focus());
+    }
   });
   document.getElementById('scan-name').addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {

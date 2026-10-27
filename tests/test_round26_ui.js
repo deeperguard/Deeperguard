@@ -19,6 +19,10 @@ assert.ok(appJs.includes('data-folder-rename='));
 assert.ok(appJs.includes('beginRenameFolder(btn.dataset.folderSelect)'));
 assert.ok(appJs.includes("toast('A folder with that name already exists', true)"));
 assert.ok(appJs.includes("toast('Enter a folder name', true)"));
+assert.ok(html.includes('id="scan-folder-select"'));
+assert.ok(appJs.includes('function syncScanFolderSelect()'));
+assert.ok(appJs.includes('New folder…</option>'));
+assert.ok(appJs.includes('opts.folderId'));
 
 assert.ok(css.includes('.tag-section.is-empty:not(#folder-section) > :not(summary):not(.tag-section-actions)'));
 

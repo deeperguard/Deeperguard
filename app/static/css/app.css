@@ -3949,8 +3949,14 @@ html.totp-toast-open.toast-above-dialog #toast {
   font-size: 14px;
   font-weight: 500;
 }
-.scan-name-field input {
+.scan-name-field input,
+.scan-name-field select {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: var(--touch);
+  color: var(--text);
+  background-color: var(--bg-elevated);
 }
 .scan-add-actions {
   display: grid;
