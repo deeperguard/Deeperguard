@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "baseline_version": 2,
-  "release_tag": "v0.65.25",
-  "generated_at": "2026-10-27T05:02:26Z",
+  "release_tag": "v0.65.26",
+  "generated_at": "2026-10-27T14:42:49Z",
   "generation": "scripts/regenerate-verify-metadata-baseline.py (static code anchors)",
   "evidence_legend": {
-    "static_source_analysis": "Static source analysis \u2014 required strings found in shipped client JS; not a live Network capture.",
-    "live_traffic_capture": "Live traffic capture \u2014 someone reproduced the action in DevTools and saved the requests (none in this baseline yet)."
+    "static_source_analysis": "Static source analysis — required strings found in shipped client JS; not a live Network capture.",
+    "live_traffic_capture": "Live traffic capture — someone reproduced the action in DevTools and saved the requests (none in this baseline yet)."
   },
   "uncovered_actions": [
     {
@@ -58,7 +58,7 @@
       "typical_requests": [
         "GET /api/account (session refresh)",
         "POST /api/sync/pull (ciphertext rows; probe + post-unlock sync)",
-        "POST /api/account/unlock/challenge + POST /api/account/unlock (SRP proofs only \u2014 empty vault / account proof)"
+        "POST /api/account/unlock/challenge + POST /api/account/unlock (SRP proofs only — empty vault / account proof)"
       ],
       "sends_nothing_typical": false,
       "note_plaintext_on_wire": false,
@@ -100,7 +100,7 @@
       "label": "View server copy",
       "summary": "Fetch one stored row exactly as the API keeps it (metadata + ciphertext).",
       "typical_requests": [
-        "GET /api/sync/item/<uuid>?include_blobs=\u2026"
+        "GET /api/sync/item/<uuid>?include_blobs=…"
       ],
       "sends_nothing_typical": false,
       "note_plaintext_on_wire": false,
