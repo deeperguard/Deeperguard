@@ -45,7 +45,7 @@ python3 "$SRC/scripts/build-client-manifest.py"
 client_hash="$(python3 "$SRC/scripts/build-client-manifest.py" --print-hash)"
 echo "Client manifest_sha256=${client_hash}"
 
-TAR_PATHS=(app deploy tests scripts requirements.txt requirements.lock README.md .python-version .nvmrc RELEASE_TAG)
+TAR_PATHS=(app deploy docs tests scripts requirements.txt requirements.lock README.md .python-version .nvmrc RELEASE_TAG)
 tar czf /tmp/deeperguard-deploy.tar.gz -C "$SRC" \
   --exclude=.git --exclude=venv --exclude=keys --exclude=data \
   --exclude='__pycache__' --exclude='*.pyc' \
