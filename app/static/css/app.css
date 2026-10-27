@@ -2732,15 +2732,48 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 .folder-list { display: flex; flex-direction: column; gap: 2px; }
 .folder-block.active > .folder-head { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 8px; }
 .folder-head { display: flex; align-items: center; gap: 4px; min-width: 0; position: relative; }
+.folder-count { flex-shrink: 0; }
+.folder-head-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: auto;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    transparent 0,
+    color-mix(in srgb, var(--bg-elevated) 55%, transparent) 28%,
+    var(--bg-elevated) 52%
+  );
+  opacity: 0;
+  pointer-events: none;
+  max-width: 0;
+  overflow: hidden;
+  transition: opacity 0.15s ease, max-width 0.15s ease;
+}
+.folder-block.active > .folder-head .folder-head-actions {
+  background: linear-gradient(
+    90deg,
+    transparent 0,
+    color-mix(in srgb, var(--accent) 14%, var(--bg-elevated)) 28%,
+    color-mix(in srgb, var(--accent) 14%, var(--bg-elevated)) 52%
+  );
+}
+.folder-head:hover .folder-head-actions,
+.folder-head:focus-within .folder-head-actions {
+  opacity: 1;
+  pointer-events: auto;
+  max-width: 9.5rem;
+}
 .folder-rename,
 .folder-server-copy {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2749,6 +2782,13 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
+}
+.folder-head-actions .tag-remove.folder-remove {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-left: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
 }
 .folder-rename:hover,
 .folder-rename:focus-visible,
@@ -7675,6 +7715,19 @@ body.search-filters-open .fab-stack,
     overflow: visible;
   }
   .sidebar-nav .tag-count { color: var(--sn-nav-muted); }
+  .sidebar-nav .tag-chip .tag-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+  }
+  .folder-block.active > .folder-head .folder-head-actions {
+    background: linear-gradient(
+      90deg,
+      transparent 0,
+      color-mix(in srgb, var(--accent) 14%, var(--sn-nav-bg)) 28%,
+      color-mix(in srgb, var(--accent) 14%, var(--sn-nav-bg)) 52%
+    );
+  }
   .tag-new-btn { color: var(--sn-nav-text); border-color: var(--border); }
   .sidebar-foot {
     display: flex;
