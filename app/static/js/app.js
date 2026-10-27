@@ -1246,12 +1246,24 @@
     });
     document.querySelectorAll('.totp-meta-changed[data-changed-ms]').forEach((el) => {
       const ms = Number(el.dataset.changedMs);
-      const full = `Changed ${totpVaultMetaLabel(ms, '—')}`;
+      const label = totpVaultMetaLabel(ms, '—');
+      const valueEl = el.querySelector('.totp-meta-v');
+      if (valueEl) {
+        if (valueEl.textContent !== label) valueEl.textContent = label;
+        return;
+      }
+      const full = `Changed ${label}`;
       if (el.textContent !== full) el.textContent = full;
     });
     document.querySelectorAll('.totp-meta-used[data-used-ms]').forEach((el) => {
       const ms = Number(el.dataset.usedMs);
-      const full = `Used ${totpVaultMetaLabel(ms, '—')}`;
+      const label = totpVaultMetaLabel(ms, '—');
+      const valueEl = el.querySelector('.totp-meta-v');
+      if (valueEl) {
+        if (valueEl.textContent !== label) valueEl.textContent = label;
+        return;
+      }
+      const full = `Last used ${label}`;
       if (el.textContent !== full) el.textContent = full;
     });
     if (currentId && NotesStore.isUnlocked()) {
@@ -4115,15 +4127,17 @@
       return `<div class="totp-item" data-totp-id="${escapeAttr(item.id)}">
         <button type="button" class="totp-item-main" data-totp-copy aria-label="Copy code for ${escapeAttr(label)}${boundHost ? ` (${boundHost})` : ' (no site set)'}">
           <span class="note-kind-icon note-kind-icon--totp" aria-hidden="true">${kindIconSvg('totp')}</span>
-          <span class="totp-item-body">
-            <span class="note-title-row"><strong>${escapeHtml(label)}</strong></span>
-            ${issuer ? `<span class="note-preview">${escapeHtml(issuer)}</span>` : ''}
-            ${hostLine}
-            <span class="totp-item-meta">
-              <span class="totp-meta-cell totp-meta-changed" data-changed-ms="${changedMs || ''}" title="${escapeAttr(changedTitle)}"><span class="totp-meta-k">Changed</span> ${escapeHtml(changedLabel)}</span>
-              <span class="totp-meta-cell totp-meta-used" data-used-ms="${usedMs || ''}" title="${escapeAttr(usedTitle)}"><span class="totp-meta-k">Used</span> ${escapeHtml(usedLabel)}</span>
+          <span class="totp-item-account">
+            <span class="totp-item-body">
+              <span class="note-title-row"><strong>${escapeHtml(label)}</strong></span>
+              ${issuer ? `<span class="note-preview">${escapeHtml(issuer)}</span>` : ''}
+              ${hostLine}
+              <span class="note-modified totp-expires">Expires in ${remaining}s</span>
             </span>
-            <span class="note-modified totp-expires">Expires in ${remaining}s</span>
+            <span class="totp-item-meta">
+              <span class="totp-meta-cell totp-meta-changed" data-changed-ms="${changedMs || ''}" title="${escapeAttr(changedTitle)}"><span class="totp-meta-k">Changed</span> <span class="totp-meta-v">${escapeHtml(changedLabel)}</span></span>
+              <span class="totp-meta-cell totp-meta-used" data-used-ms="${usedMs || ''}" title="${escapeAttr(usedTitle)}"><span class="totp-meta-k">Last used</span> <span class="totp-meta-v">${escapeHtml(usedLabel)}</span></span>
+            </span>
           </span>
           <span class="totp-item-code">
             <span class="totp-code">${escapeHtml(pretty)}</span>
