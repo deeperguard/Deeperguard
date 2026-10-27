@@ -2234,7 +2234,7 @@
       <h2 id="scan-dialog-title">Add document</h2>
     </header>
     <div class="scan-dialog-body">
-      <p class="scan-dialog-lead muted">Take photos of one document, or choose several files. Save them on one new note, or in a new folder with one note per file.</p>
+      <p class="scan-dialog-lead muted">Take photos of one document, or choose several files. Save them on one new note, or in a folder (existing or new) with one note per file.</p>
       <div id="scan-empty" class="scan-empty">
         <p class="scan-empty-title">No pages yet</p>
         <p class="scan-empty-hint muted">Add a photo, scan pages, or pick a PDF or text file.</p>
@@ -2250,7 +2250,12 @@
         <label class="scan-save-choice"><input type="radio" name="scan-save-as" value="note" checked> One note</label>
         <label class="scan-save-choice"><input type="radio" name="scan-save-as" value="folder"> Folder</label>
       </div>
-      <label class="scan-name-field"><span id="scan-name-label">Document name</span>
+      <label class="scan-name-field" id="scan-folder-select-field" hidden>
+        <span>Folder</span>
+        <select id="scan-folder-select" aria-label="Folder"></select>
+      </label>
+      <label class="scan-name-field" id="scan-name-field">
+        <span id="scan-name-label">Document name</span>
         <input id="scan-name" type="text" maxlength="120" required autocomplete="off" autocapitalize="words" enterkeyhint="done" placeholder="e.g. Passport, June invoice">
       </label>
       <p id="scan-name-error" class="error" hidden>Enter a name for this document.</p>
