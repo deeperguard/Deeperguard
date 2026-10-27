@@ -21,6 +21,9 @@ EMAIL_ATTACHMENT_MAX = int(os.environ.get("NOTES_BACKUP_EMAIL_MAX_BYTES", str(6_
 LARGE_CIPHERTEXT_BYTES = int(os.environ.get("NOTES_BACKUP_LARGE_ITEM_BYTES", str(200_000)))
 LOCAL_KEEP = int(os.environ.get("NOTES_BACKUP_LOCAL_KEEP", "14"))
 
+BACKUP_EMAIL_SUBJECT = "Your encrypted Deeperguard backup"
+BRAND_TEAL = "#0d9488"
+
 
 def backups_dir() -> Path:
     path = DATA_DIR / "backups"
@@ -179,40 +182,93 @@ def prepare_email_backup(user_id: int) -> dict[str, Any]:
     }
 
 
+def format_attachment_size(num_bytes: int) -> str:
+    """Human-readable attachment size for user-facing email copy."""
+    size = max(0, int(num_bytes))
+    if size < 1024:
+        return f"~{size} B"
+    if size < 1024 * 1024:
+        kb = size / 1024
+        return f"~{kb:.1f} KB" if kb < 10 else f"~{kb:.0f} KB"
+    mb = size / (1024 * 1024)
+    return f"~{mb:.1f} MB"
+
+
 def email_body_for(meta: dict[str, Any]) -> str:
+    human_size = format_attachment_size(int(meta["bytes_size"]))
     lines = [
-        "Attached is your encrypted Deeperguard backup.",
+        "Your vault backup is attached and encrypted. Deeperguard cannot read titles or "
+        "note bodies without your password.",
         "",
-        "The server cannot read these notes. Restore with your account password",
-        "in Settings → Import backup (gzip .enc.json.gz is supported).",
+        f"Attachment size: {human_size}",
         "",
-        f"Items in this email: {meta['item_count']}",
-        f"Attachment size: {meta['bytes_size']} bytes",
-        f"Full vault copy on the notes server: {meta['local_path']}",
+        "Restore: Settings → Import backup (`.enc.json.gz` supported).",
     ]
     if meta.get("compact"):
         lines.extend(
             [
                 "",
-                f"This email is a compact backup (omitted {meta.get('omitted', 0)} large "
-                f"document item(s); full gzip was {meta.get('full_bytes', 0)} bytes).",
-                "Large scanned documents remain on the notes server sync database and in the "
-                "local full backup file above.",
+                "Large sealed files stay in your sync backup — use Import for the full set.",
             ]
         )
     return "\n".join(lines) + "\n"
+
+
+def email_html_for(meta: dict[str, Any]) -> str:
+    human_size = format_attachment_size(int(meta["bytes_size"]))
+    compact_block = ""
+    if meta.get("compact"):
+        compact_block = (
+            '<p style="margin:20px 0 0;font-size:14px;line-height:1.6;color:#475569;">'
+            "Large sealed files stay in your sync backup — use Import for the full set.</p>"
+        )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{BACKUP_EMAIL_SUBJECT}</title>
+</head>
+<body style="margin:0;padding:0;background:#f0fdfa;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#134e4a;">
+  <div style="max-width:560px;margin:0 auto;padding:24px 16px 32px;">
+    <header style="background:{BRAND_TEAL};border-radius:12px 12px 0 0;padding:20px 24px;">
+      <div style="font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:rgba(255,255,255,0.85);">
+        Deeperguard
+      </div>
+      <h1 style="margin:8px 0 0;font-size:20px;font-weight:700;line-height:1.3;color:#ffffff;">
+        {BACKUP_EMAIL_SUBJECT}
+      </h1>
+    </header>
+    <div style="background:#ffffff;border:1px solid #ccfbf1;border-top:none;border-radius:0 0 12px 12px;padding:24px;box-shadow:0 1px 3px rgba(13,148,136,0.08);">
+      <div style="background:linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 100%);border:1px solid #99f6e4;border-radius:10px;padding:16px 18px;margin-bottom:20px;">
+        <p style="margin:0;font-size:15px;font-weight:600;color:#0f766e;">Encrypted — we can&rsquo;t read this</p>
+        <p style="margin:10px 0 0;font-size:14px;line-height:1.55;color:#115e59;">
+          Your vault backup is attached and encrypted. Deeperguard cannot read titles or note bodies without your password.
+        </p>
+      </div>
+      <p style="margin:0 0 8px;font-size:14px;color:#64748b;">Attachment size</p>
+      <p style="margin:0 0 20px;font-size:22px;font-weight:700;color:#0f766e;">{human_size}</p>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#334155;">
+        <strong>Restore:</strong> Settings &rarr; Import backup (<code style="font-size:13px;background:#f1f5f9;padding:2px 6px;border-radius:4px;">.enc.json.gz</code> supported).
+      </p>
+      {compact_block}
+    </div>
+    <p style="margin:20px 8px 0;font-size:12px;line-height:1.5;color:#94a3b8;text-align:center;">
+      This message was sent because daily encrypted backup is enabled on your Deeperguard account.
+    </p>
+  </div>
+</body>
+</html>
+"""
 
 
 def send_user_backup(user_id: int, recipient: str) -> dict[str, Any]:
     meta = prepare_email_backup(user_id)
     send_backup_email(
         recipient=recipient,
-        subject=(
-            "Deeperguard encrypted backup (compact)"
-            if meta.get("compact")
-            else "Deeperguard encrypted backup"
-        ),
+        subject=BACKUP_EMAIL_SUBJECT,
         body=email_body_for(meta),
+        html_body=email_html_for(meta),
         attachment_name=str(meta["attachment_name"]),
         attachment_bytes=bytes(meta["attachment_bytes"]),
     )

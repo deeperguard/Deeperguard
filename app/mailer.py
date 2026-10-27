@@ -62,6 +62,8 @@ def send_backup_email(
     body: str,
     attachment_name: str,
     attachment_bytes: bytes,
+    *,
+    html_body: str | None = None,
 ) -> None:
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -69,6 +71,8 @@ def send_backup_email(
     msg["Sender"] = SMTP_FROM
     msg["To"] = recipient
     msg.set_content(body)
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
     msg.add_attachment(
         attachment_bytes,
         maintype="application",
