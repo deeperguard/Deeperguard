@@ -4,6 +4,10 @@
 (function (global) {
   'use strict';
 
+  const RECOVERY_ANTI_SCAM =
+    'Deeperguard will never ask for your master password, recovery codes, or 2FA codes. ' +
+    'Nobody outside your devices can restore your account. The only recovery path is the one shown in this app.';
+
   function formatDuration(seconds) {
     const total = Math.max(0, Math.floor(Number(seconds) || 0));
     const days = Math.floor(total / 86400);
@@ -46,6 +50,10 @@
     warn.textContent =
       'Save these codes somewhere safe. Each code works once. They are for account sign-in only — your vault still needs your master password on this device.';
     container.appendChild(warn);
+    const antiScam = document.createElement('p');
+    antiScam.className = 'settings-hint';
+    antiScam.textContent = RECOVERY_ANTI_SCAM;
+    container.appendChild(antiScam);
     const list = document.createElement('ul');
     list.className = 'recovery-code-list';
     (codes || []).forEach((code) => {
@@ -61,7 +69,7 @@
     printBtn.className = 'btn';
     printBtn.textContent = 'Print';
     printBtn.addEventListener('click', () => {
-      const body = (codes || []).join('\n');
+      const body = `${RECOVERY_ANTI_SCAM}\n\n${(codes || []).join('\n')}`;
       const w = window.open('', '_blank', 'noopener');
       if (!w) return;
       w.document.write(`<pre>${body.replace(/</g, '&lt;')}</pre>`);

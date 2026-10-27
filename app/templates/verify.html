@@ -38,9 +38,9 @@
               <h3>{{ row.label }}</h3>
               <div class="mk-verify-metadata-evidence-badges">
                 {% if row.evidence_type == 'live_traffic_capture' %}
-                <span class="mk-verify-evidence live">Live traffic capture</span>
+                <span class="mk-verify-evidence live">Live{% if verify_metadata_release_tag %} · {{ verify_metadata_release_tag }}{% endif %}</span>
                 {% else %}
-                <span class="mk-verify-evidence static">Static source analysis</span>
+                <span class="mk-verify-evidence static">Static{% if verify_metadata_release_tag %} · {{ verify_metadata_release_tag }}{% endif %}</span>
                 {% endif %}
                 {% if row.measurement == 'checked' %}
                 <span class="mk-verify-measure checked" title="Required code anchors found in shipped client JS">Anchors OK</span>
@@ -104,9 +104,9 @@
                 <td>
                   <div class="mk-verify-metadata-evidence-badges stack">
                     {% if row.evidence_type == 'live_traffic_capture' %}
-                    <span class="mk-verify-evidence live">Live traffic capture</span>
+                    <span class="mk-verify-evidence live">Live{% if verify_metadata_release_tag %} · {{ verify_metadata_release_tag }}{% endif %}</span>
                     {% else %}
-                    <span class="mk-verify-evidence static">Static source analysis</span>
+                    <span class="mk-verify-evidence static">Static{% if verify_metadata_release_tag %} · {{ verify_metadata_release_tag }}{% endif %}</span>
                     {% endif %}
                     {% if row.measurement == 'checked' %}
                     <span class="mk-verify-measure checked" title="Required code anchors found in shipped client JS">Anchors OK</span>

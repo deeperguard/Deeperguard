@@ -53,6 +53,10 @@ assert.ok(verify.includes('Compare this with your own DevTools'));
 assert.ok(verify.includes('mk-verify-metadata-cards'));
 assert.ok(verify.includes('mk-verify-metadata-table'));
 assert.ok(verify.includes('mk-verify-evidence static'));
+assert.ok(
+  verify.includes('Static{% if verify_metadata_release_tag %} · {{ verify_metadata_release_tag }}{% endif %}'),
+  'each row evidence badge must pin verify_metadata_release_tag',
+);
 assert.ok(verify.includes('Actions not in this table yet'));
 assert.ok(verify.includes('Anchors OK'));
 assert.ok(verify.includes('mk-verify-sends-none'));

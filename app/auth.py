@@ -793,6 +793,7 @@ def public_path(path: str) -> bool:
         "/contact",
         "/download",
         "/self-host",
+        "/help/recovery",
         "/verify",
         "/api/health",
         "/api/app-shell",
