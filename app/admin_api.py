@@ -189,6 +189,18 @@ def register_admin_routes(app, build_id: str) -> None:
             **_site_nav(build_id),
         )
 
+    @app.get("/help/recovery")
+    def help_recovery_page():
+        from pathlib import Path
+        doc = Path(__file__).resolve().parent.parent / "docs" / "HELP_RECOVERY.md"
+        body = doc.read_text(encoding="utf-8") if doc.is_file() else "Recovery help not found."
+        return render_template(
+            "doc-page.html",
+            title="Account recovery",
+            body_html=render_simple_markdown(body),
+            **_site_nav(build_id),
+        )
+
     @app.get("/api/admin/overview")
     def api_admin_overview():
         _, err = admin_required_json()

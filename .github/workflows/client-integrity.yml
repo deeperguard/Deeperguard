@@ -43,3 +43,4 @@ jobs:
           node tests/test_round60_client_integrity.js
           python3 -m unittest tests.test_round83_verify_metadata_baseline -v
           node tests/test_round83_verify_metadata_baseline.js
+          node tests/test_round84_recovery_anti_scam.js

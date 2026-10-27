@@ -2,10 +2,10 @@
   "asset_count": 61,
   "assets": {
     "css/app.css": {
-      "bytes": 244664,
-      "sha256": "925835c2076265378da9c247a25c4b6a2a6f601a5f2d017645f5e7fbecdf694a",
-      "sri": "sha384-85pkKmpym47SvRwtC1iJmkPoQbs8jK4/GizAaAYmUbMt7qQhlHuwnlZ55VjBDw0b",
-      "url": "/static/css/app.925835c207626537.css"
+      "bytes": 244729,
+      "sha256": "a1b669c7b2754d010be9d14101d02fe28f59d7f1853b8e738dfd60b09fffe16e",
+      "sri": "sha384-hi3/WpKkPDNuXKzt69e3HzqxHfgdk+hJm8FxTYAXcs1ElqanonpLn6TR2A/xzmUE",
+      "url": "/static/css/app.a1b669c7b2754d01.css"
     },
     "css/marketing.css": {
       "bytes": 48502,
@@ -146,10 +146,10 @@
       "url": "/static/js/ocr.fe66cf58dd6d1073.js"
     },
     "js/passkey-signin.js": {
-      "bytes": 8984,
-      "sha256": "2685c849f464f7bdeaa15d288564815e2c0a417ad532454de3825fab124b1a8e",
-      "sri": "sha384-QQ8i/QHGoRaFUZyheb5T2lfUlYL14keuDD8Fwc6l+w3UM1ssmgfKogDfiUpboTCO",
-      "url": "/static/js/passkey-signin.2685c849f464f7bd.js"
+      "bytes": 9426,
+      "sha256": "c70ca78ced597d14aeb8ff733db31bec5fd88440d44a95476f94d4feda324b8a",
+      "sri": "sha384-zkRwFyMv/O8QrRJlXc2/bX7kulbWDrJJG9ECwAh9Vgf/wHkzoZ31IJDQAHaGxDag",
+      "url": "/static/js/passkey-signin.c70ca78ced597d14.js"
     },
     "js/passkeys.js": {
       "bytes": 4529,
@@ -369,6 +369,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "4641f9b6291d2d3f0f13eaa9a5fce7f73c586dfeded40a850576166957c56285",
+  "manifest_sha256": "61a7922934c0f95dce9a496a6c5706981803aa8228e0c0d42f7ca721fd765b64",
   "version": 1
 }

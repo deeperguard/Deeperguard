@@ -3605,6 +3605,7 @@ def sitemap_xml():
         "/contact",
         "/download",
         "/self-host",
+        "/help/recovery",
         "/verify",
         "/api/promo",
     ]
