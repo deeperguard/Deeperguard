@@ -2731,7 +2731,15 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 }
 .folder-list { display: flex; flex-direction: column; gap: 2px; }
 .folder-block.active > .folder-head { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 8px; }
-.folder-head { display: flex; align-items: center; gap: 4px; min-width: 0; position: relative; }
+.folder-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  position: relative;
+  container-type: inline-size;
+  container-name: folderHead;
+}
 .folder-count {
   flex-shrink: 0;
   position: relative;
@@ -2742,7 +2750,7 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   right: 0;
   top: 0;
   bottom: 0;
-  z-index: 1;
+  z-index: 3;
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -2853,13 +2861,18 @@ body.app-updating #btn-refresh-app .app-update-spinner {
     position: absolute;
     left: 0;
     top: 0;
-    bottom: 0;
+    bottom: auto;
+    height: auto;
+    min-height: 100%;
     padding: 6px 4px;
-    display: flex;
-    align-items: center;
-    white-space: nowrap;
-    width: max-content;
-    max-width: calc(100% + 8.75rem);
+    padding-right: 9rem;
+    display: block;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    /* Span the row (minus toggle + count); reserve right strip for action buttons. */
+    width: max(100%, calc(100cqw - 26px - 2.25rem));
+    max-width: min(26rem, calc(100cqw + 10rem));
     box-sizing: border-box;
     color: inherit;
     font: inherit;
@@ -2867,24 +2880,14 @@ body.app-updating #btn-refresh-app .app-update-spinner {
     font-weight: 400;
     line-height: 1.3;
     pointer-events: none;
-    z-index: 1;
-    background: linear-gradient(
-      90deg,
-      var(--bg-elevated) 0,
-      var(--bg-elevated) calc(100% - 8.5rem),
-      color-mix(in srgb, var(--bg-elevated) 88%, transparent) calc(100% - 6.5rem),
-      transparent 100%
-    );
+    z-index: 2;
+    border-radius: 8px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16);
+    background: var(--bg-elevated);
   }
   .folder-block.active > .folder-head:hover .folder-select::after,
   .folder-block.active > .folder-head:focus-within .folder-select::after {
-    background: linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--accent) 14%, transparent) 0,
-      color-mix(in srgb, var(--accent) 14%, transparent) calc(100% - 8.5rem),
-      color-mix(in srgb, var(--accent) 14%, var(--bg-elevated)) calc(100% - 6.5rem),
-      transparent 100%
-    );
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
   }
 }
 .folder-notes { display: flex; flex-direction: column; padding: 0 0 4px 22px; }
@@ -7804,25 +7807,17 @@ body.search-filters-open .fab-stack,
     );
   }
   @media (hover: hover) and (pointer: fine) {
+    body:has(.sidebar-nav .folder-head:hover) .sidebar-nav,
+    body:has(.sidebar-nav .folder-head:focus-within) .sidebar-nav {
+      overflow: visible;
+    }
     .sidebar-nav .folder-head:hover .folder-select::after,
     .sidebar-nav .folder-head:focus-within .folder-select::after {
-      background: linear-gradient(
-        90deg,
-        var(--sn-nav-bg) 0,
-        var(--sn-nav-bg) calc(100% - 8.5rem),
-        color-mix(in srgb, var(--sn-nav-bg) 88%, transparent) calc(100% - 6.5rem),
-        transparent 100%
-      );
+      background: var(--sn-nav-bg);
     }
     .sidebar-nav .folder-block.active > .folder-head:hover .folder-select::after,
     .sidebar-nav .folder-block.active > .folder-head:focus-within .folder-select::after {
-      background: linear-gradient(
-        90deg,
-        color-mix(in srgb, var(--accent) 14%, var(--sn-nav-bg)) 0,
-        color-mix(in srgb, var(--accent) 14%, var(--sn-nav-bg)) calc(100% - 8.5rem),
-        color-mix(in srgb, var(--accent) 14%, var(--sn-nav-bg)) calc(100% - 6.5rem),
-        transparent 100%
-      );
+      background: color-mix(in srgb, var(--accent) 14%, var(--sn-nav-bg));
     }
   }
   .folder-block.active > .folder-head .folder-head-actions {
