@@ -22907,10 +22907,39 @@
     return out;
   }
 
+  function decodeHtmlAttr(value) {
+    return String(value || '')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>');
+  }
+
+  function cspFromShellHtml(html) {
+    const text = String(html || '');
+    let match = text.match(
+      /<meta\s+http-equiv=["']Content-Security-Policy["']\s+content="([^"]*)"/i,
+    );
+    if (!match) {
+      match = text.match(
+        /<meta\s+content="([^"]*)"\s+http-equiv=["']Content-Security-Policy["']/i,
+      );
+    }
+    return match ? decodeHtmlAttr(match[1]) : '';
+  }
+
+  function cspPolicyFromDocument() {
+    const meta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+    return meta && meta.content ? String(meta.content) : '';
+  }
+
   async function writeShellCache(html, { build = '', cacheControl = 'no-cache' } = {}) {
     if (typeof caches === 'undefined' || !html) return false;
     const shell = await caches.open('deeperguard-shell');
     const headers = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': cacheControl };
+    const csp = cspFromShellHtml(html) || cspPolicyFromDocument();
+    if (csp) headers['Content-Security-Policy'] = csp;
     if (build) headers['X-Notes-Build'] = build;
     const keys = shellCacheKeys();
     await Promise.all(keys.map((key) => {

@@ -3465,9 +3465,20 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("default-src 'self'", csp)
         self.assertIn("worker-src 'self' blob:", csp)
         html = resp.get_data(as_text=True)
+        self.assertIn('http-equiv="Content-Security-Policy"', html)
         nonce_match = re.search(r'nonce="([^"]+)"', html)
         self.assertTrue(nonce_match)
         self.assertIn(f"'nonce-{nonce_match.group(1)}'", csp)
+        meta_match = re.search(
+            r'<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)"',
+            html,
+        )
+        self.assertTrue(meta_match, "app shell must ship CSP in meta for offline cache")
+        import html as html_module
+
+        meta_csp = html_module.unescape(meta_match.group(1))
+        self.assertIn("default-src 'self'", meta_csp)
+        self.assertIn(f"'nonce-{nonce_match.group(1)}'", meta_csp)
 
     def test_kdf_session_cache_never_persists_derived_key(self):
         self._run_node_script("test_kdf_session_cache.js")
