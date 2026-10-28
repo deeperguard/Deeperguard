@@ -370,6 +370,61 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 .totp-ring .totp-ring-value { stroke: var(--accent); stroke-linecap: round; }
 .totp-ring.is-ending .totp-ring-value { stroke: var(--warning); }
 
+@media (max-width: 999px) {
+  .totp-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .totp-item-main {
+    flex: 1 1 100%;
+    box-sizing: border-box;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "icon account"
+      "code code";
+    align-items: start;
+    row-gap: 10px;
+  }
+  .totp-item-main > .note-kind-icon {
+    grid-area: icon;
+    align-self: start;
+  }
+  .totp-item-account {
+    grid-area: account;
+    min-width: 0;
+  }
+  .totp-item-code {
+    grid-area: code;
+    justify-self: stretch;
+    justify-content: flex-end;
+    width: 100%;
+    padding-top: 2px;
+  }
+  .totp-item-body .note-title-row strong {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    overflow-wrap: anywhere;
+  }
+  .totp-item-body .note-preview {
+    display: block;
+    -webkit-line-clamp: unset;
+    -webkit-box-orient: unset;
+    overflow: visible;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .totp-item-edit,
+  .totp-item-server-copy,
+  .totp-item-remove {
+    margin: 0 4px 10px 0;
+  }
+  .totp-item-edit {
+    margin-left: auto;
+  }
+}
+
 @media (min-width: 1000px) {
   .totp-list-head:not([hidden]) {
     display: grid;

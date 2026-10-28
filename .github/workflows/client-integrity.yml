@@ -45,3 +45,4 @@ jobs:
           node tests/test_round83_verify_metadata_baseline.js
           node tests/test_round84_recovery_anti_scam.js
           node tests/test_round85_sidebar_folder_label.js
+          node tests/test_round86_totp_list_narrow.js
