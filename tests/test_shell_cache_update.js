@@ -86,6 +86,8 @@ assert.strictEqual(api.buildFromHtml('<html></html>'), '');
   const persistFn = slice('async function persistAppShell()', 'async function clearAppCaches(');
   assert.match(persistFn, /preseedLatestShell\(String\(data\.build\)\)/);
   assert.match(persistFn, /writeShellCache\(lockedShellHtml\(\)/);
+  assert.match(appJs, /function scrubShellDomForCache\(/);
+  assert.match(appJs, /scrubShellDomForCache\(doc\)/);
 
   console.log('test_shell_cache_update.js: ok');
 })().catch((err) => {

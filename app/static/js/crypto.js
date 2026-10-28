@@ -104,11 +104,10 @@ const NotesCrypto = (() => {
 
   function randomIv() {
     const iv = new Uint8Array(12);
-    if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
-      globalThis.crypto.getRandomValues(iv);
-      return iv;
+    if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') {
+      throw new Error('Secure random is unavailable in this browser');
     }
-    for (let i = 0; i < iv.length; i += 1) iv[i] = Math.floor(Math.random() * 256);
+    globalThis.crypto.getRandomValues(iv);
     return iv;
   }
 
