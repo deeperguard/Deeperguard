@@ -53,7 +53,7 @@ assert.strictEqual((appHtml.match(/id="settings-about"/g) || []).length, 1);
 assert.ok(appJs.includes('note-info-server-copy'));
 assert.ok(appJs.includes('totp-item-server-copy'));
 assert.ok(appJs.includes('folder-server-copy'));
-assert.ok(appJs.includes('View server copy for tag'));
+assert.ok(appJs.includes('View on server for tag'));
 assert.ok(appJs.includes('data-server-copy="${escapeAttr(a.uuid)}"')
   || appJs.includes('data-server-copy="${escapeAttr(a.uuid)}'));
 

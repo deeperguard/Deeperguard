@@ -36,8 +36,8 @@ assert.ok(appJs.includes('data-server-copy'));
 assert.ok(appJs.includes('note-info-server-copy'));
 assert.ok(appJs.includes('totp-item-server-copy'));
 assert.ok(appJs.includes('folder-server-copy'));
-assert.ok(appJs.includes('data-manage-tag') && appJs.includes('View server copy for tag'));
-// Attachments (files) also get a Server copy control in the attachment list.
+assert.ok(appJs.includes('data-manage-tag') && appJs.includes('View on server for tag'));
+// Attachments (files) also get an On server control in the attachment list.
 assert.ok(
   appJs.includes('data-server-copy="${escapeAttr(a.uuid)}"')
   || /data-server-copy="\$\{escapeAttr\(a\.uuid\)\}"/.test(appJs),

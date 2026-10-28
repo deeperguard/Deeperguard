@@ -4145,7 +4145,7 @@
           </span>
         </button>
         <button type="button" class="totp-item-edit" data-totp-edit aria-label="Edit ${escapeAttr(label)}">Edit</button>
-        <button type="button" class="totp-item-server-copy" data-server-copy="${escapeAttr(item.uuid)}" aria-label="View server copy for ${escapeAttr(label)}">Server copy</button>
+        <button type="button" class="totp-item-server-copy" data-server-copy="${escapeAttr(item.uuid)}" aria-label="View on server for ${escapeAttr(label)}">On server</button>
         <button type="button" class="totp-item-remove" data-totp-remove aria-label="Remove ${escapeAttr(label)}">×</button>
       </div>`;
     }).join('');
@@ -8047,7 +8047,7 @@
           <span class="tag-manage-name">${escapeHtml(tag.content.title || 'Tag')}</span>
           <span class="tag-count">${count}</span>
           <button type="button" class="btn ghost sm" data-manage-rename aria-label="Rename tag ${escapeAttr(tag.content.title || 'Tag')}">Rename</button>
-          <button type="button" class="btn ghost sm" data-server-copy="${escapeAttr(tag.uuid)}" aria-label="View server copy for tag ${escapeAttr(tag.content.title || 'Tag')}">Server copy</button>
+          <button type="button" class="btn ghost sm" data-server-copy="${escapeAttr(tag.uuid)}" aria-label="View on server for tag ${escapeAttr(tag.content.title || 'Tag')}">On server</button>
           <button type="button" class="btn ghost sm" data-manage-delete aria-label="Delete tag ${escapeAttr(tag.content.title || 'Tag')}">Delete</button>
         </div>
         <div class="tag-colors">${swatches}</div>
@@ -8257,7 +8257,7 @@
           <span class="tag-count folder-count">${notes.length}</span>
           <div class="folder-head-actions" role="group" aria-label="Folder actions">
             <button type="button" class="folder-rename" data-folder-rename="${escapeAttr(folder.uuid)}" aria-label="Rename folder ${escapeAttr(folder.content.title || 'Folder')}">✎</button>
-            <button type="button" class="folder-server-copy" data-server-copy="${escapeAttr(folder.uuid)}" aria-label="View server copy for folder ${escapeAttr(folder.content.title || 'Folder')}" title="View server copy">ⓘ</button>
+            <button type="button" class="folder-server-copy" data-server-copy="${escapeAttr(folder.uuid)}" aria-label="View on server for folder ${escapeAttr(folder.content.title || 'Folder')}" title="View on server">ⓘ</button>
             <button type="button" class="tag-remove folder-remove" data-folder-remove="${escapeAttr(folder.uuid)}" aria-label="Delete folder ${escapeAttr(folder.content.title || 'Folder')}">×</button>
           </div>
         </div>
@@ -9975,7 +9975,7 @@
         const retryBtn = !succeeded && attachmentOcrRetryable(a)
           ? `<button type="button" class="btn ghost sm ocr-retry" data-retry-ocr="${escapeAttr(a.uuid)}">Retry OCR</button>`
           : '';
-        const serverCopyBtn = `<button type="button" class="btn ghost sm" data-server-copy="${escapeAttr(a.uuid)}">Server copy</button>`;
+        const serverCopyBtn = `<button type="button" class="btn ghost sm" data-server-copy="${escapeAttr(a.uuid)}" aria-label="View on server for file">On server</button>`;
         const rerunBtn = succeeded
           ? `<details class="attachment-overflow"><summary class="btn ghost sm" aria-label="More file actions">⋯</summary><div class="attachment-overflow-menu"><button type="button" class="btn ghost sm ocr-retry" data-retry-ocr="${escapeAttr(a.uuid)}">Re-run OCR</button>${serverCopyBtn}</div></details>`
           : `<details class="attachment-overflow"><summary class="btn ghost sm" aria-label="More file actions">⋯</summary><div class="attachment-overflow-menu">${serverCopyBtn}</div></details>`;
