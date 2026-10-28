@@ -665,8 +665,8 @@
       outScale = 1;
     }
     const denoised = boxBlur(page, pageW, pageH, 1);
-    const sharpened = unsharpGray(page, denoised, 0.9);
-    const contrasted = autocontrast(sharpened, 0.01);
+    const sourceGray = options.sharpen === false ? denoised : unsharpGray(page, denoised, 0.9);
+    const contrasted = autocontrast(sourceGray, 0.01);
     const geometry = {
       srcWidth,
       srcHeight,

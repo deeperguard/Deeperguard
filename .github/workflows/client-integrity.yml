@@ -20,6 +20,14 @@ jobs:
         with:
           python-version-file: .python-version
 
+      - name: Photo OCR fail→pass fixtures (tesseract + Pillow)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y tesseract-ocr
+          python3 -m pip install -q Pillow
+          node tests/test_photo_ocr_fail_pass_manifest.js
+          python3 -m unittest tests.test_photo_ocr_quality.PhotoOcrQualityTest.test_beta_fail_pass_fixtures -v
+
       - name: Dual build hash compare
         env:
           SOURCE_DATE_EPOCH: "0"

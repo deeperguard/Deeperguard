@@ -1,0 +1,48 @@
+[
+  {
+    "id": "beta-receipt-soft-blur",
+    "file": "beta-receipt-soft-blur.jpg",
+    "description": "Soft blur on a tilted phone photo of a Dutch/English receipt.",
+    "search_tokens": [
+      "kiosk",
+      "amsterdam",
+      "visa",
+      "884422"
+    ],
+    "truth_words": [
+      "kiosk",
+      "amsterdam",
+      "btw",
+      "123456789",
+      "subtotaal",
+      "visa",
+      "884422",
+      "terminal"
+    ],
+    "v6528_max_recall": 0.72,
+    "enhanced_min_recall": 0.85
+  },
+  {
+    "id": "beta-receipt-glare-blur",
+    "file": "beta-receipt-glare-blur.jpg",
+    "description": "Mild top glare plus soft blur on the same receipt layout.",
+    "search_tokens": [
+      "kiosk",
+      "amsterdam",
+      "visa",
+      "884422"
+    ],
+    "truth_words": [
+      "kiosk",
+      "amsterdam",
+      "btw",
+      "123456789",
+      "subtotaal",
+      "visa",
+      "884422",
+      "terminal"
+    ],
+    "v6528_max_recall": 0.72,
+    "enhanced_min_recall": 0.85
+  }
+]
