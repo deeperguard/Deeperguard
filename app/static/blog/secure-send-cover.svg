@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Secure Send cover placeholder</title>
+  <desc id="desc">Abstract gradient with a lock and link motif  no user data</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e3a5f"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="920" cy="140" r="180" fill="#38bdf8" opacity="0.12"/>
+  <circle cx="280" cy="520" r="220" fill="#22c55e" opacity="0.08"/>
+  <g transform="translate(420 165)" fill="none" stroke="#e2e8f0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="40" y="120" width="280" height="220" rx="24" fill="#1e293b" stroke="#94a3b8"/>
+    <path d="M120 120 V96 a60 60 0 0 1 120 0 v24"/>
+    <circle cx="180" cy="230" r="28" fill="#0f172a" stroke="#38bdf8"/>
+    <path d="M180 218 v24 M168 230 h24" stroke="#38bdf8" stroke-width="6"/>
+  </g>
+  <path d="M760 320 H980" stroke="#94a3b8" stroke-width="10" stroke-linecap="round" stroke-dasharray="16 14"/>
+  <path d="M980 320 l-36 -28 v56 z" fill="#38bdf8" opacity="0.85"/>
+  <text x="80" y="120" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="42" font-weight="600">Deeperguard Blog</text>
+  <text x="80" y="175" fill="#cbd5e1" font-family="system-ui, sans-serif" font-size="28">Secure Send · client-side encryption</text>
+</svg>

@@ -795,6 +795,8 @@ def public_path(path: str) -> bool:
         "/self-host",
         "/help/recovery",
         "/verify",
+        "/blog",
+        "/blog/feed.xml",
         "/api/health",
         "/api/app-shell",
         "/ca.crt",
@@ -832,6 +834,8 @@ def public_path(path: str) -> bool:
     }:
         return True
     if base in {"/api/contact", "/api/promo", "/robots.txt", "/sitemap.xml", "/.well-known/security.txt"}:
+        return True
+    if base.startswith("/blog/"):
         return True
     # D2 Secure Send: receive shell + explicit Open (never GET/HEAD burn).
     if base.startswith("/receive/"):

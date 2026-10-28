@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ post.title }} — Deeperguard Blog</title>
+  <meta name="description" content="{{ post.description or post.title }}">
+  <meta property="og:title" content="{{ post.title }} — Deeperguard">
+  <meta property="og:description" content="{{ post.description or post.title }}">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ og_image }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
+  <style>
+    .mk-blog-post-head { margin-bottom: 1.25rem; }
+    .mk-blog-post-meta { font-size: 0.95rem; opacity: 0.75; margin: 0.35rem 0 0; }
+    .mk-blog-hero {
+      width: 100%;
+      max-height: 320px;
+      object-fit: cover;
+      border-radius: 12px;
+      margin: 0 0 1.5rem;
+      background: color-mix(in srgb, var(--mk-text, #111) 6%, transparent);
+    }
+    .mk-blog-body { max-width: 44rem; }
+    .mk-blog-body h2 { margin: 1.6em 0 0.5em; font-size: 1.25rem; }
+    .mk-blog-body h3 { margin: 1.2em 0 0.4em; font-size: 1.05rem; }
+    .mk-blog-body p, .mk-blog-body li { line-height: 1.55; }
+    .mk-blog-body ul, .mk-blog-body ol { padding-left: 1.25em; }
+    .mk-blog-body code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--mk-text, #111) 6%, transparent);
+    }
+    .mk-blog-back { margin: 0 0 1rem; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  {% include 'partials/mk-topbar.html' %}
+  <main class="wrap mk-subpage mk-legal">
+    <p class="mk-blog-back"><a href="/blog">← Blog</a></p>
+    <header class="mk-blog-post-head mk-section-head">
+      <span class="mk-badge">Blog</span>
+      {% if post.draft and show_drafts %}
+      <p class="mk-blog-post-meta"><strong>Draft preview</strong> — set <code>draft: false</code> (or remove <code>draft</code>) to publish.</p>
+      {% endif %}
+      <h1>{{ post.title }}</h1>
+      <p class="mk-blog-post-meta"><time datetime="{{ post.iso_date }}">{{ post.iso_date }}</time></p>
+    </header>
+    {% if post.cover_image %}
+    <img class="mk-blog-hero" src="{{ post.cover_image }}?v={{ build }}" width="960" height="504" alt="{{ post.cover_alt or post.title }}">
+    {% endif %}
+    <article class="mk-blog-body legal-section">
+      {{ post.body_html | safe }}
+    </article>
+    {% include 'partials/mk-footer.html' %}
+  </main>
+</body>
+</html>
