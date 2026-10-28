@@ -1681,7 +1681,7 @@
         <h3>Privacy &amp; security</h3>
         <div class="settings-card">
           <p class="settings-hint">Notes are encrypted on this device before sync. Your account password and vault password start as the same password. Sign-in proves who you are. The vault password decrypts notes on this device and never leaves it. You can change the vault password below. We cannot recover it. Account sign-in uses zero-knowledge SRP — the server stores only a proof, not your password.</p>
-          <p class="settings-hint">See <a href="/verify#verify-metadata-baseline" target="_blank" rel="noopener">what the server sees per action</a>, <a href="/verify" target="_blank" rel="noopener">how to verify in DevTools</a>, or use <strong>View server copy</strong> on a note, file, 2FA entry, folder, or tag.</p>
+          <p class="settings-hint">See <a href="/verify#verify-metadata-baseline" target="_blank" rel="noopener">what the server sees per action</a>, <a href="/verify" target="_blank" rel="noopener">how to verify in DevTools</a>, or use <strong>View on server</strong> on a note, file, 2FA entry, folder, or tag.</p>
           <p class="settings-hint">Self-hosting? See the <a href="/self-host">self-host guide</a>.</p>
           <p class="settings-hint">Use <a href="https://www.deeperguard.com/">https://www.deeperguard.com/</a> on iPhone. Passkeys require that hostname.</p>
           <label class="settings-row">Lock after idle
@@ -2182,7 +2182,7 @@
       </dl>
       <div class="note-info-actions note-info-actions-bottom">
         <button type="button" id="note-info-share-bottom" class="btn ghost sm desktop-only">Copy note</button>
-        <button type="button" id="note-info-server-copy" class="btn ghost sm">View server copy</button>
+        <button type="button" id="note-info-server-copy" class="btn ghost sm">View on server</button>
         <button type="button" id="note-info-protect" class="btn ghost sm note-info-protect-btn">
           <span class="note-info-protect-icon" aria-hidden="true">
             <svg class="lock-closed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" hidden>
@@ -2206,7 +2206,7 @@
   <div id="server-copy-dialog" class="scan-dialog server-copy-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="server-copy-title">
     <div class="scan-dialog-handle" aria-hidden="true"></div>
     <header class="scan-dialog-head">
-      <h2 id="server-copy-title">View server copy</h2>
+      <h2 id="server-copy-title">View on server</h2>
     </header>
     <div class="scan-dialog-body server-copy-body">
       <p class="scan-dialog-lead">This is everything our server has for this item. Without your vault password it's unreadable.</p>
