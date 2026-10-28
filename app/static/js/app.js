@@ -4178,8 +4178,14 @@
     }
     const CS = window.NotesClipboardSensitive;
     if (!CS?.copySensitive) {
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
-      else throw new Error('Could not copy');
+      const wrote = CS?.writeClipboardTextSync
+        ? CS.writeClipboardTextSync(text)
+        : false;
+      if (!wrote) {
+        if (CS?.writeClipboardText) await CS.writeClipboardText(text);
+        else if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+        else throw new Error('Could not copy');
+      }
       const base = shownBelow ? `${label} shown below and copied` : `Copied ${label}`;
       toast(rotateHint ? `${base}. ${rotateHint}` : base);
       return;
@@ -4193,12 +4199,21 @@
     });
   }
 
-  async function copyTotpEntry(id) {
+  function totpCodeFromListRow(row) {
+    const codeEl = row && row.querySelector ? row.querySelector('.totp-code') : null;
+    return String(codeEl?.textContent || '').replace(/\s/g, '');
+  }
+
+  async function copyTotpEntry(id, prefilledCode) {
     const item = totpEntries.find((entry) => entry.id === id);
     if (!item) return;
     try {
-      const totp = await NotesTotp.generate(item);
-      await copySensitiveToClipboard(totp.code, {
+      let code = String(prefilledCode || '').replace(/\s/g, '');
+      if (!/^\d{6,10}$/.test(code)) {
+        const totp = await NotesTotp.generate(item);
+        code = totp.code;
+      }
+      await copySensitiveToClipboard(code, {
         label: totpCopyLabelForEntry(item),
         seconds: 30,
         copyScope: 'totp',
@@ -21023,7 +21038,7 @@
         .catch((err) => toast(err.message || 'Could not load server copy', true));
       return;
     }
-    copyTotpEntry(row.dataset.totpId);
+    copyTotpEntry(row.dataset.totpId, totpCodeFromListRow(row));
   });
   totpUi.add?.addEventListener('click', () => showTotpAddDialog());
   totpUi.backdrop?.addEventListener('click', () => hideTotpAddDialog());

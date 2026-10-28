@@ -29,8 +29,35 @@
     return null;
   }
 
+  function writeClipboardTextSync(text) {
+    const value = String(text ?? '');
+    try {
+      const helper = global.document?.createElement('textarea');
+      if (!helper || !global.document?.body) return false;
+      helper.value = value;
+      helper.setAttribute('readonly', '');
+      helper.style.position = 'fixed';
+      helper.style.left = '-9999px';
+      helper.style.top = '0';
+      global.document.body.appendChild(helper);
+      helper.focus();
+      helper.select();
+      if (typeof helper.setSelectionRange === 'function') {
+        helper.setSelectionRange(0, value.length);
+      }
+      const ok = global.document.execCommand('copy');
+      helper.remove();
+      return !!ok;
+    } catch (err) {
+      return false;
+    }
+  }
+
   async function writeClipboardText(text) {
     const value = String(text ?? '');
+    // iOS Safari / installed PWA: execCommand must run in the user-gesture turn;
+    // try sync copy before any await on the async Clipboard API.
+    if (writeClipboardTextSync(value)) return true;
     try {
       if (global.navigator?.clipboard?.writeText) {
         await global.navigator.clipboard.writeText(value);
@@ -39,21 +66,7 @@
     } catch (err) {
       /* fall through */
     }
-    try {
-      const helper = global.document?.createElement('textarea');
-      if (!helper) return false;
-      helper.value = value;
-      helper.setAttribute('readonly', '');
-      helper.style.position = 'fixed';
-      helper.style.left = '-9999px';
-      global.document.body.appendChild(helper);
-      helper.select();
-      const ok = global.document.execCommand('copy');
-      helper.remove();
-      return !!ok;
-    } catch (err) {
-      return false;
-    }
+    return false;
   }
 
   function countdownMessage(label, secondsLeft, { shownBelow = false, rotateHint = '' } = {}) {
@@ -154,6 +167,8 @@
     countdownMessage,
     manualClearHint,
     resultMessage,
+    writeClipboardTextSync,
+    writeClipboardText,
   };
 
   global.NotesClipboardSensitive = api;
