@@ -8234,10 +8234,11 @@
         return `<button type="button" class="folder-note${on}${current}" data-folder-note="${escapeAttr(note.uuid)}">${escapeHtml(NotesSearch.effectiveNoteTitle(note) || 'Untitled')}</button>`;
       }).join('');
       const holdsOpen = notes.some((note) => editorNoteOpen() && currentId === note.uuid && currentFolder !== folder.uuid);
+      const folderTitle = folder.content.title || 'Folder';
       return `<div class="folder-block${active}${open ? ' is-open' : ''}${holdsOpen ? ' has-open-note' : ''}" data-folder="${escapeAttr(folder.uuid)}">
         <div class="folder-head">
-          <button type="button" class="folder-toggle" data-folder-toggle="${escapeAttr(folder.uuid)}" aria-expanded="${open ? 'true' : 'false'}" aria-label="${open ? 'Collapse' : 'Expand'} ${escapeAttr(folder.content.title || 'Folder')}">${open ? '▾' : '▸'}</button>
-          <button type="button" class="folder-select" data-folder-select="${escapeAttr(folder.uuid)}">${escapeHtml(folder.content.title || 'Folder')}</button>
+          <button type="button" class="folder-toggle" data-folder-toggle="${escapeAttr(folder.uuid)}" aria-expanded="${open ? 'true' : 'false'}" aria-label="${open ? 'Collapse' : 'Expand'} ${escapeAttr(folderTitle)}">${open ? '▾' : '▸'}</button>
+          <button type="button" class="folder-select" data-folder-select="${escapeAttr(folder.uuid)}" data-folder-title="${escapeAttr(folderTitle)}" title="${escapeAttr(folderTitle)}">${escapeHtml(folderTitle)}</button>
           <span class="tag-count folder-count">${notes.length}</span>
           <div class="folder-head-actions" role="group" aria-label="Folder actions">
             <button type="button" class="folder-rename" data-folder-rename="${escapeAttr(folder.uuid)}" aria-label="Rename folder ${escapeAttr(folder.content.title || 'Folder')}">✎</button>
