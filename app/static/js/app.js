@@ -943,6 +943,16 @@
   let ocrBusy = false;
   let ocrUiTimer = null;
   let ocrProgressToastAt = 0;
+
+  function ocrProgressLabel(msg, prefix) {
+    if (!msg || typeof msg.progress !== 'number') return prefix || 'Processing';
+    const pct = Math.round(msg.progress * 100);
+    const stage = String(msg.stage || '');
+    if (stage === 'prepare') return `Preparing photo ${pct}%`;
+    if (stage === 'recognize') return `Reading text ${pct}%`;
+    if (prefix) return `${prefix} ${pct}%`;
+    return `Processing ${pct}%`;
+  }
   let ocrDeferToastAt = 0;
   let ocrRetryTimer = null;
   let saveDebounce = null;
@@ -10381,7 +10391,7 @@
             const now = Date.now();
             if (now - ocrProgressToastAt < 1200) return;
             ocrProgressToastAt = now;
-            toast(`Rescanning ${name} ${Math.round(msg.progress * 100)}%`);
+            toast(`Rescanning ${name} — ${ocrProgressLabel(msg, 'Reading')}`);
           }, att.uuid);
           const live = NotesStore.get(att.uuid);
           if (!live || live.content?.type !== 'attachment') throw new Error('Attachment disappeared');
@@ -17216,7 +17226,7 @@
             const now = Date.now();
             if (now - ocrProgressToastAt < 1200) return;
             ocrProgressToastAt = now;
-            toast(`Processing ${Math.round(msg.progress * 100)}%`);
+            toast(ocrProgressLabel(msg, 'Processing'));
           }
         }, { force: !!job.force });
         ocrDeferred.delete(job.attId);

@@ -31,5 +31,5 @@
       "character_error_rate": 0.0
     }
   },
-  "note": "Synthetic pages rendered with DejaVu. Numbers are from tests/test_photo_ocr_quality.py using vendored eng+nld traineddata."
+  "note": "Synthetic pages rendered with DejaVu. Legacy hard-dutch-invoice numbers are a weak regression bar. Beta fail→pass proof: tests/fixtures/photo-ocr/beta-fail-pass.json and JPEGs beta-receipt-*.jpg."
 }

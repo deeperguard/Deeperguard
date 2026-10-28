@@ -1,0 +1,26 @@
+[
+  {
+    "id": "beta-receipt-heavy-blur-glare",
+    "file": "beta-receipt-heavy-blur-glare.jpg",
+    "description": "Blurred receipt with top glare and ~9\u00b0 skew (JPEG Q88); harder than retired beta soft/glare fixtures.",
+    "search_tokens": [
+      "kiosk",
+      "amsterdam",
+      "visa",
+      "884422"
+    ],
+    "pass_rule": "all search_tokens in OCR text (accent-insensitive); v0.65.28 pipeline sim must fail, #256 sim must pass"
+  },
+  {
+    "id": "beta-receipt-lowcon-glare-skew",
+    "file": "beta-receipt-lowcon-glare-skew.jpg",
+    "description": "Low-contrast receipt, stronger glare, ~12\u00b0 skew, moderate blur (JPEG Q88).",
+    "search_tokens": [
+      "kiosk",
+      "amsterdam",
+      "visa",
+      "884422"
+    ],
+    "pass_rule": "all search_tokens in OCR text (accent-insensitive); v0.65.28 pipeline sim must fail, #256 sim must pass"
+  }
+]

@@ -3,7 +3,7 @@
  * Read a raw RGBA photo (uint32 LE width, uint32 LE height, RGBA bytes),
  * run the on-device photo preprocess, and write a PNG.
  *
- *   node tests/apply_photo_preprocess.js input.rgba output.png primary|strong|legacy
+ *   node tests/apply_photo_preprocess.js input.rgba output.png primary|strong|gray|legacy|raw|primary_v65
  *
  * legacy is the previous client preprocess: upscale when the short side is
  * under 1800, then grayscale, contrast 1.35, brightness 1.05. No deskew.
@@ -75,6 +75,19 @@ function legacyEnhance(image) {
   return { width, height, data };
 }
 
+function rawFromRgba(image) {
+  const { width, height, data } = image;
+  const out = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0, p = 0; i < width * height; i += 1, p += 4) {
+    const gray = (data[p] * 77 + data[p + 1] * 150 + data[p + 2] * 29) >> 8;
+    out[p] = gray;
+    out[p + 1] = gray;
+    out[p + 2] = gray;
+    out[p + 3] = 255;
+  }
+  return { width, height, data: out };
+}
+
 function encodePpm(image) {
   const { width, height, data } = image;
   const header = Buffer.from(`P6\n${width} ${height}\n255\n`);
@@ -88,9 +101,13 @@ function encodePpm(image) {
   return Buffer.concat([header, rgb]);
 }
 
+function rgbaToPpm(image) {
+  return encodePpm(image);
+}
+
 const [input, output, mode] = process.argv.slice(2);
 if (!input || !output || !mode) {
-  console.error('usage: apply_photo_preprocess.js input.rgba output.png primary|strong|legacy');
+  console.error('usage: apply_photo_preprocess.js input.rgba output.png primary|strong|gray|legacy|raw|primary_v65|strong_v65');
   process.exit(2);
 }
 const image = readRgba(input);
@@ -98,9 +115,16 @@ let rendered;
 let meta = {};
 if (mode === 'legacy') {
   rendered = legacyEnhance(image);
+} else if (mode === 'raw') {
+  rendered = rawFromRgba(image);
 } else {
-  const prepared = preparePhoto(image, { maxPixels: 3500000 });
-  rendered = renderPhotoPass(prepared, mode);
+  const baseline = mode.endsWith('_v65') || process.env.PHOTO_OCR_BASELINE === '1';
+  const pass = baseline ? mode.replace(/_v65$/, '') : mode;
+  const prepared = preparePhoto(image, {
+    maxPixels: 3500000,
+    sharpen: baseline ? false : undefined,
+  });
+  rendered = renderPhotoPass(prepared, pass);
   meta = {
     angle: prepared.angle,
     cropped: prepared.cropped,

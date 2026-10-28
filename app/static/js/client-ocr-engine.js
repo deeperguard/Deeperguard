@@ -40,7 +40,26 @@ const NotesClientOcr = (() => {
   }
 
   function maxOcrPixels() {
-    return memoryConstrained() ? 1200000 : 3500000;
+    return memoryConstrained() ? 1400000 : 4200000;
+  }
+
+  // WASM SIMD is shipped alongside the default core (see fetch-ocr-assets.sh).
+  const WASM_SIMD_PROBE = new Uint8Array([
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 7, 0,
+    65, 0, 253, 15, 253, 98, 11,
+  ]);
+
+  function wasmSimdSupported() {
+    if (typeof WebAssembly !== 'object' || typeof WebAssembly.validate !== 'function') return false;
+    try {
+      return WebAssembly.validate(WASM_SIMD_PROBE);
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function tesseractCoreFile() {
+    return wasmSimdSupported() ? 'tesseract-core-simd.wasm.js' : 'tesseract-core.wasm.js';
   }
 
   function releaseCanvas(canvas) {
@@ -242,7 +261,7 @@ const NotesClientOcr = (() => {
     // not with the first page load.
     const worker = await Tesseract.createWorker('eng+nld', 1, {
       workerPath: `${TESS_BASE}/worker.min.js`,
-      corePath: `${TESS_BASE}/tesseract-core.wasm.js`,
+      corePath: `${TESS_BASE}/${tesseractCoreFile()}`,
       langPath: `${TESS_BASE}/lang`,
       gzip: true,
       logger: () => {},
@@ -397,6 +416,8 @@ const NotesClientOcr = (() => {
   // PSM 4: a single column of mixed-size text, which matches a photographed
   // page. PSM 6 is the uniform-block mode and fits screenshots better.
   const DOCUMENT_PSM = 4;
+  const AUTO_PSM = 3;
+  const SPARSE_PSM = 11;
 
   function ocrPassPoor(result) {
     if (weakOcrResult(result?.text, result?.boxes)) return true;
@@ -411,6 +432,7 @@ const NotesClientOcr = (() => {
         tessedit_pageseg_mode: String(psm),
         preserve_interword_spaces: '1',
         user_defined_dpi: '300',
+        textord_heavy_nr: '1',
       });
     }
     const result = await worker.recognize(canvas);
@@ -427,37 +449,48 @@ const NotesClientOcr = (() => {
     };
   }
 
-  async function ocrImageCanvas(canvas, page = 0) {
+  async function recognizePreparedPass(prep, prepared, pass, psm, page) {
+    const canvas = rgbaToCanvas(prep.renderPhotoPass(prepared, pass));
+    try {
+      return await recognizeCanvas(canvas, { page, psm, geometry: prepared.geometry });
+    } finally {
+      releaseCanvas(canvas);
+    }
+  }
+
+  async function ocrImageCanvas(canvas, page = 0, onStage) {
+    const reportStage = (stage) => {
+      if (typeof onStage === 'function') onStage(stage);
+    };
     const prep = photoPreprocess();
     if (!prep) {
+      reportStage('recognize');
       const result = await recognizeCanvas(canvas, { page, psm: DOCUMENT_PSM });
       const quality = weakOcrResult(result.text, result.boxes) ? 'weak' : 'ok';
       return { text: result.text, boxes: result.boxes, method: 'tesseract', ocr_quality: quality };
     }
+    reportStage('prepare');
     const prepared = prep.preparePhoto(canvasToRgba(canvas), { maxPixels: maxOcrPixels() });
-    const primary = rgbaToCanvas(prep.renderPhotoPass(prepared, 'primary'));
-    let best;
-    try {
-      best = await recognizeCanvas(primary, { page, psm: DOCUMENT_PSM, geometry: prepared.geometry });
-    } finally {
-      releaseCanvas(primary);
-    }
-    // One retry, and only when the first pass is weak. The retry uses a
-    // tighter binarization of the same deskewed page. It does not loop.
+    reportStage('recognize');
+    let best = await recognizePreparedPass(prep, prepared, 'primary', DOCUMENT_PSM, page);
     if (ocrPassPoor(best)) {
-      const retry = rgbaToCanvas(prep.renderPhotoPass(prepared, 'strong'));
-      try {
-        const second = await recognizeCanvas(retry, { page, psm: DOCUMENT_PSM, geometry: prepared.geometry });
-        best = chooseBetterOcr(best, second);
-      } finally {
-        releaseCanvas(retry);
-      }
+      best = chooseBetterOcr(best, await recognizePreparedPass(prep, prepared, 'strong', DOCUMENT_PSM, page));
+    }
+    // Glare and pencil strokes often survive better on deskewed grayscale than
+    // on adaptive threshold. This is the second allowed binarization retry.
+    if (ocrPassPoor(best)) {
+      best = chooseBetterOcr(best, await recognizePreparedPass(prep, prepared, 'gray', DOCUMENT_PSM, page));
+    }
+    if (ocrPassPoor(best)) {
+      best = chooseBetterOcr(best, await recognizePreparedPass(prep, prepared, 'primary', AUTO_PSM, page));
     }
     // Clean JPEG/WebP scans (large type on a white page) survive a direct
     // pass better than photo binarization. Keep whichever read is stronger.
     if (ocrPassPoor(best)) {
-      const direct = await recognizeCanvas(canvas, { page, psm: 6 });
-      best = chooseBetterOcr(best, direct);
+      best = chooseBetterOcr(best, await recognizeCanvas(canvas, { page, psm: 6 }));
+    }
+    if (ocrPassPoor(best)) {
+      best = chooseBetterOcr(best, await recognizePreparedPass(prep, prepared, 'gray', SPARSE_PSM, page));
     }
     const quality = weakOcrResult(best.text, best.boxes) ? 'weak' : 'ok';
     return { text: best.text, boxes: best.boxes, method: 'tesseract', ocr_quality: quality };
@@ -640,12 +673,12 @@ const NotesClientOcr = (() => {
     return { text: clean(text), method: 'text', boxes: [], ocr_quality: 'ok' };
   }
 
-  async function extractImage(file) {
+  async function extractImage(file, onStage) {
     const decoded = await decodeImageFile(file);
     // Photo OCR prepares its own working resolution. The list preview stays
     // at LIST_PREVIEW_PX and is not the image Tesseract reads.
     try {
-      return await ocrImageCanvas(decoded.canvas, 0);
+      return await ocrImageCanvas(decoded.canvas, 0, onStage);
     } finally {
       releaseCanvas(decoded.canvas);
     }
@@ -771,8 +804,8 @@ const NotesClientOcr = (() => {
     if (!file) throw new Error('Choose a file first.');
     const size = Number(file.size || 0);
     if (size > MAX_BYTES) throw new Error('File too large to process on this device.');
-    const report = (progress) => {
-      if (typeof onProgress === 'function') onProgress({ status: 'processing', progress });
+    const report = (progress, stage = '') => {
+      if (typeof onProgress === 'function') onProgress({ status: 'processing', progress, stage });
     };
     report(0.05);
     let kind = fileKind(file);
@@ -785,6 +818,13 @@ const NotesClientOcr = (() => {
     }
     report(0.15);
     let result;
+    let onStage = null;
+    if (kind === 'image') {
+      onStage = (stage) => {
+        if (stage === 'prepare') report(0.28, 'prepare');
+        else if (stage === 'recognize') report(0.52, 'recognize');
+      };
+    }
     if (kind === 'docx') {
       result = await extractDocx(file);
     } else if (kind === 'text' && (/\.json$/i.test(file.name || '') || String(file.type || '').includes('json'))) {
@@ -794,7 +834,7 @@ const NotesClientOcr = (() => {
     } else if (kind === 'pdf') {
       result = await extractPdf(file);
     } else if (kind === 'image') {
-      result = await extractImage(file);
+      result = await extractImage(file, onStage);
     } else {
       throw new Error('Use an image, PDF, or text file.');
     }
@@ -823,6 +863,8 @@ const NotesClientOcr = (() => {
     ocrPickScore,
     chooseBetterOcr,
     clean,
+    wasmSimdSupported,
+    tesseractCoreFile,
   };
 })();
 
