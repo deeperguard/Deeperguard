@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Blog — Deeperguard</title>
+  <meta name="description" content="Claim-safe how-tos and privacy notes for Deeperguard encrypted notes.">
+  <meta property="og:title" content="Blog — Deeperguard">
+  <meta property="og:description" content="Claim-safe how-tos and privacy notes for Deeperguard encrypted notes.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ og_image }}">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <link rel="alternate" type="application/rss+xml" title="Deeperguard Blog" href="/blog/feed.xml">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
+  <style>
+    .mk-blog-list { display: grid; gap: 1.25rem; margin-top: 1.5rem; }
+    .mk-blog-card {
+      display: grid;
+      gap: 1rem;
+      padding: 1.25rem 1.35rem;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--mk-text, #111) 12%, transparent);
+      background: color-mix(in srgb, var(--mk-text, #111) 3%, transparent);
+    }
+    @media (min-width: 720px) {
+      .mk-blog-card.has-cover { grid-template-columns: 200px 1fr; align-items: start; }
+    }
+    .mk-blog-cover {
+      width: 100%;
+      max-height: 140px;
+      object-fit: cover;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--mk-text, #111) 6%, transparent);
+    }
+    .mk-blog-card h2 { margin: 0 0 0.35rem; font-size: 1.25rem; }
+    .mk-blog-card h2 a { color: inherit; text-decoration: none; }
+    .mk-blog-card h2 a:hover { text-decoration: underline; }
+    .mk-blog-meta { font-size: 0.9rem; opacity: 0.75; margin: 0 0 0.5rem; }
+    .mk-blog-empty { margin-top: 1.5rem; line-height: 1.55; }
+    .mk-blog-feed-link { font-size: 0.95rem; margin-top: 0.75rem; }
+  </style>
+</head>
+<body>
+  {% include 'partials/mk-topbar.html' %}
+  <main class="wrap mk-subpage">
+    <div class="mk-section-head">
+      <span class="mk-badge">Blog</span>
+      <h1>Deeperguard blog</h1>
+      <p class="mk-lede">Short, claim-safe how-tos for encrypted notes and Secure Send. Cross-check technical claims on <a href="/verify">/verify</a>.</p>
+      <p class="mk-blog-feed-link"><a href="/blog/feed.xml">RSS feed</a></p>
+    </div>
+    {% if posts %}
+    <div class="mk-blog-list">
+      {% for post in posts %}
+      <article class="mk-blog-card{% if post.cover_image %} has-cover{% endif %}">
+        {% if post.draft and show_drafts %}
+        <p class="mk-blog-meta"><strong>Draft preview</strong> — not listed publicly until <code>draft</code> is removed.</p>
+        {% endif %}
+        {% if post.cover_image %}
+        <img class="mk-blog-cover" src="{{ post.cover_image }}?v={{ build }}" width="400" height="210" alt="{{ post.cover_alt or post.title }}">
+        {% endif %}
+        <div>
+          <p class="mk-blog-meta"><time datetime="{{ post.iso_date }}">{{ post.iso_date }}</time></p>
+          <h2><a href="/blog/{{ post.slug }}">{{ post.title }}</a></h2>
+          {% if post.description %}<p>{{ post.description }}</p>{% endif %}
+          <p><a href="/blog/{{ post.slug }}">Read post</a></p>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="mk-blog-empty">No published posts yet. Draft articles in <code>content/blog/</code> appear here after <code>draft: true</code> is removed or set to false.</p>
+    {% endif %}
+    {% include 'partials/mk-footer.html' %}
+  </main>
+</body>
+</html>

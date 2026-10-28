@@ -91,10 +91,18 @@ def _escape_html(text: str) -> str:
 
 
 def _inline_md(text: str) -> str:
-    """Escape then apply simple `code` and **bold** spans."""
+    """Escape then apply simple links, `code`, and **bold** spans."""
     import re
 
     out = _escape_html(text)
+
+    def _rel_link(match: re.Match[str]) -> str:
+        href = match.group(2)
+        if not href.startswith("/"):
+            return match.group(0)
+        return f'<a href="{href}">{match.group(1)}</a>'
+
+    out = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", _rel_link, out)
     out = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", out)
     out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
     return out

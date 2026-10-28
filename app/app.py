@@ -13,6 +13,7 @@ from pathlib import Path
 from flask import Flask, jsonify, make_response, redirect, render_template, request, send_from_directory, session, url_for
 
 import admin_api
+import blog
 import ask_ai_provider_pin
 import verify_metadata_baseline
 import ai_relay
@@ -558,7 +559,8 @@ def _headers(response):
         "/", "/pricing", "/compare/standard-notes", "/compare/notesnook",
         "/compare/joplin", "/evernote-alternative", "/for/freelancers",
         "/contact", "/download", "/privacy", "/terms", "/verify",
-    }:
+        "/blog", "/blog/feed.xml",
+    } or request.path.startswith("/blog/"):
         # Marketing HTML is public and cookie-free. A short cache keeps repeat
         # visits off the origin. Clear-Site-Data must not be set here: the
         # browser deletes its HTTP cache before painting, and the one-time
@@ -3547,6 +3549,51 @@ def verify_page():
     return render_template("verify.html", **ctx)
 
 
+def _render_blog_page(template: str, canonical_path: str, **extra):
+    host = _request_host()
+    if request.scheme != "https" and host not in {"localhost", "127.0.0.1", "::1"}:
+        return render_template("https-setup.html", host=_lan_https_host(), build=NOTES_BUILD)
+    ctx = {**_marketing_context(), **extra}
+    base = NOTES_PUBLIC_URL.rstrip("/")
+    ctx["canonical_url"] = f"{base}{canonical_path}"
+    return make_response(render_template(template, **ctx))
+
+
+@app.get("/blog")
+def blog_index_page():
+    posts = blog.published_posts()
+    return _render_blog_page(
+        "blog-index.html",
+        "/blog",
+        posts=posts,
+        show_drafts=blog.show_drafts(),
+    )
+
+
+@app.get("/blog/feed.xml")
+def blog_feed():
+    site = NOTES_PUBLIC_URL.rstrip("/")
+    body = blog.rss_xml(site, blog.listed_posts())
+    return app.response_class(body, mimetype="application/rss+xml; charset=utf-8")
+
+
+@app.get("/blog/<slug>")
+def blog_post_page(slug: str):
+    post = blog.get_published_post(slug)
+    if not post:
+        return render_template("not-found.html", **_marketing_context()), 404
+    og = f"{NOTES_PUBLIC_URL.rstrip('/')}{post.cover_image or '/static/icons/icon-512.png'}"
+    if post.cover_image and "?v=" not in post.cover_image:
+        og = f"{og}?v={NOTES_BUILD}"
+    return _render_blog_page(
+        "blog-post.html",
+        f"/blog/{post.slug}",
+        post=post,
+        og_image=og,
+        show_drafts=blog.show_drafts(),
+    )
+
+
 @app.get("/pricing")
 def pricing_page():
     # Canonical content lives on the homepage pricing section.
@@ -3627,6 +3674,7 @@ def sitemap_xml():
         "/self-host",
         "/help/recovery",
         "/verify",
+        "/blog",
         "/api/promo",
     ]
     lines = [
@@ -3636,6 +3684,10 @@ def sitemap_xml():
     for page in pages:
         lines.append("  <url>")
         lines.append(f"    <loc>{site}{page}</loc>")
+        lines.append("  </url>")
+    for post in blog.listed_posts():
+        lines.append("  <url>")
+        lines.append(f"    <loc>{site}/blog/{post.slug}</loc>")
         lines.append("  </url>")
     lines.append("</urlset>")
     return app.response_class("\n".join(lines), mimetype="application/xml; charset=utf-8")
