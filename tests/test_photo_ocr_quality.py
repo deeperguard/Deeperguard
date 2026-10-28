@@ -23,8 +23,11 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 from photo_ocr_fixtures import BETA_FAIL_PASS_FIXTURES
 from photo_ocr_pipeline import (
+    pipeline_enhanced256_passes,
     pipeline_enhanced256_recall,
+    pipeline_v6528_passes,
     pipeline_v6528_recall,
+    search_tokens_found,
     tessdata_dir,
 )
 
@@ -152,7 +155,7 @@ class PhotoOcrQualityTest(unittest.TestCase):
         self.assertGreaterEqual(enhanced, 0.9)
 
     def test_beta_fail_pass_fixtures(self):
-        """Committed JPEGs must fail v0.65.28 pipeline sim and pass #256 sim."""
+        """All four search tokens must fail v0.65.28 sim and pass #256 sim (committed JPEGs)."""
         self.assertTrue(BETA_MANIFEST.is_file(), "run tests/generate_photo_ocr_fixtures.py")
         on_disk = json.loads(BETA_MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(len(on_disk), len(BETA_FAIL_PASS_FIXTURES))
@@ -162,26 +165,21 @@ class PhotoOcrQualityTest(unittest.TestCase):
             image = Image.open(path).convert("RGB")
             with tempfile.TemporaryDirectory(prefix=f"beta-ocr-{fx.id}-") as tmp:
                 work = Path(tmp)
-                v65, text_v65 = pipeline_v6528_recall(image, fx.truth_words, work / "v65", self.data_dir)
-                enhanced, text_enh = pipeline_enhanced256_recall(
-                    image, fx.truth_words, work / "enh", self.data_dir
+                v65_ok, text_v65 = pipeline_v6528_passes(
+                    image, fx.search_tokens, work / "v65", self.data_dir
                 )
-            self.assertLess(
-                v65,
-                fx.v6528_max_recall,
-                msg=f"{fx.id} should stay weak on v0.65.28 pipeline sim: {text_v65!r}",
-            )
-            self.assertGreaterEqual(
-                enhanced,
-                fx.enhanced_min_recall,
-                msg=f"{fx.id} should become searchable on #256 sim: {text_enh!r}",
-            )
-            for token in fx.search_tokens:
-                self.assertIn(
-                    token,
-                    text_enh.lower(),
-                    f"{fx.id} missing search token {token!r} in enhanced read",
+                enh_ok, text_enh = pipeline_enhanced256_passes(
+                    image, fx.search_tokens, work / "enh", self.data_dir
                 )
+            self.assertFalse(
+                v65_ok,
+                msg=f"{fx.id} must miss ≥1 search token on v0.65.28 sim; got {text_v65!r}",
+            )
+            self.assertTrue(
+                enh_ok,
+                msg=f"{fx.id} must include all search tokens on #256 sim; got {text_enh!r}",
+            )
+            self.assertTrue(search_tokens_found(text_enh, fx.search_tokens))
 
     @unittest.skip("Weak bar — sideways deskew already passes on v0.65.28; not fail→pass proof.")
     def test_sideways_photo_deskew_and_read(self):

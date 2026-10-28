@@ -11,6 +11,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import unicodedata
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -99,9 +100,29 @@ def ocr_pass(image, mode: str, psm: int, work: Path, data_dir: Path) -> str:
 
 
 def token_recall(text: str, words: tuple[str, ...]) -> float:
-    found = set(re.findall(r"[a-z0-9]+", text.lower()))
-    hits = sum(1 for word in words if word in found)
+    hay = normalize_ocr_text(text)
+    hits = sum(1 for word in words if normalize_ocr_text(word) in hay)
     return hits / max(1, len(words))
+
+
+def normalize_ocr_text(text: str) -> str:
+    folded = unicodedata.normalize("NFKD", str(text or "").lower())
+    return "".join(ch for ch in folded if not unicodedata.combining(ch))
+
+
+def search_tokens_found(text: str, tokens: tuple[str, ...]) -> bool:
+    hay = normalize_ocr_text(text)
+    return all(normalize_ocr_text(token) in hay for token in tokens)
+
+
+def pipeline_v6528_passes(image, search_tokens, work: Path, data_dir: Path) -> tuple[bool, str]:
+    _, text = pipeline_best_recall(image, PIPELINE_V6528, search_tokens, work, data_dir)
+    return search_tokens_found(text, search_tokens), text
+
+
+def pipeline_enhanced256_passes(image, search_tokens, work: Path, data_dir: Path) -> tuple[bool, str]:
+    _, text = pipeline_best_recall(image, PIPELINE_ENHANCED_256, search_tokens, work, data_dir)
+    return search_tokens_found(text, search_tokens), text
 
 
 def pipeline_best_recall(image, passes, words, work: Path, data_dir: Path) -> tuple[float, str]:

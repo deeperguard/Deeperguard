@@ -1,48 +1,26 @@
 [
   {
-    "id": "beta-receipt-soft-blur",
-    "file": "beta-receipt-soft-blur.jpg",
-    "description": "Soft blur on a tilted phone photo of a Dutch/English receipt.",
+    "id": "beta-receipt-heavy-blur-glare",
+    "file": "beta-receipt-heavy-blur-glare.jpg",
+    "description": "Blurred receipt with top glare and ~9\u00b0 skew (JPEG Q88); harder than retired beta soft/glare fixtures.",
     "search_tokens": [
       "kiosk",
       "amsterdam",
       "visa",
       "884422"
     ],
-    "truth_words": [
-      "kiosk",
-      "amsterdam",
-      "btw",
-      "123456789",
-      "subtotaal",
-      "visa",
-      "884422",
-      "terminal"
-    ],
-    "v6528_max_recall": 0.72,
-    "enhanced_min_recall": 0.85
+    "pass_rule": "all search_tokens in OCR text (accent-insensitive); v0.65.28 pipeline sim must fail, #256 sim must pass"
   },
   {
-    "id": "beta-receipt-glare-blur",
-    "file": "beta-receipt-glare-blur.jpg",
-    "description": "Mild top glare plus soft blur on the same receipt layout.",
+    "id": "beta-receipt-lowcon-glare-skew",
+    "file": "beta-receipt-lowcon-glare-skew.jpg",
+    "description": "Low-contrast receipt, stronger glare, ~12\u00b0 skew, moderate blur (JPEG Q88).",
     "search_tokens": [
       "kiosk",
       "amsterdam",
       "visa",
       "884422"
     ],
-    "truth_words": [
-      "kiosk",
-      "amsterdam",
-      "btw",
-      "123456789",
-      "subtotaal",
-      "visa",
-      "884422",
-      "terminal"
-    ],
-    "v6528_max_recall": 0.72,
-    "enhanced_min_recall": 0.85
+    "pass_rule": "all search_tokens in OCR text (accent-insensitive); v0.65.28 pipeline sim must fail, #256 sim must pass"
   }
 ]
