@@ -70,6 +70,15 @@
     return ii[y1 * stride + x1] - ii[y0 * stride + x1] - ii[y1 * stride + x0] + ii[y0 * stride + x0];
   }
 
+  function unsharpGray(source, blur, amount) {
+    const out = new Uint8Array(source.length);
+    const gain = Number(amount) || 0;
+    for (let i = 0; i < source.length; i += 1) {
+      out[i] = clampByte(source[i] + gain * (source[i] - blur[i]));
+    }
+    return out;
+  }
+
   function boxBlur(gray, width, height, radius) {
     const ii = integral(gray, width, height, false);
     const out = new Uint8Array(width * height);
@@ -656,7 +665,8 @@
       outScale = 1;
     }
     const denoised = boxBlur(page, pageW, pageH, 1);
-    const contrasted = autocontrast(denoised, 0.01);
+    const sharpened = unsharpGray(page, denoised, 0.9);
+    const contrasted = autocontrast(sharpened, 0.01);
     const geometry = {
       srcWidth,
       srcHeight,
@@ -700,5 +710,7 @@
     detectSkew,
     toGrayImage,
     rotateGray,
+    unsharpGray,
+    boxBlur,
   };
 });

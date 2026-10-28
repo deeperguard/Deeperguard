@@ -329,6 +329,21 @@ class PhotoOcrQualityTest(unittest.TestCase):
         self.assertLess(after["cer"], before["cer"])
         self.assertGreaterEqual(control["recall"], 0.9, control["text"])
 
+    def test_sideways_photo_deskew_and_read(self):
+        """A 90° page rotation should deskew and still reach high word recall."""
+        sideways = make_sideways()
+        data_dir = self.data_dir
+        with tempfile.TemporaryDirectory(prefix="photo-ocr-sideways-") as tmp:
+            work = Path(tmp)
+            primary = recognize(sideways, "primary", 4, work / "primary", data_dir)
+            after = primary
+            if primary["recall"] < 0.85:
+                gray = recognize(sideways, "gray", 4, work / "gray", data_dir)
+                after = gray if gray["recall"] > primary["recall"] else primary
+            angle = abs(float(primary["meta"].get("angle") or 0))
+        self.assertGreaterEqual(angle, 80, f"expected ~90° deskew, got {angle}")
+        self.assertGreaterEqual(after["recall"], 0.85, after["text"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

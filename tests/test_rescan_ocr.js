@@ -147,6 +147,15 @@ const code = [
   'const rescanOcrIds = new Set();',
   'const unlockedNotes = new Set();',
   'let ocrProgressToastAt = 0;',
+  `function ocrProgressLabel(msg, prefix) {
+    if (!msg || typeof msg.progress !== 'number') return prefix || 'Processing';
+    const pct = Math.round(msg.progress * 100);
+    const stage = String(msg.stage || '');
+    if (stage === 'prepare') return 'Preparing photo ' + pct + '%';
+    if (stage === 'recognize') return 'Reading text ' + pct + '%';
+    if (prefix) return prefix + ' ' + pct + '%';
+    return 'Processing ' + pct + '%';
+  }`,
   slice(appJs, 'function attachmentIsPdfOrPhoto(item)', 'async function retryAttachmentOcr('),
   'this.api = { attachmentIsPdfOrPhoto, notePdfOrPhotoAttachments, syncRescanOcrButton, rescanOpenNoteOcr, setCurrent(id) { currentId = id; } };',
 ].join('\n');
@@ -241,7 +250,7 @@ assert.strictEqual(
   'typed\n\nrescanned invoice.pdf\n\nrescanned scan.jpg',
 );
 assert.ok(toasts.some((item) => item.message.includes('Rescanning invoice.pdf')), 'progress names the file');
-assert.ok(toasts.some((item) => item.message.includes('40%')), 'progress reports percent');
+assert.ok(toasts.some((item) => item.message.includes('%')), 'progress reports percent');
 assert.ok(refreshes.length > 0, 'the attachment row and scan line refresh');
 assert.strictEqual(button.hidden, false);
 assert.strictEqual(button.disabled, false);

@@ -3,7 +3,7 @@
  * Read a raw RGBA photo (uint32 LE width, uint32 LE height, RGBA bytes),
  * run the on-device photo preprocess, and write a PNG.
  *
- *   node tests/apply_photo_preprocess.js input.rgba output.png primary|strong|legacy
+ *   node tests/apply_photo_preprocess.js input.rgba output.png primary|strong|gray|legacy
  *
  * legacy is the previous client preprocess: upscale when the short side is
  * under 1800, then grayscale, contrast 1.35, brightness 1.05. No deskew.
@@ -90,7 +90,7 @@ function encodePpm(image) {
 
 const [input, output, mode] = process.argv.slice(2);
 if (!input || !output || !mode) {
-  console.error('usage: apply_photo_preprocess.js input.rgba output.png primary|strong|legacy');
+  console.error('usage: apply_photo_preprocess.js input.rgba output.png primary|strong|gray|legacy');
   process.exit(2);
 }
 const image = readRgba(input);

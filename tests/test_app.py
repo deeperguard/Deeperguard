@@ -2468,7 +2468,7 @@ class NotesAppTests(unittest.TestCase):
         store_js = (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8")
         self.assertIn("discardItem(id)", store_js)
         self.assertIn("NotesIDB.deleteItem(id)", store_js)
-        self.assertIn("const OCR_INDEX = 59", store_js)
+        self.assertIn("const OCR_INDEX = 60", store_js)
         self.assertIn("staleAttachmentOcr", store_js)
         self.assertIn("if (unchanged) return false", store_js)
         preview_js = (APP_DIR / "static" / "js" / "preview.js").read_text(encoding="utf-8")

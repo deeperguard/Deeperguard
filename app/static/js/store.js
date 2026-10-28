@@ -1,7 +1,7 @@
 const NotesStore = (() => {
   const MAX_REVISIONS = 30;
   const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
-  const OCR_INDEX = 59;
+  const OCR_INDEX = 60;
   const DIRTY_META_KEY = 'dirty';
 
   // Unsynced item ids survive lock / app kill / iOS background suspension in
