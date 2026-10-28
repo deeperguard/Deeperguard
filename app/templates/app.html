@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  {% if csp_policy %}
+  <meta http-equiv="Content-Security-Policy" content="{{ csp_policy | e }}">
+  {% endif %}
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
   <meta name="color-scheme" content="light dark">
   <meta name="mobile-web-app-capable" content="yes">

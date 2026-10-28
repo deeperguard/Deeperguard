@@ -35,7 +35,7 @@ const sandbox = {
 };
 const factory = new Function(
   ...Object.keys(sandbox),
-  `${helpers}\nreturn { shellCacheKeys, writeShellCache, buildFromHtml };`,
+  `${helpers}\nreturn { shellCacheKeys, writeShellCache, buildFromHtml, cspFromShellHtml };`,
 );
 const api = factory(...Object.values(sandbox));
 
@@ -50,13 +50,16 @@ assert.strictEqual(api.buildFromHtml('<meta name="notes-build" content="c8aebc63
 assert.strictEqual(api.buildFromHtml('<html></html>'), '');
 
 (async () => {
-  const html = '<!DOCTYPE html><meta name="notes-build" content="c8aebc63"><body>x</body>';
+  const csp = "default-src 'self'; script-src 'self' 'nonce-abc'";
+  const html = `<!DOCTYPE html><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="notes-build" content="c8aebc63"><body>x</body>`;
+  assert.strictEqual(api.cspFromShellHtml(html), csp);
   const ok = await api.writeShellCache(html, { build: 'c8aebc63' });
   assert.strictEqual(ok, true);
   assert.strictEqual(puts.length, 2, 'the notes shell is stored under /app only');
   for (const entry of puts) {
     assert.strictEqual(entry.response.body.text, html);
     assert.strictEqual(entry.response.headers['X-Notes-Build'], 'c8aebc63');
+    assert.strictEqual(entry.response.headers['Content-Security-Policy'], csp);
   }
 
   // Update download must bypass the service worker (which would hand back the

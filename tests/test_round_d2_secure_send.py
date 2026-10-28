@@ -473,6 +473,33 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertIn("clearSecureSendStagedFiles", app_js)
         self.assertIn("secure-send-file-remove", app_js)
 
+    def test_create_enforces_plan_daily_limit(self):
+        import db as notes_db
+        from plans import plan_secure_send_daily_limit
+
+        uid = notes_db.get_user_by_email("d2sender@example.com")["id"]
+        plan = notes_db.user_plan(notes_db.get_user_by_id(uid))
+        limit = plan_secure_send_daily_limit(plan)
+        self.assertIsNotNone(limit)
+        for _ in range(int(limit)):
+            ok = self._create()
+            self.assertEqual(ok.status_code, 200, ok.get_json())
+        blocked = self._create()
+        self.assertEqual(blocked.status_code, 429, blocked.get_json())
+        body = blocked.get_json()
+        self.assertEqual(body.get("code"), "secure_send_daily_cap")
+        self.assertIn("Daily Secure Send limit", body.get("error", ""))
+        self.assertIn(str(int(limit)), body.get("error", ""))
+
+    def test_pro_plan_unlimited_secure_send_creates(self):
+        import db as notes_db
+
+        uid = notes_db.get_user_by_email("d2sender@example.com")["id"]
+        notes_db.update_user_plan(int(uid), "pro")
+        for _ in range(5):
+            ok = self._create()
+            self.assertEqual(ok.status_code, 200, ok.get_json())
+
 
 if __name__ == "__main__":
     unittest.main()

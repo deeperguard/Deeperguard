@@ -139,10 +139,12 @@ app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
 
 @app.context_processor
 def _inject_template_globals():
+    csp_report_only = os.environ.get("NOTES_CSP_REPORT_ONLY", "0") == "1"
     return {
         **client_assets.jinja_globals(),
         **ask_ai_provider_pin.template_globals(),
         "csp_nonce": auth.csp_nonce(),
+        "csp_policy": "" if csp_report_only else auth.content_security_policy(),
         "client_hash": client_assets.client_hash(),
         "client_hash_short": client_assets.client_hash_short(),
         "release_tag": client_assets.release_tag(),
@@ -3297,10 +3299,28 @@ def api_backup_email_resend():
 def api_secure_send_create():
     """Authenticated: store opaque ciphertext blob + length; key stays in the fragment."""
     import secure_send as ss
+    from plans import (
+        plan_secure_send_daily_limit,
+        secure_send_daily_cap_message,
+        secure_send_over_daily_limit,
+        utc_day_start_timestamp,
+    )
 
     uid = auth.current_user_id()
     if not uid:
         return jsonify({"error": "login required"}), 401
+    user = db.get_user_by_id(int(uid))
+    plan = db.user_plan(user) if user else None
+    daily_limit = plan_secure_send_daily_limit(plan)
+    if daily_limit is not None:
+        creates_today = db.count_secure_sends_for_user_since(int(uid), utc_day_start_timestamp())
+        if secure_send_over_daily_limit(plan, creates_today):
+            return jsonify(
+                {
+                    "error": secure_send_daily_cap_message(plan),
+                    "code": "secure_send_daily_cap",
+                }
+            ), 429
     ip = auth.client_ip()
     # Separate buckets: per IP and per sender (Dennis D2 rate-limit rule).
     if not auth_rate_allow(f"secure-send-create-ip:{ip}", limit=20, window=3600.0):

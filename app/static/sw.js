@@ -171,6 +171,28 @@ function htmlHasInlineHandler(text) {
   return /\son[a-z]+\s*=/i.test(String(text || ''));
 }
 
+function decodeHtmlAttr(value) {
+  return String(value || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function cspMetaFromHtml(text) {
+  const html = String(text || '');
+  let match = html.match(
+    /<meta\s+http-equiv=["']Content-Security-Policy["']\s+content="([^"]*)"/i,
+  );
+  if (!match) {
+    match = html.match(
+      /<meta\s+content="([^"]*)"\s+http-equiv=["']Content-Security-Policy["']/i,
+    );
+  }
+  return match ? decodeHtmlAttr(match[1]) : '';
+}
+
 async function withoutInlineHandlers(response) {
   if (!response) return response;
   const type = response.headers.get('content-type') || '';
@@ -181,9 +203,23 @@ async function withoutInlineHandlers(response) {
   } catch (err) {
     return response;
   }
-  if (!htmlHasInlineHandler(text)) return response;
-  const cleaned = text.replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   const headers = new Headers(response.headers);
+  if (!headers.get('Content-Security-Policy')) {
+    const csp = cspMetaFromHtml(text);
+    if (csp) headers.set('Content-Security-Policy', csp);
+  }
+  if (!htmlHasInlineHandler(text)) {
+    if (headers.get('Content-Security-Policy') && !response.headers.get('Content-Security-Policy')) {
+      headers.delete('content-length');
+      return new Response(text, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }
+    return response;
+  }
+  const cleaned = text.replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   headers.delete('content-length');
   if (!headers.get('content-type')) headers.set('Content-Type', 'text/html; charset=utf-8');
   return new Response(cleaned, {

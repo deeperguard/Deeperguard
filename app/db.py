@@ -2702,6 +2702,17 @@ def get_secure_send(send_id: str):
     return row
 
 
+def count_secure_sends_for_user_since(user_id: int, since: float) -> int:
+    row = connection().execute(
+        """
+        SELECT COUNT(*) FROM secure_sends
+        WHERE sender_user_id = ? AND created_at >= ?
+        """,
+        (int(user_id), float(since)),
+    ).fetchone()
+    return int(row[0] if row else 0)
+
+
 def list_secure_sends_for_user(user_id: int, *, limit: int = 100) -> list[dict[str, Any]]:
     from secure_send import blob_path, status_display, status_label
 

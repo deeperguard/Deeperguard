@@ -18,7 +18,6 @@ PLAN_SESSION_CAPS: dict[str, int | None] = {
 }
 
 # Secure Send creates per UTC day (None = unlimited).
-# TODO(R82): enforce in api_secure_send_create once Secure Send lands on main (#184).
 PLAN_SECURE_SEND_DAILY_LIMITS: dict[str, int | None] = {
     PLAN_FREE: 3,
     PLAN_BASIC: 10,
@@ -136,15 +135,30 @@ def plan_active_session_limit(plan: str | None) -> int | None:
 
 
 def plan_secure_send_daily_limit(plan: str | None) -> int | None:
-    """Max Secure Send creates per UTC day, or None when unlimited.
-
-    TODO(R82): call from api_secure_send_create once Secure Send is on main (#184).
-    """
+    """Max Secure Send creates per UTC day, or None when unlimited."""
     return PLAN_SECURE_SEND_DAILY_LIMITS.get(normalize_plan(plan))
 
 
+def secure_send_daily_cap_message(plan: str | None = None) -> str:
+    limit = plan_secure_send_daily_limit(plan)
+    if limit is None:
+        limit = PLAN_SECURE_SEND_DAILY_LIMITS[PLAN_FREE]
+    return (
+        f"Daily Secure Send limit reached ({int(limit)} per day on your plan). "
+        "Try again tomorrow."
+    )
+
+
+def utc_day_start_timestamp() -> float:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start.timestamp()
+
+
 def secure_send_over_daily_limit(plan: str | None, creates_today: int) -> bool:
-    """Test hook for Secure Send daily caps. Not enforced until #184 lands on main."""
+    """True when the user has already hit the plan's Secure Send daily cap."""
     limit = plan_secure_send_daily_limit(plan)
     if limit is None:
         return False
