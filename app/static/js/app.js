@@ -4114,7 +4114,7 @@
       const issuer = item.issuer && item.issuer !== label ? item.issuer : '';
       const boundHost = totpBoundHostDisplay(item);
       const hostLine = boundHost
-        ? `<span class="note-preview totp-bound-host">Site: ${escapeHtml(boundHost)}</span>`
+        ? `<span class="note-preview totp-bound-host" title="${escapeAttr(boundHost)}">Site: ${escapeHtml(boundHost)}</span>`
         : '<span class="note-preview totp-bound-host muted">Site: no site set</span>';
       const pretty = `${totp.code.slice(0, 3)} ${totp.code.slice(3)}`;
       const remaining = Math.max(0, Math.round(Number(totp.remaining) || 0));
@@ -4129,8 +4129,8 @@
           <span class="note-kind-icon note-kind-icon--totp" aria-hidden="true">${kindIconSvg('totp')}</span>
           <span class="totp-item-account">
             <span class="totp-item-body">
-              <span class="note-title-row"><strong>${escapeHtml(label)}</strong></span>
-              ${issuer ? `<span class="note-preview">${escapeHtml(issuer)}</span>` : ''}
+              <span class="note-title-row"><strong title="${escapeAttr(label)}">${escapeHtml(label)}</strong></span>
+              ${issuer ? `<span class="note-preview" title="${escapeAttr(issuer)}">${escapeHtml(issuer)}</span>` : ''}
               ${hostLine}
               <span class="note-modified totp-expires">Expires in ${remaining}s</span>
             </span>
