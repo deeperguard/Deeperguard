@@ -1962,6 +1962,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_dirty_queue_survives_lock_and_synced_cursor(self):
         self._run_node_script("test_sync_dirty_queue.js")
 
+    def test_sign_out_dirty_sync_honesty(self):
+        self._run_node_script("test_sign_out_dirty_sync.js")
+
     def test_client_secure_send_sent_sync(self):
         self._run_node_script("test_secure_send_sent_sync.js")
 
@@ -5198,6 +5201,10 @@ class NotesAppTests(unittest.TestCase):
 
         self.assertIn("SIGN_OUT_WARNING", app_js)
         self.assertIn("encrypted data stays on the Deeperguard server", app_js)
+        self.assertIn("async function confirmSignOutDirtyGate()", app_js)
+        self.assertIn("async function confirmUserSignOut(", app_js)
+        self.assertIn("not guaranteed on the server", app_js)
+        self.assertIn("Delete unsynced notes and sign out", app_js)
         self.assertIn("async function requestSignOut()", app_js)
         self.assertIn("await NotesStore.clearDeviceData()", app_js)
         logout_handler = app_js[
