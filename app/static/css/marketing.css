@@ -823,6 +823,8 @@ a.mk-badge-link:hover {
   flex-direction: column;
   box-shadow: var(--mk-shadow);
   position: relative;
+  min-width: 0;
+  overflow: hidden;
 }
 .mk-distinction-card.featured {
   border: 2px solid var(--mk-accent);
@@ -870,48 +872,39 @@ a.mk-badge-link:hover {
   flex: 1;
 }
 .mk-distinction-points li {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
+  position: relative;
+  padding-left: calc(1.25rem + 0.65rem);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
 }
 .mk-distinction-points li strong {
+  display: inline;
   color: var(--mk-text);
+  font-weight: 700;
 }
-@media (max-width: 640px) {
-  .mk-distinction-points li {
-    flex-direction: column;
-    gap: 0.2rem;
-    align-items: stretch;
-  }
-  .mk-distinction-points li strong {
-    display: block;
-  }
+.mk-distinction-points li.pro::before,
+.mk-distinction-points li.con::before {
+  position: absolute;
+  left: 0;
+  top: 0.12em;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
 }
 .mk-distinction-points li.pro::before {
   content: "✓";
   color: #059669;
-  font-weight: 800;
   background: #ecfdf5;
-  width: 1.25rem;
-  height: 1.25rem;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  flex: none;
-  font-size: 0.75rem;
 }
 .mk-distinction-points li.con::before {
   content: "✕";
   color: #dc2626;
-  font-weight: 800;
   background: #fef2f2;
-  width: 1.25rem;
-  height: 1.25rem;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  flex: none;
-  font-size: 0.75rem;
 }
 .mk-distinction-verdict {
   background: var(--mk-panel-subtle);
