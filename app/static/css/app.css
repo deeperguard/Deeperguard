@@ -2903,13 +2903,18 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   .folder-head:focus-within {
     z-index: 4;
   }
+  /* Hide truncated glyphs while the popover shows; action strip stays on the row. */
+  .folder-head:not(:has(.folder-rename-input)):hover .folder-select,
+  .folder-head:not(:has(.folder-rename-input)):focus-within .folder-select {
+    color: transparent;
+  }
   .folder-head:not(:has(.folder-rename-input)):hover::after,
   .folder-head:not(:has(.folder-rename-input)):focus-within::after {
     content: attr(data-folder-title);
     position: absolute;
-    left: 26px;
-    top: 0;
-    z-index: 2;
+    left: 0;
+    top: calc(100% + 2px);
+    z-index: 5;
     width: max-content;
     max-width: min(26rem, calc(100vw - 2.5rem));
     box-sizing: border-box;
@@ -7856,6 +7861,13 @@ body.search-filters-open .fab-stack,
     }
     body:has(.sidebar-nav .folder-head:hover) .sidebar-nav .sidebar-scroll,
     body:has(.sidebar-nav .folder-head:focus-within) .sidebar-nav .sidebar-scroll {
+      overflow: visible;
+    }
+    /* #folder-section uses overflow:clip for sticky headers; release it while the popover is open. */
+    body:has(.sidebar-nav .folder-head:hover) .sidebar-nav .sidebar-scroll > #folder-section,
+    body:has(.sidebar-nav .folder-head:focus-within) .sidebar-nav .sidebar-scroll > #folder-section,
+    body:has(.sidebar-nav .folder-head:hover) .sidebar-nav .sidebar-scroll > .nav-browse > #folder-section,
+    body:has(.sidebar-nav .folder-head:focus-within) .sidebar-nav .sidebar-scroll > .nav-browse > #folder-section {
       overflow: visible;
     }
     .sidebar-nav .folder-head:not(:has(.folder-rename-input)):hover::after,

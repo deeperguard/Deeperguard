@@ -36,9 +36,27 @@ assert.ok(hoverOverlayBlock.includes('white-space: normal'), 'hover title must w
 assert.ok(hoverOverlayBlock.includes('overflow-wrap: break-word'));
 assert.ok(hoverOverlayBlock.includes('width: max-content'), 'popover must grow to fit the full title');
 assert.ok(hoverOverlayBlock.includes('word-break: normal'), 'must not force per-letter breaks in a narrow box');
+assert.ok(hoverOverlayBlock.includes('top: calc(100%'), 'popover must sit below the row, not over action buttons');
+assert.ok(
+  appCss.includes('.folder-head:not(:has(.folder-rename-input)):hover .folder-select'),
+  'truncated label must hide while popover is shown',
+);
+assert.ok(
+  appCss.match(/\.folder-head:not\(:has\(\.folder-rename-input\)\):hover \.folder-select[\s\S]*?color: transparent/),
+  'folder-select text transparent on hover',
+);
 assert.ok(!hoverOverlayBlock.includes('max-width: calc(100% + 8.75rem)'), 'must not cap overlay to a partial longer truncation');
 assert.ok(!hoverOverlayBlock.includes('white-space: nowrap'), 'hover overlay must not use nowrap truncation');
 assert.ok(!hoverOverlayBlock.includes('100cqw'), 'popover must not rely on container queries on the label');
-assert.ok(hoverOverlayBlock.includes('z-index: 2'), 'title popover sits under action buttons');
+assert.ok(hoverOverlayBlock.includes('z-index: 5'), 'title popover stacks above following folder rows');
+
+assert.ok(
+  appCss.includes('body:has(.sidebar-nav .folder-head:hover) .sidebar-nav .sidebar-scroll > .nav-browse > #folder-section'),
+  'folder-section overflow:clip must release while a row is hovered',
+);
+assert.ok(
+  appCss.includes('body:has(.sidebar-nav .folder-head:hover) .sidebar-nav .sidebar-scroll > #folder-section'),
+  'folder-section clip release must cover direct scroll children too',
+);
 
 console.log('test_round85_sidebar_folder_label: ok');
