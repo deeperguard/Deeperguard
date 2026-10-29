@@ -48,7 +48,7 @@ class Round72_2ReleaseTagTests(unittest.TestCase):
         self.assertIn('printf \'%s\\n\' "${release_tag}" > RELEASE_TAG', deploy)
         self.assertIn("manifest_sha256", deploy)
         # Always ship RELEASE_TAG (no longer optional).
-        self.assertIn("TAR_PATHS=(app deploy docs tests scripts", deploy)
+        self.assertIn("TAR_PATHS=(app content deploy docs tests scripts", deploy)
         self.assertIn("RELEASE_TAG)", deploy)
 
     def test_release_workflow_checks_tag(self):
