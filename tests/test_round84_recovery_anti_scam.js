@@ -23,7 +23,7 @@ assert.ok(
     '<a href="/help/recovery" target="_blank" rel="noopener noreferrer">Recovery help</a>'
   )
 );
-assert.ok(deploySh.includes('TAR_PATHS=(app deploy docs tests'));
+assert.ok(deploySh.includes('TAR_PATHS=(app content deploy docs tests'));
 assert.ok(
   helpMd.includes(
     'Deeperguard support will never ask for your password, recovery codes, or 2FA codes.'
