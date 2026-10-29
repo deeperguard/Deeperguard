@@ -5,7 +5,7 @@ date: 2026-10-28
 description: "Share an encrypted note by link with Deeperguard Secure Send. The decryption key stays in the URL fragment; the server only stores ciphertext."
 cover_image: /static/blog/secure-send-how-it-works.jpg
 cover_alt: "Abstract illustration of a locked link for private note sharing."
-draft: true
+draft: false
 ---
 
 You sometimes need to hand someone a note — a Wi-Fi password, a contract snippet, a temporary password — without emailing it in the clear and without giving them a vault account.
