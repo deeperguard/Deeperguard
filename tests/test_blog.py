@@ -140,36 +140,42 @@ Published **fixture** content.
         self.assertIn("hello-world", body)
         self.assertNotIn("draft-only", body)
 
-    def test_repo_marketing_draft_preview_with_env(self):
-        os.environ["NOTES_BLOG_SHOW_DRAFTS"] = "1"
+    def _repo_blog_client(self):
         for name in list(sys.modules):
             if name in {"app", "blog", "admin_api"}:
                 sys.modules.pop(name, None)
         os.environ.pop("NOTES_BLOG_DIR", None)
+        os.environ.pop("NOTES_BLOG_SHOW_DRAFTS", None)
         app_mod = importlib.import_module("app")
-        client = app_mod.app.test_client()
+        return app_mod.app.test_client()
+
+    def test_repo_marketing_posts_public_without_draft_override(self):
+        client = self._repo_blog_client()
         res = client.get("/blog/secure-send-how-it-works")
         self.assertEqual(res.status_code, 200)
         body = res.get_data(as_text=True)
         self.assertIn("Share a note without leaking it", body)
-        self.assertIn("Draft preview", body)
-
-    def test_repo_marketing_drafts_not_listed_without_override(self):
-        """Marketing-cleared posts stay draft until draft is removed or set false."""
-        for name in list(sys.modules):
-            if name in {"app", "blog", "admin_api"}:
-                sys.modules.pop(name, None)
-        os.environ.pop("NOTES_BLOG_DIR", None)
-        app_mod = importlib.import_module("app")
-        client = app_mod.app.test_client()
-        res = client.get("/blog/secure-send-how-it-works")
-        self.assertEqual(res.status_code, 404)
+        self.assertNotIn("Draft preview", body)
         res = client.get("/blog/how-zero-knowledge-notes-work")
-        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn("How zero-knowledge notes work", body)
+        self.assertNotIn("Draft preview", body)
+
+    def test_repo_marketing_posts_listed_on_index_and_feed(self):
+        client = self._repo_blog_client()
         index = client.get("/blog")
         self.assertEqual(index.status_code, 200)
-        self.assertNotIn(b"Share a note without leaking it", index.data)
-        self.assertNotIn(b"zero-knowledge notes work", index.data)
+        body = index.get_data(as_text=True)
+        self.assertIn("Share a note without leaking it", body)
+        self.assertIn("How zero-knowledge notes work", body)
+        self.assertIn('href="/blog/secure-send-how-it-works"', body)
+        self.assertIn('href="/blog/how-zero-knowledge-notes-work"', body)
+        feed = client.get("/blog/feed.xml")
+        self.assertEqual(feed.status_code, 200)
+        feed_body = feed.get_data(as_text=True)
+        self.assertIn("secure-send-how-it-works", feed_body)
+        self.assertIn("how-zero-knowledge-notes-work", feed_body)
 
 
 if __name__ == "__main__":

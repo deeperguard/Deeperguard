@@ -5,7 +5,7 @@ date: 2026-10-28
 description: "Deeperguard encrypts notes on your device before sync. Here’s what zero-knowledge means, what the server can still see, and the Ask AI exception."
 cover_image: /static/blog/how-zero-knowledge-notes-work.jpg
 cover_alt: "Abstract illustration of notes locked before they leave the device."
-draft: true
+draft: false
 ---
 
 “Zero-knowledge” gets used loosely. Here is what Deeperguard means by it for notes, what you can check yourself, and the one place readable text can leave your vault on purpose.
