@@ -7517,6 +7517,125 @@
     + 'Your encrypted data stays on the Deeperguard server and will download again when you sign back in.'
   );
 
+  function unsyncedLocalItemCount() {
+    return NotesStore.state?.dirty?.size || 0;
+  }
+
+  function signOutDeviceDeleteLine() {
+    return 'All notes, attachments, and vault data on this device will be deleted.';
+  }
+
+  function signOutWarningMessage(unsyncedCount = unsyncedLocalItemCount()) {
+    const wipe = signOutDeviceDeleteLine();
+    if (unsyncedCount > 0) {
+      const noun = unsyncedCount === 1 ? '1 note has' : `${unsyncedCount} notes have`;
+      return `${wipe} ${noun} not finished syncing — those changes may be lost and are not guaranteed on the server.`;
+    }
+    return SIGN_OUT_WARNING;
+  }
+
+  function unsyncedNotesPrompt(count, offline) {
+    const noun = count === 1 ? '1 note has' : `${count} notes have`;
+    let msg = `${noun} not finished syncing to the server. If you sign out before they upload, those changes may only exist on this device and could be lost.`;
+    if (offline) {
+      msg += '\n\nYou are offline. Connect to the internet to sync, or confirm that you accept losing these unsynced notes.';
+    }
+    return msg;
+  }
+
+  async function trySyncUnsyncedNotesForSignOut() {
+    if (!networkReachable) {
+      toast('You are offline. Connect to sync unsynced notes.', true);
+      return false;
+    }
+    try {
+      await syncNow({ force: true, quiet: false });
+    } catch (err) {
+      toast(err?.message || 'Sync failed', true);
+    }
+    return unsyncedLocalItemCount() === 0;
+  }
+
+  async function confirmOfflineUnsyncedLoss(count) {
+    const noun = count === 1 ? '1 unsynced note' : `${count} unsynced notes`;
+    return confirmAction(
+      `You are still offline. ${noun} on this device ${count === 1 ? 'has' : 'have'} not reached the server. `
+      + 'Signing out will permanently delete them from this device. This cannot be undone.',
+      {
+        title: 'Delete unsynced notes?',
+        confirmLabel: 'Delete unsynced notes and sign out',
+        cancelLabel: 'Cancel',
+        danger: true,
+      },
+    );
+  }
+
+  /** @returns {{ ok: true, finalConfirm: boolean } | { ok: false }} */
+  async function confirmSignOutDirtyGate() {
+    if (!unsyncedLocalItemCount()) return { ok: true, finalConfirm: true };
+
+    for (;;) {
+      const count = unsyncedLocalItemCount();
+      if (!count) return { ok: true, finalConfirm: true };
+
+      const offline = !networkReachable;
+      if (!offline) {
+        const choice = await confirmAction(
+          `${unsyncedNotesPrompt(count, false)}\n\n${signOutWarningMessage(count)}`,
+          {
+            title: 'Unsynced notes',
+            confirmLabel: 'Sign out anyway',
+            cancelLabel: 'Cancel',
+            extraLabel: 'Sync now',
+            danger: true,
+          },
+        );
+        if (!choice) return { ok: false };
+        if (choice === 'extra') {
+          await trySyncUnsyncedNotesForSignOut();
+          continue;
+        }
+        return { ok: true, finalConfirm: false };
+      }
+
+      const choice = await confirmAction(unsyncedNotesPrompt(count, true), {
+        title: 'Unsynced notes',
+        confirmLabel: 'Sync now',
+        cancelLabel: 'Cancel',
+        extraLabel: 'Sign out and lose unsynced notes',
+        danger: false,
+      });
+      if (!choice) return { ok: false };
+      if (choice === true) {
+        await trySyncUnsyncedNotesForSignOut();
+        continue;
+      }
+      if (choice === 'extra') {
+        const accepted = await confirmOfflineUnsyncedLoss(count);
+        if (!accepted) continue;
+        return { ok: true, finalConfirm: false };
+      }
+    }
+  }
+
+  async function confirmUserSignOut({
+    title = 'Sign out?',
+    confirmLabel = 'Sign out',
+    preamble = '',
+  } = {}) {
+    const gate = await confirmSignOutDirtyGate();
+    if (!gate.ok) return false;
+    if (!gate.finalConfirm) return true;
+    const body = signOutWarningMessage();
+    const message = preamble ? `${preamble}\n\n${body}` : body;
+    return confirmAction(message, {
+      title,
+      confirmLabel,
+      cancelLabel: 'Cancel',
+      danger: true,
+    });
+  }
+
   async function clearLocalVaultAndLeave(next = '/login') {
     stopEmptyDeviceBackgroundRetry();
     setEmptyDeviceUnlockUi('clear');
@@ -7681,13 +7800,7 @@
   }
 
   async function requestSignOut() {
-    const ok = await confirmAction(SIGN_OUT_WARNING, {
-      title: 'Sign out?',
-      confirmLabel: 'Sign out',
-      cancelLabel: 'Cancel',
-      danger: true,
-    });
-    if (!ok) return;
+    if (!(await confirmUserSignOut())) return;
     await signOutCompletely();
   }
 
@@ -14152,18 +14265,24 @@
 
   async function denyPendingDevice(item) {
     const current = !!item.current;
-    const ok = await confirmAction(
-      current
-        ? `${SIGN_OUT_WARNING}\n\nDeny removes this new sign-in and signs out here.`
-        : `Deny “${item.device || 'this device'}”? That ends the session and deletes its local vault copy when it next connects.`,
-      {
-        title: current ? 'Deny this sign-in?' : 'Deny device?',
+    if (current) {
+      if (!(await confirmUserSignOut({
+        title: 'Deny this sign-in?',
         confirmLabel: 'Deny',
-        cancelLabel: 'Cancel',
-        danger: true,
-      },
-    );
-    if (!ok) return;
+        preamble: 'Deny removes this new sign-in and signs out here.',
+      }))) return;
+    } else {
+      const ok = await confirmAction(
+        `Deny “${item.device || 'this device'}”? That ends the session and deletes its local vault copy when it next connects.`,
+        {
+          title: 'Deny device?',
+          confirmLabel: 'Deny',
+          cancelLabel: 'Cancel',
+          danger: true,
+        },
+      );
+      if (!ok) return;
+    }
     const data = await NotesStore.api(`/api/sessions/${item.id}`, { method: 'DELETE' });
     if (data.current) {
       await signOutCompletely();
@@ -14175,18 +14294,23 @@
 
   async function revokeSignedInDevice(item) {
     const current = !!item.current;
-    const ok = await confirmAction(
-      current
-        ? SIGN_OUT_WARNING
-        : `Sign out “${item.device || 'this device'}”? That device will lose access immediately and will delete its local vault copy when it next connects.`,
-      {
-        title: current ? 'Sign out?' : 'Sign out device?',
+    if (current) {
+      if (!(await confirmUserSignOut({
+        title: 'Sign out?',
         confirmLabel: 'Sign out',
-        cancelLabel: 'Cancel',
-        danger: true,
-      },
-    );
-    if (!ok) return;
+      }))) return;
+    } else {
+      const ok = await confirmAction(
+        `Sign out “${item.device || 'this device'}”? That device will lose access immediately and will delete its local vault copy when it next connects.`,
+        {
+          title: 'Sign out device?',
+          confirmLabel: 'Sign out',
+          cancelLabel: 'Cancel',
+          danger: true,
+        },
+      );
+      if (!ok) return;
+    }
     const data = await NotesStore.api(`/api/sessions/${item.id}`, { method: 'DELETE' });
     if (data.current) {
       await signOutCompletely();
