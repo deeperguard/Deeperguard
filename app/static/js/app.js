@@ -8261,7 +8261,7 @@
       const holdsOpen = notes.some((note) => editorNoteOpen() && currentId === note.uuid && currentFolder !== folder.uuid);
       const folderTitle = folder.content.title || 'Folder';
       return `<div class="folder-block${active}${open ? ' is-open' : ''}${holdsOpen ? ' has-open-note' : ''}" data-folder="${escapeAttr(folder.uuid)}">
-        <div class="folder-head">
+        <div class="folder-head" data-folder-title="${escapeAttr(folderTitle)}">
           <button type="button" class="folder-toggle" data-folder-toggle="${escapeAttr(folder.uuid)}" aria-expanded="${open ? 'true' : 'false'}" aria-label="${open ? 'Collapse' : 'Expand'} ${escapeAttr(folderTitle)}">${open ? '▾' : '▸'}</button>
           <button type="button" class="folder-select" data-folder-select="${escapeAttr(folder.uuid)}" data-folder-title="${escapeAttr(folderTitle)}" title="${escapeAttr(folderTitle)}">${escapeHtml(folderTitle)}</button>
           <span class="tag-count folder-count">${notes.length}</span>
