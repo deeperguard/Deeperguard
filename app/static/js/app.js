@@ -22868,11 +22868,36 @@
     toast(`${names.join(', ')} is injecting into this page and can read your decrypted notes. Disable it for this site.`, true);
   }
 
+  function scrubShellDomForCache(root) {
+    if (!root) return;
+    const clearText = (sel) => {
+      root.querySelectorAll(sel).forEach((el) => {
+        if ('value' in el) el.value = '';
+        if ('textContent' in el) el.textContent = '';
+        if ('innerHTML' in el) el.innerHTML = '';
+      });
+    };
+    clearText('#note-title, #note-body, #note-body-links, #note-body-highlights');
+    clearText('#secure-send-title, #secure-send-body, #secure-send-passphrase, #secure-send-link');
+    clearText('#secure-send-detail-snapshot-title, #secure-send-detail-snapshot-body, #secure-send-detail-link');
+    clearText('input[type="password"], textarea[data-sensitive="1"]');
+    root.querySelectorAll('[contenteditable="true"]').forEach((el) => {
+      el.textContent = '';
+    });
+    const list = root.getElementById('note-list');
+    if (list) list.replaceChildren();
+    const sentList = root.getElementById('secure-send-sent-list');
+    if (sentList) sentList.replaceChildren();
+    const aiLog = root.getElementById('ai-chat-log');
+    if (aiLog) aiLog.replaceChildren();
+  }
+
   function lockedShellHtml() {
     const live = document.documentElement.cloneNode(true);
     stripForeignNodes(live);
     const doc = new DOMParser().parseFromString(live.outerHTML, 'text/html');
     stripForeignNodes(doc.documentElement);
+    scrubShellDomForCache(doc);
     doc.body.classList.remove('unlocked');
     doc.body.classList.add('locked');
     const app = doc.getElementById('app');
