@@ -55,8 +55,10 @@ assert.ok(
 const clipNeedle = css.includes('.sidebar-nav .sidebar-scroll > .nav-browse > #folder-section')
   ? '.sidebar-nav .sidebar-scroll > .nav-browse > #folder-section'
   : '.sidebar-nav .sidebar-scroll > #folder-section';
-const clip = css.split(clipNeedle)[1].split('}')[0];
-assert.ok(clip.includes('overflow: clip'));
+const clipRule = css.match(
+  new RegExp(`${clipNeedle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^{]*\\{[^}]*overflow: clip`),
+);
+assert.ok(clipRule, 'folder section sticky clip rule must exist');
 const tagOpen = css.split('.sidebar-nav .tag-section[open] {')[1].split('}')[0];
 assert.ok(tagOpen.includes('overflow: visible'));
 
