@@ -39,11 +39,11 @@ The giveaway is always step 3: a request to hand over something that only you sh
 
 ## If you think you already shared something
 
-Treat this as generic hygiene for whatever service was compromised — on that service’s real site or app:
+Treat this as **generic account hygiene** for whatever service you may have compromised — Deeperguard doesn’t ship a “regenerate recovery codes” or “active sessions” screen; do these steps on that service’s real site or app:
 
 - Change the password right away.
 - Regenerate recovery codes if it offers them, and store the new set offline.
-- Sign out unknown sessions if the product shows them.
+- Sign out unknown sessions if the service shows active sessions.
 - Remember: anyone who asked for those codes was not support.
 
 ## Want to check our claims?
