@@ -618,6 +618,9 @@ def _gate():
     legacy = _legacy_notes_host_redirect()
     if legacy is not None:
         return legacy
+    blog_slash = _blog_trailing_slash_redirect()
+    if blog_slash is not None:
+        return blog_slash
     if not auth.client_allowed():
         return ("Deeperguard is limited to the LAN and WireGuard.", 403)
     # Unmatched URLs must not bounce to the sign-in page.
@@ -3069,6 +3072,18 @@ def _legacy_notes_host_redirect():
     target = f"{base}{request.full_path}"
     if target.endswith("?"):
         target = target[:-1]
+    code = 301 if request.method in {"GET", "HEAD"} else 308
+    return redirect(target, code=code)
+
+
+def _blog_trailing_slash_redirect():
+    """Blog routes are registered without trailing slashes (/blog, /blog/slug)."""
+    path = request.path
+    if path != "/blog/" and not (path.startswith("/blog/") and path.endswith("/")):
+        return None
+    base = path.rstrip("/")
+    qs = request.query_string.decode()
+    target = base + ("?" + qs if qs else "")
     code = 301 if request.method in {"GET", "HEAD"} else 308
     return redirect(target, code=code)
 

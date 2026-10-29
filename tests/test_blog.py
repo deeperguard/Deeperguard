@@ -102,6 +102,23 @@ Published **fixture** content.
         self.assertIn('href="/blog/hello-world"', body)
         self.assertIn('rel="canonical"', body)
 
+    def test_blog_trailing_slashes_redirect_to_canonical(self):
+        index = self.client.get("/blog/", follow_redirects=False)
+        self.assertEqual(index.status_code, 301)
+        self.assertEqual(index.headers["Location"], "/blog")
+        post = self.client.get("/blog/hello-world/", follow_redirects=False)
+        self.assertEqual(post.status_code, 301)
+        self.assertEqual(post.headers["Location"], "/blog/hello-world")
+        feed = self.client.get("/blog/feed.xml/", follow_redirects=False)
+        self.assertEqual(feed.status_code, 301)
+        self.assertEqual(feed.headers["Location"], "/blog/feed.xml")
+        with_qs = self.client.get("/blog/?utm=1", follow_redirects=False)
+        self.assertEqual(with_qs.status_code, 301)
+        self.assertEqual(with_qs.headers["Location"], "/blog?utm=1")
+        follow = self.client.get("/blog/", follow_redirects=True)
+        self.assertEqual(follow.status_code, 200)
+        self.assertIn("Hello blog test", follow.get_data(as_text=True))
+
     def test_draft_post_returns_404(self):
         res = self.client.get("/blog/draft-only")
         self.assertEqual(res.status_code, 404)
