@@ -123,7 +123,7 @@ Published **fixture** content.
         self.assertIn("hello-world", body)
         self.assertNotIn("draft-only", body)
 
-    def test_repo_sample_draft_preview_with_env(self):
+    def test_repo_marketing_draft_preview_with_env(self):
         os.environ["NOTES_BLOG_SHOW_DRAFTS"] = "1"
         for name in list(sys.modules):
             if name in {"app", "blog", "admin_api"}:
@@ -131,25 +131,28 @@ Published **fixture** content.
         os.environ.pop("NOTES_BLOG_DIR", None)
         app_mod = importlib.import_module("app")
         client = app_mod.app.test_client()
-        res = client.get("/blog/what-secure-send-encrypts-in-the-browser")
+        res = client.get("/blog/secure-send-how-it-works")
         self.assertEqual(res.status_code, 200)
         body = res.get_data(as_text=True)
-        self.assertIn("Secure Send encrypts", body)
+        self.assertIn("Share a note without leaking it", body)
         self.assertIn("Draft preview", body)
 
-    def test_repo_sample_draft_not_listed_without_override(self):
-        """Shipped sample post stays draft until Marketing publishes it."""
+    def test_repo_marketing_drafts_not_listed_without_override(self):
+        """Marketing-cleared posts stay draft until draft is removed or set false."""
         for name in list(sys.modules):
             if name in {"app", "blog", "admin_api"}:
                 sys.modules.pop(name, None)
         os.environ.pop("NOTES_BLOG_DIR", None)
         app_mod = importlib.import_module("app")
         client = app_mod.app.test_client()
-        res = client.get("/blog/what-secure-send-encrypts-in-the-browser")
+        res = client.get("/blog/secure-send-how-it-works")
+        self.assertEqual(res.status_code, 404)
+        res = client.get("/blog/how-zero-knowledge-notes-work")
         self.assertEqual(res.status_code, 404)
         index = client.get("/blog")
         self.assertEqual(index.status_code, 200)
-        self.assertNotIn(b"What Secure Send encrypts", index.data)
+        self.assertNotIn(b"Share a note without leaking it", index.data)
+        self.assertNotIn(b"zero-knowledge notes work", index.data)
 
 
 if __name__ == "__main__":
