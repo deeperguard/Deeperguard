@@ -177,6 +177,13 @@ Published **fixture** content.
         self.assertIn("secure-send-how-it-works", feed_body)
         self.assertIn("how-zero-knowledge-notes-work", feed_body)
 
+    def test_marketing_home_links_to_blog(self):
+        res = self.client.get("/")
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn('href="/blog">Blog</a>', body)
+        self.assertGreaterEqual(body.count('href="/blog">Blog</a>'), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
