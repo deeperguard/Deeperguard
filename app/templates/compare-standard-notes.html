@@ -4,17 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Deeperguard vs Standard Notes — encrypted notes alternative (PWA + OCR)</title>
-  <meta name="description" content="Zero-knowledge Standard Notes alternative with a browser PWA, on-device OCR, and full Pro free during public beta. Not DeepGuard deepfake software — encrypted notes at deeperguard.com.">
+  <meta name="description" content="Zero-knowledge Standard Notes alternative with a browser PWA and on-device OCR. Free, Basic, and Pro plans — encrypted notes at deeperguard.com. Not DeepGuard deepfake software.">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Deeperguard vs Standard Notes — encrypted notes alternative (PWA + OCR)">
-  <meta property="og:description" content="Same privacy class as Standard Notes: AES-GCM on your device, SRP-6a sign-in, Standard Notes import, and on-device OCR. Full Pro free in public beta.">
+  <meta property="og:description" content="Same privacy class as Standard Notes: AES-GCM on your device, SRP-6a sign-in, Standard Notes import, and on-device OCR. Free tier with sync and OCR.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="{{ canonical_url }}">
   <meta property="og:image" content="{{ og_image }}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Deeperguard vs Standard Notes — encrypted notes alternative">
-  <meta name="twitter:description" content="Zero-knowledge notes PWA with on-device OCR and Standard Notes import. Full Pro free during public beta.">
+  <meta name="twitter:description" content="Zero-knowledge notes PWA with on-device OCR and Standard Notes import. Free, Basic, and Pro plans in public beta.">
   <meta name="twitter:image" content="{{ og_image }}">
   <meta name="notes-build" content="{{ build }}">
   <link rel="canonical" href="{{ canonical_url }}">
@@ -25,9 +25,9 @@
   <div class="mk-beta-banner" role="status">
     <span class="mk-beta-pill">Public Beta</span>
     <span class="mk-beta-copy mk-beta-copy--desktop">
-      <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups. No payment details yet.
+      <strong>Public beta</strong> — Free, Basic, and Pro plans are live. New accounts start on Free. Billing not active yet.
     </span>
-    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — Pro free, no payment yet</span>
+    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — plans live, billing later</span>
   </div>
 
   <header class="mk-topbar">
@@ -127,11 +127,11 @@
             </tr>
             <tr>
               <td>Free tier today</td>
-              <td class="mk-col-highlight"><span class="yes">Full Pro</span> during public beta</td>
+              <td class="mk-col-highlight"><span class="yes">Free</span> — {{ free.storage_quota_mb }}&nbsp;MB, sync &amp; on-device OCR</td>
               <td><span class="partial">Basic free</span> — extensions and power features on paid plans</td>
             </tr>
             <tr>
-              <td>Paid plans (after beta / list)</td>
+              <td>Paid plans (list)</td>
               <td class="mk-col-highlight">Basic €{{ basic.suggested_price_eur_month }}/mo (€{{ basic.suggested_price_eur_year | int }}/yr) · Pro €{{ pro.suggested_price_eur_month }}/mo (€{{ pro.suggested_price_eur_year | int }}/yr)</td>
               <td><span class="partial">Approx.</span> €4–€10/mo (~$90–$120/yr for top tiers)</td>
             </tr>
@@ -164,7 +164,7 @@
         <article class="mk-card">
           <h3>Where Deeperguard wins</h3>
           <ul class="mk-distinction-points">
-            <li class="pro"><strong>Cost during beta:</strong> Full Pro free with no payment details collected.</li>
+            <li class="pro"><strong>Free tier:</strong> {{ free.storage_quota_mb }}&nbsp;MB with sync, attachments, import/export, and on-device OCR.</li>
             <li class="pro"><strong>PWA workflow:</strong> No app store required; install from the browser.</li>
             <li class="pro"><strong>On-device OCR:</strong> Search scans and PDFs without cloud document parsing.</li>
             <li class="pro"><strong>Standard Notes import:</strong> Upload your SN backup in Settings.</li>
@@ -222,14 +222,14 @@
         <p>There is no password reset. Enable <strong>daily encrypted email backups</strong> and/or <strong>pCloud encrypted backups</strong> in Settings as soon as your vault is ready — archives stay encrypted, but you keep a copy if a device fails.</p>
       </details>
       <details>
-        <summary>What happens after the public beta?</summary>
-        <p>Basic will be €{{ basic.suggested_price_eur_month }}/mo (€{{ basic.suggested_price_eur_year | int }}/yr) and Pro €{{ pro.suggested_price_eur_month }}/mo (€{{ pro.suggested_price_eur_year | int }}/yr). You will get advance notice before billing starts; beta accounts are not charged without that notice.</p>
+        <summary>What are the plans and pricing?</summary>
+        <p>Free ({{ free.storage_quota_mb }}&nbsp;MB, {{ free.active_sessions }} devices), Basic €{{ basic.suggested_price_eur_month }}/mo (€{{ basic.suggested_price_eur_year | int }}/yr, {{ basic.storage_quota_mb }}&nbsp;MB), Pro €{{ pro.suggested_price_eur_month }}/mo (€{{ pro.suggested_price_eur_year | int }}/yr, {{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB) with passkeys, backups, and vault authenticator. {{ billing_note }}. Billing starts only after advance notice.</p>
       </details>
     </section>
 
     <section class="mk-cta">
-      <h2>Import your Standard Notes vault. Full Pro free during public beta.</h2>
-      <p>Same zero-knowledge goal — browser PWA, on-device OCR, and a clear price after beta.</p>
+      <h2>Import your Standard Notes vault</h2>
+      <p>Same zero-knowledge goal — browser PWA, on-device OCR, and transparent Free / Basic / Pro pricing.</p>
       <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
       <a class="mk-btn secondary" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">GitHub</a>
     </section>

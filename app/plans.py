@@ -1,4 +1,4 @@
-"""Subscription plans (Free / Basic / Pro). Billing is not wired yet — free during beta."""
+"""Subscription plans (Free / Basic / Pro). Billing is not wired yet — limits apply today."""
 from __future__ import annotations
 
 import os
@@ -9,6 +9,11 @@ PLAN_BASIC = "basic"
 PLAN_PRO = "pro"
 VALID_PLANS = frozenset({PLAN_FREE, PLAN_BASIC, PLAN_PRO})
 PLAN_ORDER = (PLAN_FREE, PLAN_BASIC, PLAN_PRO)
+
+# Marketing / outreach copy when billing is not active.
+MARKETING_BILLING_NOTE = (
+    "Billing is not active yet — Free, Basic, and Pro limits apply today"
+)
 
 # Soft cap on concurrent signed-in device sessions (None = unlimited).
 PLAN_SESSION_CAPS: dict[str, int | None] = {
@@ -112,8 +117,8 @@ FEATURE_CATALOG: dict[str, dict[str, Any]] = {
 def default_plan() -> str:
     """Plan for new registrations when NOTES_DEFAULT_PLAN is unset or invalid.
 
-    Code default is Free. Production may keep NOTES_DEFAULT_PLAN=pro during beta
-    without changing existing users' stored plan values.
+    Code default is Free. Set NOTES_DEFAULT_PLAN to basic or pro only when you
+    intentionally override signup (staging); existing users keep stored plan values.
     """
     raw = os.environ.get("NOTES_DEFAULT_PLAN", PLAN_FREE).strip().lower()
     return raw if raw in VALID_PLANS else PLAN_FREE
@@ -180,6 +185,17 @@ def plan_feature_flags(plan: str | None) -> dict[str, bool]:
     return {key: current in entry["plans"] for key, entry in FEATURE_CATALOG.items()}
 
 
+def plan_billing_note(plan: str | None) -> str:
+    """Human-readable plan price line for Settings and API (billing not active yet)."""
+    current = normalize_plan(plan)
+    if current == PLAN_FREE:
+        return "Free forever"
+    meta = PLAN_CATALOG[current]
+    month = float(meta["suggested_price_eur_month"])
+    year = float(meta["suggested_price_eur_year"])
+    return f"€{month:.2f}/mo or €{year:.0f}/yr when billing launches"
+
+
 def plan_pricing_payload(plan: str | None) -> dict[str, Any]:
     current = normalize_plan(plan)
     meta = PLAN_CATALOG[current]
@@ -192,8 +208,7 @@ def plan_pricing_payload(plan: str | None) -> dict[str, Any]:
         "suggested_price_eur_month": meta["suggested_price_eur_month"],
         "suggested_price_eur_year": meta["suggested_price_eur_year"],
         "billing_active": False,
-        # Free tier stays €0 after beta; Basic/Pro show the public-beta note.
-        "billing_note": "Free forever" if current == PLAN_FREE else "Free during public beta",
+        "billing_note": plan_billing_note(current),
         "active_sessions": meta.get("active_sessions"),
         "secure_send_per_day": meta.get("secure_send_per_day"),
     }

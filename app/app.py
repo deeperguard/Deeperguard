@@ -52,6 +52,7 @@ import webauthn_helper as webauthn_mod
 from auth_rate_limit import allow as auth_rate_allow
 from plans import (
     FEATURE_CATALOG,
+    MARKETING_BILLING_NOTE,
     PLAN_BASIC,
     PLAN_CATALOG,
     PLAN_FREE,
@@ -3095,7 +3096,7 @@ def _promo_payload() -> dict:
         public_url=NOTES_PUBLIC_URL,
         app_path=app_entry_path(),
         contact_email=CONTACT_EMAIL,
-        billing_note="Free during public beta",
+        billing_note=MARKETING_BILLING_NOTE,
     )
 
 
@@ -3140,7 +3141,7 @@ def _marketing_context() -> dict:
         "plan_free": PLAN_FREE,
         "plan_basic": PLAN_BASIC,
         "plan_pro": PLAN_PRO,
-        "billing_note": "Free during public beta",
+        "billing_note": MARKETING_BILLING_NOTE,
         "contact_email": CONTACT_EMAIL,
     }
 

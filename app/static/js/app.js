@@ -679,7 +679,7 @@
   function planHas(feature, account = cachedAccountPlan()) {
     const feats = account.plan_features;
     if (feats && Object.prototype.hasOwnProperty.call(feats, feature)) return !!feats[feature];
-    return String(account.plan || 'pro').toLowerCase() === 'pro';
+    return String(account.plan || 'free').toLowerCase() === 'pro';
   }
 
   function formatPlanBytes(bytes) {
@@ -709,7 +709,7 @@
 
   function updatePlanBadge(badge, account) {
     if (!badge) return;
-    const plan = String(account?.plan || 'pro').toLowerCase();
+    const plan = String(account?.plan || 'free').toLowerCase();
     const label = account?.plan_label
       || (plan === 'pro' ? 'Pro' : (plan === 'basic' ? 'Basic' : 'Free'));
     badge.textContent = label;
@@ -720,7 +720,7 @@
     const pricing = account?.plan_pricing || {};
     const priceHint = pricing.billing_active && pricing.price_eur_month > 0
       ? `€${pricing.price_eur_month.toFixed(2)}/month`
-      : (pricing.billing_note || 'Free during public beta');
+      : (pricing.billing_note || 'Free forever');
     badge.title = `${label} plan · ${priceHint}`;
   }
 
@@ -736,7 +736,7 @@
       applyPlanGates(account);
       return;
     }
-    const plan = String(account.plan || 'pro').toLowerCase();
+    const plan = String(account.plan || 'free').toLowerCase();
     updatePlanBadge(badge, account);
     const pricing = account.plan_pricing || {};
     if (pricing.billing_active) {
@@ -745,7 +745,7 @@
         : 'Included';
     } else {
       price.textContent = pricing.billing_note
-        || (plan === 'free' ? 'Free forever' : 'Free during public beta');
+        || (plan === 'free' ? 'Free forever' : '€' + (Number(pricing.suggested_price_eur_month) || 0).toFixed(2) + '/mo when billing launches');
     }
     if (tagline) tagline.textContent = account.plan_tagline || '';
     if (storage) {
@@ -757,7 +757,7 @@
       Object.entries(account.plan_catalog).forEach(([key, meta]) => {
         const suggested = Number(meta.suggested_price_eur_month) || 0;
         const priceLine = suggested > 0
-          ? `<span class="plan-compare-free">Free during public beta</span> · suggested €${suggested.toFixed(2)}/mo`
+          ? `€${suggested.toFixed(2)}/mo when billing launches`
           : '<span class="plan-compare-free">Free</span>';
         rows.push(`<div class="plan-compare-card${key === plan ? ' is-current' : ''}">
           <h4>${escapeHtml(meta.label)}</h4>
@@ -773,7 +773,7 @@
       const basic = account.plan_catalog.basic;
       const pro = account.plan_catalog.pro;
       if (free && basic && pro) {
-        pricingNote.textContent = `Suggested pricing when billing launches: Free ${free.storage_quota_mb} MB, Basic €${basic.suggested_price_eur_month.toFixed(2)}/month (€${basic.suggested_price_eur_year.toFixed(0)}/year), Pro €${pro.suggested_price_eur_month.toFixed(2)}/month (€${pro.suggested_price_eur_year.toFixed(0)}/year). Free during public beta.`;
+        pricingNote.textContent = `Suggested pricing when billing launches: Free ${free.storage_quota_mb} MB, Basic €${basic.suggested_price_eur_month.toFixed(2)}/month (€${basic.suggested_price_eur_year.toFixed(0)}/year), Pro €${pro.suggested_price_eur_month.toFixed(2)}/month (€${pro.suggested_price_eur_year.toFixed(0)}/year). ${pricing.billing_note || 'Billing is not active yet.'}`;
       }
     }
     applyPlanGates(account);

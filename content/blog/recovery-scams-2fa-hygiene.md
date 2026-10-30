@@ -50,4 +50,4 @@ Treat this as **generic account hygiene** for whatever service you may have comp
 
 Deeperguard is open source, and you can see how the encryption and sign-in work on our [verify page](/verify). We'd rather you check than take our word for it.
 
-*Deeperguard is in public beta, and every account gets Pro for free while it lasts.*
+*Deeperguard is in public beta. New accounts start on Free; Pro extras require a Pro plan when billing launches.*

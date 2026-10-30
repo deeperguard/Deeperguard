@@ -30,7 +30,7 @@ The ciphertext is cached in IndexedDB, so notes open offline and the site can be
 
 Ciphertext blobs, the SRP verifier, the account email, sessions, and sync metadata: item ids, timestamps, and sizes. Reminder email does not include note titles.
 
-Accounts are free during the public beta.
+Accounts start on the Free plan during public beta (50&nbsp;MB, sync, attachments, on-device OCR). Basic and Pro add higher limits; Pro adds passkeys, account 2FA, backups, reminders, and the vault authenticator. Billing is not active yet.
 
 [www.deeperguard.com](https://www.deeperguard.com)
 

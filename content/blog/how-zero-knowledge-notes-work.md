@@ -51,7 +51,7 @@ Secure Send is different: it encrypts in the browser and keeps the decryption ke
 
 If someone claiming to be support asks for your vault password, recovery material, or 2FA codes, that is a scam. There is no remote restore that bypasses your vault password. Losing the password without a backup you control means the ciphertext stays unreadable — by design.
 
-During the public beta, accounts include Pro features and no payment details are collected. Check the live site for the current schedule after beta.
+During the public beta, Free, Basic, and Pro plan limits apply. Billing is not active yet — see the homepage pricing table for current caps.
 
 ## Check it yourself
 
