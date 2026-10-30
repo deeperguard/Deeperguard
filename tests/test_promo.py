@@ -15,13 +15,18 @@ class PromoPayloadTests(unittest.TestCase):
             public_url="https://www.deeperguard.com",
             app_path="/app",
             contact_email="notes@deeperguard.com",
-            billing_note="Free during public beta",
+            billing_note="Billing is not active yet — Free, Basic, and Pro limits apply today",
         )
         self.assertTrue(out["ok"])
         self.assertIn("reddit", out["copy"])
         self.assertIn("hacker_news_title", out["copy"])
         self.assertGreater(len(out["directories"]), 3)
         self.assertEqual(out["structured_data"]["@type"], "WebApplication")
+        offers = out["structured_data"]["offers"]
+        self.assertEqual(len(offers), 3)
+        self.assertEqual(offers[0]["price"], "0.00")
+        self.assertEqual(offers[1]["price"], "2.99")
+        self.assertEqual(offers[2]["price"], "6.99")
 
 
 if __name__ == "__main__":

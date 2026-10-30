@@ -56,8 +56,8 @@ class Round82FreeTierUnitTests(unittest.TestCase):
         self.assertEqual(list(catalog.keys()), ["free", "basic", "pro"])
         self.assertEqual(catalog["free"]["storage_quota_mb"], 50)
         src = (APP_DIR / "plans.py").read_text(encoding="utf-8")
-        self.assertIn("TODO(R82): call from api_secure_send_create", src)
-        self.assertIn("#184", src)
+        self.assertIn("secure_send_over_daily_limit", src)
+        self.assertIn("PLAN_SECURE_SEND_DAILY_LIMITS", src)
 
     def test_env_default_plan_override_and_invalid(self):
         import plans
@@ -559,15 +559,18 @@ class Round82FreeTierAppTests(unittest.TestCase):
         login_html = (ROOT / "app/templates/login.html").read_text(encoding="utf-8")
         css = (ROOT / "app/static/css/marketing.css").read_text(encoding="utf-8")
         self.assertIn("{{ free.label }}", marketing)
-        self.assertIn("Every new account gets full Pro free during the public beta", marketing)
-        self.assertIn("/mo after beta", marketing)
+        self.assertNotIn("Public beta · Free access", marketing)
+        self.assertIn("Start on Free", marketing)
+        self.assertIn("Secure Send (encrypted share-by-link)", marketing)
+        self.assertIn("Billing not active yet", marketing)
+        self.assertNotIn("Every new account gets full Pro free during the public beta", marketing)
         self.assertIn("Signed-in devices", marketing)
         self.assertIn("How many devices can I stay signed in on?", marketing)
         self.assertIn("Ask AI with Ollama Cloud", marketing)
         self.assertNotIn("document OCR, and the vault authenticator", marketing)
         self.assertIn('content: "Free"', css)
         self.assertIn('content: "Basic"', css)
-        self.assertIn('content: "Pro (free in beta)"', css)
+        self.assertIn('content: "Pro"', css)
         self.assertIn(".mk-distinction-grid > *", css)
         self.assertIn("Compare Free, Basic &amp; Pro", app_html)
         self.assertIn('value="free"', admin_js)
@@ -611,7 +614,8 @@ class Round82FreeTierAppTests(unittest.TestCase):
         free_note = plans.plan_pricing_payload("free")["billing_note"]
         pro_note = plans.plan_pricing_payload("pro")["billing_note"]
         self.assertEqual(free_note, "Free forever")
-        self.assertEqual(pro_note, "Free during public beta")
+        self.assertIn("€6.99/mo", pro_note)
+        self.assertIn("billing launches", pro_note)
 
 
 if __name__ == "__main__":

@@ -679,7 +679,7 @@
   function planHas(feature, account = cachedAccountPlan()) {
     const feats = account.plan_features;
     if (feats && Object.prototype.hasOwnProperty.call(feats, feature)) return !!feats[feature];
-    return String(account.plan || 'pro').toLowerCase() === 'pro';
+    return String(account.plan || 'free').toLowerCase() === 'pro';
   }
 
   function formatPlanBytes(bytes) {
@@ -709,7 +709,7 @@
 
   function updatePlanBadge(badge, account) {
     if (!badge) return;
-    const plan = String(account?.plan || 'pro').toLowerCase();
+    const plan = String(account?.plan || 'free').toLowerCase();
     const label = account?.plan_label
       || (plan === 'pro' ? 'Pro' : (plan === 'basic' ? 'Basic' : 'Free'));
     badge.textContent = label;
@@ -720,8 +720,37 @@
     const pricing = account?.plan_pricing || {};
     const priceHint = pricing.billing_active && pricing.price_eur_month > 0
       ? `€${pricing.price_eur_month.toFixed(2)}/month`
-      : (pricing.billing_note || 'Free during public beta');
+      : (pricing.billing_note || 'Free forever');
     badge.title = `${label} plan · ${priceHint}`;
+  }
+
+  function secureSendLimitHint(account) {
+    const catalog = account?.plan_catalog || {};
+    const plan = String(account?.plan || 'free').toLowerCase();
+    const meta = catalog[plan] || catalog.free || {};
+    const limit = meta.secure_send_per_day;
+    if (limit == null || limit === '') {
+      return 'Secure Send: unlimited link creates per day on your plan.';
+    }
+    const n = Number(limit);
+    if (!Number.isFinite(n) || n < 1) return '';
+    return `Secure Send: up to ${n} encrypted link${n === 1 ? '' : 's'} you create per UTC day on your plan.`;
+  }
+
+  function updateSecureSendPlanHints(account) {
+    const text = secureSendLimitHint(account);
+    for (const id of ['secure-send-plan-limit-hint', 'secure-send-settings-hint']) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      if (id === 'secure-send-settings-hint') {
+        el.textContent = text
+          ? `${text} Open Secure Send to compose a link.`
+          : 'Send an encrypted note or file by link. The key stays in the URL fragment; the server stores ciphertext only.';
+        continue;
+      }
+      el.textContent = text;
+      el.hidden = !text;
+    }
   }
 
   function renderPlanSettings(account) {
@@ -734,9 +763,10 @@
     const pricingNote = document.getElementById('plan-pricing-note');
     if (!badge || !price) {
       applyPlanGates(account);
+      updateSecureSendPlanHints(account);
       return;
     }
-    const plan = String(account.plan || 'pro').toLowerCase();
+    const plan = String(account.plan || 'free').toLowerCase();
     updatePlanBadge(badge, account);
     const pricing = account.plan_pricing || {};
     if (pricing.billing_active) {
@@ -745,7 +775,7 @@
         : 'Included';
     } else {
       price.textContent = pricing.billing_note
-        || (plan === 'free' ? 'Free forever' : 'Free during public beta');
+        || (plan === 'free' ? 'Free forever' : '€' + (Number(pricing.suggested_price_eur_month) || 0).toFixed(2) + '/mo when billing launches');
     }
     if (tagline) tagline.textContent = account.plan_tagline || '';
     if (storage) {
@@ -757,7 +787,7 @@
       Object.entries(account.plan_catalog).forEach(([key, meta]) => {
         const suggested = Number(meta.suggested_price_eur_month) || 0;
         const priceLine = suggested > 0
-          ? `<span class="plan-compare-free">Free during public beta</span> · suggested €${suggested.toFixed(2)}/mo`
+          ? `€${suggested.toFixed(2)}/mo when billing launches`
           : '<span class="plan-compare-free">Free</span>';
         rows.push(`<div class="plan-compare-card${key === plan ? ' is-current' : ''}">
           <h4>${escapeHtml(meta.label)}</h4>
@@ -773,10 +803,11 @@
       const basic = account.plan_catalog.basic;
       const pro = account.plan_catalog.pro;
       if (free && basic && pro) {
-        pricingNote.textContent = `Suggested pricing when billing launches: Free ${free.storage_quota_mb} MB, Basic €${basic.suggested_price_eur_month.toFixed(2)}/month (€${basic.suggested_price_eur_year.toFixed(0)}/year), Pro €${pro.suggested_price_eur_month.toFixed(2)}/month (€${pro.suggested_price_eur_year.toFixed(0)}/year). Free during public beta.`;
+        pricingNote.textContent = `Suggested pricing when billing launches: Free ${free.storage_quota_mb} MB, Basic €${basic.suggested_price_eur_month.toFixed(2)}/month (€${basic.suggested_price_eur_year.toFixed(0)}/year), Pro €${pro.suggested_price_eur_month.toFixed(2)}/month (€${pro.suggested_price_eur_year.toFixed(0)}/year). ${pricing.billing_note || 'Billing is not active yet.'}`;
       }
     }
     applyPlanGates(account);
+    updateSecureSendPlanHints(account);
   }
 
   function renderPlanUi(account) {

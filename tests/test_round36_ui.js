@@ -175,8 +175,8 @@ assert.ok(appJs.includes('swallowOverlayOutsideTap'));
 assert.ok(appJs.includes('Outside tap only dismisses'));
 
 // --- 4. Phone beta banner: no trailing · on wrapped first segment ------------
-assert.ok(marketing.includes('Public beta — Pro free, no payment yet'));
-assert.ok(compare.includes('Public beta — Pro free, no payment yet'));
+assert.ok(marketing.includes('Public beta — plans live, billing later'));
+assert.ok(compare.includes('Public beta — plans live, billing later'));
 assert.ok(!marketing.includes('mk-nowrap">Public beta ·'));
 assert.ok(!compare.includes('mk-nowrap">Public beta ·'));
 

@@ -1120,7 +1120,7 @@ a.mk-badge-link:hover {
     content: "Basic";
   }
   .mk-compare-plans td:nth-child(4)::before {
-    content: "Pro (free in beta)";
+    content: "Pro";
     color: var(--mk-col-highlight-fg);
   }
   .mk-compare-stack td.mk-col-highlight {

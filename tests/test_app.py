@@ -4849,7 +4849,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("scroll-margin-top: 5.75rem", css)
         self.assertIn("align-content: start", css)
         home = self.client.get("/")
-        self.assertIn(b"Free during public beta", home.data)
+        self.assertIn(b"Start on Free", home.data)
         self.assertIn(b">Free</h3>", home.data)
         self.assertIn(b">Basic</h3>", home.data)
         self.assertIn(b">Pro</h3>", home.data)

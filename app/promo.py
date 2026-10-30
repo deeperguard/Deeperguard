@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from plans import plan_structured_data_offers
+
 
 def promo_payload(
     *,
@@ -21,7 +23,8 @@ def promo_payload(
 
     reddit = (
         f"**{product_name}** — encrypted notes that sync, with real zero-knowledge design\n\n"
-        f"**Public beta:** new accounts get **Pro free** (5 GB encrypted storage). {billing_note}.\n\n"
+        f"**Public beta:** Free, Basic, and Pro plans are live. New accounts start on **Free** "
+        f"(50 MB, sync, attachments, on-device OCR). {billing_note}.\n\n"
         "- Notes and attachments encrypted **in the browser** before upload (AES-GCM)\n"
         "- **SRP sign-in** — we never see your vault password\n"
         "- **Client-side OCR** for scans; plaintext stays on your device\n"
@@ -37,21 +40,20 @@ def promo_payload(
     hn_text = (
         f"We built {product_name} for people who want Standard Notes–style privacy without another app install.\n\n"
         "Notes are encrypted client-side before sync. The server stores ciphertext only. "
-        "Authentication uses SRP; optional WebAuthn/passkeys and TOTP.\n\n"
-        f"Public beta: Pro tier is free right now ({billing_note.lower()}). "
-        f"Site: {site} — app at {app_url}\n\n"
+        "Authentication uses SRP; optional WebAuthn/passkeys and TOTP on Pro.\n\n"
+        f"{billing_note}. Site: {site} — app at {app_url}\n\n"
         "Would appreciate feedback on onboarding and whether the compare section matches your expectations."
     )
 
     discord = (
         f"**{product_name}** — ZK encrypted notes in the browser\n"
-        f"Beta: Pro free · client-side encryption · PWA\n"
+        f"Beta: Free / Basic / Pro · client-side encryption · PWA\n"
         f"{site} · app `{app_path}`"
     )
 
     twitter = (
         f"{product_name}: zero-knowledge encrypted notes in your browser. "
-        f"Client-side encryption, SRP login, OCR on-device. Public beta — Pro free. {site}"
+        f"Client-side encryption, SRP login, OCR on-device. Public beta — Free tier live. {site}"
     )
 
     alternativeto_email = (
@@ -134,16 +136,11 @@ def promo_payload(
             "Notes are encrypted in the browser before upload."
         ),
         "alternateName": "Deeperguard encrypted notes",
-        "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD",
-            "description": billing_note,
-        },
+        "offers": plan_structured_data_offers(),
         "featureList": [
             "Client-side AES-GCM encryption",
             "SRP zero-knowledge authentication",
-            "Passkeys and TOTP",
+            "Passkeys and TOTP on Pro",
             "Client-side OCR",
             "PWA / add to home screen",
         ],

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Encrypted notes for freelancers and ZZP | Deeperguard</title>
-  <meta name="description" content="Receipts, invoices, and client contracts — searchable with in-browser OCR and encrypted before sync. Vault 2FA codes for banking and tax portals. Pro free in beta.">
+  <meta name="description" content="Receipts, invoices, and client contracts — searchable with in-browser OCR and encrypted before sync. Vault 2FA codes for banking and tax portals on Pro.">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Deeperguard for freelancers — encrypted receipts and contracts">
@@ -22,9 +22,9 @@
   <div class="mk-beta-banner" role="status">
     <span class="mk-beta-pill">Public Beta</span>
     <span class="mk-beta-copy mk-beta-copy--desktop">
-      <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups.
+      <strong>Public beta</strong> — Free, Basic, and Pro plans are live. New accounts start on Free. Billing not active yet.
     </span>
-    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — Pro free</span>
+    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — plans live, billing later</span>
   </div>
 
   <header class="mk-topbar">
@@ -79,7 +79,7 @@
         </article>
         <article class="mk-card">
           <h3>2FA authenticator codes</h3>
-          <p>Keep banking and tax-portal TOTP codes in the vault authenticator — same encryption as your notes.</p>
+          <p>On Pro, keep banking and tax-portal TOTP codes in the vault authenticator — same encryption as your notes.</p>
         </article>
         <article class="mk-card">
           <h3>EU hosting</h3>
@@ -90,30 +90,14 @@
 
     <section class="mk-section" id="pricing">
       <div class="mk-section-head">
-        <span class="mk-badge ok">Public beta</span>
-        <h2>Pricing</h2>
-        <p><strong>Free during beta: Pro, 5&nbsp;GB.</strong> After beta, Basic is €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo (€{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr, 100&nbsp;MB). Pro is €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo (€{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr, 5&nbsp;GB) with backups, passkeys, and vault authenticator. On-device OCR is included on Free, Basic, and Pro.</p>
+        <span class="mk-badge ok">Pricing</span>
+        <h2>Free to start — Pro for backups</h2>
+        <p>Start on Free ({{ free.storage_quota_mb }}&nbsp;MB, on-device OCR, sync, attachments). Basic adds {{ basic.storage_quota_mb }}&nbsp;MB and {{ basic.active_sessions }} devices. Pro adds encrypted email and pCloud backups, passkeys, and the vault authenticator on {{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB. {{ billing_note }}.</p>
         <div class="mk-trust-strip" role="note">
           <span>Server in Vienna, Austria (EU)</span>
           <span><a href="/terms#operator-identity">Imprint</a></span>
           <span><a href="/verify">Check the encryption yourself</a></span>
         </div>
-      </div>
-      <div class="mk-pricing">
-        <article class="mk-plan featured">
-          <span class="mk-plan-badge">Free in Public Beta</span>
-          <div class="mk-plan-header">
-            <h3>{{ pro.label }}</h3>
-            <p class="mk-plan-tagline">{{ pro.tagline }}</p>
-          </div>
-          <p><strong>{{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB</strong> during beta.</p>
-          <ul>
-            {% for feat in pro_features %}
-            <li>{{ feat }}</li>
-            {% endfor %}
-          </ul>
-          <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
-        </article>
       </div>
       <p><a href="/#pricing">Full plan comparison on the homepage</a></p>
     </section>

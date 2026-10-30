@@ -72,7 +72,8 @@ assert.strictEqual(NotesSearch.matches(note({ title: 'Hello', content: 'world' }
 assert.strictEqual(revisionLabel({ title: '', content: '' }), 'Untitled (first save)');
 
 // Medium: terms beta quota, self-host rendered HTML, danger zone, file inputs.
-assert.ok(legal.includes('Pro with 5'));
+assert.ok(legal.includes('New registrations start on the'));
+assert.ok(legal.includes('Free</strong> plan'));
 assert.ok(legal.includes('/contact'));
 assert.ok(legal.includes('Last updated'));
 assert.ok(docPage.includes('mk-topbar.html'));

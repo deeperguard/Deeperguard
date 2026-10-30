@@ -7,17 +7,17 @@
     if (location.hash) document.documentElement.classList.add('mk-hash-open');
   </script>
   <title>Deeperguard (encrypted notes) — Private notes you cannot leak</title>
-  <meta name="description" content="Deeperguard is a zero-knowledge encrypted notes PWA — not DeepGuard deepfake software. AES-GCM on your device, free Pro in public beta. Create a vault at deeperguard.com.">
+  <meta name="description" content="Deeperguard is a zero-knowledge encrypted notes PWA — not DeepGuard deepfake software. AES-GCM on your device, Free/Basic/Pro plans in public beta. Create a vault at deeperguard.com.">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Deeperguard (encrypted notes) — Zero-knowledge notes PWA">
-  <meta property="og:description" content="Encrypted notes and searchable scans in your browser. OCR on your device, ciphertext-only sync (except Ask AI), encrypted share-by-link (Secure Send), servers in the EU. Free Pro during the beta.">
+  <meta property="og:description" content="Encrypted notes and searchable scans in your browser. OCR on your device, ciphertext-only sync (except Ask AI), encrypted share-by-link (Secure Send), servers in the EU. Free tier with sync and on-device OCR.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="{{ canonical_url }}">
   <meta property="og:image" content="{{ og_image }}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Deeperguard (encrypted notes) — Zero-knowledge notes PWA">
-  <meta name="twitter:description" content="Encrypted notes on your device before sync. Browser PWA — public beta, Pro free. Not the DeepGuard deepfake product.">
+  <meta name="twitter:description" content="Encrypted notes on your device before sync. Browser PWA — Free, Basic, and Pro plans in public beta. Not the DeepGuard deepfake product.">
   <meta name="twitter:image" content="{{ og_image }}">
   <meta name="notes-build" content="{{ build }}">
   <meta name="notes-client-hash" content="{{ client_hash }}">
@@ -31,9 +31,9 @@
   <div class="mk-beta-banner" role="status">
     <span class="mk-beta-pill">Public Beta</span>
     <span class="mk-beta-copy mk-beta-copy--desktop">
-      <strong>Pro is included for every account during the public beta</strong> — 5&nbsp;GB, passkeys, on-device OCR, and encrypted backups. No payment details yet.
+      <strong>Public beta</strong> — Free, Basic, and Pro plans are live. New accounts start on Free. Billing not active yet.
     </span>
-    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — Pro free, no payment yet</span>
+    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — plans live, billing later</span>
   </div>
 
   <header class="mk-topbar">
@@ -76,7 +76,7 @@
           <span class="mk-badge ok">Zero-knowledge by design</span>
           <a class="mk-badge mk-badge-link ok" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">Source available · GitHub</a>
           <span class="mk-badge">No app store required</span>
-          <span class="mk-badge warn">Public beta · Free access</span>
+          <span class="mk-badge">Browser PWA</span>
         </div>
         <h1>Private notes and documents you can search. Encrypted before they leave your device.</h1>
         <p class="mk-lede">Scan receipts, invoices and contracts. Text recognition runs in your browser, and sync only ever sees ciphertext. The one exception is Ask AI, which sends the text you choose through our server to Ollama Cloud. Don't take our word for it: <a href="/verify">check it yourself</a>.</p>
@@ -125,7 +125,7 @@
           <li>
             <div>
               <strong>Secure Send — share by link</strong>
-              <span class="desc">Share a note by link encrypted in the browser; the key stays in the # part of the URL, so our server stores ciphertext only. Attachments from the note come along — edit what is included before you create the link. Recipients open once (or up to N times you choose); reopen sent items from Sent in your vault on your devices. To verify: <a href="/verify#verify-secure-send">Secure Send on /verify</a>.</span>
+              <span class="desc">Share a note by link encrypted in the browser; the key stays in the # part of the URL, so our server stores ciphertext only. Plan limits: Free {{ free.secure_send_per_day }} creates per day, Basic {{ basic.secure_send_per_day }}, Pro unlimited. Attachments from the note can come along — edit what is included before you create the link. Recipients open once (or up to N times you choose); reopen sent items from Sent in your vault on your devices. Verify on <a href="/verify#verify-secure-send">/verify</a>.</span>
             </div>
           </li>
         </ul>
@@ -163,8 +163,8 @@
 
     <section class="mk-trust" aria-label="What is true today">
       <article>
-        <strong>Public beta</strong>
-        <p>Every account includes Pro during the beta. No payment details are collected.</p>
+        <strong>Plan limits</strong>
+        <p>Free, Basic, and Pro tiers with storage, device, and feature limits. New accounts start on Free ({{ free.storage_quota_mb }}&nbsp;MB).</p>
       </article>
       <article>
         <strong>Ciphertext only (except Ask AI)</strong>
@@ -233,10 +233,10 @@
             <li class="pro"><strong>No app store lock-in:</strong> Installable PWA with full offline vault support.</li>
             <li class="pro"><strong>2FA codes in your vault:</strong> Keep 2FA codes in your encrypted vault. On Pro, sign in with a passkey or a code from your authenticator app.</li>
             <li class="pro"><strong>Standard Notes Import:</strong> Easy migration with 1-click vault JSON import.</li>
-            <li class="pro"><strong>Public beta:</strong> Pro features included at no charge, including 5&nbsp;GB storage.</li>
+            <li class="pro"><strong>Free tier:</strong> Encrypted sync, attachments, import/export, and on-device OCR on {{ free.storage_quota_mb }}&nbsp;MB ({{ free.active_sessions }} signed-in devices).</li>
           </ul>
           <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Ciphertext-only sync (except Ask AI), OCR on the device, and a browser app you can use offline. After beta, Basic is encrypted sync, attachments, import, and on-device OCR on 100&nbsp;MB; Pro adds passkeys, account 2FA, daily email and pCloud backups, and the vault authenticator on 5&nbsp;GB.
+            <strong>Difference:</strong> Ciphertext-only sync (except Ask AI), OCR on the device, and a browser app you can use offline. Basic is encrypted sync, attachments, import, and on-device OCR on {{ basic.storage_quota_mb }}&nbsp;MB; Pro adds passkeys, account 2FA, daily email and pCloud backups, reminders, and the vault authenticator on {{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB.
           </div>
         </article>
 
@@ -369,7 +369,7 @@
       <div class="mk-steps">
         <article class="mk-step">
           <h3>Create your free account</h3>
-          <p>Sign up with your email and a strong master password. All accounts automatically receive <strong>Pro status for free</strong> during our public beta.</p>
+          <p>Sign up with your email and a strong master password. You start on the <strong>Free</strong> plan — upgrade to Basic or Pro when billing launches for higher limits and Pro-only features.</p>
         </article>
         <article class="mk-step">
           <h3>Unlock your local vault</h3>
@@ -382,13 +382,13 @@
       </div>
     </section>
 
-    <!-- Pricing Section: Beta Schedule & Plans -->
+    <!-- Pricing Section -->
     <section class="mk-section">
       <div class="mk-section-head" id="pricing">
-        <span class="mk-badge ok">Public Beta Schedule</span>
-        <h2>Transparent pricing schedule</h2>
+        <span class="mk-badge ok">Pricing</span>
+        <h2>Free, Basic, and Pro</h2>
         <p>
-          Every new account gets full Pro free during the public beta. No payment details are collected. After beta: Free ({{ free.storage_quota_mb }}&nbsp;MB, always €0), Basic €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr, Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr.
+          Start on Free ({{ free.storage_quota_mb }}&nbsp;MB). Upgrade anytime — Basic €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr, Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr. {{ billing_note }}.
         </p>
         <div class="mk-trust-strip" role="note">
           <span>Server in Vienna, Austria (EU)</span>
@@ -431,7 +431,7 @@
           </div>
           <div class="mk-price-block">
             <div class="mk-price-beta">
-              €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo after beta
+              €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo
             </div>
             <div class="mk-price-post-beta">
               or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr
@@ -450,17 +450,16 @@
 
         <!-- Pro Plan (Featured) -->
         <article class="mk-plan featured">
-          <span class="mk-plan-badge">Free during public beta</span>
           <div class="mk-plan-header">
             <h3>{{ pro.label }}</h3>
             <p class="mk-plan-tagline">{{ pro.tagline }}</p>
           </div>
           <div class="mk-price-block">
             <div class="mk-price-beta">
-              Free during beta
+              €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo
             </div>
             <div class="mk-price-post-beta">
-              After beta: <strong>€{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo</strong> or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr
+              or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr when billing launches
             </div>
           </div>
           <p><strong>{{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB</strong> encrypted storage, unlimited signed-in devices, plus backups, passkeys, and the vault authenticator.</p>
@@ -496,6 +495,12 @@
                 <td>Signed-in devices</td>
                 <td>{{ free.active_sessions }}</td>
                 <td>{{ basic.active_sessions }}</td>
+                <td><strong>Unlimited</strong></td>
+              </tr>
+              <tr>
+                <td>Secure Send (encrypted share-by-link)</td>
+                <td>{{ free.secure_send_per_day }} / day</td>
+                <td>{{ basic.secure_send_per_day }} / day</td>
                 <td><strong>Unlimited</strong></td>
               </tr>
               {% for key, feat in features.items() %}
@@ -535,8 +540,8 @@
         <p>Document OCR runs directly on your device using WebAssembly (Tesseract.js). The extracted text is encrypted client-side and attached to your note's ciphertext before syncing, allowing full-text search without compromising privacy.</p>
       </details>
       <details>
-        <summary>What is the pricing schedule during and after the beta?</summary>
-        <p>Every new account gets full Pro free during the public beta — no payment info is collected. After beta: Free ({{ free.storage_quota_mb }}&nbsp;MB, always €0, {{ free.active_sessions }} signed-in devices), Basic €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr ({{ basic.storage_quota_mb }}&nbsp;MB, {{ basic.active_sessions }} devices), Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr ({{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB, unlimited devices) with backups, passkeys, account 2FA, reminders, and the vault authenticator. Existing accounts keep their current plan. Billing starts only after advance notice.</p>
+        <summary>What are the plans and pricing?</summary>
+        <p>New accounts start on Free ({{ free.storage_quota_mb }}&nbsp;MB, always €0, {{ free.active_sessions }} signed-in devices) with sync, attachments, import/export, and on-device OCR — not passkeys, account 2FA, email or pCloud backups, reminders, or the vault authenticator. Basic is €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr ({{ basic.storage_quota_mb }}&nbsp;MB, {{ basic.active_sessions }} devices) with the same feature set as Free. Pro is €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr ({{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB, unlimited devices) and adds passkeys, account 2FA, daily email backup, pCloud backup, reminders, and the vault authenticator. {{ billing_note }}. Existing accounts keep their stored plan. Billing starts only after advance notice.</p>
       </details>
       <details>
         <summary>How many devices can I stay signed in on?</summary>
@@ -598,7 +603,7 @@
     <!-- Bottom CTA -->
     <section class="mk-cta">
       <h2>Create a vault for notes you cannot leak</h2>
-      <p>Free Pro access during the public beta. No payment details until you are told billing will start.</p>
+      <p>Start on Free — {{ free.storage_quota_mb }}&nbsp;MB encrypted storage, sync, and on-device OCR. Upgrade to Pro when billing launches for backups and security extras.</p>
       <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
       <a class="mk-btn secondary" href="{{ app_url }}">Open notes app</a>
     </section>
