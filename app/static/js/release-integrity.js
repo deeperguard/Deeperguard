@@ -75,6 +75,10 @@
     return metaClientHash();
   }
 
+  function githubRemoteAllowed() {
+    return metaContent('notes-release-github') === '1';
+  }
+
   function preferredTag() {
     const fromMeta = metaContent('notes-release-tag');
     if (fromMeta) return fromMeta;
@@ -610,6 +614,19 @@
         metaHash,
         metaMismatch,
         reason: 'rate_limited',
+      });
+    }
+
+    if (!githubRemoteAllowed()) {
+      const localOnlyMatch = !!(metaHash && localHash && metaHash === localHash);
+      return resultFromParts({
+        status: localOnlyMatch ? STATUS.match : STATUS.unavailable,
+        tag,
+        localHash,
+        metaHash,
+        metaMismatch,
+        signed: false,
+        reason: localOnlyMatch ? 'meta_local_match' : 'no_remote_check',
       });
     }
 

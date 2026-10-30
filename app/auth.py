@@ -1029,6 +1029,32 @@ def _csp_on_app_shell() -> bool:
     return path == "/api/app-shell"
 
 
+def _csp_path_base() -> str:
+    try:
+        return request.path.split("?", 1)[0]
+    except Exception:
+        return ""
+
+
+def _csp_on_secure_send_shell() -> bool:
+    """Secure Send receive pages (public link open/decrypt UI)."""
+    base = _csp_path_base()
+    return base.startswith("/receive/") or base.startswith("/s/")
+
+
+def _csp_on_turnstile_page() -> bool:
+    """Pages that load the Cloudflare Turnstile widget (register only)."""
+    return _csp_path_base() == "/register"
+
+
+def _csp_allows_github_api() -> bool:
+    """Routes whose HTML loads release-integrity.js against the GitHub API."""
+    base = _csp_path_base()
+    if base == "/verify":
+        return True
+    return False
+
+
 def content_security_policy() -> str:
     nonce = csp_nonce()
     # Optional Google Drive backups (GIS token client + drive.file). Allowed
@@ -1059,15 +1085,18 @@ def content_security_policy() -> str:
     except Exception:
         google_script = google_connect = google_frame = ""
         dropbox_connect = ""
-    # Optional Cloudflare Turnstile (when a site key is configured).
+    # Optional Cloudflare Turnstile — only on pages that embed the widget.
     turnstile = ""
     try:
         from config import turnstile_site_key
 
-        if turnstile_site_key():
+        if turnstile_site_key() and _csp_on_turnstile_page():
             turnstile = " https://challenges.cloudflare.com"
     except Exception:
         turnstile = ""
+    github_connect = ""
+    if _csp_allows_github_api():
+        github_connect = " https://api.github.com"
     return "; ".join(
         (
             "default-src 'self'",
@@ -1075,10 +1104,9 @@ def content_security_policy() -> str:
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
             "font-src 'self'",
-            # Widget talks to challenges.cloudflare.com from the browser.
-            # api.github.com: client release-hash check (CORS *); release asset
-            # CDN hosts are intentionally omitted — they lack ACAO and are unused.
-            f"connect-src 'self' https://api.github.com{google_connect}{dropbox_connect}{turnstile}",
+            # Turnstile (register): challenges.cloudflare.com in connect/frame/script.
+            # api.github.com: release-hash check on /verify only (CORS *).
+            f"connect-src 'self'{github_connect}{google_connect}{dropbox_connect}{turnstile}",
             "media-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'self'",

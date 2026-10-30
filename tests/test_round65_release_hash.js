@@ -21,7 +21,9 @@ assert.ok(verify.includes('data-status-prefix="Status: "'));
 assert.ok(verify.includes('timed out') || verify.includes('unlisted asset'));
 assert.ok(verify.includes('newer release'));
 assert.ok(!/<script[\s>]/i.test(verify));
-assert.ok(authPy.includes('https://api.github.com'));
+assert.ok(verify.includes('name="notes-release-github"'));
+assert.ok(authPy.includes('_csp_allows_github_api'));
+assert.ok(!authPy.includes("connect-src 'self' https://api.github.com{google_connect}"))
 assert.ok(appJs.includes('NotesReleaseIntegrity'));
 assert.ok(appJs.includes("last.status === 'pending'") || appJs.includes('force'));
 assert.ok(src.includes('AbortController') || src.includes('fetchWithTimeout'));
@@ -61,12 +63,13 @@ function loadApi(harness) {
   return harness.NotesReleaseIntegrity;
 }
 
-function makeHarness({ hash, tag, fetchImpl, storage, scripts, links, worker }) {
+function makeHarness({ hash, tag, fetchImpl, storage, scripts, links, worker, githubRemote }) {
   const store = storage || Object.create(null);
   const meta = {
     'notes-client-hash': hash || '',
     'notes-release-tag': tag || '',
     'notes-crypto-worker': worker || '',
+    'notes-release-github': githubRemote === false ? '' : '1',
   };
   const statusEl = {
     textContent: '',
