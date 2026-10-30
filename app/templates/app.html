@@ -1953,10 +1953,7 @@
           <label class="settings-row stacked">pCloud email / username
             <input id="pcloud-username" type="email" autocomplete="username">
           </label>
-          <label class="settings-row stacked">pCloud password
-            <input id="pcloud-password" type="password" autocomplete="current-password" placeholder="Leave blank to keep current password">
-          </label>
-          <label class="settings-row stacked">rclone OAuth token (if 2FA is on)
+          <label class="settings-row stacked">rclone OAuth token
             <textarea id="pcloud-rclone-token" rows="3" spellcheck="false" placeholder="Paste JSON from: rclone authorize pcloud"></textarea>
           </label>
           <label class="settings-row stacked">Remote folder
@@ -1964,8 +1961,8 @@
           </label>
           <label class="settings-row stacked">pCloud region
             <select id="pcloud-region">
-              <option value="eu">EU (ewebdav.pcloud.com)</option>
-              <option value="us">US (webdav.pcloud.com)</option>
+              <option value="eu">EU (eapi.pcloud.com)</option>
+              <option value="us">US (api.pcloud.com)</option>
             </select>
           </label>
           <label class="settings-row checkbox"><span>Daily encrypted pCloud sync</span><input id="pcloud-enabled" type="checkbox"></label>
@@ -1974,7 +1971,7 @@
             <button type="button" id="btn-save-pcloud" class="btn">Save pCloud settings</button>
             <button type="button" id="btn-pcloud-sync" class="btn">Sync to pCloud now</button>
           </div>
-          <p class="settings-hint">Uploads encrypted vault backups via rclone. Password + WebDAV works when pCloud two-factor authentication is off. If 2FA is enabled, run <code>rclone authorize pcloud</code> on your computer (EU: add <code>--pcloud-hostname eapi.pcloud.com</code>) and paste the token here.</p>
+          <p class="settings-hint">Uploads encrypted vault backups via rclone using an OAuth token (your pCloud account password is never stored on this server). On your computer run <code>rclone authorize pcloud</code> (EU: add <code>--pcloud-hostname eapi.pcloud.com</code>) and paste the JSON token here.</p>
         </div>
       </section>
 

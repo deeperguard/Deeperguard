@@ -118,7 +118,7 @@ For production WAN, add **fail2ban** or Cloudflare rate rules on `/api/auth/*`.
 - [ ] `NOTES_STRICT_ZK=1`
 - [ ] `NOTES_SERVER_OCR=0`
 - [ ] Registration policy decided (`NOTES_ALLOW_REGISTER`)
-- [ ] Backups: SMTP and/or pCloud tested
+- [ ] Backups: SMTP and/or pCloud tested (`NOTES_PCLOUD_CREDENTIALS_KEY` set — see [docs/PCLOUD_CREDENTIALS_MIGRATION.md](../docs/PCLOUD_CREDENTIALS_MIGRATION.md))
 - [ ] Firewall: no unnecessary open ports (prefer tunnel)
 - [ ] Monitoring on Vienna (disk, gunicorn, `journalctl -u deeperguard` / `cloudflared`)
 - [ ] Privacy policy / terms if offering free accounts to others

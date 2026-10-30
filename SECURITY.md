@@ -17,7 +17,6 @@ The items below are known gaps from internal reviews (October 2026). They descri
 
 | Rank | Area | Item | Status |
 |------|------|------|--------|
-| **High** | Ops / credentials | **Plaintext pCloud passwords** — optional Pro pCloud backup stores the user’s pCloud WebDAV password on the server filesystem (`keys/pcloud-password-*`) so scheduled rclone sync can run. Using OAuth instead of a password avoids this. Stored passwords are not encrypted at rest. | Open — owner decision |
 | **Medium** | Ops / host | **systemd unit runs as root** — the shipped `deploy/systemd/deeperguard.service` has no dedicated `User=` / privilege drop; the app process typically runs as root on the VPS unless operators change the unit locally. | Open — owner decision |
 | **Medium** | Auth / 2FA | **TOTP turn-off without a second factor for SRP accounts** — disabling account 2FA requires the current TOTP code (and an active session) but does **not** require re-proving the account password for SRP (zero-knowledge login) users. Legacy hash-based accounts still require the account password. | Open — owner decision |
 | **Medium** | Auth storage | **Leftover legacy password hashes** — accounts on SRP login may still have an old `password_hash` row used for migration, repair-login, and some password-change paths until explicitly cleared. Purging hashes needs a careful migration plan. | Open — owner decision |

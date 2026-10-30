@@ -19,6 +19,7 @@ class BackupHelperTests(unittest.TestCase):
         os.environ["NOTES_ROOT"] = str(root)
         os.environ["NOTES_DATA"] = str(root / "data")
         os.environ["NOTES_KEYS"] = str(root / "keys")
+        os.environ["NOTES_PCLOUD_CREDENTIALS_KEY"] = "cc" * 32
         (root / "keys").mkdir(parents=True)
         (root / "data").mkdir(parents=True)
         for name in list(sys.modules):
@@ -31,7 +32,7 @@ class BackupHelperTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
-        for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS"):
+        for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS", "NOTES_PCLOUD_CREDENTIALS_KEY"):
             os.environ.pop(key, None)
 
     def test_compact_payload_drops_large_items(self):
@@ -167,9 +168,8 @@ class BackupHelperTests(unittest.TestCase):
             return Proc()
 
         with patch.object(self.backup_pcloud, "ensure_local_full_backup", return_value=(local, 2, 99)), patch.object(
-            self.backup_pcloud, "write_rclone_config", return_value=(Path("/tmp/rclone.conf"), False)
-        ), patch.object(self.backup_pcloud, "probe_webdav_write"), patch.object(
-            self.backup_pcloud, "pcloud_password", return_value="secret"), patch.object(
+            self.backup_pcloud, "write_rclone_config", return_value=Path("/tmp/rclone.conf")
+        ), patch.object(self.backup_pcloud, "rclone_bin", return_value="/usr/bin/rclone"), patch.object(
             self.backup_pcloud, "pcloud_credentials_configured", return_value=True), patch.object(
             self.backup_pcloud.db, "get_user_by_id", return_value={
                 "id": 3,
@@ -206,7 +206,7 @@ class BackupHelperTests(unittest.TestCase):
                 "backup_email": "backup@home.local",
                 "pcloud_remote_path": "Deeperguard/backups",
             }
-        ]), patch.object(self.backup_pcloud, "pcloud_password", return_value="x"), patch.object(
+        ]), patch.object(self.backup_pcloud, "pcloud_credentials_configured", return_value=True), patch.object(
             self.backup_pcloud, "sync_user_backup", side_effect=fail
         ), patch.object(self.backup_pcloud, "notify_pcloud_backup_failure", side_effect=lambda u, d: sent.append((u["email"], d))):
             count = self.backup_pcloud.run_pcloud_backups()
@@ -219,31 +219,19 @@ class BackupHelperTests(unittest.TestCase):
         out = self.backup_pcloud.normalize_pcloud_token('{"access_token":"abc","token_type":"bearer"}')
         self.assertIn("access_token", out)
 
-    def test_write_rclone_config_obscure_password_via_stdin(self):
-        calls = []
+    def test_write_rclone_config_uses_oauth_token(self):
+        token = '{"access_token":"abc","token_type":"bearer"}'
+        with patch.object(self.backup_pcloud, "pcloud_token", return_value=token):
+            path = self.backup_pcloud.write_rclone_config(9, "eu")
+        try:
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("type = pcloud", text)
+            self.assertIn("hostname = eapi.pcloud.com", text)
+            self.assertIn(token, text)
+        finally:
+            path.unlink(missing_ok=True)
 
-        def fake_run(cmd, **kwargs):
-            calls.append((list(cmd), kwargs.get("input")))
-            class Proc:
-                stdout = "obscured-token"
-                stderr = ""
-                returncode = 0
-
-            return Proc()
-
-        with patch.object(self.backup_pcloud, "pcloud_token", return_value=""), patch.object(
-            self.backup_pcloud, "rclone_bin", return_value="/usr/bin/rclone"
-        ), patch.object(self.backup_pcloud.subprocess, "run", side_effect=fake_run), patch.object(
-            self.backup_pcloud, "pcloud_rclone_config_path", return_value=Path(self.tmp.name) / "keys" / "rclone.conf"
-        ):
-            path, native = self.backup_pcloud.write_rclone_config(9, "user@pcloud", "s3cret!", "eu")
-        self.assertFalse(native)
-        self.assertTrue(path.is_file())
-        self.assertEqual(calls[0][0][-2:], ["obscure", "-"])
-        self.assertEqual(calls[0][1], "s3cret!")
-        self.assertIn("obscured-token", path.read_text(encoding="utf-8"))
-
-    def test_run_pcloud_backups_emails_when_password_missing(self):
+    def test_run_pcloud_backups_emails_when_token_missing(self):
         sent = []
         with patch.object(self.backup_pcloud.db, "users_with_pcloud_enabled", return_value=[
             {
