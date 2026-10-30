@@ -8,6 +8,7 @@ const {
   normalizeContent,
   linkifyPlain,
   toggleTaskAt,
+  renderEditFormatMirror,
 } = require('../app/static/js/superscript.js');
 
 const booking = 'https://www.booking.com/hotel/nl/jansen-bajeskwartier.html?label=genius'
@@ -96,6 +97,18 @@ assert.doesNotMatch(angleGoogle, /&lt;&lt;/);
 const mirror = renderEditMirror('See [Docs](https://example.com) and <https://open.example.org>');
 assert.match(mirror, /<a href="https:\/\/example\.com"/);
 assert.match(mirror, /<a href="https:\/\/open\.example\.org"/);
+
+const formatMirror = renderEditFormatMirror('**Hotel Sheraton Lisboa**');
+assert.match(formatMirror, /md-fmt-bold/);
+assert.match(formatMirror, /Hotel Sheraton Lisboa/);
+assert.match(formatMirror, /<span class="md-syn">\*\*<\/span>/);
+
+const italicMirror = renderEditFormatMirror('*italic* and **bold**');
+assert.match(italicMirror, /md-fmt-em/);
+assert.match(italicMirror, /md-fmt-bold/);
+
+const supMirror = renderEditFormatMirror('E=mc^2^');
+assert.match(supMirror, /md-fmt-sup/);
 
 const links = extractLinks('See [Docs](https://example.com) and <https://open.example.org>');
 assert.ok(links.length >= 2);

@@ -9105,6 +9105,46 @@ body.editor-toolbar-menu-open .editor-actions-overflow-panel button {
 html[data-theme="light"] .note-body-wrap.code-highlight-live .tok-kw { color: #0369a1; }
 html[data-theme="light"] .note-body-wrap.code-highlight-live .tok-str { color: #166534; }
 html[data-theme="light"] .note-body-wrap.code-highlight-live .tok-comment { color: #64748b; }
+.note-body-wrap.superscript-format-live .note-body-highlights {
+  z-index: 1;
+  color: var(--text);
+}
+.note-body-wrap.superscript-format-live .note-body {
+  z-index: 2;
+  color: transparent;
+  caret-color: var(--text);
+  background: transparent;
+}
+.note-body-wrap.superscript-format-live .note-body-highlights .md-syn {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.note-body-wrap.superscript-format-live .note-body-highlights .md-fmt-bold { font-weight: 700; }
+.note-body-wrap.superscript-format-live .note-body-highlights .md-fmt-em { font-style: italic; }
+.note-body-wrap.superscript-format-live .note-body-highlights .md-fmt-code {
+  font-family: var(--font);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 3px;
+}
+.note-body-wrap.superscript-format-live .note-body-highlights .md-fmt-sup {
+  font-size: 0.75em;
+  vertical-align: super;
+  line-height: 0;
+}
+.note-body-wrap.superscript-format-live .note-body-highlights a.edit-link,
+.note-body-wrap.superscript-format-live .note-body-highlights a.in-doc-link {
+  pointer-events: auto;
+  color: var(--accent, #4f8cff);
+  -webkit-text-fill-color: currentColor;
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-size: 100% 1.5px;
+  background-position: 0 calc(100% - 1px);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  cursor: pointer;
+}
 body.editor-toolbar-menu-open .editor-actions-overflow-panel .editor-toolbar-menu-item:not(.toolbar-desktop):not(.doc-only-control):not(.editor-phone-toolbar-hide)[hidden],
 body.editor-toolbar-menu-open .editor-toolbar-menu-panel .editor-toolbar-menu-item[hidden],
 body.editor-toolbar-menu-open #btn-clear-checked[hidden] {
