@@ -10,10 +10,8 @@ PLAN_PRO = "pro"
 VALID_PLANS = frozenset({PLAN_FREE, PLAN_BASIC, PLAN_PRO})
 PLAN_ORDER = (PLAN_FREE, PLAN_BASIC, PLAN_PRO)
 
-# Marketing / outreach copy when billing is not active.
-MARKETING_BILLING_NOTE = (
-    "Billing is not active yet — Free, Basic, and Pro limits apply today"
-)
+# Optional single-line checkout status on marketing (empty = omit).
+MARKETING_BILLING_NOTE = ""
 
 # Soft cap on concurrent signed-in device sessions (None = unlimited).
 PLAN_SESSION_CAPS: dict[str, int | None] = {
@@ -208,14 +206,14 @@ def plan_feature_flags(plan: str | None) -> dict[str, bool]:
 
 
 def plan_billing_note(plan: str | None) -> str:
-    """Human-readable plan price line for Settings and API (billing not active yet)."""
+    """Human-readable plan price line for Settings and API."""
     current = normalize_plan(plan)
     if current == PLAN_FREE:
         return "Free forever"
     meta = PLAN_CATALOG[current]
     month = float(meta["suggested_price_eur_month"])
     year = float(meta["suggested_price_eur_year"])
-    return f"€{month:.2f}/mo or €{year:.0f}/yr when billing launches"
+    return f"€{month:.2f}/mo or €{year:.0f}/yr"
 
 
 def plan_pricing_payload(plan: str | None) -> dict[str, Any]:

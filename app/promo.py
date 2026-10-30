@@ -23,8 +23,8 @@ def promo_payload(
 
     reddit = (
         f"**{product_name}** — encrypted notes that sync, with real zero-knowledge design\n\n"
-        f"**Public beta:** Free, Basic, and Pro plans are live. New accounts start on **Free** "
-        f"(50 MB, sync, attachments, on-device OCR). {billing_note}.\n\n"
+        f"Free, Basic, and Pro plans are live. New accounts start on **Free** "
+        f"(50 MB, sync, attachments, on-device OCR).\n\n"
         "- Notes and attachments encrypted **in the browser** before upload (AES-GCM)\n"
         "- **SRP sign-in** — we never see your vault password\n"
         "- **Client-side OCR** for scans; plaintext stays on your device\n"
@@ -36,24 +36,24 @@ def promo_payload(
         "Happy to answer technical questions about the crypto model."
     )
 
-    hn_title = f"{product_name} – zero-knowledge encrypted notes (browser PWA, public beta)"
+    hn_title = f"{product_name} – zero-knowledge encrypted notes (browser PWA)"
     hn_text = (
         f"We built {product_name} for people who want Standard Notes–style privacy without another app install.\n\n"
         "Notes are encrypted client-side before sync. The server stores ciphertext only. "
         "Authentication uses SRP; optional WebAuthn/passkeys and TOTP on Pro.\n\n"
-        f"{billing_note}. Site: {site} — app at {app_url}\n\n"
+        f"Site: {site} — app at {app_url}\n\n"
         "Would appreciate feedback on onboarding and whether the compare section matches your expectations."
     )
 
     discord = (
         f"**{product_name}** — ZK encrypted notes in the browser\n"
-        f"Beta: Free / Basic / Pro · client-side encryption · PWA\n"
+        f"Free / Basic / Pro · client-side encryption · PWA\n"
         f"{site} · app `{app_path}`"
     )
 
     twitter = (
         f"{product_name}: zero-knowledge encrypted notes in your browser. "
-        f"Client-side encryption, SRP login, OCR on-device. Public beta — Free tier live. {site}"
+        f"Client-side encryption, SRP login, OCR on-device. Free tier live. {site}"
     )
 
     alternativeto_email = (
@@ -99,7 +99,7 @@ def promo_payload(
         {
             "name": "r/privacy",
             "url": "https://www.reddit.com/r/privacy/submit",
-            "action": "Post reddit copy (follow sub rules; disclose beta)",
+            "action": "Post reddit copy (follow sub rules)",
             "autonomous": False,
         },
         {

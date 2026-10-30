@@ -15,7 +15,7 @@ class PromoPayloadTests(unittest.TestCase):
             public_url="https://www.deeperguard.com",
             app_path="/app",
             contact_email="notes@deeperguard.com",
-            billing_note="Billing is not active yet — Free, Basic, and Pro limits apply today",
+            billing_note="",
         )
         self.assertTrue(out["ok"])
         self.assertIn("reddit", out["copy"])

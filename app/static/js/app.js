@@ -775,7 +775,7 @@
         : 'Included';
     } else {
       price.textContent = pricing.billing_note
-        || (plan === 'free' ? 'Free forever' : '€' + (Number(pricing.suggested_price_eur_month) || 0).toFixed(2) + '/mo when billing launches');
+        || (plan === 'free' ? 'Free forever' : '€' + (Number(pricing.suggested_price_eur_month) || 0).toFixed(2) + '/mo');
     }
     if (tagline) tagline.textContent = account.plan_tagline || '';
     if (storage) {
@@ -787,7 +787,7 @@
       Object.entries(account.plan_catalog).forEach(([key, meta]) => {
         const suggested = Number(meta.suggested_price_eur_month) || 0;
         const priceLine = suggested > 0
-          ? `€${suggested.toFixed(2)}/mo when billing launches`
+          ? `€${suggested.toFixed(2)}/mo`
           : '<span class="plan-compare-free">Free</span>';
         rows.push(`<div class="plan-compare-card${key === plan ? ' is-current' : ''}">
           <h4>${escapeHtml(meta.label)}</h4>
@@ -803,7 +803,7 @@
       const basic = account.plan_catalog.basic;
       const pro = account.plan_catalog.pro;
       if (free && basic && pro) {
-        pricingNote.textContent = `Suggested pricing when billing launches: Free ${free.storage_quota_mb} MB, Basic €${basic.suggested_price_eur_month.toFixed(2)}/month (€${basic.suggested_price_eur_year.toFixed(0)}/year), Pro €${pro.suggested_price_eur_month.toFixed(2)}/month (€${pro.suggested_price_eur_year.toFixed(0)}/year). ${pricing.billing_note || 'Billing is not active yet.'}`;
+        pricingNote.textContent = `Free ${free.storage_quota_mb} MB, Basic €${basic.suggested_price_eur_month.toFixed(2)}/month (€${basic.suggested_price_eur_year.toFixed(0)}/year), Pro €${pro.suggested_price_eur_month.toFixed(2)}/month (€${pro.suggested_price_eur_year.toFixed(0)}/year).`;
       }
     }
     applyPlanGates(account);
@@ -918,7 +918,7 @@
           lock = document.createElement('p');
           lock.className = 'settings-hint plan-pro-lock';
           const planLabel = account?.plan_label || String(account?.plan || 'Free');
-          lock.textContent = `Included with Pro. You are on ${planLabel} — contact support to upgrade when billing launches.`;
+          lock.textContent = `Included with Pro. You are on ${planLabel} — contact support to upgrade.`;
           el.prepend(lock);
         }
         el.querySelectorAll('input, button, select, textarea').forEach((input) => {

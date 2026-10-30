@@ -65,7 +65,7 @@
       {% if turnstile_site_key %}
       <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="light"></div>
       {% endif %}
-      <p class="auth-hint">Public beta: new accounts start on <strong>Pro</strong> (free for now) with <strong>5&nbsp;GB</strong> encrypted storage. After the beta, <strong>Basic</strong> is €2.99/month or €29/year (100&nbsp;MB) and <strong>Pro</strong> is €6.99/month or €69/year (5&nbsp;GB). Creating an account does not ask for a code. We email a verification code to this address, and you only enter it in Settings before encrypted backups are sent.</p>
+      <p class="auth-hint">New accounts start on <strong>Free</strong> (50&nbsp;MB encrypted storage, sync, attachments, on-device OCR). <strong>Basic</strong> is €2.99/month or €29/year (100&nbsp;MB) and <strong>Pro</strong> is €6.99/month or €69/year (5&nbsp;GB) with passkeys, backups, and the vault authenticator. Creating an account does not ask for a code. We email a verification code to this address, and you only enter it in Settings before encrypted backups are sent.</p>
       <p id="register-error" class="error" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
       <button type="button" id="register-submit" class="btn primary block">Create account</button>
     </form>

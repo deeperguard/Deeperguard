@@ -562,7 +562,9 @@ class Round82FreeTierAppTests(unittest.TestCase):
         self.assertNotIn("Public beta · Free access", marketing)
         self.assertIn("Start on Free", marketing)
         self.assertIn("Secure Send (encrypted share-by-link)", marketing)
-        self.assertIn("Billing not active yet", marketing)
+        self.assertNotIn("Billing not active yet", marketing)
+        self.assertNotIn("when billing launches", marketing)
+        self.assertNotIn("public beta", marketing.lower())
         self.assertNotIn("Every new account gets full Pro free during the public beta", marketing)
         self.assertIn("Signed-in devices", marketing)
         self.assertIn("How many devices can I stay signed in on?", marketing)
@@ -615,7 +617,7 @@ class Round82FreeTierAppTests(unittest.TestCase):
         pro_note = plans.plan_pricing_payload("pro")["billing_note"]
         self.assertEqual(free_note, "Free forever")
         self.assertIn("€6.99/mo", pro_note)
-        self.assertIn("billing launches", pro_note)
+        self.assertNotIn("billing launches", pro_note)
 
 
 if __name__ == "__main__":

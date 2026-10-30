@@ -14,7 +14,7 @@
   <meta property="og:image" content="{{ og_image }}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Deeperguard vs Standard Notes — encrypted notes alternative">
-  <meta name="twitter:description" content="Zero-knowledge notes PWA with on-device OCR and Standard Notes import. Free, Basic, and Pro plans in public beta.">
+  <meta name="twitter:description" content="Zero-knowledge notes PWA with on-device OCR and Standard Notes import. Free, Basic, and Pro plans.">
   <meta name="twitter:image" content="{{ og_image }}">
   <meta name="notes-build" content="{{ build }}">
   <link rel="canonical" href="{{ canonical_url }}">
@@ -22,14 +22,6 @@
   {{ asset_stylesheet('css/marketing.css') }}
 </head>
 <body>
-  <div class="mk-beta-banner" role="status">
-    <span class="mk-beta-pill">Public Beta</span>
-    <span class="mk-beta-copy mk-beta-copy--desktop">
-      <strong>Public beta</strong> — Free, Basic, and Pro plans are live. New accounts start on Free. Billing not active yet.
-    </span>
-    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — plans live, billing later</span>
-  </div>
-
   <header class="mk-topbar">
     <div class="wrap mk-topbar-inner">
       <a class="mk-brand" href="/">
@@ -74,7 +66,7 @@
           <a class="mk-btn secondary mk-btn-lg" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">View on GitHub</a>
         </div>
         <div class="mk-hero-trust">
-          <span>Public beta</span>
+          <span>Free, Basic, and Pro</span>
           <span>No payment details</span>
           <span>Source available for review</span>
         </div>
@@ -147,7 +139,7 @@
             </tr>
             <tr>
               <td>Maturity</td>
-              <td class="mk-col-highlight"><span class="partial">Early public beta</span></td>
+              <td class="mk-col-highlight"><span class="partial">Independent product</span></td>
               <td><span class="yes">10+ years</span> — established brand and ecosystem</td>
             </tr>
           </tbody>
@@ -223,7 +215,7 @@
       </details>
       <details>
         <summary>What are the plans and pricing?</summary>
-        <p>Free ({{ free.storage_quota_mb }}&nbsp;MB, {{ free.active_sessions }} devices), Basic €{{ basic.suggested_price_eur_month }}/mo (€{{ basic.suggested_price_eur_year | int }}/yr, {{ basic.storage_quota_mb }}&nbsp;MB), Pro €{{ pro.suggested_price_eur_month }}/mo (€{{ pro.suggested_price_eur_year | int }}/yr, {{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB) with passkeys, backups, and vault authenticator. {{ billing_note }}. Billing starts only after advance notice.</p>
+        <p>Free ({{ free.storage_quota_mb }}&nbsp;MB, {{ free.active_sessions }} devices), Basic €{{ basic.suggested_price_eur_month }}/mo (€{{ basic.suggested_price_eur_year | int }}/yr, {{ basic.storage_quota_mb }}&nbsp;MB), Pro €{{ pro.suggested_price_eur_month }}/mo (€{{ pro.suggested_price_eur_year | int }}/yr, {{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB) with passkeys, backups, and vault authenticator.</p>
       </details>
     </section>
 
