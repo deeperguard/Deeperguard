@@ -471,10 +471,51 @@
       .join('\n');
   }
 
+  function synWrap(open, inner, close, cls) {
+    const innerHtml = escapeHtml(inner);
+    return `<span class="${cls}"><span class="md-syn">${escapeHtml(open)}</span>${innerHtml}<span class="md-syn">${escapeHtml(close)}</span></span>`;
+  }
+
+  function applyCharacterPreservingEmphasisPlain(text) {
+    let out = String(text || '');
+    const codes = [];
+    out = out.replace(/`([^`\n]+)`/g, (match) => {
+      codes.push(match);
+      return `@@UCODE${codes.length - 1}@@`;
+    });
+    out = out.replace(/\*\*(.+?)\*\*/g, (_, inner) => synWrap('**', inner, '**', 'md-fmt-bold'));
+    out = out.replace(/(^|[^*])\*(?!\*)(.+?)\*(?!\*)/g, (_, pre, inner) => `${pre}${synWrap('*', inner, '*', 'md-fmt-em')}`);
+    out = out.replace(/(^|[^\w])__(?!_)([\s\S]+?)__(?!\w)/g, (_, pre, inner) => `${pre}${synWrap('__', inner, '__', 'md-fmt-bold')}`);
+    out = out.replace(/(^|[^\w])_(?!_)([^_\n]+?)_(?!\w)/g, (_, pre, inner) => `${pre}${synWrap('_', inner, '_', 'md-fmt-em')}`);
+    out = out.replace(/\^\^(.+?)\^\^/g, (_, inner) => synWrap('^^', inner, '^^', 'md-fmt-sup'));
+    out = out.replace(/\^([^^]+)\^/g, (_, inner) => synWrap('^', inner, '^', 'md-fmt-sup'));
+    return out.replace(/@@UCODE(\d+)@@/g, (_, index) => {
+      const raw = codes[Number(index)] || '';
+      const match = raw.match(/^`([^`\n]+)`$/);
+      return match ? synWrap('`', match[1], '`', 'md-fmt-code') : escapeHtml(raw);
+    });
+  }
+
+  function applyCharacterPreservingEmphasis(html) {
+    const parts = String(html || '').split(/(<[^>]+>)/g);
+    return parts.map((part) => (part.startsWith('<') ? part : applyCharacterPreservingEmphasisPlain(part))).join('');
+  }
+
+  function renderEditFormatLine(line) {
+    return applyCharacterPreservingEmphasis(renderInline(line));
+  }
+
   function renderEditMirror(text) {
     return String(text || '')
       .split('\n')
       .map((line) => renderInline(line))
+      .join('<br>\n');
+  }
+
+  function renderEditFormatMirror(text) {
+    return String(text || '')
+      .split('\n')
+      .map((line) => renderEditFormatLine(line))
       .join('<br>\n');
   }
 
@@ -588,6 +629,7 @@
   const api = {
     render,
     renderEditMirror,
+    renderEditFormatMirror,
     extractLinks,
     collectLinkRanges,
     convertTo,

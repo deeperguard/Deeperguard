@@ -1658,6 +1658,7 @@
     const note = currentId ? NotesStore.get(currentId) : null;
     const type = note?.content?.editor || ui.editorType?.value || 'plain';
     syncEditLinkOverlay();
+    syncSuperscriptFormatMirror();
     if (isChecklistEditor(type)) {
       renderChecklist(note ? { ...note, content: { ...note.content, content: snap.body } } : { content: { content: snap.body, editor: type } });
     }
@@ -1853,7 +1854,34 @@
 
   function editLinkOverlayActive() {
     if (!ui.body || ui.body.hidden || noteEditingLocked()) return false;
-    return editorMode === 'edit';
+    if (editorMode !== 'edit') return false;
+    if (superscriptFormatLiveActive()) return false;
+    return true;
+  }
+
+  function superscriptFormatLiveActive() {
+    if (!ui.body || ui.body.hidden || noteEditingLocked()) return false;
+    if (editorMode !== 'edit') return false;
+    const note = currentId ? NotesStore.get(currentId) : null;
+    const type = note?.content?.editor || ui.editorType?.value || 'plain';
+    return type === 'superscript' && !!window.NotesSuperscript?.renderEditFormatMirror;
+  }
+
+  function syncSuperscriptFormatMirror() {
+    const wrap = document.getElementById('note-body-wrap');
+    const layer = document.getElementById('note-body-highlights');
+    const findOpen = document.getElementById('find-bar') && !document.getElementById('find-bar').hidden;
+    const on = superscriptFormatLiveActive() && !findOpen;
+    wrap?.classList.toggle('superscript-format-live', !!on);
+    if (!layer) return;
+    if (!on) {
+      if (!findOpen && layer.querySelector('.md-fmt-bold, .md-fmt-em, .md-fmt-code, .md-fmt-sup')) {
+        layer.innerHTML = '';
+      }
+      return;
+    }
+    layer.innerHTML = NotesSuperscript.renderEditFormatMirror(ui.body.value || '');
+    syncFindHighlightScroll();
   }
 
   function syncEditLinkScroll() {
@@ -1895,15 +1923,20 @@
     const type = note?.content?.editor || ui.editorType?.value || 'plain';
     const checklistOn = isChecklistEditor(type);
     if (checklistOn && ui.checklist) syncChecklistLinkOverlays(ui.checklist);
-    if (!wrap || !layer || !ui.body) return;
+    if (!wrap || !layer || !ui.body) {
+      syncSuperscriptFormatMirror();
+      return;
+    }
     const active = editLinkOverlayActive() && !checklistOn && window.NotesLinkOverlay?.renderHtml;
     wrap.classList.toggle('edit-links-active', active);
     if (!active) {
       layer.innerHTML = '';
+      syncSuperscriptFormatMirror();
       return;
     }
     layer.innerHTML = NotesLinkOverlay.renderHtml(ui.body.value);
     syncEditLinkScroll();
+    syncSuperscriptFormatMirror();
   }
 
   function bindEditLinkOverlays() {
@@ -18002,6 +18035,7 @@
     ta.value = `${ta.value.slice(0, start)}${before}${selected}${after}${ta.value.slice(end)}`;
     ta.setSelectionRange(start + before.length, start + before.length + selected.length);
     ta.focus();
+    syncEditLinkOverlay();
     scheduleSave();
   }
 
@@ -18031,6 +18065,7 @@
     const shift = prefix.length;
     ta.setSelectionRange(start + shift, ta.selectionEnd + shift);
     ta.focus();
+    syncEditLinkOverlay();
     scheduleSave();
   }
 
@@ -19155,6 +19190,7 @@
     scheduleSave();
     autosizeNoteBody();
     syncEditLinkOverlay();
+    syncSuperscriptFormatMirror();
     syncCodeHighlight();
     syncUndoButtons();
     if (!document.getElementById('find-bar')?.hidden) {
