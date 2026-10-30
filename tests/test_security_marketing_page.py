@@ -102,8 +102,15 @@ class SecurityMarketingPageTests(unittest.TestCase):
 
     def test_marketing_home_keeps_in_page_security_section(self):
         marketing = (REPO / "app/templates/marketing.html").read_text(encoding="utf-8")
-        self.assertIn('href="#security">Security</a>', marketing)
+        self.assertIn('href="#security">How encryption works</a>', marketing)
+        self.assertIn('href="/security">Security</a>', marketing)
         self.assertNotIn('href="/#security"', marketing)
+        self.assertNotIn('href="#security">Security</a>', marketing)
+
+    def test_homepage_chrome_links_security_route(self):
+        body = self.client.get("/").get_data(as_text=True)
+        self.assertIn('href="/security">Security</a>', body)
+        self.assertNotIn('href="#security">Security</a>', body)
 
     def test_blog_page_topbar_links_security_route(self):
         body = self.client.get("/blog").get_data(as_text=True)
