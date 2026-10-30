@@ -795,6 +795,7 @@ def public_path(path: str) -> bool:
         "/self-host",
         "/help/recovery",
         "/verify",
+        "/security",
         "/blog",
         "/blog/feed.xml",
         "/api/health",
