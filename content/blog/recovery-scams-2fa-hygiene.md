@@ -48,6 +48,6 @@ Treat this as **generic account hygiene** for whatever service you may have comp
 
 ## Want to check our claims?
 
-Deeperguard is open source, and you can see how the encryption and sign-in work on our [verify page](/verify). We'd rather you check than take our word for it.
+Deeperguard publishes client source for review on GitHub, and you can see how the encryption and sign-in work on our [verify page](/verify). We'd rather you check than take our word for it.
 
 *Deeperguard is in public beta, and every account gets Pro for free while it lasts.*
