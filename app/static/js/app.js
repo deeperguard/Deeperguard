@@ -14346,14 +14346,12 @@
       document.getElementById('pcloud-remote-path').value = (!account.pcloud_enabled && legacyDefault) ? '' : remotePath;
       document.getElementById('pcloud-region').value = account.pcloud_region || 'eu';
       document.getElementById('pcloud-enabled').checked = !!account.pcloud_enabled;
-      document.getElementById('pcloud-password').value = '';
       const tokenEl = document.getElementById('pcloud-rclone-token');
       if (tokenEl) tokenEl.value = '';
       const statusEl = document.getElementById('pcloud-status');
       const parts = [];
-      if (account.pcloud_password_set) parts.push('Password saved on server');
-      else parts.push('Password not set');
-      if (account.pcloud_token_set) parts.push('OAuth token saved');
+      if (account.pcloud_token_set) parts.push('OAuth token saved on server');
+      else parts.push('OAuth token not set');
       if (account.pcloud_last_sync_at > 0) {
         const when = new Date(account.pcloud_last_sync_at * 1000).toLocaleString();
         const outcome = account.pcloud_last_sync_status === 'ok' ? 'OK' : 'Failed';
@@ -21874,20 +21872,17 @@
 
   document.getElementById('btn-save-pcloud').addEventListener('click', async () => {
     const username = document.getElementById('pcloud-username').value.trim();
-    const password = document.getElementById('pcloud-password').value;
     const rclone_token = document.getElementById('pcloud-rclone-token').value.trim();
     const remote_path = document.getElementById('pcloud-remote-path').value.trim() || 'Deeperguard/backups';
     const region = document.getElementById('pcloud-region').value || 'eu';
     const enabled = document.getElementById('pcloud-enabled').checked;
     const body = { username, remote_path, region, enabled };
-    if (password) body.password = password;
     if (rclone_token) body.rclone_token = rclone_token;
     try {
       await NotesStore.api('/api/backup/pcloud/settings', {
         method: 'POST',
         body: JSON.stringify(body),
       });
-      document.getElementById('pcloud-password').value = '';
       document.getElementById('pcloud-rclone-token').value = '';
       toast('pCloud settings saved');
       showSettings().catch(() => {});

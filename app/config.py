@@ -374,27 +374,9 @@ def smtp_password() -> str:
     return SMTP_PASS or read_secret(smtp_password_path())
 
 
-def pcloud_password_path(user_id: int) -> Path:
-    return KEYS_DIR / f"pcloud-password-{int(user_id)}"
-
-
 def pcloud_rclone_config_path(user_id: int) -> Path:
+    """Legacy persisted rclone config (removed at migration); prefer ephemeral configs."""
     return KEYS_DIR / f"pcloud-rclone-{int(user_id)}.conf"
-
-
-def write_pcloud_password(user_id: int, password: str) -> None:
-    path = pcloud_password_path(user_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(password.strip(), encoding="utf-8")
-    path.chmod(0o600)
-
-
-def pcloud_password(user_id: int) -> str:
-    return read_secret(pcloud_password_path(user_id))
-
-
-def pcloud_password_set(user_id: int) -> bool:
-    return bool(pcloud_password(user_id))
 
 
 def pcloud_token_path(user_id: int) -> Path:
@@ -402,18 +384,40 @@ def pcloud_token_path(user_id: int) -> Path:
 
 
 def write_pcloud_token(user_id: int, token_json: str) -> None:
+    import pcloud_credentials as pc
+
+    cleaned = token_json.strip()
     path = pcloud_token_path(user_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(token_json.strip(), encoding="utf-8")
+    if not cleaned:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return
+    path.write_text(pc.encrypt_at_rest(cleaned), encoding="utf-8")
     path.chmod(0o600)
 
 
 def pcloud_token(user_id: int) -> str:
-    return read_secret(pcloud_token_path(user_id))
+    import pcloud_credentials as pc
+
+    raw = read_secret(pcloud_token_path(user_id))
+    if not raw:
+        return ""
+    try:
+        return pc.decrypt_at_rest(raw)
+    except Exception:
+        return ""
 
 
 def pcloud_token_set(user_id: int) -> bool:
-    return bool(pcloud_token(user_id))
+    return bool(read_secret(pcloud_token_path(user_id)))
+
+
+def pcloud_password_set(user_id: int) -> bool:
+    """Legacy WebDAV password storage is disabled (always false)."""
+    return False
 
 
 _HOSTNAME_RE = re.compile(

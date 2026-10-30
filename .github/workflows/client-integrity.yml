@@ -48,6 +48,7 @@ jobs:
         run: |
           python3 -m pip install -q -r requirements.lock
           python3 -m unittest tests.test_round60_client_integrity -v
+          python3 -m unittest tests.test_pcloud_credentials -v
           node tests/test_round60_client_integrity.js
           python3 -m unittest tests.test_round83_verify_metadata_baseline -v
           node tests/test_round83_verify_metadata_baseline.js

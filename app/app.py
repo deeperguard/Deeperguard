@@ -2567,7 +2567,7 @@ def api_backup_pcloud_sync():
     if not user["pcloud_username"]:
         return jsonify({"error": "pCloud username is not configured"}), 400
     if not pcloud_credentials_configured(uid):
-        return jsonify({"error": "pCloud password or rclone OAuth token is not configured"}), 400
+        return jsonify({"error": "pCloud rclone OAuth token is not configured"}), 400
     try:
         meta = sync_user_backup(uid)
     except Exception as exc:
@@ -3774,8 +3774,11 @@ log_turnstile_startup_warning()
 log_signup_notify_config()
 db.init_schema()
 from uploads import migrate_email_named_upload_dirs
+import pcloud_credentials as pcloud_credentials_mod
+from config import KEYS_DIR
 
 migrate_email_named_upload_dirs()
+pcloud_credentials_mod.migrate_all_pcloud_secrets(KEYS_DIR)
 server_info_cache.start_refresh_loop()
 admin_api.register_admin_routes(app, NOTES_BUILD)
 if ocr_ephemeral():

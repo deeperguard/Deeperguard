@@ -34,6 +34,7 @@ class NotesAppTests(unittest.TestCase):
         # Suite coverage for Pro-gated features assumes Vienna-style default.
         # Code default remains Free when unset (see test_round82_free_tier).
         os.environ["NOTES_DEFAULT_PLAN"] = "pro"
+        os.environ["NOTES_PCLOUD_CREDENTIALS_KEY"] = "bb" * 32
         os.environ.pop("NOTES_DISABLE_CIDR_GATE", None)
         (root / "keys").mkdir(parents=True)
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
@@ -49,7 +50,7 @@ class NotesAppTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
-        for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS", "NOTES_ALLOWED_CIDRS", "NOTES_SKIP_LOGIN", "NOTES_BUILD", "NOTES_SERVER_INFO_REFRESH", "NOTES_SERVER_OCR", "NOTES_STRICT_ZK", "NOTES_ADMIN_EMAILS", "NOTES_DEFAULT_USER_QUOTA_MB", "NOTES_DEFAULT_PLAN", "NOTES_APP_PATH", "NOTES_AUTH_RATE_LIMIT", "NOTES_REPAIR_LOGIN_PASSWORD"):
+        for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS", "NOTES_ALLOWED_CIDRS", "NOTES_SKIP_LOGIN", "NOTES_BUILD", "NOTES_SERVER_INFO_REFRESH", "NOTES_SERVER_OCR", "NOTES_STRICT_ZK", "NOTES_ADMIN_EMAILS", "NOTES_DEFAULT_USER_QUOTA_MB", "NOTES_DEFAULT_PLAN", "NOTES_APP_PATH", "NOTES_AUTH_RATE_LIMIT", "NOTES_REPAIR_LOGIN_PASSWORD", "NOTES_PCLOUD_CREDENTIALS_KEY"):
             os.environ.pop(key, None)
 
     def _srp_verifier(
@@ -4494,20 +4495,25 @@ class NotesAppTests(unittest.TestCase):
             headers=csrf,
             json={
                 "username": "user@pcloud.test",
-                "password": "pcloud-secret",
+                "rclone_token": '{"access_token":"pcloud-secret-token","token_type":"bearer"}',
                 "remote_path": "Backups/notes",
                 "region": "eu",
                 "enabled": True,
             },
         )
         self.assertEqual(saved.status_code, 200)
-        self.assertTrue(saved.get_json()["password_set"])
+        self.assertTrue(saved.get_json()["token_set"])
+        self.assertFalse(saved.get_json()["password_set"])
 
         account2 = self.client.get("/api/account", headers=csrf)
         self.assertTrue(account2.get_json()["pcloud_enabled"])
         self.assertEqual(account2.get_json()["pcloud_username"], "user@pcloud.test")
         self.assertEqual(account2.get_json()["pcloud_remote_path"], "Backups/notes")
-        self.assertTrue(account2.get_json()["pcloud_password_set"])
+        self.assertTrue(account2.get_json()["pcloud_token_set"])
+        self.assertFalse(account2.get_json()["pcloud_password_set"])
+        token_path = Path(os.environ["NOTES_KEYS"]) / "pcloud-token-1"
+        if token_path.is_file():
+            self.assertNotIn("pcloud-secret-token", token_path.read_text(encoding="utf-8"))
 
         with patch("backup_pcloud.subprocess.run") as run_mock, patch(
             "backup_pcloud.rclone_bin", return_value="/usr/bin/rclone"

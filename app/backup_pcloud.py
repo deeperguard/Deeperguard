@@ -6,20 +6,14 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
 import db
+import pcloud_credentials as pc
 from backup_mail import backups_dir, ensure_local_full_backup
-from config import (
-    pcloud_password,
-    pcloud_rclone_config_path,
-    pcloud_token,
-    pcloud_token_path,
-    pcloud_token_set,
-    write_pcloud_password,
-    write_pcloud_token,
-)
+from config import KEYS_DIR, pcloud_token, pcloud_token_path, pcloud_token_set, write_pcloud_token
 from mailer import send_plain_email
 
 log = logging.getLogger("deeperguard.backup.pcloud")
@@ -29,10 +23,6 @@ DEFAULT_REMOTE_PATH = "Deeperguard/backups"
 RCLONE_TIMEOUT_SECONDS = int(os.environ.get("NOTES_PCLOUD_RCLONE_TIMEOUT", "7200"))
 PCLOUD_RETENTION_DAYS = int(os.environ.get("NOTES_PCLOUD_RETENTION_DAYS", "7"))
 PCLOUD_LOCAL_MAX_AGE = int(os.environ.get("NOTES_PCLOUD_LOCAL_MAX_AGE", "7200"))
-PCLOUD_WEBDAV_URLS = {
-    "us": "https://webdav.pcloud.com",
-    "eu": "https://ewebdav.pcloud.com",
-}
 DEFAULT_PCLOUD_REGION = "eu"
 PCLOUD_API_HOSTS = {
     "us": "api.pcloud.com",
@@ -58,11 +48,7 @@ def normalize_remote_path(path: str) -> str:
 
 def normalize_pcloud_region(region: str) -> str:
     key = str(region or "").strip().lower()
-    return key if key in PCLOUD_WEBDAV_URLS else DEFAULT_PCLOUD_REGION
-
-
-def webdav_url_for_region(region: str) -> str:
-    return PCLOUD_WEBDAV_URLS[normalize_pcloud_region(region)]
+    return key if key in PCLOUD_API_HOSTS else DEFAULT_PCLOUD_REGION
 
 
 def pcloud_hostname(region: str) -> str:
@@ -74,7 +60,7 @@ def backup_include_pattern(user_id: int) -> str:
 
 
 def pcloud_credentials_configured(user_id: int) -> bool:
-    return pcloud_token_set(user_id) or bool(pcloud_password(user_id))
+    return pcloud_token_set(user_id)
 
 
 def normalize_pcloud_token(raw: str) -> str:
@@ -103,10 +89,9 @@ def notify_pcloud_backup_failure(user: Any, detail: str) -> None:
         "Your scheduled Deeperguard pCloud backup did not complete.\n\n"
         f"Account: {user['email']}\n"
         f"Detail: {detail}\n\n"
-        "If your pCloud account uses two-factor authentication, WebDAV password login "
-        "often fails. Paste an rclone OAuth token in Settings → pCloud backup, or disable "
-        "2FA and enable WebDAV in your pCloud account. Check the EU/US region matches "
-        "your account.\n"
+        "Paste an rclone OAuth token in Settings → pCloud backup. On your computer run "
+        '"rclone authorize pcloud" (EU accounts: add --pcloud-hostname eapi.pcloud.com). '
+        "Check the EU/US region matches your account.\n"
     )
     try:
         send_plain_email(recipient, "Deeperguard: pCloud backup failed", body)
@@ -114,43 +99,23 @@ def notify_pcloud_backup_failure(user: Any, detail: str) -> None:
         log.error("pcloud failure email not sent user=%s: %s", user["email"], exc)
 
 
-def write_rclone_config(user_id: int, username: str, password: str, region: str) -> tuple[Path, bool]:
-    """Return rclone config path and whether the native pCloud API backend is used."""
-    config_path = pcloud_rclone_config_path(user_id)
-    config_path.parent.mkdir(parents=True, exist_ok=True)
+def write_rclone_config(user_id: int, region: str) -> Path:
+    """Write an ephemeral rclone config with the user's OAuth token (0600). Caller must unlink."""
     token = pcloud_token(user_id)
-    if token:
-        body = (
-            f"[{RCLONE_REMOTE}]\n"
-            "type = pcloud\n"
-            f"hostname = {pcloud_hostname(region)}\n"
-            f"token = {token}\n"
-        )
-        config_path.write_text(body, encoding="utf-8")
-        config_path.chmod(0o600)
-        return config_path, True
-
-    proc = subprocess.run(
-        [rclone_bin(), "obscure", "-"],
-        input=password,
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=30,
-    )
-    obscured = proc.stdout.strip()
+    if not token:
+        raise RuntimeError("pCloud rclone OAuth token is not configured")
+    fd, name = tempfile.mkstemp(prefix=f"pcloud-rclone-{int(user_id)}-", suffix=".conf", dir=str(KEYS_DIR))
+    os.close(fd)
+    config_path = Path(name)
     body = (
         f"[{RCLONE_REMOTE}]\n"
-        "type = webdav\n"
-        f"url = {webdav_url_for_region(region)}\n"
-        "vendor = other\n"
-        "auth_redirect = false\n"
-        f"user = {username.strip()}\n"
-        f"pass = {obscured}\n"
+        "type = pcloud\n"
+        f"hostname = {pcloud_hostname(region)}\n"
+        f"token = {token}\n"
     )
     config_path.write_text(body, encoding="utf-8")
     config_path.chmod(0o600)
-    return config_path, False
+    return config_path
 
 
 def _rclone_base_args(config_path: Path) -> list[str]:
@@ -179,7 +144,7 @@ def _run_rclone(cmd: list[str], *, timeout: int) -> subprocess.CompletedProcess[
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(
             "rclone timed out uploading the backup. Large vaults need a stable link; "
-            "try an rclone OAuth token if WebDAV is slow or blocked."
+            "try refreshing the rclone OAuth token in Settings."
         ) from exc
 
 
@@ -188,15 +153,11 @@ def _format_rclone_error(proc: subprocess.CompletedProcess[str]) -> str:
     if len(detail) > 500:
         detail = detail[:497] + "..."
     if "401 Unauthorized" in detail:
-        return (
-            "pCloud rejected the login (401). Check email/password and pick the correct "
-            "region (EU vs US)."
-        )
+        return "pCloud rejected the login (401). Refresh the rclone OAuth token in Settings."
     if "409 Conflict" in detail:
         return (
-            "pCloud WebDAV rejected the upload (409). This usually means two-factor "
-            "authentication is enabled or WebDAV is disabled on your pCloud account. "
-            "Add an rclone OAuth token in Settings, or disable 2FA and enable WebDAV."
+            "pCloud rejected the upload (409). Refresh the rclone OAuth token in Settings "
+            "or check your pCloud account status."
         )
     if "empty token found" in detail:
         return (
@@ -206,33 +167,7 @@ def _format_rclone_error(proc: subprocess.CompletedProcess[str]) -> str:
     return detail or "pcloud sync failed"
 
 
-def probe_webdav_write(config_path: Path, remote_path: str) -> None:
-    """Fail fast when WebDAV writes are blocked (common with pCloud 2FA)."""
-    probe = backups_dir() / ".pcloud-write-probe"
-    probe.write_bytes(b"ok")
-    dest = f"{RCLONE_REMOTE}:{remote_path}/.deeperguard-write-probe"
-    cmd = [
-        *_rclone_base_args(config_path),
-        "copyto",
-        str(probe),
-        dest,
-        "--timeout",
-        "2m",
-        "--retries",
-        "1",
-    ]
-    try:
-        proc = _run_rclone(cmd, timeout=180)
-    finally:
-        try:
-            probe.unlink()
-        except OSError:
-            pass
-    if proc.returncode != 0:
-        raise RuntimeError(_format_rclone_error(proc))
-
-
-def prune_remote_backups(user_id: int, config_path: Path, remote_path: str, *, native: bool) -> None:
+def prune_remote_backups(user_id: int, config_path: Path, remote_path: str) -> None:
     """Remove remote backups older than PCLOUD_RETENTION_DAYS (by file mtime on pCloud)."""
     if PCLOUD_RETENTION_DAYS <= 0:
         return
@@ -245,9 +180,9 @@ def prune_remote_backups(user_id: int, config_path: Path, remote_path: str, *, n
         include,
         "--min-age",
         f"{PCLOUD_RETENTION_DAYS}d",
+        "--multi-thread-streams",
+        "0",
     ]
-    if native:
-        cmd.extend(["--multi-thread-streams", "0"])
     proc = _run_rclone(cmd, timeout=min(RCLONE_TIMEOUT_SECONDS, 1800))
     if proc.returncode != 0:
         detail = _format_rclone_error(proc)
@@ -258,8 +193,6 @@ def upload_backup_file(
     local_path: Path,
     config_path: Path,
     remote_path: str,
-    *,
-    native: bool,
 ) -> None:
     """Upload a single gzip backup; avoids re-uploading every local daily copy."""
     cmd = [
@@ -271,9 +204,9 @@ def upload_backup_file(
         "45m",
         "--transfers",
         "1",
+        "--multi-thread-streams",
+        "0",
     ]
-    if native:
-        cmd.extend(["--multi-thread-streams", "0"])
     proc = _run_rclone(cmd, timeout=RCLONE_TIMEOUT_SECONDS)
     if proc.returncode != 0:
         raise RuntimeError(_format_rclone_error(proc))
@@ -287,36 +220,42 @@ def sync_user_backup(user_id: int) -> dict[str, Any]:
     if not username:
         raise RuntimeError("pCloud username is not configured")
     if not pcloud_credentials_configured(user_id):
-        raise RuntimeError("pCloud password or rclone OAuth token is not configured")
+        raise RuntimeError("pCloud rclone OAuth token is not configured")
 
     remote_path = normalize_remote_path(str(user["pcloud_remote_path"] or ""))
     region = normalize_pcloud_region(str(user["pcloud_region"] or ""))
-    password = pcloud_password(user_id)
-    config_path, native = write_rclone_config(user_id, username, password, region)
-
-    if not native and not password:
-        raise RuntimeError("pCloud password is required for WebDAV backup")
+    config_path = write_rclone_config(user_id, region)
 
     local_path, item_count, bytes_size = ensure_local_full_backup(user_id, max_age=PCLOUD_LOCAL_MAX_AGE)
     if item_count == 0 and local_path.is_file():
         item_count = sum(1 for _ in db.iter_backup_items(user_id))
 
     try:
-        if not native:
-            probe_webdav_write(config_path, remote_path)
-        upload_backup_file(local_path, config_path, remote_path, native=native)
+        upload_backup_file(local_path, config_path, remote_path)
     except RuntimeError as exc:
         detail = str(exc)
         db.update_pcloud_sync_status(user_id, "error", detail)
         db.log_backup(user_id, remote_path, item_count, bytes_size, "error", f"pcloud:{detail}")
         raise
+    finally:
+        try:
+            config_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     prune_error = ""
+    config_path = write_rclone_config(user_id, region)
     try:
-        prune_remote_backups(user_id, config_path, remote_path, native=native)
-    except RuntimeError as exc:
-        prune_error = str(exc)
-        log.warning("pcloud remote prune user=%s: %s", user_id, prune_error)
+        try:
+            prune_remote_backups(user_id, config_path, remote_path)
+        except RuntimeError as exc:
+            prune_error = str(exc)
+            log.warning("pcloud remote prune user=%s: %s", user_id, prune_error)
+    finally:
+        try:
+            config_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     detail = f"synced {local_path.name}"
     if prune_error:
@@ -324,13 +263,12 @@ def sync_user_backup(user_id: int) -> dict[str, Any]:
     db.update_pcloud_sync_status(user_id, "ok", detail)
     db.log_backup(user_id, remote_path, item_count, bytes_size, "ok", "pcloud")
     log.info(
-        "pcloud sync user=%s remote=%s items=%s bytes=%s file=%s native=%s",
+        "pcloud sync user=%s remote=%s items=%s bytes=%s file=%s",
         user_id,
         remote_path,
         item_count,
         bytes_size,
         local_path.name,
-        native,
     )
     return {
         "ok": True,
@@ -357,30 +295,38 @@ def save_pcloud_settings(
     region = normalize_pcloud_region(region)
     if enabled and not username:
         raise ValueError("pCloud username is required when backup is enabled")
+    if password:
+        raise ValueError(
+            "pCloud account passwords are no longer stored on the server. "
+            "Run rclone authorize pcloud on your computer and paste the OAuth token JSON."
+        )
+    pc.migrate_user_pcloud_secrets(user_id, KEYS_DIR)
     if rclone_token is not None:
         token = normalize_pcloud_token(rclone_token)
         if token:
-            write_pcloud_token(user_id, token)
+            try:
+                write_pcloud_token(user_id, token)
+            except RuntimeError as exc:
+                raise ValueError(str(exc)) from exc
         else:
             try:
                 pcloud_token_path(user_id).unlink(missing_ok=True)
             except OSError:
                 pass
-    if password:
-        write_pcloud_password(user_id, password)
     if enabled and not pcloud_credentials_configured(user_id):
-        raise ValueError("pCloud password or rclone OAuth token is required")
+        raise ValueError("pCloud rclone OAuth token is required when backup is enabled")
 
     db.update_pcloud_settings(user_id, username, remote_path, region, enabled)
 
 
 def run_pcloud_backups() -> int:
+    pc.migrate_all_pcloud_secrets(KEYS_DIR)
     synced = 0
     for user in db.users_with_pcloud_enabled():
         uid = int(user["id"])
         remote_path = normalize_remote_path(str(user["pcloud_remote_path"] or ""))
         if not pcloud_credentials_configured(uid):
-            detail = "pCloud password or rclone OAuth token is not configured"
+            detail = "pCloud rclone OAuth token is not configured"
             db.update_pcloud_sync_status(uid, "error", detail)
             db.log_backup(uid, remote_path, 0, 0, "error", f"pcloud:{detail}")
             log.error("pcloud backup skipped user=%s: %s", user["email"], detail)
