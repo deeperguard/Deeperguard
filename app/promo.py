@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from plans import plan_structured_data_offers
+
 
 def promo_payload(
     *,
@@ -134,12 +136,7 @@ def promo_payload(
             "Notes are encrypted in the browser before upload."
         ),
         "alternateName": "Deeperguard encrypted notes",
-        "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "EUR",
-            "description": billing_note,
-        },
+        "offers": plan_structured_data_offers(),
         "featureList": [
             "Client-side AES-GCM encryption",
             "SRP zero-knowledge authentication",

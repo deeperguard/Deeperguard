@@ -76,7 +76,7 @@
           <span class="mk-badge ok">Zero-knowledge by design</span>
           <a class="mk-badge mk-badge-link ok" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">Open source · GitHub</a>
           <span class="mk-badge">No app store required</span>
-          <span class="mk-badge warn">Public beta · Free access</span>
+          <span class="mk-badge">Browser PWA</span>
         </div>
         <h1>Private notes and documents you can search. Encrypted before they leave your device.</h1>
         <p class="mk-lede">Scan receipts, invoices and contracts. Text recognition runs in your browser, and sync only ever sees ciphertext. The one exception is Ask AI, which sends the text you choose through our server to Ollama Cloud. Don't take our word for it: <a href="/verify">check it yourself</a>.</p>
@@ -125,7 +125,7 @@
           <li>
             <div>
               <strong>Secure Send — share by link</strong>
-              <span class="desc">Share a note by link encrypted in the browser; the key stays in the # part of the URL, so our server stores ciphertext only. Attachments from the note come along — edit what is included before you create the link. Recipients open once (or up to N times you choose); reopen sent items from Sent in your vault on your devices. To verify: <a href="/verify#verify-secure-send">Secure Send on /verify</a>.</span>
+              <span class="desc">Share a note by link encrypted in the browser; the key stays in the # part of the URL, so our server stores ciphertext only. Plan limits: Free {{ free.secure_send_per_day }} creates per day, Basic {{ basic.secure_send_per_day }}, Pro unlimited. Attachments from the note can come along — edit what is included before you create the link. Recipients open once (or up to N times you choose); reopen sent items from Sent in your vault on your devices. Verify on <a href="/verify#verify-secure-send">/verify</a>.</span>
             </div>
           </li>
         </ul>
@@ -388,7 +388,7 @@
         <span class="mk-badge ok">Pricing</span>
         <h2>Free, Basic, and Pro</h2>
         <p>
-          New accounts start on Free ({{ free.storage_quota_mb }}&nbsp;MB, {{ free.active_sessions }} devices, always €0). Basic is €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr ({{ basic.storage_quota_mb }}&nbsp;MB, {{ basic.active_sessions }} devices). Pro is €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr ({{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB, unlimited devices) with passkeys, account 2FA, backups, reminders, and the vault authenticator. {{ billing_note }} — no payment details collected yet. Accounts that already had Pro during the beta keep their stored plan until you change it.
+          Start on Free ({{ free.storage_quota_mb }}&nbsp;MB). Upgrade anytime — Basic €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr, Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr. {{ billing_note }}.
         </p>
         <div class="mk-trust-strip" role="note">
           <span>Server in Vienna, Austria (EU)</span>
@@ -495,6 +495,12 @@
                 <td>Signed-in devices</td>
                 <td>{{ free.active_sessions }}</td>
                 <td>{{ basic.active_sessions }}</td>
+                <td><strong>Unlimited</strong></td>
+              </tr>
+              <tr>
+                <td>Secure Send (encrypted share-by-link)</td>
+                <td>{{ free.secure_send_per_day }} / day</td>
+                <td>{{ basic.secure_send_per_day }} / day</td>
                 <td><strong>Unlimited</strong></td>
               </tr>
               {% for key, feat in features.items() %}

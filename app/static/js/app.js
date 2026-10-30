@@ -724,6 +724,35 @@
     badge.title = `${label} plan · ${priceHint}`;
   }
 
+  function secureSendLimitHint(account) {
+    const catalog = account?.plan_catalog || {};
+    const plan = String(account?.plan || 'free').toLowerCase();
+    const meta = catalog[plan] || catalog.free || {};
+    const limit = meta.secure_send_per_day;
+    if (limit == null || limit === '') {
+      return 'Secure Send: unlimited link creates per day on your plan.';
+    }
+    const n = Number(limit);
+    if (!Number.isFinite(n) || n < 1) return '';
+    return `Secure Send: up to ${n} encrypted link${n === 1 ? '' : 's'} you create per UTC day on your plan.`;
+  }
+
+  function updateSecureSendPlanHints(account) {
+    const text = secureSendLimitHint(account);
+    for (const id of ['secure-send-plan-limit-hint', 'secure-send-settings-hint']) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      if (id === 'secure-send-settings-hint') {
+        el.textContent = text
+          ? `${text} Open Secure Send to compose a link.`
+          : 'Send an encrypted note or file by link. The key stays in the URL fragment; the server stores ciphertext only.';
+        continue;
+      }
+      el.textContent = text;
+      el.hidden = !text;
+    }
+  }
+
   function renderPlanSettings(account) {
     updatePlanBadge(document.getElementById('list-plan-badge'), account);
     const badge = document.getElementById('account-plan-badge');
@@ -734,6 +763,7 @@
     const pricingNote = document.getElementById('plan-pricing-note');
     if (!badge || !price) {
       applyPlanGates(account);
+      updateSecureSendPlanHints(account);
       return;
     }
     const plan = String(account.plan || 'free').toLowerCase();
@@ -777,6 +807,7 @@
       }
     }
     applyPlanGates(account);
+    updateSecureSendPlanHints(account);
   }
 
   function renderPlanUi(account) {

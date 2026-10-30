@@ -60,6 +60,28 @@ PLAN_CATALOG: dict[str, dict[str, Any]] = {
     },
 }
 
+
+def plan_structured_data_offers() -> list[dict[str, Any]]:
+    """Schema.org Offer list for homepage JSON-LD (Free €0; paid tiers not €0)."""
+    offers: list[dict[str, Any]] = []
+    for key in PLAN_ORDER:
+        meta = PLAN_CATALOG[key]
+        month = float(meta["suggested_price_eur_month"])
+        offers.append(
+            {
+                "@type": "Offer",
+                "name": str(meta["label"]),
+                "price": f"{month:.2f}",
+                "priceCurrency": "EUR",
+                "description": (
+                    f"{meta['storage_quota_mb']} MB storage"
+                    if key != PLAN_PRO
+                    else f"{int(meta['storage_quota_mb'] / 1024)} GB storage"
+                ),
+            }
+        )
+    return offers
+
 FEATURE_CATALOG: dict[str, dict[str, Any]] = {
     "sync": {
         "label": "Encrypted note sync",

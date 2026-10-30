@@ -1673,7 +1673,7 @@
       <section class="settings-group" id="settings-secure-send-link">
         <h3>Secure Send</h3>
         <div class="settings-card">
-          <p class="settings-hint">Send an encrypted note or file by link. The key stays in the URL fragment; the server stores ciphertext only.</p>
+          <p class="settings-hint" id="secure-send-settings-hint">Send an encrypted note or file by link. The key stays in the URL fragment; the server stores ciphertext only.</p>
           <div class="settings-actions">
             <button type="button" id="btn-settings-open-secure-send" class="btn ghost sm">Open Secure Send →</button>
           </div>
@@ -2014,7 +2014,8 @@
       <section class="settings-group" id="secure-send-compose">
         <h3 class="sr-only">Compose</h3>
         <div class="settings-card stack">
-          <p class="settings-hint">Send an encrypted note and optional file. The key is in the link itself and never reaches our server. The link stops working after the set number of opens or 7 days.</p>
+          <p class="settings-hint" id="secure-send-compose-hint">Send an encrypted note and optional file. The key is in the link itself and never reaches our server. The link stops working after the set number of opens or 7 days.</p>
+          <p class="settings-hint" id="secure-send-plan-limit-hint" hidden></p>
           <label class="settings-row stacked" for="secure-send-title">Title
             <input id="secure-send-title" type="text" maxlength="500" autocomplete="off">
           </label>

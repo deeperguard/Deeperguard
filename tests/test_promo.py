@@ -22,6 +22,11 @@ class PromoPayloadTests(unittest.TestCase):
         self.assertIn("hacker_news_title", out["copy"])
         self.assertGreater(len(out["directories"]), 3)
         self.assertEqual(out["structured_data"]["@type"], "WebApplication")
+        offers = out["structured_data"]["offers"]
+        self.assertEqual(len(offers), 3)
+        self.assertEqual(offers[0]["price"], "0.00")
+        self.assertEqual(offers[1]["price"], "2.99")
+        self.assertEqual(offers[2]["price"], "6.99")
 
 
 if __name__ == "__main__":
