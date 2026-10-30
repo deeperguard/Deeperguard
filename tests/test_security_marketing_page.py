@@ -92,13 +92,24 @@ class SecurityMarketingPageTests(unittest.TestCase):
                 f"forbidden pattern {pattern!r} found on /security",
             )
 
-    def test_security_not_linked_from_chrome(self):
+    def test_security_linked_from_chrome(self):
         topbar = (REPO / "app/templates/partials/mk-topbar.html").read_text(encoding="utf-8")
         footer = (REPO / "app/templates/partials/mk-footer.html").read_text(encoding="utf-8")
-        self.assertNotIn('href="/security"', topbar)
-        self.assertNotIn('href="/security"', footer)
-        # Homepage section anchor remains; dedicated page is not in nav yet.
-        self.assertIn('href="/#security"', topbar)
+        self.assertIn('href="/security">Security</a>', topbar)
+        self.assertIn('href="/security">Security</a>', footer)
+        self.assertNotIn('href="/#security"', topbar)
+        self.assertNotIn('href="/#security"', footer)
+
+    def test_marketing_home_keeps_in_page_security_section(self):
+        marketing = (REPO / "app/templates/marketing.html").read_text(encoding="utf-8")
+        self.assertIn('href="#security">Security</a>', marketing)
+        self.assertNotIn('href="/#security"', marketing)
+
+    def test_blog_page_topbar_links_security_route(self):
+        body = self.client.get("/blog").get_data(as_text=True)
+        self.assertIn('href="/security">Security</a>', body)
+        self.assertIn('href="/blog">Blog</a>', body)
+        self.assertIn('href="/verify">Verify</a>', body)
 
     def test_security_is_public_path(self):
         import auth
