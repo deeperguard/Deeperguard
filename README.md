@@ -80,6 +80,10 @@ cp deploy/github-workflows/*.yml .github/workflows/
 git add .github/workflows && git commit -m "Enable client integrity GitHub Actions" && git push
 ```
 
-## Source
+## Source available for review
 
-[AGPL-3.0](LICENSE) · [Privacy](docs/PRIVACY.md) · [Security](SECURITY.md) · [Self-host](docs/SELF_HOST.md) · [Verify](https://www.deeperguard.com/verify)
+The client and application source are published on GitHub so you can inspect encryption, sync, and client logic. The [Business Source License 1.1](LICENSE) allows inspection, audit, and non-production evaluation; **production or commercial use requires a separate agreement** with the licensor. Never commit infrastructure secrets (`config/deeperguard.env`, `keys/`, `data/`, or API tokens).
+
+Cross-check what you run in the browser on [/verify](https://www.deeperguard.com/verify) (release hashes, Sigstore, reproducible client manifest).
+
+[LICENSE](LICENSE) · [Privacy](docs/PRIVACY.md) · [Security](SECURITY.md) · [Self-host](docs/SELF_HOST.md) · [Verify](https://www.deeperguard.com/verify)

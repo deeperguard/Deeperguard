@@ -103,7 +103,7 @@ If you prefer to push from the parent homelab repo, use `git subtree split` or e
 ## 6. After publishing
 
 1. **Settings → General → Features** — enable Issues; disable Wikis if unused
-2. Add **LICENSE** (already AGPL-3.0 in repo root)
+2. Add **LICENSE** (Business Source License 1.1 in repo root)
 3. Pin the repo on your profile if you want visibility
 4. Add a link to `docs/PRIVACY.md` in the repo About section or README
 5. Optional: **Settings → Actions** — allow GitHub Actions (CI runs tests on push)
@@ -118,7 +118,7 @@ Never commit production secrets. Rotate anything that was ever in git history be
 
 ## 8. License note
 
-This project uses **AGPL-3.0** (same family as Standard Notes). Network users of a modified version must be able to obtain the corresponding source. If you prefer MIT for maximum reuse, change `LICENSE` and file headers before the first public push.
+This project uses the **Business Source License 1.1** (source available for review and non-production evaluation; production or commercial use requires a separate license from the licensor). See `LICENSE` for the change date and future Apache 2.0 license.
 
 ## Questions?
 
