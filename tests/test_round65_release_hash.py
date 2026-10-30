@@ -64,14 +64,14 @@ class Round65ReleaseHashTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_csp_allows_github_api_only(self):
+    def test_csp_allows_github_api_only_on_verify(self):
         from config import app_entry_path
 
-        resp = self.client.get(app_entry_path())
-        self.assertEqual(resp.status_code, 200)
-        csp = resp.headers.get("Content-Security-Policy") or ""
-        self.assertIn("https://api.github.com", csp)
-        self.assertNotIn("release-assets.githubusercontent.com", csp)
+        app_csp = self.client.get(app_entry_path()).headers.get("Content-Security-Policy") or ""
+        self.assertNotIn("https://api.github.com", app_csp)
+        verify_csp = self.client.get("/verify").headers.get("Content-Security-Policy") or ""
+        self.assertIn("https://api.github.com", verify_csp)
+        self.assertNotIn("release-assets.githubusercontent.com", verify_csp)
 
     def test_verify_page_has_status_and_meta(self):
         resp = self.client.get("/verify")

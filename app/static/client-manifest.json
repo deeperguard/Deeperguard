@@ -170,10 +170,10 @@
       "url": "/static/js/preview.a635608a75d76f6b.js"
     },
     "js/release-integrity.js": {
-      "bytes": 26771,
-      "sha256": "2a8e7278af7d80c704ad25ef95d2e3978a6fdbcd04da89fdf38ea48304d5f17f",
-      "sri": "sha384-M0Etx2gsCywL8lx1G9p7bU6Gyrhda/2GAo2+gC6W7dIKBj+Nx04c3JjYkWT5QTZ0",
-      "url": "/static/js/release-integrity.2a8e7278af7d80c7.js"
+      "bytes": 27267,
+      "sha256": "230e0f73a5a8c72f41c05c1f7852f10080e40adac14fd844728976ab2f5d72c8",
+      "sri": "sha384-08A0M3X9zns79QAIYKtkFhNPfdNkQmDYJdsXDTVDAMudKSxjRHcDjyHrKHs+44WN",
+      "url": "/static/js/release-integrity.230e0f73a5a8c72f.js"
     },
     "js/sanitize.js": {
       "bytes": 979,
@@ -369,6 +369,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "127260ccd8523a5e94275760f4a310cf199face2d40200940941af0330ab379f",
+  "manifest_sha256": "2f880c5039cee23c22b6b2a450e9179eac0b7bb0e3dd02bdfeb7a065c8b3a2e1",
   "version": 1
 }
