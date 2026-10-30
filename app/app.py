@@ -558,7 +558,7 @@ def _headers(response):
     elif request.path in {
         "/", "/pricing", "/compare/standard-notes", "/compare/notesnook",
         "/compare/joplin", "/evernote-alternative", "/for/freelancers",
-        "/contact", "/download", "/privacy", "/terms", "/verify",
+        "/contact", "/download", "/privacy", "/terms", "/verify", "/security",
         "/blog", "/blog/feed.xml",
     } or request.path.startswith("/blog/"):
         # Marketing HTML is public and cookie-free. A short cache keeps repeat
@@ -3647,6 +3647,11 @@ def evernote_alternative_page():
 @app.get("/for/freelancers")
 def for_freelancers_page():
     return _render_marketing_page("for-freelancers.html", "/for/freelancers")
+
+
+@app.get("/security")
+def security_page():
+    return _render_marketing_page("security.html", "/security")
 
 
 @app.get("/api/promo")

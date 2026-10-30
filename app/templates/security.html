@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Security — Deeperguard</title>
+  <meta name="description" content="How Deeperguard encrypts notes on your device, what the server can see, and how to verify it yourself.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <meta property="og:title" content="Security — Deeperguard">
+  <meta property="og:description" content="How Deeperguard encrypts notes on your device, what the server can see, and how to verify it yourself.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ og_image }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?v={{ build }}">
+  {{ asset_stylesheet('css/marketing.css') }}
+</head>
+<body>
+  {% include 'partials/mk-topbar.html' %}
+  <main class="wrap mk-subpage">
+    <section class="mk-section" id="security-overview">
+      <div class="mk-section-head">
+        <span class="mk-badge">Privacy by architecture</span>
+        <h1>Security</h1>
+        <p>Notes are encrypted on your device before they sync. We store ciphertext. The one honest exception is Ask AI: text you choose to send is relayed through our server to Ollama Cloud and is not stored by us.</p>
+        <p class="mk-hero-actions">
+          <a class="mk-btn secondary" href="/verify">Verify it yourself</a>
+          <a class="mk-btn ghost" href="https://github.com/deeperguard/Deeperguard" target="_blank" rel="noopener noreferrer">Open source on GitHub</a>
+        </p>
+      </div>
+
+      <article class="mk-card" id="encryption-keys">
+        <h2>Encryption &amp; keys</h2>
+        <ul>
+          <li>AES-GCM 256 encrypts note content in the browser before sync.</li>
+          <li>Argon2id derives your vault key on this device.</li>
+          <li>SRP-6a signs you in with proofs — the vault password is not posted as a readable field.</li>
+          <li>Unlocking the vault happens on your device. We do not offer a “forgot vault password” reset that recovers your notes.</li>
+        </ul>
+      </article>
+
+      <article class="mk-card" id="server-visibility">
+        <h2>What the server can and cannot see</h2>
+        <p><strong>Cannot read:</strong> note titles, bodies, attachments, 2FA secrets in the vault, Secure Send contents (without the link fragment).</p>
+        <p><strong>Can see (metadata):</strong> account email, item IDs, timestamps, ciphertext sizes, and similar sync metadata.</p>
+        <p><strong>Full DevTools walkthrough:</strong> <a href="/verify">/verify</a></p>
+      </article>
+
+      <article class="mk-card" id="account-sign-in">
+        <h2>Account sign-in</h2>
+        <ul>
+          <li>Sign in with email + password (SRP), or with a passkey for the account.</li>
+          <li>Optional account two-factor authentication (authenticator app).</li>
+          <li>Passkeys here mean account sign-in — not “unlock the vault without your vault password.”</li>
+        </ul>
+      </article>
+
+      <article class="mk-card" id="sync-honesty">
+        <h2>Sync honesty</h2>
+        <p>If notes have not finished syncing, Sign out warns you and offers Sync now or Sign out anyway, with clear copy that unsynced notes are not guaranteed on the server.</p>
+      </article>
+
+      <article class="mk-card" id="secure-send">
+        <h2>Secure Send</h2>
+        <p>Share a note by link encrypted in the browser. The decryption key stays in the <code>#</code> part of the URL (browsers do not send that to servers). We store opaque ciphertext only. Recipients open within the view/expiry limits you set.</p>
+        <p><strong>Details:</strong> <a href="/verify#verify-secure-send">/verify#verify-secure-send</a></p>
+      </article>
+
+      <article class="mk-card" id="backups">
+        <h2>Backups</h2>
+        <ul>
+          <li>Daily encrypted email backups (ciphertext archives).</li>
+          <li>pCloud: connect with an rclone OAuth token — your pCloud account password is never stored on this server.</li>
+        </ul>
+        <p>Archives stay encrypted; you still need your vault password to open them.</p>
+      </article>
+
+      <article class="mk-card" id="ask-ai">
+        <h2>Ask AI (honest exception)</h2>
+        <p>Ask AI is optional. The text you choose to send leaves the vault in readable form, is relayed to Ollama Cloud, and is not stored by Deeperguard. Preview the payload in the app before you send.</p>
+      </article>
+
+      <article class="mk-card" id="client-check">
+        <h2>Check the client you are running</h2>
+        <p>Same-origin client assets are hashed in the browser and compared to the Sigstore-signed release on GitHub. Steps on <a href="/verify">/verify</a> and Settings → About.</p>
+      </article>
+
+      <article class="mk-card" id="vulnerability-reports">
+        <h2>Report a vulnerability</h2>
+        <p>Email <a href="mailto:notes@deeperguard.com?subject=Vulnerability%20report">notes@deeperguard.com</a> with subject Vulnerability report.</p>
+      </article>
+    </section>
+
+    <section class="mk-cta" aria-label="Next steps">
+      <div class="mk-hero-actions">
+        <a class="mk-btn" href="{{ app_url }}">Open the app</a>
+        <a class="mk-btn secondary" href="/verify">Verify zero-knowledge</a>
+        <a class="mk-btn ghost" href="/blog">Blog</a>
+      </div>
+    </section>
+
+    {% include 'partials/mk-footer.html' %}
+  </main>
+  {{ asset_script('js/marketing.js', defer=True) }}
+</body>
+</html>
