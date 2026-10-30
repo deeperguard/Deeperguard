@@ -19,14 +19,6 @@
   {{ asset_stylesheet('css/marketing.css') }}
 </head>
 <body>
-  <div class="mk-beta-banner" role="status">
-    <span class="mk-beta-pill">Public Beta</span>
-    <span class="mk-beta-copy mk-beta-copy--desktop">
-      <strong>Public beta</strong> — Free, Basic, and Pro plans are live. New accounts start on Free. Billing not active yet.
-    </span>
-    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — plans live, billing later</span>
-  </div>
-
   <header class="mk-topbar">
     <div class="wrap mk-topbar-inner">
       <a class="mk-brand" href="/">
@@ -92,7 +84,7 @@
       <div class="mk-section-head">
         <span class="mk-badge ok">Pricing</span>
         <h2>Free to start — Pro for backups</h2>
-        <p>Start on Free ({{ free.storage_quota_mb }}&nbsp;MB, on-device OCR, sync, attachments). Basic adds {{ basic.storage_quota_mb }}&nbsp;MB and {{ basic.active_sessions }} devices. Pro adds encrypted email and pCloud backups, passkeys, and the vault authenticator on {{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB. {{ billing_note }}.</p>
+        <p>Start on Free ({{ free.storage_quota_mb }}&nbsp;MB, on-device OCR, sync, attachments). Basic adds {{ basic.storage_quota_mb }}&nbsp;MB and {{ basic.active_sessions }} devices. Pro adds encrypted email and pCloud backups, passkeys, and the vault authenticator on {{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB.</p>
         <div class="mk-trust-strip" role="note">
           <span>Server in Vienna, Austria (EU)</span>
           <span><a href="/terms#operator-identity">Imprint</a></span>

@@ -7,7 +7,7 @@
     if (location.hash) document.documentElement.classList.add('mk-hash-open');
   </script>
   <title>Deeperguard (encrypted notes) — Private notes you cannot leak</title>
-  <meta name="description" content="Deeperguard is a zero-knowledge encrypted notes PWA — not DeepGuard deepfake software. AES-GCM on your device, Free/Basic/Pro plans in public beta. Create a vault at deeperguard.com.">
+  <meta name="description" content="Deeperguard is a zero-knowledge encrypted notes PWA — not DeepGuard deepfake software. AES-GCM on your device, Free, Basic, and Pro plans. Create a vault at deeperguard.com.">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
   <meta property="og:title" content="Deeperguard (encrypted notes) — Zero-knowledge notes PWA">
@@ -17,7 +17,7 @@
   <meta property="og:image" content="{{ og_image }}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Deeperguard (encrypted notes) — Zero-knowledge notes PWA">
-  <meta name="twitter:description" content="Encrypted notes on your device before sync. Browser PWA — Free, Basic, and Pro plans in public beta. Not the DeepGuard deepfake product.">
+  <meta name="twitter:description" content="Encrypted notes on your device before sync. Browser PWA — Free, Basic, and Pro plans. Not the DeepGuard deepfake product.">
   <meta name="twitter:image" content="{{ og_image }}">
   <meta name="notes-build" content="{{ build }}">
   <meta name="notes-client-hash" content="{{ client_hash }}">
@@ -28,14 +28,6 @@
   {{ asset_stylesheet('css/marketing.css') }}
 </head>
 <body>
-  <div class="mk-beta-banner" role="status">
-    <span class="mk-beta-pill">Public Beta</span>
-    <span class="mk-beta-copy mk-beta-copy--desktop">
-      <strong>Public beta</strong> — Free, Basic, and Pro plans are live. New accounts start on Free. Billing not active yet.
-    </span>
-    <span class="mk-beta-copy mk-beta-copy--mobile">Public beta — plans live, billing later</span>
-  </div>
-
   <header class="mk-topbar">
     <div class="wrap mk-topbar-inner">
       <a class="mk-brand" href="#top">
@@ -369,7 +361,7 @@
       <div class="mk-steps">
         <article class="mk-step">
           <h3>Create your free account</h3>
-          <p>Sign up with your email and a strong master password. You start on the <strong>Free</strong> plan — upgrade to Basic or Pro when billing launches for higher limits and Pro-only features.</p>
+          <p>Sign up with your email and a strong master password. You start on the <strong>Free</strong> plan — upgrade to Basic or Pro for higher limits and Pro-only features.</p>
         </article>
         <article class="mk-step">
           <h3>Unlock your local vault</h3>
@@ -388,7 +380,7 @@
         <span class="mk-badge ok">Pricing</span>
         <h2>Free, Basic, and Pro</h2>
         <p>
-          Start on Free ({{ free.storage_quota_mb }}&nbsp;MB). Upgrade anytime — Basic €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr, Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr. {{ billing_note }}.
+          Start on Free ({{ free.storage_quota_mb }}&nbsp;MB). Upgrade anytime — Basic €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr, Pro €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr.
         </p>
         <div class="mk-trust-strip" role="note">
           <span>Server in Vienna, Austria (EU)</span>
@@ -459,7 +451,7 @@
               €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo
             </div>
             <div class="mk-price-post-beta">
-              or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr when billing launches
+              or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr
             </div>
           </div>
           <p><strong>{{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB</strong> encrypted storage, unlimited signed-in devices, plus backups, passkeys, and the vault authenticator.</p>
@@ -541,7 +533,7 @@
       </details>
       <details>
         <summary>What are the plans and pricing?</summary>
-        <p>New accounts start on Free ({{ free.storage_quota_mb }}&nbsp;MB, always €0, {{ free.active_sessions }} signed-in devices) with sync, attachments, import/export, and on-device OCR — not passkeys, account 2FA, email or pCloud backups, reminders, or the vault authenticator. Basic is €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr ({{ basic.storage_quota_mb }}&nbsp;MB, {{ basic.active_sessions }} devices) with the same feature set as Free. Pro is €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr ({{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB, unlimited devices) and adds passkeys, account 2FA, daily email backup, pCloud backup, reminders, and the vault authenticator. {{ billing_note }}. Existing accounts keep their stored plan. Billing starts only after advance notice.</p>
+        <p>New accounts start on Free ({{ free.storage_quota_mb }}&nbsp;MB, always €0, {{ free.active_sessions }} signed-in devices) with sync, attachments, import/export, and on-device OCR — not passkeys, account 2FA, email or pCloud backups, reminders, or the vault authenticator. Basic is €{{ "%.2f"|format(basic.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(basic.suggested_price_eur_year) }}/yr ({{ basic.storage_quota_mb }}&nbsp;MB, {{ basic.active_sessions }} devices) with the same feature set as Free. Pro is €{{ "%.2f"|format(pro.suggested_price_eur_month) }}/mo or €{{ "%.0f"|format(pro.suggested_price_eur_year) }}/yr ({{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB, unlimited devices) and adds passkeys, account 2FA, daily email backup, pCloud backup, reminders, and the vault authenticator. Existing accounts keep their stored plan.</p>
       </details>
       <details>
         <summary>How many devices can I stay signed in on?</summary>
@@ -568,7 +560,7 @@
       <div class="mk-section-head">
         <span class="mk-badge">Get in Touch</span>
         <h2>Contact us</h2>
-        <p>Questions about the product or the beta: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>. Security reports use the same address with the subject “Vulnerability report”.</p>
+        <p>Questions about the product: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>. Security reports use the same address with the subject “Vulnerability report”.</p>
       </div>
       <form id="contact-form" class="mk-contact-form mk-card" novalidate>
         <div class="mk-contact-grid">
@@ -603,7 +595,7 @@
     <!-- Bottom CTA -->
     <section class="mk-cta">
       <h2>Create a vault for notes you cannot leak</h2>
-      <p>Start on Free — {{ free.storage_quota_mb }}&nbsp;MB encrypted storage, sync, and on-device OCR. Upgrade to Pro when billing launches for backups and security extras.</p>
+      <p>Start on Free — {{ free.storage_quota_mb }}&nbsp;MB encrypted storage, sync, and on-device OCR. Upgrade to Pro for backups and security extras.</p>
       <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
       <a class="mk-btn secondary" href="{{ app_url }}">Open notes app</a>
     </section>
@@ -613,7 +605,7 @@
       <div class="mk-section-head">
         <span class="mk-badge">About</span>
         <h2>Who builds Deeperguard</h2>
-        <p>Deeperguard is an independent notes product in public beta. Security reports and product questions go to <a href="mailto:notes@deeperguard.com">notes@deeperguard.com</a>.</p>
+        <p>Deeperguard is an independent notes product. Security reports and product questions go to <a href="mailto:notes@deeperguard.com">notes@deeperguard.com</a>.</p>
       </div>
     </section>
 
