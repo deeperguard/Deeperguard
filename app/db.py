@@ -224,6 +224,18 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             "UPDATE users SET storage_quota_bytes = ? WHERE storage_quota_bytes = 0",
             (default,),
         )
+    if "stripe_customer_id" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT NOT NULL DEFAULT ''")
+    if "stripe_subscription_id" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT NOT NULL DEFAULT ''")
+    if "stripe_subscription_period_end" not in cols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN stripe_subscription_period_end REAL NOT NULL DEFAULT 0"
+        )
+    if "stripe_cancel_at_period_end" not in cols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN stripe_cancel_at_period_end INTEGER NOT NULL DEFAULT 0"
+        )
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS webauthn_credentials (
@@ -2081,6 +2093,53 @@ def update_user_plan(user_id: int, plan: str) -> None:
             "UPDATE users SET plan = ?, storage_quota_bytes = ?, updated_at = ? WHERE id = ?",
             (normalized, quota, now(), int(user_id)),
         )
+
+
+def update_user_stripe_customer(user_id: int, customer_id: str) -> None:
+    cid = str(customer_id or "").strip()
+    with tx() as conn:
+        conn.execute(
+            "UPDATE users SET stripe_customer_id = ?, updated_at = ? WHERE id = ?",
+            (cid, now(), int(user_id)),
+        )
+
+
+def update_user_stripe_subscription(
+    user_id: int,
+    *,
+    customer_id: str | None = None,
+    subscription_id: str | None = None,
+    period_end: float | None = None,
+    cancel_at_period_end: bool | None = None,
+) -> None:
+    fields: list[str] = ["updated_at = ?"]
+    values: list[Any] = [now()]
+    if customer_id is not None:
+        fields.append("stripe_customer_id = ?")
+        values.append(str(customer_id or "").strip())
+    if subscription_id is not None:
+        fields.append("stripe_subscription_id = ?")
+        values.append(str(subscription_id or "").strip())
+    if period_end is not None:
+        fields.append("stripe_subscription_period_end = ?")
+        values.append(float(period_end or 0))
+    if cancel_at_period_end is not None:
+        fields.append("stripe_cancel_at_period_end = ?")
+        values.append(1 if cancel_at_period_end else 0)
+    values.append(int(user_id))
+    with tx() as conn:
+        conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
+
+
+def get_user_by_stripe_customer(customer_id: str) -> dict[str, Any] | None:
+    cid = str(customer_id or "").strip()
+    if not cid:
+        return None
+    row = connection().execute(
+        "SELECT * FROM users WHERE stripe_customer_id = ? COLLATE NOCASE LIMIT 1",
+        (cid,),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def update_user_storage_quota(user_id: int, quota_bytes: int) -> None:

@@ -813,8 +813,203 @@
   function renderPlanUi(account) {
     if (!account || typeof account !== 'object') return;
     renderPlanSettings(account);
+    renderBillingUi(account);
     const adminBtn = document.getElementById('btn-open-admin');
     if (adminBtn) adminBtn.hidden = !account.is_admin;
+  }
+
+  const BILLING_MSG = {
+    successBasic: "You're on Basic. Plan limits update on this account now.",
+    successPro: "You're on Pro. Plan limits update on this account now.",
+    canceled: 'Payment canceled. Your plan is unchanged.',
+    failed: "Payment didn't go through. Your plan is unchanged — try again or contact support.",
+    cancelPending: 'Your plan stays active until the end of the paid period, then returns to Free.',
+  };
+
+  function billingEnabled(account) {
+    return !!(account?.billing?.enabled || account?.plan_pricing?.billing_active);
+  }
+
+  function renderBillingUi(account) {
+    const actions = document.getElementById('billing-actions');
+    const upgradeBtn = document.getElementById('btn-plan-upgrade');
+    const portalBtn = document.getElementById('btn-manage-billing');
+    const statusEl = document.getElementById('billing-status');
+    const enabled = billingEnabled(account);
+    if (actions) actions.hidden = !enabled;
+    if (upgradeBtn) {
+      const plan = String(account.plan || 'free').toLowerCase();
+      upgradeBtn.hidden = !enabled || plan === 'pro';
+    }
+    if (portalBtn) {
+      portalBtn.hidden = !(enabled && account.billing && account.billing.has_customer);
+    }
+    if (statusEl && account.billing && account.billing.cancel_at_period_end) {
+      statusEl.hidden = false;
+      statusEl.textContent = BILLING_MSG.cancelPending;
+    } else if (statusEl && statusEl.dataset.sticky !== '1') {
+      statusEl.hidden = true;
+      statusEl.textContent = '';
+    }
+    updatePlanPickerPrices(account);
+  }
+
+  function updatePlanPickerPrices(account) {
+    const catalog = account?.plan_catalog || {};
+    document.querySelectorAll('.plan-picker-price[data-plan]').forEach((el) => {
+      const key = el.getAttribute('data-plan');
+      const meta = catalog[key];
+      if (!meta) return;
+      const interval = getPlanPickerInterval();
+      if (interval === 'year') {
+        el.textContent = `€${Number(meta.suggested_price_eur_year || 0).toFixed(0)}/year`;
+      } else {
+        el.textContent = `€${Number(meta.suggested_price_eur_month || 0).toFixed(2)}/month`;
+      }
+    });
+  }
+
+  function getPlanPickerInterval() {
+    const active = document.querySelector('.plan-interval-btn.is-active');
+    const iv = active && active.getAttribute('data-interval');
+    return iv === 'year' ? 'year' : 'month';
+  }
+
+  function openPlanPicker(preferredPlan) {
+    const panel = document.getElementById('plan-picker-panel');
+    const backdrop = document.getElementById('plan-picker-backdrop');
+    if (!panel || !backdrop) return;
+    panel.hidden = false;
+    backdrop.hidden = false;
+    document.body.classList.add('plan-picker-open');
+    const plan = String(preferredPlan || 'pro').toLowerCase();
+    const input = document.querySelector(`input[name="plan-picker-plan"][value="${plan === 'basic' ? 'basic' : 'pro'}"]`);
+    if (input) input.checked = true;
+    const err = document.getElementById('plan-picker-error');
+    if (err) {
+      err.hidden = true;
+      err.textContent = '';
+    }
+    updatePlanPickerPrices(NotesStore.cachedAccount() || {});
+  }
+
+  function closePlanPicker() {
+    const panel = document.getElementById('plan-picker-panel');
+    const backdrop = document.getElementById('plan-picker-backdrop');
+    if (panel) panel.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+    document.body.classList.remove('plan-picker-open');
+  }
+
+  async function startBillingCheckout() {
+    const selected = document.querySelector('input[name="plan-picker-plan"]:checked');
+    const plan = selected ? String(selected.value || '').toLowerCase() : '';
+    const err = document.getElementById('plan-picker-error');
+    const btn = document.getElementById('btn-plan-checkout');
+    if (!plan || (plan !== 'basic' && plan !== 'pro')) {
+      if (err) {
+        err.hidden = false;
+        err.textContent = 'Choose Basic or Pro to continue.';
+      }
+      return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+      const res = await NotesStore.api('/api/billing/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ plan, interval: getPlanPickerInterval() }),
+      });
+      if (res && res.url) {
+        window.location.href = res.url;
+        return;
+      }
+      throw new Error('Checkout unavailable');
+    } catch (e) {
+      if (err) {
+        err.hidden = false;
+        err.textContent = BILLING_MSG.failed;
+      } else {
+        toast(BILLING_MSG.failed, true);
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function openBillingPortal() {
+    try {
+      const res = await NotesStore.api('/api/billing/portal', { method: 'POST', body: '{}' });
+      if (res && res.url) window.location.href = res.url;
+    } catch (err) {
+      toast(err.message || 'Could not open billing portal', true);
+    }
+  }
+
+  function showBillingStatus(message, sticky) {
+    const statusEl = document.getElementById('billing-status');
+    if (!statusEl) return;
+    statusEl.hidden = !message;
+    statusEl.textContent = message || '';
+    if (sticky) statusEl.dataset.sticky = '1';
+    else delete statusEl.dataset.sticky;
+    if (message) {
+      openSettings();
+    }
+  }
+
+  async function handleBillingReturnQuery() {
+    const params = new URLSearchParams(location.search);
+    const billing = String(params.get('billing') || '').toLowerCase();
+    const upgrade = String(params.get('upgrade') || '').toLowerCase();
+    if (upgrade === 'basic' || upgrade === 'pro') {
+      openSettings();
+      if (billingEnabled(NotesStore.cachedAccount() || {})) {
+        openPlanPicker(upgrade);
+      }
+    }
+    if (!billing) return;
+    if (billing === 'canceled' || billing === 'cancelled') {
+      showBillingStatus(BILLING_MSG.canceled, true);
+      stripBillingQuery();
+      return;
+    }
+    if (billing === 'return') {
+      const sessionId = String(params.get('session_id') || '').trim();
+      if (!sessionId) {
+        showBillingStatus(BILLING_MSG.failed, true);
+        stripBillingQuery();
+        return;
+      }
+      try {
+        const res = await NotesStore.api(`/api/billing/checkout/session?session_id=${encodeURIComponent(sessionId)}`);
+        if (res && res.ok && res.plan === 'basic') {
+          showBillingStatus(BILLING_MSG.successBasic, true);
+        } else if (res && res.ok && res.plan === 'pro') {
+          showBillingStatus(BILLING_MSG.successPro, true);
+        } else {
+          showBillingStatus(BILLING_MSG.failed, true);
+        }
+        await NotesStore.loadAccount().then((account) => renderPlanUi(account));
+      } catch (err) {
+        showBillingStatus(BILLING_MSG.failed, true);
+      }
+      stripBillingQuery();
+      return;
+    }
+    if (billing === 'portal') {
+      openSettings();
+      stripBillingQuery();
+    }
+  }
+
+  function stripBillingQuery() {
+    try {
+      const params = new URLSearchParams(location.search);
+      ['billing', 'session_id', 'upgrade', 'plan'].forEach((k) => params.delete(k));
+      const qs = params.toString();
+      const next = `${location.pathname}${qs ? `?${qs}` : ''}${location.hash || ''}`;
+      history.replaceState(null, '', next);
+    } catch (err) { /* ignore */ }
   }
 
   function heroGuideDismissed() {
@@ -918,7 +1113,10 @@
           lock = document.createElement('p');
           lock.className = 'settings-hint plan-pro-lock';
           const planLabel = account?.plan_label || String(account?.plan || 'Free');
-          lock.textContent = `Included with Pro. You are on ${planLabel} — contact support to upgrade.`;
+          const billingOn = billingEnabled(account);
+          lock.textContent = billingOn
+            ? `Included with Pro. You are on ${planLabel} — use Upgrade in Settings.`
+            : `Included with Pro. You are on ${planLabel} — contact support to upgrade.`;
           el.prepend(lock);
         }
         el.querySelectorAll('input, button, select, textarea').forEach((input) => {
@@ -20246,6 +20444,22 @@
   bindSettingsOpen(document.getElementById('btn-settings-head'));
   bindSettingsOpen(document.getElementById('btn-settings-nav'));
   bindSettingsOpen(document.getElementById('btn-editor-settings'));
+  document.getElementById('btn-plan-upgrade')?.addEventListener('click', () => openPlanPicker('pro'));
+  document.getElementById('btn-manage-billing')?.addEventListener('click', () => {
+    openBillingPortal().catch(() => {});
+  });
+  document.getElementById('btn-plan-checkout')?.addEventListener('click', () => {
+    startBillingCheckout().catch(() => {});
+  });
+  document.getElementById('plan-picker-close')?.addEventListener('click', () => closePlanPicker());
+  document.getElementById('plan-picker-backdrop')?.addEventListener('click', () => closePlanPicker());
+  document.querySelectorAll('.plan-interval-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.plan-interval-btn').forEach((b) => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      updatePlanPickerPrices(NotesStore.cachedAccount() || {});
+    });
+  });
   function bindSecureSendOpen(el) {
     if (!el) return;
     el.addEventListener('click', (event) => {
@@ -24110,7 +24324,10 @@
     }, 600);
     scheduleNetworkProbe();
     NotesStore.loadAccount()
-      .then((account) => renderPlanUi(account))
+      .then((account) => {
+        renderPlanUi(account);
+        return handleBillingReturnQuery();
+      })
       .catch(() => ensureServerSession().catch(() => {}));
     deferredUnlockSync?.catch(() => {});
     const needsNotes = NotesStore.listNotes().length === 0;

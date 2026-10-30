@@ -339,7 +339,7 @@ def _unlock_payload(user) -> dict:
         "password_changed_at": db.user_password_changed_at(user),
         "auth_method": db.user_auth_method(user),
         "csrf": auth.csrf_token(),
-        **account_plan_payload(db.user_plan(user)),
+        **account_plan_payload(db.user_plan(user), user),
     }
 
 
@@ -355,7 +355,7 @@ def _login_payload(user, *, totp_required: bool = False) -> dict:
         "auth_method": db.user_auth_method(user),
         "totp_required": totp_required,
         "csrf": auth.csrf_token(),
-        **account_plan_payload(db.user_plan(user)),
+        **account_plan_payload(db.user_plan(user), user),
     }
 
 
@@ -464,11 +464,35 @@ def _public_reminder(row: dict) -> dict:
 
 
 def _deep_link_args() -> dict:
-    """Carry a valid `?note=<uuid>` through login/2FA redirects so email links open the note."""
+    """Carry valid deep-link query params through login/2FA redirects."""
     if request.path not in {"/", app_entry_path(), "/login", "/totp"}:
         return {}
+    args: dict[str, str] = {}
     note = str(request.args.get("note") or "").strip()
-    return {"note": note} if ITEM_UUID_RE.match(note) else {}
+    if ITEM_UUID_RE.match(note):
+        args["note"] = note
+    billing = str(request.args.get("billing") or "").strip().lower()
+    if billing in {
+        "return",
+        "canceled",
+        "cancelled",
+        "portal",
+        "upgrade",
+        "success",
+        "failed",
+        "payment_failed",
+    }:
+        args["billing"] = billing
+    plan = str(request.args.get("plan") or "").strip().lower()
+    if plan in {"free", "basic", "pro"}:
+        args["plan"] = plan
+    upgrade = str(request.args.get("upgrade") or "").strip().lower()
+    if upgrade in {"basic", "pro"}:
+        args["upgrade"] = upgrade
+    session_id = str(request.args.get("session_id") or "").strip()
+    if session_id and re.fullmatch(r"cs_[A-Za-z0-9_]+", session_id):
+        args["session_id"] = session_id
+    return args
 
 
 def _notes_build() -> str:
@@ -640,7 +664,7 @@ def _gate():
         return redirect(url_for("notes_app", **_deep_link_args()))
     if auth.public_path(request.path):
         if request.path.startswith("/api/") and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
-            if not auth.request_is_same_origin():
+            if request.path != "/api/billing/stripe/webhook" and not auth.request_is_same_origin():
                 return jsonify({"error": "cross-origin request denied"}), 403
         return None
     if not auth.authenticated():
@@ -2269,9 +2293,108 @@ def api_account():
             "storage_quota_effective": db.user_storage_quota_effective(user),
             "is_admin": user_is_admin(user),
             "csrf": auth.csrf_token(),
-            **account_plan_payload(db.user_plan(user)),
+            **account_plan_payload(db.user_plan(user), user),
         }
     )
+
+
+@app.post("/api/billing/checkout")
+def api_billing_checkout():
+    import stripe_billing
+
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    if not stripe_billing.billing_enabled():
+        return jsonify({"error": "billing unavailable"}), 503
+    body = request.get_json(silent=True) or {}
+    plan = str(body.get("plan") or "").strip().lower()
+    interval = str(body.get("interval") or "month").strip().lower()
+    if plan not in {"basic", "pro"}:
+        return jsonify({"error": "invalid plan"}), 400
+    entry = app_entry_path()
+    success = stripe_billing.checkout_success_url(NOTES_PUBLIC_URL, entry)
+    cancel = stripe_billing.checkout_cancel_url(NOTES_PUBLIC_URL, entry)
+    try:
+        customer_id = str(user["stripe_customer_id"] or "").strip() or None
+        url = stripe_billing.create_checkout_session(
+            user_id=int(uid),
+            email=str(user["email"] or ""),
+            plan=plan,
+            interval=interval,
+            customer_id=customer_id,
+            success_url=success,
+            cancel_url=cancel,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception:
+        logging.exception("checkout session failed")
+        return jsonify({"error": "checkout failed"}), 502
+    return jsonify({"url": url})
+
+
+@app.post("/api/billing/portal")
+def api_billing_portal():
+    import stripe_billing
+
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    if not stripe_billing.billing_enabled():
+        return jsonify({"error": "billing unavailable"}), 503
+    customer_id = str(user["stripe_customer_id"] or "").strip()
+    if not customer_id:
+        return jsonify({"error": "no billing customer"}), 400
+    entry = app_entry_path()
+    return_url = stripe_billing.portal_return_url(NOTES_PUBLIC_URL, entry)
+    try:
+        url = stripe_billing.create_portal_session(customer_id=customer_id, return_url=return_url)
+    except Exception:
+        logging.exception("portal session failed")
+        return jsonify({"error": "portal failed"}), 502
+    return jsonify({"url": url})
+
+
+@app.get("/api/billing/checkout/session")
+def api_billing_checkout_session():
+    import stripe_billing
+
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "login required"}), 401
+    session_id = str(request.args.get("session_id") or "").strip()
+    if not session_id or not re.fullmatch(r"cs_[A-Za-z0-9_]+", session_id):
+        return jsonify({"error": "invalid session"}), 400
+    if not stripe_billing.billing_enabled():
+        return jsonify({"error": "billing unavailable"}), 503
+    try:
+        result = stripe_billing.verify_checkout_session_for_user(session_id, int(uid))
+    except Exception:
+        logging.exception("checkout session verify failed")
+        return jsonify({"error": "verify failed"}), 502
+    if not result.get("ok"):
+        code = str(result.get("code") or "payment_failed")
+        return jsonify({"ok": False, "code": code}), 200
+    return jsonify(result)
+
+
+@app.post("/api/billing/stripe/webhook")
+def api_billing_stripe_webhook():
+    import stripe_billing
+
+    payload = request.get_data(cache=False, as_text=False) or b""
+    sig = request.headers.get("Stripe-Signature") or ""
+    ok, detail = stripe_billing.handle_webhook_payload(payload, sig)
+    if not ok:
+        return jsonify({"error": detail}), 400
+    return jsonify({"ok": True, "detail": detail})
 
 
 @app.post("/api/totp/setup")
@@ -3115,6 +3238,14 @@ def _marketing_context() -> dict:
     entry = app_entry_path()
     base = NOTES_PUBLIC_URL.rstrip("/")
     promo = _promo_payload()
+    try:
+        import stripe_billing
+
+        billing_live = stripe_billing.billing_enabled()
+    except Exception:
+        billing_live = False
+    upgrade_basic_url = f"{base}{entry}?upgrade=basic"
+    upgrade_pro_url = f"{base}{entry}?upgrade=pro"
     return {
         "build": NOTES_BUILD,
         "client_hash": NOTES_CLIENT_HASH or client_assets.client_hash(),
@@ -3130,6 +3261,9 @@ def _marketing_context() -> dict:
         "app_path": entry,
         "register_url": f"{base}/register",
         "login_url": f"{base}/login",
+        "upgrade_basic_url": upgrade_basic_url,
+        "upgrade_pro_url": upgrade_pro_url,
+        "billing_enabled": billing_live,
         "free": free,
         "basic": basic,
         "pro": pro,

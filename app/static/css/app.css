@@ -5851,6 +5851,30 @@ body.ai-outbound-open { overflow: hidden; }
 .plan-locked { opacity: 0.72; }
 .plan-pro-lock { border-left: 3px solid var(--warning); margin: 0 0 10px; padding: 8px 10px !important; background: color-mix(in srgb, var(--warning) 10%, transparent); }
 .plan-locked-tab { opacity: 0.45; }
+body.plan-picker-open #plan-picker-panel { transform: translateX(0); visibility: visible; }
+body.plan-picker-open #plan-picker-backdrop { opacity: 1; visibility: visible; }
+.plan-picker-panel { z-index: calc(var(--z-settings, 1200) + 2); }
+.plan-picker-backdrop { z-index: calc(var(--z-settings, 1200) + 1); }
+.plan-picker-toggle .plan-interval-btn.is-active {
+  border-color: rgba(255, 176, 32, 0.65);
+  box-shadow: 0 0 0 1px rgba(255, 176, 32, 0.25);
+}
+.plan-picker-options { display: grid; gap: 10px; padding: 0 14px 8px; }
+.plan-picker-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  background: var(--bg-hover);
+}
+.plan-picker-option:has(input:checked) { border-color: rgba(255, 176, 32, 0.55); }
+.plan-picker-option input { margin-top: 4px; }
+.plan-picker-option-body { display: grid; gap: 4px; }
+.plan-picker-error { color: var(--danger); }
+.billing-status { margin: 0 14px 8px; }
 .settings-hint.settings-diagnostics strong { color: var(--ok, #2f9a68); }
 .settings-actions { display: grid; gap: 8px; padding: 12px 14px; }
 /* All Settings action buttons ≥44px (exclude icon close + inline password toggles). */

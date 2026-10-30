@@ -836,6 +836,8 @@ def public_path(path: str) -> bool:
         return True
     if base in {"/api/contact", "/api/promo", "/robots.txt", "/sitemap.xml", "/.well-known/security.txt"}:
         return True
+    if base == "/api/billing/stripe/webhook":
+        return True
     if base.startswith("/blog/"):
         return True
     # D2 Secure Send: receive shell + explicit Open (never GET/HEAD burn).
@@ -1098,6 +1100,16 @@ def content_security_policy() -> str:
     github_connect = ""
     if _csp_allows_github_api():
         github_connect = " https://api.github.com"
+    stripe_frame = ""
+    stripe_connect = ""
+    try:
+        from stripe_billing import billing_enabled
+
+        if billing_enabled() and _csp_on_app_shell():
+            stripe_frame = " https://checkout.stripe.com https://billing.stripe.com"
+            stripe_connect = " https://api.stripe.com"
+    except Exception:
+        stripe_frame = stripe_connect = ""
     return "; ".join(
         (
             "default-src 'self'",
@@ -1107,12 +1119,12 @@ def content_security_policy() -> str:
             "font-src 'self'",
             # Turnstile (register): challenges.cloudflare.com in connect/frame/script.
             # api.github.com: release-hash check on /verify only (CORS *).
-            f"connect-src 'self'{github_connect}{google_connect}{dropbox_connect}{turnstile}",
+            f"connect-src 'self'{github_connect}{google_connect}{dropbox_connect}{turnstile}{stripe_connect}",
             "media-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'self'",
             "frame-ancestors 'none'",
-            f"frame-src 'self'{google_frame}{turnstile}",
+            f"frame-src 'self'{google_frame}{turnstile}{stripe_frame}",
             "worker-src 'self' blob:",
             "manifest-src 'self'",
             "form-action 'self'",

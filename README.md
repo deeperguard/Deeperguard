@@ -30,7 +30,7 @@ The ciphertext is cached in IndexedDB, so notes open offline and the site can be
 
 Ciphertext blobs, the SRP verifier, the account email, sessions, and sync metadata: item ids, timestamps, and sizes. Reminder email does not include note titles.
 
-Accounts start on the Free plan during public beta (50&nbsp;MB, sync, attachments, on-device OCR). Basic and Pro add higher limits; Pro adds passkeys, account 2FA, backups, reminders, and the vault authenticator. Billing is not active yet.
+Accounts start on the Free plan (50&nbsp;MB, sync, attachments, on-device OCR). Basic and Pro add higher limits; Pro adds passkeys, account 2FA, backups, reminders, and the vault authenticator. Paid plans use Stripe Checkout and the Stripe Customer Portal when billing env vars are configured (test mode first).
 
 [www.deeperguard.com](https://www.deeperguard.com)
 
@@ -79,6 +79,17 @@ mkdir -p .github/workflows
 cp deploy/github-workflows/*.yml .github/workflows/
 git add .github/workflows && git commit -m "Enable client integrity GitHub Actions" && git push
 ```
+
+## Stripe billing (Basic / Pro)
+
+Configure in `config/deeperguard.env` (never commit secrets). Create four EUR recurring Prices in the Stripe Dashboard (Basic €2.99/mo, €29/yr; Pro €6.99/mo, €69/yr) and set:
+
+- `STRIPE_SECRET_KEY` — test secret key first (`sk_test_…`)
+- `STRIPE_WEBHOOK_SECRET` — signing secret for `POST /api/billing/stripe/webhook`
+- `STRIPE_PRICE_BASIC_MONTHLY`, `STRIPE_PRICE_BASIC_YEARLY`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY` — Price IDs (`price_…`)
+- Optional: `STRIPE_PUBLISHABLE_KEY`, `STRIPE_BILLING_ENABLED=0` to disable without removing keys
+
+`plan_pricing.billing_active` is true when the secret key and all four price IDs are set. Subscriptions cancel at period end via the Customer Portal; webhooks move the account to Free after the paid period.
 
 ## Source available for review
 
