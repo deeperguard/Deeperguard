@@ -57,6 +57,6 @@ During the public beta, Free, Basic, and Pro plan limits apply. Billing is not a
 
 - [Verify](https://www.deeperguard.com/verify) — per-action table, Secure Send, Ask AI, client hash checks  
 - [App](https://www.deeperguard.com/app) — unlock and write  
-- Open source on GitHub — inspect encryption and client code  
+- Source available for review on GitHub — inspect encryption and client code  
 
 Security reports: notes@deeperguard.com with subject “Vulnerability report”.

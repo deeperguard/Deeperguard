@@ -13,7 +13,7 @@ Standard Notes is open source and encrypts notes end-to-end. Deeperguard aims to
 | Vault unlock | Client-side | Client-side; server **never** verifies vault password (`NOTES_STRICT_ZK=1`) |
 | OCR / PDF text | Varies by client | **Browser-only** by default; server OCR disabled |
 | Reminder emails | May include titles | **No note titles** in reminder mail (ZK metadata) |
-| Source | Open (AGPL) | Open (AGPL-3.0) |
+| Source | Open (AGPL) | Source available for review ([BSL 1.1](../LICENSE); production use requires permission) |
 
 ## What never leaves your device (default config)
 
