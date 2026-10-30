@@ -5,7 +5,7 @@ date: 2026-10-30
 description: "Real support never asks for your vault password, recovery code, or 2FA code. Here's how account-recovery scams work and five habits that keep your codes safe."
 cover_image: /static/blog/recovery-scams-2fa-hygiene.jpg
 cover_alt: "Illustration of a padlocked envelope beside a phone showing a blank code field, with a red 'never share' badge"
-draft: true
+draft: false
 ---
 
 Most accounts don't get broken into by clever math. They get talked open. Someone calls, emails or DMs you, sounds helpful, and asks for "just the code we sent you." This post covers how those recovery scams work and the small habits that make them fail.
