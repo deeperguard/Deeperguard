@@ -1494,6 +1494,40 @@
   </div>
 
   <div id="settings-backdrop" class="settings-backdrop" hidden></div>
+  <div id="plan-picker-backdrop" class="settings-backdrop plan-picker-backdrop" hidden></div>
+  <aside id="plan-picker-panel" class="settings-panel plan-picker-panel" hidden role="dialog" aria-modal="true" aria-labelledby="plan-picker-title">
+    <header class="settings-head">
+      <h2 id="plan-picker-title">Choose your plan</h2>
+      <button type="button" class="btn icon" id="plan-picker-close" aria-label="Close plan picker">×</button>
+    </header>
+    <div class="settings-body">
+      <p class="settings-hint">Free stays free. Basic and Pro unlock more storage and Pro features.</p>
+      <div class="plan-picker-toggle settings-actions" role="group" aria-label="Billing interval">
+        <button type="button" class="btn plan-interval-btn is-active" data-interval="month">Monthly</button>
+        <button type="button" class="btn plan-interval-btn" data-interval="year">Yearly</button>
+      </div>
+      <div class="plan-picker-options">
+        <label class="plan-picker-option">
+          <input type="radio" name="plan-picker-plan" value="basic">
+          <span class="plan-picker-option-body">
+            <strong>Basic</strong>
+            <span class="muted plan-picker-price" data-plan="basic"></span>
+          </span>
+        </label>
+        <label class="plan-picker-option">
+          <input type="radio" name="plan-picker-plan" value="pro">
+          <span class="plan-picker-option-body">
+            <strong>Pro</strong>
+            <span class="muted plan-picker-price" data-plan="pro"></span>
+          </span>
+        </label>
+      </div>
+      <p id="plan-picker-error" class="settings-hint plan-picker-error" hidden role="alert"></p>
+      <div class="settings-actions">
+        <button type="button" id="btn-plan-checkout" class="btn primary">Continue to payment</button>
+      </div>
+    </div>
+  </aside>
   <aside id="settings-panel" class="settings-panel" hidden>
     <header class="settings-head">
       <h2>Settings</h2>
@@ -1510,6 +1544,11 @@
             </div>
             <p id="account-plan-tagline" class="settings-hint">Backups, security extras, and room to grow</p>
             <p id="account-plan-storage" class="settings-hint"></p>
+          </div>
+          <p id="billing-status" class="settings-hint billing-status" hidden role="status" aria-live="polite"></p>
+          <div id="billing-actions" class="settings-actions" hidden>
+            <button type="button" id="btn-plan-upgrade" class="btn primary">Upgrade</button>
+            <button type="button" id="btn-manage-billing" class="btn" hidden>Manage billing</button>
           </div>
           <p id="account-email" class="settings-account"></p>
           <p class="settings-hint">Your password is the only key. Deeperguard can't recover your notes if you forget it.</p>

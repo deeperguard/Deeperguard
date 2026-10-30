@@ -438,6 +438,7 @@
             <li class="is-unavailable">Not included: {{ feat }}</li>
             {% endfor %}
           </ul>
+          <a class="mk-btn" href="{{ upgrade_basic_url if billing_enabled else register_url }}">Upgrade to Basic</a>
         </article>
 
         <!-- Pro Plan (Featured) -->
@@ -460,9 +461,8 @@
             <li>{{ feat }}</li>
             {% endfor %}
           </ul>
-          <a class="mk-btn" href="{{ register_url }}">Create free vault</a>
+          <a class="mk-btn" href="{{ upgrade_pro_url if billing_enabled else register_url }}">Upgrade to Pro</a>
         </article>
-      </div>
 
       <!-- Feature Comparison Breakdown -->
       <div style="margin-top: 2rem;">

@@ -1,4 +1,4 @@
-"""Subscription plans (Free / Basic / Pro). Billing is not wired yet — limits apply today."""
+"""Subscription plans (Free / Basic / Pro) and Stripe billing integration."""
 from __future__ import annotations
 
 import os
@@ -234,9 +234,17 @@ def plan_pricing_payload(plan: str | None) -> dict[str, Any]:
     }
 
 
-def account_plan_payload(plan: str | None) -> dict[str, Any]:
+def account_plan_payload(plan: str | None, user=None) -> dict[str, Any]:
     current = normalize_plan(plan)
     meta = PLAN_CATALOG[current]
+    try:
+        from stripe_billing import billing_public_payload, plan_pricing_with_billing
+
+        pricing = plan_pricing_with_billing(current, user)
+        billing = billing_public_payload(user)
+    except Exception:
+        pricing = plan_pricing_payload(current)
+        billing = {"enabled": False, "has_customer": False, "has_subscription": False}
     return {
         "plan": current,
         "plan_label": meta["label"],
@@ -258,7 +266,8 @@ def account_plan_payload(plan: str | None) -> dict[str, Any]:
             }
             for key in PLAN_ORDER
         },
-        "plan_pricing": plan_pricing_payload(current),
+        "plan_pricing": pricing,
+        "billing": billing,
     }
 
 

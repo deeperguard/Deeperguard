@@ -19,5 +19,6 @@ pyOpenSSL==26.4.0
 pycparser==3.12
 pyotp==2.9.0
 qrcode==8.0
+stripe==11.6.0
 typing_extensions==4.16.0
 webauthn==2.5.0
