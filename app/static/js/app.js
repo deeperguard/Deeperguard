@@ -7108,6 +7108,52 @@
     return true;
   }
 
+  let authSecurityNoticeOpen = false;
+
+  function closeAuthSecurityNotice() {
+    const dialog = document.getElementById('auth-security-notice');
+    const backdrop = document.getElementById('auth-security-notice-backdrop');
+    if (dialog) dialog.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+    document.body.classList.remove('scan-dialog-open');
+    authSecurityNoticeOpen = false;
+  }
+
+  function openAuthSecurityNotice(account) {
+    if (authSecurityNoticeOpen) return true;
+    const dialog = document.getElementById('auth-security-notice');
+    const backdrop = document.getElementById('auth-security-notice-backdrop');
+    if (!dialog || !backdrop) return false;
+    authSecurityNoticeOpen = true;
+    backdrop.hidden = false;
+    dialog.hidden = false;
+    dialog.dataset.authSecurityAt = String(Number(account?.auth_security_at) || 0);
+    document.body.classList.add('scan-dialog-open');
+    const ackBtn = document.getElementById('auth-security-notice-ack');
+    ackBtn?.focus();
+    if (ackBtn && !ackBtn.dataset.bound) {
+      ackBtn.dataset.bound = '1';
+      ackBtn.addEventListener('click', () => {
+        const ts = Number(dialog.dataset.authSecurityAt) || 0;
+        if (ts) NotesStore.ackAuthSecurity?.(ts);
+        closeAuthSecurityNotice();
+      });
+    }
+    return true;
+  }
+
+  function checkRemoteAuthSecurityNotice(account) {
+    if (!account) return false;
+    let postLoginUnlock = false;
+    try { postLoginUnlock = sessionStorage.getItem('notes_post_login_unlock') === '1'; } catch (err) { /* ignore */ }
+    if (postLoginUnlock) {
+      if (account.auth_security_at) NotesStore.ackAuthSecurity?.(account.auth_security_at);
+      return false;
+    }
+    if (!NotesStore.remoteAuthSecurityEvent?.(account)) return false;
+    return openAuthSecurityNotice(account);
+  }
+
   async function serverSessionLooksValid() {
     try {
       await NotesStore.loadAccount();
@@ -8188,6 +8234,7 @@
               unlockResolver = resolve;
             });
           }
+          checkRemoteAuthSecurityNotice(remoteAccount);
         } catch (err) {
           if (!NotesStore.isProbablyOffline(err) && err?.status !== 401 && err?.status !== 403) {
             /* keep booting offline */
@@ -8227,6 +8274,7 @@
             unlockResolver = resolve;
           });
         }
+        checkRemoteAuthSecurityNotice(account);
       } catch (err) {
         if (err.status === 401 || err.status === 403) {
           account = NotesStore.cachedAccount();
@@ -21613,7 +21661,8 @@
   document.getElementById('btn-enable-totp').addEventListener('click', async () => {
     const code = document.getElementById('totp-enable-code').value;
     try {
-      await NotesStore.api('/api/totp/enable', { method: 'POST', body: JSON.stringify({ code }) });
+      const data = await NotesStore.api('/api/totp/enable', { method: 'POST', body: JSON.stringify({ code }) });
+      if (data?.auth_security_at) NotesStore.ackAuthSecurity?.(data.auth_security_at);
       await initSettings();
       document.getElementById('totp-setup').hidden = true;
       toast('2FA enabled');
@@ -21663,10 +21712,11 @@
     );
     if (password && authMethod !== 'srp') body.password = password;
     try {
-      await NotesStore.api('/api/totp/disable', {
+      const data = await NotesStore.api('/api/totp/disable', {
         method: 'POST',
         body: JSON.stringify(body),
       });
+      if (data?.auth_security_at) NotesStore.ackAuthSecurity?.(data.auth_security_at);
       document.getElementById('totp-disable').hidden = true;
       await initSettings();
       toast('2FA disabled');
@@ -23808,6 +23858,7 @@
         .then(async (account) => {
           if (account && typeof account === 'object') renderPlanUi(account);
           if (await checkRemoteVaultPasswordChange(account)) return false;
+          checkRemoteAuthSecurityNotice(account);
           return account;
         })
         .catch((err) => {
@@ -23998,7 +24049,10 @@
       if (!vaultReady || ignoreNextForeground) return;
       if (NotesStore.isUnlocked()) {
         NotesStore.loadAccount()
-          .then((account) => checkRemoteVaultPasswordChange(account))
+          .then((account) => {
+            checkRemoteVaultPasswordChange(account);
+            checkRemoteAuthSecurityNotice(account);
+          })
           .catch((err) => {
             if (isLoginRequiredError(err)) showExpiredSessionBanner();
           });
@@ -24016,7 +24070,10 @@
     if (!vaultReady || ignoreNextForeground) return;
     if (NotesStore.isUnlocked()) {
       NotesStore.loadAccount()
-        .then((account) => checkRemoteVaultPasswordChange(account))
+        .then((account) => {
+          checkRemoteVaultPasswordChange(account);
+          checkRemoteAuthSecurityNotice(account);
+        })
         .catch((err) => {
           if (isLoginRequiredError(err)) showExpiredSessionBanner();
         });

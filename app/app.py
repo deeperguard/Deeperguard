@@ -337,6 +337,7 @@ def _unlock_payload(user) -> dict:
         "kdf_iterations": db.user_kdf_iterations(user),
         "vault_kdf_version": db.user_vault_kdf_version(user),
         "password_changed_at": db.user_password_changed_at(user),
+        "auth_security_at": db.user_auth_security_at(user),
         "auth_method": db.user_auth_method(user),
         "csrf": auth.csrf_token(),
         **account_plan_payload(db.user_plan(user), user),
@@ -352,6 +353,7 @@ def _login_payload(user, *, totp_required: bool = False) -> dict:
         "kdf_iterations": db.user_kdf_iterations(user),
         "vault_kdf_version": db.user_vault_kdf_version(user),
         "password_changed_at": db.user_password_changed_at(user),
+        "auth_security_at": db.user_auth_security_at(user),
         "auth_method": db.user_auth_method(user),
         "totp_required": totp_required,
         "csrf": auth.csrf_token(),
@@ -1958,6 +1960,7 @@ def api_auth_recovery_code_login():
         return jsonify({"error": "Recovery codes are not active yet"}), 403
     if not uid:
         return jsonify({"error": "invalid credentials"}), 401
+    db.touch_auth_security(int(uid))
     user = db.get_user_by_id(uid)
     if not user:
         return jsonify({"error": "invalid credentials"}), 401
@@ -2191,7 +2194,12 @@ def api_account_password():
         )
         db.clear_user_legacy_password(uid)
         _revoke_other_sessions(uid, reason="password")
-        return jsonify({"ok": True, "password_changed_at": changed_at, "auth_method": "srp"})
+        return jsonify({
+            "ok": True,
+            "password_changed_at": changed_at,
+            "auth_security_at": changed_at,
+            "auth_method": "srp",
+        })
 
     if len(new) < 8:
         return jsonify({"error": "new password must be at least 8 characters"}), 400
@@ -2201,7 +2209,7 @@ def api_account_password():
         if strict_zk():
             db.clear_user_legacy_password(uid)
     _revoke_other_sessions(uid, reason="password")
-    return jsonify({"ok": True, "password_changed_at": changed_at})
+    return jsonify({"ok": True, "password_changed_at": changed_at, "auth_security_at": changed_at})
 
 
 @app.post("/api/account/vault-kdf")
@@ -2283,6 +2291,7 @@ def api_account():
             "pcloud_last_sync_status": user["pcloud_last_sync_status"] or "",
             "pcloud_last_sync_detail": user["pcloud_last_sync_detail"] or "",
             "password_changed_at": db.user_password_changed_at(user),
+            "auth_security_at": db.user_auth_security_at(user),
             "auth_method": db.user_auth_method(user),
             "webauthn_enabled": len(db.list_webauthn_credentials(uid)) > 0,
             "passkey_host_ok": webauthn_mod.passkey_host_error() is None,
@@ -2453,7 +2462,8 @@ def api_totp_enable():
     if blocked:
         return blocked
     _revoke_other_sessions(uid, reason="totp")
-    return jsonify({"ok": True})
+    security_at = db.touch_auth_security(uid)
+    return jsonify({"ok": True, "auth_security_at": security_at})
 
 
 @app.post("/api/totp/disable")
@@ -2485,7 +2495,8 @@ def api_totp_disable():
     if blocked:
         return blocked
     _revoke_other_sessions(uid, reason="totp")
-    return jsonify({"ok": True})
+    security_at = db.touch_auth_security(uid)
+    return jsonify({"ok": True, "auth_security_at": security_at})
 
 
 @app.get("/api/reminders")

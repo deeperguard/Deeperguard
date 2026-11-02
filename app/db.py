@@ -150,6 +150,8 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN kdf_iterations INTEGER NOT NULL DEFAULT 10000")
     if "password_changed_at" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN password_changed_at REAL NOT NULL DEFAULT 0")
+    if "auth_security_at" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN auth_security_at REAL NOT NULL DEFAULT 0")
     if "pcloud_enabled" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN pcloud_enabled INTEGER NOT NULL DEFAULT 0")
     if "pcloud_username" not in cols:
@@ -577,13 +579,14 @@ def update_user_srp_verifier(
                 """
                 UPDATE users
                 SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = ?,
-                    updated_at = ?, password_changed_at = ?
+                    updated_at = ?, password_changed_at = ?, auth_security_at = ?
                 WHERE id = ?
                 """,
                 (
                     srp_salt.strip().lower(),
                     srp_verifier.strip().lower(),
                     kdf_ver,
+                    ts,
                     ts,
                     ts,
                     user_id,
@@ -1341,16 +1344,37 @@ def user_password_changed_at(user) -> float:
     return value if value > 0 else 0.0
 
 
+def user_auth_security_at(user) -> float:
+    try:
+        value = float(user["auth_security_at"])
+    except (KeyError, TypeError, ValueError):
+        return 0.0
+    return value if value > 0 else 0.0
+
+
+def touch_auth_security(user_id: int) -> float:
+    """Bump when account recovery, password, or 2FA sign-in credentials change."""
+    ts = now()
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE users SET auth_security_at = ?, updated_at = ? WHERE id = ?
+            """,
+            (ts, ts, int(user_id)),
+        )
+    return ts
+
+
 def update_user_password(user_id: int, password_hash: str) -> float:
     ts = now()
     with tx() as conn:
         conn.execute(
             """
             UPDATE users
-            SET password_hash = ?, updated_at = ?, password_changed_at = ?
+            SET password_hash = ?, updated_at = ?, password_changed_at = ?, auth_security_at = ?
             WHERE id = ?
             """,
-            (password_hash, ts, ts, user_id),
+            (password_hash, ts, ts, ts, user_id),
         )
     return ts
 
