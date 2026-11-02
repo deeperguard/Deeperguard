@@ -8875,8 +8875,11 @@
       toast('Trash is already empty');
       return;
     }
+    const deleteCopy = window.NotesDeletionSyncHonesty?.permanentDeleteConfirmMessage
+      ? window.NotesDeletionSyncHonesty.permanentDeleteConfirmMessage({ count: total })
+      : `Permanently delete ${total} note${total === 1 ? '' : 's'} in Trash? No undo.`;
     if (!(await confirmAction(
-      `Permanently delete ${total} note${total === 1 ? '' : 's'} in Trash? They leave this device now and sync a delete. Other devices drop them on next sync unless they have a newer edit. No undo.`,
+      `${deleteCopy}\n\nNo undo.`,
       {
         title: 'Empty trash',
         confirmLabel: 'Empty trash',
@@ -8898,7 +8901,11 @@
     if (protectedCount > 0) {
       toast('Protected notes were not deleted', true);
     } else {
-      toast('Trash emptied');
+      const deletedCount = total - protectedCount;
+      const emptiedToast = window.NotesDeletionSyncHonesty?.permanentDeleteToastMessage
+        ? window.NotesDeletionSyncHonesty.permanentDeleteToastMessage({ count: deletedCount })
+        : 'Trash emptied';
+      toast(emptiedToast);
     }
   }
 
@@ -15887,17 +15894,24 @@
 
   async function revokeSecureSendSentItem(item) {
     if (!item?.id || item.status !== 'active') return;
-    const ok = await confirmAction(
-      'Revoke this link? It will stop working for anyone who still has it.',
-      { title: 'Revoke link?', confirmLabel: 'Revoke', cancelLabel: 'Keep' },
-    );
+    const revokeCopy = window.NotesDeletionSyncHonesty?.secureSendRevokeConfirmMessage
+      ? window.NotesDeletionSyncHonesty.secureSendRevokeConfirmMessage()
+      : 'Revoke this link? Recipients may still see cached content until they fetch again.';
+    const ok = await confirmAction(revokeCopy, {
+      title: 'Revoke link?',
+      confirmLabel: 'Revoke',
+      cancelLabel: 'Keep',
+    });
     if (!ok) return;
     try {
       await NotesStore.api(`/api/secure-send/${encodeURIComponent(item.id)}/cancel`, {
         method: 'POST',
         body: '{}',
       });
-      toast('Link revoked — it stops working now');
+      const revokeToast = window.NotesDeletionSyncHonesty?.secureSendRevokeToastMessage
+        ? window.NotesDeletionSyncHonesty.secureSendRevokeToastMessage()
+        : 'Link revoked';
+      toast(revokeToast);
       closeSecureSendSentDetail();
       refreshSecureSendList();
     } catch (err) {
@@ -20031,14 +20045,14 @@
       toast('This note is protected', true);
       return;
     }
-    if (!(await confirmAction(
-      'This removes it from Trash on this device and syncs a delete. Other devices drop it on their next sync unless they have a newer edit.',
-      {
-        title: 'Delete forever',
-        confirmLabel: 'Delete',
-        danger: true,
-      },
-    ))) return;
+    const foreverCopy = window.NotesDeletionSyncHonesty?.permanentDeleteConfirmMessage
+      ? window.NotesDeletionSyncHonesty.permanentDeleteConfirmMessage({ count: 1 })
+      : 'Permanently delete this note from Trash on this device?';
+    if (!(await confirmAction(foreverCopy, {
+      title: 'Delete forever',
+      confirmLabel: 'Delete',
+      danger: true,
+    }))) return;
     if (id === currentId) {
       currentId = null;
       ui.shell.classList.remove('editor-open');
@@ -20051,7 +20065,10 @@
     if (sessionStorage.getItem('notes_open_id') === id) rememberOpen(null);
     renderNotes();
     renderTags();
-    toast('Deleted');
+    const deletedToast = window.NotesDeletionSyncHonesty?.permanentDeleteToastMessage
+      ? window.NotesDeletionSyncHonesty.permanentDeleteToastMessage({ count: 1 })
+      : 'Deleted';
+    toast(deletedToast);
   }
 
   function deleteFromList(id) {
