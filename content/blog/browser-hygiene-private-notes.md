@@ -5,7 +5,7 @@ date: 2026-10-31
 description: "Encryption protects your notes on the server. These six browser habits protect them on your screen: the right URL, careful extensions, shared-computer sign-out and more."
 cover_image: /static/blog/browser-hygiene-private-notes.jpg
 cover_alt: "Illustration of a browser window with a padlock in the address bar, a small shield over a notes icon, and a puzzle-piece extension icon set aside"
-draft: true
+draft: false
 ---
 
 Deeperguard encrypts your notes on your device with AES-GCM 256 before they sync, so our servers only ever hold ciphertext. That handles the server side. But while your vault is unlocked, your notes are readable on *your* screen, inside *your* browser. That's the part only you can look after, and a few small habits go a long way.
