@@ -4853,9 +4853,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b">Free</h3>", home.data)
         self.assertIn(b">Basic</h3>", home.data)
         self.assertIn(b">Pro</h3>", home.data)
-        # After-beta Free schedule is explicit (€0); Free card still says Always free.
+        # After-beta Free schedule is explicit (€0); Free card says no payment required.
         self.assertIn("always €0".encode(), home.data)
-        self.assertIn(b"Always free", home.data)
+        self.assertIn(b"No payment required", home.data)
         self.assertIn(b'class="is-unavailable">Not included: Passkey sign-in', home.data)
         self.assertIn(b"mk-hash-open", home.data)
         marketing_js = (APP_DIR / "static" / "js" / "marketing.js").read_text(encoding="utf-8")
