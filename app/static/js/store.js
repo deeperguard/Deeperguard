@@ -1201,6 +1201,7 @@ const NotesStore = (() => {
   }
 
   const PASSWORD_ACK_KEY = 'notes_password_ack_at';
+  const AUTH_SECURITY_ACK_KEY = 'notes_auth_security_ack_at';
 
   function readPasswordAck() {
     try {
@@ -1220,6 +1221,31 @@ const NotesStore = (() => {
       /* ignore quota */
     }
     state.blockPushForPasswordRotation = false;
+  }
+
+  function readAuthSecurityAck() {
+    try {
+      const value = Number(localStorage.getItem(AUTH_SECURITY_ACK_KEY));
+      return Number.isFinite(value) && value > 0 ? value : 0;
+    } catch (err) {
+      return 0;
+    }
+  }
+
+  function ackAuthSecurity(at) {
+    const ts = Number(at) || 0;
+    if (!ts) return;
+    try {
+      localStorage.setItem(AUTH_SECURITY_ACK_KEY, String(ts));
+    } catch (err) {
+      /* ignore quota */
+    }
+  }
+
+  function remoteAuthSecurityEvent(account) {
+    const server = Number(account?.auth_security_at) || 0;
+    if (!server) return false;
+    return server > readAuthSecurityAck() + 0.001;
   }
 
   function remotePasswordChanged(account) {
@@ -5569,6 +5595,7 @@ const NotesStore = (() => {
         });
       }
       ackPasswordChanged(passwordRes?.password_changed_at);
+      ackAuthSecurity(passwordRes?.auth_security_at || passwordRes?.password_changed_at);
       if (typeof NotesVaultSecrets !== 'undefined') {
         NotesVaultSecrets.setAccountPassword(next);
       }
@@ -6042,6 +6069,8 @@ const NotesStore = (() => {
     saveSecureSendSentRecord,
     ackPasswordChanged,
     remotePasswordChanged,
+    ackAuthSecurity,
+    remoteAuthSecurityEvent,
     prepareForRemotePasswordRotation,
     abandonLocalForPasswordRotation,
     passwordChangeInFlight: () => passwordChangeInFlight,

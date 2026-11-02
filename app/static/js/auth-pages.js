@@ -85,6 +85,14 @@ function ackPasswordChanged(at) {
   } catch (e) { /* ignore */ }
 }
 
+function ackAuthSecurity(at) {
+  const ts = Number(at) || 0;
+  if (!ts) return;
+  try {
+    localStorage.setItem('notes_auth_security_ack_at', String(ts));
+  } catch (e) { /* ignore */ }
+}
+
 async function stashLoginSession(data, email, password) {
   try {
     const nextEmail = String(email || '').trim().toLowerCase();
@@ -125,6 +133,7 @@ async function stashLoginSession(data, email, password) {
     }
   } catch (e) { /* ignore */ }
   if (data.password_changed_at) ackPasswordChanged(data.password_changed_at);
+  if (data.auth_security_at) ackAuthSecurity(data.auth_security_at);
 }
 
 function mapPasswordSignInError(err) {

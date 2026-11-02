@@ -4145,6 +4145,14 @@ html.totp-toast-open.toast-above-dialog #toast {
 body.scan-dialog-open {
   overflow: hidden;
 }
+.auth-security-notice-backdrop {
+  z-index: 120;
+  background: rgba(0, 0, 0, 0.55);
+}
+#auth-security-notice.auth-security-notice {
+  z-index: 121;
+  max-width: min(440px, 100%);
+}
 #server-copy-backdrop { z-index: 92; }
 #server-copy-dialog.server-copy-dialog {
   z-index: 93;

@@ -2242,6 +2242,18 @@
   <!-- File pickers live outside .sidebar so mobile editor-open (pointer-events:none) cannot block iOS/Safari. -->
   <input id="scan-camera" class="sr-file" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
   <input id="scan-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,application/pdf,text/plain" multiple tabindex="-1" aria-hidden="true">
+  <div id="auth-security-notice-backdrop" class="scan-backdrop auth-security-notice-backdrop" hidden aria-hidden="true"></div>
+  <div id="auth-security-notice" class="scan-dialog auth-security-notice" hidden role="alertdialog" aria-modal="true" aria-labelledby="auth-security-notice-title" aria-describedby="auth-security-notice-body">
+    <header class="scan-dialog-head">
+      <h2 id="auth-security-notice-title">Account sign-in changed</h2>
+    </header>
+    <div class="scan-dialog-body">
+      <p id="auth-security-notice-body" class="scan-dialog-lead">Recovery, a password change, or 2FA reset happened on this account. If that was not you, someone else may have taken over account sign-in. Check Settings → Devices, secure this device, and change your vault password from a trusted device.</p>
+    </div>
+    <footer class="scan-dialog-foot">
+      <button type="button" id="auth-security-notice-ack" class="btn primary block">I reviewed this</button>
+    </footer>
+  </div>
   <div id="server-copy-backdrop" class="scan-backdrop" hidden></div>
   <div id="server-copy-dialog" class="scan-dialog server-copy-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="server-copy-title">
     <div class="scan-dialog-handle" aria-hidden="true"></div>
