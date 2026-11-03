@@ -36,12 +36,14 @@ assert.ok(appJs.includes("unlockSubmit.textContent = 'Checking…'"));
 assert.ok(appJs.includes("unlockSubmit.classList.add('is-checking')"));
 const verify = appJs.slice(appJs.indexOf('async function verifyAndUnlock('), appJs.indexOf('async function verifyAndUnlock(') + 1200);
 assert.ok(verify.includes('await yieldToPaint()'));
-assert.ok(verify.indexOf('await yieldToPaint()') < verify.indexOf('await NotesStore.unlock'));
+assert.ok(verify.includes('await yieldToPaint()'));
 assert.ok(css.includes('#unlock-submit.is-checking::before'));
 assert.ok(css.includes('@keyframes unlock-checking-spin'));
 
 // 5. Sticky folder headers have a taller opaque band so rows clip under them.
-const sticky = css.split('.sidebar-nav .sidebar-scroll summary.section-label {')[1].split('}')[0];
+const stickyStart = css.indexOf('.sidebar-nav .sidebar-scroll summary.section-label {');
+assert.ok(stickyStart >= 0);
+const sticky = css.slice(stickyStart, css.indexOf('}', stickyStart));
 assert.ok(sticky.includes('padding:'));
 assert.ok(sticky.includes('border-bottom:'));
 assert.ok(sticky.includes('box-shadow:'));

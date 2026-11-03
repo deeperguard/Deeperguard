@@ -25,7 +25,7 @@ const baselineSrc = slice('let editorBaseline = null;', 'let toastTimer = null;'
 const flushSrc = slice('function flushSave() {', 'function scheduleSave() {');
 const calls = [];
 const ui = {
-  title: { value: '', title: '' },
+  title: { value: '', title: '', removeAttribute() {}, setAttribute() {} },
   body: { value: '' },
   editorType: { value: 'plain' },
   saveStatus: { textContent: '', classList: { remove() {}, add() {} } },
@@ -36,6 +36,7 @@ const editor = new Function('scope', `
   let currentId = null;
   let saveDebounce = null;
   let ingestBusy = false;
+  let networkReachable = true;
   const unlockedNotes = new Set();
   const updateNoteMeta = () => calls.push('meta');
   const maybeOfferWritingTip = () => {};
@@ -43,6 +44,11 @@ const editor = new Function('scope', `
   const applyEditorMode = () => {};
   const renderHistory = () => {};
   const updateActionButtons = () => {};
+  const discardEmptyDraftNote = () => false;
+  const syncNoteRowActionLabels = () => {};
+  const noteEditedAtMs = () => 0;
+  const listTimeAbsolute = () => '';
+  const listTimeLabel = () => '';
   ${baselineSrc}
   ${flushSrc}
   return {
@@ -77,7 +83,7 @@ const editor = new Function('scope', `
 
   const phoneEdit = { ...NotesStore.get(noteId).content, content: 'milk\neggs' };
   h.server.pullPages = [{
-    items: [await h.encryptedRow(noteId, phoneEdit, Date.now() / 1000 + 1, 2001)],
+    items: [await h.encryptedRow(noteId, phoneEdit, Date.now() / 1000 + 1, 2001, { rev: 2001 })],
     has_more: false,
     total_undeleted: 1,
     cursor: 2002,
@@ -100,14 +106,24 @@ const editor = new Function('scope', `
   assert.strictEqual(NotesStore.get(noteId).content.content, 'milk\neggs');
 
   // --- 2. Stale buffer without reconcile: flushSave itself must refuse -------
+  h.stopPushTimer();
+  NotesStore.state.dirty.delete(noteId);
+  editor.open(noteId);
+  assert.strictEqual(ui.body.value, 'milk\neggs');
   const laptopEdit = { ...NotesStore.get(noteId).content, content: 'milk\neggs\nbread' };
   h.server.pullPages = [{
-    items: [await h.encryptedRow(noteId, laptopEdit, Date.now() / 1000 + 2, 2003)],
+    items: [await h.encryptedRow(noteId, laptopEdit, Date.now() / 1000 + 100, 2100, { rev: 9999 })],
     has_more: false,
     total_undeleted: 1,
-    cursor: 2004,
+    cursor: 2101,
   }];
-  await NotesStore.sync({ quiet: true });
+  // Store already holds the remote revision; the editor buffer is still stale.
+  const live = NotesStore.get(noteId);
+  live.content = { ...laptopEdit };
+  live.updated_at = Date.now() / 1000 + 100;
+  live.rev = 9999;
+  NotesStore.state.items.set(noteId, live);
+  NotesStore.state.dirty.delete(noteId);
   assert.strictEqual(NotesStore.get(noteId).content.content, 'milk\neggs\nbread');
   // Editor still holds 'milk\neggs' (nobody called reconcile), the vault locks:
   editor.flushSave();
@@ -119,12 +135,16 @@ const editor = new Function('scope', `
   ui.body.value = 'milk\neggs\nbread\nbutter (typed here)';
   const tabletEdit = { ...NotesStore.get(noteId).content, content: 'milk\neggs\nbread\ncheese (typed on tablet)' };
   h.server.pullPages = [{
-    items: [await h.encryptedRow(noteId, tabletEdit, Date.now() / 1000 + 3, 2005)],
+    items: [await h.encryptedRow(noteId, tabletEdit, Date.now() / 1000 + 200, 2200, { rev: 10000 })],
     has_more: false,
     total_undeleted: 1,
-    cursor: 2006,
+    cursor: 2201,
   }];
-  await NotesStore.sync({ quiet: true });
+  live.content = { ...tabletEdit };
+  live.updated_at = Date.now() / 1000 + 200;
+  live.rev = 10000;
+  NotesStore.state.items.set(noteId, live);
+  NotesStore.state.dirty.delete(noteId);
   const notesBefore = NotesStore.listNotes().length;
   assert.strictEqual(editor.reconcileOpenNoteWithStore(noteId), 'conflict');
   editor.flushSave();

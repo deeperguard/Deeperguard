@@ -5,6 +5,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const { cssPhoneBlock } = require('./css_media_blocks');
 
 const root = path.join(__dirname, '..');
 const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
@@ -17,7 +18,7 @@ assert.ok(renderTotp.includes('>On server</button>'), 'marketing label must stay
 assert.ok(renderTotp.includes('data-totp-copy'), 'tap-to-copy row control must remain');
 
 assert.ok(appCss.includes('@media (max-width: 999px)'));
-const narrowBlock = appCss.split('@media (max-width: 999px) {')[1].split('@media (min-width: 1000px)')[0];
+const narrowBlock = cssPhoneBlock(appCss);
 assert.ok(narrowBlock.includes('.totp-item-main'), 'narrow rules must retarget the copy row');
 assert.ok(narrowBlock.includes('grid-template-areas'), 'code moves off the identity column on narrow viewports');
 assert.ok(narrowBlock.includes('"code code"'), 'TOTP code sits on its own row so names keep horizontal space');

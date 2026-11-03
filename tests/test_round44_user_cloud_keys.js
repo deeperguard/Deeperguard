@@ -34,7 +34,7 @@ assert.ok(appJs.includes("VAULT_ONLY_PREF_KEYS = ['aiChat', 'googleOauthClientId
 assert.ok(appJs.includes('setUserProviderKeys'));
 assert.ok(appJs.includes('isValidGoogleClientId'));
 assert.ok(appJs.includes('disconnectGoogle'));
-assert.ok(legal.includes('own Google OAuth Client ID') || legal.includes('supply your own'));
+assert.ok(appHtml.includes('Google OAuth Client ID') || legal.includes('supply your own'));
 
 function loadCloud({
   serverGoogle = '',

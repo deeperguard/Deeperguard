@@ -1,6 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const { cssPhoneBlock } = require('./css_media_blocks');
 
 const root = path.join(__dirname, '..');
 const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
@@ -51,7 +52,7 @@ assert.ok(marketing.includes('.mk-nav a { white-space: nowrap;'));
 assert.ok(marketing.includes('min-height: 44px'));
 
 assert.ok(appJs.includes('flex-direction: column') || css.includes('flex-direction: column'));
-const phone = css.split('@media (max-width: 999px)')[1].split('@media (min-width: 1000px)')[0];
+const phone = cssPhoneBlock(css);
 assert.ok(phone.includes('.note-list-head-copy'));
 assert.ok(phone.includes('flex-direction: column'));
 assert.ok(!phone.split('.note-list-title {')[1].split('}')[0].includes('max-width: 100%'));
@@ -76,7 +77,7 @@ assert.ok(html.includes('dir="auto"'));
 assert.ok(appJs.includes('function markAutoDir'));
 assert.ok(css.includes('width: min(720px, 100%)'));
 assert.ok(!css.includes('margin-left: auto;\n  color: var(--muted);'));
-assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 5);
+assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 6);
 
 const devices = appJs.split('function renderSignedInDevices')[1].split('function stopSignedInDevicesRefresh')[0];
 assert.ok(devices.includes('if (item.current)'));

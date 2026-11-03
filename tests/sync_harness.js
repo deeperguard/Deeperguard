@@ -77,7 +77,12 @@ global.NotesIDB = {
 };
 
 function jsonResponse(status, payload) {
-  return { ok: status >= 200 && status < 300, status, json: async () => payload };
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => payload,
+    headers: { get: () => null },
+  };
 }
 
 global.fetch = async (url, options = {}) => {
