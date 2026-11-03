@@ -8,7 +8,7 @@ cover_alt: "Illustration of an old and a new smartphone joined by a dashed arrow
 draft: true
 ---
 
-Two-factor authentication (2FA) is one of the best upgrades you can give an account. Even if someone learns your password, they still need the second step. But the same protection can lock *you* out if your phone is lost, broken or wiped before you've planned for it. A few minutes of preparation fixes that.
+Two-factor authentication (2FA) is one of the best upgrades you can give an account. Even if someone learns your password, they still need the second step. But the same protection can lock you out if your phone is lost, broken or wiped before you've planned for it. A few minutes of preparation fixes that.
 
 ## Save your backup codes the day you turn on 2FA
 
