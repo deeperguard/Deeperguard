@@ -15,7 +15,7 @@ assert.ok(storeJs.includes('Retry the other'));
 assert.ok(storeJs.includes('Do not persist vault_kdf_version until ciphertext proves'));
 assert.ok(!appJs.includes('if (silent) rejectWrongUnlockPassword()'));
 // Round 50 deps kept.
-assert.ok(/Pillow==12\.3\.0/.test(req));
+assert.ok(/Pillow==13\.0\.0/.test(req));
 assert.ok(/pyOpenSSL==26\.4\.0/.test(req));
 
 console.log('test_round51_client ok');

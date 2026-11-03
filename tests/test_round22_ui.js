@@ -48,6 +48,6 @@ assert.ok(
 const totpAdd = css.split('html.layout-compact #totp-pane #btn-totp-add')[1].split('}')[0];
 assert.ok(totpAdd.includes('display: inline-flex !important'));
 assert.ok(totpAdd.includes('min-height: 44px'));
-assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 5);
+assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 6);
 
 console.log('round 22 ui ok');

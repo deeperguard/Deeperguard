@@ -83,6 +83,6 @@ const starRow = html.indexOf('data-editor-proxy="btn-star" title="Star"');
 const menuAt = html.indexOf('editor-toolbar-menu-panel');
 assert.ok(starRow > 0 && starRow < menuAt);
 
-assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 5);
+assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 6);
 
 console.log('test_round28_ui ok');

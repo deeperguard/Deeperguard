@@ -24,6 +24,6 @@ assert.ok(css.includes('html.layout-compact .shell.editor-open #btn-list-menu'))
 // Phone drawer starts under the menu button instead of padding a tall empty band.
 assert.ok(appJs.includes('panel.style.top'));
 assert.ok(appJs.includes("getComputedStyle(sidebar).transform !== 'none'"));
-assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 5);
+assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 6);
 
 console.log('round 24 ui ok');

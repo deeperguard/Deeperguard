@@ -1,6 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const { cssPhoneBlock } = require('./css_media_blocks');
 
 const root = path.join(__dirname, '..');
 const css = fs.readFileSync(path.join(root, 'app/static/css/app.css'), 'utf8');
@@ -77,7 +78,7 @@ assert.ok(
 assert.ok(html.includes('data-theme-opt="dark" aria-pressed="false"'));
 assert.ok(appJs.includes("btn.setAttribute('aria-pressed', on ? 'true' : 'false')"));
 
-const phoneTitle = css.split('@media (max-width: 999px)')[1].split('@media (min-width: 1000px)')[0];
+const phoneTitle = cssPhoneBlock(css);
 const titleRule = phoneTitle.split('.note-list-title {')[1].split('}')[0];
 assert.ok(titleRule.includes('white-space: nowrap'));
 assert.ok(titleRule.includes('text-overflow: ellipsis'));
@@ -106,6 +107,6 @@ assert.match(superHtml, /<em>italic<\/em>/);
 assert.match(superHtml, /<strong>bold<\/strong>/);
 assert.doesNotMatch(superHtml, /<em>bar<\/em>/);
 
-assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 5);
+assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 6);
 
 console.log('round 26 ui ok');

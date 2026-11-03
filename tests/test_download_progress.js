@@ -104,8 +104,8 @@ assert.ok(appJs.includes('closeFileDownloadOverlayA11y'));
 assert.ok(appJs.includes('app.inert = true'));
 assert.ok(appJs.includes('formatVaultSyncDownloadProgress'));
 
-const vaultSrc = html.indexOf('/static/js/vault-sync-progress.js');
-const appSrc = html.indexOf('/static/js/app.js');
+const vaultSrc = html.indexOf("asset_script('js/vault-sync-progress.js')");
+const appSrc = html.indexOf("asset_script('js/app.js')");
 assert.ok(vaultSrc > 0 && vaultSrc < appSrc);
 
 console.log('ok');

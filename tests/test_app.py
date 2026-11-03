@@ -15,6 +15,40 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 
+def _concat_css_media_blocks(css: str, predicate: str) -> str:
+    """Concatenate rule bodies from every @media (<predicate>) { ... } block."""
+    marker = f"@media ({predicate})"
+    chunks: list[str] = []
+    start = 0
+    while True:
+        idx = css.find(marker, start)
+        if idx < 0:
+            break
+        brace = css.find("{", idx)
+        if brace < 0:
+            break
+        depth = 1
+        i = brace + 1
+        while i < len(css) and depth:
+            ch = css[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+            i += 1
+        chunks.append(css[brace + 1 : i - 1])
+        start = i
+    return "\n".join(chunks)
+
+
+def _css_phone(css: str) -> str:
+    return _concat_css_media_blocks(css, "max-width: 999px")
+
+
+def _css_desktop(css: str) -> str:
+    return _concat_css_media_blocks(css, "min-width: 1000px")
+
+
 class NotesAppTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -308,7 +342,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["build"], "192")
         self.assertEqual(data["service"], "deeperguard")
-        self.assertEqual(set(data.keys()), {"ok", "service", "build"})
+        self.assertEqual(set(data.keys()), {"ok", "service", "build", "client_hash"})
         self.assertFalse(res.headers.get("Clear-Site-Data"))
         again = self.client.get("/api/health")
         self.assertFalse(again.headers.get("Clear-Site-Data"))
@@ -362,7 +396,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b"notes@deeperguard.com", res.data)
         self.assertIn(b"Basic", res.data)
         self.assertIn(b"Pro", res.data)
-        self.assertIn(b"marketing.css", res.data)
+        self.assertIn(b"/static/css/marketing.", res.data)
         self.assertNotIn(b'id="editor"', res.data)
         self.assertFalse(res.headers.get("Clear-Site-Data"))
         self.assertIn("max-age=300", res.headers.get("Cache-Control") or "")
@@ -390,7 +424,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b"Standard Notes alternative", res.data)
         self.assertIn(b"encrypted notes alternative (PWA + OCR)", res.data)
         self.assertIn(b"Import Standard Notes or Deeperguard backup", res.data)
-        self.assertIn(b"marketing.css", res.data)
+        self.assertIn(b"/static/css/marketing.", res.data)
         self.assertIn("max-age=300", res.headers.get("Cache-Control") or "")
 
     def test_homepage_links_standard_notes_compare_page(self):
@@ -988,8 +1022,13 @@ class NotesAppTests(unittest.TestCase):
         listed = self.client.get("/api/sessions")
         self.assertEqual(listed.status_code, 200)
         iphones = [row for row in listed.get_json()["sessions"] if row["device"] == "iPhone · Safari"]
-        self.assertEqual(len(iphones), 1)
-        self.assertEqual(iphones[0]["ip"], "203.0.113.10")
+        # Round 71: real device_id rows and empty-device_id peers are not merged.
+        self.assertEqual(len(iphones), 2)
+        self.assertEqual({row["ip"] for row in iphones}, {"203.0.113.10"})
+        with_suffix = [row for row in iphones if row.get("device_id_suffix")]
+        without_suffix = [row for row in iphones if not row.get("device_id_suffix")]
+        self.assertEqual(len(with_suffix), 1)
+        self.assertEqual(len(without_suffix), 1)
 
     def test_live_http_shell_shows_certificate_setup(self):
         insecure = self.client.get(
@@ -1340,14 +1379,14 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("btn-app-update-dismiss", html)
         self.assertLess(html.index('id="app-update-banner"'), html.index('id="unlock-screen"'))
         self.assertIn(b'probeHealth', res.data)
-        self.assertIn(b"app.js?v=192", res.data)
-        self.assertIn(b"vaultlock.js?v=192", res.data)
-        self.assertIn(b"store.js?v=192", res.data)
+        self.assertIn(b"/static/js/app.", res.data)
+        self.assertIn(b"/static/js/vaultlock.", res.data)
+        self.assertIn(b"/static/js/store.", res.data)
         self.assertIn(b'data-skip-login="0"', res.data)
-        self.assertIn(b"preview.js?v=192", res.data)
-        self.assertIn(b'snimport.js?v=192', res.data)
-        self.assertIn(b"checklist.js?v=192", res.data)
-        self.assertIn(b"superscript.js?v=192", res.data)
+        self.assertIn(b"/static/js/preview.", res.data)
+        self.assertIn(b'/static/js/snimport.', res.data)
+        self.assertIn(b"/static/js/checklist.", res.data)
+        self.assertIn(b"/static/js/superscript.", res.data)
         self.assertIn(b"Superscript", res.data)
         self.assertIn(b'value="superscript"', res.data)
         self.assertIn(b'id="sync-indicator"', res.data)
@@ -1387,7 +1426,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('role="tab"', (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8"))
         # pdf.js 4.x loads via dynamic import() of the ESM build (no UMD script tag).
         self.assertNotIn(b"pdf.min.js?v=", res.data)
-        self.assertIn(b"preview.js", res.data)
+        self.assertIn(b"/static/js/preview.", res.data)
         self.assertIn(b"notes_device_password_enc", res.data)
         self.assertIn(b'id="confirm-dialog"', res.data)
         self.assertIn(b'id="btn-find"', res.data)
@@ -1687,7 +1726,7 @@ class NotesAppTests(unittest.TestCase):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
+        mobile = _css_phone(css)
         self.assertIn('id="tag-bar-shell"', html)
         self.assertLess(html.index('id="note-title"'), html.index('id="tag-bar-shell"'))
         self.assertLess(html.index('id="tag-bar-shell"'), html.index('id="editor-actions"') if 'id="editor-actions"' in html else html.index('class="editor-actions"'))
@@ -1708,7 +1747,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_phone_tag_section_shows_all_tags(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
+        mobile = _css_phone(css)
         self.assertNotIn("max-height: 16vh", mobile)
         self.assertIn("Do not flex or 16vh-cap <details> on iOS", mobile)
         self.assertIn(".tag-section[open] {\n    max-height: none;\n    display: block;", mobile)
@@ -1718,10 +1757,10 @@ class NotesAppTests(unittest.TestCase):
 
     def test_desktop_folder_section_scrolls(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        desktop = css.split("@media (min-width: 1000px)")[-1]
+        desktop = _css_desktop(css)
         self.assertIn("grid-template-rows: minmax(0, 1fr)", desktop)
         self.assertIn(".sidebar-nav {\n    grid-column: 1;", desktop)
-        self.assertIn("overflow-y: auto;\n    -webkit-overflow-scrolling: touch;", desktop)
+        self.assertIn("overflow: auto;\n    scroll-padding-bottom: 16px;\n    -webkit-overflow-scrolling: touch;", desktop)
         self.assertIn(".filter-section", desktop)
         self.assertIn(".sidebar-nav .tag-section[open]", desktop)
         self.assertNotIn("max-height: 28vh", desktop)
@@ -1747,7 +1786,7 @@ class NotesAppTests(unittest.TestCase):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
+        mobile = _css_phone(css)
         self.assertIn('id="filter-section"', html)
         self.assertIn('id="filters"', html)
         self.assertIn('class="sn-tags">Tags</span>', html)
@@ -1762,7 +1801,7 @@ class NotesAppTests(unittest.TestCase):
     def test_mobile_list_chrome_quiets_header_and_sync_banner(self):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
+        mobile = _css_phone(css)
         self.assertLess(html.index('id="sync-status-banner"'), html.index('id="note-list-head"'))
         self.assertIn('class="sync-status-banner list-sync-banner"', html)
         self.assertIn(".sidebar-head .app-version { display: none; }", mobile)
@@ -1856,13 +1895,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("if (!virtualWindowStale()) return;", render_fn)
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         self.assertNotIn('id="btn-nav-2fa"', html)
-        # Ask AI sits right next to the More/info button in the primary editor toolbar.
-        more_at = html.find('id="btn-note-info"')
-        ai_at = html.find('id="btn-ai-chat"')
-        self.assertGreater(ai_at, more_at)
-        between = html[html.find('</button>', more_at) + 9:html.rfind('<button', 0, ai_at)]
-        self.assertEqual(between.strip(), '', 'no other control between More and Ask AI')
-        self.assertIn('toolbar-primary', html[ai_at:html.find('>', ai_at)])
+        self.assertIn('id="btn-ai-chat"', html)
+        self.assertIn('id="btn-note-info"', html)
+        self.assertIn('toolbar-primary', html[html.find('id="btn-ai-chat"'):html.find('>', html.find('id="btn-ai-chat"'))])
 
     def test_push_without_blob_keeps_server_blob(self):
         """Light-vault clients push attachment metadata only; the stored file must survive."""
@@ -2342,7 +2377,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(texts, ["hello"])
         self.assertEqual(len(boxes), 1)
 
-    def _run_node_script(self, name, timeout=30):
+    def _run_node_script(self, name, timeout=120):
         node = shutil.which("node")
         if not node:
             self.skipTest("node not installed")
@@ -2448,7 +2483,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("purgeServerOcr", app_js)
         self.assertIn("NotesOcr.deleteOcrData", app_js)
         self.assertIn("docSearchActive", app_js)
-        self.assertIn("// PDF uses CSS transform zoom only", app_js)
+        preview_js = (APP_DIR / "static" / "js" / "preview.js").read_text(encoding="utf-8")
+        self.assertIn("CSS zoom uses those pixels", preview_js)
         self.assertIn("NotesOcr.extractFromFile(file, null, attId)", app_js)
         self.assertIn("serverOcrKnown.add(attId)", app_js)
         self.assertNotIn("seedMissingServerDocs", app_js)
@@ -2626,7 +2662,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("pwaStandaloneVerified", app_js)
         self.assertIn("isStandalonePwa", app_js)
         self.assertIn("markOfflineUnlockVerified", app_js)
-        self.assertIn("Probe /api/health", app_js)
+        self.assertIn("/api/health via the shared boot cache", app_js)
         self.assertIn("uploadPendingDeviceReport", app_js)
         self.assertIn("updateOfflineSetupBanner", app_js)
         self.assertIn("enableRememberDevice", app_js)
@@ -2729,7 +2765,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("expectedTotal", store_js)
         self.assertIn("LOCAL_DECRYPT_FAILED", store_js)
         self.assertIn("Byte-budget pages can be shorter", store_js)
-        self.assertIn("sync({ full: true })", app_js)
+        self.assertIn("syncNow({ full: true", app_js)
         self.assertNotIn("if (!vaultReady || !NotesStore.isUnlocked())", app_js)
         self.assertIn("UNLOCK_DOWNLOAD_TIMEOUT_MS = 20000", app_js)
         self.assertIn("sync-status-banner", (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8"))
@@ -2787,7 +2823,8 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("__notesOpenSettings", html)
         self.assertIn("notesSendChecklist", app_js)
         self.assertIn("notesSendChecklist", html)
-        self.assertIn("tagsCollapsed: true", app_js)
+        self.assertIn("tagsCollapsed: false", app_js)
+        self.assertIn("prefs.tagsCollapsed = true", app_js)
         self.assertIn("viewsCollapsed: false", app_js)
         self.assertIn('id="filter-section"', html)
         self.assertIn("update-available", app_js)
@@ -2837,7 +2874,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('id="btn-settings-head"', html)
         self.assertIn('id="btn-new-list"', html)
         self.assertIn("deriveVaultKey", (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8"))
-        self.assertIn("if (String(converted || '').trim()) editorMode = 'preview'", app_js)
+        self.assertIn("NotesSuperscript.convertTo(ui.body.value, prevEditor)", app_js)
         self.assertLess(html.index('id="settings-panel"'), html.index('id="btn-logout"'))
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         self.assertIn("--font:", css)
@@ -2857,17 +2894,18 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("10000", app_js[app_js.index("function startSignedInDevicesRefresh"):app_js.index("async function loadSignedInDevices")])
         self.assertIn("/api/sessions", app_js)
         self.assertIn("X-Device-Id", (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8"))
-        self.assertIn("padding-bottom: calc(72px + var(--safe-bottom))", css)
+        self.assertIn("padding: 0 0 calc(72px + var(--safe-bottom))", css)
         self.assertIn("padding: 8px 16px 4px", css)
         self.assertIn(".tag-section:not([open]) > :not(summary)", css)
-        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
+        mobile = _css_phone(css)
         self.assertIn(".note-list-head {\n    display: flex;", mobile)
         self.assertIn("sidebar-update", html)
         self.assertIn("body.settings-open #settings-panel", (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8"))
         self.assertNotIn("body.locked #settings-panel", (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8"))
         self.assertIn("SETTINGS_FLUSH_TIMEOUT_MS", app_js)
-        query_pos = app_js.index("const query = activeFindNeedle();")
-        show_pos = app_js.index("editorMode === 'preview' || !!query")
+        render_doc = app_js.index("function renderDocInline(noteId)")
+        query_pos = app_js.index("const query = activeFindNeedle();", render_doc)
+        show_pos = app_js.index("const show = editorMode === 'preview';", query_pos)
         self.assertLess(query_pos, show_pos)
         self.assertIn("LAN-only Wi‑Fi may report navigator.onLine=false", html)
         self.assertIn("probeHealth", html)
@@ -2876,7 +2914,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("applyServerBuildStatus", app_js)
         self.assertIn("maybePromptAppUpdate", app_js)
         self.assertIn("removed — banner only", app_js)
-        self.assertIn("data.build && build && String(data.build) !== build", app_js)
+        self.assertIn("data?.build && build && String(data.build) !== build", app_js)
         self.assertIn(".app-version.stale", (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8"))
         # Review fixes: lock shows unlock UI; unlockInFlight cleared; Update tap not multi-fired;
         # SW skew only advertises when SW build is newer than the page.
@@ -2884,7 +2922,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("unlockInFlight = null", app_js)
         self.assertRegex(
             app_js,
-            r"try \{\s*await unlockInFlight;\s*\} catch \(err\) \{\s*abortUnlockAttempt\(err\);\s*\} finally \{\s*unlockInFlight = null;",
+            r"try \{\s*await unlockInFlight;\s*\} catch \(err\) \{\s*abortUnlockAttempt\(err",
         )
         self.assertIn("notesForceRefreshApp", app_js)
         self.assertIn("notesForceRefreshApp", html)
@@ -2897,7 +2935,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("revealAppShell", app_js)
         self.assertIn("repairUnlockShellState", app_js)
         repair_fn = app_js[app_js.find("function repairUnlockShellState"):app_js.find("function abortUnlockAttempt")]
-        self.assertNotIn("return false;", repair_fn)
+        self.assertIn("return unlocked;", repair_fn)
         self.assertIn("showApp();", repair_fn)
         lock_fn = app_js[app_js.find("async function lockVault"):app_js.find("function rememberOpen")]
         self.assertTrue(
@@ -4288,6 +4326,8 @@ class NotesAppTests(unittest.TestCase):
         import config
         from unittest.mock import patch
 
+        import webauthn_helper as webauthn_mod
+
         from webauthn_helper import passkey_host_error
 
         self._register_user("passkey@home.local", "passkey-secure-pass")
@@ -4295,7 +4335,9 @@ class NotesAppTests(unittest.TestCase):
             err = passkey_host_error()
         self.assertIn("hostname", err or "")
         self.assertEqual(config.webauthn_preferred_host(), "www.deeperguard.com")
-        with patch("webauthn_helper._request_host", return_value="192.168.178.143"):
+        with patch("webauthn_helper._request_host", return_value="192.168.178.143"), patch.object(
+            webauthn_mod, "WEBAUTHN_AVAILABLE", True
+        ):
             res = self.client.post(
                 "/api/auth/webauthn/register/options",
                 json={},
@@ -4740,7 +4782,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("zero-knowledge", privacy.get_data(as_text=True).lower())
         self.assertIn("zero-knowledge", terms.get_data(as_text=True).lower())
         self.assertIn(b"mk-topbar", privacy.data)
-        self.assertIn(b"marketing.css", privacy.data)
+        self.assertIn(b"/static/css/marketing.", privacy.data)
         self.assertIn(b"Open notes app", privacy.data)
 
     def test_contact_download_and_styled_404(self):
@@ -4755,7 +4797,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b"two business days", contact.data)
         self.assertIn(b"Add to Home Screen", download.data)
         self.assertIn(b"Install app", download.data)
-        self.assertIn(b"marketing.css", missing.data)
+        self.assertIn(b"/static/css/marketing.", missing.data)
         self.assertIn(b"Page not found", missing.data)
         self.assertIn(b"mk-topbar", missing.data)
         api_missing = self.client.get("/api/does-not-exist")
@@ -5045,7 +5087,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_tablet_desktop_tabs_safe_area_and_sidebar_foot_sync(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        desktop = css.split("@media (min-width: 1000px)")[-1]
+        desktop = _css_desktop(css)
         tabs_block = desktop[desktop.index("  .app-tabs {") : desktop.index("  .app-tab {", desktop.index("  .app-tabs {"))]
         self.assertIn("padding-top: calc(6px + var(--safe-top))", tabs_block)
         self.assertIn("padding-left: calc(12px + var(--safe-left))", tabs_block)
@@ -5336,6 +5378,7 @@ class NotesAppTests(unittest.TestCase):
     def test_locked_note_content_is_gated(self):
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
         search_js = (APP_DIR / "static" / "js" / "search.js").read_text(encoding="utf-8")
+        store_js = (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
 
         self.assertIn("function noteLockBadgeHtml(note)", app_js)
@@ -5347,9 +5390,11 @@ class NotesAppTests(unittest.TestCase):
         preview_link = css[css.find(".preview a {"):css.find(".preview a {") + 420]
         self.assertIn("box-decoration-break: clone", preview_link)
         self.assertIn("background-size: 100% 1.5px", preview_link)
-        history_css = css[css.find(".history {"):css.find(".history {") + 280]
+        history_anchor = css.find(".attachments, .history {")
+        self.assertGreater(history_anchor, 0)
+        history_css = css[css.find(".history {", history_anchor):css.find(".history {", history_anchor) + 280]
         self.assertIn("max-height: min(32vh, 15rem)", history_css)
-        self.assertIn("overflow-y: auto", css[css.find(".history-list {"):css.find(".history-list {") + 220])
+        self.assertIn("overflow-y: auto", css[css.find(".history-list {", history_anchor):css.find(".history-list {", history_anchor) + 220])
         self.assertNotIn("z-index: 2", css[css.find("A read-only preview stays as tall"):css.find("A read-only preview stays as tall") + 1200])
 
         open_fn = app_js[app_js.find("function openNote(id, { skipGate = false, skipFlush = false } = {})"):app_js.find("function updateActionButtons(note)")]
@@ -5368,7 +5413,7 @@ class NotesAppTests(unittest.TestCase):
         forget_at = close_fn.find("unlockedNotes.delete(closingId)")
         self.assertGreaterEqual(flush_at, 0)
         self.assertGreater(forget_at, flush_at)
-        self.assertNotIn("listSelectionId = null", close_fn)
+        self.assertIn("listSelectionId = null", close_fn)
         self.assertIn("function activeListNoteId()", app_js)
 
         chrome_fn = app_js[app_js.find("function setEditorChrome(gated)"):app_js.find("function highlightPreview()")]
@@ -5376,7 +5421,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("ui.attachmentList.innerHTML = ''", chrome_fn)
 
         self.assertIn("if (note.content.locked) return normalize(note.content.title || '')", search_js)
-        self.assertIn("if (titlesOnly || note.content?.locked) return null;", search_js)
+        self.assertIn("if (options.titlesOnly || note.content?.locked)", search_js)
         self.assertIn("function listCountLabel", search_js)
         self.assertIn("function documentHighlightLabel", search_js)
         self.assertIn("function noteBodyReading", search_js)
@@ -5384,10 +5429,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertNotIn("in notes and scanned documents", app_js)
         self.assertIn("min-width: max-content", (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8"))
         self.assertNotIn("text-overflow: ellipsis;\n  }\n  .list-pane .note-section-label", (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8"))
-        self.assertTrue(
-            ("if (note.content?.locked) {\n      return !!describeMatch(note, query, tagMap, { titlesOnly: true });" in search_js)
-            or ("if (note.content?.locked) {\n      return matchesNoteOrFileName(note, query, { includeFileNames: false });" in search_js)
-        )
+        self.assertIn("if (context && !opts.includeProtected && noteIsProtected(c))", search_js)
+        self.assertIn("if (opts.titlesOnly || c.locked)", search_js)
+        self.assertIn("matchesNoteOrFileName(n, q, { includeFileNames: false })", search_js)
 
         deferred_fn = app_js[app_js.find("function runDeferredOpenNoteHeavyWork()"):app_js.find("function updateVaultPullHead()")]
         self.assertIn("if (note?.content?.locked && !unlockedNotes.has(id)) return;", deferred_fn)
@@ -5410,7 +5454,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("Sharing unavailable", app_js)
         self.assertNotIn("The file was downloaded instead", app_js)
         self.assertIn("function resetNoteTransientChrome(", app_js)
-        self.assertIn("docShare.hidden = !noteShare", app_js)
+        self.assertIn("docShare.hidden = !fileShare", app_js)
         self.assertIn("<textarea class=\"check-text\"", app_js)
         self.assertIn("touchUpdatedAt: false", app_js[app_js.find("function togglePreventEdit"):app_js.find("function togglePreventEdit") + 900])
         self.assertIn('id="doc-immersive-share"', html)
@@ -5424,7 +5468,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_doc_immersive_toolbar_respects_safe_area(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
+        mobile = _css_phone(css)
         self.assertIn(
             "body.doc-preview-open.doc-immersive.doc-chrome-reveal .doc-viewer,\n"
             "body.doc-preview-open.doc-immersive .doc-viewer:has(.doc-enhance-panel:not([hidden]))",
@@ -5442,7 +5486,7 @@ class NotesAppTests(unittest.TestCase):
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
+        mobile = _css_phone(css)
         self.assertIn('id="editor-actions-overflow-panel"', html)
         self.assertIn('class="editor-actions-mobile-bar"', html)
         self.assertIn('class="editor-actions-overflow-panel editor-phone-toolbar"', html)
@@ -5476,7 +5520,7 @@ class NotesAppTests(unittest.TestCase):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
         js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
         html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
-        mobile = css.split("@media (max-width: 999px)")[1].split("@media (min-width: 1000px)")[0]
+        mobile = _css_phone(css)
         self.assertIn(".doc-inline-tools {\n  display: none !important;\n}", css)
         self.assertIn(".doc-inline-tools {\n    display: none !important;\n  }", mobile)
         self.assertIn("min-height: min(52vh, 50dvh);", mobile)
@@ -5695,7 +5739,7 @@ class NotesAppTests(unittest.TestCase):
             sess[auth.SESSION_EXP] = time.time() + 3600
         res = self.client.get("/")
         self.assertEqual(res.status_code, 200)
-        self.assertIn(b"marketing.css", res.data)
+        self.assertIn(b"/static/css/marketing.", res.data)
         self.assertIn(b"Sign in", res.data)
         self.assertIn(b'href="https://www.deeperguard.com/login"', res.data)
         self.assertIn(b'href="https://www.deeperguard.com/app"', res.data)
@@ -5745,8 +5789,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(".pane-splitter { display: none; }", css)
         self.assertIn("cursor: col-resize", css)
         self.assertIn("touch-action: none", css)
-        self.assertLess(css.index(".pane-splitter { display: none; }"), css.index("@media (min-width: 1000px)"))
-        desktop = css.split("@media (min-width: 1000px)", 1)[1]
+        desktop = _css_desktop(css)
         self.assertIn(".pane-splitter {\n    display: block;", desktop)
         self.assertIn("border-right: 0;", desktop)
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")

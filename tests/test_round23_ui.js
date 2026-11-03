@@ -22,19 +22,19 @@ assert.ok(views.includes('min-height: 44px !important'));
 assert.ok(views.includes('font-size: 16px'));
 assert.ok(appJs.includes('panel.style.paddingTop'));
 assert.ok(css.includes('.filter-icon {\n    width: 16px;\n    height: 16px;'));
-assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 5);
+assert.strictEqual(css.split('@media (min-width: 1000px)').length - 1, 6);
 
 // 2. Lock, sign-out, and a successful unlock clear the password field.
-assert.ok(appJs.includes('function clearUnlockPasswordField()'));
+assert.ok(appJs.includes('function clearUnlockPasswordField({'));
 assert.ok(appJs.includes('unlockPassword.value = \'\''));
 const lockFn = appJs.slice(appJs.indexOf('async function lockVault('), appJs.indexOf('function rememberOpen('));
-assert.ok(lockFn.includes('clearUnlockPasswordField()'));
+assert.ok(lockFn.includes('clearUnlockPasswordField('));
 const showUnlock = appJs.slice(appJs.indexOf('function showUnlock('), appJs.indexOf('function updateSecureContextHint('));
-assert.ok(showUnlock.includes('clearUnlockPasswordField()'));
+assert.ok(showUnlock.includes('clearUnlockPasswordField('));
 const finished = appJs.slice(appJs.indexOf('async function finishUnlocked('), appJs.indexOf('async function finishUnlocked(') + 400);
-assert.ok(finished.includes('clearUnlockPasswordField()'));
+assert.ok(finished.includes('clearUnlockPasswordField('));
 const leave = appJs.slice(appJs.indexOf('async function clearLocalVaultAndLeave('), appJs.indexOf('async function clearLocalVaultAndLeave(') + 200);
-assert.ok(leave.includes('clearUnlockPasswordField()'));
+assert.ok(leave.includes('clearUnlockPasswordField('));
 
 // 3. The first login-required push or pull raises the not-syncing banner.
 assert.ok(storeJs.includes("emitSync('session-expired', 'Not syncing — sign in again')"));

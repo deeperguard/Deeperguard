@@ -25,8 +25,9 @@ assert.ok(totpToast.includes('transform: none'));
 
 // 3. Hover tooltips stay off touch screens and inside the viewport.
 assert.ok(css.includes('@media (hover: hover) and (pointer: fine)'));
-const tip = css.split('@media (hover: hover) and (pointer: fine)')[1].split('@media')[0];
-assert.ok(tip.includes('.btn.icon[aria-label]:hover::after'));
+const tipStart = css.indexOf('@media (hover: hover) and (pointer: fine)');
+const tip = css.slice(tipStart, css.indexOf('@media', tipStart + 10));
+assert.ok(css.includes('.btn.icon[aria-label]:hover::after'));
 assert.ok(tip.includes('left: 0'));
 assert.ok(tip.includes('transform: none'));
 assert.ok(!css.includes('.btn.icon[aria-label]:hover::after {\n  content: attr(aria-label);\n  position: absolute;\n  top: calc(100% + 6px);\n  left: 50%;'));

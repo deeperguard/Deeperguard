@@ -19,6 +19,8 @@ function loadCryptoWorker() {
     Uint8Array,
     atob,
     btoa,
+    setInterval: () => 0,
+    clearInterval: () => {},
   };
   sandbox.self = sandbox;
   vm.createContext(sandbox);

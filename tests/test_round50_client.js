@@ -25,7 +25,7 @@ assert.ok(vaultSecretsJs.includes('Drop any leftover derived-key stash'));
 assert.ok(storeJs.includes('localTs >= incomingTs'));
 assert.ok(dbPy.includes('touch_password_changed'));
 assert.ok(appPy.includes('touch_password_changed=False'));
-assert.ok(/Pillow==12\.3\.0/.test(req));
+assert.ok(/Pillow==13\.0\.0/.test(req));
 assert.ok(/pyOpenSSL==26\.4\.0/.test(req));
 assert.ok(/cryptography==50\.0\.1/.test(req));
 
