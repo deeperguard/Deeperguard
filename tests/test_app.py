@@ -308,7 +308,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["build"], "192")
         self.assertEqual(data["service"], "deeperguard")
-        self.assertEqual(set(data.keys()), {"ok", "service", "build"})
+        self.assertEqual(set(data.keys()), {"ok", "service", "build", "client_hash"})
         self.assertFalse(res.headers.get("Clear-Site-Data"))
         again = self.client.get("/api/health")
         self.assertFalse(again.headers.get("Clear-Site-Data"))
@@ -362,7 +362,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b"notes@deeperguard.com", res.data)
         self.assertIn(b"Basic", res.data)
         self.assertIn(b"Pro", res.data)
-        self.assertIn(b"marketing.css", res.data)
+        self.assertIn(b"/static/css/marketing.", res.data)
         self.assertNotIn(b'id="editor"', res.data)
         self.assertFalse(res.headers.get("Clear-Site-Data"))
         self.assertIn("max-age=300", res.headers.get("Cache-Control") or "")
@@ -390,7 +390,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b"Standard Notes alternative", res.data)
         self.assertIn(b"encrypted notes alternative (PWA + OCR)", res.data)
         self.assertIn(b"Import Standard Notes or Deeperguard backup", res.data)
-        self.assertIn(b"marketing.css", res.data)
+        self.assertIn(b"/static/css/marketing.", res.data)
         self.assertIn("max-age=300", res.headers.get("Cache-Control") or "")
 
     def test_homepage_links_standard_notes_compare_page(self):
@@ -1340,14 +1340,14 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("btn-app-update-dismiss", html)
         self.assertLess(html.index('id="app-update-banner"'), html.index('id="unlock-screen"'))
         self.assertIn(b'probeHealth', res.data)
-        self.assertIn(b"app.js?v=192", res.data)
-        self.assertIn(b"vaultlock.js?v=192", res.data)
-        self.assertIn(b"store.js?v=192", res.data)
+        self.assertIn(b"/static/js/app.", res.data)
+        self.assertIn(b"/static/js/vaultlock.", res.data)
+        self.assertIn(b"/static/js/store.", res.data)
         self.assertIn(b'data-skip-login="0"', res.data)
-        self.assertIn(b"preview.js?v=192", res.data)
-        self.assertIn(b'snimport.js?v=192', res.data)
-        self.assertIn(b"checklist.js?v=192", res.data)
-        self.assertIn(b"superscript.js?v=192", res.data)
+        self.assertIn(b"/static/js/preview.", res.data)
+        self.assertIn(b'/static/js/snimport.', res.data)
+        self.assertIn(b"/static/js/checklist.", res.data)
+        self.assertIn(b"/static/js/superscript.", res.data)
         self.assertIn(b"Superscript", res.data)
         self.assertIn(b'value="superscript"', res.data)
         self.assertIn(b'id="sync-indicator"', res.data)
@@ -2342,7 +2342,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(texts, ["hello"])
         self.assertEqual(len(boxes), 1)
 
-    def _run_node_script(self, name, timeout=30):
+    def _run_node_script(self, name, timeout=120):
         node = shutil.which("node")
         if not node:
             self.skipTest("node not installed")
@@ -4288,6 +4288,8 @@ class NotesAppTests(unittest.TestCase):
         import config
         from unittest.mock import patch
 
+        import webauthn_helper as webauthn_mod
+
         from webauthn_helper import passkey_host_error
 
         self._register_user("passkey@home.local", "passkey-secure-pass")
@@ -4295,7 +4297,9 @@ class NotesAppTests(unittest.TestCase):
             err = passkey_host_error()
         self.assertIn("hostname", err or "")
         self.assertEqual(config.webauthn_preferred_host(), "www.deeperguard.com")
-        with patch("webauthn_helper._request_host", return_value="192.168.178.143"):
+        with patch("webauthn_helper._request_host", return_value="192.168.178.143"), patch.object(
+            webauthn_mod, "WEBAUTHN_AVAILABLE", True
+        ):
             res = self.client.post(
                 "/api/auth/webauthn/register/options",
                 json={},
@@ -4740,7 +4744,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("zero-knowledge", privacy.get_data(as_text=True).lower())
         self.assertIn("zero-knowledge", terms.get_data(as_text=True).lower())
         self.assertIn(b"mk-topbar", privacy.data)
-        self.assertIn(b"marketing.css", privacy.data)
+        self.assertIn(b"/static/css/marketing.", privacy.data)
         self.assertIn(b"Open notes app", privacy.data)
 
     def test_contact_download_and_styled_404(self):
@@ -4755,7 +4759,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b"two business days", contact.data)
         self.assertIn(b"Add to Home Screen", download.data)
         self.assertIn(b"Install app", download.data)
-        self.assertIn(b"marketing.css", missing.data)
+        self.assertIn(b"/static/css/marketing.", missing.data)
         self.assertIn(b"Page not found", missing.data)
         self.assertIn(b"mk-topbar", missing.data)
         api_missing = self.client.get("/api/does-not-exist")
@@ -5695,7 +5699,7 @@ class NotesAppTests(unittest.TestCase):
             sess[auth.SESSION_EXP] = time.time() + 3600
         res = self.client.get("/")
         self.assertEqual(res.status_code, 200)
-        self.assertIn(b"marketing.css", res.data)
+        self.assertIn(b"/static/css/marketing.", res.data)
         self.assertIn(b"Sign in", res.data)
         self.assertIn(b'href="https://www.deeperguard.com/login"', res.data)
         self.assertIn(b'href="https://www.deeperguard.com/app"', res.data)

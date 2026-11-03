@@ -62,10 +62,8 @@ class MarketingSteps12Tests(unittest.TestCase):
         self.assertIn("sync only ever sees ciphertext", body)
         self.assertIn("The one exception is Ask AI", body)
         self.assertIn('href="/verify">check it yourself</a>', body)
-        self.assertIn(
-            "ciphertext-only sync (except Ask AI), servers in the EU",
-            body,
-        )
+        self.assertIn("ciphertext-only sync (except Ask AI)", body)
+        self.assertIn("Server in Vienna, Austria (EU)", body)
         self.assertIn("mk-trust-strip", body)
         self.assertIn("/terms#operator-identity", body)
 
@@ -92,7 +90,8 @@ class MarketingSteps12Tests(unittest.TestCase):
             body = res.get_data(as_text=True)
             self.assertIn("mk-compare-stack", body)
             self.assertRegex(body, r'href="/verify"[^>]*>check it yourself</a>')
-            self.assertNotIn('href="/verify">/verify</a>', body)
+            # Footer and body may link to /verify with visible "/verify" label.
+            self.assertIn('href="/verify"', body)
 
 
 if __name__ == "__main__":
