@@ -8,7 +8,7 @@ cover_alt: "Illustration of a browser window with a padlock in the address bar, 
 draft: false
 ---
 
-Deeperguard encrypts your notes on your device with AES-GCM 256 before they sync, so our servers only ever hold ciphertext. That handles the server side. But while your vault is unlocked, your notes are readable on *your* screen, inside *your* browser. That's the part only you can look after, and a few small habits go a long way.
+Deeperguard encrypts your notes on your device with AES-GCM 256 before they sync, so our servers only ever hold ciphertext. That handles the server side. But while your vault is unlocked, your notes are readable on your screen, inside your browser. That's the part only you can look after, and a few small habits go a long way.
 
 ## 1. Check the address before you type your vault password
 
@@ -42,7 +42,7 @@ Copying a note puts it on your clipboard, where other apps may be able to read i
 
 ## 6. Lock your screen, not just your vault
 
-If you step away from your desk, lock the computer (Windows: <kbd>Win</kbd> + <kbd>L</kbd>, macOS: <kbd>Ctrl</kbd> + <kbd>Cmd</kbd> + <kbd>Q</kbd>). An unlocked laptop with an open tab is the easiest "hack" there is.
+If you step away from your desk, lock the computer (Windows: Win+L, macOS: Control+Command+Q). An unlocked laptop with an open tab is the easiest "hack" there is.
 
 ## Want to see what the browser is allowed to load?
 
