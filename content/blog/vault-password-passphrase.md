@@ -5,7 +5,7 @@ date: 2026-11-03
 description: "Your vault password is the one secret everything else rests on. Here's how to build a long, memorable passphrase, where to keep a backup, and what to avoid."
 cover_image: /static/blog/vault-password-passphrase.jpg
 cover_alt: "Illustration of four blank rounded tiles linked into a chain that ends in a key, beside a closed teal padlock on a soft cream and blue background"
-draft: true
+draft: false
 ---
 
 Deeperguard is built so that your notes are encrypted on your device with AES-GCM 256 before they sync, and our servers only ever hold ciphertext. That design has one consequence worth taking seriously: your vault password is the secret that everything else rests on. Make it strong, make it memorable, and keep it to yourself.
