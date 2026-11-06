@@ -5,7 +5,7 @@ date: 2026-11-06
 description: "Passwords, Wi-Fi keys and account numbers pasted into chat or email stay there for years. Here's a simple habit for sharing secrets safely, and how Secure Send keeps the key out of our hands."
 cover_image: /static/blog/stop-pasting-passwords-in-chat.jpg
 cover_alt: "Illustration of two phones with shield icons and a speech bubble between them holding a teal envelope with a closed padlock, joined by a dotted line, on a soft cream and blue background"
-draft: true
+draft: false
 ---
 
 Sooner or later someone needs a secret from you: the Wi-Fi password for a guest, a shared streaming login, a door code, an account number for a family member. The quickest move is to paste it into the chat you already have open. It's also the move most likely to come back and bite you.
