@@ -1188,6 +1188,7 @@ const NotesStore = (() => {
   }
 
   function isProbablyOffline(err) {
+    if (err && (err.code === 'timeout' || err.code === 'UNLOCK_NETWORK_STALL')) return true;
     const message = String(err && err.message ? err.message : err || '');
     // Fetch/network wording wins even if a recent health probe flipped us "online".
     if (/failed to fetch|networkerror|load failed|timed out|offline|net::err_/i.test(message)) {
@@ -2228,8 +2229,14 @@ const NotesStore = (() => {
     let cursorSince = 0;
     let afterUuid = '';
     let pages = 0;
+    const probeDeadline = Date.now() + 45000;
     try {
       while (pages < 24 && rows.length < 3) {
+        if (Date.now() > probeDeadline) {
+          const stall = new Error('Server did not respond in time. Check your connection and try again.');
+          stall.code = 'UNLOCK_NETWORK_STALL';
+          throw stall;
+        }
         pages += 1;
         const pullBody = {
           since: cursorSince,

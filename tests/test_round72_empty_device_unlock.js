@@ -19,7 +19,13 @@ assert.ok(appJs.includes('if (isRealNetworkFailure(err)) return { offline: true,
 
 // Empty-device retry UI
 assert.ok(appJs.includes('Getting your notes from the server…'));
-assert.ok(appJs.includes("Can't reach the server right now. We'll keep trying in the background."));
+assert.ok(
+  appJs.includes(
+    "This device couldn't reach the notes server (you may be online without usable data). We'll keep trying in the background — tap Try again when your connection works.",
+  ),
+);
+assert.ok(appJs.includes('UNLOCK_NETWORK_DEADLINE_MS'));
+assert.ok(appJs.includes('async function raceUnlockDeadline'));
 assert.ok(appJs.includes('EMPTY_DEVICE_RETRY_DELAYS_MS'));
 assert.ok(appJs.includes('fetchEmptyDeviceProofWithRetry'));
 assert.ok(appJs.includes("err.code = 'EMPTY_DEVICE_FETCH_PENDING'"));
@@ -135,7 +141,7 @@ function makeServerUnreachableNow({ fetchHealthJson, notesNetworkReachable, navi
       status.hidden = false;
       status.classList.remove('is-fetching');
       status.classList.add('is-fallback');
-      status.textContent = "Can't reach the server right now. We'll keep trying in the background.";
+      status.textContent = "This device couldn't reach the notes server (you may be online without usable data). We'll keep trying in the background — tap Try again when your connection works.";
       progress.hidden = true;
       progress.classList.remove('is-indeterminate');
       retryBtn.hidden = false;
@@ -156,7 +162,7 @@ function makeServerUnreachableNow({ fetchHealthJson, notesNetworkReachable, navi
   setEmptyDeviceUnlockUi('fallback');
   assert.strictEqual(
     status.textContent,
-    "Can't reach the server right now. We'll keep trying in the background.",
+    "This device couldn't reach the notes server (you may be online without usable data). We'll keep trying in the background — tap Try again when your connection works.",
   );
   assert.ok(status.classList.contains('is-fallback'));
   assert.ok(!retryBtn.hidden);
