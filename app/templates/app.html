@@ -1441,6 +1441,18 @@
     </div>
     <section id="agenda-pane" class="agenda-pane" hidden>
       <input id="agenda-ics-input" type="file" class="sr-file" accept="text/calendar,.ics" tabindex="-1" aria-hidden="true">
+      <div id="agenda-calendar-settings-backdrop" class="agenda-calendar-settings-backdrop" hidden aria-hidden="true"></div>
+      <aside id="agenda-calendar-settings" class="agenda-calendar-settings" hidden aria-hidden="true">
+        <header class="agenda-calendar-settings-head">
+          <h2 class="agenda-calendar-settings-title">Calendar</h2>
+          <button type="button" class="btn icon" id="agenda-calendar-settings-close" aria-label="Close">×</button>
+        </header>
+        <div class="agenda-calendar-settings-body">
+          <p class="settings-hint">Import events from an .ics file. Events stay encrypted in your vault; only https links are used as join targets.</p>
+          <button type="button" class="btn primary agenda-calendar-settings-import" id="agenda-calendar-import-ics">Import ICS…</button>
+          <button type="button" class="btn ghost sm agenda-calendar-settings-account" id="agenda-open-app-settings">App settings…</button>
+        </div>
+      </aside>
       <div id="agenda-root" class="agenda-root" data-agenda-root></div>
     </section>
     <section id="totp-pane" class="totp-pane" hidden>
