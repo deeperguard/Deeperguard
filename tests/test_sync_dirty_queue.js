@@ -194,8 +194,9 @@ async function encryptedRow(uuid, content, updatedAt, syncedAt) {
   await NotesStore.pushDirty({ quiet: true });
   const push = fetchCalls.find((c) => c.url.includes('/api/sync/items') && c.method === 'POST');
   assert.ok(push, 'restored queue is pushed');
-  assert.strictEqual(push.body.items.length, 1, 'only the pending tombstone is pushed after unlock');
-  const deletedRow = push.body.items.find((row) => row.item_uuid === delId);
+  const syncPushItems = push.body.items.filter((row) => row.item_uuid !== NotesStore.AGENDA_PACK_UUID);
+  assert.strictEqual(syncPushItems.length, 1, 'only the pending tombstone is pushed after unlock');
+  const deletedRow = syncPushItems.find((row) => row.item_uuid === delId);
   assert.ok(deletedRow, 'tombstone delete is pushed after unlock');
   assert.strictEqual(deletedRow.deleted, true, 'tombstone pushes as a delete');
   assert.ok(deletedRow.ciphertext, 'delete still carries ciphertext for the server');

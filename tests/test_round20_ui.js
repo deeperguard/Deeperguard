@@ -7,11 +7,13 @@ const css = fs.readFileSync(path.join(root, 'app/static/css/app.css'), 'utf8');
 const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
 const html = fs.readFileSync(path.join(root, 'app/templates/app.html'), 'utf8');
 
-// 1. Compact layout must not keep the notes shell visible on the 2FA tab.
+// 1. Compact layout must not keep the notes shell visible on the 2FA tab (or Agenda).
 assert.ok(css.includes('html.layout-compact .shell[hidden]'));
 const shellHidden = css.split('html.layout-compact .shell[hidden]')[1].split('}')[0];
 assert.ok(shellHidden.includes('display: none !important'));
-assert.ok(appJs.includes("ui.shell.hidden = appTab === '2fa'"));
+assert.ok(appJs.includes("const on2fa = appTab === '2fa'"));
+assert.ok(appJs.includes("const onAgenda = appTab === 'agenda'"));
+assert.ok(appJs.includes('if (ui.shell) ui.shell.hidden = on2fa || onAgenda'));
 
 // 2. A background sync toast must not cover live OTP codes.
 const toastFn = appJs.slice(appJs.indexOf('function toast('), appJs.indexOf('const totpUi'));

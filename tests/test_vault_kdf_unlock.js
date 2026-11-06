@@ -130,8 +130,10 @@ function resetClient() {
   await NotesStore.pushDirty({ quiet: true });
   const push = fetchCalls.find((call) => String(call.url).includes('/api/sync/items') && call.method === 'POST');
   assert.ok(push, 'dirty note should push');
+  const noteRow = push.body.items.find((row) => row.item_uuid === noteId);
+  assert.ok(noteRow, 'push body should include the dirty note');
   assert.strictEqual(
-    push.body.items[0].updated_at,
+    noteRow.updated_at,
     originalUpdatedAt,
     'push must keep the item timestamp — Date.now() restamps cause PC↔phone bounce',
   );
