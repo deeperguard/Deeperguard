@@ -5,7 +5,7 @@ date: 2026-11-04
 description: "Two-factor authentication keeps attackers out, but a lost or wiped phone can keep you out too. Here's how to save backup codes, move 2FA safely to a new phone, and avoid recovery scams."
 cover_image: /static/blog/2fa-backup-codes-phone-switch.jpg
 cover_alt: "Illustration of an old and a new smartphone joined by a dashed arrow with a shield check badge, next to a blank paper card and a closed teal padlock on a soft cream and blue background"
-draft: true
+draft: false
 ---
 
 Two-factor authentication (2FA) is one of the best upgrades you can give an account. Even if someone learns your password, they still need the second step. But the same protection can lock you out if your phone is lost, broken or wiped before you've planned for it. A few minutes of preparation fixes that.
