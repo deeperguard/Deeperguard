@@ -2441,6 +2441,35 @@
     return inflight;
   }
 
+  /** Wall-clock cap for unlock-time network work (health, session bootstrap, pull/prove). */
+  const UNLOCK_NETWORK_DEADLINE_MS = 45000;
+
+  function unlockNetworkTimeoutError(message) {
+    const err = new Error(
+      message || "Can't reach the server right now (connection may be stalled). Check your network and try again.",
+    );
+    err.code = 'UNLOCK_NETWORK_TIMEOUT';
+    return err;
+  }
+
+  function isUnlockNetworkTimeout(err) {
+    return !!(err && err.code === 'UNLOCK_NETWORK_TIMEOUT');
+  }
+
+  async function raceUnlockDeadline(promise) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        reject(unlockNetworkTimeoutError());
+      }, UNLOCK_NETWORK_DEADLINE_MS);
+    });
+    try {
+      return await Promise.race([promise, timeout]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   function flushPendingUpdatePrompt() {
     // /api/health via the shared boot cache, not a second request.
     fetchHealthJson()
@@ -2615,6 +2644,7 @@
   function isRealNetworkFailure(err) {
     if (!err) return true;
     if (err.code === 'aborted' || err.code === 'EMPTY_DEVICE_FETCH_PENDING') return true;
+    if (err.code === 'timeout' || err.code === 'UNLOCK_NETWORK_STALL') return true;
     if (typeof NotesStore !== 'undefined' && NotesStore.isProbablyOffline?.(err)) return true;
     const status = Number(err.status) || 0;
     if (!status && err.code !== 'DECRYPT_FAILED' && err.code !== 'PROBE_NO_SAMPLE') return true;
@@ -2666,7 +2696,7 @@
         status.hidden = false;
         status.classList.remove('is-fetching');
         status.classList.add('is-fallback');
-        status.textContent = "Can't reach the server right now. We'll keep trying in the background.";
+        status.textContent = "This device couldn't reach the notes server (you may be online without usable data). We'll keep trying in the background — tap Try again when your connection works.";
       }
       if (progress) {
         progress.hidden = true;
@@ -2691,7 +2721,7 @@
 
   function emptyDeviceFetchPendingError() {
     const err = new Error(
-      "Can't reach the server right now. We'll keep trying in the background.",
+      "This device couldn't reach the notes server (you may be online without usable data). We'll keep trying in the background — tap Try again when your connection works.",
     );
     err.code = 'EMPTY_DEVICE_FETCH_PENDING';
     return err;
@@ -2754,17 +2784,29 @@
       if (gen !== emptyDeviceFetchGeneration) throw emptyDeviceFetchPendingError();
       try {
         // Re-bootstrap when health/reachability was flaky on the first pass.
+        let proof;
         try {
-          await bootstrapServerSession(cached, {
-            retryOnLoginRequired: !!(silent && isPostLoginBootUnlock()),
-          });
-        } catch (bootErr) {
-          if (isLoginRequiredError(bootErr)) throw sessionExpiredError();
-          if (!isRealNetworkFailure(bootErr)) throw bootErr;
-          lastErr = bootErr;
-          continue;
+          proof = await raceUnlockDeadline((async () => {
+            try {
+              await bootstrapServerSession(cached, {
+                retryOnLoginRequired: !!(silent && isPostLoginBootUnlock()),
+              });
+            } catch (bootErr) {
+              if (isLoginRequiredError(bootErr)) throw sessionExpiredError();
+              if (!isRealNetworkFailure(bootErr)) throw bootErr;
+              throw bootErr;
+            }
+            return assertVaultKeyVerified();
+          })());
+        } catch (innerErr) {
+          if (isLoginRequiredError(innerErr)) throw sessionExpiredError();
+          if (isUnlockNetworkTimeout(innerErr)) {
+            lastErr = innerErr;
+            setEmptyDeviceUnlockUi('fetching');
+            continue;
+          }
+          throw innerErr;
         }
-        const proof = await assertVaultKeyVerified();
         setEmptyDeviceUnlockUi('clear');
         return { ok: true, proof };
       } catch (err) {
@@ -2793,6 +2835,9 @@
   window.NotesEmptyDeviceUnlock = {
     EMPTY_DEVICE_RETRY_DELAYS_MS,
     EMPTY_DEVICE_BG_PROBE_MS,
+    UNLOCK_NETWORK_DEADLINE_MS,
+    raceUnlockDeadline,
+    isUnlockNetworkTimeout,
     serverUnreachableNow,
     isRealNetworkFailure,
     setEmptyDeviceUnlockUi,
@@ -6411,6 +6456,12 @@
         throw missing;
       }
     } catch (err) {
+      if (isUnlockNetworkTimeout(err)) {
+        NotesStore.lock();
+        throw unlockNetworkTimeoutError(
+          "Can't verify your password with the server right now (connection may be stalled). Check your network and try again.",
+        );
+      }
       if (isLoginRequiredError(err)) throw sessionExpiredError();
       if (err?.status === 429) {
         NotesStore.lock();
@@ -6760,6 +6811,24 @@
     }
     // Round 72: empty-device fetch fallback owns the unlock status line —
     // do not replace it with a generic error or leave Checking… spinning.
+    if (isUnlockNetworkTimeout(err)) {
+      resetLoginProgress();
+      logLockReason('unlock-network-timeout', { message: String(err?.message || '') });
+      try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
+      markVaultShellLocked();
+      if (silent || err?.code === 'AUTO_UNLOCK_DEFER') {
+        const deferErr = new Error(String(err?.message || 'Connection stalled'));
+        deferErr.code = 'AUTO_UNLOCK_DEFER';
+        throw deferErr;
+      }
+      if (unlockSubmit) {
+        unlockSubmit.disabled = false;
+        unlockSubmit.textContent = 'Unlock';
+        unlockSubmit.removeAttribute('aria-busy');
+        unlockSubmit.classList.remove('is-checking');
+      }
+      throw err;
+    }
     if (err?.code === 'EMPTY_DEVICE_FETCH_PENDING') {
       resetLoginProgress();
       logLockReason('empty-device-fetch-pending', { message: String(err?.message || '') });
@@ -7377,15 +7446,22 @@
         await yieldToPaint();
         const retryOnLoginRequired = !!(silent && isPostLoginBootUnlock());
         const serverCheck = (async () => {
-          // Round 72: force health. Backoff null / stale networkReachable must
-          // not skip bootstrap — only a real /api/account failure is offline.
-          await serverUnreachableNow({ force: true });
           try {
-            await bootstrapServerSession(cached, { retryOnLoginRequired });
-            return { ok: true };
+            return await raceUnlockDeadline((async () => {
+              // Round 72: force health. Backoff null / stale networkReachable must
+              // not skip bootstrap — only a real /api/account failure is offline.
+              await serverUnreachableNow({ force: true });
+              try {
+                await bootstrapServerSession(cached, { retryOnLoginRequired });
+                return { ok: true };
+              } catch (err) {
+                if (isRealNetworkFailure(err)) return { offline: true, err };
+                return { err };
+              }
+            })());
           } catch (err) {
-            if (isRealNetworkFailure(err)) return { offline: true, err };
-            return { err };
+            if (isUnlockNetworkTimeout(err)) return { offline: true, err };
+            throw err;
           }
         })();
         const loadVaultLocal = async () => {
@@ -7510,6 +7586,15 @@
           }
           passwordProven = vaultKeyProven();
           if (passwordProven) serverResult = { ok: true };
+        }
+        if (serverResult && isUnlockNetworkTimeout(serverResult.err)) {
+          // Treat stalled TCP like offline for empty-device flow; when local
+          // ciphertext already proved the key, do not block unlock on sync.
+          if (!hasLocalVault) {
+            serverResult = { offline: true, err: serverResult.err };
+          } else {
+            serverResult = { ok: true };
+          }
         }
         if (serverResult.offline) {
           if (emptyLocal && !hasLocalVault && !passwordProven) {
@@ -7779,6 +7864,16 @@
         return;
       }
       if (err?.code === 'EMPTY_DEVICE_FETCH_PENDING') {
+        unlockSubmit.disabled = false;
+        unlockSubmit.textContent = 'Unlock';
+        unlockSubmit.removeAttribute('aria-busy');
+        unlockSubmit.classList.remove('is-checking');
+        return;
+      }
+      if (err?.code === 'UNLOCK_NETWORK_TIMEOUT') {
+        showUnlockError(err.message || "Can't reach the server right now (connection may be stalled). Check your network and try again.");
+        const recovery = document.getElementById('unlock-recovery-hint');
+        if (recovery) recovery.hidden = false;
         unlockSubmit.disabled = false;
         unlockSubmit.textContent = 'Unlock';
         unlockSubmit.removeAttribute('aria-busy');

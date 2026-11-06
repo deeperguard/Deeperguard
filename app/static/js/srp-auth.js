@@ -212,7 +212,7 @@
     }
   }
 
-  async function postJson(path, body) {
+  async function postJson(path, body, { timeoutMs = 30000 } = {}) {
     const headers = { 'Content-Type': 'application/json' };
     try {
       const csrf = sessionStorage.getItem('notes_csrf') || '';
@@ -226,12 +226,28 @@
     } catch (err) {
       /* ignore */
     }
-    const res = await fetch(path, {
-      method: 'POST',
-      headers,
-      credentials: 'same-origin',
-      body: JSON.stringify(body),
-    });
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const ms = Math.max(2000, Number(timeoutMs) || 30000);
+    const timer = ctrl ? setTimeout(() => { try { ctrl.abort('timeout'); } catch (e) {} }, ms) : null;
+    let res;
+    try {
+      res = await fetch(path, {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+        signal: ctrl ? ctrl.signal : undefined,
+      });
+    } catch (err) {
+      if (timer) clearTimeout(timer);
+      if (err && err.name === 'AbortError') {
+        const stall = new Error('Request timed out. Check your connection and try again.');
+        stall.code = 'timeout';
+        throw stall;
+      }
+      throw err;
+    }
+    if (timer) clearTimeout(timer);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       let message = data.error || `HTTP ${res.status}`;
