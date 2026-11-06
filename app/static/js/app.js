@@ -2456,6 +2456,12 @@
     return !!(err && err.code === 'UNLOCK_NETWORK_TIMEOUT');
   }
 
+  /** Network stall / deadline — not a vault-vs-login password mismatch. */
+  function isUnlockNetworkStallLikeFailure(err) {
+    if (isUnlockNetworkTimeout(err)) return true;
+    return !!(err && err.code === 'UNLOCK_NETWORK_STALL');
+  }
+
   async function raceUnlockDeadline(promise) {
     let timer;
     const timeout = new Promise((_, reject) => {
@@ -7870,10 +7876,13 @@
         unlockSubmit.classList.remove('is-checking');
         return;
       }
-      if (err?.code === 'UNLOCK_NETWORK_TIMEOUT') {
-        showUnlockError(err.message || "Can't reach the server right now (connection may be stalled). Check your network and try again.");
+      if (isUnlockNetworkStallLikeFailure(err)) {
+        showUnlockError(
+          err.message || "Can't reach the server right now (connection may be stalled). Check your network and try again.",
+        );
         const recovery = document.getElementById('unlock-recovery-hint');
-        if (recovery) recovery.hidden = false;
+        // Vault-vs-login copy does not apply to stalled connections; keep hidden on phone/PWA.
+        if (recovery) recovery.hidden = true;
         unlockSubmit.disabled = false;
         unlockSubmit.textContent = 'Unlock';
         unlockSubmit.removeAttribute('aria-busy');

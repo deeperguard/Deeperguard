@@ -13,6 +13,7 @@ const srpAuthJs = fs.readFileSync(path.join(root, 'app/static/js/srp-auth.js'), 
 // --- static: unlock deadline + stall handling ---------------------------------
 assert.ok(appJs.includes('UNLOCK_NETWORK_DEADLINE_MS'));
 assert.ok(appJs.includes('function unlockNetworkTimeoutError'));
+assert.ok(appJs.includes('function isUnlockNetworkStallLikeFailure'));
 assert.ok(appJs.includes('code = \'UNLOCK_NETWORK_TIMEOUT\''));
 assert.ok(appJs.includes('async function raceUnlockDeadline'));
 assert.ok(appJs.includes('return await raceUnlockDeadline((async () => {'));
@@ -23,6 +24,11 @@ assert.ok(
 assert.ok(
   appJs.includes('if (serverResult && isUnlockNetworkTimeout(serverResult.err))'),
   'stalled serverCheck must be normalized before offline branch',
+);
+
+assert.ok(
+  appJs.includes('Vault-vs-login copy does not apply to stalled connections'),
+  'unlock recovery hint must stay hidden on network timeout/stall',
 );
 
 assert.ok(storeJs.includes('probeDeadline'));
