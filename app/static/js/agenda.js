@@ -201,10 +201,13 @@
       const first = new Date(y, m, 1);
       const last = new Date(y, m + 1, 0);
       const gridStart = startOfWeekMonday(first);
-      const gridEndWeek = startOfWeekMonday(addDays(last, 1));
+      // Exclusive end: first Monday strictly after the week that contains `last`.
+      // Using startOfWeekMonday(addDays(last, 1)) wrongly collapses to `last`'s week
+      // when `last` is a Monday, so that week is never iterated.
+      const gridEndWeekExclusive = addDays(startOfWeekMonday(last), 7);
       const weekStarts = [];
       let cur = gridStart;
-      while (cur < gridEndWeek) {
+      while (cur < gridEndWeekExclusive) {
         weekStarts.push(cur);
         cur = addDays(cur, 7);
       }

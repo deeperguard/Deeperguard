@@ -2,10 +2,12 @@
  * Round 87: unlock must not hang forever on online-but-stalled TCP; deadline + retry UX.
  */
 const assert = require('assert');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
+execFileSync(process.execPath, [path.join(__dirname, 'test_agenda_month_grid_range.js')]);
 const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
 const storeJs = fs.readFileSync(path.join(root, 'app/static/js/store.js'), 'utf8');
 const srpAuthJs = fs.readFileSync(path.join(root, 'app/static/js/srp-auth.js'), 'utf8');
