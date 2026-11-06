@@ -202,105 +202,82 @@
       </div>
     </section>
 
-    <!-- Comparison: Deeperguard vs Standard Notes, Notesnook, Joplin, Evernote -->
-    <section class="mk-section" id="compare">
-      <div class="mk-section-head">
-        <span class="mk-badge">Comparison</span>
-        <h2>How Deeperguard compares</h2>
-        <p>
-          Whether you are leaving <strong>Evernote</strong>, comparing <strong>Standard Notes</strong>, <strong>Notesnook</strong>, or <strong>Joplin</strong>,
-          here is an honest distinction — no fear-mongering, just architecture and product fit.
-        </p>
-      </div>
-
-      <div class="mk-distinction-grid">
-        <!-- Deeperguard -->
-        <article class="mk-distinction-card featured">
-          <span class="mk-distinction-badge">Deeperguard</span>
-          <h3>Deeperguard</h3>
-          <p class="mk-distinction-subtitle">Browser notes with client-side encryption, on-device OCR, and offline use.</p>
-          <ul class="mk-distinction-points">
-            <li class="pro"><strong>True zero-knowledge:</strong> Server stores only ciphertext, except note text you send to Ask AI, which passes through our server to Ollama Cloud and is not stored.</li>
-            <li class="pro"><strong>Client-side OCR:</strong> Search scanned receipts and PDFs without cloud AI parsing.</li>
-            <li class="pro"><strong>No app store lock-in:</strong> Installable PWA with full offline vault support.</li>
-            <li class="pro"><strong>2FA codes in your vault:</strong> Keep 2FA codes in your encrypted vault. On Pro, sign in with a passkey or a code from your authenticator app.</li>
-            <li class="pro"><strong>Standard Notes Import:</strong> Easy migration with 1-click vault JSON import.</li>
-            <li class="pro"><strong>Free tier:</strong> Encrypted sync, attachments, import/export, and on-device OCR on {{ free.storage_quota_mb }}&nbsp;MB ({{ free.active_sessions }} signed-in devices).</li>
-          </ul>
-          <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Ciphertext-only sync (except Ask AI), OCR on the device, and a browser app you can use offline. Basic is encrypted sync, attachments, import, and on-device OCR on {{ basic.storage_quota_mb }}&nbsp;MB; Pro adds passkeys, account 2FA, daily email and pCloud backups, reminders, and the vault authenticator on {{ (pro.storage_quota_mb / 1024)|int }}&nbsp;GB.
+    <!-- Honest Compare: homepage competitor snapshot (full pages linked below) -->
+    <section class="mk-section mk-honest-compare" id="compare" aria-labelledby="mk-honest-compare-heading">
+      <div class="mk-honest-compare-bleed">
+        <div class="mk-honest-compare-inner">
+          <div class="mk-section-head mk-honest-compare-head">
+            <span class="mk-badge mk-honest-compare-eyebrow">Honest Compare</span>
+            <h2 id="mk-honest-compare-heading">How Deeperguard compares</h2>
+            <p>
+              Whether you are leaving <strong>Evernote</strong>, comparing <strong>Standard Notes</strong>, <strong>Notesnook</strong>, or <strong>Joplin</strong>,
+              here is an honest distinction — no fear-mongering, just architecture and product fit.
+            </p>
           </div>
-        </article>
 
-        <!-- Standard Notes -->
-        <article class="mk-distinction-card">
-          <span class="mk-distinction-badge neutral">Encrypted notes</span>
-          <h3>Standard Notes</h3>
-          <p class="mk-distinction-subtitle">Established encrypted notes ecosystem with extensive desktop apps and plugin extensions.</p>
-          <ul class="mk-distinction-points">
-            <li class="pro"><strong>Zero-knowledge:</strong> Mature end-to-end encrypted architecture.</li>
-            <li class="pro"><strong>Free plan includes 2FA and daily encrypted email backups.</strong></li>
-            <li class="pro"><strong>Part of Proton since April 2024.</strong></li>
-            <li class="pro"><strong>Extensible:</strong> Plentiful editors, themes, and extensions on paid tiers.</li>
-            <li class="con"><strong>Paid plans:</strong> About $90/year (Productivity) or $120/year (Professional) — see <a href="https://standardnotes.com/plans" target="_blank" rel="noopener noreferrer">Standard Notes plans</a>.</li>
-            <li class="con"><strong>Apps:</strong> Desktop and mobile clients are the usual way to use it. A web app also exists.</li>
-          </ul>
-          <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Also zero-knowledge. Deeperguard adds text recognition for scans and PDFs in your browser.
-          </div>
-          <a class="mk-distinction-card-link" href="/compare/standard-notes">Full Standard Notes comparison →</a>
-        </article>
+          <!-- Featured: Deeperguard -->
+          <article class="mk-distinction-card featured mk-honest-compare-featured" aria-label="Deeperguard summary">
+            <div class="mk-honest-compare-featured-inner">
+              <span class="mk-distinction-badge mk-honest-compare-brand-pill">Deeperguard</span>
+              <h3>Deeperguard</h3>
+              <p class="mk-distinction-subtitle">Browser notes with client-side encryption, on-device OCR, and offline use.</p>
+              <ul class="mk-distinction-points">
+                <li class="pro"><strong>True zero-knowledge:</strong> Server stores only ciphertext, except note text you send to Ask AI, which passes through our server to Ollama Cloud and is not stored.</li>
+                <li class="pro"><strong>Client-side OCR:</strong> Search scanned receipts and PDFs without cloud AI parsing.</li>
+                <li class="pro"><strong>No app store lock-in:</strong> Installable PWA with full offline vault support.</li>
+                <li class="pro"><strong>2FA codes in your vault:</strong> Keep 2FA codes in your encrypted vault. On Pro, sign in with a passkey or a code from your authenticator app.</li>
+                <li class="pro"><strong>Standard Notes Import:</strong> Easy migration with 1-click vault JSON import.</li>
+                <li class="pro"><strong>{{ free.label }} tier:</strong> Encrypted sync, attachments, import/export, and on-device OCR on {{ free.storage_quota_mb }}&nbsp;MB ({{ free.active_sessions }} signed-in devices).</li>
+              </ul>
+              <div class="mk-distinction-verdict mk-honest-compare-difference">
+                <strong>Difference:</strong> Ciphertext-only sync (except Ask AI), on-device OCR, and an installable browser PWA with offline vault access.
+              </div>
+            </div>
+          </article>
 
-        <!-- Evernote -->
-        <article class="mk-distinction-card">
-          <span class="mk-distinction-badge neutral">Cloud notebook</span>
-          <h3>Evernote</h3>
-          <p class="mk-distinction-subtitle">Mainstream productivity notebook with cloud-based features and third-party integrations.</p>
-          <ul class="mk-distinction-points">
-            <li class="pro"><strong>Rich features:</strong> Web clipper, audio recording, and extensive templates.</li>
-            <li class="con"><strong>Not zero-knowledge:</strong> The service can access note plaintext on its servers — see <a href="https://evernote.com/compare-plans" target="_blank" rel="noopener noreferrer">Evernote plans</a>.</li>
-            <li class="con"><strong>Paid plans:</strong> Paid plans; the free plan is limited (<a href="https://evernote.com/compare-plans" target="_blank" rel="noopener noreferrer">Evernote plans</a>).</li>
-          </ul>
-          <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> A full-featured notebook. It is not zero-knowledge: the server can access plaintext.
-          </div>
-          <a class="mk-distinction-card-link" href="/evernote-alternative">Evernote alternative guide →</a>
-        </article>
+          <!-- Competitor snapshot row -->
+          <div class="mk-distinction-grid mk-honest-compare-peers">
+            <article class="mk-distinction-card mk-distinction-card--honest-peer">
+              <span class="mk-distinction-badge neutral mk-distinction-badge--honest-cat">Encrypted notes</span>
+              <h3>Standard Notes</h3>
+              <p class="mk-distinction-peer-tagline">Established encrypted notes ecosystem with desktop apps and extensions.</p>
+              <div class="mk-distinction-verdict mk-distinction-verdict--peer">
+                <strong>Difference:</strong> Also zero-knowledge. Deeperguard adds text recognition for scans and PDFs in your browser.
+              </div>
+              <a class="mk-distinction-card-link" href="/compare/standard-notes">Full Standard Notes comparison →</a>
+            </article>
 
-        <!-- Notesnook -->
-        <article class="mk-distinction-card">
-          <span class="mk-distinction-badge neutral">Encrypted notes</span>
-          <h3>Notesnook</h3>
-          <p class="mk-distinction-subtitle">Open-source encrypted notes with a web app plus native desktop and mobile apps, and a generous free plan.</p>
-          <ul class="mk-distinction-points">
-            <li class="pro"><strong>Zero-knowledge:</strong> End-to-end encrypted notes and attachments on Notesnook sync.</li>
-            <li class="pro"><strong>Open source:</strong> Client code is published for review (server components vary by deployment).</li>
-            <li class="pro"><strong>Web and native apps:</strong> A browser app plus desktop and mobile clients.</li>
-            <li class="con"><strong>Paid Pro tier:</strong> Advanced features and higher limits on published plans.</li>
-          </ul>
-          <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Also privacy-first, with client source available for review on GitHub. Deeperguard adds in-browser OCR for scans and PDFs, plus 2FA codes kept in the same vault.
-          </div>
-          <a class="mk-distinction-card-link" href="/compare/notesnook">Full Notesnook comparison →</a>
-        </article>
+            <article class="mk-distinction-card mk-distinction-card--honest-peer">
+              <span class="mk-distinction-badge neutral mk-distinction-badge--honest-cat">Cloud notebook</span>
+              <h3>Evernote</h3>
+              <p class="mk-distinction-peer-tagline">Mainstream productivity notebook with cloud features and integrations.</p>
+              <div class="mk-distinction-verdict mk-distinction-verdict--peer">
+                <strong>Difference:</strong> A full-featured notebook. It is not zero-knowledge: the server can access plaintext.
+              </div>
+              <a class="mk-distinction-card-link" href="/evernote-alternative">Evernote alternative guide →</a>
+            </article>
 
-        <!-- Joplin -->
-        <article class="mk-distinction-card">
-          <span class="mk-distinction-badge neutral">Open notes</span>
-          <h3>Joplin</h3>
-          <p class="mk-distinction-subtitle">Popular open-source notebook with Markdown, plugins, and bring-your-own sync (Dropbox, WebDAV, Joplin Cloud, etc.).</p>
-          <ul class="mk-distinction-points">
-            <li class="pro"><strong>Open source &amp; self-host friendly:</strong> Large community, many sync targets, rich Markdown tooling.</li>
-            <li class="pro"><strong>Optional E2EE:</strong> End-to-end encryption is available when enabled; sync provider may still see metadata depending on setup.</li>
-            <li class="con"><strong>Not ciphertext-only by default:</strong> Without E2EE, sync targets can hold readable note bodies.</li>
-            <li class="con"><strong>App-centric:</strong> Desktop and mobile apps are the usual workflow; web clipper is separate.</li>
-            <li class="con"><strong>OCR:</strong> Built in and offline, but only in the desktop app. <a href="https://joplinapp.org/help/apps/sync/e2ee" target="_blank" rel="noopener noreferrer">Encryption is off until you turn it on</a> (<a href="https://joplinapp.org/help/apps/ocr" target="_blank" rel="noopener noreferrer">Joplin OCR</a>).</li>
-          </ul>
-          <div class="mk-distinction-verdict">
-            <strong>Difference:</strong> Deeperguard is encrypted from the first note and runs OCR in any browser, including on your phone, with nothing to install.
+            <article class="mk-distinction-card mk-distinction-card--honest-peer">
+              <span class="mk-distinction-badge neutral mk-distinction-badge--honest-cat">Encrypted notes</span>
+              <h3>Notesnook</h3>
+              <p class="mk-distinction-peer-tagline">Open-source encrypted notes with web and native apps.</p>
+              <div class="mk-distinction-verdict mk-distinction-verdict--peer">
+                <strong>Difference:</strong> Also privacy-first, with client source on GitHub. Deeperguard adds in-browser OCR for scans and PDFs, plus 2FA codes in the same vault.
+              </div>
+              <a class="mk-distinction-card-link" href="/compare/notesnook">Full Notesnook comparison →</a>
+            </article>
+
+            <article class="mk-distinction-card mk-distinction-card--honest-peer">
+              <span class="mk-distinction-badge neutral mk-distinction-badge--honest-cat">Open notes</span>
+              <h3>Joplin</h3>
+              <p class="mk-distinction-peer-tagline">Open-source Markdown notebook with plugins and bring-your-own sync.</p>
+              <div class="mk-distinction-verdict mk-distinction-verdict--peer">
+                <strong>Difference:</strong> Deeperguard is encrypted from the first note and runs OCR in any browser, including on your phone, with nothing to install.
+              </div>
+              <a class="mk-distinction-card-link" href="/compare/joplin">Full Joplin comparison →</a>
+            </article>
           </div>
-          <a class="mk-distinction-card-link" href="/compare/joplin">Full Joplin comparison →</a>
-        </article>
+        </div>
       </div>
     </section>
 
