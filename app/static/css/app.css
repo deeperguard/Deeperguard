@@ -164,6 +164,21 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
+/* Agenda tab: slimmer app chrome so the calendar uses the viewport */
+#app[data-app-tab="agenda"] .app-tabs {
+  padding-top: calc(4px + var(--safe-top));
+  padding-bottom: 4px;
+  padding-left: calc(8px + var(--safe-left));
+  padding-right: calc(8px + var(--safe-right));
+  gap: 2px;
+  border-bottom-color: color-mix(in srgb, var(--border) 70%, transparent);
+}
+#app[data-app-tab="agenda"] .app-tab {
+  padding: 8px 10px;
+  min-height: 40px;
+  font-size: 14px;
+}
+
 /* Agenda — encrypted calendar (vault ciphertext via agenda_pack item) */
 .agenda-pane {
   flex: 1;
@@ -182,9 +197,9 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 .agenda-editor.agenda-editor-row-inline { flex-direction: row; align-items: center; gap: 10px; }
 .agenda-top {
   flex-shrink: 0;
-  padding: 10px 14px 8px;
-  padding-left: calc(14px + var(--safe-left));
-  padding-right: calc(14px + var(--safe-right));
+  padding: 6px 10px 6px;
+  padding-left: calc(10px + var(--safe-left));
+  padding-right: calc(10px + var(--safe-right));
   border-bottom: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
   background: color-mix(in srgb, var(--bg-elevated) 94%, var(--bg));
 }
@@ -192,7 +207,8 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  row-gap: 6px;
 }
 .agenda-nav {
   display: flex;
@@ -205,7 +221,7 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   margin: 0;
   flex: 1;
   min-width: 0;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 750;
   letter-spacing: -0.02em;
   white-space: nowrap;
@@ -216,19 +232,23 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   flex-shrink: 0;
 }
 .agenda-icon-btn {
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 40px;
+  min-height: 40px;
   border-radius: 999px;
+}
+.agenda-calendar-settings-ico {
+  display: block;
 }
 .agenda-seg-wrap {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
+  gap: 3px;
+  padding: 3px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text) 6%, transparent);
-  flex: 2 1 280px;
+  flex: 2 1 min(280px, 100%);
+  min-width: 0;
   justify-content: center;
 }
 .agenda-seg {
@@ -237,10 +257,10 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 650;
-  padding: 8px 10px;
-  min-height: 40px;
+  padding: 6px 8px;
+  min-height: 36px;
   border-radius: 999px;
   cursor: pointer;
 }
@@ -253,17 +273,19 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  flex: 2 1 320px;
+  gap: 6px;
+  flex: 2 1 min(320px, 100%);
+  min-width: 0;
   justify-content: flex-end;
 }
 .agenda-search-field {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1 1 180px;
-  min-width: 140px;
-  padding: 6px 12px;
+  gap: 6px;
+  flex: 1 1 min(180px, 100%);
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 10px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--text) 7%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
@@ -282,20 +304,7 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 .agenda-add {
   border-radius: 999px;
   font-weight: 700;
-  padding-inline: 16px;
-}
-.agenda-subrow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-top: 10px;
-}
-.agenda-privacy-hint {
-  flex: 1;
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.35;
+  padding-inline: 14px;
 }
 .agenda-body {
   flex: 1;
@@ -304,7 +313,7 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   flex-direction: column;
   overflow: hidden;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: calc(72px + var(--safe-bottom));
+  padding-bottom: calc(12px + var(--safe-bottom));
 }
 /* Month / agenda list scroll in the outer body; week grid scrolls only the time area */
 .agenda-body.agenda-view-month,
@@ -485,7 +494,9 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   flex-shrink: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   background: var(--bg);
-  z-index: 2;
+  position: sticky;
+  top: 0;
+  z-index: 3;
 }
 .agenda-corner {
   width: 52px;
@@ -514,7 +525,16 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 }
 .agenda-dow { display: block; font-size: 11px; font-weight: 650; letter-spacing: 0.06em; }
 .agenda-dom { display: block; font-size: 20px; font-weight: 780; margin-top: 2px; }
-.agenda-month-grid { padding: 8px; }
+.agenda-month-grid { padding: 6px 8px 8px; }
+.agenda-month-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  margin: 0 -2px;
+  padding: 0 2px;
+}
 .agenda-month-head, .agenda-month-row {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -606,6 +626,42 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   .agenda-month-cell { min-height: 88px; font-size: 11px; }
   .agenda-month-ev { font-size: 10px; padding: 2px 4px 2px 8px; }
 }
+@media (max-width: 520px) {
+  .agenda-top-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .agenda-nav {
+    flex: 1 1 auto;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .agenda-seg-wrap {
+    flex: 1 1 auto;
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    border-radius: 12px;
+  }
+  .agenda-seg-wrap::-webkit-scrollbar {
+    display: none;
+  }
+  .agenda-seg {
+    flex: 0 0 auto;
+  }
+  .agenda-top-tools {
+    flex: 1 1 auto;
+    width: 100%;
+    justify-content: stretch;
+  }
+  .agenda-search-field {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
 .agenda-list-view { padding: 12px 16px; max-width: 720px; margin: 0 auto; }
 .agenda-list-section-label { font-size: 12px; font-weight: 650; margin: 16px 0 8px; }
 .agenda-list { list-style: none; padding: 0; margin: 0; }
@@ -627,6 +683,73 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 }
 .agenda-list-date { font-size: 12px; color: var(--muted); }
 .agenda-list-title { font-weight: 650; }
+
+/* Agenda — calendar settings sheet (ICS import lives here, not on the main toolbar) */
+.agenda-calendar-settings-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  background: rgba(0, 0, 0, 0.45);
+}
+.agenda-calendar-settings {
+  display: none;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(380px, 100%);
+  max-width: 100%;
+  min-width: 0;
+  z-index: 45;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border);
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  overflow-x: clip;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
+}
+body.agenda-calendar-settings-open .agenda-calendar-settings-backdrop {
+  display: block !important;
+}
+body.agenda-calendar-settings-open .agenda-calendar-settings {
+  display: flex !important;
+}
+body.agenda-calendar-settings-open {
+  overflow: hidden;
+}
+.agenda-calendar-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.agenda-calendar-settings-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+.agenda-calendar-settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.agenda-calendar-settings-import {
+  align-self: flex-start;
+  border-radius: 999px;
+}
+.agenda-calendar-settings-account {
+  align-self: flex-start;
+  margin-top: 4px;
+}
 
 .totp-pane {
   flex: 1;
@@ -6988,6 +7111,8 @@ body.note-readonly #checklist:not([hidden]) {
 .fab:active { filter: brightness(0.94); }
 body.settings-open .fab,
 body.settings-open .fab-stack,
+body.agenda-calendar-settings-open .fab,
+body.agenda-calendar-settings-open .fab-stack,
 body.secure-send-open .fab,
 body.secure-send-open .fab-stack,
 body.doc-preview-open .fab,
@@ -6996,6 +7121,11 @@ body.search-filters-open .fab,
 body.search-filters-open .fab-stack,
 .shell.editor-open ~ .fab,
 .shell.editor-open .fab-stack { display: none !important; }
+
+/* Agenda: primary new-event affordance (FAB); keep visible while tab is active */
+#app[data-app-tab="agenda"] .fab {
+  display: inline-flex !important;
+}
 
 @media (max-width: 999px) {
   .settings-panel { width: 100%; max-width: 100%; }

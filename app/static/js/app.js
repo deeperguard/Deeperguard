@@ -4188,6 +4188,13 @@
     if (ui.shell) ui.shell.hidden = on2fa || onAgenda;
     if (totpUi.pane) totpUi.pane.hidden = !on2fa;
     if (agendaPane) agendaPane.hidden = !onAgenda;
+    if (!onAgenda && typeof globalThis.__notesCloseAgendaCalendarSettings === 'function') {
+      try {
+        globalThis.__notesCloseAgendaCalendarSettings();
+      } catch (err) {
+        /* ignore */
+      }
+    }
     if (on2fa) {
       const toastEl = document.getElementById('toast');
       if (toastEl && window.NotesVaultLock?.isBackgroundSyncToast?.(toastEl.textContent)) {

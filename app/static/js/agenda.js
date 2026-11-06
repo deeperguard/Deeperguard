@@ -167,6 +167,57 @@
   let fileInput = null;
   let searchDebounce = 0;
   let editorWired = false;
+  let calendarSettingsWired = false;
+
+  function closeCalendarSettingsPanel() {
+    const calPanel = document.getElementById('agenda-calendar-settings');
+    const calBackdrop = document.getElementById('agenda-calendar-settings-backdrop');
+    if (calPanel) {
+      calPanel.hidden = true;
+      calPanel.setAttribute('aria-hidden', 'true');
+    }
+    if (calBackdrop) {
+      calBackdrop.hidden = true;
+      calBackdrop.setAttribute('aria-hidden', 'true');
+    }
+    document.body.classList.remove('agenda-calendar-settings-open');
+  }
+
+  function openCalendarSettingsPanel() {
+    const calPanel = document.getElementById('agenda-calendar-settings');
+    const calBackdrop = document.getElementById('agenda-calendar-settings-backdrop');
+    if (calPanel) {
+      calPanel.hidden = false;
+      calPanel.removeAttribute('aria-hidden');
+    }
+    if (calBackdrop) {
+      calBackdrop.hidden = false;
+      calBackdrop.removeAttribute('aria-hidden');
+    }
+    document.body.classList.add('agenda-calendar-settings-open');
+  }
+
+  function wireCalendarSettingsOnce() {
+    if (calendarSettingsWired) return;
+    calendarSettingsWired = true;
+    document.getElementById('agenda-calendar-settings-backdrop')
+      ?.addEventListener('click', closeCalendarSettingsPanel);
+    document.getElementById('agenda-calendar-settings-close')
+      ?.addEventListener('click', closeCalendarSettingsPanel);
+    document.getElementById('agenda-calendar-import-ics')?.addEventListener('click', () => {
+      closeCalendarSettingsPanel();
+      fileInput?.click();
+    });
+    document.getElementById('agenda-open-app-settings')?.addEventListener('click', () => {
+      closeCalendarSettingsPanel();
+      if (typeof window.__notesOpenSettings === 'function') window.__notesOpenSettings();
+      else document.getElementById('btn-settings-head')?.click();
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Escape' || !document.body.classList.contains('agenda-calendar-settings-open')) return;
+      closeCalendarSettingsPanel();
+    });
+  }
 
   function getStore() {
     return global.NotesStore;
@@ -525,14 +576,14 @@
       + '<svg class="agenda-search-ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M16 16l5 5"/></svg>'
       + `<input type="search" id="agenda-search" placeholder="Search" value="${esc(state.search)}" autocomplete="off" />`
       + '</label>'
-      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-filter-placeholder" aria-label="Filters" title="Filters">⚙</button>'
-      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-settings-placeholder" aria-label="Calendar settings" title="Settings">☰</button>'
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-calendar-settings-btn" aria-label="Calendar settings" title="Calendar settings">'
+      + '<svg class="agenda-calendar-settings-ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+      + '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+      + 'd="M8 7V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M5 7h14M6 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7M9 11h.01M15 11h.01M9 15h4"/>'
+      + '</svg>'
+      + '</button>'
       + '<button type="button" class="btn primary agenda-add" id="agenda-add-event">+ Event</button>'
       + '</div>'
-      + '</div>'
-      + '<div class="agenda-subrow">'
-      + '<button type="button" class="btn sm ghost" id="agenda-import-ics">Import ICS…</button>'
-      + '<p class="agenda-privacy-hint muted">Events stay encrypted in your vault. ICS import is a trust boundary — only https links are offered as join targets.</p>'
       + '</div>'
       + '</header>'
       + `<div class="agenda-body agenda-view-${esc(state.view)}">${main}</div>`
@@ -568,12 +619,8 @@
     rootEl.querySelector('#agenda-add-event')?.addEventListener('click', () => {
       openEditor(null);
     });
-    rootEl.querySelector('#agenda-import-ics')?.addEventListener('click', () => {
-      fileInput?.click();
-    });
-    rootEl.querySelector('#agenda-settings-placeholder')?.addEventListener('click', () => {
-      if (typeof window.__notesOpenSettings === 'function') window.__notesOpenSettings();
-      else document.getElementById('btn-settings-head')?.click();
+    rootEl.querySelector('#agenda-calendar-settings-btn')?.addEventListener('click', () => {
+      openCalendarSettingsPanel();
     });
 
     rootEl.querySelectorAll('[data-agenda-id]').forEach((btn) => {
@@ -861,6 +908,7 @@
   function init() {
     rootEl = document.getElementById('agenda-root');
     if (!rootEl) return;
+    wireCalendarSettingsOnce();
     wireEditor();
     fileInput = document.getElementById('agenda-ics-input');
     if (fileInput) {
@@ -892,4 +940,5 @@
     onTabShown,
     openNewEvent,
   };
+  global.__notesCloseAgendaCalendarSettings = closeCalendarSettingsPanel;
 }(typeof window !== 'undefined' ? window : globalThis));
