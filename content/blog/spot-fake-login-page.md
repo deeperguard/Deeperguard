@@ -5,7 +5,7 @@ date: 2026-11-05
 description: "Phishing pages copy the look of real sign-in screens to steal passwords. Here's how to check the address bar, avoid login links in messages, and keep your vault password safe."
 cover_image: /static/blog/spot-fake-login-page.jpg
 cover_alt: "Illustration of two nearly identical browser windows side by side, one with a teal shield check and one with a red warning triangle, above a closed teal padlock on a soft cream and blue background"
-draft: true
+draft: false
 ---
 
 Most stolen passwords aren't cracked. They're typed in by their owners, on a page that only looks like the real one. A phishing page can copy a logo, colors and layout in minutes. What it can't copy is the real web address. Learning to check that one detail protects every account you have, including your Deeperguard vault.
