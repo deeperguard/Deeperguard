@@ -2,16 +2,16 @@
   "asset_count": 64,
   "assets": {
     "css/app.css": {
-      "bytes": 261964,
-      "sha256": "34df1d430d3d5dce56b61c1e6da3492b18e8fd14bded1972b72bb3aabacad0e7",
-      "sri": "sha384-a7UUc60U1dLMhWCh/LxTXz9pzExZvz3cvO/At6R1w942K0j3l5wAVlGDcntBfo4o",
-      "url": "/static/css/app.34df1d430d3d5dce.css"
+      "bytes": 263845,
+      "sha256": "3fc2024674d5d00acc5842818d0ed16a6b39a675f48644f26b718f76c458dd62",
+      "sri": "sha384-7iq3DEkZA7ZTDdzKv4yrWzey7XUIMGmDJBBIx95kUHjkcmQBhM2RX+e9BEtH4c8T",
+      "url": "/static/css/app.3fc2024674d5d00a.css"
     },
     "css/marketing.css": {
-      "bytes": 48401,
-      "sha256": "d8c294dbff367c9c7d649638b585e94cf3b1e4f426399a9b4a47e4900c8c82cd",
-      "sri": "sha384-/JYWyZqZkjc5ztsANGNU3CJ5yPziLhdakC0s+qQ+9Ov6+iz1DhryZmieR4keO7AD",
-      "url": "/static/css/marketing.d8c294dbff367c9c.css"
+      "bytes": 54240,
+      "sha256": "bf67166de4dd8ab1afbd4c05f1ef7c754c066509066df9c7e12272f674ef8ca7",
+      "sri": "sha384-2KMJyZHqH77iUi2iZ6W4FH7KmdTYxmfuCoDIk487+/9O4R45qqpe19QC/MRRxnpO",
+      "url": "/static/css/marketing.bf67166de4dd8ab1.css"
     },
     "js/admin.js": {
       "bytes": 8122,
@@ -26,10 +26,10 @@
       "url": "/static/js/agenda-ics.cd5ba96a3421671f.js"
     },
     "js/agenda.js": {
-      "bytes": 30484,
-      "sha256": "00db54ce0e40eac89fe95805a9e5845d8540f504a5a6ca8999952018a13f7cb9",
-      "sri": "sha384-TNH97SJ/ahn+PLa+dyXns2yveUEPS2womwO3TFkdmCddxBhcxMGvhTc0YNTLh4eP",
-      "url": "/static/js/agenda.00db54ce0e40eac8.js"
+      "bytes": 32987,
+      "sha256": "06622977c4e779c8da88605e48a02d5b62a025dd7032a2022cb8f5cf07302b69",
+      "sri": "sha384-Dx+lyDqnjK87CaBjL37cfntjJbL8m4CN72F75IiGFRxSxD+x8mi2g4Fx8ZEVs9D4",
+      "url": "/static/js/agenda.06622977c4e779c8.js"
     },
     "js/ai-chat.js": {
       "bytes": 27644,
@@ -387,6 +387,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "ea7a9eef225d8cfe045a7e63a314b6f8523ceab598dcd6538a1d1e50d07c4871",
+  "manifest_sha256": "82ceaa422d8d7199d45842ec62745e29d9a630f0ef5e9c353c952791096c0e45",
   "version": 1
 }
