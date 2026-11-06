@@ -1687,10 +1687,141 @@ const NotesStore = (() => {
     return !!(winner && !winner.deleted && winner.content?.type === 'attachment');
   }
 
+  /** Single vault item holding all Agenda events (encrypted ciphertext). */
+  const AGENDA_PACK_UUID = 'a6da67da-67da-4000-8000-000000000001';
+
+  function defaultAgendaPack() {
+    const now = new Date().toISOString();
+    return {
+      type: 'agenda_pack',
+      version: 1,
+      events: {},
+      created_at: now,
+      updated_at: now,
+    };
+  }
+
+  function agendaPackRecord() {
+    const item = state.items.get(AGENDA_PACK_UUID);
+    if (!item || item.deleted || item.content?.type !== 'agenda_pack') return null;
+    return item;
+  }
+
+  function ensureAgendaPack() {
+    if (agendaPackRecord()) return;
+    upsert(AGENDA_PACK_UUID, defaultAgendaPack());
+  }
+
+  function listAgendaEvents() {
+    const pack = agendaPackRecord();
+    if (!pack || !pack.content || !pack.content.events) return [];
+    const events = pack.content.events;
+    return Object.keys(events).map((id) => {
+      const row = events[id] || {};
+      return { id, ...row };
+    }).filter((row) => row && row.type === 'agenda_event');
+  }
+
+  function upsertAgendaEvent(uuid, content) {
+    ensureAgendaPack();
+    const pack = agendaPackRecord();
+    if (!pack) return;
+    const id = String(uuid || newUuid()).trim();
+    const events = { ...(pack.content.events || {}) };
+    const next = {
+      ...content,
+      type: 'agenda_event',
+      updated_at: new Date().toISOString(),
+    };
+    events[id] = next;
+    upsert(AGENDA_PACK_UUID, {
+      ...pack.content,
+      events,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  function removeAgendaEvent(uuid) {
+    const id = String(uuid || '').trim();
+    if (!id) return;
+    const pack = agendaPackRecord();
+    if (!pack) return;
+    const events = { ...(pack.content.events || {}) };
+    if (!events[id]) return;
+    delete events[id];
+    upsert(AGENDA_PACK_UUID, {
+      ...pack.content,
+      events,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Merge ICS rows into the agenda pack. Same ICAL UID replaces the existing row (idempotent).
+   */
+  function importAgendaFromIcs(rows) {
+    ensureAgendaPack();
+    const pack = agendaPackRecord();
+    if (!pack) return { imported: 0, skipped: 0 };
+    const events = { ...(pack.content.events || {}) };
+    const byUid = new Map();
+    for (const [eid, ev] of Object.entries(events)) {
+      const u = String(ev && ev.ical_uid || '').trim();
+      if (u) byUid.set(u, eid);
+    }
+    let imported = 0;
+    let skipped = 0;
+    for (const row of rows || []) {
+      const uid = String(row && row.ical_uid || '').trim();
+      let id = uid && byUid.has(uid) ? byUid.get(uid) : newUuid();
+      if (uid && !byUid.has(uid)) byUid.set(uid, id);
+      const nextRow = {
+        type: 'agenda_event',
+        version: 1,
+        title: String(row.title || '').trim() || 'Untitled',
+        location: String(row.location || ''),
+        notes: String(row.notes || ''),
+        attendees: Array.isArray(row.attendees) ? row.attendees : [],
+        webcall_url: String(row.webcall_url || ''),
+        start: String(row.start || ''),
+        end: String(row.end || ''),
+        all_day: !!row.all_day,
+        rrule: String(row.rrule || ''),
+        ical_uid: uid,
+        source_tz: String(row.source_tz || ''),
+        imported_at: new Date().toISOString(),
+      };
+      const prev = events[id];
+      const prevSig = prev && JSON.stringify({
+        t: prev.title, s: prev.start, e: prev.end, l: prev.location, n: prev.notes, r: prev.rrule, a: prev.all_day,
+      });
+      const nextSig = JSON.stringify({
+        t: nextRow.title, s: nextRow.start, e: nextRow.end, l: nextRow.location, n: nextRow.notes, r: nextRow.rrule, a: nextRow.all_day,
+      });
+      if (prev && prevSig === nextSig) {
+        skipped += 1;
+        continue;
+      }
+      events[id] = nextRow;
+      imported += 1;
+    }
+    upsert(AGENDA_PACK_UUID, {
+      ...pack.content,
+      events,
+      updated_at: new Date().toISOString(),
+    });
+    return { imported, skipped };
+  }
+
   async function runUnlockMaintenance() {
     await migratePlainAttachments();
     await migrateLegacyBlobs();
     repairStoredAttachmentCopies();
+    try {
+      ensureAgendaPack();
+    } catch (err) {
+      /* unlocked after maintenance; ignore */
+    }
     // Rewrite copied scan text from the attachments the note list shows
     // before the first search. This does not delete attachment bytes.
     for (const note of listNotes()) refreshNoteSearchText(note.uuid);
@@ -6038,6 +6169,11 @@ const NotesStore = (() => {
     staleAttachmentOcr,
     OCR_INDEX,
     SEARCH_INDEX_UUID,
+    AGENDA_PACK_UUID,
+    listAgendaEvents,
+    upsertAgendaEvent,
+    removeAgendaEvent,
+    importAgendaFromIcs,
     searchIndexCovers,
     applySearchIndexEntry,
     mergeSearchEntries,

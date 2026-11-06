@@ -4119,6 +4119,14 @@
     }, linger);
   }
 
+  /** Agenda ICS import / errors — same toast pipeline as the rest of the app. */
+  window.notesAgendaToast = (message, isError = false) => {
+    toast(message, isError);
+  };
+
+  const agendaPane = document.getElementById('agenda-pane');
+  let agendaUiInited = false;
+
   const totpUi = {
     pane: document.getElementById('totp-pane'),
     list: document.getElementById('totp-list'),
@@ -4149,7 +4157,7 @@
 
   function normalizeAppTab(name) {
     if (name === 'files') return 'notes';
-    if (name === '2fa') return name;
+    if (name === '2fa' || name === 'agenda') return name;
     return 'notes';
   }
 
@@ -4175,9 +4183,12 @@
     appTab = next;
     root.dataset.appTab = appTab;
     syncAppTabButtons(appTab);
-    if (ui.shell) ui.shell.hidden = appTab === '2fa';
-    if (totpUi.pane) totpUi.pane.hidden = appTab !== '2fa';
-    if (appTab === '2fa') {
+    const on2fa = appTab === '2fa';
+    const onAgenda = appTab === 'agenda';
+    if (ui.shell) ui.shell.hidden = on2fa || onAgenda;
+    if (totpUi.pane) totpUi.pane.hidden = !on2fa;
+    if (agendaPane) agendaPane.hidden = !onAgenda;
+    if (on2fa) {
       const toastEl = document.getElementById('toast');
       if (toastEl && window.NotesVaultLock?.isBackgroundSyncToast?.(toastEl.textContent)) {
         toastEl.hidden = true;
@@ -4192,11 +4203,27 @@
     if (persist) {
       try { sessionStorage.setItem('notes_app_tab', appTab); } catch (err) { /* ignore */ }
     }
-    if (appTab === '2fa') {
+    if (on2fa) {
       resetNoteTransientChrome();
       closeDocPreview();
       refreshTotpVault({ migrate: true });
       startTotpClock();
+    } else if (onAgenda) {
+      stopTotpClock();
+      resetNoteTransientChrome();
+      closeDocPreview();
+      if (typeof globalThis.NotesAgenda !== 'undefined') {
+        if (!agendaUiInited) {
+          NotesAgenda.init();
+          agendaUiInited = true;
+        } else {
+          try {
+            NotesAgenda.onTabShown();
+          } catch (err) {
+            /* ignore */
+          }
+        }
+      }
     } else {
       stopTotpClock();
       if (appTab === 'files') {
@@ -4221,9 +4248,17 @@
   function updateFab() {
     const fab = document.getElementById('fab-add');
     if (!fab) return;
-    const on2fa = currentAppTab() === '2fa';
-    fab.setAttribute('aria-label', on2fa ? 'Add 2FA account' : 'New note');
-    fab.title = on2fa ? 'Add account' : 'New note';
+    const tab = currentAppTab();
+    if (tab === '2fa') {
+      fab.setAttribute('aria-label', 'Add 2FA account');
+      fab.title = 'Add account';
+    } else if (tab === 'agenda') {
+      fab.setAttribute('aria-label', 'New event');
+      fab.title = 'New event';
+    } else {
+      fab.setAttribute('aria-label', 'New note');
+      fab.title = 'New note';
+    }
   }
 
   function restoreAppTab() {
@@ -18578,8 +18613,11 @@
     document.getElementById('btn-account-info-head')?.click();
   });
   document.getElementById('fab-add')?.addEventListener('click', () => {
-    if (currentAppTab() === '2fa') showTotpAddDialog();
-    else createNote();
+    const t = currentAppTab();
+    if (t === '2fa') showTotpAddDialog();
+    else if (t === 'agenda' && typeof globalThis.NotesAgenda !== 'undefined' && NotesAgenda.openNewEvent) {
+      NotesAgenda.openNewEvent();
+    } else createNote();
   });
   document.getElementById('fab-scan')?.addEventListener('click', pickScanFile);
   document.getElementById('btn-list-scan')?.addEventListener('click', pickScanFile);
