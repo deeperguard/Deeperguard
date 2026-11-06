@@ -178,14 +178,6 @@
     return S.listAgendaEvents();
   }
 
-  function viewDays() {
-    if (state.view === 'day') return 1;
-    if (state.view === '3day') return 3;
-    if (state.view === 'week') return 7;
-    if (state.view === 'month') return 42;
-    return 7;
-  }
-
   function rangeForView() {
     const v = state.view;
     if (v === 'day') {
@@ -204,11 +196,26 @@
       return { start: s, end: addDays(s, 7), days };
     }
     if (v === 'month') {
-      const x = new Date(state.anchor.getFullYear(), state.anchor.getMonth(), 1);
-      const gridStart = startOfWeekMonday(x);
-      const days = [];
-      for (let i = 0; i < 42; i += 1) days.push(addDays(gridStart, i));
-      return { start: days[0], end: addDays(days[41], 1), days };
+      const y = state.anchor.getFullYear();
+      const m = state.anchor.getMonth();
+      const first = new Date(y, m, 1);
+      const last = new Date(y, m + 1, 0);
+      const gridStart = startOfWeekMonday(first);
+      const gridEndWeek = startOfWeekMonday(addDays(last, 1));
+      const weekStarts = [];
+      let cur = gridStart;
+      while (cur < gridEndWeek) {
+        weekStarts.push(cur);
+        cur = addDays(cur, 7);
+      }
+      const nWeeks = Math.max(1, weekStarts.length);
+      const out = [];
+      for (let i = 0; i < nWeeks * 7; i += 1) out.push(addDays(gridStart, i));
+      return {
+        start: out[0],
+        end: addDays(out[out.length - 1], 1),
+        days: out,
+      };
     }
     const s = startOfDay(state.anchor);
     const end = addDays(s, 14);
@@ -270,9 +277,6 @@
   }
 
   function renderTimedGrid(days, occ) {
-    const rangeStart = days[0];
-    const rangeEnd = addDays(days[days.length - 1], 1);
-    const SLOT_MIN = 60;
     const PX_PER_HOUR = 52;
     const hours = [];
     for (let h = 0; h < 24; h += 1) hours.push(h);
@@ -311,7 +315,8 @@
         + '</button>'
       );
     });
-    body += '</div></div>';
+    body += '</div>';
+    body += '</div>';
 
     body += '<div class="agenda-scroll-wrap"><div class="agenda-time-grid">';
     body += '<div class="agenda-time-rail">';
@@ -393,29 +398,68 @@
     return html;
   }
 
+  function sortOccForMonthDay(dayOcc) {
+    return [...dayOcc].sort((a, b) => {
+      if (!!a.ev.all_day !== !!b.ev.all_day) return a.ev.all_day ? -1 : 1;
+      return a.start - b.start;
+    });
+  }
+
+  function monthWeekHasVisibleContent(days, occ, weekIndex, anchorMonth, anchorYear) {
+    for (let c = 0; c < 7; c += 1) {
+      const day = days[weekIndex * 7 + c];
+      const ds = startOfDay(day);
+      const de = addDays(ds, 1);
+      const inMonth = day.getMonth() === anchorMonth && day.getFullYear() === anchorYear;
+      const hasEvents = occ.some((o) => o.end > ds && o.start < de);
+      if (inMonth || hasEvents) return true;
+    }
+    return false;
+  }
+
   function renderMonthGrid(days, occ) {
+    let nWeeks = Math.ceil(days.length / 7);
+    const anchorMonth = state.anchor.getMonth();
+    const anchorYear = state.anchor.getFullYear();
+    while (nWeeks > 1 && !monthWeekHasVisibleContent(days, occ, nWeeks - 1, anchorMonth, anchorYear)) {
+      nWeeks -= 1;
+    }
     let html = '<div class="agenda-month-grid">';
     const weekRow = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     html += '<div class="agenda-month-head">';
     weekRow.forEach((w) => { html += `<div class="agenda-month-dow muted">${w}</div>`; });
     html += '</div>';
-    for (let r = 0; r < 6; r += 1) {
+    const MAX_CHIPS = 3;
+    for (let r = 0; r < nWeeks; r += 1) {
       html += '<div class="agenda-month-row">';
       for (let c = 0; c < 7; c += 1) {
         const day = days[r * 7 + c];
         const ds = startOfDay(day);
         const de = addDays(ds, 1);
-        const inMonth = day.getMonth() === state.anchor.getMonth();
+        const inMonth = day.getMonth() === anchorMonth && day.getFullYear() === anchorYear;
         const dayOcc = occ.filter((o) => o.end > ds && o.start < de);
-        const extra = dayOcc.length > 3 ? dayOcc.length - 3 : 0;
-        html += `<div class="agenda-month-cell ${inMonth ? '' : 'is-out'}">`;
+        const sorted = sortOccForMonthDay(dayOcc);
+        const show = sorted.slice(0, MAX_CHIPS);
+        const extra = sorted.length > MAX_CHIPS ? sorted.length - MAX_CHIPS : 0;
+        const isToday = ds.getTime() === startOfDay(new Date()).getTime();
+        html += `<div class="agenda-month-cell ${inMonth ? '' : 'is-out'} ${isToday ? 'is-today' : ''}">`;
         html += `<div class="agenda-month-date">${day.getDate()}</div>`;
-        html += '<div class="agenda-month-dots">';
-        dayOcc.slice(0, 3).forEach((o) => {
+        html += '<div class="agenda-month-events">';
+        show.forEach((o) => {
           const clr = ACCENT_PALETTE[hashHue(o.ev.id)];
-          html += `<button type="button" class="agenda-month-dot" data-agenda-id="${esc(o.ev.id)}" style="background:${clr}" title="${esc(o.ev.title)}"></button>`;
+          const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
+          const tlabel = o.ev.all_day ? 'All day' : formatTime(o.start);
+          html += (
+            `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}" title="${esc(o.ev.title)}">`
+            + `<span class="agenda-month-ev-accent" style="background:${clr}"></span>`
+            + '<span class="agenda-month-ev-body">'
+            + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
+            + `<span class="agenda-month-ev-title">${esc(o.ev.title)}</span>`
+            + `<span class="agenda-month-ev-time muted">${esc(tlabel)}</span>`
+            + '</span></button>'
+          );
         });
-        if (extra) html += `<span class="muted">+${extra}</span>`;
+        if (extra) html += `<span class="agenda-month-more muted" aria-hidden="true">+${extra} more</span>`;
         html += '</div></div>';
       }
       html += '</div>';
@@ -453,7 +497,12 @@
     } else if (state.view === 'month') {
       main = renderMonthGrid(days, occ);
     } else {
-      main = renderDayHeaders(days) + renderTimedGrid(days, occ);
+      main = (
+        '<div class="agenda-week-layout">'
+        + renderDayHeaders(days)
+        + renderTimedGrid(days, occ)
+        + '</div>'
+      );
     }
 
     rootEl.innerHTML = (
@@ -496,6 +545,7 @@
     rootEl.querySelectorAll('[data-agenda-view]').forEach((btn) => {
       btn.addEventListener('click', () => {
         state.view = btn.getAttribute('data-agenda-view') || 'week';
+        try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
         render();
       });
     });
@@ -527,6 +577,18 @@
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-agenda-id');
         openEditor(id);
+      });
+    });
+
+    rootEl.querySelectorAll('[data-agenda-goto-day]').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const raw = btn.getAttribute('data-agenda-goto-day');
+        const t = raw ? Number(raw) : NaN;
+        if (!Number.isFinite(t)) return;
+        state.anchor = new Date(t);
+        state.view = 'day';
+        render();
       });
     });
   }
