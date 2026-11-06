@@ -269,7 +269,11 @@ async function waitPersist(uuid, tries = 40) {
   const beforeIds = NotesStore.listAttachments(noteId).map((item) => item.uuid);
   const originalPut = global.NotesIDB.putItem;
   global.NotesIDB.putItem = async (row) => {
-    if (row.uuid !== noteId && !beforeIds.includes(row.uuid)) {
+    if (
+      row.uuid !== noteId
+      && !beforeIds.includes(row.uuid)
+      && row.uuid !== NotesStore.AGENDA_PACK_UUID
+    ) {
       throw new Error('disk full');
     }
     return originalPut(row);
@@ -292,6 +296,7 @@ async function waitPersist(uuid, tries = 40) {
       || uuid === legacyId
       || uuid === orphanId
       || uuid === NotesStore.SEARCH_INDEX_UUID
+      || uuid === NotesStore.AGENDA_PACK_UUID
       || extraIds.includes(uuid),
       uuid,
     );
