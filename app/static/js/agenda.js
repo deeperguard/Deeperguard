@@ -412,7 +412,8 @@
       }
     };
     const run = (attempt) => {
-      if (wrap.clientHeight > 0 || attempt >= 12) {
+      if (attempt >= 12) return;
+      if (wrap.clientHeight > 0) {
         placeScroll();
         return;
       }
@@ -766,10 +767,12 @@
     return body;
   }
 
-  function renderAgendaList(occ) {
+  function renderAgendaList(occ, range) {
     const sorted = occ.filter((o) => !o.ev.all_day).sort((a, b) => a.start - b.start);
     const allDay = occ.filter((o) => o.ev.all_day).sort((a, b) => a.start - b.start);
-    let html = '<div class="agenda-list-view">';
+    const rs = range && range.start ? range.start.getTime() : 0;
+    const re = range && range.end ? range.end.getTime() : 0;
+    let html = `<div class="agenda-list-view" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
     if (allDay.length) {
       html += '<p class="agenda-list-section-label muted">All day</p><ul class="agenda-list">';
       allDay.forEach((o) => {
@@ -821,7 +824,9 @@
     while (nWeeks > 1 && !monthWeekHasVisibleContent(days, occ, nWeeks - 1, anchorMonth, anchorYear)) {
       nWeeks -= 1;
     }
-    let html = '<div class="agenda-month-grid">';
+    const rs = startOfDay(days[0]).getTime();
+    const re = addDays(startOfDay(days[days.length - 1]), 1).getTime();
+    let html = `<div class="agenda-month-grid" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
     const weekRow = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     html += '<div class="agenda-month-head">';
     weekRow.forEach((w) => { html += `<div class="agenda-month-dow muted">${w}</div>`; });
@@ -890,7 +895,7 @@
 
     let main = '';
     if (state.view === 'agenda') {
-      main = renderAgendaList(occ);
+      main = renderAgendaList(occ, range);
     } else if (state.view === 'month') {
       main = renderMonthGrid(days, occ);
     } else {
