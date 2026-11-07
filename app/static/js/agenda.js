@@ -98,9 +98,14 @@
     const untilMatch = rule.match(/UNTIL=([^;:]+)/);
     let until = null;
     if (untilMatch) {
-      const raw = untilMatch[1].replace(/Z$/, '');
-      const p = Date.parse(raw);
-      if (Number.isFinite(p)) until = new Date(p);
+      const R = global.NotesAgendaRecurrence;
+      if (R && typeof R.parseUntil === 'function') {
+        until = R.parseUntil(untilMatch[1]);
+      } else {
+        const raw = untilMatch[1].replace(/Z$/, '');
+        const p = Date.parse(raw);
+        if (Number.isFinite(p)) until = new Date(p);
+      }
     }
     const countMatch = rule.match(/COUNT=(\d+)/);
     const maxCount = countMatch ? Math.max(1, Number(countMatch[1]) || 50) : 400;
@@ -994,6 +999,73 @@
     return { ...rest, type: 'agenda_event' };
   }
 
+  function syncEditorDatetimeMode(allDay) {
+    const startEl = document.getElementById('agenda-edit-start');
+    const endEl = document.getElementById('agenda-edit-end');
+    [startEl, endEl].forEach((el) => {
+      if (!el) return;
+      const was = el.value;
+      if (allDay) {
+        el.type = 'date';
+        if (was && was.includes('T')) el.value = was.slice(0, 10);
+      } else {
+        el.type = 'datetime-local';
+        if (was && /^\d{4}-\d{2}-\d{2}$/.test(was)) el.value = `${was}T09:00`;
+      }
+    });
+  }
+
+  function fillRecurrenceEditor(rrule) {
+    const R = global.NotesAgendaRecurrence;
+    const sel = document.getElementById('agenda-edit-repeat');
+    const untilEl = document.getElementById('agenda-edit-until');
+    const status = document.getElementById('agenda-edit-rrule-status');
+    const adv = document.getElementById('agenda-edit-rrule-advanced');
+    const raw = document.getElementById('agenda-edit-rrule-raw');
+    const notice = document.getElementById('agenda-edit-series-notice');
+    if (!R || !sel) return;
+    const p = R.parseAgendaRrule(rrule);
+    sel.value = p.kind;
+    if (untilEl) untilEl.value = p.until ? R.toDateInputValue(p.until) : '';
+    const showAdv = p.kind === 'advanced' && !!p.raw;
+    if (adv) adv.hidden = !showAdv;
+    if (raw) raw.textContent = showAdv ? p.raw : '';
+    if (status) {
+      if (p.kind === 'weekly') status.textContent = 'Repeats every week.';
+      else if (p.kind === 'biweekly') status.textContent = 'Repeats every 2 weeks.';
+      else if (p.kind === 'advanced') status.textContent = 'Imported/custom rule — preserved unless you choose a pattern above.';
+      else status.textContent = '';
+    }
+    if (notice) notice.hidden = !String(rrule || '').trim();
+  }
+
+  function readRecurrenceForSave(prevRrule) {
+    const R = global.NotesAgendaRecurrence;
+    const sel = document.getElementById('agenda-edit-repeat');
+    const untilEl = document.getElementById('agenda-edit-until');
+    if (!R || !sel) return String(prevRrule || '');
+    const kind = sel.value;
+    if (kind === 'advanced') return String(prevRrule || '').trim();
+    if (kind === 'none') return '';
+    const untilD = untilEl && untilEl.value
+      ? new Date(`${untilEl.value}T12:00:00`)
+      : null;
+    return R.buildAgendaRrule(kind, untilD) || '';
+  }
+
+  function updateRecurrenceStatus() {
+    const sel = document.getElementById('agenda-edit-repeat');
+    const status = document.getElementById('agenda-edit-rrule-status');
+    const adv = document.getElementById('agenda-edit-rrule-advanced');
+    if (!sel || !status) return;
+    const kind = sel.value;
+    if (kind === 'weekly') status.textContent = 'Repeats every week.';
+    else if (kind === 'biweekly') status.textContent = 'Repeats every 2 weeks.';
+    else if (kind === 'advanced') status.textContent = 'Custom rule kept from import.';
+    else status.textContent = '';
+    if (adv) adv.hidden = kind !== 'advanced';
+  }
+
   function openEditor(id) {
     const S = getStore();
     if (!S || typeof S.get !== 'function') return;
@@ -1029,14 +1101,26 @@
 
     if (titleEl) titleEl.value = content.title || '';
     if (locEl) locEl.value = content.location || '';
-    if (startEl) startEl.value = toDatetimeLocal(s);
-    if (endEl) endEl.value = toDatetimeLocal(e);
-    if (allDayEl) {
-      allDayEl.checked = !!content.all_day;
-      [startEl, endEl].forEach((el) => {
-        if (el) el.toggleAttribute('disabled', !!content.all_day);
-      });
+    const allDay = !!content.all_day;
+    if (allDayEl) allDayEl.checked = allDay;
+    syncEditorDatetimeMode(allDay);
+    if (allDay) {
+      const ds = startOfDay(s);
+      let lastInclusive = ds;
+      if (e.getTime() > ds.getTime() + MS_DAY) {
+        lastInclusive = addDays(startOfDay(e), -1);
+      }
+      if (startEl) {
+        startEl.value = `${ds.getFullYear()}-${pad2(ds.getMonth() + 1)}-${pad2(ds.getDate())}`;
+      }
+      if (endEl) {
+        endEl.value = `${lastInclusive.getFullYear()}-${pad2(lastInclusive.getMonth() + 1)}-${pad2(lastInclusive.getDate())}`;
+      }
+    } else {
+      if (startEl) startEl.value = toDatetimeLocal(s);
+      if (endEl) endEl.value = toDatetimeLocal(e);
     }
+    fillRecurrenceEditor(content.rrule || '');
     if (webcallEl) webcallEl.value = content.webcall_url || '';
     if (notesEl) notesEl.value = content.notes || '';
     if (attEl) attEl.value = (content.attendees || []).join(', ');
@@ -1062,6 +1146,8 @@
 
     backdrop.hidden = false;
     dialog.hidden = false;
+    document.body.classList.add('agenda-editor-open');
+    titleEl?.focus?.({ preventScroll: true });
   }
 
   function toDatetimeLocal(d) {
@@ -1099,6 +1185,7 @@
     const dialog = document.getElementById('agenda-editor');
     if (backdrop) backdrop.hidden = true;
     if (dialog) dialog.hidden = true;
+    document.body.classList.remove('agenda-editor-open');
   }
 
   function saveEditor() {
@@ -1114,9 +1201,24 @@
     const notesEl = document.getElementById('agenda-edit-notes');
     const attEl = document.getElementById('agenda-edit-attendees');
 
-    const start = fromDatetimeLocal(startEl && startEl.value);
-    let end = fromDatetimeLocal(endEl && endEl.value);
-    if (end <= start) end = new Date(start.getTime() + 3600000);
+    const allDay = !!(allDayEl && allDayEl.checked);
+    let start;
+    let end;
+    if (allDay) {
+      const sd = startEl && startEl.value
+        ? new Date(`${startEl.value}T00:00:00`)
+        : new Date();
+      let ed = endEl && endEl.value
+        ? new Date(`${endEl.value}T00:00:00`)
+        : sd;
+      if (ed < sd) ed = new Date(sd);
+      start = startOfDay(sd);
+      end = addDays(startOfDay(ed), 1);
+    } else {
+      start = fromDatetimeLocal(startEl && startEl.value);
+      end = fromDatetimeLocal(endEl && endEl.value);
+      if (end <= start) end = new Date(start.getTime() + 3600000);
+    }
 
     const wcRaw = String(webcallEl && webcallEl.value || '').trim();
     const wc = global.NotesAgendaIcs && NotesAgendaIcs.sanitizeHttpsUrl
@@ -1137,6 +1239,7 @@
     }
     if (!base) base = defaultEvent();
 
+    const rrule = readRecurrenceForSave(base.rrule || '');
     S.upsertAgendaEvent(id, {
       ...base,
       title: String(titleEl && titleEl.value || '').trim() || 'Untitled',
@@ -1146,7 +1249,8 @@
       attendees,
       start: start.toISOString(),
       end: end.toISOString(),
-      all_day: !!(allDayEl && allDayEl.checked),
+      all_day: allDay,
+      rrule,
     });
     closeEditor();
     render();
@@ -1182,15 +1286,12 @@
     document.getElementById('agenda-edit-delete')?.addEventListener('click', deleteEditor);
     document.getElementById('agenda-editor-backdrop')?.addEventListener('click', closeEditor);
     const ad = document.getElementById('agenda-edit-allday');
-    const startEl = document.getElementById('agenda-edit-start');
-    const endEl = document.getElementById('agenda-edit-end');
-    if (ad && startEl && endEl) {
+    if (ad) {
       ad.addEventListener('change', () => {
-        const on = !!ad.checked;
-        startEl.toggleAttribute('disabled', on);
-        endEl.toggleAttribute('disabled', on);
+        syncEditorDatetimeMode(!!ad.checked);
       });
     }
+    document.getElementById('agenda-edit-repeat')?.addEventListener('change', updateRecurrenceStatus);
     const notesEl = document.getElementById('agenda-edit-notes');
     if (notesEl) {
       notesEl.addEventListener('input', () => {
