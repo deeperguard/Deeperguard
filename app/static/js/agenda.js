@@ -168,10 +168,19 @@
   let searchDebounce = 0;
   let editorWired = false;
   let calendarSettingsWired = false;
+  let agendaSwipeWired = false;
+  /** @type {{ active: boolean, x: number, y: number, t: number, locked: string }} */
+  let swipe = { active: false, x: 0, y: 0, t: 0, locked: '' };
+  const PX_PER_HOUR = 52;
+  const DEFAULT_DAY_START_HOUR = 8;
+  const SWIPE_MIN_PX = 56;
+  const SWIPE_MAX_MS = 900;
+  const WHEEL_NAV_MIN_DX = 42;
 
   function closeCalendarSettingsPanel() {
     const calPanel = document.getElementById('agenda-calendar-settings');
     const calBackdrop = document.getElementById('agenda-calendar-settings-backdrop');
+    const calBtn = document.getElementById('agenda-calendar-settings-btn');
     if (calPanel) {
       calPanel.hidden = true;
       calPanel.setAttribute('aria-hidden', 'true');
@@ -181,11 +190,13 @@
       calBackdrop.setAttribute('aria-hidden', 'true');
     }
     document.body.classList.remove('agenda-calendar-settings-open');
+    if (calBtn) calBtn.setAttribute('aria-expanded', 'false');
   }
 
   function openCalendarSettingsPanel() {
     const calPanel = document.getElementById('agenda-calendar-settings');
     const calBackdrop = document.getElementById('agenda-calendar-settings-backdrop');
+    const calBtn = document.getElementById('agenda-calendar-settings-btn');
     if (calPanel) {
       calPanel.hidden = false;
       calPanel.removeAttribute('aria-hidden');
@@ -195,6 +206,7 @@
       calBackdrop.removeAttribute('aria-hidden');
     }
     document.body.classList.add('agenda-calendar-settings-open');
+    if (calBtn) calBtn.setAttribute('aria-expanded', 'true');
   }
 
   function wireCalendarSettingsOnce() {
@@ -207,6 +219,9 @@
     document.getElementById('agenda-calendar-import-ics')?.addEventListener('click', () => {
       closeCalendarSettingsPanel();
       fileInput?.click();
+    });
+    document.getElementById('agenda-calendar-export-ics')?.addEventListener('click', () => {
+      exportAgendaToIcs();
     });
     document.getElementById('agenda-open-app-settings')?.addEventListener('click', () => {
       closeCalendarSettingsPanel();
@@ -289,6 +304,315 @@
     });
   }
 
+  function scrollPeriodKey(range) {
+    if (!range) return '';
+    if (state.view === 'month') {
+      const y = state.anchor.getFullYear();
+      const m = state.anchor.getMonth();
+      return `${state.view}|${y}-${m}`;
+    }
+    if (state.view === 'agenda') {
+      return `${state.view}|${startOfDay(state.anchor).getTime()}`;
+    }
+    return `${state.view}|${range.start.getTime()}`;
+  }
+
+  function scrollStorageKey(range) {
+    const k = scrollPeriodKey(range);
+    return k ? `notes_agenda_scroll_${k}` : '';
+  }
+
+  /** SessionStorage key for schedule fingerprint paired with scroll top (same period as scrollStorageKey). */
+  function scrollFingerprintStorageKey(range) {
+    const k = scrollPeriodKey(range);
+    return k ? `notes_agenda_scroll_fp_${k}` : '';
+  }
+
+  function buildOccurrencesUnfiltered(rangeStart, rangeEnd) {
+    const events = listAgendaEvents();
+    const occ = [];
+    for (const ev of events) {
+      occ.push(...expandEventOccurrences(ev, rangeStart, rangeEnd));
+    }
+    return occ;
+  }
+
+  /** Fingerprint from full vault schedule in period (ignores Agenda search filter). */
+  function scrollScheduleFingerprint(range) {
+    const Core = global.NotesAgendaScroll;
+    if (!Core || typeof Core.scheduleFingerprint !== 'function') return '';
+    const occ = buildOccurrencesUnfiltered(range.start, range.end);
+    return Core.scheduleFingerprint(occ, range.start, range.end);
+  }
+
+  function preferredTimeGridScrollTop(occ, range) {
+    const Core = global.NotesAgendaScroll;
+    if (!Core || typeof Core.preferredTimeGridScrollTop !== 'function') {
+      return DEFAULT_DAY_START_HOUR * PX_PER_HOUR;
+    }
+    const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
+    const viewportHeight = wrap ? wrap.clientHeight : 0;
+    return Core.preferredTimeGridScrollTop(occ, range, {
+      pxPerHour: PX_PER_HOUR,
+      defaultDayStartHour: DEFAULT_DAY_START_HOUR,
+      viewportHeight,
+    });
+  }
+
+  function applyTimeGridScroll(range, occ) {
+    const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
+    if (!wrap) return;
+    const sk = scrollStorageKey(range);
+    const fk = scrollFingerprintStorageKey(range);
+    const fp = scrollScheduleFingerprint(range);
+    const viewportHeight = wrap.clientHeight || 0;
+    const scrollOpts = {
+      pxPerHour: PX_PER_HOUR,
+      defaultDayStartHour: DEFAULT_DAY_START_HOUR,
+      viewportHeight,
+    };
+    let top = preferredTimeGridScrollTop(occ, range);
+    if (sk && fk) {
+      try {
+        const storedFp = sessionStorage.getItem(fk);
+        const raw = sessionStorage.getItem(sk);
+        const Core = global.NotesAgendaScroll;
+        if (Core && typeof Core.pickTimeGridScrollTop === 'function') {
+          top = Core.pickTimeGridScrollTop({
+            currentFingerprint: fp,
+            storedFingerprint: storedFp,
+            storedScrollTop: raw,
+            displayOcc: occ,
+            range,
+            opts: scrollOpts,
+          });
+        } else if (storedFp === fp && raw !== null && raw !== '') {
+          const n = Number(raw);
+          if (Number.isFinite(n)) top = n;
+        }
+      } catch (e) { /* ignore */ }
+    }
+    requestAnimationFrame(() => {
+      const Core = global.NotesAgendaScroll;
+      if (Core && typeof Core.clampTimeGridScrollTop === 'function') {
+        wrap.scrollTop = Core.clampTimeGridScrollTop(top, wrap.scrollHeight, wrap.clientHeight);
+      } else {
+        const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+        wrap.scrollTop = Math.max(0, Math.min(top, max));
+      }
+    });
+  }
+
+  function wireTimeGridScrollPersistence(range) {
+    const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
+    if (!wrap) return;
+    const sk = scrollStorageKey(range);
+    const fk = scrollFingerprintStorageKey(range);
+    if (!sk || !fk) return;
+    wrap.dataset.agendaScrollKey = sk;
+    wrap.onscroll = () => {
+      try {
+        const fp = scrollScheduleFingerprint(range);
+        sessionStorage.setItem(fk, fp);
+        sessionStorage.setItem(sk, String(wrap.scrollTop));
+      } catch (e) { /* ignore */ }
+    };
+  }
+
+  function exportAgendaToIcs() {
+    const Ics = global.NotesAgendaIcs;
+    const S = getStore();
+    if (!Ics || typeof Ics.buildIcsCalendarFromEvents !== 'function' || !S || typeof S.listAgendaEvents !== 'function') {
+      if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('Export unavailable', true);
+      return;
+    }
+    const rows = listAgendaEvents() || [];
+    if (!rows.length) {
+      if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('No events to export', true);
+      return;
+    }
+    const icsText = Ics.buildIcsCalendarFromEvents(rows);
+    const blob = new Blob([icsText], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `deeperguard-calendar-${stamp}.ics`;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2500);
+    if (typeof global.notesAgendaToast === 'function') {
+      global.notesAgendaToast('Exported .ics — file is plaintext; keep it private.');
+    }
+    closeCalendarSettingsPanel();
+  }
+
+  function agendaSwipeBlockedTarget(el) {
+    if (!el || !el.closest) return true;
+    return !!el.closest(
+      '#agenda-editor, #agenda-editor-backdrop, #agenda-calendar-settings, #agenda-calendar-settings-backdrop,'
+      + ' .confirm-dialog, #agenda-search, input, textarea, select, option,'
+      + ' .agenda-icon-btn, .agenda-add, .agenda-calendar-menu-btn, .agenda-today, [data-agenda-view]',
+    );
+  }
+
+  function wireAgendaSwipeOnce() {
+    if (agendaSwipeWired) return;
+    const pane = document.getElementById('agenda-pane');
+    if (!pane) return;
+    agendaSwipeWired = true;
+
+    const tryNavigate = (dir) => {
+      if (dir > 0) shiftAnchor(1);
+      else if (dir < 0) shiftAnchor(-1);
+      render();
+    };
+
+    const finishPan = (startX, startY, startT, endX, endY, locked) => {
+      const dt = Date.now() - startT;
+      const dx = endX - startX;
+      const dy = endY - startY;
+      if (locked === 'vertical') return;
+      if (dt > SWIPE_MAX_MS) return;
+      if (Math.abs(dy) > 80) return;
+      if (Math.abs(dx) < SWIPE_MIN_PX) return;
+      const horizontalIntent = locked === 'horizontal'
+        || (Math.abs(dx) > Math.abs(dy) * 1.25 && Math.abs(dx) >= SWIPE_MIN_PX);
+      if (!horizontalIntent) return;
+      if (dx < 0) tryNavigate(1);
+      else tryNavigate(-1);
+    };
+
+    const onPanMove = (dx, dy) => {
+      if (!swipe.active) return;
+      if (!swipe.locked) {
+        const ax = Math.abs(dx);
+        const ay = Math.abs(dy);
+        if (ax < 12 && ay < 12) return;
+        if (ay > ax * 1.25) {
+          swipe.locked = 'vertical';
+          return;
+        }
+        if (ax > ay * 1.25 && ax > 18) swipe.locked = 'horizontal';
+      }
+    };
+
+    const onPanStart = (clientX, clientY, target) => {
+      if (document.body.classList.contains('agenda-calendar-settings-open')) return;
+      if (pane.hidden) return;
+      if (agendaSwipeBlockedTarget(target)) {
+        swipe.active = false;
+        return;
+      }
+      swipe = {
+        active: true,
+        x: clientX,
+        y: clientY,
+        t: Date.now(),
+        locked: '',
+      };
+    };
+
+    pane.addEventListener(
+      'touchstart',
+      (ev) => {
+        if (!ev.touches || ev.touches.length !== 1) return;
+        const t = ev.touches[0];
+        const el = document.elementFromPoint(t.clientX, t.clientY);
+        onPanStart(t.clientX, t.clientY, el);
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'touchmove',
+      (ev) => {
+        if (!swipe.active || !ev.touches || ev.touches.length !== 1) return;
+        const t = ev.touches[0];
+        onPanMove(t.clientX - swipe.x, t.clientY - swipe.y);
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'touchend',
+      (ev) => {
+        if (!swipe.active) return;
+        const changed = ev.changedTouches && ev.changedTouches[0];
+        if (!changed) {
+          swipe.active = false;
+          return;
+        }
+        const locked = swipe.locked;
+        finishPan(swipe.x, swipe.y, swipe.t, changed.clientX, changed.clientY, locked);
+        swipe.active = false;
+        swipe.locked = '';
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'pointerdown',
+      (ev) => {
+        if (ev.pointerType === 'touch') return;
+        if (!ev.isPrimary) return;
+        onPanStart(ev.clientX, ev.clientY, ev.target);
+        swipe.pointerId = ev.pointerId;
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'pointermove',
+      (ev) => {
+        if (!swipe.active || ev.pointerId !== swipe.pointerId) return;
+        if (ev.pointerType === 'touch') return;
+        onPanMove(ev.clientX - swipe.x, ev.clientY - swipe.y);
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'pointerup',
+      (ev) => {
+        if (!swipe.active || ev.pointerId !== swipe.pointerId) return;
+        if (ev.pointerType === 'touch') return;
+        const locked = swipe.locked;
+        finishPan(swipe.x, swipe.y, swipe.t, ev.clientX, ev.clientY, locked);
+        swipe.active = false;
+        swipe.locked = '';
+        swipe.pointerId = undefined;
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'pointercancel',
+      () => {
+        swipe.active = false;
+        swipe.locked = '';
+        swipe.pointerId = undefined;
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'wheel',
+      (ev) => {
+        if (pane.hidden) return;
+        if (agendaSwipeBlockedTarget(ev.target)) return;
+        if (Math.abs(ev.deltaX) < WHEEL_NAV_MIN_DX) return;
+        if (Math.abs(ev.deltaX) < Math.abs(ev.deltaY) * 1.1) return;
+        if (ev.deltaX < 0) tryNavigate(1);
+        else tryNavigate(-1);
+        ev.preventDefault();
+      },
+      { passive: false },
+    );
+  }
+
   function buildOccurrences(rangeStart, rangeEnd) {
     const events = filterEvents(state.search, listAgendaEvents());
     const occ = [];
@@ -331,7 +655,6 @@
   }
 
   function renderTimedGrid(days, occ) {
-    const PX_PER_HOUR = 52;
     const hours = [];
     for (let h = 0; h < 24; h += 1) hours.push(h);
 
@@ -576,12 +899,7 @@
       + '<svg class="agenda-search-ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M16 16l5 5"/></svg>'
       + `<input type="search" id="agenda-search" placeholder="Search" value="${esc(state.search)}" autocomplete="off" />`
       + '</label>'
-      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-calendar-settings-btn" aria-label="Calendar settings" title="Calendar settings">'
-      + '<svg class="agenda-calendar-settings-ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
-      + '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
-      + 'd="M8 7V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M5 7h14M6 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7M9 11h.01M15 11h.01M9 15h4"/>'
-      + '</svg>'
-      + '</button>'
+      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
       + '<button type="button" class="btn primary agenda-add" id="agenda-add-event">+ Event</button>'
       + '</div>'
       + '</div>'
@@ -620,7 +938,9 @@
       openEditor(null);
     });
     rootEl.querySelector('#agenda-calendar-settings-btn')?.addEventListener('click', () => {
-      openCalendarSettingsPanel();
+      const open = document.body.classList.contains('agenda-calendar-settings-open');
+      if (open) closeCalendarSettingsPanel();
+      else openCalendarSettingsPanel();
     });
 
     rootEl.querySelectorAll('[data-agenda-id]').forEach((btn) => {
@@ -641,6 +961,11 @@
         render();
       });
     });
+
+    if (['day', '3day', 'week'].includes(state.view)) {
+      wireTimeGridScrollPersistence(range);
+      applyTimeGridScroll(range, occ);
+    }
   }
 
   function addMonthsAnchor(d, n) {
@@ -909,6 +1234,7 @@
     rootEl = document.getElementById('agenda-root');
     if (!rootEl) return;
     wireCalendarSettingsOnce();
+    wireAgendaSwipeOnce();
     wireEditor();
     fileInput = document.getElementById('agenda-ics-input');
     if (fileInput) {

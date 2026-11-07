@@ -1442,15 +1442,19 @@
     <section id="agenda-pane" class="agenda-pane" hidden>
       <input id="agenda-ics-input" type="file" class="sr-file" accept="text/calendar,.ics" tabindex="-1" aria-hidden="true">
       <div id="agenda-calendar-settings-backdrop" class="agenda-calendar-settings-backdrop" hidden aria-hidden="true"></div>
-      <aside id="agenda-calendar-settings" class="agenda-calendar-settings" hidden aria-hidden="true">
+      <aside id="agenda-calendar-settings" class="agenda-calendar-settings" hidden aria-hidden="true" aria-labelledby="agenda-calendar-settings-heading">
         <header class="agenda-calendar-settings-head">
-          <h2 class="agenda-calendar-settings-title">Calendar</h2>
-          <button type="button" class="btn icon" id="agenda-calendar-settings-close" aria-label="Close">×</button>
+          <h2 class="agenda-calendar-settings-title" id="agenda-calendar-settings-heading">Calendar settings</h2>
+          <button type="button" class="btn icon" id="agenda-calendar-settings-close" aria-label="Close calendar settings">×</button>
         </header>
         <div class="agenda-calendar-settings-body">
-          <p class="settings-hint">Import events from an .ics file. Events stay encrypted in your vault; only https links are used as join targets.</p>
-          <button type="button" class="btn primary agenda-calendar-settings-import" id="agenda-calendar-import-ics">Import ICS…</button>
-          <button type="button" class="btn ghost sm agenda-calendar-settings-account" id="agenda-open-app-settings">App settings…</button>
+          <p class="settings-hint">Import or export calendar files on this device only. If Agenda looks out of date after an update, close the tab and open Deeperguard again (the offline worker fetches a fresh shell).</p>
+          <p class="settings-hint">Import supports .ics from other apps. Events stay encrypted in your vault; only https links are used as join targets.</p>
+          <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-import-ics">Import calendar (.ics)</button>
+          <p class="settings-hint muted agenda-cal-action-sub">Choose a file exported from another calendar.</p>
+          <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-export-ics">Export calendar (.ics)</button>
+          <p class="settings-hint muted agenda-cal-action-sub">Downloads a standard .ics file with your events. The file is <strong>not encrypted</strong> — titles, times, and notes are readable plaintext. Keep it private and share carefully.</p>
+          <button type="button" class="btn ghost sm agenda-calendar-settings-account" id="agenda-open-app-settings">Open app settings…</button>
         </div>
       </aside>
       <div id="agenda-root" class="agenda-root" data-agenda-root></div>
@@ -2556,6 +2560,7 @@
   {{ asset_script('js/store.js') }}
   {{ asset_script('js/vendor/jsQR.js') }}
   {{ asset_script('js/agenda-ics.js') }}
+  {{ asset_script('js/agenda-scroll-core.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}
   {{ asset_script('js/search.js') }}

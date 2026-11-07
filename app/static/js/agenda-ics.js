@@ -50,7 +50,8 @@
       const y = Number(s.slice(0, 4));
       const m = Number(s.slice(4, 6)) - 1;
       const d = Number(s.slice(6, 8));
-      return { date: new Date(Date.UTC(y, m, d)), allDay: true };
+      /** Plain DATE: calendar day in local timezone (matches export formatLocalDateValue). */
+      return { date: new Date(y, m, d), allDay: true };
     }
     if (/^\d{8}T\d{6}Z$/.test(upper)) {
       const y = Number(s.slice(0, 4));
@@ -93,6 +94,155 @@
       if (ok) return ok;
     }
     return '';
+  }
+
+  /** RFC 5545 TEXT escaping for SUMMARY, LOCATION, DESCRIPTION. */
+  function escapeIcsText(s) {
+    return String(s || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\r\n/g, '\\n')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\n');
+  }
+
+  /**
+   * Fold long lines (RFC 5545: max 75 octets per logical line; continuation starts with SP/HTAB).
+   * Uses UTF-8 byte length and never splits inside a Unicode scalar value (emoji, combining marks).
+   */
+  function foldIcsLine(line) {
+    const raw = String(line || '');
+    const enc = new TextEncoder();
+    const parts = [];
+    let pos = 0;
+    let firstLineMax = 75;
+    while (pos < raw.length) {
+      let chunk = '';
+      let oct = 0;
+      const limit = firstLineMax;
+      firstLineMax = 74;
+      while (pos < raw.length) {
+        const cp = raw.codePointAt(pos);
+        const w = cp > 0xffff ? 2 : 1;
+        const ch = raw.slice(pos, pos + w);
+        const nextOct = enc.encode(ch).length;
+        if (oct + nextOct > limit) break;
+        chunk += ch;
+        oct += nextOct;
+        pos += w;
+      }
+      if (!chunk && pos < raw.length) {
+        const cp = raw.codePointAt(pos);
+        const w = cp > 0xffff ? 2 : 1;
+        chunk = raw.slice(pos, pos + w);
+        pos += w;
+      }
+      parts.push(parts.length ? ` ${chunk}` : chunk);
+    }
+    return parts.join('\r\n');
+  }
+
+  function pad4(n) {
+    return String(n).padStart(4, '0');
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  /** Local floating date-time YYYYMMDDTHHmmss (no TZ suffix). */
+  function formatLocalDateTime(d) {
+    const x = new Date(d);
+    return (
+      `${pad4(x.getFullYear())}${pad2(x.getMonth() + 1)}${pad2(x.getDate())}`
+      + `T${pad2(x.getHours())}${pad2(x.getMinutes())}${pad2(x.getSeconds())}`
+    );
+  }
+
+  /** All-day DATE value YYYYMMDD (local calendar). */
+  function formatLocalDateValue(d) {
+    const x = new Date(d);
+    return `${pad4(x.getFullYear())}${pad2(x.getMonth() + 1)}${pad2(x.getDate())}`;
+  }
+
+  /** DTSTAMP in UTC form ending with Z. */
+  function formatUtcStamp(d) {
+    const x = new Date(d);
+    return (
+      `${pad4(x.getUTCFullYear())}${pad2(x.getUTCMonth() + 1)}${pad2(x.getUTCDate())}`
+      + `T${pad2(x.getUTCHours())}${pad2(x.getUTCMinutes())}${pad2(x.getUTCSeconds())}Z`
+    );
+  }
+
+  /** DATE-TIME in UTC (Zulu) for timed events — preserves absolute instant across timezones. */
+  function formatUtcDateTime(d) {
+    const x = new Date(d);
+    return (
+      `${pad4(x.getUTCFullYear())}${pad2(x.getUTCMonth() + 1)}${pad2(x.getUTCDate())}`
+      + `T${pad2(x.getUTCHours())}${pad2(x.getUTCMinutes())}${pad2(x.getUTCSeconds())}Z`
+    );
+  }
+
+  /**
+   * Build a VCALENDAR string from vault agenda rows (client-only, no network).
+   * @param {Array<{ id?: string, title?: string, location?: string, notes?: string,
+   *   start?: string, end?: string, all_day?: boolean, rrule?: string,
+   *   webcall_url?: string, attendees?: string[], ical_uid?: string }>} rows
+   */
+  function buildIcsCalendarFromEvents(rows) {
+    const now = new Date();
+    const dtstamp = formatUtcStamp(now);
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Deeperguard//Agenda Export//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+    ];
+    for (const ev of rows || []) {
+      const startIso = ev.start;
+      const endIso = ev.end;
+      if (!startIso || !endIso) continue;
+      const ds = new Date(startIso);
+      const de = new Date(endIso);
+      if (!Number.isFinite(ds.getTime()) || !Number.isFinite(de.getTime())) continue;
+      const uidRaw = String(ev.ical_uid || ev.id || '').trim();
+      const uid = uidRaw || `deeperguard-${(ev.id || Math.random().toString(36).slice(2))}@local`;
+      lines.push('BEGIN:VEVENT');
+      lines.push(`UID:${escapeIcsText(uid)}`);
+      lines.push(`DTSTAMP:${dtstamp}`);
+      lines.push(`SUMMARY:${escapeIcsText(ev.title || 'Untitled')}`);
+      if (ev.location) lines.push(`LOCATION:${escapeIcsText(ev.location)}`);
+      let notes = String(ev.notes || '');
+      if (Array.isArray(ev.attendees) && ev.attendees.length) {
+        const att = ev.attendees.map((a) => String(a || '').trim()).filter(Boolean).join(', ');
+        /** Real newline before escape — escapeIcsText turns newlines into \\n in ICS TEXT. */
+        if (att) notes = notes ? `${notes}\nAttendees: ${att}` : `Attendees: ${att}`;
+      }
+      if (notes) lines.push(`DESCRIPTION:${escapeIcsText(notes)}`);
+      const wc = sanitizeHttpsUrl(ev.webcall_url || '');
+      if (wc) lines.push(`URL:${wc}`);
+      if (ev.all_day) {
+        let endExclusive = new Date(de.getTime());
+        const dStart = formatLocalDateValue(ds);
+        const dEndProbe = formatLocalDateValue(endExclusive);
+        if (!Number.isFinite(Number(dEndProbe)) || Number(dEndProbe) <= Number(dStart)) {
+          endExclusive = new Date(ds.getTime() + 86400000);
+        }
+        const dEnd = formatLocalDateValue(endExclusive);
+        lines.push(`DTSTART;VALUE=DATE:${dStart}`);
+        lines.push(`DTEND;VALUE=DATE:${dEnd}`);
+      } else {
+        lines.push(`DTSTART:${formatUtcDateTime(ds)}`);
+        lines.push(`DTEND:${formatUtcDateTime(de)}`);
+      }
+      const rrule = String(ev.rrule || '').trim();
+      if (rrule) lines.push(`RRULE:${rrule.replace(/\s+/g, '')}`);
+      lines.push('END:VEVENT');
+    }
+    lines.push('END:VCALENDAR');
+    return `${lines.map((ln) => foldIcsLine(ln)).join('\r\n')}\r\n`;
   }
 
   function parseIcsFile(text) {
@@ -176,5 +326,9 @@
     parseIcsFile,
     sanitizeHttpsUrl,
     extractHttpsFromText,
+    escapeIcsText,
+    foldIcsLine,
+    buildIcsCalendarFromEvents,
+    formatUtcDateTime,
   };
 }(typeof window !== 'undefined' ? window : globalThis));
