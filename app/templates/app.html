@@ -2416,15 +2416,20 @@
       <label class="settings-row stacked">Title
         <input id="agenda-edit-title" type="text" maxlength="500" autocomplete="off">
       </label>
-      <label class="settings-row stacked agenda-editor-row-inline">
-        <input id="agenda-edit-allday" type="checkbox"> All day
+      <label class="settings-row checkbox agenda-editor-allday">
+        <span>All day</span>
+        <input id="agenda-edit-allday" type="checkbox">
       </label>
       <div class="agenda-editor-datetime-row">
-        <label class="settings-row stacked">Starts
-          <input id="agenda-edit-start" type="datetime-local">
+        <label class="settings-row stacked agenda-editor-datetime-label" for="agenda-edit-start">Starts
+          <span class="agenda-editor-datetime-field">
+            <input id="agenda-edit-start" type="datetime-local" step="60">
+          </span>
         </label>
-        <label class="settings-row stacked">Ends
-          <input id="agenda-edit-end" type="datetime-local">
+        <label class="settings-row stacked agenda-editor-datetime-label" for="agenda-edit-end">Ends
+          <span class="agenda-editor-datetime-field">
+            <input id="agenda-edit-end" type="datetime-local" step="60">
+          </span>
         </label>
       </div>
       <fieldset class="agenda-editor-recurrence">
