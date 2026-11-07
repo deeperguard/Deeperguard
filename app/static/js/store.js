@@ -1787,6 +1787,10 @@ const NotesStore = (() => {
         end: String(row.end || ''),
         all_day: !!row.all_day,
         rrule: String(row.rrule || ''),
+        ics_exdates: Array.isArray(row.ics_exdates)
+          ? row.ics_exdates.map((x) => String(x || '').trim()).filter(Boolean)
+          : [],
+        ics_recurrence_id: String(row.ics_recurrence_id || ''),
         ical_uid: uid,
         source_tz: String(row.source_tz || ''),
         imported_at: new Date().toISOString(),
