@@ -369,43 +369,62 @@
     if (!wrap) return;
     const sk = scrollStorageKey(range);
     const fk = scrollFingerprintStorageKey(range);
-    const fp = scrollScheduleFingerprint(range);
-    const viewportHeight = wrap.clientHeight || 0;
-    const scrollOpts = {
-      pxPerHour: PX_PER_HOUR,
-      defaultDayStartHour: DEFAULT_DAY_START_HOUR,
-      viewportHeight,
-    };
-    let top = preferredTimeGridScrollTop(occ, range);
-    if (sk && fk) {
-      try {
-        const storedFp = sessionStorage.getItem(fk);
-        const raw = sessionStorage.getItem(sk);
-        const Core = global.NotesAgendaScroll;
-        if (Core && typeof Core.pickTimeGridScrollTop === 'function') {
-          top = Core.pickTimeGridScrollTop({
-            currentFingerprint: fp,
-            storedFingerprint: storedFp,
-            storedScrollTop: raw,
-            displayOcc: occ,
-            range,
-            opts: scrollOpts,
-          });
-        } else if (storedFp === fp && raw !== null && raw !== '') {
-          const n = Number(raw);
-          if (Number.isFinite(n)) top = n;
-        }
-      } catch (e) { /* ignore */ }
-    }
-    requestAnimationFrame(() => {
-      const Core = global.NotesAgendaScroll;
-      if (Core && typeof Core.clampTimeGridScrollTop === 'function') {
-        wrap.scrollTop = Core.clampTimeGridScrollTop(top, wrap.scrollHeight, wrap.clientHeight);
-      } else {
-        const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-        wrap.scrollTop = Math.max(0, Math.min(top, max));
+    const Core = global.NotesAgendaScroll;
+    const placeScroll = () => {
+      const viewportHeight = wrap.clientHeight || 0;
+      const scrollOpts = {
+        pxPerHour: PX_PER_HOUR,
+        defaultDayStartHour: DEFAULT_DAY_START_HOUR,
+        viewportHeight,
+      };
+      const fp = scrollScheduleFingerprint(range);
+      let top = preferredTimeGridScrollTop(occ, range);
+      if (sk && fk) {
+        try {
+          const storedFp = sessionStorage.getItem(fk);
+          const raw = sessionStorage.getItem(sk);
+          if (Core && typeof Core.pickTimeGridScrollTop === 'function') {
+            top = Core.pickTimeGridScrollTop({
+              currentFingerprint: fp,
+              storedFingerprint: storedFp,
+              storedScrollTop: raw,
+              displayOcc: occ,
+              range,
+              opts: scrollOpts,
+            });
+          } else if (
+            storedFp
+            && fp
+            && storedFp === fp
+            && raw !== null
+            && raw !== ''
+          ) {
+            const n = Number(raw);
+            if (Number.isFinite(n)) top = n;
+          }
+        } catch (e) { /* ignore */ }
       }
-    });
+      try {
+        wrap.dataset.agendaScrollApplying = '1';
+        if (Core && typeof Core.clampTimeGridScrollTop === 'function') {
+          wrap.scrollTop = Core.clampTimeGridScrollTop(top, wrap.scrollHeight, wrap.clientHeight);
+        } else {
+          const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+          wrap.scrollTop = Math.max(0, Math.min(top, max));
+        }
+      } finally {
+        delete wrap.dataset.agendaScrollApplying;
+      }
+    };
+    const run = (attempt) => {
+      if (attempt >= 12) return;
+      if (wrap.clientHeight > 0) {
+        placeScroll();
+        return;
+      }
+      requestAnimationFrame(() => run(attempt + 1));
+    };
+    requestAnimationFrame(() => run(0));
   }
 
   function wireTimeGridScrollPersistence(range) {
@@ -416,8 +435,10 @@
     if (!sk || !fk) return;
     wrap.dataset.agendaScrollKey = sk;
     wrap.onscroll = () => {
+      if (wrap.dataset.agendaScrollApplying === '1') return;
       try {
         const fp = scrollScheduleFingerprint(range);
+        if (!fp) return;
         sessionStorage.setItem(fk, fp);
         sessionStorage.setItem(sk, String(wrap.scrollTop));
       } catch (e) { /* ignore */ }
@@ -752,10 +773,12 @@
     return body;
   }
 
-  function renderAgendaList(occ) {
+  function renderAgendaList(occ, range) {
     const sorted = occ.filter((o) => !o.ev.all_day).sort((a, b) => a.start - b.start);
     const allDay = occ.filter((o) => o.ev.all_day).sort((a, b) => a.start - b.start);
-    let html = '<div class="agenda-list-view">';
+    const rs = range && range.start ? range.start.getTime() : 0;
+    const re = range && range.end ? range.end.getTime() : 0;
+    let html = `<div class="agenda-list-view" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
     if (allDay.length) {
       html += '<p class="agenda-list-section-label muted">All day</p><ul class="agenda-list">';
       allDay.forEach((o) => {
@@ -807,7 +830,9 @@
     while (nWeeks > 1 && !monthWeekHasVisibleContent(days, occ, nWeeks - 1, anchorMonth, anchorYear)) {
       nWeeks -= 1;
     }
-    let html = '<div class="agenda-month-grid">';
+    const rs = startOfDay(days[0]).getTime();
+    const re = addDays(startOfDay(days[days.length - 1]), 1).getTime();
+    let html = `<div class="agenda-month-grid" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
     const weekRow = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     html += '<div class="agenda-month-head">';
     weekRow.forEach((w) => { html += `<div class="agenda-month-dow muted">${w}</div>`; });
@@ -876,7 +901,7 @@
 
     let main = '';
     if (state.view === 'agenda') {
-      main = renderAgendaList(occ);
+      main = renderAgendaList(occ, range);
     } else if (state.view === 'month') {
       main = renderMonthGrid(days, occ);
     } else {
