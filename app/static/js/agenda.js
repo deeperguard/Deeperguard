@@ -328,50 +328,33 @@
     return k ? `notes_agenda_scroll_fp_${k}` : '';
   }
 
-  /** Stable fingerprint of visible occurrences for scroll: navigation or schedule change resets "stick to saved". */
-  function scheduleFingerprint(occ, rangeStart, rangeEnd) {
-    const parts = [];
-    for (const o of occ || []) {
-      if (!o || !o.ev) continue;
-      if (o.end <= rangeStart || o.start >= rangeEnd) continue;
-      const id = String(o.ev.id || '');
-      parts.push(`${id}|${o.start.getTime()}|${o.end.getTime()}|${!!o.ev.all_day}`);
+  function buildOccurrencesUnfiltered(rangeStart, rangeEnd) {
+    const events = listAgendaEvents();
+    const occ = [];
+    for (const ev of events) {
+      occ.push(...expandEventOccurrences(ev, rangeStart, rangeEnd));
     }
-    parts.sort();
-    return parts.join(';');
+    return occ;
   }
 
-  /**
-   * Earliest local time-of-day (minutes from midnight) among timed events as they appear in visible day columns.
-   * Multi-day/week: compare per-column overlap (Mon 14:00 does not hide Wed 08:00). Overnight spill uses 00:00 on the visible day.
-   */
-  function earliestVisibleMinutesInPeriod(occ, days, rangeStart, rangeEnd) {
-    let minMin = null;
-    for (const d of days || []) {
-      const ds = startOfDay(d);
-      const de = addDays(ds, 1);
-      if (de <= rangeStart || ds >= rangeEnd) continue;
-      for (const o of occ || []) {
-        if (!o || !o.ev || o.ev.all_day) continue;
-        if (o.end <= ds || o.start >= de) continue;
-        const a = o.start < ds ? ds : o.start;
-        const b = o.end > de ? de : o.end;
-        if (b <= a) continue;
-        const mins = (a - ds) / 60000;
-        if (minMin === null || mins < minMin) minMin = mins;
-      }
-    }
-    return minMin;
+  /** Fingerprint from full vault schedule in period (ignores Agenda search filter). */
+  function scrollScheduleFingerprint(range) {
+    const Core = global.NotesAgendaScroll;
+    if (!Core || typeof Core.scheduleFingerprint !== 'function') return '';
+    const occ = buildOccurrencesUnfiltered(range.start, range.end);
+    return Core.scheduleFingerprint(occ, range.start, range.end);
   }
 
   function preferredTimeGridScrollTop(occ, range) {
-    const minMin = earliestVisibleMinutesInPeriod(occ, range.days, range.start, range.end);
-    if (minMin === null) {
+    const Core = global.NotesAgendaScroll;
+    if (!Core || typeof Core.preferredTimeGridScrollTop !== 'function') {
       return DEFAULT_DAY_START_HOUR * PX_PER_HOUR;
     }
-    const h = minMin / 60;
-    const raw = (h - SCROLL_LEAD_HOURS) * PX_PER_HOUR;
-    return Math.max(0, raw);
+    return Core.preferredTimeGridScrollTop(occ, range, {
+      pxPerHour: PX_PER_HOUR,
+      scrollLeadHours: SCROLL_LEAD_HOURS,
+      defaultDayStartHour: DEFAULT_DAY_START_HOUR,
+    });
   }
 
   function applyTimeGridScroll(range, occ) {
@@ -379,26 +362,40 @@
     if (!wrap) return;
     const sk = scrollStorageKey(range);
     const fk = scrollFingerprintStorageKey(range);
-    const fp = scheduleFingerprint(occ, range.start, range.end);
-    let top = null;
+    const fp = scrollScheduleFingerprint(range);
+    const scrollOpts = {
+      pxPerHour: PX_PER_HOUR,
+      scrollLeadHours: SCROLL_LEAD_HOURS,
+      defaultDayStartHour: DEFAULT_DAY_START_HOUR,
+    };
+    let top = preferredTimeGridScrollTop(occ, range);
     if (sk && fk) {
       try {
         const storedFp = sessionStorage.getItem(fk);
         const raw = sessionStorage.getItem(sk);
-        if (storedFp === fp && raw !== null && raw !== '') {
+        const Core = global.NotesAgendaScroll;
+        if (Core && typeof Core.pickTimeGridScrollTop === 'function') {
+          top = Core.pickTimeGridScrollTop({
+            currentFingerprint: fp,
+            storedFingerprint: storedFp,
+            storedScrollTop: raw,
+            displayOcc: occ,
+            range,
+            opts: scrollOpts,
+          });
+        } else if (storedFp === fp && raw !== null && raw !== '') {
           const n = Number(raw);
           if (Number.isFinite(n)) top = n;
         }
       } catch (e) { /* ignore */ }
     }
-    if (top === null) top = preferredTimeGridScrollTop(occ, range);
     requestAnimationFrame(() => {
       const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
       wrap.scrollTop = Math.max(0, Math.min(top, max));
     });
   }
 
-  function wireTimeGridScrollPersistence(range, occ) {
+  function wireTimeGridScrollPersistence(range) {
     const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
     if (!wrap) return;
     const sk = scrollStorageKey(range);
@@ -407,7 +404,7 @@
     wrap.dataset.agendaScrollKey = sk;
     wrap.onscroll = () => {
       try {
-        const fp = scheduleFingerprint(occ, range.start, range.end);
+        const fp = scrollScheduleFingerprint(range);
         sessionStorage.setItem(fk, fp);
         sessionStorage.setItem(sk, String(wrap.scrollTop));
       } catch (e) { /* ignore */ }
@@ -889,7 +886,7 @@
     });
 
     if (['day', '3day', 'week'].includes(state.view)) {
-      wireTimeGridScrollPersistence(range, occ);
+      wireTimeGridScrollPersistence(range);
       applyTimeGridScroll(range, occ);
     }
   }
