@@ -52,3 +52,4 @@ jobs:
           node tests/test_agenda_ics_timezone.js
           node tests/test_agenda_scroll_core.js
           node tests/test_agenda_recurrence.js
+          node tests/test_agenda_weekly_occurrences.js

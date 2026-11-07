@@ -115,6 +115,7 @@
     const duration = curEnd - curStart;
     let n = 0;
     while (n < maxCount && curStart < rangeEnd) {
+      if (until && curStart > until) break;
       const ce = new Date(curStart.getTime() + duration);
       if (ce > rangeStart && curStart < rangeEnd) {
         out.push({
@@ -125,7 +126,6 @@
         });
       }
       n += 1;
-      if (until && curStart > until) break;
       if (freqDaily) {
         curStart = addDays(curStart, interval);
       } else if (freqWeekly) {

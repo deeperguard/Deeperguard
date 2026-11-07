@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -57,27 +58,38 @@ def start_server(root: Path, port: int):
     raise RuntimeError("flask did not start")
 
 
-VISIBILITY_JS = """
+DATETIME_READABILITY_JS = """
 () => {
-  const d = document.getElementById('agenda-editor');
-  const title = document.getElementById('agenda-edit-title');
   const start = document.getElementById('agenda-edit-start');
   const end = document.getElementById('agenda-edit-end');
+  const alldayRow = document.querySelector('.agenda-editor-allday');
   const allday = document.getElementById('agenda-edit-allday');
-  const save = document.getElementById('agenda-edit-save');
-  const dialog = d?.getBoundingClientRect();
-  const tb = title?.getBoundingClientRect();
-  const sb = save?.getBoundingClientRect();
-  const vh = window.innerHeight;
-  const inView = (r) => r && r.top >= 0 && r.bottom <= vh + 2;
+  const field = start?.closest('.agenda-editor-datetime-field');
+  const sr = start?.getBoundingClientRect();
+  const fr = field?.getBoundingClientRect();
+  const row = document.querySelector('.agenda-editor-datetime-row');
+  const dialog = document.getElementById('agenda-editor');
+  const rr = row?.getBoundingClientRect();
+  const dw = dialog?.getBoundingClientRect().width || 0;
+  const span = alldayRow?.querySelector('span');
+  const spanBox = span?.getBoundingClientRect();
+  const alldayBox = allday?.getBoundingClientRect();
+  const sameRow = spanBox && alldayBox
+    ? Math.abs(spanBox.top - alldayBox.top) < 10
+    : false;
+  const timePart = (v) => (v && v.includes('T') ? v.split('T')[1] : '');
   return {
-    dialogH: dialog?.height,
-    titleVisible: inView(tb),
-    startVisible: !!start && !start.disabled && start.offsetParent !== null,
-    saveVisible: inView(sb),
-    scrollH: d?.querySelector('.agenda-editor-scroll')?.scrollHeight,
-    clientH: d?.querySelector('.agenda-editor-scroll')?.clientHeight,
-    alldayChecked: allday?.checked,
+    startValue: start?.value || '',
+    endValue: end?.value || '',
+    startTime: timePart(start?.value),
+    endTime: timePart(end?.value),
+    fieldWidth: fr?.width || 0,
+    inputWidth: sr?.width || 0,
+    rowWidth: rr?.width || 0,
+    dialogWidth: dw,
+    fieldInDialog: fr && dw ? fr.width >= dw * 0.62 : false,
+    inputFillsField: fr && sr ? sr.width >= fr.width * 0.72 : false,
+    alldayAligned: sameRow && !!alldayRow && alldayRow.contains(allday),
   };
 }
 """
@@ -139,18 +151,61 @@ def main() -> int:
                 )
                 page.locator('[data-agenda-id]').first.click()
                 page.wait_for_selector("#agenda-editor:not([hidden])", timeout=10_000)
-                vis = page.evaluate(VISIBILITY_JS)
+                opened = page.evaluate(DATETIME_READABILITY_JS)
+                time_ok = bool(
+                    re.search(r"^10:30", opened.get("startTime") or "")
+                    and re.search(r"^\d{2}:\d{2}", opened.get("endTime") or "")
+                    and opened.get("fieldInDialog")
+                    and opened.get("alldayAligned")
+                )
                 results.append(
                     {
                         "vp": vp_name,
-                        "check": "editor_fields_visible",
-                        "ok": vis.get("titleVisible") and vis.get("saveVisible") and vis.get("startVisible"),
-                        "detail": vis,
+                        "check": "datetime_readable_on_open",
+                        "ok": time_ok,
+                        "detail": opened,
                     }
                 )
-                if shots < 3 and vp_name == "428":
-                    page.locator("#agenda-editor").screenshot(path=str(ART / f"editor_{vp_name}.png"))
+                if vp_name in ("390", "428") and shots < 3:
+                    page.locator(".agenda-editor-datetime-row").screenshot(
+                        path=str(ART / f"editor_datetime_{vp_name}.png")
+                    )
                     shots += 1
+
+                edit_start = page.evaluate(
+                    """() => {
+                  const el = document.getElementById('agenda-edit-start');
+                  if (!el || !el.value) return null;
+                  const [d] = el.value.split('T');
+                  return `${d}T15:45`;
+                }"""
+                )
+                assert edit_start, "start value missing for time edit"
+                page.fill("#agenda-edit-start", edit_start)
+                page.evaluate(
+                    """() => {
+                  const start = new Date(document.getElementById('agenda-edit-start').value);
+                  const end = new Date(start.getTime() + 3600000);
+                  const pad = (n) => String(n).padStart(2, '0');
+                  const loc = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                  document.getElementById('agenda-edit-end').value = loc(end);
+                }"""
+                )
+                page.fill("#agenda-edit-title", "Edited title 15:45")
+                page.click("#agenda-edit-save")
+                page.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
+                page.locator('[data-agenda-id]').first.click()
+                page.wait_for_selector("#agenda-editor:not([hidden])")
+                after_time = page.evaluate(DATETIME_READABILITY_JS)
+                time_save_ok = (after_time.get("startTime") or "").startswith("15:45")
+                results.append(
+                    {
+                        "vp": vp_name,
+                        "check": "time_edit_save_reopen",
+                        "ok": time_save_ok,
+                        "detail": after_time,
+                    }
+                )
 
                 page.fill("#agenda-edit-title", "Edited title")
                 page.select_option("#agenda-edit-repeat", "biweekly")
@@ -198,16 +253,12 @@ def main() -> int:
                     }
                 )
                 page.click("#agenda-edit-cancel")
-                if shots < 3 and vp_name == "390":
-                    page.locator("#agenda-add-event").click()
-                    page.wait_for_timeout(300)
-                    page.locator("#agenda-editor").screenshot(path=str(ART / f"editor_new_{vp_name}.png"))
-                    shots += 1
-                    page.click("#agenda-edit-cancel")
-                if shots < 3 and vp_name == "1280":
+                if vp_name == "428" and shots < 3:
                     page.locator('[data-agenda-id]').first.click()
-                    page.wait_for_timeout(300)
-                    page.locator("#agenda-editor").screenshot(path=str(ART / f"editor_desktop_{vp_name}.png"))
+                    page.wait_for_selector("#agenda-editor:not([hidden])")
+                    page.locator(".agenda-editor-allday").screenshot(
+                        path=str(ART / f"editor_allday_{vp_name}.png")
+                    )
                     shots += 1
                     page.click("#agenda-edit-cancel")
                 page.close()
