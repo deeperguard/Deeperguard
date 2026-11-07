@@ -2406,6 +2406,20 @@
       <button type="button" class="btn primary" id="account-info-close">OK</button>
     </div>
   </div>
+  <div id="agenda-scope-backdrop" class="settings-backdrop agenda-scope-backdrop" hidden></div>
+  <div id="agenda-scope-chooser" class="confirm-dialog agenda-scope-chooser" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-scope-heading">
+    <h2 id="agenda-scope-heading" class="agenda-editor-heading">Edit recurring event</h2>
+    <p class="agenda-scope-lead">Apply changes to:</p>
+    <p id="agenda-scope-title" class="agenda-scope-event muted"></p>
+    <div class="agenda-scope-actions">
+      <button type="button" class="btn primary agenda-scope-btn" data-agenda-edit-scope="occurrence">This occurrence</button>
+      <button type="button" class="btn ghost agenda-scope-btn" data-agenda-edit-scope="series">Entire series</button>
+    </div>
+    <p id="agenda-scope-advanced-note" class="agenda-scope-advanced" hidden>
+      Imported/custom rules can only be edited for the entire series (occurrence exceptions not supported for this rule).
+    </p>
+    <button type="button" class="btn ghost agenda-scope-cancel" id="agenda-scope-cancel">Cancel</button>
+  </div>
   <div id="agenda-editor-backdrop" class="settings-backdrop agenda-editor-backdrop" hidden></div>
   <div id="agenda-editor" class="confirm-dialog agenda-editor" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-edit-visible-title">
     <div class="agenda-editor-scroll">
@@ -2591,6 +2605,7 @@
   {{ asset_script('js/vendor/jsQR.js') }}
   {{ asset_script('js/agenda-ics.js') }}
   {{ asset_script('js/agenda-recurrence.js') }}
+  {{ asset_script('js/agenda-occurrence.js') }}
   {{ asset_script('js/agenda-scroll-core.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}

@@ -66,6 +66,17 @@
     return { start: a, end: b };
   }
 
+  function occDisplayTitle(o) {
+    return String(o.displayTitle || o.ev.title || '');
+  }
+
+  function occurrenceChipAttrs(o) {
+    if (!o.recurring) return '';
+    const ser = o.seriesInstanceStart || o.start;
+    if (!ser || !Number.isFinite(ser.getTime())) return '';
+    return ` data-agenda-occurrence-ms="${ser.getTime()}"`;
+  }
+
   /** Expand instances for range [rangeStart, rangeEnd) — single + RRULE basic FREQ=DAILY/WEEKLY. */
   function expandEventOccurrences(ev, rangeStart, rangeEnd) {
     const span = eventSpan(ev);
@@ -134,6 +145,10 @@
         break;
       }
     }
+    const Occ = global.NotesAgendaOccurrence;
+    if (Occ && typeof Occ.finalizeOccurrences === 'function') {
+      return Occ.finalizeOccurrences(ev, out, rangeStart, rangeEnd);
+    }
     return out;
   }
 
@@ -166,6 +181,9 @@
     anchor: new Date(),
     search: '',
     selectedId: '',
+    editorScope: 'series',
+    editorOccurrenceStartMs: 0,
+    pendingEditor: null,
   };
 
   let rootEl = null;
@@ -526,7 +544,7 @@
       if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('No events to export', true);
       return;
     }
-    const icsText = Ics.buildIcsCalendarFromEvents(rows);
+    const icsText = Ics.buildIcsCalendarFromEvents(flattenEventsForIcsExport(rows));
     const blob = new Blob([icsText], { type: 'text/calendar;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -781,9 +799,9 @@
       const clr = ACCENT_PALETTE[hashHue(o.ev.id)];
       const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
       body += (
-        `<button type="button" class="agenda-allday-chip" data-agenda-id="${esc(o.ev.id)}" style="grid-column:${i0 + 1} / span ${span}" title="${esc(o.ev.title)}">`
+        `<button type="button" class="agenda-allday-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="grid-column:${i0 + 1} / span ${span}" title="${esc(occDisplayTitle(o))}">`
         + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-        + `<span class="agenda-chip-title">${esc(o.ev.title)}</span>`
+        + `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`
         + `<span class="agenda-chip-accent" style="background:${clr}"></span>`
         + '</button>'
       );
@@ -826,11 +844,11 @@
         const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
         const timeRange = `${formatTime(o.a)} – ${formatTime(o.b)}`;
         body += (
-          `<button type="button" class="agenda-event-chip" data-agenda-id="${esc(o.ev.id)}" style="top:${top}px;height:${h}px;left:${leftPct}%;width:${wPct}%;--agenda-accent:${clr}">`
+          `<button type="button" class="agenda-event-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="top:${top}px;height:${h}px;left:${leftPct}%;width:${wPct}%;--agenda-accent:${clr}">`
           + `<span class="agenda-chip-accent" style="background:${clr}"></span>`
           + '<span class="agenda-chip-body">'
           + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-          + `<span class="agenda-chip-title">${esc(o.ev.title)}</span>`
+          + `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`
           + (h >= 36 ? `<span class="agenda-chip-time muted">${esc(timeRange)}</span>` : '')
           + '</span></button>'
         );
@@ -852,9 +870,9 @@
       html += '<p class="agenda-list-section-label muted">All day</p><ul class="agenda-list">';
       allDay.forEach((o) => {
         html += (
-          `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}">`
+          `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
           + `<span class="agenda-list-date">${esc(o.start.toLocaleDateString())}</span>`
-          + `<span class="agenda-list-title">${esc(o.ev.title)}</span>`
+          + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
           + '</button></li>'
         );
       });
@@ -863,9 +881,9 @@
     html += '<p class="agenda-list-section-label muted">Scheduled</p><ul class="agenda-list">';
     sorted.forEach((o) => {
       html += (
-        `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}">`
+        `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
         + `<span class="agenda-list-date">${esc(o.start.toLocaleString())}</span>`
-        + `<span class="agenda-list-title">${esc(o.ev.title)}</span>`
+        + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
         + '</button></li>'
       );
     });
@@ -927,11 +945,11 @@
           const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
           const tlabel = o.ev.all_day ? 'All day' : formatTime(o.start);
           html += (
-            `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}" title="${esc(o.ev.title)}">`
+            `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} title="${esc(occDisplayTitle(o))}">`
             + `<span class="agenda-month-ev-accent" style="background:${clr}"></span>`
             + '<span class="agenda-month-ev-body">'
             + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-            + `<span class="agenda-month-ev-title">${esc(o.ev.title)}</span>`
+            + `<span class="agenda-month-ev-title">${esc(occDisplayTitle(o))}</span>`
             + `<span class="agenda-month-ev-time muted">${esc(tlabel)}</span>`
             + '</span></button>'
           );
@@ -1048,7 +1066,9 @@
     rootEl.querySelectorAll('[data-agenda-id]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-agenda-id');
-        openEditor(id);
+        const rawMs = btn.getAttribute('data-agenda-occurrence-ms');
+        const occurrenceMs = rawMs ? Number(rawMs) : 0;
+        beginEditFromClick(id, occurrenceMs);
       });
     });
 
@@ -1176,7 +1196,89 @@
     if (adv) adv.hidden = kind !== 'advanced';
   }
 
-  function openEditor(id) {
+  function beginEditFromClick(id, occurrenceMs) {
+    if (!id) {
+      openEditor(null, { scope: 'series' });
+      return;
+    }
+    const ev = (listAgendaEvents() || []).find((e) => e.id === id);
+    const Occ = global.NotesAgendaOccurrence;
+    const hasRrule = ev && String(ev.rrule || '').trim();
+    const occOk = Occ && Occ.supportsOccurrenceEdit(ev && ev.rrule)
+      && Number.isFinite(occurrenceMs) && occurrenceMs > 0;
+    if (hasRrule && occOk) {
+      state.pendingEditor = { id, occurrenceMs };
+      openScopeChooser(ev);
+      return;
+    }
+    openEditor(id, { scope: 'series' });
+  }
+
+  function closeScopeChooser() {
+    const backdrop = document.getElementById('agenda-scope-backdrop');
+    const dialog = document.getElementById('agenda-scope-chooser');
+    if (backdrop) backdrop.hidden = true;
+    if (dialog) dialog.hidden = true;
+    document.body.classList.remove('agenda-scope-open');
+    state.pendingEditor = null;
+  }
+
+  function openScopeChooser(ev) {
+    const backdrop = document.getElementById('agenda-scope-backdrop');
+    const dialog = document.getElementById('agenda-scope-chooser');
+    const title = document.getElementById('agenda-scope-title');
+    const adv = document.getElementById('agenda-scope-advanced-note');
+    if (!backdrop || !dialog) {
+      const pending = state.pendingEditor;
+      state.pendingEditor = null;
+      if (pending) openEditor(pending.id, { scope: 'series', occurrenceMs: pending.occurrenceMs });
+      return;
+    }
+    if (title) title.textContent = ev && ev.title ? `“${ev.title}”` : 'This event';
+    const Occ = global.NotesAgendaOccurrence;
+    const occBtn = document.querySelector('[data-agenda-edit-scope="occurrence"]');
+    const occSupported = !!(Occ && Occ.supportsOccurrenceEdit(ev && ev.rrule));
+    if (occBtn) occBtn.hidden = !occSupported;
+    if (adv) adv.hidden = occSupported;
+    backdrop.hidden = false;
+    dialog.hidden = false;
+    document.body.classList.add('agenda-scope-open');
+  }
+
+  function wireScopeChooser() {
+    if (wireScopeChooser._done) return;
+    wireScopeChooser._done = true;
+    document.getElementById('agenda-scope-cancel')?.addEventListener('click', () => closeScopeChooser());
+    document.getElementById('agenda-scope-backdrop')?.addEventListener('click', () => closeScopeChooser());
+    document.querySelectorAll('[data-agenda-edit-scope]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const pending = state.pendingEditor;
+        if (!pending) return closeScopeChooser();
+        const scope = btn.getAttribute('data-agenda-edit-scope') || 'series';
+        closeScopeChooser();
+        openEditor(pending.id, { scope, occurrenceMs: pending.occurrenceMs });
+      });
+    });
+  }
+
+  function applyEditorScopeUi(scope) {
+    const isOcc = scope === 'occurrence';
+    const notice = document.getElementById('agenda-edit-series-notice');
+    const recur = document.querySelector('#agenda-editor .agenda-editor-recurrence');
+    const del = document.getElementById('agenda-edit-delete');
+    const heading = document.getElementById('agenda-edit-visible-title');
+    if (notice) {
+      notice.hidden = false;
+      notice.textContent = isOcc
+        ? 'Editing this occurrence only. Other dates in the series stay unchanged.'
+        : 'Changes apply to the entire recurring series.';
+    }
+    if (recur) recur.hidden = isOcc;
+    if (del) del.textContent = isOcc ? 'Delete occurrence' : 'Delete';
+    if (heading) heading.textContent = isOcc ? 'Edit occurrence' : 'Event';
+  }
+
+  function openEditor(id, opts) {
     const S = getStore();
     if (!S || typeof S.get !== 'function') return;
     let existing = id ? S.get(id) : null;
@@ -1186,10 +1288,16 @@
         existing = { uuid: id, content: agendaRowToContent(ev) };
       }
     }
+    const options = opts && typeof opts === 'object' ? opts : {};
     const content = existing && existing.content?.type === 'agenda_event'
       ? existing.content
       : defaultEvent();
     state.selectedId = existing ? existing.uuid : id || '';
+    const scope = options.scope === 'occurrence' ? 'occurrence' : 'series';
+    state.editorScope = scope;
+    const occMs = Number(options.occurrenceMs) || 0;
+    state.editorOccurrenceStartMs = scope === 'occurrence' ? occMs : 0;
+    wireScopeChooser();
 
     const backdrop = document.getElementById('agenda-editor-backdrop');
     const dialog = document.getElementById('agenda-editor');
@@ -1205,13 +1313,34 @@
     const attEl = document.getElementById('agenda-edit-attendees');
     const joinEl = document.getElementById('agenda-edit-join');
 
-    const s = parseInstant(content.start) || new Date();
-    const endParsed = parseInstant(content.end);
-    const e = endParsed || new Date(s.getTime() + 3600000);
-
-    if (titleEl) titleEl.value = content.title || '';
-    if (locEl) locEl.value = content.location || '';
-    const allDay = !!content.all_day;
+    let s = parseInstant(content.start) || new Date();
+    let endParsed = parseInstant(content.end);
+    let e = endParsed || new Date(s.getTime() + 3600000);
+    const Occ = global.NotesAgendaOccurrence;
+    let overlay = null;
+    if (scope === 'occurrence' && occMs > 0 && Occ) {
+      const seriesStart = new Date(occMs);
+      const rid = Occ.recurrenceIdForStart(seriesStart, content.all_day);
+      overlay = (content.ics_occurrence_overrides && content.ics_occurrence_overrides[rid]) || null;
+      const masterS = parseInstant(content.start) || seriesStart;
+      const masterE = parseInstant(content.end) || new Date(masterS.getTime() + 3600000);
+      const dur = masterE.getTime() - masterS.getTime();
+      s = overlay && overlay.start ? (parseInstant(overlay.start) || seriesStart) : seriesStart;
+      e = overlay && overlay.end ? (parseInstant(overlay.end) || new Date(s.getTime() + dur)) : new Date(s.getTime() + dur);
+    }
+    if (titleEl) {
+      titleEl.value = (scope === 'occurrence' && overlay && overlay.title)
+        ? overlay.title
+        : (content.title || '');
+    }
+    if (locEl) {
+      locEl.value = (scope === 'occurrence' && overlay && overlay.location != null)
+        ? overlay.location
+        : (content.location || '');
+    }
+    const allDay = (scope === 'occurrence' && overlay && typeof overlay.all_day === 'boolean')
+      ? overlay.all_day
+      : !!content.all_day;
     if (allDayEl) allDayEl.checked = allDay;
     syncEditorDatetimeMode(allDay);
     if (allDay) {
@@ -1230,9 +1359,14 @@
       if (startEl) startEl.value = toDatetimeLocal(s);
       if (endEl) endEl.value = toDatetimeLocal(e);
     }
-    fillRecurrenceEditor(content);
+    if (scope === 'series') fillRecurrenceEditor(content);
+    else fillRecurrenceEditor({ ...content, rrule: content.rrule || '' });
     if (webcallEl) webcallEl.value = content.webcall_url || '';
-    if (notesEl) notesEl.value = content.notes || '';
+    if (notesEl) {
+      notesEl.value = (scope === 'occurrence' && overlay && overlay.notes != null)
+        ? overlay.notes
+        : (content.notes || '');
+    }
     if (attEl) attEl.value = (content.attendees || []).join(', ');
 
     const wc = (global.NotesAgendaIcs && NotesAgendaIcs.sanitizeHttpsUrl)
@@ -1253,6 +1387,7 @@
     }
 
     document.getElementById('agenda-edit-delete')?.toggleAttribute('hidden', !state.selectedId);
+    applyEditorScopeUi(scope);
 
     backdrop.hidden = false;
     dialog.hidden = false;
@@ -1287,7 +1422,36 @@
       all_day: false,
       rrule: '',
       ical_uid: '',
+      ics_exdates: [],
+      ics_occurrence_overrides: {},
     };
+  }
+
+  function flattenEventsForIcsExport(rows) {
+    const out = [];
+    for (const ev of rows || []) {
+      out.push(ev);
+      const overrides = ev.ics_occurrence_overrides;
+      if (!overrides || typeof overrides !== 'object') continue;
+      Object.keys(overrides).forEach((rid) => {
+        const ov = overrides[rid];
+        if (!ov || ov.cancelled) return;
+        out.push({
+          ...ev,
+          rrule: '',
+          ics_exdates: [],
+          ics_occurrence_overrides: {},
+          ics_recurrence_id: rid,
+          title: ov.title || ev.title,
+          location: ov.location != null ? ov.location : ev.location,
+          notes: ov.notes != null ? ov.notes : ev.notes,
+          start: ov.start || ev.start,
+          end: ov.end || ev.end,
+          all_day: typeof ov.all_day === 'boolean' ? ov.all_day : ev.all_day,
+        });
+      });
+    }
+    return out;
   }
 
   function closeEditor() {
@@ -1296,6 +1460,8 @@
     if (backdrop) backdrop.hidden = true;
     if (dialog) dialog.hidden = true;
     document.body.classList.remove('agenda-editor-open');
+    state.editorScope = 'series';
+    state.editorOccurrenceStartMs = 0;
   }
 
   function saveEditor() {
@@ -1349,7 +1515,44 @@
     }
     if (!base) base = defaultEvent();
 
+    const Occ = global.NotesAgendaOccurrence;
+    const Ics = global.NotesAgendaIcs;
+    if (
+      state.editorScope === 'occurrence'
+      && state.editorOccurrenceStartMs > 0
+      && Occ
+    ) {
+      const seriesStart = new Date(state.editorOccurrenceStartMs);
+      const rid = Occ.recurrenceIdForStart(seriesStart, !!base.all_day);
+      const exdates = Occ.normalizeExdates(base.ics_exdates);
+      const overrides = { ...(base.ics_occurrence_overrides || {}) };
+      const moved = allDay !== !!base.all_day
+        || Occ.recurrenceIdForStart(start, allDay) !== Occ.recurrenceIdForStart(seriesStart, !!base.all_day);
+      if (moved && !Occ.isExcludedByExdate(seriesStart, exdates, !!base.all_day)) {
+        exdates.push(rid);
+      }
+      overrides[rid] = {
+        title: String(titleEl && titleEl.value || '').trim() || 'Untitled',
+        location: String(locEl && locEl.value || ''),
+        notes: String(notesEl && notesEl.value || ''),
+        start: start.toISOString(),
+        end: end.toISOString(),
+        all_day: allDay,
+      };
+      const icalUid = Occ.ensureIcalUid(base, id);
+      S.upsertAgendaEvent(id, {
+        ...base,
+        ics_exdates: exdates,
+        ics_occurrence_overrides: overrides,
+        ical_uid: icalUid,
+      });
+      closeEditor();
+      render();
+      return;
+    }
+
     const rrule = readRecurrenceForSave(base.rrule || '');
+    const icalUid = Occ ? Occ.ensureIcalUid(base, id) : (base.ical_uid || '');
     S.upsertAgendaEvent(id, {
       ...base,
       title: String(titleEl && titleEl.value || '').trim() || 'Untitled',
@@ -1361,6 +1564,7 @@
       end: end.toISOString(),
       all_day: allDay,
       rrule,
+      ical_uid: icalUid || base.ical_uid || '',
     });
     closeEditor();
     render();
@@ -1368,7 +1572,33 @@
 
   function deleteEditor() {
     const S = getStore();
-    if (!state.selectedId || !S || typeof S.removeAgendaEvent !== 'function') return;
+    if (!state.selectedId || !S || typeof S.upsertAgendaEvent !== 'function') return;
+    const Occ = global.NotesAgendaOccurrence;
+    if (
+      state.editorScope === 'occurrence'
+      && state.editorOccurrenceStartMs > 0
+      && Occ
+    ) {
+      const prev = S.get(state.selectedId);
+      const base = (prev && prev.content?.type === 'agenda_event')
+        ? prev.content
+        : agendaRowToContent((listAgendaEvents() || []).find((e) => e.id === state.selectedId));
+      const seriesStart = new Date(state.editorOccurrenceStartMs);
+      const rid = Occ.recurrenceIdForStart(seriesStart, !!base.all_day);
+      const exdates = Occ.normalizeExdates(base.ics_exdates);
+      if (!Occ.isExcludedByExdate(seriesStart, exdates, !!base.all_day)) exdates.push(rid);
+      const overrides = { ...(base.ics_occurrence_overrides || {}) };
+      delete overrides[rid];
+      S.upsertAgendaEvent(state.selectedId, {
+        ...base,
+        ics_exdates: exdates,
+        ics_occurrence_overrides: overrides,
+      });
+      closeEditor();
+      render();
+      return;
+    }
+    if (typeof S.removeAgendaEvent !== 'function') return;
     S.removeAgendaEvent(state.selectedId);
     closeEditor();
     render();
@@ -1391,6 +1621,7 @@
   function wireEditor() {
     if (editorWired) return;
     editorWired = true;
+    wireScopeChooser();
     document.getElementById('agenda-edit-cancel')?.addEventListener('click', closeEditor);
     document.getElementById('agenda-edit-save')?.addEventListener('click', saveEditor);
     document.getElementById('agenda-edit-delete')?.addEventListener('click', deleteEditor);
