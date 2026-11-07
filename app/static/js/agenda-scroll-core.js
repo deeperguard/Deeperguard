@@ -93,9 +93,11 @@
       range,
       opts,
     } = p || {};
+    const fpOk = (s) => s != null && s !== '';
     let top = null;
     if (
-      storedFingerprint != null
+      fpOk(storedFingerprint)
+      && fpOk(currentFingerprint)
       && storedFingerprint === currentFingerprint
       && storedScrollTop != null
       && storedScrollTop !== ''

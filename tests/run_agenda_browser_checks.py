@@ -143,6 +143,31 @@ def main() -> int:
                 results.append(
                     {"vp": name, "check": "center_wed08", "ok": geo["diff"] < 80, "detail": geo}
                 )
+                dom_center = page.evaluate(
+                    """() => {
+                      const wrap = document.querySelector('.agenda-scroll-wrap');
+                      const head = document.querySelector('.agenda-col-head');
+                      const headH = head ? head.getBoundingClientRect().height : 0;
+                      const wRect = wrap.getBoundingClientRect();
+                      const portCenter = wRect.top + headH + Math.max(0, wRect.height - headH) / 2;
+                      const chip = [...document.querySelectorAll('.agenda-event-chip')].find((el) =>
+                        (el.querySelector('.agenda-chip-title')?.textContent || '').includes('Wed 08:00')
+                      );
+                      if (!chip) return { ok: false, reason: 'no-wed-chip' };
+                      const r = chip.getBoundingClientRect();
+                      const cy = r.top + r.height / 2;
+                      const diff = Math.abs(cy - portCenter);
+                      return { ok: diff < 32, diff, scrollTop: wrap.scrollTop, cy, portCenter };
+                    }"""
+                )
+                results.append(
+                    {
+                        "vp": name,
+                        "check": "dom_center_earliest_wed",
+                        "ok": bool(dom_center.get("ok")),
+                        "detail": dom_center,
+                    }
+                )
                 before = page.evaluate(
                     "() => document.querySelector('.agenda-scroll-wrap')?.scrollTop ?? 0"
                 )
