@@ -232,8 +232,12 @@ body.agenda-editor-open #agenda-editor.agenda-editor { z-index: 210; }
   padding: 8px 10px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
+  color: var(--text);
   font-size: 13px;
   line-height: 1.4;
+}
+.agenda-editor-series-notice strong {
+  color: inherit;
 }
 /* Editor max width is ~420px — side-by-side datetime-local clips times on phones. */
 .agenda-editor-datetime-row {
@@ -333,6 +337,43 @@ body.agenda-editor-open #agenda-editor.agenda-editor { z-index: 210; }
   border-right: 0;
 }
 .agenda-editor-recurrence legend { font-size: 12px; font-weight: 650; padding: 0 4px; }
+#agenda-editor .agenda-editor-recurrence .settings-row.stacked {
+  flex: 0 0 auto;
+  align-items: stretch;
+  padding: 4px 0 6px;
+  border-bottom: 0;
+  gap: 4px;
+}
+#agenda-editor .agenda-editor-recurrence select#agenda-edit-repeat {
+  flex: 0 0 auto;
+  flex-grow: 0;
+  width: 100%;
+  min-height: var(--touch);
+  height: var(--touch);
+  max-height: var(--touch);
+  align-self: stretch;
+  line-height: 1.2;
+}
+#agenda-editor .agenda-editor-recurrence #agenda-edit-rrule-status {
+  margin: 0;
+  padding: 0 0 4px;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  font-size: 13px;
+  line-height: 1.35;
+}
+#agenda-editor .agenda-editor-recurrence #agenda-edit-until-wrap input[type="date"] {
+  flex: 0 0 auto;
+  min-height: var(--touch);
+  height: var(--touch);
+  max-height: var(--touch);
+}
+.agenda-editor-exdates-note {
+  margin: 0;
+  padding: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--text) 86%, var(--muted));
+}
 .agenda-editor-rrule-advanced code {
   display: block;
   margin-top: 4px;

@@ -1041,13 +1041,16 @@
     });
   }
 
-  function fillRecurrenceEditor(rrule) {
+  function fillRecurrenceEditor(content) {
     const R = global.NotesAgendaRecurrence;
+    const rrule = (content && content.rrule) || '';
+    const exdates = (content && Array.isArray(content.ics_exdates)) ? content.ics_exdates : [];
     const sel = document.getElementById('agenda-edit-repeat');
     const untilEl = document.getElementById('agenda-edit-until');
     const status = document.getElementById('agenda-edit-rrule-status');
     const adv = document.getElementById('agenda-edit-rrule-advanced');
     const raw = document.getElementById('agenda-edit-rrule-raw');
+    const exNote = document.getElementById('agenda-edit-exdates-note');
     const notice = document.getElementById('agenda-edit-series-notice');
     if (!R || !sel) return;
     const p = R.parseAgendaRrule(rrule);
@@ -1063,6 +1066,16 @@
       else status.textContent = '';
     }
     if (notice) notice.hidden = !String(rrule || '').trim();
+    if (exNote) {
+      const n = exdates.filter(Boolean).length;
+      if (p.kind === 'advanced' && n > 0) {
+        exNote.hidden = false;
+        exNote.textContent = `${n} imported EXDATE exclusion(s) preserved on save/export.`;
+      } else {
+        exNote.hidden = true;
+        exNote.textContent = '';
+      }
+    }
   }
 
   function readRecurrenceForSave(prevRrule) {
@@ -1146,7 +1159,7 @@
       if (startEl) startEl.value = toDatetimeLocal(s);
       if (endEl) endEl.value = toDatetimeLocal(e);
     }
-    fillRecurrenceEditor(content.rrule || '');
+    fillRecurrenceEditor(content);
     if (webcallEl) webcallEl.value = content.webcall_url || '';
     if (notesEl) notesEl.value = content.notes || '';
     if (attEl) attEl.value = (content.attendees || []).join(', ');

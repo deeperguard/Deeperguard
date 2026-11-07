@@ -166,6 +166,59 @@ def main() -> int:
                         "detail": focus,
                     }
                 )
+                chrome = page.evaluate(
+                    """() => {
+                      function parseRgb(css) {
+                        const m = String(css || '').match(/rgba?\\(([^)]+)\\)/);
+                        if (!m) return null;
+                        const p = m[1].split(',').map((x) => Number(x.trim()));
+                        return p.length >= 3 ? { r: p[0], g: p[1], b: p[2] } : null;
+                      }
+                      function lin(c) {
+                        const s = c / 255;
+                        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+                      }
+                      function lum(rgb) {
+                        if (!rgb) return 0;
+                        return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
+                      }
+                      function contrast(f, b) {
+                        const L1 = Math.max(lum(f), lum(b));
+                        const L2 = Math.min(lum(f), lum(b));
+                        return (L1 + 0.05) / (L2 + 0.05);
+                      }
+                      const banner = document.getElementById('agenda-edit-series-notice');
+                      const status = document.getElementById('agenda-edit-rrule-status');
+                      const sel = document.getElementById('agenda-edit-repeat');
+                      const bSt = banner ? getComputedStyle(banner) : null;
+                      const sSt = status ? getComputedStyle(status) : null;
+                      const bFg = parseRgb(bSt?.color);
+                      const bBg = parseRgb(bSt?.backgroundColor);
+                      const sFg = parseRgb(sSt?.color);
+                      const dialog = document.getElementById('agenda-editor');
+                      const dBg = parseRgb(getComputedStyle(dialog).backgroundColor);
+                      const sb = sel?.getBoundingClientRect();
+                      return {
+                        seriesContrast: contrast(bFg, bBg),
+                        seriesColor: bSt?.color,
+                        seriesBg: bSt?.backgroundColor,
+                        helperContrast: contrast(sFg, dBg),
+                        helperColor: sSt?.color,
+                        dialogBg: getComputedStyle(dialog).backgroundColor,
+                        patternSelectHeight: sb?.height,
+                      };
+                    }"""
+                )
+                results.append(
+                    {
+                        "vp": vp_name,
+                        "check": "recurrence_contrast_and_pattern_height",
+                        "ok": (chrome.get("seriesContrast") or 0) >= 4.5
+                        and (chrome.get("helperContrast") or 0) >= 4.5
+                        and 40 <= (chrome.get("patternSelectHeight") or 0) <= 48,
+                        "detail": chrome,
+                    }
+                )
                 page.locator("#agenda-editor").screenshot(
                     path=str(ART / f"editor_full_top_{vp_name}.png")
                 )
@@ -294,56 +347,68 @@ def main() -> int:
                 page.click("#agenda-edit-cancel")
 
                 if vp_name == "428":
-                    adv = page.evaluate(
+                    imp = page.evaluate(
                         """async () => {
                       const start = new Date();
-                      start.setHours(14, 0, 0, 0);
+                      start.setHours(11, 0, 0, 0);
                       if (start.getTime() < Date.now()) start.setDate(start.getDate() + 1);
-                      const id = NotesStore.newUuid();
-                      const raw = 'FREQ=MONTHLY;BYDAY=2MO;EXDATE=20270302T160000Z';
-                      NotesStore.upsertAgendaEvent(id, {
-                        title: 'Import custom',
-                        start: start.toISOString(),
-                        end: new Date(start.getTime() + 3600000).toISOString(),
-                        all_day: false,
-                        rrule: raw,
-                        ical_uid: 'adv-' + id.slice(0, 8),
-                      });
+                      const end = new Date(start.getTime() + 3600000);
+                      const toIcsUtc = (d) => {
+                        const pad = (n) => String(n).padStart(2, '0');
+                        return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+                      };
+                      const ex = new Date(start.getTime());
+                      ex.setUTCDate(ex.getUTCDate() + 28);
+                      const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:exdate-browser-1
+DTSTART:${toIcsUtc(start)}
+DTEND:${toIcsUtc(end)}
+SUMMARY:ICS EXDATE fixture
+RRULE:FREQ=WEEKLY;INTERVAL=1
+EXDATE:${toIcsUtc(ex)}
+END:VEVENT
+END:VCALENDAR`;
+                      const { events } = NotesAgendaIcs.parseIcsFile(ics);
+                      NotesStore.importAgendaFromIcs(events);
                       await NotesStore.flush();
                       NotesAgenda.render();
-                      return { id, raw };
+                      const row = NotesStore.listAgendaEvents().find((e) => e.ical_uid === 'exdate-browser-1');
+                      return { id: row?.id, exdates: row?.ics_exdates || [], exIcs: toIcsUtc(ex) };
                     }"""
                     )
                     page.wait_for_function(
-                        f"() => document.querySelector('[data-agenda-id=\"{adv['id']}\"]')",
+                        f"() => document.querySelector('[data-agenda-id=\"{imp['id']}\"]')",
                         timeout=15_000,
                     )
-                    page.locator(f'[data-agenda-id="{adv["id"]}"]').click()
+                    page.locator(f'[data-agenda-id="{imp["id"]}"]').click()
                     page.wait_for_selector("#agenda-editor:not([hidden])")
-                    adv_ui = page.evaluate(
-                        """() => ({
-                          repeat: document.getElementById('agenda-edit-repeat')?.value,
-                          raw: document.getElementById('agenda-edit-rrule-raw')?.textContent?.trim(),
-                          advHidden: document.getElementById('agenda-edit-rrule-advanced')?.hidden,
-                        })"""
-                    )
+                    page.fill("#agenda-edit-title", "ICS EXDATE fixture (edited)")
                     page.click("#agenda-edit-save")
                     page.wait_for_selector("#agenda-editor", state="hidden")
-                    stored = page.evaluate(
-                        """(raw) => {
-                      const row = NotesStore.listAgendaEvents().find((e) => e.title === 'Import custom');
-                      return { vault: row?.rrule || '', expected: raw };
+                    ex = page.evaluate(
+                        """(exIcs) => {
+                      const rows = NotesStore.listAgendaEvents().filter((e) => e.ical_uid === 'exdate-browser-1');
+                      const cal = NotesAgendaIcs.buildIcsCalendarFromEvents(rows);
+                      const vault = rows[0] || {};
+                      return {
+                        vaultEx: vault.ics_exdates || [],
+                        calHasExdate: cal.includes(`EXDATE:${exIcs}`),
+                        rruleClean: (vault.rrule || '').indexOf('EXDATE') < 0,
+                        exIcs,
+                      };
                     }""",
-                        adv["raw"],
+                        imp["exIcs"],
                     )
                     results.append(
                         {
                             "vp": vp_name,
-                            "check": "advanced_rrule_preserved",
-                            "ok": adv_ui.get("repeat") == "advanced"
-                            and adv["raw"] in (adv_ui.get("raw") or "")
-                            and stored.get("vault") == adv["raw"],
-                            "detail": {**adv_ui, **stored},
+                            "check": "ics_exdate_import_edit_export",
+                            "ok": ex.get("calHasExdate")
+                            and ex.get("rruleClean")
+                            and ex.get("vaultEx") == [imp["exIcs"]],
+                            "detail": ex,
                         }
                     )
 
