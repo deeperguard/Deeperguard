@@ -2,10 +2,10 @@
   "asset_count": 64,
   "assets": {
     "css/app.css": {
-      "bytes": 266936,
-      "sha256": "9e59f7bc3ea8b07dc44f655e2f2449210f9eb74a94120763b14063531bc14a1b",
-      "sri": "sha384-xkSSFjENCBS+NzzeX7K1fPvq3npKmFOb8bknhu2Hb/3DlSR/pqP7UaH4+DLuSD1T",
-      "url": "/static/css/app.9e59f7bc3ea8b07d.css"
+      "bytes": 267274,
+      "sha256": "5b766646bf5bdc1121db67f7dad77c5dc3b461fcd452ca2224f3a50eee685b3e",
+      "sri": "sha384-9U+qGrXwgh1MuOwGiCvi/LONaqMjzn7UvdKsTadBFCsJNYnIfKTTfHcNOAVkbUDD",
+      "url": "/static/css/app.5b766646bf5bdc11.css"
     },
     "css/marketing.css": {
       "bytes": 54240,
@@ -20,16 +20,16 @@
       "url": "/static/js/admin.da5308df76c2a61e.js"
     },
     "js/agenda-ics.js": {
-      "bytes": 5938,
-      "sha256": "cd5ba96a3421671f6de4628c863dae3853ba6e9e87b7f0e38560719607794a70",
-      "sri": "sha384-Z7ByDE6voQEDgCuKHd2DZFzknkYZQo1hqT2/R4RSrROKrHapdmN4ClvSa5ksCgOH",
-      "url": "/static/js/agenda-ics.cd5ba96a3421671f.js"
+      "bytes": 10401,
+      "sha256": "ea5c5c66a57b40b4d7e6c8a7a76ebc90291becb28a8573c812e3a8be9058f9c3",
+      "sri": "sha384-FMP1pukUjhOWow/qri1ehghnpFEPe81v+Xjnl9/VfIC5qpF5T9nKx9qpSnzl97NP",
+      "url": "/static/js/agenda-ics.ea5c5c66a57b40b4.js"
     },
     "js/agenda.js": {
-      "bytes": 35107,
-      "sha256": "b4009bfcbb29b52d3cc63664867013de092cf33fccf7f7ea5e98ae3be2d52381",
-      "sri": "sha384-tOxUOR7DgCJPcdocRHDZeXTmMBxYOEZbGeB1eZql7d/iWnAHt61I6r1FTEt3/Jfl",
-      "url": "/static/js/agenda.b4009bfcbb29b52d.js"
+      "bytes": 42158,
+      "sha256": "ae2ca637e192ab6503308a1415e0d6ca8e58154e1fb1c6898bd35cd3516ed4ec",
+      "sri": "sha384-z2T407kXYwOhpDl6tyBPBjzN2x59KzcWwbE4ASZAlF/ql7ovRwMwO84xLZ0Th5Ni",
+      "url": "/static/js/agenda.ae2ca637e192ab65.js"
     },
     "js/ai-chat.js": {
       "bytes": 27644,
@@ -387,6 +387,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "cb9e0c927a1964eab8b4c2b5e836134b5c08ac09f6de0fad76eb71ac79abf4ba",
+  "manifest_sha256": "c4cc3c1467724a287a684b04155462e0513e98bf2f1835052c9bd8b95fb541a7",
   "version": 1
 }

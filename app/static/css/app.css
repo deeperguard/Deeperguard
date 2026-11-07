@@ -742,9 +742,25 @@ body.agenda-calendar-settings-open {
   flex-direction: column;
   gap: 14px;
 }
-.agenda-calendar-settings-import {
-  align-self: flex-start;
+.agenda-cal-action {
+  align-self: stretch;
+  justify-content: center;
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 650;
+}
+.agenda-cal-action-sub {
+  margin: -6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.agenda-calendar-menu-btn {
+  min-height: 44px;
+  padding: 0 14px;
   border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  font-weight: 650;
+  flex-shrink: 0;
 }
 .agenda-calendar-settings-account {
   align-self: flex-start;

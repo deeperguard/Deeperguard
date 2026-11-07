@@ -95,6 +95,124 @@
     return '';
   }
 
+  /** RFC 5545 TEXT escaping for SUMMARY, LOCATION, DESCRIPTION. */
+  function escapeIcsText(s) {
+    return String(s || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\r\n/g, '\\n')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\n');
+  }
+
+  /** Fold long lines (max 75 octets per line, continuation begins with space). */
+  function foldIcsLine(line) {
+    const raw = String(line || '');
+    if (raw.length <= 75) return raw;
+    const out = [];
+    let rest = raw;
+    out.push(rest.slice(0, 75));
+    rest = rest.slice(75);
+    while (rest.length > 0) {
+      out.push(` ${rest.slice(0, 74)}`);
+      rest = rest.slice(74);
+    }
+    return out.join('\r\n');
+  }
+
+  function pad4(n) {
+    return String(n).padStart(4, '0');
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  /** Local floating date-time YYYYMMDDTHHmmss (no TZ suffix). */
+  function formatLocalDateTime(d) {
+    const x = new Date(d);
+    return (
+      `${pad4(x.getFullYear())}${pad2(x.getMonth() + 1)}${pad2(x.getDate())}`
+      + `T${pad2(x.getHours())}${pad2(x.getMinutes())}${pad2(x.getSeconds())}`
+    );
+  }
+
+  /** All-day DATE value YYYYMMDD (local calendar). */
+  function formatLocalDateValue(d) {
+    const x = new Date(d);
+    return `${pad4(x.getFullYear())}${pad2(x.getMonth() + 1)}${pad2(x.getDate())}`;
+  }
+
+  /** DTSTAMP in UTC form ending with Z. */
+  function formatUtcStamp(d) {
+    const x = new Date(d);
+    return (
+      `${pad4(x.getUTCFullYear())}${pad2(x.getUTCMonth() + 1)}${pad2(x.getUTCDate())}`
+      + `T${pad2(x.getUTCHours())}${pad2(x.getUTCMinutes())}${pad2(x.getUTCSeconds())}Z`
+    );
+  }
+
+  /**
+   * Build a VCALENDAR string from vault agenda rows (client-only, no network).
+   * @param {Array<{ id?: string, title?: string, location?: string, notes?: string,
+   *   start?: string, end?: string, all_day?: boolean, rrule?: string,
+   *   webcall_url?: string, attendees?: string[], ical_uid?: string }>} rows
+   */
+  function buildIcsCalendarFromEvents(rows) {
+    const now = new Date();
+    const dtstamp = formatUtcStamp(now);
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Deeperguard//Agenda Export//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+    ];
+    for (const ev of rows || []) {
+      const startIso = ev.start;
+      const endIso = ev.end;
+      if (!startIso || !endIso) continue;
+      const ds = new Date(startIso);
+      const de = new Date(endIso);
+      if (!Number.isFinite(ds.getTime()) || !Number.isFinite(de.getTime())) continue;
+      const uidRaw = String(ev.ical_uid || ev.id || '').trim();
+      const uid = uidRaw || `deeperguard-${(ev.id || Math.random().toString(36).slice(2))}@local`;
+      lines.push('BEGIN:VEVENT');
+      lines.push(`UID:${escapeIcsText(uid)}`);
+      lines.push(`DTSTAMP:${dtstamp}`);
+      lines.push(`SUMMARY:${escapeIcsText(ev.title || 'Untitled')}`);
+      if (ev.location) lines.push(`LOCATION:${escapeIcsText(ev.location)}`);
+      let notes = String(ev.notes || '');
+      if (Array.isArray(ev.attendees) && ev.attendees.length) {
+        const att = ev.attendees.map((a) => String(a || '').trim()).filter(Boolean).join(', ');
+        if (att) notes = notes ? `${notes}\\nAttendees: ${att}` : `Attendees: ${att}`;
+      }
+      if (notes) lines.push(`DESCRIPTION:${escapeIcsText(notes)}`);
+      const wc = sanitizeHttpsUrl(ev.webcall_url || '');
+      if (wc) lines.push(`URL:${wc}`);
+      if (ev.all_day) {
+        let endExclusive = new Date(de.getTime());
+        const dStart = formatLocalDateValue(ds);
+        const dEndProbe = formatLocalDateValue(endExclusive);
+        if (!Number.isFinite(Number(dEndProbe)) || Number(dEndProbe) <= Number(dStart)) {
+          endExclusive = new Date(ds.getTime() + 86400000);
+        }
+        const dEnd = formatLocalDateValue(endExclusive);
+        lines.push(`DTSTART;VALUE=DATE:${dStart}`);
+        lines.push(`DTEND;VALUE=DATE:${dEnd}`);
+      } else {
+        lines.push(`DTSTART:${formatLocalDateTime(ds)}`);
+        lines.push(`DTEND:${formatLocalDateTime(de)}`);
+      }
+      const rrule = String(ev.rrule || '').trim();
+      if (rrule) lines.push(`RRULE:${rrule.replace(/\s+/g, '')}`);
+      lines.push('END:VEVENT');
+    }
+    lines.push('END:VCALENDAR');
+    return `${lines.map((ln) => foldIcsLine(ln)).join('\r\n')}\r\n`;
+  }
+
   function parseIcsFile(text) {
     const warnings = [];
     const blocks = [];
@@ -176,5 +294,8 @@
     parseIcsFile,
     sanitizeHttpsUrl,
     extractHttpsFromText,
+    escapeIcsText,
+    foldIcsLine,
+    buildIcsCalendarFromEvents,
   };
 }(typeof window !== 'undefined' ? window : globalThis));
