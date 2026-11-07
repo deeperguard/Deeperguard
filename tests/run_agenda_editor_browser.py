@@ -15,7 +15,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app"
 ART = Path("/opt/cursor/artifacts/agenda-editor-verify")
+SIGNOFF = Path("/opt/cursor/artifacts/signoff-editor")
 ART.mkdir(parents=True, exist_ok=True)
+SIGNOFF.mkdir(parents=True, exist_ok=True)
+def _contrast_browser_js() -> str:
+    raw = (ROOT / "tests/agenda_contrast_utils.js").read_text(encoding="utf-8")
+    raw = raw.split("if (typeof module")[0].strip()
+    return f"() => {{\n{raw}\nreturn measureEditorContrast();\n}}"
 VPS = (("390", 390, 844), ("428", 428, 926), ("1280", 1280, 800))
 
 
@@ -166,49 +172,7 @@ def main() -> int:
                         "detail": focus,
                     }
                 )
-                chrome = page.evaluate(
-                    """() => {
-                      function parseRgb(css) {
-                        const m = String(css || '').match(/rgba?\\(([^)]+)\\)/);
-                        if (!m) return null;
-                        const p = m[1].split(',').map((x) => Number(x.trim()));
-                        return p.length >= 3 ? { r: p[0], g: p[1], b: p[2] } : null;
-                      }
-                      function lin(c) {
-                        const s = c / 255;
-                        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-                      }
-                      function lum(rgb) {
-                        if (!rgb) return 0;
-                        return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
-                      }
-                      function contrast(f, b) {
-                        const L1 = Math.max(lum(f), lum(b));
-                        const L2 = Math.min(lum(f), lum(b));
-                        return (L1 + 0.05) / (L2 + 0.05);
-                      }
-                      const banner = document.getElementById('agenda-edit-series-notice');
-                      const status = document.getElementById('agenda-edit-rrule-status');
-                      const sel = document.getElementById('agenda-edit-repeat');
-                      const bSt = banner ? getComputedStyle(banner) : null;
-                      const sSt = status ? getComputedStyle(status) : null;
-                      const bFg = parseRgb(bSt?.color);
-                      const bBg = parseRgb(bSt?.backgroundColor);
-                      const sFg = parseRgb(sSt?.color);
-                      const dialog = document.getElementById('agenda-editor');
-                      const dBg = parseRgb(getComputedStyle(dialog).backgroundColor);
-                      const sb = sel?.getBoundingClientRect();
-                      return {
-                        seriesContrast: contrast(bFg, bBg),
-                        seriesColor: bSt?.color,
-                        seriesBg: bSt?.backgroundColor,
-                        helperContrast: contrast(sFg, dBg),
-                        helperColor: sSt?.color,
-                        dialogBg: getComputedStyle(dialog).backgroundColor,
-                        patternSelectHeight: sb?.height,
-                      };
-                    }"""
-                )
+                chrome = page.evaluate(_contrast_browser_js())
                 results.append(
                     {
                         "vp": vp_name,
@@ -219,9 +183,9 @@ def main() -> int:
                         "detail": chrome,
                     }
                 )
-                page.locator("#agenda-editor").screenshot(
-                    path=str(ART / f"editor_full_top_{vp_name}.png")
-                )
+                top_path = ART / f"editor_full_top_{vp_name}.png"
+                page.locator("#agenda-editor").screenshot(path=str(top_path))
+                SIGNOFF.joinpath(top_path.name).write_bytes(top_path.read_bytes())
                 scroll = page.locator(".agenda-editor-scroll")
                 scroll.evaluate("el => { el.scrollTop = el.scrollHeight; }")
                 page.wait_for_timeout(250)
@@ -236,9 +200,9 @@ def main() -> int:
                       };
                     }"""
                 )
-                page.locator("#agenda-editor").screenshot(
-                    path=str(ART / f"editor_full_bottom_{vp_name}.png")
-                )
+                bot_path = ART / f"editor_full_bottom_{vp_name}.png"
+                page.locator("#agenda-editor").screenshot(path=str(bot_path))
+                SIGNOFF.joinpath(bot_path.name).write_bytes(bot_path.read_bytes())
                 results.append(
                     {
                         "vp": vp_name,
@@ -440,6 +404,11 @@ END:VCALENDAR`;
     failed = [r for r in results if not r.get("ok")]
     out = {"results": results, "failed": len(failed), "total": len(results)}
     (ART / "editor_results.json").write_text(json.dumps(out, indent=2), encoding="utf-8")
+    contrast_rows = [r for r in results if r.get("check") == "recurrence_contrast_and_pattern_height"]
+    (ART / "editor_contrast_report.json").write_text(
+        json.dumps({"head_note": "WCAG contrast from measureEditorContrast", "rows": contrast_rows}, indent=2),
+        encoding="utf-8",
+    )
     print(json.dumps({"failed": out["failed"], "total": out["total"]}, indent=2))
     return 1 if failed else 0
 
