@@ -364,7 +364,16 @@
     });
   }
 
+  let timeGridScrollPlacementGen = 0;
+  let timeGridScrollResizeObs = null;
+
   function applyTimeGridScroll(range, occ) {
+    const placementGen = ++timeGridScrollPlacementGen;
+    const placementLive = () => placementGen === timeGridScrollPlacementGen;
+    if (timeGridScrollResizeObs) {
+      try { timeGridScrollResizeObs.disconnect(); } catch (e) { /* ignore */ }
+      timeGridScrollResizeObs = null;
+    }
     const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
     if (!wrap) return;
     const sk = scrollStorageKey(range);
@@ -415,16 +424,76 @@
       } finally {
         delete wrap.dataset.agendaScrollApplying;
       }
+      if (wrap.scrollTop > 0) persistPlacedScroll();
+    };
+    const persistPlacedScroll = () => {
+      if (!sk || !fk) return;
+      const top = wrap.scrollTop;
+      if (top <= 0) return;
+      try {
+        const fp = scrollScheduleFingerprint(range);
+        if (!fp) return;
+        sessionStorage.setItem(fk, fp);
+        sessionStorage.setItem(sk, String(top));
+      } catch (e) { /* ignore */ }
+    };
+    let placedAtScrollHeight = 0;
+    const tryPlace = () => {
+      if (!placementLive() || !wrap.isConnected) return;
+      const sh = wrap.scrollHeight;
+      const ch = wrap.clientHeight;
+      const ready = Core && typeof Core.isTimeGridLayoutReady === 'function'
+        ? Core.isTimeGridLayoutReady(sh, ch)
+        : ch > 0 && sh > ch;
+      if (!ready) return;
+      if (placedAtScrollHeight > 0 && sh <= placedAtScrollHeight + 2) return;
+      placedAtScrollHeight = sh;
+      placeScroll();
+      persistPlacedScroll();
+    };
+    let resizeObs = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObs = new ResizeObserver(() => tryPlace());
+      resizeObs.observe(wrap);
+      timeGridScrollResizeObs = resizeObs;
+    }
+    const finishPlacement = () => {
+      if (!placementLive()) return;
+      if (resizeObs) {
+        try { resizeObs.disconnect(); } catch (e) { /* ignore */ }
+        if (timeGridScrollResizeObs === resizeObs) timeGridScrollResizeObs = null;
+      }
     };
     const run = (attempt) => {
-      if (attempt >= 12) return;
-      if (wrap.clientHeight > 0) {
-        placeScroll();
+      if (!placementLive()) return;
+      tryPlace();
+      const stable = placedAtScrollHeight > 0 && wrap.scrollHeight <= placedAtScrollHeight + 2;
+      if (stable) {
+        finishPlacement();
         return;
       }
+      if (attempt >= 64) return;
       requestAnimationFrame(() => run(attempt + 1));
     };
+    tryPlace();
     requestAnimationFrame(() => run(0));
+  }
+
+  function saveTimeGridScrollSnapshot() {
+    const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
+    if (!wrap) return;
+    const range = rangeForView();
+    const sk = scrollStorageKey(range);
+    const fk = scrollFingerprintStorageKey(range);
+    if (!sk || !fk) return;
+    const top = wrap.scrollTop;
+    if (top < 0) return;
+    try {
+      const fp = scrollScheduleFingerprint(range);
+      if (!fp) return;
+      sessionStorage.setItem(fk, fp);
+      sessionStorage.setItem(sk, String(top));
+    } catch (e) { /* ignore */ }
   }
 
   function wireTimeGridScrollPersistence(range) {
@@ -947,7 +1016,9 @@
 
     rootEl.querySelectorAll('[data-agenda-view]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        state.view = btn.getAttribute('data-agenda-view') || 'week';
+        const next = btn.getAttribute('data-agenda-view') || 'week';
+        if (['day', '3day', 'week'].includes(state.view)) saveTimeGridScrollSnapshot();
+        state.view = next;
         try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
         render();
       });
