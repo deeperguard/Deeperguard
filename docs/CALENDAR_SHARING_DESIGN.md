@@ -34,3 +34,12 @@ Group key agreement per calendar — stronger membership privacy, more engineeri
 ## Relation to Dennis’s question (“where are shared calendars?”)
 
 They are **not present** yet. Scope for product agreement: which flows (invite email vs in-app only), whether Pro-only, and whether read-only sharing is enough for v1.
+
+## ICS handoff behavior (Agenda export/import)
+
+This matches the current client implementation in `app/static/js/agenda-ics.js` and scroll logic in `app/static/js/agenda.js`.
+
+- **Timed events:** Export uses **UTC `Z`** `DTSTART`/`DTEND` so the absolute instant roundtrips regardless of the machine timezone. Parsing accepts both floating local and `Z` forms.
+- **All-day events:** `VALUE=DATE` uses the **local calendar day** on import and export (not UTC midnight for the YYYYMMDD form), so America/Chicago/LA does not shift Christmas Eve to the prior calendar day.
+- **Line folding:** RFC 5545 **75 octets per line** in UTF-8; folds never split a Unicode codepoint (emoji stay intact).
+- **Time grid scroll:** `sessionStorage` stores scroll **paired with a schedule fingerprint** for the same view/period. Pure rerenders keep the user’s scroll; **navigation** (different period) or any **change to visible occurrences** (new event, edit, delete) updates the fingerprint so the grid **re-scrolls to the earliest visible timed appointment** for that period.

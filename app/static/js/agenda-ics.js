@@ -50,7 +50,8 @@
       const y = Number(s.slice(0, 4));
       const m = Number(s.slice(4, 6)) - 1;
       const d = Number(s.slice(6, 8));
-      return { date: new Date(Date.UTC(y, m, d)), allDay: true };
+      /** Plain DATE: calendar day in local timezone (matches export formatLocalDateValue). */
+      return { date: new Date(y, m, d), allDay: true };
     }
     if (/^\d{8}T\d{6}Z$/.test(upper)) {
       const y = Number(s.slice(0, 4));
@@ -106,19 +107,40 @@
       .replace(/\r/g, '\\n');
   }
 
-  /** Fold long lines (max 75 octets per line, continuation begins with space). */
+  /**
+   * Fold long lines (RFC 5545: max 75 octets per logical line; continuation starts with SP/HTAB).
+   * Uses UTF-8 byte length and never splits inside a Unicode scalar value (emoji, combining marks).
+   */
   function foldIcsLine(line) {
     const raw = String(line || '');
-    if (raw.length <= 75) return raw;
-    const out = [];
-    let rest = raw;
-    out.push(rest.slice(0, 75));
-    rest = rest.slice(75);
-    while (rest.length > 0) {
-      out.push(` ${rest.slice(0, 74)}`);
-      rest = rest.slice(74);
+    const enc = new TextEncoder();
+    const parts = [];
+    let pos = 0;
+    let firstLineMax = 75;
+    while (pos < raw.length) {
+      let chunk = '';
+      let oct = 0;
+      const limit = firstLineMax;
+      firstLineMax = 74;
+      while (pos < raw.length) {
+        const cp = raw.codePointAt(pos);
+        const w = cp > 0xffff ? 2 : 1;
+        const ch = raw.slice(pos, pos + w);
+        const nextOct = enc.encode(ch).length;
+        if (oct + nextOct > limit) break;
+        chunk += ch;
+        oct += nextOct;
+        pos += w;
+      }
+      if (!chunk && pos < raw.length) {
+        const cp = raw.codePointAt(pos);
+        const w = cp > 0xffff ? 2 : 1;
+        chunk = raw.slice(pos, pos + w);
+        pos += w;
+      }
+      parts.push(parts.length ? ` ${chunk}` : chunk);
     }
-    return out.join('\r\n');
+    return parts.join('\r\n');
   }
 
   function pad4(n) {
@@ -146,6 +168,15 @@
 
   /** DTSTAMP in UTC form ending with Z. */
   function formatUtcStamp(d) {
+    const x = new Date(d);
+    return (
+      `${pad4(x.getUTCFullYear())}${pad2(x.getUTCMonth() + 1)}${pad2(x.getUTCDate())}`
+      + `T${pad2(x.getUTCHours())}${pad2(x.getUTCMinutes())}${pad2(x.getUTCSeconds())}Z`
+    );
+  }
+
+  /** DATE-TIME in UTC (Zulu) for timed events — preserves absolute instant across timezones. */
+  function formatUtcDateTime(d) {
     const x = new Date(d);
     return (
       `${pad4(x.getUTCFullYear())}${pad2(x.getUTCMonth() + 1)}${pad2(x.getUTCDate())}`
@@ -186,7 +217,8 @@
       let notes = String(ev.notes || '');
       if (Array.isArray(ev.attendees) && ev.attendees.length) {
         const att = ev.attendees.map((a) => String(a || '').trim()).filter(Boolean).join(', ');
-        if (att) notes = notes ? `${notes}\\nAttendees: ${att}` : `Attendees: ${att}`;
+        /** Real newline before escape — escapeIcsText turns newlines into \\n in ICS TEXT. */
+        if (att) notes = notes ? `${notes}\nAttendees: ${att}` : `Attendees: ${att}`;
       }
       if (notes) lines.push(`DESCRIPTION:${escapeIcsText(notes)}`);
       const wc = sanitizeHttpsUrl(ev.webcall_url || '');
@@ -202,8 +234,8 @@
         lines.push(`DTSTART;VALUE=DATE:${dStart}`);
         lines.push(`DTEND;VALUE=DATE:${dEnd}`);
       } else {
-        lines.push(`DTSTART:${formatLocalDateTime(ds)}`);
-        lines.push(`DTEND:${formatLocalDateTime(de)}`);
+        lines.push(`DTSTART:${formatUtcDateTime(ds)}`);
+        lines.push(`DTEND:${formatUtcDateTime(de)}`);
       }
       const rrule = String(ev.rrule || '').trim();
       if (rrule) lines.push(`RRULE:${rrule.replace(/\s+/g, '')}`);
@@ -297,5 +329,6 @@
     escapeIcsText,
     foldIcsLine,
     buildIcsCalendarFromEvents,
+    formatUtcDateTime,
   };
 }(typeof window !== 'undefined' ? window : globalThis));

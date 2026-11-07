@@ -322,23 +322,54 @@
     return k ? `notes_agenda_scroll_${k}` : '';
   }
 
-  function earliestTimedOccStart(occ, rangeStart, rangeEnd) {
-    let minT = null;
+  /** SessionStorage key for schedule fingerprint paired with scroll top (same period as scrollStorageKey). */
+  function scrollFingerprintStorageKey(range) {
+    const k = scrollPeriodKey(range);
+    return k ? `notes_agenda_scroll_fp_${k}` : '';
+  }
+
+  /** Stable fingerprint of visible occurrences for scroll: navigation or schedule change resets "stick to saved". */
+  function scheduleFingerprint(occ, rangeStart, rangeEnd) {
+    const parts = [];
     for (const o of occ || []) {
-      if (!o || !o.ev || o.ev.all_day) continue;
+      if (!o || !o.ev) continue;
       if (o.end <= rangeStart || o.start >= rangeEnd) continue;
-      const t = o.start.getTime();
-      if (minT === null || t < minT) minT = t;
+      const id = String(o.ev.id || '');
+      parts.push(`${id}|${o.start.getTime()}|${o.end.getTime()}|${!!o.ev.all_day}`);
     }
-    return minT !== null ? new Date(minT) : null;
+    parts.sort();
+    return parts.join(';');
+  }
+
+  /**
+   * Earliest local time-of-day (minutes from midnight) among timed events as they appear in visible day columns.
+   * Multi-day/week: compare per-column overlap (Mon 14:00 does not hide Wed 08:00). Overnight spill uses 00:00 on the visible day.
+   */
+  function earliestVisibleMinutesInPeriod(occ, days, rangeStart, rangeEnd) {
+    let minMin = null;
+    for (const d of days || []) {
+      const ds = startOfDay(d);
+      const de = addDays(ds, 1);
+      if (de <= rangeStart || ds >= rangeEnd) continue;
+      for (const o of occ || []) {
+        if (!o || !o.ev || o.ev.all_day) continue;
+        if (o.end <= ds || o.start >= de) continue;
+        const a = o.start < ds ? ds : o.start;
+        const b = o.end > de ? de : o.end;
+        if (b <= a) continue;
+        const mins = (a - ds) / 60000;
+        if (minMin === null || mins < minMin) minMin = mins;
+      }
+    }
+    return minMin;
   }
 
   function preferredTimeGridScrollTop(occ, range) {
-    const earliest = earliestTimedOccStart(occ, range.start, range.end);
-    if (!earliest) {
+    const minMin = earliestVisibleMinutesInPeriod(occ, range.days, range.start, range.end);
+    if (minMin === null) {
       return DEFAULT_DAY_START_HOUR * PX_PER_HOUR;
     }
-    const h = earliest.getHours() + earliest.getMinutes() / 60;
+    const h = minMin / 60;
     const raw = (h - SCROLL_LEAD_HOURS) * PX_PER_HOUR;
     return Math.max(0, raw);
   }
@@ -347,11 +378,14 @@
     const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
     if (!wrap) return;
     const sk = scrollStorageKey(range);
+    const fk = scrollFingerprintStorageKey(range);
+    const fp = scheduleFingerprint(occ, range.start, range.end);
     let top = null;
-    if (sk) {
+    if (sk && fk) {
       try {
+        const storedFp = sessionStorage.getItem(fk);
         const raw = sessionStorage.getItem(sk);
-        if (raw !== null && raw !== '') {
+        if (storedFp === fp && raw !== null && raw !== '') {
           const n = Number(raw);
           if (Number.isFinite(n)) top = n;
         }
@@ -364,14 +398,17 @@
     });
   }
 
-  function wireTimeGridScrollPersistence(range) {
+  function wireTimeGridScrollPersistence(range, occ) {
     const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
     if (!wrap) return;
     const sk = scrollStorageKey(range);
-    if (!sk) return;
+    const fk = scrollFingerprintStorageKey(range);
+    if (!sk || !fk) return;
     wrap.dataset.agendaScrollKey = sk;
     wrap.onscroll = () => {
       try {
+        const fp = scheduleFingerprint(occ, range.start, range.end);
+        sessionStorage.setItem(fk, fp);
         sessionStorage.setItem(sk, String(wrap.scrollTop));
       } catch (e) { /* ignore */ }
     };
@@ -852,7 +889,7 @@
     });
 
     if (['day', '3day', 'week'].includes(state.view)) {
-      wireTimeGridScrollPersistence(range);
+      wireTimeGridScrollPersistence(range, occ);
       applyTimeGridScroll(range, occ);
     }
   }
