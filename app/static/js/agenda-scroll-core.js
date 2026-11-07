@@ -74,6 +74,13 @@
     return Math.max(0, Math.min(n, max));
   }
 
+  /** Defer scroll placement until grid has measurable layout (avoids clamping to 0). */
+  function isTimeGridLayoutReady(scrollHeight, clientHeight) {
+    const ch = Number(clientHeight) || 0;
+    const sh = Number(scrollHeight) || 0;
+    return ch > 0 && sh > ch;
+  }
+
   /**
    * Choose scrollTop for time grid: honor saved position when schedule fingerprint matches.
    * @param {object} p
@@ -114,6 +121,7 @@
     earliestVisibleMinutesInPeriod,
     preferredTimeGridScrollTop,
     clampTimeGridScrollTop,
+    isTimeGridLayoutReady,
     pickTimeGridScrollTop,
     startOfDay,
     addDays,
