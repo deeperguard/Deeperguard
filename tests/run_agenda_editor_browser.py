@@ -151,6 +151,50 @@ def main() -> int:
                 )
                 page.locator('[data-agenda-id]').first.click()
                 page.wait_for_selector("#agenda-editor:not([hidden])", timeout=10_000)
+                focus = page.evaluate(
+                    """() => ({
+                      active: document.activeElement?.id || document.activeElement?.tagName,
+                      seriesVisible: !document.getElementById('agenda-edit-series-notice')?.hidden,
+                      titleVisible: !!document.getElementById('agenda-edit-title')?.offsetParent,
+                    })"""
+                )
+                results.append(
+                    {
+                        "vp": vp_name,
+                        "check": "keyboard_focus_series_notice",
+                        "ok": focus.get("active") == "agenda-edit-title" and focus.get("seriesVisible"),
+                        "detail": focus,
+                    }
+                )
+                page.locator("#agenda-editor").screenshot(
+                    path=str(ART / f"editor_full_top_{vp_name}.png")
+                )
+                scroll = page.locator(".agenda-editor-scroll")
+                scroll.evaluate("el => { el.scrollTop = el.scrollHeight; }")
+                page.wait_for_timeout(250)
+                save_vis = page.evaluate(
+                    """() => {
+                      const save = document.getElementById('agenda-edit-save');
+                      const r = save?.getBoundingClientRect();
+                      const vh = window.innerHeight;
+                      return {
+                        saveInView: !!(r && r.top >= 0 && r.bottom <= vh + 2),
+                        scrollTop: document.querySelector('.agenda-editor-scroll')?.scrollTop,
+                      };
+                    }"""
+                )
+                page.locator("#agenda-editor").screenshot(
+                    path=str(ART / f"editor_full_bottom_{vp_name}.png")
+                )
+                results.append(
+                    {
+                        "vp": vp_name,
+                        "check": "sticky_actions_after_scroll",
+                        "ok": save_vis.get("saveInView"),
+                        "detail": save_vis,
+                    }
+                )
+                scroll.evaluate("el => { el.scrollTop = 0; }")
                 opened = page.evaluate(DATETIME_READABILITY_JS)
                 time_ok = bool(
                     re.search(r"^10:30", opened.get("startTime") or "")
@@ -231,7 +275,77 @@ def main() -> int:
                         "detail": reopened,
                     }
                 )
+                page.fill("#agenda-edit-title", "Should not persist")
                 page.click("#agenda-edit-cancel")
+                page.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
+                page.locator('[data-agenda-id]').first.click()
+                page.wait_for_selector("#agenda-editor:not([hidden])")
+                cancel_ok = page.evaluate(
+                    "() => document.getElementById('agenda-edit-title')?.value"
+                )
+                results.append(
+                    {
+                        "vp": vp_name,
+                        "check": "cancel_discards_edits",
+                        "ok": cancel_ok == "Edited title",
+                        "detail": {"title": cancel_ok},
+                    }
+                )
+                page.click("#agenda-edit-cancel")
+
+                if vp_name == "428":
+                    adv = page.evaluate(
+                        """async () => {
+                      const start = new Date();
+                      start.setHours(14, 0, 0, 0);
+                      if (start.getTime() < Date.now()) start.setDate(start.getDate() + 1);
+                      const id = NotesStore.newUuid();
+                      const raw = 'FREQ=MONTHLY;BYDAY=2MO;EXDATE=20270302T160000Z';
+                      NotesStore.upsertAgendaEvent(id, {
+                        title: 'Import custom',
+                        start: start.toISOString(),
+                        end: new Date(start.getTime() + 3600000).toISOString(),
+                        all_day: false,
+                        rrule: raw,
+                        ical_uid: 'adv-' + id.slice(0, 8),
+                      });
+                      await NotesStore.flush();
+                      NotesAgenda.render();
+                      return { id, raw };
+                    }"""
+                    )
+                    page.wait_for_function(
+                        f"() => document.querySelector('[data-agenda-id=\"{adv['id']}\"]')",
+                        timeout=15_000,
+                    )
+                    page.locator(f'[data-agenda-id="{adv["id"]}"]').click()
+                    page.wait_for_selector("#agenda-editor:not([hidden])")
+                    adv_ui = page.evaluate(
+                        """() => ({
+                          repeat: document.getElementById('agenda-edit-repeat')?.value,
+                          raw: document.getElementById('agenda-edit-rrule-raw')?.textContent?.trim(),
+                          advHidden: document.getElementById('agenda-edit-rrule-advanced')?.hidden,
+                        })"""
+                    )
+                    page.click("#agenda-edit-save")
+                    page.wait_for_selector("#agenda-editor", state="hidden")
+                    stored = page.evaluate(
+                        """(raw) => {
+                      const row = NotesStore.listAgendaEvents().find((e) => e.title === 'Import custom');
+                      return { vault: row?.rrule || '', expected: raw };
+                    }""",
+                        adv["raw"],
+                    )
+                    results.append(
+                        {
+                            "vp": vp_name,
+                            "check": "advanced_rrule_preserved",
+                            "ok": adv_ui.get("repeat") == "advanced"
+                            and adv["raw"] in (adv_ui.get("raw") or "")
+                            and stored.get("vault") == adv["raw"],
+                            "detail": {**adv_ui, **stored},
+                        }
+                    )
 
                 page.locator("#agenda-add-event").click()
                 page.wait_for_selector("#agenda-editor:not([hidden])")
@@ -253,14 +367,6 @@ def main() -> int:
                     }
                 )
                 page.click("#agenda-edit-cancel")
-                if vp_name == "428" and shots < 3:
-                    page.locator('[data-agenda-id]').first.click()
-                    page.wait_for_selector("#agenda-editor:not([hidden])")
-                    page.locator(".agenda-editor-allday").screenshot(
-                        path=str(ART / f"editor_allday_{vp_name}.png")
-                    )
-                    shots += 1
-                    page.click("#agenda-edit-cancel")
                 page.close()
             browser.close()
     finally:
