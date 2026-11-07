@@ -1,5 +1,9 @@
 # Release notes
 
+## v0.65.47 (Vienna)
+
+- **Agenda #320:** Center the earliest visible timed event in the time-grid viewport on new/changed schedules; period navigation via horizontal touch/pointer/wheel across Day, 3-day, Week, Month, and List views (vertical scroll preserved); ICS export plaintext warning unchanged.
+
 ## v0.65.46 (Vienna)
 
 - **Agenda chrome & ICS (#318):** Import ICS lives in a **Calendar** settings sheet (opened from the calendar icon in the Agenda header). The main toolbar is slimmer, the calendar body uses more viewport height, and week/month headers stay sticky with improved narrow-width layout.

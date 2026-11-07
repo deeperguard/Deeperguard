@@ -12,7 +12,18 @@ vm.runInThisContext(fs.readFileSync(corePath, 'utf8'), { filename: 'agenda-scrol
 const Core = global.NotesAgendaScroll;
 assert.ok(Core && typeof Core.scheduleFingerprint === 'function');
 
-const { scheduleFingerprint, earliestVisibleMinutesInPeriod, preferredTimeGridScrollTop, pickTimeGridScrollTop, startOfDay, addDays } = Core;
+const {
+  scheduleFingerprint,
+  earliestVisibleMinutesInPeriod,
+  preferredTimeGridScrollTop,
+  clampTimeGridScrollTop,
+  pickTimeGridScrollTop,
+  startOfDay,
+  addDays,
+} = Core;
+
+const PX = 52;
+const VIEW_H = 400;
 
 function startOfWeekMonday(d) {
   const x = startOfDay(d);
@@ -87,14 +98,25 @@ top = pickTimeGridScrollTop({
 });
 assert.strictEqual(top, 1200, 'search filter must not bust scroll fp');
 
+const scrollOpts = { pxPerHour: PX, viewportHeight: VIEW_H };
 top = pickTimeGridScrollTop({
   currentFingerprint: fp1,
   storedFingerprint: fp0,
   storedScrollTop: 900,
   displayOcc: [mon14, wed08],
   range: range2,
+  opts: scrollOpts,
 });
-const want = preferredTimeGridScrollTop([mon14, wed08], range2);
+const want = preferredTimeGridScrollTop([mon14, wed08], range2, scrollOpts);
 assert.strictEqual(top, want, 'schedule change invalidates saved scroll');
+
+const centered = preferredTimeGridScrollTop([mon14, wed08], range2, { pxPerHour: PX, viewportHeight: VIEW_H });
+assert.strictEqual(centered, 8 * PX - VIEW_H / 2, 'earliest event centered in viewport (Wed 08:00)');
+
+const noEvents = preferredTimeGridScrollTop([], range2, { pxPerHour: PX, viewportHeight: VIEW_H, defaultDayStartHour: 8 });
+assert.strictEqual(noEvents, 8 * PX, 'empty schedule uses default morning band');
+
+const clamped = clampTimeGridScrollTop(9000, 1200, VIEW_H);
+assert.strictEqual(clamped, 1200 - VIEW_H, 'clamp scroll top to max');
 
 console.log('test_agenda_scroll_core ok');

@@ -173,9 +173,9 @@
   let swipe = { active: false, x: 0, y: 0, t: 0, locked: '' };
   const PX_PER_HOUR = 52;
   const DEFAULT_DAY_START_HOUR = 8;
-  const SCROLL_LEAD_HOURS = 1;
   const SWIPE_MIN_PX = 56;
   const SWIPE_MAX_MS = 900;
+  const WHEEL_NAV_MIN_DX = 42;
 
   function closeCalendarSettingsPanel() {
     const calPanel = document.getElementById('agenda-calendar-settings');
@@ -350,10 +350,12 @@
     if (!Core || typeof Core.preferredTimeGridScrollTop !== 'function') {
       return DEFAULT_DAY_START_HOUR * PX_PER_HOUR;
     }
+    const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
+    const viewportHeight = wrap ? wrap.clientHeight : 0;
     return Core.preferredTimeGridScrollTop(occ, range, {
       pxPerHour: PX_PER_HOUR,
-      scrollLeadHours: SCROLL_LEAD_HOURS,
       defaultDayStartHour: DEFAULT_DAY_START_HOUR,
+      viewportHeight,
     });
   }
 
@@ -363,10 +365,11 @@
     const sk = scrollStorageKey(range);
     const fk = scrollFingerprintStorageKey(range);
     const fp = scrollScheduleFingerprint(range);
+    const viewportHeight = wrap.clientHeight || 0;
     const scrollOpts = {
       pxPerHour: PX_PER_HOUR,
-      scrollLeadHours: SCROLL_LEAD_HOURS,
       defaultDayStartHour: DEFAULT_DAY_START_HOUR,
+      viewportHeight,
     };
     let top = preferredTimeGridScrollTop(occ, range);
     if (sk && fk) {
@@ -390,8 +393,13 @@
       } catch (e) { /* ignore */ }
     }
     requestAnimationFrame(() => {
-      const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-      wrap.scrollTop = Math.max(0, Math.min(top, max));
+      const Core = global.NotesAgendaScroll;
+      if (Core && typeof Core.clampTimeGridScrollTop === 'function') {
+        wrap.scrollTop = Core.clampTimeGridScrollTop(top, wrap.scrollHeight, wrap.clientHeight);
+      } else {
+        const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+        wrap.scrollTop = Math.max(0, Math.min(top, max));
+      }
     });
   }
 
@@ -441,6 +449,15 @@
     closeCalendarSettingsPanel();
   }
 
+  function agendaSwipeBlockedTarget(el) {
+    if (!el || !el.closest) return true;
+    return !!el.closest(
+      '#agenda-editor, #agenda-editor-backdrop, #agenda-calendar-settings, #agenda-calendar-settings-backdrop,'
+      + ' .confirm-dialog, #agenda-search, input, textarea, select, option,'
+      + ' .agenda-icon-btn, .agenda-add, .agenda-calendar-menu-btn, .agenda-today, [data-agenda-view]',
+    );
+  }
+
   function wireAgendaSwipeOnce() {
     if (agendaSwipeWired) return;
     const pane = document.getElementById('agenda-pane');
@@ -453,27 +470,58 @@
       render();
     };
 
+    const finishPan = (startX, startY, startT, endX, endY, locked) => {
+      const dt = Date.now() - startT;
+      const dx = endX - startX;
+      const dy = endY - startY;
+      if (locked === 'vertical') return;
+      if (dt > SWIPE_MAX_MS) return;
+      if (Math.abs(dy) > 80) return;
+      if (Math.abs(dx) < SWIPE_MIN_PX) return;
+      const horizontalIntent = locked === 'horizontal'
+        || (Math.abs(dx) > Math.abs(dy) * 1.25 && Math.abs(dx) >= SWIPE_MIN_PX);
+      if (!horizontalIntent) return;
+      if (dx < 0) tryNavigate(1);
+      else tryNavigate(-1);
+    };
+
+    const onPanMove = (dx, dy) => {
+      if (!swipe.active) return;
+      if (!swipe.locked) {
+        const ax = Math.abs(dx);
+        const ay = Math.abs(dy);
+        if (ax < 12 && ay < 12) return;
+        if (ay > ax * 1.25) {
+          swipe.locked = 'vertical';
+          return;
+        }
+        if (ax > ay * 1.25 && ax > 18) swipe.locked = 'horizontal';
+      }
+    };
+
+    const onPanStart = (clientX, clientY, target) => {
+      if (document.body.classList.contains('agenda-calendar-settings-open')) return;
+      if (pane.hidden) return;
+      if (agendaSwipeBlockedTarget(target)) {
+        swipe.active = false;
+        return;
+      }
+      swipe = {
+        active: true,
+        x: clientX,
+        y: clientY,
+        t: Date.now(),
+        locked: '',
+      };
+    };
+
     pane.addEventListener(
       'touchstart',
       (ev) => {
         if (!ev.touches || ev.touches.length !== 1) return;
-        if (document.body.classList.contains('agenda-calendar-settings-open')) return;
-        if (pane.hidden) return;
         const t = ev.touches[0];
         const el = document.elementFromPoint(t.clientX, t.clientY);
-        if (el && el.closest && el.closest('#agenda-editor, #agenda-editor-backdrop, .confirm-dialog')) return;
-        const inWeekLayout = el && el.closest && el.closest('.agenda-week-layout');
-        if (!inWeekLayout) {
-          swipe.active = false;
-          return;
-        }
-        swipe = {
-          active: true,
-          x: t.clientX,
-          y: t.clientY,
-          t: Date.now(),
-          locked: '',
-        };
+        onPanStart(t.clientX, t.clientY, el);
       },
       { passive: true },
     );
@@ -483,20 +531,7 @@
       (ev) => {
         if (!swipe.active || !ev.touches || ev.touches.length !== 1) return;
         const t = ev.touches[0];
-        const dx = t.clientX - swipe.x;
-        const dy = t.clientY - swipe.y;
-        if (!swipe.locked) {
-          const ax = Math.abs(dx);
-          const ay = Math.abs(dy);
-          if (ax < 12 && ay < 12) return;
-          if (ay > ax * 1.25) {
-            swipe.locked = 'vertical';
-            return;
-          }
-          if (ax > ay * 1.25 && ax > 18) {
-            swipe.locked = 'horizontal';
-          }
-        }
+        onPanMove(t.clientX - swipe.x, t.clientY - swipe.y);
       },
       { passive: true },
     );
@@ -510,29 +545,71 @@
           swipe.active = false;
           return;
         }
-        const dt = Date.now() - swipe.t;
-        const dx = changed.clientX - swipe.x;
-        const dy = changed.clientY - swipe.y;
+        const locked = swipe.locked;
+        finishPan(swipe.x, swipe.y, swipe.t, changed.clientX, changed.clientY, locked);
         swipe.active = false;
-        if (swipe.locked === 'vertical') {
-          swipe.locked = '';
-          return;
-        }
-        if (state.view === 'month' || state.view === 'agenda') {
-          swipe.locked = '';
-          return;
-        }
-        if (dt > SWIPE_MAX_MS) return;
-        if (Math.abs(dy) > 80) return;
-        if (Math.abs(dx) < SWIPE_MIN_PX) return;
-        const horizontalIntent = swipe.locked === 'horizontal'
-          || (Math.abs(dx) > Math.abs(dy) * 1.25 && Math.abs(dx) >= SWIPE_MIN_PX);
-        if (!horizontalIntent) return;
-        if (dx < 0) tryNavigate(1);
-        else tryNavigate(-1);
         swipe.locked = '';
       },
       { passive: true },
+    );
+
+    pane.addEventListener(
+      'pointerdown',
+      (ev) => {
+        if (ev.pointerType === 'touch') return;
+        if (!ev.isPrimary) return;
+        onPanStart(ev.clientX, ev.clientY, ev.target);
+        swipe.pointerId = ev.pointerId;
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'pointermove',
+      (ev) => {
+        if (!swipe.active || ev.pointerId !== swipe.pointerId) return;
+        if (ev.pointerType === 'touch') return;
+        onPanMove(ev.clientX - swipe.x, ev.clientY - swipe.y);
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'pointerup',
+      (ev) => {
+        if (!swipe.active || ev.pointerId !== swipe.pointerId) return;
+        if (ev.pointerType === 'touch') return;
+        const locked = swipe.locked;
+        finishPan(swipe.x, swipe.y, swipe.t, ev.clientX, ev.clientY, locked);
+        swipe.active = false;
+        swipe.locked = '';
+        swipe.pointerId = undefined;
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'pointercancel',
+      () => {
+        swipe.active = false;
+        swipe.locked = '';
+        swipe.pointerId = undefined;
+      },
+      { passive: true },
+    );
+
+    pane.addEventListener(
+      'wheel',
+      (ev) => {
+        if (pane.hidden) return;
+        if (agendaSwipeBlockedTarget(ev.target)) return;
+        if (Math.abs(ev.deltaX) < WHEEL_NAV_MIN_DX) return;
+        if (Math.abs(ev.deltaX) < Math.abs(ev.deltaY) * 1.1) return;
+        if (ev.deltaX < 0) tryNavigate(1);
+        else tryNavigate(-1);
+        ev.preventDefault();
+      },
+      { passive: false },
     );
   }
 

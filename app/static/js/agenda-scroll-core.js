@@ -4,7 +4,6 @@
  */
 (function (global) {
   const DEFAULT_PX_PER_HOUR = 52;
-  const DEFAULT_SCROLL_LEAD_HOURS = 1;
   const DEFAULT_DAY_START_HOUR = 8;
 
   function startOfDay(d) {
@@ -49,10 +48,11 @@
     return minMin;
   }
 
+  /** Place earliest timed event at vertical center of viewport (px), else default morning band. */
   function preferredTimeGridScrollTop(occ, range, opts) {
     const pxPerHour = (opts && opts.pxPerHour) || DEFAULT_PX_PER_HOUR;
-    const scrollLeadHours = (opts && opts.scrollLeadHours) || DEFAULT_SCROLL_LEAD_HOURS;
     const defaultDayStartHour = (opts && opts.defaultDayStartHour) || DEFAULT_DAY_START_HOUR;
+    const viewportHeight = Number(opts && opts.viewportHeight) || 0;
     const minMin = earliestVisibleMinutesInPeriod(
       occ,
       range && range.days,
@@ -60,8 +60,18 @@
       range && range.end,
     );
     if (minMin === null) return defaultDayStartHour * pxPerHour;
-    const h = minMin / 60;
-    return Math.max(0, (h - scrollLeadHours) * pxPerHour);
+    const eventTopPx = (minMin / 60) * pxPerHour;
+    if (viewportHeight > 0) {
+      return Math.max(0, eventTopPx - viewportHeight / 2);
+    }
+    return Math.max(0, eventTopPx);
+  }
+
+  function clampTimeGridScrollTop(top, scrollHeight, clientHeight) {
+    const max = Math.max(0, Number(scrollHeight) - Number(clientHeight));
+    const n = Number(top);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(n, max));
   }
 
   /**
@@ -101,6 +111,7 @@
     scheduleFingerprint,
     earliestVisibleMinutesInPeriod,
     preferredTimeGridScrollTop,
+    clampTimeGridScrollTop,
     pickTimeGridScrollTop,
     startOfDay,
     addDays,
