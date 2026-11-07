@@ -240,6 +240,39 @@ body.agenda-editor-open #agenda-editor.agenda-editor { z-index: 210; }
 #agenda-editor.agenda-editor .agenda-editor-series-notice strong {
   color: inherit;
 }
+.agenda-scope-chooser {
+  max-width: min(420px, 100vw - 24px);
+}
+.agenda-scope-chooser .agenda-scope-lead {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.agenda-scope-chooser .agenda-scope-event {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+.agenda-scope-chooser .agenda-scope-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.agenda-scope-chooser .agenda-scope-btn {
+  min-height: var(--touch, 44px);
+  width: 100%;
+  justify-content: center;
+}
+.agenda-scope-chooser .agenda-scope-advanced {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.agenda-scope-chooser .agenda-scope-cancel {
+  width: 100%;
+}
+body.agenda-scope-open {
+  overflow: hidden;
+}
 /* Editor max width is ~420px — side-by-side datetime-local clips times on phones. */
 .agenda-editor-datetime-row {
   display: grid;
