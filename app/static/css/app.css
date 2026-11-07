@@ -227,7 +227,7 @@ body.agenda-editor-open #agenda-editor.agenda-editor { z-index: 210; }
   box-sizing: border-box;
 }
 .agenda-editor-heading { margin: 0 0 10px; font-size: 17px; font-weight: 680; }
-.agenda-editor-series-notice {
+#agenda-editor.agenda-editor .agenda-editor-series-notice {
   margin: 0 0 10px;
   padding: 8px 10px;
   border-radius: 8px;
@@ -237,7 +237,7 @@ body.agenda-editor-open #agenda-editor.agenda-editor { z-index: 210; }
   font-size: 13px;
   line-height: 1.4;
 }
-.agenda-editor-series-notice strong {
+#agenda-editor.agenda-editor .agenda-editor-series-notice strong {
   color: inherit;
 }
 /* Editor max width is ~420px — side-by-side datetime-local clips times on phones. */
