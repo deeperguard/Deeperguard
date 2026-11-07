@@ -7,8 +7,8 @@ This document records **what was exercised on the agent worker** vs **not emulat
 | Area | What we checked | Evidence |
 |------|-----------------|----------|
 | Agenda — Calendar menu | Text button “Calendar menu”; labelled sheet “Calendar settings”; Import/Export copy | Code + HTML in PR; no screenshots attached in-repo |
-| Agenda — timed grid scroll | Initial scroll to ~1h before **earliest local time-of-day** among visible day columns (or 08:00 fallback); `sessionStorage` saves scroll **paired with a schedule fingerprint** so rerenders keep position but navigation or any occurrence change re-scrolls to earliest | Logic in `agenda.js` |
-| Agenda — iOS swipe | Horizontal swipe on `.agenda-week-layout` navigates prev/next period; vertical gesture cancels | Logic in `agenda.js` |
+| Agenda — timed grid scroll | **v0.65.47:** earliest visible timed event **centered** in `.agenda-scroll-wrap`; fingerprint/session restore unchanged; search does not jump scroll | `agenda-scroll-core.js`, `tests/test_agenda_scroll_core.js`, `tests/run_agenda_browser_checks.py` |
+| Agenda — period pan | **v0.65.47:** horizontal touch/pointer/wheel on `#agenda-pane` for Day/3-day/Week/Month/List; vertical scroll preserved | `agenda.js`, local Playwright @ 390/428/1280 |
 | ICS export | Client-only blob download; UTF-8 folding; timed **UTC Z**; all-day local DATE; attendees in DESCRIPTION roundtrip | `tests/test_agenda_ics_export_roundtrip.js`, `tests/test_agenda_ics_timezone.js`, `tests/test_agenda_scroll_logic.js`, `tests/test_agenda_scroll_session.js` |
 | SW / stale shell | Hint in Calendar settings: reload after update | `app/templates/app.html` |
 
