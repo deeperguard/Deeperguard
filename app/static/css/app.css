@@ -195,6 +195,76 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   overflow: hidden;
 }
 .agenda-editor.agenda-editor-row-inline { flex-direction: row; align-items: center; gap: 10px; }
+#agenda-editor.agenda-editor {
+  top: max(10px, env(safe-area-inset-top));
+  bottom: max(0px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 20px));
+  max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px));
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  z-index: 210;
+}
+body.agenda-editor-open #agenda-editor-backdrop.agenda-editor-backdrop { z-index: 205; }
+body.agenda-editor-open #agenda-editor.agenda-editor { z-index: 210; }
+.agenda-editor-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 16px 10px;
+  -webkit-overflow-scrolling: touch;
+}
+.agenda-editor-heading { margin: 0 0 10px; font-size: 17px; font-weight: 680; }
+.agenda-editor-series-notice {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
+  font-size: 13px;
+  line-height: 1.4;
+}
+.agenda-editor-datetime-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 380px) {
+  .agenda-editor-datetime-row { grid-template-columns: 1fr; }
+}
+.agenda-editor-recurrence {
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 10px;
+  border-left: 0;
+  border-right: 0;
+}
+.agenda-editor-recurrence legend { font-size: 12px; font-weight: 650; padding: 0 4px; }
+.agenda-editor-rrule-advanced code {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  word-break: break-all;
+}
+#agenda-edit-notes {
+  min-height: 2.75rem;
+  max-height: 5.5rem;
+  resize: vertical;
+  field-sizing: content;
+}
+.agenda-editor-actions {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  position: sticky;
+  bottom: 0;
+}
 .agenda-top {
   flex-shrink: 0;
   padding: 6px 10px 6px;
