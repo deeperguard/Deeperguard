@@ -506,6 +506,7 @@
 
     const onPanStart = (clientX, clientY, target) => {
       if (document.body.classList.contains('agenda-calendar-settings-open')) return;
+      if (document.body.classList.contains('agenda-editor-open')) return;
       if (pane.hidden) return;
       if (agendaSwipeBlockedTarget(target)) {
         swipe.active = false;
