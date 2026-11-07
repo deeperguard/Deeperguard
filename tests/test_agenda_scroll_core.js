@@ -100,6 +100,17 @@ assert.strictEqual(top, 1200, 'search filter must not bust scroll fp');
 
 const scrollOpts = { pxPerHour: PX, viewportHeight: VIEW_H };
 top = pickTimeGridScrollTop({
+  currentFingerprint: '',
+  storedFingerprint: '',
+  storedScrollTop: 416,
+  displayOcc: [mon14, wed08],
+  range: range2,
+  opts: scrollOpts,
+});
+const wantEmptyFp = preferredTimeGridScrollTop([mon14, wed08], range2, scrollOpts);
+assert.strictEqual(top, wantEmptyFp, 'empty fingerprint must not restore stale scrollTop');
+
+top = pickTimeGridScrollTop({
   currentFingerprint: fp1,
   storedFingerprint: fp0,
   storedScrollTop: 900,

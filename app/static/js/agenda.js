@@ -369,43 +369,61 @@
     if (!wrap) return;
     const sk = scrollStorageKey(range);
     const fk = scrollFingerprintStorageKey(range);
-    const fp = scrollScheduleFingerprint(range);
-    const viewportHeight = wrap.clientHeight || 0;
-    const scrollOpts = {
-      pxPerHour: PX_PER_HOUR,
-      defaultDayStartHour: DEFAULT_DAY_START_HOUR,
-      viewportHeight,
-    };
-    let top = preferredTimeGridScrollTop(occ, range);
-    if (sk && fk) {
-      try {
-        const storedFp = sessionStorage.getItem(fk);
-        const raw = sessionStorage.getItem(sk);
-        const Core = global.NotesAgendaScroll;
-        if (Core && typeof Core.pickTimeGridScrollTop === 'function') {
-          top = Core.pickTimeGridScrollTop({
-            currentFingerprint: fp,
-            storedFingerprint: storedFp,
-            storedScrollTop: raw,
-            displayOcc: occ,
-            range,
-            opts: scrollOpts,
-          });
-        } else if (storedFp === fp && raw !== null && raw !== '') {
-          const n = Number(raw);
-          if (Number.isFinite(n)) top = n;
-        }
-      } catch (e) { /* ignore */ }
-    }
-    requestAnimationFrame(() => {
-      const Core = global.NotesAgendaScroll;
-      if (Core && typeof Core.clampTimeGridScrollTop === 'function') {
-        wrap.scrollTop = Core.clampTimeGridScrollTop(top, wrap.scrollHeight, wrap.clientHeight);
-      } else {
-        const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-        wrap.scrollTop = Math.max(0, Math.min(top, max));
+    const Core = global.NotesAgendaScroll;
+    const placeScroll = () => {
+      const viewportHeight = wrap.clientHeight || 0;
+      const scrollOpts = {
+        pxPerHour: PX_PER_HOUR,
+        defaultDayStartHour: DEFAULT_DAY_START_HOUR,
+        viewportHeight,
+      };
+      const fp = scrollScheduleFingerprint(range);
+      let top = preferredTimeGridScrollTop(occ, range);
+      if (sk && fk) {
+        try {
+          const storedFp = sessionStorage.getItem(fk);
+          const raw = sessionStorage.getItem(sk);
+          if (Core && typeof Core.pickTimeGridScrollTop === 'function') {
+            top = Core.pickTimeGridScrollTop({
+              currentFingerprint: fp,
+              storedFingerprint: storedFp,
+              storedScrollTop: raw,
+              displayOcc: occ,
+              range,
+              opts: scrollOpts,
+            });
+          } else if (
+            storedFp
+            && fp
+            && storedFp === fp
+            && raw !== null
+            && raw !== ''
+          ) {
+            const n = Number(raw);
+            if (Number.isFinite(n)) top = n;
+          }
+        } catch (e) { /* ignore */ }
       }
-    });
+      try {
+        wrap.dataset.agendaScrollApplying = '1';
+        if (Core && typeof Core.clampTimeGridScrollTop === 'function') {
+          wrap.scrollTop = Core.clampTimeGridScrollTop(top, wrap.scrollHeight, wrap.clientHeight);
+        } else {
+          const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+          wrap.scrollTop = Math.max(0, Math.min(top, max));
+        }
+      } finally {
+        delete wrap.dataset.agendaScrollApplying;
+      }
+    };
+    const run = (attempt) => {
+      if (wrap.clientHeight > 0 || attempt >= 12) {
+        placeScroll();
+        return;
+      }
+      requestAnimationFrame(() => run(attempt + 1));
+    };
+    requestAnimationFrame(() => run(0));
   }
 
   function wireTimeGridScrollPersistence(range) {
@@ -416,8 +434,10 @@
     if (!sk || !fk) return;
     wrap.dataset.agendaScrollKey = sk;
     wrap.onscroll = () => {
+      if (wrap.dataset.agendaScrollApplying === '1') return;
       try {
         const fp = scrollScheduleFingerprint(range);
+        if (!fp) return;
         sessionStorage.setItem(fk, fp);
         sessionStorage.setItem(sk, String(wrap.scrollTop));
       } catch (e) { /* ignore */ }
