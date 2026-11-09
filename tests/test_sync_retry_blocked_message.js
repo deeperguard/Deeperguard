@@ -7,17 +7,42 @@ const path = require('path');
 const NotesStore = require(path.join(__dirname, '..', 'app/static/js/store.js'));
 
 const HUMAN_EN = 'This save could not be applied safely. The note may have changed — edit and save again.';
+const HUMAN_NL = 'Deze wijziging kon niet veilig worden opgeslagen. De notitie is mogelijk gewijzigd — bewerk en sla opnieuw op.';
 const TITLE = 'Budget note';
 
-(() => {
-  const line = NotesStore.retryConflictBlockedLine(TITLE, HUMAN_EN);
-  assert.ok(line.startsWith(`“${TITLE}” did not sync:`));
-  assert.ok(line.includes(HUMAN_EN));
-  assert.ok(!line.includes('retry_hash_mismatch'), 'toast must not show internal reason code');
+function withDocLang(lang, fn) {
+  const prev = global.document;
+  if (lang == null) {
+    delete global.document;
+  } else {
+    global.document = { documentElement: { lang } };
+  }
+  try {
+    fn();
+  } finally {
+    if (prev === undefined) delete global.document;
+    else global.document = prev;
+  }
+}
 
-  const fallback = NotesStore.retryConflictBlockedLine(TITLE, '');
-  assert.ok(fallback.startsWith(`“${TITLE}” did not sync:`));
-  assert.ok(fallback.includes(NotesStore.syncRetryConflictUserMessage()));
+(() => {
+  withDocLang('en', () => {
+    const line = NotesStore.retryConflictBlockedLine(TITLE);
+    assert.ok(line.startsWith(`“${TITLE}” did not sync:`));
+    assert.ok(line.includes(HUMAN_EN));
+    assert.ok(!line.includes('retry_hash_mismatch'), 'toast must not show internal reason code');
+    assert.strictEqual(NotesStore.syncRetryConflictUserMessage(), HUMAN_EN);
+  });
+
+  withDocLang('nl', () => {
+    const line = NotesStore.retryConflictBlockedLine(TITLE);
+    assert.ok(!line.includes('did not sync'), 'NL toast shell must not use English did not sync');
+    assert.ok(line.includes('is niet gesynchroniseerd'), 'NL toast shell');
+    assert.ok(line.includes(HUMAN_NL), 'NL body from client locale, not server English');
+    assert.ok(!line.includes(HUMAN_EN), 'server English error must not appear in NL toast');
+    const serverOnly = NotesStore.syncRetryConflictUserMessage();
+    assert.strictEqual(serverOnly, HUMAN_NL);
+  });
 
   const stale = 'client-retry-key-stale';
   const item = { content: { title: TITLE }, sync_retry_key: stale };

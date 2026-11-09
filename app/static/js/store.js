@@ -1612,10 +1612,8 @@ const NotesStore = (() => {
     return key;
   }
 
-  function retryConflictBlockedLine(label, error) {
-    const name = String(label || '').trim() || 'an item';
-    const msg = String(error || '').trim() || syncRetryConflictUserMessage();
-    return `“${name}” did not sync: ${msg}`;
+  function retryConflictBlockedLine(label) {
+    return blockedSyncDetailLine(label, syncRetryConflictUserMessage());
   }
 
   function syncPushWrapStamp(item, content) {
@@ -2709,13 +2707,32 @@ const NotesStore = (() => {
     return String(label || '').trim() || (content?.type === 'attachment' ? 'a file' : 'an item');
   }
 
-  function syncRetryConflictUserMessage() {
-    const nl = String(typeof document !== 'undefined' && document.documentElement?.lang || '')
+  function syncBlockedLocaleNl() {
+    return String(typeof document !== 'undefined' && document.documentElement?.lang || '')
       .toLowerCase()
       .startsWith('nl');
-    return nl
+  }
+
+  function syncRetryConflictUserMessage() {
+    return syncBlockedLocaleNl()
       ? 'Deze wijziging kon niet veilig worden opgeslagen. De notitie is mogelijk gewijzigd — bewerk en sla opnieuw op.'
       : 'This save could not be applied safely. The note may have changed — edit and save again.';
+  }
+
+  function blockedSyncDetailLine(label, detail) {
+    const fallback = syncBlockedLocaleNl() ? 'een item' : 'an item';
+    const name = String(label || '').trim() || fallback;
+    const quoted = `“${name}”`;
+    if (syncBlockedLocaleNl()) {
+      return `${quoted} is niet gesynchroniseerd: ${detail}`;
+    }
+    return `${quoted} did not sync: ${detail}`;
+  }
+
+  function blockedMoreSuffix(count) {
+    const n = Number(count) || 0;
+    if (n <= 0) return '';
+    return syncBlockedLocaleNl() ? ` (+${n} meer)` : ` (+${n} more)`;
   }
 
   // Items the server refuses for size or quota stay on this device and out of
@@ -2725,7 +2742,7 @@ const NotesStore = (() => {
     const status = String(result?.status || '');
     const serverError = String(result?.error || '').trim();
     const display = status === 'retry_conflict'
-      ? (serverError || syncRetryConflictUserMessage())
+      ? syncRetryConflictUserMessage()
       : (serverError || String(result?.reason || ''));
     state.blocked.set(uuid, {
       status,
@@ -2759,11 +2776,17 @@ const NotesStore = (() => {
     const first = blockedItems()[0];
     if (!first) return '';
     const label = `“${first.label}”`;
-    const more = state.blocked.size > 1 ? ` (+${state.blocked.size - 1} more)` : '';
-    if (first.status === 'quota_exceeded') return `${label} did not sync: storage quota reached${more}`;
-    if (first.status === 'too_large') return `${label} did not sync: too large for the server${more}`;
+    const more = blockedMoreSuffix(state.blocked.size - 1);
+    if (first.status === 'quota_exceeded') {
+      const detail = syncBlockedLocaleNl() ? 'opslagquotum bereikt' : 'storage quota reached';
+      return blockedSyncDetailLine(first.label, detail) + more;
+    }
+    if (first.status === 'too_large') {
+      const detail = syncBlockedLocaleNl() ? 'te groot voor de server' : 'too large for the server';
+      return blockedSyncDetailLine(first.label, detail) + more;
+    }
     if (first.status === 'retry_conflict') {
-      return retryConflictBlockedLine(first.label, first.error) + more;
+      return retryConflictBlockedLine(first.label) + more;
     }
     return `${label} did not sync${more}`;
   }
