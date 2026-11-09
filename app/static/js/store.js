@@ -928,6 +928,21 @@ const NotesStore = (() => {
     return out;
   }
 
+  async function knownHashesForPull(since) {
+    if (!(Number(since) > 0)) return {};
+    if (state.items.size > 0) return localContentHashes();
+    if (typeof NotesIDB.loadItems !== 'function') return {};
+    const rows = await NotesIDB.loadItems();
+    const out = {};
+    for (const row of rows) {
+      if (!row || row.deleted) continue;
+      const uuid = String(row.uuid || '').trim();
+      const hash = row.content_hash;
+      if (uuid && hash) out[uuid] = String(hash);
+    }
+    return out;
+  }
+
   function syncRequestTimeoutMs(byteEstimate = 0, { minMs = 90000, maxMs = 300000 } = {}) {
     const bytes = Math.max(0, Number(byteEstimate) || 0);
     return Math.min(maxMs, minMs + Math.floor(bytes / 40000));
@@ -2083,12 +2098,15 @@ const NotesStore = (() => {
     if (state.cryptoKey) return false;
     const pending = await loadPersistedDirtyIds();
     if (pending.length) return false;
-    let since = Math.max(readStoredLastSync(), Number(await NotesIDB.getMeta('lastSync')) || 0);
-    let cursorSince = since;
+    const pullSince = Math.max(readStoredLastSync(), Number(await NotesIDB.getMeta('lastSync')) || 0);
+    let cursorSince = pullSince;
     let afterUuid = '';
     let pages = 0;
-    let watermark = since;
+    let watermark = pullSince;
     let any = false;
+    let pullBytes = 0;
+    const known = await knownHashesForPull(pullSince);
+    const knownCount = Object.keys(known).length;
     while (pages < 200) {
       pages += 1;
       const pullBody = {
@@ -2098,12 +2116,17 @@ const NotesStore = (() => {
         include_blobs: 0,
       };
       if (afterUuid) pullBody.after = afterUuid;
+      if (Object.keys(known).length) pullBody.known_hashes = known;
       const data = await api('/api/sync/pull', {
         method: 'POST',
         body: JSON.stringify(pullBody),
         timeoutMs: syncRequestTimeoutMs(50 * 80000),
       });
       const rows = await fetchMissingBlobs(data.items || []);
+      pullBytes += rows.reduce(
+        (sum, row) => sum + String(row.ciphertext || '').length + String(row.blob_ciphertext || '').length,
+        0,
+      );
       if (!rows.length) break;
       any = true;
       for (const row of rows) {
@@ -2116,12 +2139,29 @@ const NotesStore = (() => {
     }
     if (any && watermark) await rememberLastSync(watermark);
     if (any && !quiet) emitSync('ok', 'Downloaded encrypted notes');
-    logSync('pull-cipher-locked', { pages, any, watermark, quiet: !!quiet });
+    logSync('pull-cipher-locked', {
+      pages,
+      bytes: pullBytes,
+      full: pullSince === 0,
+      known_hash_count: knownCount,
+      quiet: !!quiet,
+    });
     return any;
   }
 
   async function syncWhileLocked({ quiet = true } = {}) {
     const pushed = await pushDirtyPersisted({ quiet });
+    const changed = await hasRemoteChanges();
+    if (!changed) {
+      logSync('pull-cipher-locked', {
+        pages: 0,
+        bytes: 0,
+        full: false,
+        known_hash_count: 0,
+        quiet: !!quiet,
+      });
+      return !!pushed;
+    }
     const pulled = await pullCipherWhileLocked({ quiet });
     return !!(pushed || pulled);
   }

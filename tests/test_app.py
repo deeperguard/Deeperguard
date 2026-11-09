@@ -1997,6 +1997,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_client_dirty_queue_survives_lock_and_synced_cursor(self):
         self._run_node_script("test_sync_dirty_queue.js")
+        self._run_node_script("test_sync_locked_pull.js")
 
     def test_sign_out_dirty_sync_honesty(self):
         self._run_node_script("test_sign_out_dirty_sync.js")
@@ -2036,6 +2037,11 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("async function pullCipherWhileLocked", store_js)
         self.assertIn("async function syncWhileLocked", store_js)
         self.assertIn("NotesStore.hasRemoteChanges()", app_js)
+        poll_locked = app_js[
+            app_js.find("if (!NotesStore.isUnlocked())") : app_js.find("if (!vaultReady && !NotesStore.isUnlocked())")
+        ]
+        self.assertIn("hasRemoteChanges()", poll_locked, "locked poll gates on watermark")
+        self.assertIn("known_hashes", store_js)
         store_js = (APP_DIR / "static" / "js" / "store.js").read_text(encoding="utf-8")
         self.assertIn("cursor: 'synced_at'", store_js)
         self.assertNotIn("readStoredLastSync(), localWatermark())", store_js, "local edit clock must not drive the pull cursor")
