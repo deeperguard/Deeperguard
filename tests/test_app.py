@@ -2978,6 +2978,9 @@ class NotesAppTests(unittest.TestCase):
         self.assertNotIn('name="password2"', register_html)
         self.assertIn("preventAuthFormNavigation", register_html)
         self.assertIn("window.__notesSubmitRegister", auth_js)
+        self.assertIn('id="register-hang-live"', register_html)
+        self.assertIn('aria-live="polite"', register_html)
+        self.assertIn('id="register-retry"', register_html)
 
     def test_note_swipe_delete_hidden_until_open(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
@@ -4909,6 +4912,9 @@ class NotesAppTests(unittest.TestCase):
         marketing_js = (APP_DIR / "static" / "js" / "marketing.js").read_text(encoding="utf-8")
         self.assertIn("settleHashScroll", marketing_js)
         self.assertIn("scrollRestoration", marketing_js)
+
+    def test_register_signup_hang_ux(self):
+        self._run_node_script("test_register_signup_hang.js")
 
     def test_register_retest_copy_strength_and_labels(self):
         register = (APP_DIR / "templates" / "register.html").read_text(encoding="utf-8")

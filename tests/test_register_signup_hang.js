@@ -1,5 +1,5 @@
 /**
- * Register hang UX: 6s secure label, 20s hang + retry, late success recovery, exists → login.
+ * Register hang UX: 6s/20s timers, late success, stale attempt wins once, exists strict, turnstile retry.
  */
 const assert = require('assert');
 const fs = require('fs');
@@ -51,7 +51,7 @@ function buildSandbox(lang = 'en') {
   getEl('register-password2').value = 'longpassword12';
   getEl('register-terms').checked = true;
   getEl('register-recover-ack').checked = true;
-  const location = { href: '', replace: () => {} };
+  const location = { href: '', replace: () => {}, pathname: '/register', search: '' };
   const sandbox = {
     console,
     setTimeout,
@@ -65,6 +65,7 @@ function buildSandbox(lang = 'en') {
     },
     window: null,
     location,
+    history: { replaceState() {} },
     sessionStorage: makeStorage(),
     localStorage: makeStorage(),
     requestAnimationFrame: (cb) => setTimeout(cb, 0),
@@ -110,18 +111,45 @@ function runAuthPages(sandbox) {
   assert.strictEqual(replaced, true);
 
   const sb3 = buildSandbox();
+  let calls = 0;
+  sb3.NotesSrpAuth.register = async () => {
+    calls += 1;
+    if (calls === 1) {
+      await new Promise((r) => setTimeout(r, 400));
+      return { kdf_salt: 'late', vault_kdf_version: 2 };
+    }
+    throw new Error('second attempt failed');
+  };
+  let replaceCount = 0;
+  sb3.location.replace = () => { replaceCount += 1; };
   runAuthPages(sb3);
-  assert.strictEqual(
-    sb3.__notesRegisterHangTest.isRegisterExistsError(
-      new Error('Could not complete sign-up. If you already have an account, sign in instead.'),
-    ),
-    true,
-  );
-  sb3.__notesRegisterHangTest.routeRegisterExistsToLogin('user@example.com');
-  assert.ok(sb3.location.href.includes('register-exists'));
+  const first = sb3.__notesRegisterHangTest.runRegisterAttempt();
+  await new Promise((r) => setTimeout(r, 50));
+  const second = sb3.__notesRegisterHangTest.runRegisterAttempt({ allowWhileInFlight: true });
+  await first;
+  await second;
+  assert.strictEqual(replaceCount, 1, 'stale attempt success still finishes once');
+
+  const sb4 = buildSandbox();
+  runAuthPages(sb4);
+  const generic = new Error('Could not complete sign-up. If you already have an account, sign in instead.');
+  assert.strictEqual(sb4.__notesRegisterHangTest.isRegisterExistsError(generic), false);
+  assert.strictEqual(sb4.__notesRegisterHangTest.isRegisterExistsError({ code: 'account_exists' }), true);
+  assert.strictEqual(sb4.__notesRegisterHangTest.isRegisterExistsError({ status: 409 }), true);
+  sb4.NotesSrpAuth.register = async () => { throw generic; };
+  sb4.location.href = '';
+  await sb4.__notesRegisterHangTest.runRegisterAttempt();
+  assert.ok(!sb4.location.href.includes('/login'), 'generic failure stays on register');
+  sb4.__notesRegisterHangTest.routeRegisterExistsToLogin('user@example.com');
+  assert.strictEqual(sb4.sessionStorage.getItem('notes_login_prefill_email'), 'user@example.com');
+  assert.ok(sb4.location.href.includes('register-exists'));
+  assert.ok(!sb4.location.href.includes('email='));
+
+  const sb5 = buildSandbox('nl');
+  runAuthPages(sb5);
+  assert.strictEqual(sb5.__notesRegisterHangTest.tCopy('retry'), 'Opnieuw');
 
   assert.ok(authPagesCode.includes('register-hang-live'));
-  assert.ok(authPagesCode.includes('Je account wordt veilig aangemaakt'));
   const srp = fs.readFileSync(path.join(jsRoot, 'srp-auth.js'), 'utf8');
   assert.ok(srp.includes('timeoutMs: 180000'));
 

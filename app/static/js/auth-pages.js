@@ -253,12 +253,24 @@ const loginForm = document.getElementById('login-form');
 if (loginForm) {
   try {
     const params = new URLSearchParams(location.search);
-    const prefill = String(params.get('email') || '').trim();
+    let prefill = '';
+    try {
+      prefill = String(sessionStorage.getItem('notes_login_prefill_email') || '').trim();
+      if (prefill) sessionStorage.removeItem('notes_login_prefill_email');
+    } catch (e) { /* ignore */ }
+    if (!prefill) prefill = String(params.get('email') || '').trim();
     if (prefill) {
       const emailInput = loginForm.querySelector('[name="email"]');
       if (emailInput && !emailInput.value) emailInput.value = prefill;
     }
+    if (params.has('email') && typeof history.replaceState === 'function') {
+      params.delete('email');
+      const qs = params.toString();
+      const next = qs ? `${location.pathname}?${qs}` : location.pathname;
+      history.replaceState({}, '', next);
+    }
     const reason = params.get('reason') || '';
+    const loginNl = String(document.documentElement?.lang || 'en').toLowerCase().startsWith('nl');
     if (reason === 'session-expired') {
       showError('login-error', 'Your session expired — please sign in again.');
     } else if (reason === 'signed-out') {
@@ -269,7 +281,9 @@ if (loginForm) {
     } else if (reason === 'register-exists') {
       showError(
         'login-error',
-        'That email already has an account. Sign in with your password.',
+        loginNl
+          ? 'Dit e-mailadres heeft al een account. Log in met je wachtwoord.'
+          : 'That email already has an account. Sign in with your password.',
       );
     }
   } catch (err) {
@@ -660,16 +674,15 @@ function registerHangTiming() {
 }
 
 function isRegisterExistsError(err) {
-  const msg = String(err?.message || err?.error || '').toLowerCase();
   if (err?.code === 'account_exists') return true;
-  return msg.includes('already have an account') || msg.includes('account exists');
+  return Number(err?.status) === 409;
 }
 
 function routeRegisterExistsToLogin(email) {
-  const q = new URLSearchParams();
-  if (email) q.set('email', email);
-  q.set('reason', 'register-exists');
-  location.href = `/login?${q.toString()}`;
+  try {
+    if (email) sessionStorage.setItem('notes_login_prefill_email', String(email));
+  } catch (e) { /* ignore */ }
+  location.href = '/login?reason=register-exists';
 }
 
 const registerForm = document.getElementById('register-form');
@@ -716,6 +729,8 @@ if (registerForm) {
   let registerInFlight = 0;
   let registerRetryLock = false;
   let registerHangTimers = [];
+  let registerSuccessOnce = false;
+  let registerFinishPromise = null;
 
   const registerCopy = {
     creating: { en: 'Creating account…', nl: 'Account aanmaken…' },
@@ -758,7 +773,42 @@ if (registerForm) {
         hangLive.hidden = false;
       }, 20);
     }
-    if (retryBtn) retryBtn.hidden = false;
+    if (retryBtn) {
+      retryBtn.textContent = tCopy('retry');
+      retryBtn.hidden = false;
+    }
+  }
+
+  async function awaitFreshTurnstileToken() {
+    const widget = document.querySelector('.cf-turnstile');
+    if (!widget) return true;
+    if (typeof turnstile === 'undefined' || typeof turnstile.reset !== 'function') {
+      showError('register-error', 'Complete the security check and try again.');
+      return false;
+    }
+    try { turnstile.reset(widget); } catch (e) { /* ignore */ }
+    const deadline = Date.now() + 60000;
+    for (;;) {
+      const tok = String(document.querySelector('input[name="cf-turnstile-response"]')?.value || '').trim();
+      if (tok) return true;
+      if (Date.now() > deadline) {
+        showError('register-error', 'Complete the security check and try again.');
+        return false;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
+  async function completeRegisterSuccessOnce(data, email, password) {
+    if (registerSuccessOnce) {
+      if (registerFinishPromise) await registerFinishPromise;
+      return;
+    }
+    registerSuccessOnce = true;
+    clearRegisterHangTimers();
+    clearRegisterHangMessage();
+    registerFinishPromise = finishRegisterSuccess(data, email, password);
+    await registerFinishPromise;
   }
 
   function validateRegisterForm() {
@@ -836,9 +886,14 @@ if (registerForm) {
     location.replace(afterAuthUrl('/app'));
   }
 
-  async function runRegisterAttempt({ allowWhileInFlight = false } = {}) {
+  async function runRegisterAttempt({ allowWhileInFlight = false, fromRetry = false } = {}) {
+    if (registerSuccessOnce) return;
     if (registerInFlight > 0 && !allowWhileInFlight) return;
     if (registerRetryLock) return;
+    if (fromRetry) {
+      const ok = await awaitFreshTurnstileToken();
+      if (!ok) return;
+    }
     const validated = validateRegisterForm();
     if (!validated) return;
     const { email, password, turnstileInput } = validated;
@@ -867,11 +922,9 @@ if (registerForm) {
         company,
         cf_turnstile_response: turnstileInput ? String(turnstileInput.value || '') : '',
       });
-      if (attemptId !== registerAttemptSeq) return;
-      clearRegisterHangTimers();
-      clearRegisterHangMessage();
-      await finishRegisterSuccess(data, email, password);
+      await completeRegisterSuccessOnce(data, email, password);
     } catch (err) {
+      if (registerSuccessOnce) return;
       if (attemptId !== registerAttemptSeq) return;
       clearRegisterHangTimers();
       if (isRegisterExistsError(err)) {
@@ -894,10 +947,10 @@ if (registerForm) {
   }
 
   retryBtn?.addEventListener('click', async () => {
-    if (registerRetryLock) return;
+    if (registerRetryLock || registerSuccessOnce) return;
     registerRetryLock = true;
     try {
-      await runRegisterAttempt({ allowWhileInFlight: true });
+      await runRegisterAttempt({ allowWhileInFlight: true, fromRetry: true });
     } finally {
       registerRetryLock = false;
     }
@@ -912,6 +965,9 @@ if (registerForm) {
     routeRegisterExistsToLogin,
     runRegisterAttempt,
     tCopy,
+    completeRegisterSuccessOnce,
+    isRegisterSuccessOnce: () => registerSuccessOnce,
+    awaitFreshTurnstileToken,
   };
   if (window.__notesRegisterQueued) {
     window.__notesRegisterQueued = false;
