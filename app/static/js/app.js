@@ -24144,9 +24144,16 @@
     if (sessionExpiredHold) return;
     if (changePollInFlight) return;
     if (!NotesStore.isUnlocked()) {
+      if (typeof NotesStore.hasRemoteChanges !== 'function') return;
       changePollInFlight = true;
       try {
-        await syncWhileVaultLocked({ quiet: true, force: true });
+        const changed = await NotesStore.hasRemoteChanges();
+        if (changed) {
+          NotesStore.logSync?.('change-poll', { changed: true, locked: true });
+          await syncWhileVaultLocked({ quiet: true, force: true });
+        }
+      } catch (err) {
+        if (isLoginRequiredError(err)) showExpiredSessionBanner();
       } finally {
         changePollInFlight = false;
       }
