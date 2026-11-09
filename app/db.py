@@ -305,6 +305,20 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_items_user_synced ON items(user_id, synced_at, item_uuid)"
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sync_idempotency (
+            user_id INTEGER NOT NULL,
+            retry_key TEXT NOT NULL,
+            item_uuid TEXT NOT NULL,
+            request_hash TEXT NOT NULL,
+            item_rev INTEGER NOT NULL,
+            created_at REAL NOT NULL,
+            PRIMARY KEY (user_id, retry_key),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
     if "rev" not in item_cols:
         # Server-assigned per-item revision, bumped on every accepted write.
         # Clients that send base_rev get a "conflict" instead of silently losing
@@ -1764,6 +1778,77 @@ def _parse_base_rev(raw) -> int | None:
     return max(0, value)
 
 
+def _sync_retry_fields(item: dict[str, Any]) -> tuple[str, str]:
+    retry_key = str(item.get("sync_retry_key") or "").strip()
+    request_hash = str(item.get("sync_request_hash") or item.get("content_hash") or "").strip()
+    return retry_key, request_hash
+
+
+def _check_sync_idempotency(
+    conn: sqlite3.Connection,
+    user_id: int,
+    item: dict[str, Any],
+    existing,
+) -> dict[str, Any] | None:
+    retry_key, request_hash = _sync_retry_fields(item)
+    if not retry_key or not request_hash:
+        return None
+    item_uuid = str(item.get("item_uuid") or "").strip()
+    existing_rev = _existing_rev(existing)
+    row = conn.execute(
+        """
+        SELECT request_hash, item_uuid, item_rev
+        FROM sync_idempotency
+        WHERE user_id = ? AND retry_key = ?
+        """,
+        (user_id, retry_key),
+    ).fetchone()
+    if row:
+        if str(row["request_hash"]) == request_hash:
+            rev = existing_rev or int(row["item_rev"] or 0)
+            return {
+                "item_uuid": item_uuid,
+                "status": "unchanged",
+                "rev": rev,
+                "idempotent": True,
+            }
+        return {
+            "item_uuid": item_uuid,
+            "status": "retry_conflict",
+            "reason": "retry_hash_mismatch",
+            "error": (
+                "This save could not be applied safely. The note may have changed — "
+                "edit and save again."
+            ),
+            "rev": existing_rev,
+        }
+    return None
+
+
+def _record_sync_idempotency(
+    conn: sqlite3.Connection,
+    user_id: int,
+    retry_key: str,
+    item_uuid: str,
+    request_hash: str,
+    rev: int,
+) -> None:
+    if not retry_key or not request_hash:
+        return
+    conn.execute(
+        """
+        INSERT INTO sync_idempotency (user_id, retry_key, item_uuid, request_hash, item_rev, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, retry_key) DO UPDATE SET
+            item_uuid = excluded.item_uuid,
+            request_hash = excluded.request_hash,
+            item_rev = excluded.item_rev,
+            created_at = excluded.created_at
+        """,
+        (user_id, retry_key, item_uuid, request_hash, int(rev), time.time()),
+    )
+
+
 def _plan_sync_item(
     item: dict[str, Any],
     *,
@@ -1946,6 +2031,10 @@ def _upsert_items_batch_locked(
                 """,
                 (user_id, item_uuid),
             ).fetchone()
+        idem = _check_sync_idempotency(conn, user_id, item, existing)
+        if idem is not None:
+            results.append(idem)
+            continue
         result, current_used, payload = _plan_sync_item(
             item,
             existing=existing,
@@ -1971,6 +2060,16 @@ def _upsert_items_batch_locked(
                 synced_at=synced_at,
                 force=bool(payload.get("force")),
             )
+            retry_key, request_hash = _sync_retry_fields(item)
+            if retry_key and request_hash:
+                _record_sync_idempotency(
+                    conn,
+                    user_id,
+                    retry_key,
+                    payload["item_uuid"],
+                    request_hash,
+                    int(result.get("rev") or 0),
+                )
         results.append(result)
     return results
 
