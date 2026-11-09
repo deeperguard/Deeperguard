@@ -149,6 +149,27 @@ function runAuthPages(sandbox) {
   runAuthPages(sb5);
   assert.strictEqual(sb5.__notesRegisterHangTest.tCopy('retry'), 'Opnieuw');
 
+  const sb6 = buildSandbox();
+  const turnstileInput = { value: 'stale-token' };
+  let resetCalled = false;
+  sb6.document.querySelector = (sel) => {
+    if (sel === '.cf-turnstile') return { tagName: 'DIV' };
+    if (sel === 'input[name="cf-turnstile-response"]') return turnstileInput;
+    return null;
+  };
+  sb6.turnstile = {
+    reset: () => {
+      resetCalled = true;
+      turnstileInput.value = '';
+      setTimeout(() => { turnstileInput.value = 'fresh-token'; }, 50);
+    },
+  };
+  runAuthPages(sb6);
+  const tokenOk = await sb6.__notesRegisterHangTest.awaitFreshTurnstileToken();
+  assert.strictEqual(resetCalled, true, 'retry path resets turnstile');
+  assert.strictEqual(tokenOk, true);
+  assert.strictEqual(turnstileInput.value, 'fresh-token');
+
   assert.ok(authPagesCode.includes('register-hang-live'));
   const srp = fs.readFileSync(path.join(jsRoot, 'srp-auth.js'), 'utf8');
   assert.ok(srp.includes('timeoutMs: 180000'));
