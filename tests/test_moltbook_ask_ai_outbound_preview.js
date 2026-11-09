@@ -43,6 +43,7 @@ async function main() {
   const cloudRoute = NotesAiChat.describeOutboundRoute({ host: 'https://ollama.com' });
   assert.ok(cloudRoute.cloud);
   assert.ok(cloudRoute.label.includes('goes through our server to ollama.com'));
+  assert.ok(cloudRoute.label.includes("doesn't store your API key"));
 
   const localRoute = NotesAiChat.describeOutboundRoute({ host: 'http://127.0.0.1:11434' });
   assert.ok(!localRoute.cloud);
@@ -99,6 +100,7 @@ async function main() {
   assert.ok(prompts[0].preview.includes('Scan line 1'));
   assert.strictEqual(prompts[0].loud, true);
   assert.ok(prompts[0].warnLines.some((l) => l.includes('our server to ollama.com')));
+  assert.ok(prompts[0].warnLines.some((l) => l.includes("doesn't store your API key")));
   assert.ok(prompts[0].warnLines.includes(NotesAiChat.CONTENT_WARN_NOTE));
   assert.ok(prompts[0].warnLines.includes(NotesAiChat.CONTENT_WARN_OCR));
   assert.strictEqual(store.getItem(NotesAiChat.CLOUD_RELAY_ACK_KEY), '1');
