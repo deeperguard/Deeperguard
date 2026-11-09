@@ -1,5 +1,9 @@
 # Release notes
 
+## v0.65.49 (Vienna)
+
+- **Sign-up #327:** Register hang UX — reassurance copy at 6s/20s, Retry without aborting SRP (180s client timeout), late success honored once, Turnstile refresh on retry, soft-fail anti-enumeration with optional sign-in link after retry (sessionStorage email prefill).
+
 ## v0.65.48 (Vienna)
 
 - **Sync #326:** While the vault is locked, change-poll checks the server watermark before pulling; locked incremental pulls send `known_hashes` from stored ciphertext (cuts repeated full-page downloads).
