@@ -50,10 +50,10 @@
       "url": "/static/js/app.3014e800d13e02d6.js"
     },
     "js/auth-pages.js": {
-      "bytes": 38445,
-      "sha256": "5cc0a56ce16caf9794481cb1d087ed27589217dc9994d66c8cddc8d3511f66c3",
-      "sri": "sha384-deG11NVSDM5vMimPFJVtOxJYIRfvC9gmRye+uYJEepskJ2KjR1jH1lMEwwnWcYPf",
-      "url": "/static/js/auth-pages.5cc0a56ce16caf97.js"
+      "bytes": 41555,
+      "sha256": "341073f0dcd86032e2950c296ba18166b3c3ce6dd2f954c94fa5ec6ab5cffee2",
+      "sri": "sha384-Zk94eHR99lZ1cQbuYDOUTMdqHdsnKCmuFn6zyDZ81wFyeM17j/zQUwjDh7hPMfJa",
+      "url": "/static/js/auth-pages.341073f0dcd86032.js"
     },
     "js/checklist.js": {
       "bytes": 2734,
@@ -393,6 +393,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "c43627cdcc55a66a6d763cf06c7c09a19a09a363544ba452bf32b81bcdea7369",
+  "manifest_sha256": "4e297d33db2b05fb7b2d257cdbfa59166c970e5eb29bb052d787baf546c36b1e",
   "version": 1
 }

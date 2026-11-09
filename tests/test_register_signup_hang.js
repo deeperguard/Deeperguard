@@ -1,5 +1,5 @@
 /**
- * Register hang UX: 6s/20s timers, late success, stale attempt wins once, exists strict, turnstile retry.
+ * Register hang UX: timers, retry lock, late success, soft-fail anti-enum, Turnstile retry.
  */
 const assert = require('assert');
 const fs = require('fs');
@@ -9,6 +9,9 @@ const vm = require('vm');
 const root = path.join(__dirname, '..');
 const jsRoot = path.join(root, 'app', 'static', 'js');
 const authPagesCode = fs.readFileSync(path.join(jsRoot, 'auth-pages.js'), 'utf8');
+
+const REGISTER_SOFT_FAIL_MESSAGE =
+  'Could not complete sign-up. If you already have an account, sign in instead.';
 
 function makeStorage() {
   const store = Object.create(null);
@@ -39,6 +42,33 @@ function buildSandbox(lang = 'en') {
           addEventListener() {},
           querySelector: () => null,
           querySelectorAll: () => [],
+        });
+      } else if (id === 'register-retry') {
+        const el = {
+          hidden: true,
+          disabled: false,
+          textContent: '',
+          _clicks: [],
+          addEventListener(type, fn) { if (type === 'click') this._clicks.push(fn); },
+          click() {
+            const ev = { preventDefault() {} };
+            for (const fn of this._clicks) fn(ev);
+          },
+        };
+        elements.set(id, el);
+      } else if (id === 'register-soft-fail-signin') {
+        elements.set(id, { hidden: true, textContent: '' });
+      } else if (id === 'register-soft-fail-signin-link') {
+        elements.set(id, {
+          hidden: false,
+          textContent: '',
+          href: '/login',
+          _clicks: [],
+          addEventListener(type, fn) { if (type === 'click') this._clicks.push(fn); },
+          click() {
+            const ev = { preventDefault() {} };
+            for (const fn of this._clicks) fn(ev);
+          },
         });
       } else {
         elements.set(id, makeEl('input', (id.includes('terms') || id.includes('recover')) ? { checked: true } : {}));
@@ -82,6 +112,12 @@ function buildSandbox(lang = 'en') {
 function runAuthPages(sandbox) {
   vm.createContext(sandbox);
   vm.runInContext(authPagesCode, sandbox);
+}
+
+function softFailError() {
+  const err = new Error(REGISTER_SOFT_FAIL_MESSAGE);
+  err.status = 400;
+  return err;
 }
 
 (async () => {
@@ -130,20 +166,46 @@ function runAuthPages(sandbox) {
   await second;
   assert.strictEqual(replaceCount, 1, 'stale attempt success still finishes once');
 
+  const sbRetry = buildSandbox();
+  let registerCalls = 0;
+  sbRetry.NotesSrpAuth.register = () => {
+    registerCalls += 1;
+    return new Promise((r) => setTimeout(() => r({ kdf_salt: 'x', vault_kdf_version: 2 }), 8000));
+  };
+  runAuthPages(sbRetry);
+  void sbRetry.__notesRegisterHangTest.runRegisterAttempt();
+  await new Promise((r) => setTimeout(r, 300));
+  assert.ok(!sbRetry.getEl('register-retry').hidden, 'hang shows retry');
+  sbRetry.getEl('register-retry').click();
+  await new Promise((r) => setTimeout(r, 50));
+  assert.strictEqual(registerCalls, 2, 'retry click starts second register');
+
   const sb4 = buildSandbox();
   runAuthPages(sb4);
-  const generic = new Error('Could not complete sign-up. If you already have an account, sign in instead.');
+  const generic = softFailError();
   assert.strictEqual(sb4.__notesRegisterHangTest.isRegisterExistsError(generic), false);
+  assert.strictEqual(sb4.__notesRegisterHangTest.isRegisterSoftFailError(generic), true);
   assert.strictEqual(sb4.__notesRegisterHangTest.isRegisterExistsError({ code: 'account_exists' }), true);
   assert.strictEqual(sb4.__notesRegisterHangTest.isRegisterExistsError({ status: 409 }), true);
   sb4.NotesSrpAuth.register = async () => { throw generic; };
   sb4.location.href = '';
   await sb4.__notesRegisterHangTest.runRegisterAttempt();
-  assert.ok(!sb4.location.href.includes('/login'), 'generic failure stays on register');
-  sb4.__notesRegisterHangTest.routeRegisterExistsToLogin('user@example.com');
-  assert.strictEqual(sb4.sessionStorage.getItem('notes_login_prefill_email'), 'user@example.com');
+  assert.ok(!sb4.location.href.includes('/login'), 'first soft-fail: no redirect');
+  assert.strictEqual(sb4.getEl('register-soft-fail-signin').hidden, true, 'first try: no sign-in link');
+  sb4.NotesSrpAuth.register = async () => { throw softFailError(); };
+  await sb4.__notesRegisterHangTest.runRegisterAttempt({ fromRetry: true });
+  assert.ok(!sb4.location.href.includes('/login'), 'retry soft-fail: no auto redirect');
+  assert.strictEqual(sb4.getEl('register-soft-fail-signin').hidden, false);
+  assert.ok(sb4.getEl('register-soft-fail-signin-link').textContent.includes('Sign in'));
+  sb4.getEl('register-soft-fail-signin-link').click();
+  assert.strictEqual(sb4.sessionStorage.getItem('notes_login_prefill_email'), 't@example.com');
   assert.ok(sb4.location.href.includes('register-exists'));
-  assert.ok(!sb4.location.href.includes('email='));
+
+  const sb4nl = buildSandbox('nl');
+  runAuthPages(sb4nl);
+  sb4nl.NotesSrpAuth.register = async () => { throw softFailError(); };
+  await sb4nl.__notesRegisterHangTest.runRegisterAttempt({ fromRetry: true });
+  assert.ok(sb4nl.getEl('register-soft-fail-signin-link').textContent.includes('Inloggen'));
 
   const sb5 = buildSandbox('nl');
   runAuthPages(sb5);
@@ -151,24 +213,41 @@ function runAuthPages(sandbox) {
 
   const sb6 = buildSandbox();
   const turnstileInput = { value: 'stale-token' };
-  let resetCalled = false;
+  let resetArg;
   sb6.document.querySelector = (sel) => {
-    if (sel === '.cf-turnstile') return { tagName: 'DIV' };
+    if (sel === '.cf-turnstile') return { tagName: 'DIV', id: 'cf-chl-widget-test' };
     if (sel === 'input[name="cf-turnstile-response"]') return turnstileInput;
     return null;
   };
   sb6.turnstile = {
-    reset: () => {
-      resetCalled = true;
+    reset: (id) => {
+      resetArg = id;
       turnstileInput.value = '';
       setTimeout(() => { turnstileInput.value = 'fresh-token'; }, 50);
     },
   };
   runAuthPages(sb6);
-  const tokenOk = await sb6.__notesRegisterHangTest.awaitFreshTurnstileToken();
-  assert.strictEqual(resetCalled, true, 'retry path resets turnstile');
+  assert.strictEqual(turnstileInput.value, 'stale-token');
+  const tokenWait = sb6.__notesRegisterHangTest.awaitFreshTurnstileToken();
+  await new Promise((r) => setTimeout(r, 5));
+  assert.strictEqual(sb6.getEl('register-submit').textContent, 'Security check…');
+  const tokenOk = await tokenWait;
+  assert.strictEqual(resetArg, 'cf-chl-widget-test');
   assert.strictEqual(tokenOk, true);
   assert.strictEqual(turnstileInput.value, 'fresh-token');
+
+  const sb7 = buildSandbox();
+  sb7.document.querySelector = (sel) => {
+    if (sel === '.cf-turnstile') return { tagName: 'DIV', id: 'w2' };
+    return null;
+  };
+  runAuthPages(sb7);
+  const missingTurnstile = await sb7.__notesRegisterHangTest.awaitFreshTurnstileToken();
+  assert.strictEqual(missingTurnstile, false);
+  assert.strictEqual(sb7.getEl('register-submit').disabled, false);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.strictEqual(sb7.getEl('register-error').textContent, 'Please try again.');
+  assert.ok(authPagesCode.includes('Date.now() + 60000'));
 
   assert.ok(authPagesCode.includes('register-hang-live'));
   const srp = fs.readFileSync(path.join(jsRoot, 'srp-auth.js'), 'utf8');

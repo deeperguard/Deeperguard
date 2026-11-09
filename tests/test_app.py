@@ -2981,6 +2981,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn('id="register-hang-live"', register_html)
         self.assertIn('aria-live="polite"', register_html)
         self.assertIn('id="register-retry"', register_html)
+        self.assertIn('id="register-soft-fail-signin"', register_html)
 
     def test_note_swipe_delete_hidden_until_open(self):
         css = (APP_DIR / "static" / "css" / "app.css").read_text(encoding="utf-8")
