@@ -1,5 +1,9 @@
 # Release notes
 
+## v0.65.51 (Vienna)
+
+- **Sync #330:** Safe upload retries via `sync_retry_key` / request hash — identical retries are idempotent; hash mismatch returns `retry_conflict` without clobbering newer server data. Reuses wrapped ciphertext on the same dirty cycle; rotates retry key after conflict. Localized blocked-sync toasts (EN/NL) with note title for `retry_conflict`.
+
 ## v0.65.50 (Vienna)
 
 - **Ask AI #331:** Structured send consent — destination consent recorded; cloud relay warnings and ack only for Ollama Cloud; relay-only storage copy (EN/NL).
