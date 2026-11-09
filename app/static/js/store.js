@@ -1592,6 +1592,16 @@ const NotesStore = (() => {
     return row.content?.file_enc || null;
   }
 
+  function ensureSyncRetryKey(item) {
+    if (!item || typeof item !== 'object') return '';
+    if (!item.sync_retry_key) {
+      item.sync_retry_key = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : `retry-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+    return item.sync_retry_key;
+  }
+
   async function wrapItem(uuid, content, updatedAt) {
     await sealAttachmentContent(content);
     let wrapContent = content;
@@ -1618,7 +1628,7 @@ const NotesStore = (() => {
     const ciphertext = JSON.stringify(payload);
     const content_hash = await NotesCrypto.hashText(ciphertext);
     const ts = Number(updatedAt);
-    return {
+    const row = {
       item_uuid: uuid,
       content_version: 1,
       ciphertext,
@@ -1627,6 +1637,12 @@ const NotesStore = (() => {
       deleted: !!content.deleted,
       updated_at: Number.isFinite(ts) && ts > 0 ? ts : Date.now() / 1000,
     };
+    const live = state.items.get(uuid);
+    if (live) {
+      row.sync_retry_key = ensureSyncRetryKey(live);
+      row.sync_request_hash = content_hash;
+    }
+    return row;
   }
 
   async function decryptCipherPayload(payload, { fast = false } = {}) {
@@ -1925,7 +1941,7 @@ const NotesStore = (() => {
       const ciphertext = String(row.ciphertext || '');
       if (!ciphertext) return null;
       const content_hash = await NotesCrypto.hashText(ciphertext);
-      return {
+      const tombstone = {
         item_uuid: uuid,
         content_version: 1,
         ciphertext,
@@ -1935,6 +1951,11 @@ const NotesStore = (() => {
         updated_at: updatedAt,
         ...baseRev,
       };
+      if (row.sync_retry_key) {
+        tombstone.sync_retry_key = row.sync_retry_key;
+        tombstone.sync_request_hash = content_hash;
+      }
+      return tombstone;
     }
     const ciphertext = String(row.ciphertext || '');
     if (!ciphertext) return null;
@@ -1947,7 +1968,7 @@ const NotesStore = (() => {
     // an older ciphertext (kept for known_hashes), which must not describe
     // this re-encrypted copy.
     const content_hash = await NotesCrypto.hashText(ciphertext);
-    return {
+    const payload = {
       item_uuid: uuid,
       content_version: 1,
       ciphertext,
@@ -1957,6 +1978,11 @@ const NotesStore = (() => {
       updated_at: updatedAt,
       ...baseRev,
     };
+    if (row.sync_retry_key) {
+      payload.sync_retry_key = row.sync_retry_key;
+      payload.sync_request_hash = content_hash;
+    }
+    return payload;
   }
 
   async function persistCipherRowFromServer(row) {
@@ -2670,6 +2696,9 @@ const NotesStore = (() => {
     const more = state.blocked.size > 1 ? ` (+${state.blocked.size - 1} more)` : '';
     if (first.status === 'quota_exceeded') return `${label} did not sync: storage quota reached${more}`;
     if (first.status === 'too_large') return `${label} did not sync: too large for the server${more}`;
+    if (first.status === 'retry_conflict') {
+      return (first.reason || first.error || `${label} could not be saved safely`) + more;
+    }
     return `${label} did not sync${more}`;
   }
 
@@ -2691,6 +2720,7 @@ const NotesStore = (() => {
   async function recordPushedState(uuid, pushed, result) {
     const item = state.items.get(uuid);
     if (!item) return;
+    delete item.sync_retry_key;
     if (pushed?.content_hash) item.content_hash = pushed.content_hash;
     if (result?.rev != null && Number.isFinite(Number(result.rev))) item.rev = Number(result.rev);
     if (item.deleted || !pushed?.ciphertext) return;
@@ -2705,6 +2735,7 @@ const NotesStore = (() => {
         has_blob: !!(existing?.has_blob || pushed.blob_ciphertext
           || (item.content?.type === 'attachment' && item.content.file_enc_stored)),
         rev: item.rev != null ? Number(item.rev) || 0 : undefined,
+        sync_retry_key: undefined,
       });
     } catch (err) {
       /* bookkeeping only; the next pull repairs it */
@@ -2914,6 +2945,9 @@ const NotesStore = (() => {
               // Could not fetch or read the server copy: keep ours queued.
               logSync('conflict-resolve-failed', { uuid, error: err?.message || String(err) });
             }
+          } else if (status === 'retry_conflict') {
+            blockItem(uuid, result);
+            state.dirty.delete(uuid);
           } else if (status === 'quota_exceeded' || status === 'too_large') {
             blockItem(uuid, result);
           }
