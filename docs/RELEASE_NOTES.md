@@ -1,5 +1,10 @@
 # Release notes
 
+## v0.65.48 (Vienna)
+
+- **Sync #326:** While the vault is locked, change-poll checks the server watermark before pulling; locked incremental pulls send `known_hashes` from stored ciphertext (cuts repeated full-page downloads).
+- **Blog (draft only on main):** Staged draft posts for zero-knowledge basics (#324) and encrypted email backups (#325) — not listed on `/blog` until published.
+
 ## v0.65.47 (Vienna)
 
 - **Agenda #320:** Center the earliest visible timed event in the time-grid viewport on new/changed schedules; period navigation via horizontal touch/pointer/wheel across Day, 3-day, Week, Month, and List views (vertical scroll preserved); ICS export plaintext warning unchanged.
