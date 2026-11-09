@@ -76,6 +76,7 @@ const NotesAiChat = (() => {
     },
     send: { en: 'Send', nl: 'Versturen' },
     cancel: { en: 'Cancel', nl: 'Annuleren' },
+    reviewPrefix: { en: 'Review: ', nl: 'Controleer: ' },
   };
   // Ollama cloud models (https://ollama.com/api/tags) suited to Q&A over a note.
   const SUGGESTED_MODELS = [
@@ -523,7 +524,7 @@ const NotesAiChat = (() => {
     };
   }
 
-  function showOutboundDialog({
+  async function showOutboundDialog({
     title,
     routeLabel,
     warnLines = [],
@@ -542,22 +543,29 @@ const NotesAiChat = (() => {
     const cancelBtn = el('ai-outbound-cancel');
     const sendBtn = el('ai-outbound-send');
     if (!backdrop || !dialog || !titleEl || !routeEl || !warnEl || !detailsEl || !previewEl || !cancelBtn || !sendBtn) {
-      return Promise.resolve(!!globalThis.confirm?.(cloudRelayConfirmMessage()));
+      const fallbackMsg = [routeLabel, ...(warnLines || [])].filter(Boolean).join('\n\n')
+        || cloudRelayConfirmMessage();
+      if (typeof deps.confirm === 'function') {
+        return Promise.resolve(!!(await deps.confirm(fallbackMsg, { confirmLabel, cancelLabel })));
+      }
+      return Promise.resolve(!!globalThis.confirm?.(fallbackMsg));
     }
     return new Promise((resolve) => {
       titleEl.textContent = title || 'Send to Ask AI';
       routeEl.textContent = routeLabel || '';
       warnEl.replaceChildren();
       const lines = (warnLines || []).filter(Boolean);
+      const reviewPrefix = consentUi('reviewPrefix');
+      const reviewStrip = consentLocale() === 'nl' ? /^Controleer:\s*/ : /^Review:\s*/;
       if (lines.length) {
         warnEl.hidden = false;
         for (const line of lines) {
           const p = document.createElement('p');
           if (loud && line === lines[0]) {
             const strong = document.createElement('strong');
-            strong.textContent = 'Review: ';
+            strong.textContent = reviewPrefix;
             p.appendChild(strong);
-            p.append(line.replace(/^Review:\s*/, ''));
+            p.append(line.replace(reviewStrip, ''));
           } else {
             p.textContent = line;
           }
