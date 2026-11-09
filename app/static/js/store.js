@@ -1602,6 +1602,18 @@ const NotesStore = (() => {
     return item.sync_retry_key;
   }
 
+  function rotateSyncRetryKey(item) {
+    if (!item || typeof item !== 'object') return '';
+    delete item.sync_retry_key;
+    return ensureSyncRetryKey(item);
+  }
+
+  function retryConflictBlockedLine(label, error) {
+    const name = String(label || '').trim() || 'an item';
+    const msg = String(error || '').trim() || syncRetryConflictUserMessage();
+    return `“${name}” did not sync: ${msg}`;
+  }
+
   async function wrapItem(uuid, content, updatedAt) {
     await sealAttachmentContent(content);
     let wrapContent = content;
@@ -2687,6 +2699,9 @@ const NotesStore = (() => {
       updated_at: Number(item?.updated_at) || 0,
       at: Date.now(),
     });
+    if (status === 'retry_conflict') {
+      rotateSyncRetryKey(item);
+    }
     logSync('push-blocked', { uuid, status: result?.status, reason: result?.reason || '', error: display });
   }
 
@@ -2712,7 +2727,7 @@ const NotesStore = (() => {
     if (first.status === 'quota_exceeded') return `${label} did not sync: storage quota reached${more}`;
     if (first.status === 'too_large') return `${label} did not sync: too large for the server${more}`;
     if (first.status === 'retry_conflict') {
-      return (first.error || syncRetryConflictUserMessage()) + more;
+      return retryConflictBlockedLine(first.label, first.error) + more;
     }
     return `${label} did not sync${more}`;
   }
@@ -6288,6 +6303,8 @@ const NotesStore = (() => {
     setConflictCopyCallback,
     blockedItems,
     syncRetryConflictUserMessage,
+    retryConflictBlockedLine,
+    rotateSyncRetryKey,
     chunkPushRows,
     verifyVaultPassword,
     fetchAttachmentBlobFromServer,
