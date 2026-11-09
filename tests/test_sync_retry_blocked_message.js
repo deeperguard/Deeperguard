@@ -7,33 +7,27 @@ const path = require('path');
 const NotesStore = require(path.join(__dirname, '..', 'app/static/js/store.js'));
 
 const HUMAN_EN = 'This save could not be applied safely. The note may have changed — edit and save again.';
-
-function blockedToastLine(info) {
-  if (info.status !== 'retry_conflict') return '';
-  return info.error || NotesStore.syncRetryConflictUserMessage();
-}
+const TITLE = 'Budget note';
 
 (() => {
-  const serverResult = {
-    status: 'retry_conflict',
-    reason: 'retry_hash_mismatch',
-    error: HUMAN_EN,
-  };
-  const line = blockedToastLine({
-    status: serverResult.status,
-    reason: serverResult.reason,
-    error: serverResult.error,
-  });
-  assert.strictEqual(line, HUMAN_EN);
+  const line = NotesStore.retryConflictBlockedLine(TITLE, HUMAN_EN);
+  assert.ok(line.startsWith(`“${TITLE}” did not sync:`));
+  assert.ok(line.includes(HUMAN_EN));
   assert.ok(!line.includes('retry_hash_mismatch'), 'toast must not show internal reason code');
 
-  const fallback = blockedToastLine({
-    status: 'retry_conflict',
-    reason: 'retry_hash_mismatch',
-    error: '',
-  });
-  assert.strictEqual(fallback, NotesStore.syncRetryConflictUserMessage());
-  assert.ok(fallback.includes('safely') || fallback.includes('veilig'));
+  const fallback = NotesStore.retryConflictBlockedLine(TITLE, '');
+  assert.ok(fallback.startsWith(`“${TITLE}” did not sync:`));
+  assert.ok(fallback.includes(NotesStore.syncRetryConflictUserMessage()));
+
+  const stale = 'client-retry-key-stale';
+  const item = { content: { title: TITLE }, sync_retry_key: stale };
+  const rotated = NotesStore.rotateSyncRetryKey(item);
+  assert.ok(rotated);
+  assert.notStrictEqual(rotated, stale, 'conflict must rotate retry key');
+  assert.strictEqual(item.sync_retry_key, rotated);
+
+  const again = NotesStore.rotateSyncRetryKey(item);
+  assert.notStrictEqual(again, rotated);
 
   console.log('test_sync_retry_blocked_message.js: ok');
 })();
