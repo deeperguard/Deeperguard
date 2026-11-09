@@ -1261,17 +1261,33 @@
     });
   }
 
-  function applyEditorScopeUi(scope) {
+  function seriesNoticeForEditor(scope, rrule) {
+    const hasRrule = Boolean(String(rrule || '').trim());
+    if (!hasRrule) {
+      return { hidden: true, text: '' };
+    }
+    if (scope === 'occurrence') {
+      return {
+        hidden: false,
+        text: 'Editing this occurrence only. Other dates in the series stay unchanged.',
+      };
+    }
+    return {
+      hidden: false,
+      text: 'Changes apply to the entire recurring series.',
+    };
+  }
+
+  function applyEditorScopeUi(scope, rrule) {
     const isOcc = scope === 'occurrence';
     const notice = document.getElementById('agenda-edit-series-notice');
     const recur = document.querySelector('#agenda-editor .agenda-editor-recurrence');
     const del = document.getElementById('agenda-edit-delete');
     const heading = document.getElementById('agenda-edit-visible-title');
+    const seriesNotice = seriesNoticeForEditor(scope, rrule);
     if (notice) {
-      notice.hidden = false;
-      notice.textContent = isOcc
-        ? 'Editing this occurrence only. Other dates in the series stay unchanged.'
-        : 'Changes apply to the entire recurring series.';
+      notice.hidden = seriesNotice.hidden;
+      notice.textContent = seriesNotice.text;
     }
     if (recur) recur.hidden = isOcc;
     if (del) del.textContent = isOcc ? 'Delete occurrence' : 'Delete';
@@ -1387,7 +1403,7 @@
     }
 
     document.getElementById('agenda-edit-delete')?.toggleAttribute('hidden', !state.selectedId);
-    applyEditorScopeUi(scope);
+    applyEditorScopeUi(scope, content.rrule || '');
 
     backdrop.hidden = false;
     dialog.hidden = false;
@@ -1707,6 +1723,7 @@
     render,
     onTabShown,
     openNewEvent,
+    seriesNoticeForEditor,
   };
   global.__notesCloseAgendaCalendarSettings = closeCalendarSettingsPanel;
 }(typeof window !== 'undefined' ? window : globalThis));
