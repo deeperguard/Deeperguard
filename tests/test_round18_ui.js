@@ -61,7 +61,7 @@ assert.ok(searchBlock.includes('ui.search.blur()'));
 
 // 3. Registration derives once, paints before that derive, and stashes the
 //    key so /app adoptDerivedVaultKey skips a second Argon2.
-const creating = authPages.indexOf("submitBtn.textContent = 'Creating account…'");
+const creating = authPages.indexOf("creating: { en: 'Creating account…'");
 const goApp = authPages.indexOf('location.replace(afterAuthUrl', creating);
 const registerSlice = authPages.slice(creating, goApp);
 assert.ok(registerSlice.includes("notes_just_registered"));

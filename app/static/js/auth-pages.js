@@ -253,18 +253,37 @@ const loginForm = document.getElementById('login-form');
 if (loginForm) {
   try {
     const params = new URLSearchParams(location.search);
-    const prefill = String(params.get('email') || '').trim();
+    let prefill = '';
+    try {
+      prefill = String(sessionStorage.getItem('notes_login_prefill_email') || '').trim();
+      if (prefill) sessionStorage.removeItem('notes_login_prefill_email');
+    } catch (e) { /* ignore */ }
+    if (!prefill) prefill = String(params.get('email') || '').trim();
     if (prefill) {
       const emailInput = loginForm.querySelector('[name="email"]');
       if (emailInput && !emailInput.value) emailInput.value = prefill;
     }
+    if (params.has('email') && typeof history.replaceState === 'function') {
+      params.delete('email');
+      const qs = params.toString();
+      const next = qs ? `${location.pathname}?${qs}` : location.pathname;
+      history.replaceState({}, '', next);
+    }
     const reason = params.get('reason') || '';
+    const loginNl = String(document.documentElement?.lang || 'en').toLowerCase().startsWith('nl');
     if (reason === 'session-expired') {
       showError('login-error', 'Your session expired — please sign in again.');
     } else if (reason === 'signed-out') {
       showError(
         'login-error',
         'This device was signed out remotely. Local vault data on this device was deleted. Sign in again to download your notes.',
+      );
+    } else if (reason === 'register-exists') {
+      showError(
+        'login-error',
+        loginNl
+          ? 'Dit e-mailadres heeft al een account. Log in met je wachtwoord.'
+          : 'That email already has an account. Sign in with your password.',
       );
     }
   } catch (err) {
@@ -639,6 +658,47 @@ function bindPasswordToggles(root) {
   });
 }
 
+function registerPageLocale() {
+  const lang = String(document.documentElement?.lang || 'en').toLowerCase();
+  return lang.startsWith('nl') ? 'nl' : 'en';
+}
+
+function registerHangTiming() {
+  const o = window.__notesRegisterTiming;
+  const slowMs = Number(o?.slowMs);
+  const hangMs = Number(o?.hangMs);
+  return {
+    slowMs: slowMs > 0 ? slowMs : 6000,
+    hangMs: hangMs > 0 ? hangMs : 20000,
+  };
+}
+
+const REGISTER_SOFT_FAIL_MESSAGE =
+  'Could not complete sign-up. If you already have an account, sign in instead.';
+
+function isRegisterExistsError(err) {
+  if (err?.code === 'account_exists') return true;
+  return Number(err?.status) === 409;
+}
+
+function isRegisterSoftFailError(err) {
+  return Number(err?.status) === 400
+    && String(err?.message || '').trim() === REGISTER_SOFT_FAIL_MESSAGE;
+}
+
+function turnstileWidgetId() {
+  const el = document.querySelector('.cf-turnstile');
+  if (!el) return '';
+  return String(el.id || el.getAttribute('data-widget-id') || '').trim();
+}
+
+function routeRegisterExistsToLogin(email) {
+  try {
+    if (email) sessionStorage.setItem('notes_login_prefill_email', String(email));
+  } catch (e) { /* ignore */ }
+  location.href = '/login?reason=register-exists';
+}
+
 const registerForm = document.getElementById('register-form');
 if (registerForm) {
   bindPasswordToggles(registerForm);
@@ -676,8 +736,170 @@ if (registerForm) {
     if (recoverInput.checked) setFieldError('register-recover-ack', 'register-recover-error', '');
   });
 
-  async function submitRegisterForm() {
-    showError('register-error', '');
+  const submitBtn = document.getElementById('register-submit');
+  const retryBtn = document.getElementById('register-retry');
+  const hangLive = document.getElementById('register-hang-live');
+  let registerAttemptSeq = 0;
+  let registerInFlight = 0;
+  let registerRetryLock = false;
+  let registerHangTimers = [];
+  let registerSuccessOnce = false;
+  let registerFinishPromise = null;
+
+  const registerCopy = {
+    creating: { en: 'Creating account…', nl: 'Account aanmaken…' },
+    secure: {
+      en: 'Creating your account securely…',
+      nl: 'Je account wordt veilig aangemaakt…',
+    },
+    hang: {
+      en: 'Sign-up is not working right now. Please try again.',
+      nl: 'Aanmelden lukt nu niet. Probeer het opnieuw.',
+    },
+    submit: { en: 'Create account', nl: 'Account aanmaken' },
+    retry: { en: 'Retry', nl: 'Opnieuw' },
+    turnstileWait: { en: 'Security check…', nl: 'Beveiligingscheck…' },
+    turnstileTimeout: { en: 'Please try again.', nl: 'Probeer het opnieuw.' },
+    turnstileMissing: {
+      en: 'Please complete the security check and try again.',
+      nl: 'Voltooi eerst de beveiligingscontrole en probeer het opnieuw.',
+    },
+    softFailSignIn: {
+      en: 'Already have an account? Sign in',
+      nl: 'Heb je al een account? Inloggen',
+    },
+  };
+
+  const softFailSignInEl = document.getElementById('register-soft-fail-signin');
+  const softFailSignInLink = document.getElementById('register-soft-fail-signin-link');
+  let softFailSignInEmail = '';
+
+  function registerRegisterFailureUi() {
+    clearRegisterHangTimers();
+    clearRegisterHangMessage();
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = tCopy('submit');
+    }
+  }
+
+  function hideRegisterSoftFailSignIn() {
+    softFailSignInEmail = '';
+    if (softFailSignInEl) softFailSignInEl.hidden = true;
+  }
+
+  function showRegisterSoftFailSignIn(email) {
+    softFailSignInEmail = String(email || '');
+    if (softFailSignInLink) {
+      softFailSignInLink.textContent = tCopy('softFailSignIn');
+      softFailSignInLink.href = '/login';
+    }
+    if (softFailSignInEl) softFailSignInEl.hidden = false;
+  }
+
+  if (softFailSignInLink) {
+    softFailSignInLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      routeRegisterExistsToLogin(softFailSignInEmail);
+    });
+  }
+
+  function showRegisterError(message) {
+    const el = document.getElementById('register-error');
+    if (!el) return;
+    el.hidden = true;
+    el.textContent = '';
+    if (!message) return;
+    const ariaTimer = window.setTimeout(() => {
+      if (!document.getElementById('register-error')) return;
+      el.textContent = message;
+      el.hidden = false;
+    }, 20);
+    registerHangTimers.push(ariaTimer);
+  }
+
+  function tCopy(key) {
+    const loc = registerPageLocale();
+    return registerCopy[key]?.[loc] || registerCopy[key]?.en || '';
+  }
+
+  function clearRegisterHangTimers() {
+    for (const id of registerHangTimers) clearTimeout(id);
+    registerHangTimers = [];
+  }
+
+  function clearRegisterHangMessage() {
+    if (hangLive) {
+      hangLive.textContent = '';
+      hangLive.hidden = true;
+    }
+    if (retryBtn) retryBtn.hidden = true;
+  }
+
+  function showRegisterHangMessage() {
+    if (hangLive) {
+      hangLive.textContent = '';
+      hangLive.hidden = true;
+      const ariaTimer = window.setTimeout(() => {
+        hangLive.textContent = tCopy('hang');
+        hangLive.hidden = false;
+      }, 20);
+      registerHangTimers.push(ariaTimer);
+    }
+    if (retryBtn) {
+      retryBtn.textContent = tCopy('retry');
+      retryBtn.hidden = false;
+    }
+  }
+
+  async function awaitFreshTurnstileToken() {
+    const widgetEl = document.querySelector('.cf-turnstile');
+    if (!widgetEl) return true;
+    if (typeof turnstile === 'undefined' || typeof turnstile.reset !== 'function') {
+      registerRegisterFailureUi();
+      showRegisterError(tCopy('turnstileTimeout'));
+      return false;
+    }
+    const turnstileInput = document.querySelector('input[name="cf-turnstile-response"]');
+    if (turnstileInput) turnstileInput.value = '';
+    const widgetId = turnstileWidgetId();
+    try {
+      if (widgetId) turnstile.reset(widgetId);
+      else turnstile.reset(widgetEl);
+    } catch (e) { /* ignore */ }
+    clearRegisterHangMessage();
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = tCopy('turnstileWait');
+    }
+    const deadline = Date.now() + 60000;
+    for (;;) {
+      const tok = String(document.querySelector('input[name="cf-turnstile-response"]')?.value || '').trim();
+      if (tok) return true;
+      if (Date.now() > deadline) {
+        registerRegisterFailureUi();
+        showRegisterError(tCopy('turnstileTimeout'));
+        return false;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
+  async function completeRegisterSuccessOnce(data, email, password) {
+    if (registerSuccessOnce) {
+      if (registerFinishPromise) await registerFinishPromise;
+      return;
+    }
+    registerSuccessOnce = true;
+    clearRegisterHangTimers();
+    clearRegisterHangMessage();
+    registerFinishPromise = finishRegisterSuccess(data, email, password);
+    await registerFinishPromise;
+  }
+
+  function validateRegisterForm() {
+    hideRegisterSoftFailSignIn();
+    showRegisterError('');
     const email = String(emailInput?.value || '').trim().toLowerCase();
     const password = String(passwordInput?.value || '');
     const password2 = String(confirmInput?.value || '');
@@ -712,63 +934,136 @@ if (registerForm) {
     } else {
       setFieldError('register-recover-ack', 'register-recover-error', '');
     }
-    if (invalid) return;
+    if (invalid) return null;
     const turnstileWidget = document.querySelector('.cf-turnstile');
     const turnstileInput = document.querySelector('input[name="cf-turnstile-response"]');
     if (turnstileWidget && !String(turnstileInput?.value || '').trim()) {
-      showError('register-error', 'Please complete the security check and try again.');
-      return;
+      showRegisterError(tCopy('turnstileMissing'));
+      return null;
     }
-    const submitBtn = document.getElementById('register-submit');
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Creating account…';
-    }
-    try {
-      const company = String(document.getElementById('register-company')?.value || '');
-      const data = await NotesSrpAuth.register(email, password, {
-        company,
-        cf_turnstile_response: turnstileInput ? String(turnstileInput.value || '') : '',
+    return { email, password, turnstileInput };
+  }
+
+  async function finishRegisterSuccess(data, email, password) {
+    await stashLoginSession(data, email, password);
+    try { sessionStorage.setItem('notes_just_registered', '1'); } catch (err) { /* ignore */ }
+    try { sessionStorage.setItem('notes_verify_email_hint', '1'); } catch (err) { /* ignore */ }
+    if (data?.kdf_salt && window.NotesCrypto?.deriveKey && window.NotesVaultSecrets?.stashBootDerivedKey) {
+      if (submitBtn) submitBtn.textContent = registerPageLocale() === 'nl' ? 'Kluis voorbereiden…' : 'Preparing your vault…';
+      await new Promise((resolve) => {
+        if (typeof requestAnimationFrame !== 'function') {
+          setTimeout(resolve, 0);
+          return;
+        }
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
       });
-      await stashLoginSession(data, email, password);
-      try { sessionStorage.setItem('notes_just_registered', '1'); } catch (err) { /* ignore */ }
-      try { sessionStorage.setItem('notes_verify_email_hint', '1'); } catch (err) { /* ignore */ }
-      // One Argon2 run, in the worker, stashed so /app adoptDerivedVaultKey
-      // skips a second derive. Paint before it so "Creating account…" is only SRP.
-      if (data?.kdf_salt && window.NotesCrypto?.deriveKey && window.NotesVaultSecrets?.stashBootDerivedKey) {
-        if (submitBtn) submitBtn.textContent = 'Preparing your vault…';
-        await new Promise((resolve) => {
-          if (typeof requestAnimationFrame !== 'function') {
-            setTimeout(resolve, 0);
-            return;
-          }
-          requestAnimationFrame(() => requestAnimationFrame(resolve));
-        });
-        const version = Number(data.vault_kdf_version) === 1 ? 1 : 2;
-        let derived;
-        if (NotesCrypto.workerEnabled?.()) {
-          try {
-            derived = await NotesCrypto.deriveKeyInWorker(password, data.kdf_salt, { kdfVersion: version });
-          } catch (err) {
-            derived = await NotesCrypto.deriveKey(password, data.kdf_salt, { kdfVersion: version });
-          }
-        } else {
+      const version = Number(data.vault_kdf_version) === 1 ? 1 : 2;
+      let derived;
+      if (NotesCrypto.workerEnabled?.()) {
+        try {
+          derived = await NotesCrypto.deriveKeyInWorker(password, data.kdf_salt, { kdfVersion: version });
+        } catch (err) {
           derived = await NotesCrypto.deriveKey(password, data.kdf_salt, { kdfVersion: version });
         }
-        await NotesVaultSecrets.stashBootDerivedKey(derived, data.kdf_salt, derived?.version || version);
+      } else {
+        derived = await NotesCrypto.deriveKey(password, data.kdf_salt, { kdfVersion: version });
       }
-      location.replace(afterAuthUrl('/app'));
-    } catch (err) {
+      await NotesVaultSecrets.stashBootDerivedKey(derived, data.kdf_salt, derived?.version || version);
+    }
+    location.replace(afterAuthUrl('/app'));
+  }
+
+  async function runRegisterAttempt({ allowWhileInFlight = false, fromRetry = false } = {}) {
+    if (registerSuccessOnce) return;
+    if (registerInFlight > 0 && !allowWhileInFlight) return;
+    if (fromRetry) {
+      if (registerRetryLock) return;
+      registerRetryLock = true;
+    }
+    try {
+      if (fromRetry) {
+        const ok = await awaitFreshTurnstileToken();
+        if (!ok) return;
+      }
+      const validated = validateRegisterForm();
+      if (!validated) {
+        registerRegisterFailureUi();
+        return;
+      }
+      const { email, password, turnstileInput } = validated;
+      const attemptId = ++registerAttemptSeq;
+      registerInFlight += 1;
+      clearRegisterHangTimers();
+      clearRegisterHangMessage();
+      hideRegisterSoftFailSignIn();
+      showRegisterError('');
+      const { slowMs, hangMs } = registerHangTiming();
       if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Create account';
+        submitBtn.disabled = true;
+        submitBtn.textContent = tCopy('creating');
       }
-      showError('register-error', err.message);
+      const slowTimer = window.setTimeout(() => {
+        if (attemptId !== registerAttemptSeq) return;
+        if (submitBtn) submitBtn.textContent = tCopy('secure');
+      }, slowMs);
+      const hangTimer = window.setTimeout(() => {
+        if (attemptId !== registerAttemptSeq) return;
+        showRegisterHangMessage();
+      }, hangMs);
+      registerHangTimers.push(slowTimer, hangTimer);
+      try {
+        const company = String(document.getElementById('register-company')?.value || '');
+        const data = await NotesSrpAuth.register(email, password, {
+          company,
+          cf_turnstile_response: turnstileInput ? String(turnstileInput.value || '') : '',
+        });
+        await completeRegisterSuccessOnce(data, email, password);
+      } catch (err) {
+        if (registerSuccessOnce) return;
+        if (attemptId !== registerAttemptSeq) return;
+        registerRegisterFailureUi();
+        hideRegisterSoftFailSignIn();
+        if (isRegisterExistsError(err)) {
+          routeRegisterExistsToLogin(email);
+          return;
+        }
+        if (fromRetry && isRegisterSoftFailError(err)) {
+          showRegisterError(err.message);
+          showRegisterSoftFailSignIn(email);
+          return;
+        }
+        showRegisterError(err.message);
+      } finally {
+        registerInFlight = Math.max(0, registerInFlight - 1);
+      }
+    } finally {
+      if (fromRetry) registerRetryLock = false;
     }
   }
 
+  async function submitRegisterForm() {
+    if (registerInFlight > 0) return;
+    await runRegisterAttempt();
+  }
+
+  retryBtn?.addEventListener('click', () => {
+    if (registerSuccessOnce) return;
+    void runRegisterAttempt({ allowWhileInFlight: true, fromRetry: true });
+  });
+
   window.__notesSubmitRegister = () => {
     submitRegisterForm();
+  };
+  window.__notesRegisterHangTest = {
+    registerHangTiming,
+    isRegisterExistsError,
+    isRegisterSoftFailError,
+    routeRegisterExistsToLogin,
+    runRegisterAttempt,
+    tCopy,
+    completeRegisterSuccessOnce,
+    isRegisterSuccessOnce: () => registerSuccessOnce,
+    awaitFreshTurnstileToken,
   };
   if (window.__notesRegisterQueued) {
     window.__notesRegisterQueued = false;
