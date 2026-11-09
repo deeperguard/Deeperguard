@@ -2863,6 +2863,14 @@ const NotesStore = (() => {
     delete item.sync_retry_key;
     clearSyncPushWrap(item);
     if (pushed?.content_hash) item.content_hash = pushed.content_hash;
+    if (
+      pushed?.content_hash
+      && typeof NotesFreshness !== 'undefined'
+      && item.content
+      && NotesFreshness.shouldTrackType(item.content.type)
+    ) {
+      NotesFreshness.noteAccepted(uuid, item.content, pushed.content_hash);
+    }
     if (result?.rev != null && Number.isFinite(Number(result.rev))) item.rev = Number(result.rev);
     if (item.deleted || !pushed?.ciphertext) return;
     try {
@@ -4766,7 +4774,8 @@ const NotesStore = (() => {
       state.dirty.add(uuid);
       schedulePush();
       if (typeof NotesFreshness !== 'undefined' && NotesFreshness.shouldTrackType(content.type)) {
-        NotesFreshness.noteAccepted(uuid, content, item.content_hash || '');
+        // Ciphertext hash is unknown until wrap/push; adopt after recordPushedState.
+        NotesFreshness.noteAccepted(uuid, content, '');
         scheduleVaultHeadRefresh();
       }
     }

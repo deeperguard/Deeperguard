@@ -242,7 +242,16 @@
     const ver = itemVersion(content);
     const prev = getHwm(id);
     if (prev && ver < prev.v) return; // should have been rejected
-    state.hwm[id] = { v: ver, hash: String(contentHash || prev?.hash || '') };
+    const hash = String(contentHash || '').trim();
+    if (hash) {
+      state.hwm[id] = { v: ver, hash };
+    } else if (prev && ver > prev.v) {
+      // Local bump before encrypt/push: do not keep the previous revision's
+      // content_hash (IV changes on re-encrypt → false fork on echo).
+      state.hwm[id] = { v: ver, hash: '' };
+    } else {
+      state.hwm[id] = { v: ver, hash: String(prev?.hash || '') };
+    }
     schedulePersist();
   }
 

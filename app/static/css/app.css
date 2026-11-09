@@ -273,6 +273,23 @@ body.agenda-editor-open #agenda-editor.agenda-editor { z-index: 210; }
 body.agenda-scope-open {
   overflow: hidden;
 }
+body.agenda-scope-open #agenda-scope-backdrop.agenda-scope-backdrop {
+  z-index: 205;
+}
+body.agenda-scope-open #agenda-scope-chooser.agenda-scope-chooser {
+  z-index: 210;
+}
+/* Toasts must not cover agenda scope chooser or editor sheets. */
+body.agenda-scope-open #toast,
+body.agenda-editor-open #toast {
+  visibility: hidden;
+  pointer-events: none;
+}
+#agenda-editor .agenda-editor-scroll .settings-row,
+#agenda-editor .agenda-editor-scroll .agenda-editor-datetime-row .settings-row {
+  padding-left: 0;
+  padding-right: 0;
+}
 /* Editor max width is ~420px — side-by-side datetime-local clips times on phones. */
 .agenda-editor-datetime-row {
   display: grid;

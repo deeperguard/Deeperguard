@@ -111,6 +111,19 @@ function reset() {
   assert.ok(/older version/i.test(rollback.warning.message));
   assert.strictEqual(NotesFreshness.getHwm('note-a').v, 3, 'HWM unchanged after reject');
 
+  // --- version bump before push: drop stale ciphertext hash (agenda pack edits) ---
+  reset();
+  NotesFreshness.noteAccepted('pack-a', { type: 'agenda_pack', __fv: 1, __fid: 'pack-a' }, 'cipher-v1');
+  NotesFreshness.noteAccepted('pack-a', { type: 'agenda_pack', __fv: 2, __fid: 'pack-a' }, '');
+  assert.strictEqual(NotesFreshness.getHwm('pack-a').v, 2);
+  assert.strictEqual(NotesFreshness.getHwm('pack-a').hash, '');
+  const echo = NotesFreshness.checkIncoming(
+    'pack-a',
+    { type: 'agenda_pack', __fv: 2, __fid: 'pack-a' },
+    'cipher-v2-after-push',
+  );
+  assert.strictEqual(echo.reject, false, 'no false fork on first known hash for bumped version');
+
   // --- same version different hash → item fork ---
   reset();
   NotesFreshness.noteAccepted('note-a', { type: 'note', __fv: 2, __fid: 'note-a' }, 'hash-a');

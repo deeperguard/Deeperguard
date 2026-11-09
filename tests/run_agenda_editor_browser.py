@@ -64,6 +64,30 @@ def start_server(root: Path, port: int):
     raise RuntimeError("flask did not start")
 
 
+def wait_no_fork_toast(page, timeout_ms: int = 3000) -> dict:
+    """Fail fast if freshness fork toast is visible (harness/product regression)."""
+    return page.evaluate(
+        """() => {
+          const el = document.getElementById('toast');
+          const cs = el ? getComputedStyle(el) : null;
+          const toastVisible = !!(
+            el && !el.hidden && el.textContent
+            && cs && cs.visibility !== 'hidden' && cs.display !== 'none'
+          );
+          const forkToast = toastVisible && /possible fork/i.test(el.textContent || '');
+          const warnings = NotesFreshness?.getPublicSnapshot?.()?.warnings || [];
+          const forkWarn = warnings.some((w) => /possible fork/i.test(w?.message || ''));
+          return {
+            toastVisible,
+            forkToast,
+            forkWarn,
+            text: (el && el.textContent) || '',
+            scopeOpen: !document.getElementById('agenda-scope-chooser')?.hidden,
+          };
+        }"""
+    )
+
+
 def click_agenda_event(page, event_id: str | None = None, scope: str | None = "series") -> None:
     if event_id:
         page.locator(f'[data-agenda-id="{event_id}"]').first.click()
@@ -325,6 +349,15 @@ def main() -> int:
                 )
                 page.locator("[data-agenda-occurrence-ms]").first.click()
                 page.wait_for_selector("#agenda-scope-chooser:not([hidden])", timeout=8000)
+                fork_gate = wait_no_fork_toast(page)
+                results.append(
+                    {
+                        "vp": vp_name,
+                        "check": "no_fork_toast_at_scope",
+                        "ok": not fork_gate.get("forkToast") and not fork_gate.get("forkWarn"),
+                        "detail": fork_gate,
+                    }
+                )
                 scope_full = ART / f"occurrence_scope_full_{vp_name}.png"
                 page.screenshot(path=str(scope_full), full_page=True)
                 SIGNOFF.joinpath(scope_full.name).write_bytes(scope_full.read_bytes())
