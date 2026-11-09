@@ -1605,13 +1605,49 @@ const NotesStore = (() => {
   function rotateSyncRetryKey(item) {
     if (!item || typeof item !== 'object') return '';
     delete item.sync_retry_key;
-    return ensureSyncRetryKey(item);
+    const key = ensureSyncRetryKey(item);
+    if (item.sync_push_wrap?.row) {
+      item.sync_push_wrap.row = { ...item.sync_push_wrap.row, sync_retry_key: key };
+    }
+    return key;
   }
 
   function retryConflictBlockedLine(label, error) {
     const name = String(label || '').trim() || 'an item';
     const msg = String(error || '').trim() || syncRetryConflictUserMessage();
     return `“${name}” did not sync: ${msg}`;
+  }
+
+  function syncPushWrapStamp(item, content) {
+    const ts = Number(item?.updated_at) || 0;
+    const tomb = !!(content?.deleted || item?.deleted);
+    return `${ts}|${tomb ? 1 : 0}`;
+  }
+
+  function clearSyncPushWrap(item) {
+    if (item && typeof item === 'object') delete item.sync_push_wrap;
+  }
+
+  function reuseCachedPushRow(item, content) {
+    if (!item || typeof item !== 'object') return null;
+    const cached = item.sync_push_wrap;
+    if (!cached?.row) return null;
+    const stamp = syncPushWrapStamp(item, content);
+    if (cached.stamp !== stamp) return null;
+    const row = { ...cached.row };
+    row.sync_retry_key = ensureSyncRetryKey(item);
+    row.sync_request_hash = cached.row.content_hash;
+    return row;
+  }
+
+  async function wrapItemForPush(uuid, content, item) {
+    const cached = reuseCachedPushRow(item, content);
+    if (cached) return cached;
+    const row = await wrapItem(uuid, content, item.updated_at);
+    if (item && typeof item === 'object') {
+      item.sync_push_wrap = { stamp: syncPushWrapStamp(item, content), row: { ...row } };
+    }
+    return row;
   }
 
   async function wrapItem(uuid, content, updatedAt) {
@@ -2751,6 +2787,7 @@ const NotesStore = (() => {
     const item = state.items.get(uuid);
     if (!item) return;
     delete item.sync_retry_key;
+    clearSyncPushWrap(item);
     if (pushed?.content_hash) item.content_hash = pushed.content_hash;
     if (result?.rev != null && Number.isFinite(Number(result.rev))) item.rev = Number(result.rev);
     if (item.deleted || !pushed?.ciphertext) return;
@@ -3014,7 +3051,7 @@ const NotesStore = (() => {
             deletedIds.add(uuid);
           }
           snapshots.set(uuid, { item, updated_at: item.updated_at });
-          const row = await wrapItem(uuid, content, item.updated_at);
+          const row = await wrapItemForPush(uuid, content, item);
           // The revision this write builds on; the server reports a conflict
           // instead of picking a winner by clock when it has moved on.
           if (item.rev != null && Number.isFinite(Number(item.rev))) row.base_rev = Number(item.rev);
@@ -6305,6 +6342,8 @@ const NotesStore = (() => {
     syncRetryConflictUserMessage,
     retryConflictBlockedLine,
     rotateSyncRetryKey,
+    syncPushWrapStamp,
+    reuseCachedPushRow,
     chunkPushRows,
     verifyVaultPassword,
     fetchAttachmentBlobFromServer,
