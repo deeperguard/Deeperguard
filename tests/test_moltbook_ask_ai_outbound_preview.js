@@ -43,6 +43,7 @@ async function main() {
   const cloudRoute = NotesAiChat.describeOutboundRoute({ host: 'https://ollama.com' });
   assert.ok(cloudRoute.cloud);
   assert.ok(cloudRoute.label.includes('goes through our server to ollama.com'));
+  assert.ok(cloudRoute.label.includes("doesn't store your API key"));
 
   const localRoute = NotesAiChat.describeOutboundRoute({ host: 'http://127.0.0.1:11434' });
   assert.ok(!localRoute.cloud);
@@ -75,8 +76,13 @@ async function main() {
     history: [],
     model: 'llama3',
   });
-  assert.strictEqual(okLocal, true);
-  assert.strictEqual(prompts.length, 0, 'local host skips outbound preview');
+  assert.strictEqual(okLocal, false, 'cloud-only preview helper does not run for local');
+
+  store.setItem(NotesAiChat.CONSENT_RECORD_KEY, JSON.stringify({
+    destination: 'cloud:https://ollama.com',
+    purpose: 'ask-ai',
+    consentedAt: new Date().toISOString(),
+  }));
 
   const okCloud = await NotesAiChat.ensureCloudSendConsent({
     cfg: { host: 'https://ollama.com', apiKey: 'k', model: 'gpt-oss:120b' },
@@ -94,6 +100,7 @@ async function main() {
   assert.ok(prompts[0].preview.includes('Scan line 1'));
   assert.strictEqual(prompts[0].loud, true);
   assert.ok(prompts[0].warnLines.some((l) => l.includes('our server to ollama.com')));
+  assert.ok(prompts[0].warnLines.some((l) => l.includes("doesn't store your API key")));
   assert.ok(prompts[0].warnLines.includes(NotesAiChat.CONTENT_WARN_NOTE));
   assert.ok(prompts[0].warnLines.includes(NotesAiChat.CONTENT_WARN_OCR));
   assert.strictEqual(store.getItem(NotesAiChat.CLOUD_RELAY_ACK_KEY), '1');
@@ -115,7 +122,15 @@ async function main() {
   assert.strictEqual(prompts[1].warnLines.length, 0);
 
   const emptyNote = { content: { title: '', content: '' } };
-  const ocrOnlyStore = memStorage({ [NotesAiChat.CLOUD_RELAY_ACK_KEY]: '1', [NotesAiChat.CLOUD_CONTENT_ACK_KEY]: '{}' });
+  const ocrOnlyStore = memStorage({
+    [NotesAiChat.CLOUD_RELAY_ACK_KEY]: '1',
+    [NotesAiChat.CLOUD_CONTENT_ACK_KEY]: '{}',
+    [NotesAiChat.CONSENT_RECORD_KEY]: JSON.stringify({
+      destination: 'cloud:https://ollama.com',
+      purpose: 'ask-ai',
+      consentedAt: new Date().toISOString(),
+    }),
+  });
   const ocrPrompts = [];
   NotesAiChat.init({
     storage: ocrOnlyStore,

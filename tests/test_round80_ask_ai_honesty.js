@@ -9,7 +9,7 @@
  * - 2FA tab
  * - Lock settings
  * - Device phrase (R74 / R75 / R75.1)
- * - Local Ollama Ask AI (no confirm when host is not ollama.com)
+ * - Local Ollama Ask AI (destination consent; no cloud relay warning or ack)
  */
 const assert = require('assert');
 const fs = require('fs');
@@ -65,7 +65,7 @@ assert.ok(aiChatJs.includes('CLOUD_RELAY_ACK_KEY'));
 assert.ok(aiChatJs.includes('ensureCloudRelayConsent'));
 assert.ok(
   aiChatJs.includes(
-    "Your message and any note content will go through our server to ollama.com. Nothing is stored. Send?",
+    "Our server doesn't store your API key, the prompt or the answer. Ollama has its own terms.",
   ),
 );
 assert.ok(aiChatJs.includes("confirmLabel: 'Send'"));
@@ -88,37 +88,44 @@ async function main() {
   assert.ok(NotesAiChat.isCloudHost('https://ollama.com'));
   assert.ok(!NotesAiChat.isCloudHost('http://127.0.0.1:11434'));
 
+  const prevConfirm = global.confirm;
+  global.confirm = () => true;
+
   const store = memStorage();
-  let confirmCalls = 0;
+  let localConfirms = 0;
   NotesAiChat.init({
     storage: store,
-    confirm: async (message, options) => {
-      confirmCalls += 1;
-      assert.ok(message.includes('through our server to ollama.com'));
-      assert.ok(message.includes('Nothing is stored. Send?'));
-      assert.strictEqual(options.confirmLabel, 'Send');
-      assert.strictEqual(options.cancelLabel, 'Cancel');
+    confirm: async (msg) => {
+      localConfirms += 1;
+      assert.ok(!/our server to ollama\.com/i.test(msg), 'local consent text has no cloud relay warning');
       return true;
     },
   });
-
+  assert.strictEqual(store.getItem(NotesAiChat.CONSENT_RECORD_KEY), null, 'local starts without consent');
   assert.strictEqual(await NotesAiChat.ensureCloudRelayConsent({ host: 'http://localhost:11434' }), true);
-  assert.strictEqual(confirmCalls, 0, 'local Ollama needs no warning');
+  assert.ok(localConfirms >= 1, 'local Ollama prompts for destination consent');
+  assert.ok(store.getItem(NotesAiChat.CONSENT_RECORD_KEY), 'local consent is recorded');
+  assert.strictEqual(store.getItem(NotesAiChat.CLOUD_RELAY_ACK_KEY), null, 'local settings check does not cloud-ack');
+
+  const cloudStore = memStorage();
+  NotesAiChat.init({
+    storage: cloudStore,
+    confirm: async () => true,
+    promptOutboundSend: async () => true,
+  });
+  assert.strictEqual(await NotesAiChat.ensureCloudRelayConsent({ host: 'https://ollama.com' }), true);
+  const cloudRecord = JSON.parse(cloudStore.getItem(NotesAiChat.CONSENT_RECORD_KEY));
+  assert.strictEqual(cloudRecord.destination, 'cloud:https://ollama.com');
 
   assert.strictEqual(await NotesAiChat.ensureCloudRelayConsent({ host: 'https://ollama.com' }), true);
-  assert.strictEqual(confirmCalls, 1);
-  assert.strictEqual(store.getItem(NotesAiChat.CLOUD_RELAY_ACK_KEY), '1');
-
-  assert.strictEqual(await NotesAiChat.ensureCloudRelayConsent({ host: 'https://ollama.com' }), true);
-  assert.strictEqual(confirmCalls, 1, 'acked device does not prompt again');
 
   const cancelStore = memStorage();
-  NotesAiChat.init({
-    storage: cancelStore,
-    confirm: async () => false,
-  });
+  NotesAiChat.init({ storage: cancelStore, promptOutboundSend: async () => false });
+  global.confirm = () => false;
   assert.strictEqual(await NotesAiChat.ensureCloudRelayConsent({ host: 'https://ollama.com' }), false);
-  assert.strictEqual(cancelStore.getItem(NotesAiChat.CLOUD_RELAY_ACK_KEY), null, 'cancel does not persist ack');
+  assert.strictEqual(cancelStore.getItem(NotesAiChat.CONSENT_RECORD_KEY), null, 'cancel does not persist consent');
+
+  global.confirm = prevConfirm;
 
   console.log('test_round80_ask_ai_honesty ok');
 }
