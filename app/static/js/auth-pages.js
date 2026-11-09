@@ -266,6 +266,11 @@ if (loginForm) {
         'login-error',
         'This device was signed out remotely. Local vault data on this device was deleted. Sign in again to download your notes.',
       );
+    } else if (reason === 'register-exists') {
+      showError(
+        'login-error',
+        'That email already has an account. Sign in with your password.',
+      );
     }
   } catch (err) {
     /* ignore */
@@ -639,6 +644,34 @@ function bindPasswordToggles(root) {
   });
 }
 
+function registerPageLocale() {
+  const lang = String(document.documentElement?.lang || 'en').toLowerCase();
+  return lang.startsWith('nl') ? 'nl' : 'en';
+}
+
+function registerHangTiming() {
+  const o = window.__notesRegisterTiming;
+  const slowMs = Number(o?.slowMs);
+  const hangMs = Number(o?.hangMs);
+  return {
+    slowMs: slowMs > 0 ? slowMs : 6000,
+    hangMs: hangMs > 0 ? hangMs : 20000,
+  };
+}
+
+function isRegisterExistsError(err) {
+  const msg = String(err?.message || err?.error || '').toLowerCase();
+  if (err?.code === 'account_exists') return true;
+  return msg.includes('already have an account') || msg.includes('account exists');
+}
+
+function routeRegisterExistsToLogin(email) {
+  const q = new URLSearchParams();
+  if (email) q.set('email', email);
+  q.set('reason', 'register-exists');
+  location.href = `/login?${q.toString()}`;
+}
+
 const registerForm = document.getElementById('register-form');
 if (registerForm) {
   bindPasswordToggles(registerForm);
@@ -676,7 +709,59 @@ if (registerForm) {
     if (recoverInput.checked) setFieldError('register-recover-ack', 'register-recover-error', '');
   });
 
-  async function submitRegisterForm() {
+  const submitBtn = document.getElementById('register-submit');
+  const retryBtn = document.getElementById('register-retry');
+  const hangLive = document.getElementById('register-hang-live');
+  let registerAttemptSeq = 0;
+  let registerInFlight = 0;
+  let registerRetryLock = false;
+  let registerHangTimers = [];
+
+  const registerCopy = {
+    creating: { en: 'Creating account…', nl: 'Account aanmaken…' },
+    secure: {
+      en: 'Creating your account securely…',
+      nl: 'Je account wordt veilig aangemaakt…',
+    },
+    hang: {
+      en: 'Sign-up is not working right now. Please try again.',
+      nl: 'Aanmelden lukt nu niet. Probeer het opnieuw.',
+    },
+    submit: { en: 'Create account', nl: 'Account aanmaken' },
+    retry: { en: 'Retry', nl: 'Opnieuw' },
+  };
+
+  function tCopy(key) {
+    const loc = registerPageLocale();
+    return registerCopy[key]?.[loc] || registerCopy[key]?.en || '';
+  }
+
+  function clearRegisterHangTimers() {
+    for (const id of registerHangTimers) clearTimeout(id);
+    registerHangTimers = [];
+  }
+
+  function clearRegisterHangMessage() {
+    if (hangLive) {
+      hangLive.textContent = '';
+      hangLive.hidden = true;
+    }
+    if (retryBtn) retryBtn.hidden = true;
+  }
+
+  function showRegisterHangMessage() {
+    if (hangLive) {
+      hangLive.textContent = '';
+      hangLive.hidden = true;
+      window.setTimeout(() => {
+        hangLive.textContent = tCopy('hang');
+        hangLive.hidden = false;
+      }, 20);
+    }
+    if (retryBtn) retryBtn.hidden = false;
+  }
+
+  function validateRegisterForm() {
     showError('register-error', '');
     const email = String(emailInput?.value || '').trim().toLowerCase();
     const password = String(passwordInput?.value || '');
@@ -712,63 +797,121 @@ if (registerForm) {
     } else {
       setFieldError('register-recover-ack', 'register-recover-error', '');
     }
-    if (invalid) return;
+    if (invalid) return null;
     const turnstileWidget = document.querySelector('.cf-turnstile');
     const turnstileInput = document.querySelector('input[name="cf-turnstile-response"]');
     if (turnstileWidget && !String(turnstileInput?.value || '').trim()) {
       showError('register-error', 'Please complete the security check and try again.');
-      return;
+      return null;
     }
-    const submitBtn = document.getElementById('register-submit');
+    return { email, password, turnstileInput };
+  }
+
+  async function finishRegisterSuccess(data, email, password) {
+    await stashLoginSession(data, email, password);
+    try { sessionStorage.setItem('notes_just_registered', '1'); } catch (err) { /* ignore */ }
+    try { sessionStorage.setItem('notes_verify_email_hint', '1'); } catch (err) { /* ignore */ }
+    if (data?.kdf_salt && window.NotesCrypto?.deriveKey && window.NotesVaultSecrets?.stashBootDerivedKey) {
+      if (submitBtn) submitBtn.textContent = registerPageLocale() === 'nl' ? 'Kluis voorbereiden…' : 'Preparing your vault…';
+      await new Promise((resolve) => {
+        if (typeof requestAnimationFrame !== 'function') {
+          setTimeout(resolve, 0);
+          return;
+        }
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      });
+      const version = Number(data.vault_kdf_version) === 1 ? 1 : 2;
+      let derived;
+      if (NotesCrypto.workerEnabled?.()) {
+        try {
+          derived = await NotesCrypto.deriveKeyInWorker(password, data.kdf_salt, { kdfVersion: version });
+        } catch (err) {
+          derived = await NotesCrypto.deriveKey(password, data.kdf_salt, { kdfVersion: version });
+        }
+      } else {
+        derived = await NotesCrypto.deriveKey(password, data.kdf_salt, { kdfVersion: version });
+      }
+      await NotesVaultSecrets.stashBootDerivedKey(derived, data.kdf_salt, derived?.version || version);
+    }
+    location.replace(afterAuthUrl('/app'));
+  }
+
+  async function runRegisterAttempt({ allowWhileInFlight = false } = {}) {
+    if (registerInFlight > 0 && !allowWhileInFlight) return;
+    if (registerRetryLock) return;
+    const validated = validateRegisterForm();
+    if (!validated) return;
+    const { email, password, turnstileInput } = validated;
+    const attemptId = ++registerAttemptSeq;
+    registerInFlight += 1;
+    clearRegisterHangTimers();
+    clearRegisterHangMessage();
+    showError('register-error', '');
+    const { slowMs, hangMs } = registerHangTiming();
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Creating account…';
+      submitBtn.textContent = tCopy('creating');
     }
+    const slowTimer = window.setTimeout(() => {
+      if (attemptId !== registerAttemptSeq) return;
+      if (submitBtn) submitBtn.textContent = tCopy('secure');
+    }, slowMs);
+    const hangTimer = window.setTimeout(() => {
+      if (attemptId !== registerAttemptSeq) return;
+      showRegisterHangMessage();
+    }, hangMs);
+    registerHangTimers.push(slowTimer, hangTimer);
     try {
       const company = String(document.getElementById('register-company')?.value || '');
       const data = await NotesSrpAuth.register(email, password, {
         company,
         cf_turnstile_response: turnstileInput ? String(turnstileInput.value || '') : '',
       });
-      await stashLoginSession(data, email, password);
-      try { sessionStorage.setItem('notes_just_registered', '1'); } catch (err) { /* ignore */ }
-      try { sessionStorage.setItem('notes_verify_email_hint', '1'); } catch (err) { /* ignore */ }
-      // One Argon2 run, in the worker, stashed so /app adoptDerivedVaultKey
-      // skips a second derive. Paint before it so "Creating account…" is only SRP.
-      if (data?.kdf_salt && window.NotesCrypto?.deriveKey && window.NotesVaultSecrets?.stashBootDerivedKey) {
-        if (submitBtn) submitBtn.textContent = 'Preparing your vault…';
-        await new Promise((resolve) => {
-          if (typeof requestAnimationFrame !== 'function') {
-            setTimeout(resolve, 0);
-            return;
-          }
-          requestAnimationFrame(() => requestAnimationFrame(resolve));
-        });
-        const version = Number(data.vault_kdf_version) === 1 ? 1 : 2;
-        let derived;
-        if (NotesCrypto.workerEnabled?.()) {
-          try {
-            derived = await NotesCrypto.deriveKeyInWorker(password, data.kdf_salt, { kdfVersion: version });
-          } catch (err) {
-            derived = await NotesCrypto.deriveKey(password, data.kdf_salt, { kdfVersion: version });
-          }
-        } else {
-          derived = await NotesCrypto.deriveKey(password, data.kdf_salt, { kdfVersion: version });
-        }
-        await NotesVaultSecrets.stashBootDerivedKey(derived, data.kdf_salt, derived?.version || version);
-      }
-      location.replace(afterAuthUrl('/app'));
+      if (attemptId !== registerAttemptSeq) return;
+      clearRegisterHangTimers();
+      clearRegisterHangMessage();
+      await finishRegisterSuccess(data, email, password);
     } catch (err) {
+      if (attemptId !== registerAttemptSeq) return;
+      clearRegisterHangTimers();
+      if (isRegisterExistsError(err)) {
+        routeRegisterExistsToLogin(email);
+        return;
+      }
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Create account';
+        submitBtn.textContent = tCopy('submit');
       }
       showError('register-error', err.message);
+    } finally {
+      registerInFlight = Math.max(0, registerInFlight - 1);
     }
   }
 
+  async function submitRegisterForm() {
+    if (registerInFlight > 0) return;
+    await runRegisterAttempt();
+  }
+
+  retryBtn?.addEventListener('click', async () => {
+    if (registerRetryLock) return;
+    registerRetryLock = true;
+    try {
+      await runRegisterAttempt({ allowWhileInFlight: true });
+    } finally {
+      registerRetryLock = false;
+    }
+  });
+
   window.__notesSubmitRegister = () => {
     submitRegisterForm();
+  };
+  window.__notesRegisterHangTest = {
+    registerHangTiming,
+    isRegisterExistsError,
+    routeRegisterExistsToLogin,
+    runRegisterAttempt,
+    tCopy,
   };
   if (window.__notesRegisterQueued) {
     window.__notesRegisterQueued = false;

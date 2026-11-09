@@ -384,7 +384,8 @@
       }
       if (extras.company != null) body.company = String(extras.company);
     }
-    return postJson('/api/auth/srp/register', body);
+    // Do not abort slow sign-ups early; register page handles UX timers separately.
+    return postJson('/api/auth/srp/register', body, { timeoutMs: 180000 });
   }
 
   async function maybeUpgradeSrpKdf(email, password, loginResult) {
