@@ -2661,18 +2661,33 @@ const NotesStore = (() => {
     return String(label || '').trim() || (content?.type === 'attachment' ? 'a file' : 'an item');
   }
 
+  function syncRetryConflictUserMessage() {
+    const nl = String(typeof document !== 'undefined' && document.documentElement?.lang || '')
+      .toLowerCase()
+      .startsWith('nl');
+    return nl
+      ? 'Deze wijziging kon niet veilig worden opgeslagen. De notitie is mogelijk gewijzigd — bewerk en sla opnieuw op.'
+      : 'This save could not be applied safely. The note may have changed — edit and save again.';
+  }
+
   // Items the server refuses for size or quota stay on this device and out of
   // the push queue's way; they are retried by sync() and whenever they change.
   function blockItem(uuid, result) {
     const item = state.items.get(uuid);
+    const status = String(result?.status || '');
+    const serverError = String(result?.error || '').trim();
+    const display = status === 'retry_conflict'
+      ? (serverError || syncRetryConflictUserMessage())
+      : (serverError || String(result?.reason || ''));
     state.blocked.set(uuid, {
-      status: String(result?.status || ''),
-      reason: String(result?.reason || result?.error || ''),
+      status,
+      reason: String(result?.reason || ''),
+      error: display,
       max_item_bytes: Number(result?.max_item_bytes) || 0,
       updated_at: Number(item?.updated_at) || 0,
       at: Date.now(),
     });
-    logSync('push-blocked', { uuid, status: result?.status, reason: result?.reason || result?.error || '' });
+    logSync('push-blocked', { uuid, status: result?.status, reason: result?.reason || '', error: display });
   }
 
   function blockedUnchanged(uuid, item) {
@@ -2697,7 +2712,7 @@ const NotesStore = (() => {
     if (first.status === 'quota_exceeded') return `${label} did not sync: storage quota reached${more}`;
     if (first.status === 'too_large') return `${label} did not sync: too large for the server${more}`;
     if (first.status === 'retry_conflict') {
-      return (first.reason || first.error || `${label} could not be saved safely`) + more;
+      return (first.error || syncRetryConflictUserMessage()) + more;
     }
     return `${label} did not sync${more}`;
   }
@@ -6272,6 +6287,7 @@ const NotesStore = (() => {
     conflictCopySuffix: () => CONFLICT_SUFFIX,
     setConflictCopyCallback,
     blockedItems,
+    syncRetryConflictUserMessage,
     chunkPushRows,
     verifyVaultPassword,
     fetchAttachmentBlobFromServer,
