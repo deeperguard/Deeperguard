@@ -75,8 +75,13 @@ async function main() {
     history: [],
     model: 'llama3',
   });
-  assert.strictEqual(okLocal, true);
-  assert.strictEqual(prompts.length, 0, 'local host skips outbound preview');
+  assert.strictEqual(okLocal, false, 'cloud-only preview helper does not run for local');
+
+  store.setItem(NotesAiChat.CONSENT_RECORD_KEY, JSON.stringify({
+    destination: 'cloud:https://ollama.com',
+    purpose: 'ask-ai',
+    consentedAt: new Date().toISOString(),
+  }));
 
   const okCloud = await NotesAiChat.ensureCloudSendConsent({
     cfg: { host: 'https://ollama.com', apiKey: 'k', model: 'gpt-oss:120b' },
@@ -115,7 +120,15 @@ async function main() {
   assert.strictEqual(prompts[1].warnLines.length, 0);
 
   const emptyNote = { content: { title: '', content: '' } };
-  const ocrOnlyStore = memStorage({ [NotesAiChat.CLOUD_RELAY_ACK_KEY]: '1', [NotesAiChat.CLOUD_CONTENT_ACK_KEY]: '{}' });
+  const ocrOnlyStore = memStorage({
+    [NotesAiChat.CLOUD_RELAY_ACK_KEY]: '1',
+    [NotesAiChat.CLOUD_CONTENT_ACK_KEY]: '{}',
+    [NotesAiChat.CONSENT_RECORD_KEY]: JSON.stringify({
+      destination: 'cloud:https://ollama.com',
+      purpose: 'ask-ai',
+      consentedAt: new Date().toISOString(),
+    }),
+  });
   const ocrPrompts = [];
   NotesAiChat.init({
     storage: ocrOnlyStore,
