@@ -95,6 +95,7 @@ async function main() {
   NotesAiChat.init({ storage: store, promptOutboundSend: async () => true });
   assert.strictEqual(await NotesAiChat.ensureCloudRelayConsent({ host: 'http://localhost:11434' }), true);
   assert.ok(store.getItem(NotesAiChat.CONSENT_RECORD_KEY), 'local consent is recorded');
+  assert.strictEqual(store.getItem(NotesAiChat.CLOUD_RELAY_ACK_KEY), null, 'local settings check does not cloud-ack');
 
   const cloudStore = memStorage();
   NotesAiChat.init({ storage: cloudStore, promptOutboundSend: async () => true });

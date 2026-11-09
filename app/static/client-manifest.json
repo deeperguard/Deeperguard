@@ -38,10 +38,10 @@
       "url": "/static/js/agenda.eb0a825311075af8.js"
     },
     "js/ai-chat.js": {
-      "bytes": 27644,
-      "sha256": "486704f1ab1903eb81a62c1d02f76ab33de2c7e81773bf4500413e76da68dbfa",
-      "sri": "sha384-CEzz5t4IZy7PZKvg1HnWrbl/twUmykEq+9umYwiBbGDes6uWfHBun8v3RLJYqQLl",
-      "url": "/static/js/ai-chat.486704f1ab1903eb.js"
+      "bytes": 33074,
+      "sha256": "a1f6dff1ecef37367a2f7aa3b1e5f0867db273e6e067cbca9f8e30842cfeafb7",
+      "sri": "sha384-AfR3r13PJL82rpR12D3HB3A5Vn60ns3AjUBBfU+fJmJJmLPiYtuA+u0hHERqK79p",
+      "url": "/static/js/ai-chat.a1f6dff1ecef3736.js"
     },
     "js/app.js": {
       "bytes": 961943,
@@ -393,6 +393,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "4e297d33db2b05fb7b2d257cdbfa59166c970e5eb29bb052d787baf546c36b1e",
+  "manifest_sha256": "0117204fb5c7ec53e7229e7e831aec6bfd0ef47a93d4ead93969d3378afdb862",
   "version": 1
 }

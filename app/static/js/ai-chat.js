@@ -496,9 +496,10 @@ const NotesAiChat = (() => {
     const body = requestBody({ model, context, history, question });
     const preview = formatOutboundPreview(body);
     const route = describeOutboundRoute(cfg);
+    const cloud = route.cloud;
     const sensitivity = classifyOutboundContent(note, attachments, { includeOcr });
     const contentAck = readContentAck();
-    const needRelayAck = !hasCloudRelayAck();
+    const needRelayAck = cloud && !hasCloudRelayAck();
     const needNoteAck = sensitivity.noteText && !contentAck.note;
     const needOcrAck = sensitivity.ocrText && !contentAck.ocr;
     const loud = needRelayAck || needNoteAck || needOcrAck;
@@ -631,7 +632,7 @@ const NotesAiChat = (() => {
     });
     const ok = await promptCloudOutboundSend(plan);
     if (!ok) return false;
-    if (plan.needRelayAck) setCloudRelayAck();
+    if (isCloudHost(cfg?.host) && plan.needRelayAck) setCloudRelayAck();
     if (plan.sensitivity.noteText) setContentAck({ note: true });
     if (plan.sensitivity.ocrText) setContentAck({ ocr: true });
     return true;
@@ -666,7 +667,7 @@ const NotesAiChat = (() => {
       });
       if (!ok) return false;
       writeConsentRecord(normalized);
-      if (plan.needRelayAck) setCloudRelayAck();
+      if (cloud && plan.needRelayAck) setCloudRelayAck();
       if (plan.sensitivity.noteText) setContentAck({ note: true });
       if (plan.sensitivity.ocrText) setContentAck({ ocr: true });
       return true;

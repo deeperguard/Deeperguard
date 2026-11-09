@@ -31,6 +31,18 @@ const note = { content: { title: 'T', content: 'Body' } };
 
   assert.strictEqual(NotesAiChat.destinationId({ host: 'https://ollama.com' }), 'cloud:https://ollama.com');
 
+  const localPlan = NotesAiChat.outboundPromptPlan({
+    cfg: { host: 'http://127.0.0.1:11434' },
+    note,
+    attachments: [],
+    includeOcr: false,
+    question: 'q',
+    history: [],
+    model: 'llama3',
+  });
+  assert.ok(!localPlan.needRelayAck, 'local path does not need cloud relay ack');
+  assert.ok(!localPlan.warnLines.some((l) => /our server to ollama\.com/i.test(l)), 'local prompt has no cloud relay warning');
+
   const localOk = await NotesAiChat.ensureSendConsent({
     cfg: { host: 'http://127.0.0.1:11434' },
     note,
@@ -42,6 +54,7 @@ const note = { content: { title: 'T', content: 'Body' } };
   });
   assert.strictEqual(localOk, true);
   assert.ok(confirms >= 1, 'missing record re-prompts (local destination named)');
+  assert.strictEqual(store.getItem(NotesAiChat.CLOUD_RELAY_ACK_KEY), null, 'local send does not set cloud relay ack');
   const localRec = JSON.parse(store._data[NotesAiChat.CONSENT_RECORD_KEY]);
   assert.strictEqual(localRec.destination, 'local:http://127.0.0.1:11434');
 
