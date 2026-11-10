@@ -20,7 +20,7 @@ On a device you don't control, don't let the browser save your password, and ski
 
 Your notes are encrypted on the device you're using with AES-GCM 256 before they sync, so what reaches our server is ciphertext, not your notes. That holds on a borrowed laptop too. But encryption can't protect against the device itself: a public or unknown computer could have software that records what you type or shows on screen. If you can, use your own phone instead, and treat a shared computer as a last resort. Encryption also can't protect a screen someone else is looking at, or a session you forgot to close. That part is up to the habits below.
 
-The one exception is Ask AI: text you choose to send to Ask AI passes through our server to Ollama Cloud. On a device that isn't yours, it's simplest to leave Ask AI for later.
+The one exception to that ciphertext rule is Ask AI: text you choose to send to Ask AI passes through our server to Ollama Cloud. On a device that isn't yours, it's simplest to leave Ask AI for later.
 
 ## Four habits for a device that isn't yours
 
