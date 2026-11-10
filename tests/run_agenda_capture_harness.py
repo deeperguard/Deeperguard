@@ -67,8 +67,18 @@ GO_AGENDA_TAB = """
 
 SET_THEME = """
 (theme) => {
-  document.documentElement.setAttribute('data-theme', theme);
-  try { localStorage.setItem('notes_theme', theme); } catch (e) {}
+  const t = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  document.documentElement.style.colorScheme = t;
+  if (document.body) document.body.dataset.theme = t;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', t === 'light' ? '#ffffff' : '#0f1419');
+  try {
+    const raw = localStorage.getItem('deeperguard-prefs') || '{}';
+    const p = JSON.parse(raw);
+    p.theme = t;
+    localStorage.setItem('deeperguard-prefs', JSON.stringify(p));
+  } catch (e) { /* ignore */ }
 }
 """
 
@@ -140,6 +150,23 @@ def ensure_session(page, base: str, email: str, password: str, *, registered: bo
     page.evaluate(DISMISS_CHROME)
 
 
+PICK_VIEW = """
+(view) => {
+  if (document.getElementById('agenda-phone-more')) {
+    document.body.classList.remove('agenda-phone-menu-open');
+    const b = document.getElementById('agenda-phone-menu-backdrop');
+    if (b) b.hidden = true;
+    document.getElementById('agenda-phone-more')?.click();
+    document.querySelector(`#agenda-phone-menu [data-agenda-view="${view}"]`)?.click();
+    document.body.classList.remove('agenda-phone-menu-open');
+    if (b) b.hidden = true;
+  } else {
+    document.querySelector(`[data-agenda-view="${view}"]`)?.click();
+  }
+}
+"""
+
+
 def capture(
     page,
     name: str,
@@ -147,9 +174,11 @@ def capture(
     *,
     open_menu: bool = False,
 ) -> None:
+    scheme = "light" if theme == "light" else "dark"
+    page.emulate_media(color_scheme=scheme)
     page.evaluate(DISMISS_CHROME)
-    page.evaluate(SET_THEME, theme)
-    page.wait_for_timeout(200)
+    page.evaluate(SET_THEME, scheme)
+    page.wait_for_timeout(350)
     if open_menu:
         page.evaluate("() => document.getElementById('agenda-phone-more')?.click()")
         page.wait_for_timeout(250)
@@ -187,7 +216,7 @@ def main() -> int:
             seed = PR_B_SEED if pr == "b" else SEED_FIXTURE
             fx = page.evaluate(seed)
             page.evaluate(GO_AGENDA_TAB)
-            page.wait_for_selector("#agenda-pane:not([hidden])", timeout=30_000)
+            page.wait_for_selector("#agenda-pane", state="attached", timeout=30_000)
             page.wait_for_selector("#agenda-root .agenda-body", state="attached", timeout=30_000)
 
             for theme in ("light", "dark"):
@@ -253,6 +282,31 @@ def main() -> int:
                             tag2 = f"agenda-pr-b-{theme}-week-polish-{vp_name}x{h}"
                             page.locator(".agenda-week-layout").screenshot(path=str(ART / f"{tag2}.png"))
                             paths.append(f"{tag2}.png")
+                            page.click('[data-agenda-view="agenda"]')
+                            page.evaluate(RE_RENDER)
+                            page.wait_for_timeout(400)
+                            tag3 = f"agenda-pr-b-{theme}-list-{vp_name}x{h}"
+                            capture(page, f"{tag3}.png", theme)
+                            paths.append(f"{tag3}.png")
+            if pr == "b":
+                page.evaluate(
+                    """() => {
+                      NotesStore.listAgendaEvents().forEach((e) => NotesStore.removeAgendaEvent(e.id));
+                      return NotesStore.flush();
+                    }""",
+                )
+                for vp_name, w, h in (("390", 390, 844), ("1280", 1280, 800)):
+                    for theme in ("light", "dark"):
+                        scheme = "light" if theme == "light" else "dark"
+                        page.set_viewport_size({"width": w, "height": h})
+                        page.emulate_media(color_scheme=scheme)
+                        page.evaluate(SET_THEME, scheme)
+                        page.evaluate(PICK_VIEW, "agenda")
+                        page.evaluate(RE_RENDER)
+                        page.wait_for_timeout(400)
+                        tag = f"agenda-pr-b-empty-{theme}-list-{vp_name}x{h}.png"
+                        capture(page, tag, theme)
+                        paths.append(tag)
             ctx.close()
             browser.close()
     finally:
