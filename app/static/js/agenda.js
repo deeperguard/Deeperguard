@@ -184,6 +184,8 @@
     editorScope: 'series',
     editorOccurrenceStartMs: 0,
     pendingEditor: null,
+    editorReturnFocusId: '',
+    editorReturnFocusOccurrenceMs: 0,
   };
 
   let rootEl = null;
@@ -1066,7 +1068,9 @@
       });
     }
 
-    rootEl.querySelector('#agenda-add-event')?.addEventListener('click', () => {
+    rootEl.querySelector('#agenda-add-event')?.addEventListener('click', (ev) => {
+      const btn = ev.currentTarget;
+      rememberEditorReturnFocus(btn instanceof HTMLElement ? btn : null, '', 0);
       openEditor(null);
     });
     rootEl.querySelector('#agenda-calendar-settings-btn')?.addEventListener('click', () => {
@@ -1080,6 +1084,7 @@
         const id = btn.getAttribute('data-agenda-id');
         const rawMs = btn.getAttribute('data-agenda-occurrence-ms');
         const occurrenceMs = rawMs ? Number(rawMs) : 0;
+        rememberEditorReturnFocus(btn, id, occurrenceMs);
         beginEditFromClick(id, occurrenceMs);
       });
     });
@@ -1208,6 +1213,45 @@
     if (adv) adv.hidden = kind !== 'advanced';
   }
 
+  function cssAttrEscape(value) {
+    const s = String(value || '');
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(s);
+    return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  function rememberEditorReturnFocus(fromEl, id, occurrenceMs) {
+    if (fromEl instanceof HTMLElement) editorReturnFocus = fromEl;
+    state.editorReturnFocusId = String(id || '');
+    state.editorReturnFocusOccurrenceMs = Number.isFinite(Number(occurrenceMs)) ? Number(occurrenceMs) : 0;
+  }
+
+  function queryEditorReturnFocusChip() {
+    const id = state.editorReturnFocusId;
+    if (!id) return null;
+    const root = rootEl || document.getElementById('agenda-root');
+    if (!root) return null;
+    const escId = cssAttrEscape(id);
+    const ms = state.editorReturnFocusOccurrenceMs;
+    let chip = null;
+    if (ms > 0) {
+      chip = root.querySelector(`[data-agenda-id="${escId}"][data-agenda-occurrence-ms="${ms}"]`);
+    }
+    if (!chip) chip = root.querySelector(`[data-agenda-id="${escId}"]`);
+    return chip instanceof HTMLElement ? chip : null;
+  }
+
+  function focusEditorReturnTarget() {
+    const chip = queryEditorReturnFocusChip();
+    const el = chip
+      || (editorReturnFocus && editorReturnFocus.isConnected ? editorReturnFocus : null)
+      || (rootEl && rootEl.querySelector('.agenda-add'))
+      || document.querySelector('.agenda-add');
+    editorReturnFocus = null;
+    state.editorReturnFocusId = '';
+    state.editorReturnFocusOccurrenceMs = 0;
+    if (el instanceof HTMLElement) el.focus({ preventScroll: false });
+  }
+
   function beginEditFromClick(id, occurrenceMs) {
     if (!id) {
       openEditor(null, { scope: 'series' });
@@ -1226,13 +1270,14 @@
     openEditor(id, { scope: 'series' });
   }
 
-  function closeScopeChooser() {
+  function closeScopeChooser({ restoreFocus = true } = {}) {
     const backdrop = document.getElementById('agenda-scope-backdrop');
     const dialog = document.getElementById('agenda-scope-chooser');
     if (backdrop) backdrop.hidden = true;
     if (dialog) dialog.hidden = true;
     document.body.classList.remove('agenda-scope-open');
     state.pendingEditor = null;
+    if (restoreFocus) focusEditorReturnTarget();
   }
 
   function openScopeChooser(ev) {
@@ -1267,7 +1312,7 @@
         const pending = state.pendingEditor;
         if (!pending) return closeScopeChooser();
         const scope = btn.getAttribute('data-agenda-edit-scope') || 'series';
-        closeScopeChooser();
+        closeScopeChooser({ restoreFocus: false });
         openEditor(pending.id, { scope, occurrenceMs: pending.occurrenceMs });
       });
     });
@@ -1417,9 +1462,10 @@
     document.getElementById('agenda-edit-delete')?.toggleAttribute('hidden', !state.selectedId);
     applyEditorScopeUi(scope, content.rrule || '');
 
-    editorReturnFocus = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
+    if (!editorReturnFocus) {
+      const ae = document.activeElement;
+      if (ae instanceof HTMLElement) editorReturnFocus = ae;
+    }
     backdrop.hidden = false;
     dialog.hidden = false;
     document.body.classList.add('agenda-editor-open');
@@ -1492,14 +1538,31 @@
   function closeEditor() {
     const backdrop = document.getElementById('agenda-editor-backdrop');
     const dialog = document.getElementById('agenda-editor');
-    const returnFocus = editorReturnFocus;
-    editorReturnFocus = null;
     if (backdrop) backdrop.hidden = true;
     if (dialog) dialog.hidden = true;
     document.body.classList.remove('agenda-editor-open');
     state.editorScope = 'series';
     state.editorOccurrenceStartMs = 0;
-    if (returnFocus && returnFocus.isConnected) returnFocus.focus();
+    focusEditorReturnTarget();
+  }
+
+  function handleEscapeKey(ev) {
+    if (!ev || ev.key !== 'Escape') return false;
+    const scopeDialog = document.getElementById('agenda-scope-chooser');
+    if (scopeDialog && !scopeDialog.hidden) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeScopeChooser();
+      return true;
+    }
+    const dialog = document.getElementById('agenda-editor');
+    if (document.body.classList.contains('agenda-editor-open') && dialog && !dialog.hidden) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeEditor();
+      return true;
+    }
+    return false;
   }
 
   function saveEditor() {
@@ -1664,19 +1727,7 @@
     document.getElementById('agenda-edit-save')?.addEventListener('click', saveEditor);
     document.getElementById('agenda-edit-delete')?.addEventListener('click', deleteEditor);
     document.getElementById('agenda-editor-backdrop')?.addEventListener('click', closeEditor);
-    document.addEventListener('keydown', (ev) => {
-      if (ev.key !== 'Escape') return;
-      const scopeDialog = document.getElementById('agenda-scope-chooser');
-      if (scopeDialog && !scopeDialog.hidden) {
-        ev.preventDefault();
-        closeScopeChooser();
-        return;
-      }
-      const dialog = document.getElementById('agenda-editor');
-      if (!dialog || dialog.hidden) return;
-      ev.preventDefault();
-      closeEditor();
-    });
+    document.addEventListener('keydown', handleEscapeKey, true);
     const ad = document.getElementById('agenda-edit-allday');
     if (ad) {
       ad.addEventListener('change', () => {
@@ -1759,6 +1810,9 @@
     onTabShown,
     openNewEvent,
     seriesNoticeForEditor,
+    handleEscapeKey,
+    closeEditor,
+    closeScopeChooser,
   };
   global.__notesCloseAgendaCalendarSettings = closeCalendarSettingsPanel;
 }(typeof window !== 'undefined' ? window : globalThis));
