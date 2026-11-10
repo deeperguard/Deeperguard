@@ -209,6 +209,29 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
 }
 body.agenda-editor-open #agenda-editor-backdrop.agenda-editor-backdrop { z-index: 205; }
 body.agenda-editor-open #agenda-editor.agenda-editor { z-index: 210; }
+body.agenda-detail-open #agenda-detail-backdrop { z-index: 203; }
+body.agenda-detail-open #agenda-detail-card { z-index: 208; }
+.agenda-detail-card { max-width: 420px; }
+.agenda-detail-when { margin: 0 0 8px; font-size: 14px; }
+.agenda-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+.agenda-color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--swatch);
+  cursor: pointer;
+  padding: 0;
+}
+.agenda-color-swatch.is-selected {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px color-mix(in srgb, var(--text) 35%, transparent);
+}
 .agenda-editor-scroll {
   flex: 1;
   min-height: 0;

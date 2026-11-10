@@ -2431,6 +2431,17 @@
       </div>
     </div>
   </div>
+  <div id="agenda-detail-backdrop" class="settings-backdrop agenda-detail-backdrop" hidden></div>
+  <div id="agenda-detail-card" class="confirm-dialog agenda-detail-card" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-detail-title">
+    <h2 id="agenda-detail-title" class="agenda-editor-heading">Event</h2>
+    <p id="agenda-detail-when" class="agenda-detail-when muted"></p>
+    <p id="agenda-detail-location" class="agenda-detail-loc" hidden></p>
+    <p id="agenda-detail-notes" class="agenda-detail-notes muted" hidden></p>
+    <div class="confirm-dialog-actions agenda-detail-actions">
+      <button type="button" class="btn ghost" id="agenda-detail-close">Close</button>
+      <button type="button" class="btn primary" id="agenda-detail-edit">Edit</button>
+    </div>
+  </div>
   <div id="agenda-editor-backdrop" class="settings-backdrop agenda-editor-backdrop" hidden></div>
   <div id="agenda-editor" class="confirm-dialog agenda-editor" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-edit-visible-title">
     <div class="agenda-editor-scroll">
@@ -2482,19 +2493,23 @@
       <label class="settings-row stacked">Location
         <input id="agenda-edit-location" type="text" maxlength="500" autocomplete="off">
       </label>
-      <label class="settings-row stacked">Join link (https only)
+      <fieldset class="agenda-editor-colors">
+        <legend class="muted">Color</legend>
+        <div id="agenda-edit-colors" class="agenda-color-swatches" role="radiogroup" aria-label="Event color"></div>
+      </fieldset>
+      <label class="settings-row stacked">Meeting link (https only)
         <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://">
       </label>
       <p id="agenda-edit-join" class="settings-hint" hidden></p>
       <label class="settings-row stacked">Notes
         <textarea id="agenda-edit-notes" rows="2" maxlength="16000" autocomplete="off"></textarea>
       </label>
-      <label class="settings-row stacked">Attendees (comma-separated)
+      <label class="settings-row stacked">Guests (comma-separated)
         <input id="agenda-edit-attendees" type="text" maxlength="2000" autocomplete="off">
       </label>
     </div>
     <div class="confirm-dialog-actions agenda-editor-actions">
-      <button type="button" class="btn ghost" id="agenda-edit-delete" hidden>Delete</button>
+      <button type="button" class="btn danger" id="agenda-edit-delete" hidden>Delete</button>
       <button type="button" class="btn ghost" id="agenda-edit-cancel">Cancel</button>
       <button type="button" class="btn primary" id="agenda-edit-save">Save</button>
     </div>
