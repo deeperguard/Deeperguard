@@ -165,6 +165,31 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("agenda mobile a11y ok", proc.stdout)
 
+    def test_security_phase1_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_round88_security_phase1.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("test_round88_security_phase1.js ok", proc.stdout)
+
+    def test_security_phase1_totp_limits(self):
+        env = os.environ.copy()
+        env["SOURCE_DATE_EPOCH"] = "0"
+        env.setdefault("NOTES_DISABLE_CIDR_GATE", "1")
+        proc = subprocess.run(
+            [sys.executable, "-m", "unittest", "tests.test_round88_security_phase1", "-q"],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

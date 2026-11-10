@@ -1383,41 +1383,7 @@ def api_auth_repair_login():
 @app.post("/api/auth/srp/resync")
 def api_auth_srp_resync():
     """Rebuild SRP verifier when it drifted from the vault/login password (legacy hash still on file)."""
-    body = request.get_json(silent=True) or {}
-    email = str(body.get("email") or "").strip().lower()
-    password = str(body.get("password") or "")
-    srp_salt = str(body.get("srp_salt") or "").strip().lower()
-    srp_verifier = str(body.get("srp_verifier") or "").strip().lower()
-    srp_kdf_version = normalize_srp_kdf_version(body.get("srp_kdf_version") or SRP_KDF_V2)
-    if not EMAIL_RE.match(email) or not password or not srp_salt or not srp_verifier:
-        return jsonify({"error": "invalid credentials"}), 400
-    if srp_kdf_version < SRP_KDF_V2:
-        return jsonify({"error": "srp_kdf_version 2 required"}), 400
-    # Pre-login leftover-hash repair stays public, but a password-only
-    # (TOTP-pending) session must not rotate the verifier (L-22).
-    if auth.authenticated() and auth.needs_totp():
-        return jsonify({"error": "2FA required"}), 403
-    if _auth_rate_limited("srp-resync", email):
-        return jsonify({"error": "too many attempts"}), 429
-    user = db.get_user_by_email(email)
-    if not user or db.user_auth_method(user) != "srp":
-        return jsonify({"error": "invalid credentials"}), 401
-    if not db.user_has_legacy_password(user):
-        return jsonify({"error": "invalid credentials"}), 401
-    if not verify_password(user["password_hash"], password):
-        return jsonify({"error": "invalid credentials"}), 401
-    uid = int(user["id"])
-    _realign_login_credentials(
-        uid, email, password, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
-    )
-    totp_required = bool(user["totp_enabled"])
-    blocked = _login_user(uid, totp_ok=not totp_required)
-    if blocked:
-        return blocked
-    user = db.get_user_by_id(int(user["id"]))
-    payload = _login_payload(user, totp_required=totp_required)
-    payload["srp_resynced"] = True
-    return jsonify(payload)
+    return jsonify({"error": "legacy SRP resync removed", "code": "legacy_resync_removed"}), 410
 
 
 @app.post("/api/auth/verify-vault")
@@ -1573,24 +1539,8 @@ def api_auth_srp_upgrade():
 
 @app.post("/api/auth/login")
 def api_login():
-    """Legacy Argon2 password login only. SRP accounts must use A/M1 proofs."""
-    body = request.get_json(silent=True) or {}
-    email = str(body.get("email") or "").strip().lower()
-    password = str(body.get("password") or "").strip()
-    if _auth_rate_limited("legacy-login", email or auth.client_ip()):
-        return jsonify({"error": "too many attempts"}), 429
-    user = db.get_user_by_email(email)
-    # Round 73: refuse before any password check when the account is SRP.
-    if user and (db.user_auth_method(user) == "srp" or db.user_has_srp(user)):
-        return jsonify({"error": "invalid credentials"}), 401
-    user_id, totp_required = auth.verify_credentials(email, password)
-    if not user_id:
-        return jsonify({"error": "invalid credentials"}), 401
-    blocked = _login_user(user_id, totp_ok=not totp_required)
-    if blocked:
-        return blocked
-    user = db.get_user_by_id(user_id)
-    return jsonify(_login_payload(user, totp_required=totp_required))
+    """Legacy Argon2 password login removed (H1)."""
+    return jsonify({"error": "legacy password login removed", "code": "legacy_login_removed"}), 410
 
 
 @app.post("/api/auth/logout")
@@ -1994,8 +1944,19 @@ def api_totp_verify():
     body = request.get_json(silent=True) or {}
     code = str(body.get("code") or "")
     pending_cap = auth.session_cap_pending()
-    if not auth.verify_totp_for_current_user(code):
+    user = db.get_user_by_id(uid) if uid else None
+    if not user or not user["totp_secret"]:
         return jsonify({"error": "invalid code"}), 401
+    status, step = auth.check_totp_code(user, code)
+    if status == "limited":
+        return jsonify({"error": "too many attempts"}), 429
+    if status == "locked":
+        return _totp_change_blocked_response()
+    if status != "ok":
+        return jsonify({"error": "invalid code"}), 401
+    if step:
+        db.set_user_totp_last_step(uid, step)
+    session[auth.SESSION_TOTP] = True
     if pending_cap:
         blocked = _complete_session_cap_after_totp()
         if blocked:
@@ -2406,6 +2367,10 @@ def api_billing_stripe_webhook():
     return jsonify({"ok": True, "detail": detail})
 
 
+def _totp_change_blocked_response():
+    return jsonify({"error": "too many 2FA attempts — try again in an hour"}), 429
+
+
 @app.post("/api/totp/setup")
 def api_totp_setup():
     uid = auth.current_user_id()
@@ -2417,13 +2382,19 @@ def api_totp_setup():
         return blocked
     body = request.get_json(silent=True) or {}
     code = str(body.get("code") or "")
+    rotation_token = str(body.get("rotation_token") or "").strip()
     if user["totp_enabled"]:
+        if db.user_auth_method(user) == "srp":
+            if not rotation_token or not auth.consume_password_rotation_token(uid, rotation_token):
+                return jsonify({"error": "prove your password first"}), 401
         if not code:
             return jsonify({"error": "current 2FA code required"}), 403
-        ok, step = totp_mod.verify_and_step(
-            str(user["totp_secret"]), code, last_step=db.user_totp_last_step(user),
-        )
-        if not ok:
+        status, step = auth.check_totp_code(user, code)
+        if status == "limited":
+            return jsonify({"error": "too many attempts"}), 429
+        if status == "locked":
+            return _totp_change_blocked_response()
+        if status != "ok":
             return jsonify({"error": "invalid code"}), 400
         if step:
             db.set_user_totp_last_step(uid, step)
@@ -2449,10 +2420,12 @@ def api_totp_enable():
         return blocked
     body = request.get_json(silent=True) or {}
     code = str(body.get("code") or "")
-    ok, step = totp_mod.verify_and_step(
-        str(user["totp_secret"]), code, last_step=db.user_totp_last_step(user),
-    )
-    if not ok:
+    status, step = auth.check_totp_code(user, code)
+    if status == "limited":
+        return jsonify({"error": "too many attempts"}), 429
+    if status == "locked":
+        return _totp_change_blocked_response()
+    if status != "ok":
         return jsonify({"error": "invalid code"}), 400
     if step:
         db.set_user_totp_last_step(uid, step)
@@ -2475,17 +2448,21 @@ def api_totp_disable():
     body = request.get_json(silent=True) or {}
     password = str(body.get("password") or "")
     code = str(body.get("code") or "")
-    # Round 73: SRP accounts prove with the session + TOTP code only — ignore password.
-    if db.user_auth_method(user) != "srp":
-        if not verify_password(user["password_hash"], password):
-            return jsonify({"error": "invalid password"}), 401
+    rotation_token = str(body.get("rotation_token") or "").strip()
+    if db.user_auth_method(user) == "srp":
+        if not rotation_token or not auth.consume_password_rotation_token(uid, rotation_token):
+            return jsonify({"error": "prove your password first"}), 401
+    elif not verify_password(user["password_hash"], password):
+        return jsonify({"error": "invalid password"}), 401
     if user["totp_enabled"]:
         if not code:
             return jsonify({"error": "current 2FA code required"}), 403
-        ok, step = totp_mod.verify_and_step(
-            str(user["totp_secret"]), code, last_step=db.user_totp_last_step(user),
-        )
-        if not ok:
+        status, step = auth.check_totp_code(user, code)
+        if status == "limited":
+            return jsonify({"error": "too many attempts"}), 429
+        if status == "locked":
+            return _totp_change_blocked_response()
+        if status != "ok":
             return jsonify({"error": "invalid code"}), 400
         if step:
             db.set_user_totp_last_step(uid, step)

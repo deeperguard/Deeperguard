@@ -18,7 +18,7 @@ The items below are known gaps from internal reviews (October 2026). They descri
 | Rank | Area | Item | Status |
 |------|------|------|--------|
 | **Medium** | Ops / host | **systemd unit runs as root** — the shipped `deploy/systemd/deeperguard.service` has no dedicated `User=` / privilege drop; the app process typically runs as root on the VPS unless operators change the unit locally. | Open — owner decision |
-| **Medium** | Auth / 2FA | **TOTP turn-off without a second factor for SRP accounts** — disabling account 2FA requires the current TOTP code (and an active session) but does **not** require re-proving the account password for SRP (zero-knowledge login) users. Legacy hash-based accounts still require the account password. | Open — owner decision |
+| **Medium** | Auth / 2FA | ~~TOTP turn-off without a second factor for SRP accounts~~ — fixed in **pending release** (Phase 1): SRP users must complete `/api/account/password/prove` (rotation token) before disable or secret replacement; shared per-user TOTP rate limits. | Fixed (pending tag) |
 | **Medium** | Auth storage | **Leftover legacy password hashes** — accounts on SRP login may still have an old `password_hash` row used for migration, repair-login, and some password-change paths until explicitly cleared. Purging hashes needs a careful migration plan. | Open — owner decision |
 
 Ranks reflect our current view of **risk and user impact**, not CVSS scores. Wording may be updated as the product changes.

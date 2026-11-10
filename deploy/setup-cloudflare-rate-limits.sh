@@ -78,3 +78,36 @@ fi
 
 python3 -c "import json,sys; d=json.load(sys.stdin); print('ok', d.get('success'), d.get('errors'))" <<<"$RESP"
 echo "Rate limit active: /api/auth/* → 30 requests / minute / IP (block 60s)."
+
+TOTP_RULE_DESC="Deeperguard TOTP rate limit"
+TOTP_EXISTING="$(python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for r in d.get('result',{}).get('rules',[]) or []:
+    if r.get('description')=='''${TOTP_RULE_DESC}''':
+        print(r.get('id',''))
+        break
+" <<<"$RULESET_JSON")"
+
+TOTP_PAYLOAD='{
+  "description": "Deeperguard TOTP rate limit",
+  "expression": "(http.request.uri.path starts_with \"/api/totp/\")",
+  "action": "block",
+  "ratelimit": {
+    "characteristics": ["ip.src"],
+    "period": 300,
+    "requests_per_period": 10,
+    "mitigation_timeout": 300
+  }
+}'
+
+if [[ -n "$TOTP_EXISTING" ]]; then
+  echo "Updating existing TOTP rule ${TOTP_EXISTING}…"
+  TOTP_RESP="$(cf_api PUT "/zones/${ZONE_ID}/rulesets/${RULESET_ID}/rules/${TOTP_EXISTING}" "$TOTP_PAYLOAD")"
+else
+  echo "Creating TOTP rate-limit rule…"
+  TOTP_RESP="$(cf_api POST "/zones/${ZONE_ID}/rulesets/${RULESET_ID}/rules" "$TOTP_PAYLOAD")"
+fi
+
+python3 -c "import json,sys; d=json.load(sys.stdin); print('totp rule', d.get('success'), d.get('errors'))" <<<"$TOTP_RESP"
+echo "Rate limit (when applied): /api/totp/* → 10 requests / 5 min / IP (block 5 min)."

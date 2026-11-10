@@ -21874,13 +21874,31 @@
       return;
     }
     const body = { code };
-    // Round 73: never send plaintext password for SRP accounts (server ignores it anyway).
     const authMethod = String(
       NotesStore.cachedAccount?.()?.auth_method
       || NotesStore.state?.account?.auth_method
       || '',
     );
-    if (password && authMethod !== 'srp') body.password = password;
+    if (authMethod === 'srp') {
+      const email = String(
+        NotesStore.cachedAccount?.()?.email
+        || NotesStore.state?.account?.email
+        || '',
+      ).trim().toLowerCase();
+      if (!password) {
+        toast('Enter your account password to disable 2FA.', true);
+        return;
+      }
+      const proved = await NotesSrpAuth.passwordChangeProve(email, password);
+      const rotationToken = String(proved?.rotation_token || '').trim();
+      if (!rotationToken) {
+        toast('Could not verify your password — try again.', true);
+        return;
+      }
+      body.rotation_token = rotationToken;
+    } else if (password) {
+      body.password = password;
+    }
     try {
       const data = await NotesStore.api('/api/totp/disable', {
         method: 'POST',

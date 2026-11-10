@@ -142,7 +142,7 @@ class Round73SrpNoPlaintext(unittest.TestCase):
         self.assertEqual(res.status_code, 401)
         self.assertNotEqual(res.get_json().get("code"), "legacy_login")
 
-    def test_legacy_login_still_works(self):
+    def test_legacy_login_returns_410(self):
         email = "r73-legacy-ok@home.local"
         password = "r73-legacy-ok-pass"
         self._register_legacy(email, password)
@@ -150,15 +150,14 @@ class Round73SrpNoPlaintext(unittest.TestCase):
             "/api/auth/login",
             json={"email": email, "password": password},
         )
-        self.assertEqual(res.status_code, 200, res.get_json())
-        self.assertEqual(res.get_json().get("auth_method"), "argon2")
+        self.assertEqual(res.status_code, 410, res.get_json())
 
     def test_client_sources_omit_srp_plaintext_paths(self):
         srp = (APP_DIR / "static" / "js" / "srp-auth.js").read_text(encoding="utf-8")
         auth_pages = (APP_DIR / "static" / "js" / "auth-pages.js").read_text(encoding="utf-8")
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
         sign_in = srp[srp.index("async function passwordSignIn") : srp.index("async function register")]
-        self.assertIn("legacy_login", sign_in)
+        self.assertIn("legacyLoginRemoved", sign_in)
         self.assertIn("incorrectPassword", sign_in)
         self.assertIn("showSecureSignInReload", auth_pages)
         self.assertNotIn(

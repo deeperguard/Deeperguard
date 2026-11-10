@@ -8,6 +8,7 @@ from threading import Lock
 
 _lock = Lock()
 _hits: dict[str, list[float]] = defaultdict(list)
+_lock_until: dict[str, float] = {}
 
 
 def _limits() -> tuple[int, float]:
@@ -52,3 +53,31 @@ def allow(key: str, *, limit: int | None = None, window: float | None = None) ->
             return False
         bucket.append(now)
         return True
+
+
+def record(key: str, *, window: float = 3600.0) -> int:
+    """Record one event and return how many are in the window (including this one)."""
+    now = time.time()
+    with _lock:
+        bucket = _hits[key]
+        bucket[:] = [stamp for stamp in bucket if now - stamp < window]
+        bucket.append(now)
+        return len(bucket)
+
+
+def set_lock(key: str, seconds: float) -> None:
+    """Block a key until `seconds` elapse from now."""
+    if seconds <= 0:
+        return
+    with _lock:
+        _lock_until[key] = time.time() + seconds
+
+
+def is_locked(key: str) -> bool:
+    with _lock:
+        until = _lock_until.get(key, 0.0)
+        if until and time.time() < until:
+            return True
+        if until:
+            _lock_until.pop(key, None)
+        return False

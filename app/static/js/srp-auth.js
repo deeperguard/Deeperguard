@@ -56,6 +56,48 @@
 
   const SRP_KDF_V1 = 1;
   const SRP_KDF_V2 = 2;
+  // TODO(security): hard-refuse v1 challenges after this instant (config only for now).
+  const SRP_KDF_V1_SUNSET_UTC = '2026-12-01T00:00:00Z';
+
+  function srpKdfPinKey(email) {
+    return `notes_srp_kdf_pin:${String(email || '').trim().toLowerCase()}`;
+  }
+
+  function getPinnedSrpKdfVersion(email) {
+    try {
+      const raw = localStorage.getItem(srpKdfPinKey(email));
+      if (raw == null || raw === '') return null;
+      const version = Number(raw);
+      return version >= SRP_KDF_V2 ? SRP_KDF_V2 : SRP_KDF_V1;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function pinSrpKdfVersion(email, version) {
+    const ver = normalizeSrpKdfVersion(version);
+    try {
+      const prev = getPinnedSrpKdfVersion(email);
+      if (prev != null && ver < prev) return;
+      localStorage.setItem(srpKdfPinKey(email), String(ver));
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function assertSrpKdfChallenge(email, challengeVersion) {
+    const pinned = getPinnedSrpKdfVersion(email);
+    const challenge = normalizeSrpKdfVersion(challengeVersion);
+    if (pinned != null && challenge < pinned) {
+      const err = new Error(
+        'This device has seen a newer sign-in method for this account. '
+        + 'Sign in again from a trusted device or contact support.',
+      );
+      err.code = 'srp_kdf_downgrade';
+      err.srpKdfDowngrade = true;
+      throw err;
+    }
+  }
   // Lighter than vault Argon2id (64 MiB) so login stays ~<1s on iPhone.
   const SRP_ARGON2_PARAMS = { t: 2, m: 19456, p: 1, dkLen: 32 };
 
@@ -290,6 +332,7 @@
   async function credentialProofLogin(challengePath, loginPath, email, password) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const challenge = await postJson(challengePath, { email: normalizedEmail });
+    assertSrpKdfChallenge(normalizedEmail, challenge.srp_kdf_version);
     const challengeVersion = normalizeSrpKdfVersion(challenge.srp_kdf_version);
     // Rotate to v2 after proving with the stored version.
     const rotated = await makeVerifier(normalizedEmail, password, null, SRP_KDF_V2);
@@ -311,6 +354,7 @@
     // salt/verifier; rotation belongs on /api/account/password after totp_ok.
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const challenge = await postJson('/api/auth/repair-login/challenge', { email: normalizedEmail });
+    assertSrpKdfChallenge(normalizedEmail, challenge.srp_kdf_version);
     const challengeVersion = normalizeSrpKdfVersion(challenge.srp_kdf_version);
     const client = new SrpClient();
     client.step1(normalizedEmail, password);
@@ -348,22 +392,25 @@
         result = await repairLogin(normalizedEmail, password);
       } catch (repairErr) {
         if (repairErr?.status === 429) throw repairErr;
-        // Leftover Argon2-only: server advertises legacy_login (never for auth_method srp).
         if (repairErr?.legacyLogin || repairErr?.code === 'legacy_login') {
-          if (onStatus) onStatus('Signing in…');
-          result = await postJson('/api/auth/login', {
-            email: normalizedEmail,
-            password,
-          });
-        } else {
-          const err = new Error('Email or password is incorrect');
-          err.status = repairErr?.status || 401;
-          err.incorrectPassword = true;
+          const err = new Error(
+            'This account needs an updated sign-in method. Password-only login is no longer available.',
+          );
+          err.status = 410;
+          err.legacyLoginRemoved = true;
           throw err;
         }
+        const err = new Error('Email or password is incorrect');
+        err.status = repairErr?.status || 401;
+        err.incorrectPassword = true;
+        throw err;
       }
     }
-    if (result?.totp_required) return result;
+    if (result?.totp_required) {
+      pinSrpKdfVersion(normalizedEmail, result.srp_kdf_version);
+      return result;
+    }
+    pinSrpKdfVersion(normalizedEmail, result.srp_kdf_version);
     return maybeUpgradeLegacySrp(normalizedEmail, password, result);
   }
 
@@ -426,6 +473,7 @@
     const client = new SrpClient();
     client.step1(email, password);
     const challenge = await postJson('/api/auth/srp/challenge', { email });
+    assertSrpKdfChallenge(email, challenge.srp_kdf_version);
     const challengeVersion = normalizeSrpKdfVersion(challenge.srp_kdf_version);
     const creds = await client.step2(challenge.srp_salt, challenge.B, challengeVersion);
     const result = await postJson('/api/auth/srp/verify', {
@@ -439,6 +487,7 @@
       throw err;
     }
     await client.step3(result.M2);
+    pinSrpKdfVersion(email, result.srp_kdf_version || challengeVersion);
     // 2FA sessions are not fully authenticated until /api/totp/verify.
     // Upgrading before that would let a password-only caller replace the
     // verifier; totp-page.js finishes the upgrade after TOTP succeeds.
@@ -522,6 +571,7 @@
   async function accountUnlock(email, password) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const challenge = await postJson('/api/account/unlock/challenge', { email: normalizedEmail });
+    assertSrpKdfChallenge(normalizedEmail, challenge.srp_kdf_version);
     const client = new SrpClient();
     client.step1(normalizedEmail, password);
     const creds = await client.step2(
@@ -539,6 +589,7 @@
   async function passwordChangeProve(email, proofPassword) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const challenge = await postJson('/api/account/password/challenge', { email: normalizedEmail });
+    assertSrpKdfChallenge(normalizedEmail, challenge.srp_kdf_version);
     const client = new SrpClient();
     client.step1(normalizedEmail, proofPassword);
     const creds = await client.step2(
@@ -588,6 +639,10 @@
     shouldRetryWithRepairAfterSrp,
     SRP_KDF_V1,
     SRP_KDF_V2,
+    SRP_KDF_V1_SUNSET_UTC,
     normalizeSrpKdfVersion,
+    getPinnedSrpKdfVersion,
+    pinSrpKdfVersion,
+    assertSrpKdfChallenge,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
