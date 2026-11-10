@@ -5,7 +5,7 @@ date: 2026-11-09
 description: "If encrypted email backups are available for your account, here is what the archive and its size reveal, what stays encrypted, and why strong passwords still matter."
 cover_image: /static/blog/encrypted-email-backups.jpg
 cover_alt: "Illustration of a cream envelope sealed with a glowing teal padlock, a window in the envelope showing only scrambled gold and teal blocks instead of readable writing, on a soft cream and dusty-blue background"
-draft: true
+draft: false
 ---
 
 A backup arriving by email raises a reasonable question: does opening the mailbox reveal your notes? With an encrypted archive, the attachment is not a readable copy of your note contents.

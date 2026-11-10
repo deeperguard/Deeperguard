@@ -5,7 +5,7 @@ date: 2026-11-08
 description: "Lots of apps say your notes are encrypted. Zero-knowledge means something stricter: the service never holds the key. Here's what that means in plain words, what it protects, and what it can't."
 cover_image: /static/blog/zero-knowledge-notes-basics.jpg
 cover_alt: "Illustration of a laptop showing a notebook page behind a glowing teal padlock, with a gold key resting beside the laptop while small scrambled blocks travel along a dotted line up to a cloud, on a soft cream and blue background"
-draft: true
+draft: false
 ---
 
 “Your notes are encrypted” leaves an important question unanswered: **who holds the key?** Encryption alone does not prevent a service from reading your notes if it can use the decryption key.
