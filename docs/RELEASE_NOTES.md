@@ -1,5 +1,9 @@
 # Release notes
 
+## v0.65.52 (Vienna)
+
+- **Ops #334:** After any server `notes.db` restore, operators can revoke all live sessions (`deploy/revoke-all-sessions-after-restore.{sh,py}`) so pre-restore cookies cannot authenticate; runbook in `deploy/PRODUCTION.md`.
+
 ## v0.65.51 (Vienna)
 
 - **Sync #330:** Safe upload retries via `sync_retry_key` / request hash — identical retries are idempotent; hash mismatch returns `retry_conflict` without clobbering newer server data. Reuses wrapped ciphertext on the same dirty cycle; rotates retry key after conflict. Localized blocked-sync toasts (EN/NL) with note title for `retry_conflict`.
