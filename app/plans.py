@@ -126,6 +126,11 @@ FEATURE_CATALOG: dict[str, dict[str, Any]] = {
         "description": "Email when a note is due.",
         "plans": {PLAN_PRO},
     },
+    "agenda_reminders": {
+        "label": "Agenda reminders",
+        "description": "Push or email before calendar events (server sees only reminder times).",
+        "plans": {PLAN_FREE, PLAN_BASIC, PLAN_PRO},
+    },
     "vault_authenticator": {
         "label": "Vault authenticator",
         "description": "Store 2FA codes inside your encrypted vault.",

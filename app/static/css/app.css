@@ -227,6 +227,13 @@ body.agenda-editor-open #agenda-editor.agenda-editor { z-index: 210; }
   box-sizing: border-box;
 }
 .agenda-editor-heading { margin: 0 0 10px; font-size: 17px; font-weight: 680; }
+.agenda-reminder-offset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
+.agenda-reminder-channel-settings { margin-top: 12px; border: 0; padding: 0; }
 #agenda-editor.agenda-editor .agenda-editor-series-notice {
   margin: 0 0 10px;
   padding: 8px 10px;

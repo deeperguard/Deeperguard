@@ -165,6 +165,17 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("agenda mobile a11y ok", proc.stdout)
 
+    def test_agenda_reminders_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_agenda_reminders.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("test_agenda_reminders ok", proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
