@@ -165,6 +165,17 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("agenda mobile a11y ok", proc.stdout)
 
+    def test_security_phase1_totp_disable_prove_ux(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_round88_totp_disable_prove.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("test_round88_totp_disable_prove.js ok", proc.stdout)
+
     def test_security_phase1_contract(self):
         proc = subprocess.run(
             ["node", str(REPO / "tests" / "test_round88_security_phase1.js")],

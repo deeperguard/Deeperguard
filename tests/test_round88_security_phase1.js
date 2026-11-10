@@ -80,6 +80,9 @@ async function passwordSignInHarness({ login, repairLogin, postJson, email, pass
 
   assert.ok(srpSrc.includes('function assertSrpKdfChallenge'));
   assert.ok(srpSrc.includes('srpKdfDowngrade'));
+assert.ok(
+  srpSrc.includes('For your security, this sign-in was blocked on this device.'),
+);
 
   const pinStore = new Map();
   const pinKey = (email) => `notes_srp_kdf_pin:${email}`;

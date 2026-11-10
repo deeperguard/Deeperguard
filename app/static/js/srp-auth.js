@@ -90,8 +90,8 @@
     const challenge = normalizeSrpKdfVersion(challengeVersion);
     if (pinned != null && challenge < pinned) {
       const err = new Error(
-        'This device has seen a newer sign-in method for this account. '
-        + 'Sign in again from a trusted device or contact notes@deeperguard.com.',
+        'For your security, this sign-in was blocked on this device. '
+        + 'Sign in from a device you trust, or email notes@deeperguard.com.',
       );
       err.code = 'srp_kdf_downgrade';
       err.srpKdfDowngrade = true;

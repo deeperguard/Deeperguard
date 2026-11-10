@@ -28,11 +28,12 @@ assert.ok(!authPages.includes("postJson('/api/auth/repair-login', { email, passw
 
 const totpSlice = appJs.slice(
   appJs.indexOf("getElementById('btn-confirm-disable-totp')"),
-  appJs.indexOf("getElementById('btn-confirm-disable-totp')") + 1400,
+  appJs.indexOf("getElementById('btn-confirm-disable-totp')") + 2400,
 );
 assert.ok(totpSlice.includes("authMethod === 'srp'"));
-assert.ok(totpSlice.includes('passwordChangeProve'));
+assert.ok(totpSlice.includes('srpTotpPasswordProve'));
 assert.ok(totpSlice.includes('rotation_token'));
+assert.ok(appJs.includes('accountTotpProveErrorMessage'));
 
 // --- behavioral harness mirroring passwordSignIn control flow --------------
 async function passwordSignInHarness({ login, repairLogin, postJson, email, password }) {
