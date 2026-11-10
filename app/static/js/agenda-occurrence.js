@@ -228,21 +228,19 @@
       };
     }
     const duration = masterDurationMs(base.start, base.end);
-    const exdates = normalizeExdates(base.ics_exdates).map((ex) => {
-      const ov = oldOverrides[ex];
-      if (ov && !overrideKeepsSeriesSlotTime(ov, ex, base.start, base.end, oldAllDay)) return ex;
-      return shiftRecurrenceToken(ex, deltaMs, oldAllDay, newAllDay);
-    });
+    const exSet = new Set();
+    for (const ex of normalizeExdates(base.ics_exdates)) {
+      exSet.add(shiftRecurrenceToken(ex, deltaMs, oldAllDay, newAllDay));
+    }
     const overrides = {};
     for (const [oldRid, ov] of Object.entries(oldOverrides)) {
       if (!ov || typeof ov !== 'object') continue;
       const keepsSlot = overrideKeepsSeriesSlotTime(
         ov, oldRid, base.start, base.end, oldAllDay,
       );
-      let newRid = oldRid;
+      const newRid = shiftRecurrenceToken(oldRid, deltaMs, oldAllDay, newAllDay);
       let patch = { ...ov };
       if (keepsSlot) {
-        newRid = shiftRecurrenceToken(oldRid, deltaMs, oldAllDay, newAllDay);
         if (patch.start) {
           const os = new Date(patch.start);
           if (Number.isFinite(os.getTime())) patch.start = new Date(os.getTime() + deltaMs).toISOString();
@@ -256,13 +254,15 @@
             patch.end = new Date(os.getTime() + duration).toISOString();
           }
         }
+      } else {
+        exSet.add(newRid);
       }
       patch = mergeOverrideSeriesFields(patch, ov, base, next);
       if (typeof patch.all_day !== 'boolean') patch.all_day = newAllDay;
       overrides[newRid] = patch;
     }
     return {
-      ics_exdates: normalizeExdates(exdates),
+      ics_exdates: normalizeExdates([...exSet]),
       ics_occurrence_overrides: overrides,
       resetCount: 0,
     };

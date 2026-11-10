@@ -164,18 +164,20 @@ const timeFixedPreserved = Occ.preserveOverridesOnSeriesEdit(timeFixedMaster, {
   end: '2026-11-03T14:00:00.000Z',
   all_day: false,
 });
+const timeFixedNewRid = Occ.recurrenceIdForStart(new Date('2026-11-17T13:00:00.000Z'), false);
 const timeFixedEv = {
   ...timeFixedMaster,
   start: '2026-11-03T13:00:00.000Z',
   end: '2026-11-03T14:00:00.000Z',
   ...timeFixedPreserved,
 };
-assert.strictEqual(timeFixedPreserved.ics_occurrence_overrides[timeFixedRid].title, 'Afternoon only');
+assert.strictEqual(timeFixedPreserved.ics_occurrence_overrides[timeFixedNewRid].title, 'Afternoon only');
 assert.strictEqual(
-  timeFixedPreserved.ics_occurrence_overrides[timeFixedRid].start,
+  timeFixedPreserved.ics_occurrence_overrides[timeFixedNewRid].start,
   '2026-11-17T14:00:00.000Z',
 );
-assert.ok(timeFixedPreserved.ics_exdates.includes(timeFixedRid));
+assert.ok(timeFixedPreserved.ics_exdates.includes(timeFixedNewRid));
+assert.strictEqual(timeFixedPreserved.ics_occurrence_overrides[timeFixedRid], undefined);
 occ = expandRaw(timeFixedEv, new Date('2026-11-01'), new Date('2026-12-01'));
 const afternoonNov17 = occ.find((o) => o.displayTitle === 'Afternoon only');
 assert.ok(afternoonNov17);
@@ -239,6 +241,7 @@ const titleTimeMaster = {
   },
   ics_exdates: [titleTimeRid],
 };
+const titleTimeNewRid = Occ.recurrenceIdForStart(new Date('2026-12-01T13:00:00.000Z'), false);
 const titleTimePlan = Occ.planPreserveOverridesOnSeriesEdit(titleTimeMaster, {
   start: '2026-11-03T13:00:00.000Z',
   end: '2026-11-03T14:00:00.000Z',
@@ -254,8 +257,9 @@ const titleTimeEv = {
   ...titleTimePlan,
 };
 assert.strictEqual(titleTimePlan.resetCount, 0);
-assert.strictEqual(titleTimePlan.ics_occurrence_overrides[titleTimeRid].title, 'Board + late');
-assert.strictEqual(titleTimePlan.ics_occurrence_overrides[titleTimeRid].start, '2026-12-01T14:00:00.000Z');
+assert.strictEqual(titleTimePlan.ics_occurrence_overrides[titleTimeNewRid].title, 'Board + late');
+assert.strictEqual(titleTimePlan.ics_occurrence_overrides[titleTimeNewRid].start, '2026-12-01T14:00:00.000Z');
+assert.ok(titleTimePlan.ics_exdates.includes(titleTimeNewRid));
 occ = expandRaw(titleTimeEv, new Date('2026-11-01'), new Date('2026-12-15'));
 const titleTimeOcc = occ.find((o) => o.displayTitle === 'Board + late');
 assert.ok(titleTimeOcc);
@@ -283,8 +287,10 @@ const timeOnlyPlan = Occ.planPreserveOverridesOnSeriesEdit(timeOnlyMaster, {
   location: '',
   notes: '',
 });
+const timeOnlyNewRid = Occ.recurrenceIdForStart(new Date('2026-12-08T13:00:00.000Z'), false);
 assert.strictEqual(timeOnlyPlan.resetCount, 0);
-assert.strictEqual(timeOnlyPlan.ics_occurrence_overrides[timeOnlyRid].start, '2026-12-08T14:00:00.000Z');
+assert.strictEqual(timeOnlyPlan.ics_occurrence_overrides[timeOnlyNewRid].start, '2026-12-08T14:00:00.000Z');
+assert.ok(timeOnlyPlan.ics_exdates.includes(timeOnlyNewRid));
 const timeOnlyEv = {
   ...timeOnlyMaster,
   start: '2026-11-03T13:00:00.000Z',
@@ -319,9 +325,92 @@ const allDayReset = Occ.planPreserveOverridesOnSeriesEdit(weeklyMaster, {
 assert.strictEqual(allDayReset.resetCount, 1);
 assert.deepStrictEqual(allDayReset.ics_occurrence_overrides, {});
 
+const tueSeries = {
+  ...master,
+  id: 'wk2',
+  title: 'Tuesday series',
+  start: '2026-11-04T12:00:00.000Z',
+  end: '2026-11-04T13:00:00.000Z',
+  rrule: 'FREQ=WEEKLY;INTERVAL=1',
+  ics_exdates: [],
+  ics_occurrence_overrides: {},
+};
+const occ2Slot = new Date('2026-11-11T12:00:00.000Z');
+const occ2Rid = Occ.recurrenceIdForStart(occ2Slot, false);
+const occ2MovedStart = '2026-11-11T15:00:00.000Z';
+const occ2MovedEnd = '2026-11-11T16:00:00.000Z';
+const occ2NewRid = Occ.recurrenceIdForStart(new Date('2026-11-11T13:00:00.000Z'), false);
+const seriesShiftNext = {
+  start: '2026-11-04T13:00:00.000Z',
+  end: '2026-11-04T14:00:00.000Z',
+  all_day: false,
+  title: tueSeries.title,
+  location: '',
+  notes: '',
+};
+function countAt15(ev) {
+  const list = expandRaw(ev, new Date('2026-11-01'), new Date('2026-12-01'));
+  return list.filter((o) => o.start.toISOString() === occ2MovedStart);
+}
+
+const withExdate = {
+  ...tueSeries,
+  ics_exdates: [occ2Rid],
+  ics_occurrence_overrides: {
+    [occ2Rid]: {
+      title: 'Occurrence 2 moved',
+      start: occ2MovedStart,
+      end: occ2MovedEnd,
+      all_day: false,
+    },
+  },
+};
+const exPlan = Occ.planPreserveOverridesOnSeriesEdit(withExdate, seriesShiftNext);
+assert.strictEqual(exPlan.ics_occurrence_overrides[occ2NewRid].start, occ2MovedStart);
+assert.ok(exPlan.ics_exdates.includes(occ2NewRid));
+const withExdateEv = { ...withExdate, ...seriesShiftNext, ...exPlan };
+assert.strictEqual(countAt15(withExdateEv).length, 1);
+assert.strictEqual(countAt15(withExdateEv)[0].displayTitle, 'Occurrence 2 moved');
+
+const overrideOnly = {
+  ...tueSeries,
+  ics_exdates: [],
+  ics_occurrence_overrides: {
+    [occ2Rid]: {
+      title: 'Occurrence 2 moved',
+      start: occ2MovedStart,
+      end: occ2MovedEnd,
+      all_day: false,
+    },
+  },
+};
+const onlyPlan = Occ.planPreserveOverridesOnSeriesEdit(overrideOnly, seriesShiftNext);
+assert.ok(onlyPlan.ics_exdates.includes(occ2NewRid));
+assert.strictEqual(onlyPlan.ics_occurrence_overrides[occ2NewRid].start, occ2MovedStart);
+const overrideOnlyEv = { ...overrideOnly, ...seriesShiftNext, ...onlyPlan };
+assert.strictEqual(countAt15(overrideOnlyEv).length, 1);
+
+const icsExceptionRows = [
+  overrideOnlyEv,
+  {
+    ...overrideOnlyEv,
+    rrule: '',
+    ics_exdates: [],
+    ics_occurrence_overrides: {},
+    ics_recurrence_id: occ2NewRid,
+    title: onlyPlan.ics_occurrence_overrides[occ2NewRid].title,
+    start: occ2MovedStart,
+    end: occ2MovedEnd,
+    all_day: false,
+  },
+];
+const occ2Ics = Ics.buildIcsCalendarFromEvents(icsExceptionRows);
+assert.ok(occ2Ics.includes(`RECURRENCE-ID:${occ2NewRid.replace(/\s+/g, '')}`));
+
 const agendaSrc = fs.readFileSync(path.join(root, 'app/static/js/agenda.js'), 'utf8');
 assert.ok(agendaSrc.includes('agenda-scope-reset-panel'));
 assert.ok(agendaSrc.includes('openScopeChooserSeriesReset'));
 assert.ok(agendaSrc.includes('seriesOverrideResetMessage'));
+assert.ok(agendaSrc.includes("getElementById('agenda-edit-save')"));
 
 console.log('test_agenda_occurrence ok');

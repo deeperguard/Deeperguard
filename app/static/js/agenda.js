@@ -1356,7 +1356,15 @@
     document.getElementById('agenda-scope-cancel')?.addEventListener('click', () => closeScopeChooser());
     document.getElementById('agenda-scope-reset-cancel')?.addEventListener('click', () => {
       setScopeChooserMode('pick');
-      closeScopeChooser();
+      const backdrop = document.getElementById('agenda-scope-backdrop');
+      const dialog = document.getElementById('agenda-scope-chooser');
+      if (backdrop) backdrop.hidden = true;
+      if (dialog) dialog.hidden = true;
+      document.body.classList.remove('agenda-scope-open');
+      state.seriesOverrideResetConfirmed = false;
+      setScopeChooserMode('pick');
+      const saveBtn = document.getElementById('agenda-edit-save');
+      if (saveBtn) saveBtn.focus();
     });
     document.getElementById('agenda-scope-reset-confirm')?.addEventListener('click', () => {
       state.seriesOverrideResetConfirmed = true;
