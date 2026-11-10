@@ -5,7 +5,7 @@ date: 2026-11-10
 description: "Any app can say “zero-knowledge.” Here's how to check Deeperguard's claim yourself with your browser's DevTools and our /verify page, what you should see, and what these checks can't prove."
 cover_image: /static/blog/verify-zero-knowledge-yourself.jpg
 cover_alt: "Illustration of a browser window with a magnifying glass over a list of network requests, each shown as a locked teal envelope, on a soft cream and blue background"
-draft: true
+draft: false
 ---
 
 "Zero-knowledge" is easy to put on a homepage. It's harder to prove. So instead of asking you to trust our copy, we publish a [Verify zero-knowledge](/verify) page that shows what the shipped client sends, and how you can watch it happen in your own browser. No special tools needed, just the developer tools that come with Chrome, Edge, Brave or Firefox.
