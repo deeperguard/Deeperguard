@@ -8,10 +8,10 @@
       "url": "/static/css/app.f9589862ef1c051a.css"
     },
     "css/marketing.css": {
-      "bytes": 54240,
-      "sha256": "bf67166de4dd8ab1afbd4c05f1ef7c754c066509066df9c7e12272f674ef8ca7",
-      "sri": "sha384-2KMJyZHqH77iUi2iZ6W4FH7KmdTYxmfuCoDIk487+/9O4R45qqpe19QC/MRRxnpO",
-      "url": "/static/css/marketing.bf67166de4dd8ab1.css"
+      "bytes": 54715,
+      "sha256": "7091c52f885cc1af7397cd69edfe04bfc087db1620010c5de0a277a1c2ae3d7f",
+      "sri": "sha384-ijBCIiAZpCo6LRgXIXR2nFIrNqSwKg4e4yBek7JSzHm2WPlUzBwkOYA+td8l725y",
+      "url": "/static/css/marketing.7091c52f885cc1af.css"
     },
     "js/admin.js": {
       "bytes": 8122,
@@ -26,10 +26,10 @@
       "url": "/static/js/agenda-ics.48d006f60771cd22.js"
     },
     "js/agenda-occurrence.js": {
-      "bytes": 6677,
-      "sha256": "84cf7c79236b08519d2e1a4d625d9038f6ec1c9a38f08b58468d1ade17ddc245",
-      "sri": "sha384-guLuOwfPJ35ihEtJWcOKeszx+H9F1p+kvBMTNNI3ctUuNhMVVS01YcWG/54SuPpg",
-      "url": "/static/js/agenda-occurrence.84cf7c79236b0851.js"
+      "bytes": 13802,
+      "sha256": "a0ca5c8460054818ca0851cc9549e0eb0390e29094c21ce7bb4c97ce5be5b307",
+      "sri": "sha384-MnJKg7YoDuq1nkzZdsYJ0funAhEtwhIUAUGNJgNz1lPV0nXOf7SHPIdjxMIaqJiw",
+      "url": "/static/js/agenda-occurrence.a0ca5c8460054818.js"
     },
     "js/agenda-recurrence.js": {
       "bytes": 2920,
@@ -44,10 +44,10 @@
       "url": "/static/js/agenda-scroll-core.bbd6d40f71bbde58.js"
     },
     "js/agenda.js": {
-      "bytes": 67739,
-      "sha256": "7881964ffcaca86a2f802dd6f2db806c5d1ff4f23f7463fd677f2bebbab37e6b",
-      "sri": "sha384-C7J4+u900YqT5bc90J2Vk6H9os7A0g5CCbil6iK8CE37X+OkdHTOjzYvUMvbFOmO",
-      "url": "/static/js/agenda.7881964ffcaca86a.js"
+      "bytes": 71975,
+      "sha256": "bdaa049665f0003423a0d14be61a48d6ed888e5250577e78bebb3a9255ca2963",
+      "sri": "sha384-EMwE+PscsDxcU6VdD7ya2J1hqBlpGYIuwIkWVgseycnQUU+528YULYrL2sTvoEk3",
+      "url": "/static/js/agenda.bdaa049665f00034.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -405,6 +405,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "dfa2aab7b80696ce563803f5209c2c19205ce5cbf0d56d6e1722a410d928ee73",
+  "manifest_sha256": "f87901f11e412fb7b7feceebda0d2111f05d1c4fd0f4cb32eb3a134f0407058b",
   "version": 1
 }

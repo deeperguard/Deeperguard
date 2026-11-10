@@ -153,7 +153,7 @@
       "password_or_vault_key_on_wire": false,
       "evidence_type": "static_source_analysis",
       "measurement": "checked",
-      "measurement_note": "Checked against client source (static analysis). Confirm in DevTools. No agenda-specific /api routes; persisted events sync as encrypted agenda pack rows when dirty (edit-save row)."
+      "measurement_note": "Checked against client source (static analysis). Confirm in DevTools. No agenda-specific /api routes; persisted events sync as encrypted vault data when dirty."
     }
   ]
 }

@@ -301,7 +301,7 @@ def _actions() -> list[dict]:
             "measurement": agenda_meas,
             "measurement_note": (
                 f"{agenda_note} No agenda-specific /api routes; "
-                "persisted events sync as encrypted agenda pack rows when dirty (edit-save row)."
+                "persisted events sync as encrypted vault data when dirty."
             ),
         },
     ]

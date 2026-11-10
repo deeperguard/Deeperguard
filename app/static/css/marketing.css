@@ -2154,10 +2154,17 @@ a.mk-badge-link:hover {
   background: var(--mk-ok-bg);
   border: 1px solid var(--mk-ok-border);
 }
-.mk-verify-evidence.browser {
+.mk-verify-evidence.webapp {
   color: var(--mk-text);
   background: var(--mk-panel-subtle);
   border: 1px solid var(--mk-border);
+}
+.mk-verify-metadata-traffic-neutral {
+  display: inline-block;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--mk-text);
+  line-height: 1.45;
 }
 .mk-verify-metadata-feature-note {
   margin: 0.35rem 0 0.75rem;

@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -69,8 +70,33 @@ class Round83VerifyMetadataBaseline(unittest.TestCase):
             "Your one-off changes are kept when you edit the series.",
             body,
         )
-        self.assertIn("Browser only", body)
+        self.assertIn("Web app only", body)
+        self.assertIn("Syncs as encrypted vault data", body)
+        self.assertIn("Tested in the web app; not the installed app or iOS.", body)
+        self.assertNotIn("Browser only", body)
         self.assertIn("Sends nothing", body)
+        agenda_card = re.search(
+            r'<div class="mk-verify-metadata-card" data-action-id="agenda-recurrence">'
+            r"[\s\S]*?"
+            r'<div class="mk-verify-metadata-table-wrap"',
+            body,
+        )
+        self.assertIsNotNone(agenda_card, "agenda-recurrence mobile card")
+        self.assertNotIn(
+            "mk-verify-sends-none",
+            agenda_card.group(0),
+            msg="Agenda card must not use sends-none styling",
+        )
+        agenda_tr = re.search(
+            r'<tr data-action-id="agenda-recurrence">[\s\S]*?</tr>',
+            body,
+        )
+        self.assertIsNotNone(agenda_tr, "agenda-recurrence table row")
+        self.assertNotIn(
+            "mk-verify-sends-none",
+            agenda_tr.group(0),
+            msg="Agenda table row must not use sends-none styling",
+        )
         self.assertIn("Static source analysis", body)
         self.assertIn("Actions not in this table yet", body)
         verify_tpl = (REPO / "app/templates/verify.html").read_text(encoding="utf-8")
