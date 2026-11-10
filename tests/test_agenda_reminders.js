@@ -14,10 +14,13 @@ const R = global.NotesAgendaReminders;
 const appHtml = fs.readFileSync(path.join(root, 'app/templates/app.html'), 'utf8');
 const appPy = fs.readFileSync(path.join(root, 'app/app.py'), 'utf8');
 const cron = fs.readFileSync(path.join(root, 'app/agenda_reminder_cron.py'), 'utf8');
+const remindersJs = fs.readFileSync(path.join(root, 'app/static/js/agenda-reminders.js'), 'utf8');
 
 assert.ok(R);
 assert.ok(appHtml.includes("asset_script('js/agenda-reminders.js')"));
 assert.ok(appHtml.includes('agenda-reminder-channel-settings'));
+assert.ok(remindersJs.includes("Push isn't available yet."));
+assert.ok(!remindersJs.includes('VAPID keys required'));
 
 const now = Date.now();
 const ev = {

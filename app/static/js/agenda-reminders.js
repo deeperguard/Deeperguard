@@ -233,7 +233,7 @@
       btn.hidden = !ready;
       if (status) {
         status.hidden = ready;
-        status.textContent = ready ? '' : 'Push is not configured on the server (VAPID keys required).';
+        status.textContent = ready ? '' : "Push isn't available yet.";
       }
     } catch (e) {
       if (status) {
@@ -256,7 +256,7 @@
     const cfg = await S.api('/api/agenda-reminders/push-config');
     const key = cfg?.vapid_public_key;
     if (!key) {
-      if (typeof global.toast === 'function') toast('Push is not configured on the server', true);
+      if (typeof global.toast === 'function') toast("Push isn't available yet.", true);
       return;
     }
     const raw = key.replace(/-/g, '+').replace(/_/g, '/');

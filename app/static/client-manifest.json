@@ -38,10 +38,10 @@
       "url": "/static/js/agenda-recurrence.b37c215b6094e68c.js"
     },
     "js/agenda-reminders.js": {
-      "bytes": 10972,
-      "sha256": "4333fdb0180e155131be157a082390cafc896b50c156eef214dcee36734d3d21",
-      "sri": "sha384-hvOOz1R60dIWz+dOdfc7TIcogpX2zg/kW81y+Z7vfZ+NS6By9tqemuqViYZKujvd",
-      "url": "/static/js/agenda-reminders.4333fdb0180e1551.js"
+      "bytes": 10927,
+      "sha256": "1598fc81d09964523a0cc59bbe46d97a696bce7a2d301fb404aca599b8789b51",
+      "sri": "sha384-7g2x09qdD75QWRARfU75A6a4mgQXJU8iWArhMEh4rpqyxlJnwUGB0sQ5xzBrG0xr",
+      "url": "/static/js/agenda-reminders.1598fc81d0996452.js"
     },
     "js/agenda-scroll-core.js": {
       "bytes": 4315,
@@ -411,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "d808cdf3d6e183476425d069dfe8bda563312c0d5bba65561633a724590f5fc3",
+  "manifest_sha256": "e24128c05754599510f7ecda683ed4b2f9c3bced4fe282016a55ec6a08ba9006",
   "version": 1
 }
