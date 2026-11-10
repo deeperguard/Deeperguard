@@ -64,6 +64,42 @@ def start_server(root: Path, port: int):
     raise RuntimeError("flask did not start")
 
 
+def wait_no_fork_toast(page, timeout_ms: int = 3000) -> dict:
+    """Fail fast if freshness fork toast is visible (harness/product regression)."""
+    return page.evaluate(
+        """() => {
+          const el = document.getElementById('toast');
+          const cs = el ? getComputedStyle(el) : null;
+          const toastVisible = !!(
+            el && !el.hidden && el.textContent
+            && cs && cs.visibility !== 'hidden' && cs.display !== 'none'
+          );
+          const forkToast = toastVisible && /possible fork/i.test(el.textContent || '');
+          const warnings = NotesFreshness?.getPublicSnapshot?.()?.warnings || [];
+          const forkWarn = warnings.some((w) => /possible fork/i.test(w?.message || ''));
+          return {
+            toastVisible,
+            forkToast,
+            forkWarn,
+            text: (el && el.textContent) || '',
+            scopeOpen: !document.getElementById('agenda-scope-chooser')?.hidden,
+          };
+        }"""
+    )
+
+
+def click_agenda_event(page, event_id: str | None = None, scope: str | None = "series") -> None:
+    if event_id:
+        page.locator(f'[data-agenda-id="{event_id}"]').first.click()
+    else:
+        page.locator("[data-agenda-id]").first.click()
+    page.wait_for_timeout(120)
+    if page.locator("#agenda-scope-chooser:not([hidden])").count():
+        pick = "occurrence" if scope == "occurrence" else "series"
+        page.click(f'[data-agenda-edit-scope="{pick}"]')
+    page.wait_for_selector("#agenda-editor:not([hidden])", timeout=10_000)
+
+
 DATETIME_READABILITY_JS = """
 () => {
   const start = document.getElementById('agenda-edit-start');
@@ -155,8 +191,7 @@ def main() -> int:
                     "() => document.querySelector('#agenda-root [data-agenda-id]')",
                     timeout=30_000,
                 )
-                page.locator('[data-agenda-id]').first.click()
-                page.wait_for_selector("#agenda-editor:not([hidden])", timeout=10_000)
+                click_agenda_event(page, scope="series")
                 focus = page.evaluate(
                     """() => ({
                       active: document.activeElement?.id || document.activeElement?.tagName,
@@ -255,8 +290,7 @@ def main() -> int:
                 page.fill("#agenda-edit-title", "Edited title 15:45")
                 page.click("#agenda-edit-save")
                 page.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
-                page.locator('[data-agenda-id]').first.click()
-                page.wait_for_selector("#agenda-editor:not([hidden])")
+                click_agenda_event(page, scope="series")
                 after_time = page.evaluate(DATETIME_READABILITY_JS)
                 time_save_ok = (after_time.get("startTime") or "").startswith("15:45")
                 results.append(
@@ -273,8 +307,7 @@ def main() -> int:
                 page.fill("#agenda-edit-until", "2026-12-31")
                 page.click("#agenda-edit-save")
                 page.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
-                page.locator('[data-agenda-id]').first.click()
-                page.wait_for_selector("#agenda-editor:not([hidden])")
+                click_agenda_event(page, scope="series")
                 reopened = page.evaluate(
                     """() => ({
                       title: document.getElementById('agenda-edit-title')?.value,
@@ -295,8 +328,7 @@ def main() -> int:
                 page.fill("#agenda-edit-title", "Should not persist")
                 page.click("#agenda-edit-cancel")
                 page.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
-                page.locator('[data-agenda-id]').first.click()
-                page.wait_for_selector("#agenda-editor:not([hidden])")
+                click_agenda_event(page, scope="series")
                 cancel_ok = page.evaluate(
                     "() => document.getElementById('agenda-edit-title')?.value"
                 )
@@ -306,6 +338,94 @@ def main() -> int:
                         "check": "cancel_discards_edits",
                         "ok": cancel_ok == "Edited title",
                         "detail": {"title": cancel_ok},
+                    }
+                )
+                page.click("#agenda-edit-cancel")
+
+                page.click('[data-agenda-view="week"]')
+                page.wait_for_timeout(450)
+                target_ms = page.evaluate(
+                    "() => document.querySelector('[data-agenda-occurrence-ms]')?.getAttribute('data-agenda-occurrence-ms')"
+                )
+                page.locator("[data-agenda-occurrence-ms]").first.click()
+                page.wait_for_selector("#agenda-scope-chooser:not([hidden])", timeout=8000)
+                fork_gate = wait_no_fork_toast(page)
+                results.append(
+                    {
+                        "vp": vp_name,
+                        "check": "no_fork_toast_at_scope",
+                        "ok": not fork_gate.get("forkToast") and not fork_gate.get("forkWarn"),
+                        "detail": fork_gate,
+                    }
+                )
+                scope_full = ART / f"occurrence_scope_full_{vp_name}.png"
+                page.screenshot(path=str(scope_full), full_page=True)
+                SIGNOFF.joinpath(scope_full.name).write_bytes(scope_full.read_bytes())
+                page.click('[data-agenda-edit-scope="occurrence"]')
+                page.wait_for_selector("#agenda-editor:not([hidden])")
+                occ_title = f"Occ only {vp_name}"
+                page.fill("#agenda-edit-title", occ_title)
+                page.click("#agenda-edit-save")
+                page.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
+                chip_titles = page.evaluate(
+                    "() => [...document.querySelectorAll('.agenda-chip-title')].map((t) => t.textContent.trim())"
+                )
+                sibling = page.evaluate(
+                    """([eid, occTitle]) => {
+                      const ev = NotesStore.listAgendaEvents().find((e) => e.id === eid);
+                      if (!ev) return { ok: false };
+                      const overrides = ev.ics_occurrence_overrides || {};
+                      const patched = Object.values(overrides).some((o) => o.title === occTitle);
+                      return {
+                        ok: patched && ev.title === 'Edited title' && ev.rrule.includes('FREQ=WEEKLY'),
+                        masterTitle: ev.title,
+                        overrideCount: Object.keys(overrides).length,
+                      };
+                    }""",
+                    [event_id_holder[vp_name], occ_title],
+                )
+                results.append(
+                    {
+                        "vp": vp_name,
+                        "check": "occurrence_edit_siblings_untouched",
+                        "ok": occ_title in chip_titles and sibling.get("ok"),
+                        "detail": {"chips": chip_titles, "occ_title": occ_title, "vault": sibling},
+                    }
+                )
+                page.locator(f'[data-agenda-occurrence-ms="{target_ms}"]').click()
+                page.wait_for_timeout(120)
+                if page.locator("#agenda-scope-chooser:not([hidden])").count():
+                    page.click('[data-agenda-edit-scope="occurrence"]')
+                page.wait_for_selector("#agenda-editor:not([hidden])")
+                reopen_title = page.evaluate(
+                    "() => document.getElementById('agenda-edit-title')?.value"
+                )
+                saved_shot = ART / f"occurrence_saved_full_{vp_name}.png"
+                page.screenshot(path=str(saved_shot), full_page=True)
+                SIGNOFF.joinpath(saved_shot.name).write_bytes(saved_shot.read_bytes())
+                results.append(
+                    {
+                        "vp": vp_name,
+                        "check": "occurrence_save_reopen",
+                        "ok": reopen_title == occ_title,
+                        "detail": {"title": reopen_title},
+                    }
+                )
+                page.fill("#agenda-edit-title", "Occ cancel probe")
+                page.click("#agenda-edit-cancel")
+                page.wait_for_selector("#agenda-editor", state="hidden")
+                page.locator(f'[data-agenda-occurrence-ms="{target_ms}"]').click()
+                if page.locator("#agenda-scope-chooser:not([hidden])").count():
+                    page.click('[data-agenda-edit-scope="occurrence"]')
+                cancel_title = page.evaluate(
+                    "() => document.getElementById('agenda-edit-title')?.value"
+                )
+                results.append(
+                    {
+                        "vp": vp_name,
+                        "check": "occurrence_cancel_safe",
+                        "ok": cancel_title == occ_title,
+                        "detail": {"title": cancel_title},
                     }
                 )
                 page.click("#agenda-edit-cancel")
@@ -346,8 +466,7 @@ END:VCALENDAR`;
                         f"() => document.querySelector('[data-agenda-id=\"{imp['id']}\"]')",
                         timeout=15_000,
                     )
-                    page.locator(f'[data-agenda-id="{imp["id"]}"]').click()
-                    page.wait_for_selector("#agenda-editor:not([hidden])")
+                    click_agenda_event(page, imp["id"], scope="series")
                     page.fill("#agenda-edit-title", "ICS EXDATE fixture (edited)")
                     page.click("#agenda-edit-save")
                     page.wait_for_selector("#agenda-editor", state="hidden")

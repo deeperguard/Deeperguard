@@ -1833,8 +1833,45 @@ const NotesStore = (() => {
     });
   }
 
+  function mergeIcsRowsForUid(vevents, existing) {
+    const list = vevents || [];
+    const master = list.find((v) => String(v.rrule || '').trim())
+      || list.find((v) => !String(v.ics_recurrence_id || '').trim())
+      || list[0];
+    if (!master) return null;
+    const overrides = { ...((existing && existing.ics_occurrence_overrides) || {}) };
+    const exSet = new Set();
+    (existing && existing.ics_exdates || []).forEach((x) => {
+      const t = String(x || '').trim();
+      if (t) exSet.add(t);
+    });
+    for (const v of list) {
+      (Array.isArray(v.ics_exdates) ? v.ics_exdates : []).forEach((x) => {
+        const t = String(x || '').trim();
+        if (t) exSet.add(t);
+      });
+      const rid = String(v.ics_recurrence_id || '').trim();
+      if (rid && v !== master && !String(v.rrule || '').trim()) {
+        overrides[rid] = {
+          title: String(v.title || '').trim() || 'Untitled',
+          location: String(v.location || ''),
+          notes: String(v.notes || ''),
+          start: String(v.start || ''),
+          end: String(v.end || ''),
+          all_day: !!v.all_day,
+        };
+      }
+    }
+    return {
+      master,
+      overrides,
+      ics_exdates: [...exSet],
+      ical_uid: String(master.ical_uid || '').trim(),
+    };
+  }
+
   /**
-   * Merge ICS rows into the agenda pack. Same ICAL UID replaces the existing row (idempotent).
+   * Merge ICS rows into the agenda pack. Rows sharing ICAL UID compose master + exceptions.
    */
   function importAgendaFromIcs(rows) {
     ensureAgendaPack();
@@ -1846,38 +1883,48 @@ const NotesStore = (() => {
       const u = String(ev && ev.ical_uid || '').trim();
       if (u) byUid.set(u, eid);
     }
+    const groups = new Map();
+    (rows || []).forEach((row, idx) => {
+      const uid = String(row && row.ical_uid || '').trim() || `__anon_${idx}`;
+      if (!groups.has(uid)) groups.set(uid, []);
+      groups.get(uid).push(row);
+    });
     let imported = 0;
     let skipped = 0;
-    for (const row of rows || []) {
-      const uid = String(row && row.ical_uid || '').trim();
-      let id = uid && byUid.has(uid) ? byUid.get(uid) : newUuid();
-      if (uid && !byUid.has(uid)) byUid.set(uid, id);
+    for (const [uid, groupRows] of groups) {
+      const id = uid.startsWith('__anon_') ? newUuid() : (byUid.has(uid) ? byUid.get(uid) : newUuid());
+      if (!uid.startsWith('__anon_') && !byUid.has(uid)) byUid.set(uid, id);
+      const prev = events[id];
+      const merged = mergeIcsRowsForUid(groupRows, prev);
+      if (!merged) continue;
+      const m = merged.master;
+      const icalUid = merged.ical_uid || (uid.startsWith('__anon_') ? '' : uid);
       const nextRow = {
         type: 'agenda_event',
         version: 1,
-        title: String(row.title || '').trim() || 'Untitled',
-        location: String(row.location || ''),
-        notes: String(row.notes || ''),
-        attendees: Array.isArray(row.attendees) ? row.attendees : [],
-        webcall_url: String(row.webcall_url || ''),
-        start: String(row.start || ''),
-        end: String(row.end || ''),
-        all_day: !!row.all_day,
-        rrule: String(row.rrule || ''),
-        ics_exdates: Array.isArray(row.ics_exdates)
-          ? row.ics_exdates.map((x) => String(x || '').trim()).filter(Boolean)
-          : [],
-        ics_recurrence_id: String(row.ics_recurrence_id || ''),
-        ical_uid: uid,
-        source_tz: String(row.source_tz || ''),
+        title: String(m.title || '').trim() || 'Untitled',
+        location: String(m.location || ''),
+        notes: String(m.notes || ''),
+        attendees: Array.isArray(m.attendees) ? m.attendees : [],
+        webcall_url: String(m.webcall_url || ''),
+        start: String(m.start || ''),
+        end: String(m.end || ''),
+        all_day: !!m.all_day,
+        rrule: String(m.rrule || ''),
+        ics_exdates: merged.ics_exdates,
+        ics_occurrence_overrides: merged.overrides,
+        ics_recurrence_id: '',
+        ical_uid: icalUid,
+        source_tz: String(m.source_tz || ''),
         imported_at: new Date().toISOString(),
       };
-      const prev = events[id];
       const prevSig = prev && JSON.stringify({
-        t: prev.title, s: prev.start, e: prev.end, l: prev.location, n: prev.notes, r: prev.rrule, a: prev.all_day,
+        t: prev.title, s: prev.start, e: prev.end, l: prev.location, n: prev.notes,
+        r: prev.rrule, a: prev.all_day, x: prev.ics_exdates, o: prev.ics_occurrence_overrides,
       });
       const nextSig = JSON.stringify({
-        t: nextRow.title, s: nextRow.start, e: nextRow.end, l: nextRow.location, n: nextRow.notes, r: nextRow.rrule, a: nextRow.all_day,
+        t: nextRow.title, s: nextRow.start, e: nextRow.end, l: nextRow.location, n: nextRow.notes,
+        r: nextRow.rrule, a: nextRow.all_day, x: nextRow.ics_exdates, o: nextRow.ics_occurrence_overrides,
       });
       if (prev && prevSig === nextSig) {
         skipped += 1;
@@ -2816,6 +2863,14 @@ const NotesStore = (() => {
     delete item.sync_retry_key;
     clearSyncPushWrap(item);
     if (pushed?.content_hash) item.content_hash = pushed.content_hash;
+    if (
+      pushed?.content_hash
+      && typeof NotesFreshness !== 'undefined'
+      && item.content
+      && item.content.type === 'agenda_pack'
+    ) {
+      NotesFreshness.noteAccepted(uuid, item.content, pushed.content_hash);
+    }
     if (result?.rev != null && Number.isFinite(Number(result.rev))) item.rev = Number(result.rev);
     if (item.deleted || !pushed?.ciphertext) return;
     try {
@@ -4719,7 +4774,12 @@ const NotesStore = (() => {
       state.dirty.add(uuid);
       schedulePush();
       if (typeof NotesFreshness !== 'undefined' && NotesFreshness.shouldTrackType(content.type)) {
-        NotesFreshness.noteAccepted(uuid, content, item.content_hash || '');
+        if (content.type === 'agenda_pack') {
+          // Pack bumps ship before wrap; stamp hash after recordPushedState.
+          NotesFreshness.noteAccepted(uuid, content, '');
+        } else {
+          NotesFreshness.noteAccepted(uuid, content, item.content_hash || '');
+        }
         scheduleVaultHeadRefresh();
       }
     }
