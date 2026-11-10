@@ -1,5 +1,17 @@
 # Release notes
 
+## v0.65.52 (Vienna)
+
+- **Ops #334:** After any server `notes.db` restore, operators can revoke all live sessions (`deploy/revoke-all-sessions-after-restore.{sh,py}`) so pre-restore cookies cannot authenticate; runbook in `deploy/PRODUCTION.md`.
+
+## v0.65.51 (Vienna)
+
+- **Sync #330:** Safe upload retries via `sync_retry_key` / request hash — identical retries are idempotent; hash mismatch returns `retry_conflict` without clobbering newer server data. Reuses wrapped ciphertext on the same dirty cycle; rotates retry key after conflict. Localized blocked-sync toasts (EN/NL) with note title for `retry_conflict`.
+
+## v0.65.50 (Vienna)
+
+- **Ask AI #331:** Structured send consent — destination consent recorded; cloud relay warnings and ack only for Ollama Cloud; relay-only storage copy (EN/NL).
+
 ## v0.65.49 (Vienna)
 
 - **Sign-up #327:** Register hang UX — reassurance copy at 6s/20s, Retry without aborting SRP (180s client timeout), late success honored once, Turnstile refresh on retry, soft-fail anti-enumeration with optional sign-in link after retry (sessionStorage email prefill).

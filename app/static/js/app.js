@@ -4043,7 +4043,11 @@
       || open('account-info-dialog')
       || open('folder-prompt')
       || open('totp-add-dialog')
-      || open('scan-dialog');
+      || open('scan-dialog')
+      || open('agenda-scope-chooser')
+      || open('agenda-editor')
+      || document.body.classList.contains('agenda-scope-open')
+      || document.body.classList.contains('agenda-editor-open');
   }
 
   function syncToastDialogLift() {
@@ -24640,6 +24644,9 @@
         event.preventDefault();
         event.stopPropagation();
       };
+      if (global.NotesAgenda && typeof global.NotesAgenda.handleEscapeKey === 'function') {
+        if (global.NotesAgenda.handleEscapeKey(event)) return;
+      }
       const folderPrompt = document.getElementById('folder-prompt');
       if (folderPrompt && !folderPrompt.hidden) {
         closeFolderPrompt();

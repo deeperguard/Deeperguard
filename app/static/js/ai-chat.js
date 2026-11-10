@@ -21,14 +21,63 @@ const NotesAiChat = (() => {
   const DEFAULT_MODEL = 'gpt-oss:120b';
   const MAX_CONTEXT_CHARS = 24000;
   const MAX_HISTORY = 12;
-  /** Per-device ack that the user saw the Ollama Cloud relay warning before first send. */
+  /** Structured Ask AI consent (destination, purpose, time). */
+  const CONSENT_RECORD_KEY = 'notes_ai_send_consent_v1';
+  /** Legacy per-device acks (migrated into CONSENT_RECORD_KEY when readable). */
   const CLOUD_RELAY_ACK_KEY = 'notes_ai_ollama_cloud_relay_ack';
-  /** Per-device ack for note body/title and scanned attachment text on Ollama Cloud sends. */
   const CLOUD_CONTENT_ACK_KEY = 'notes_ai_ollama_cloud_content_ack';
-  const CLOUD_RELAY_CONFIRM_MESSAGE = "Your message and any note content will go through our server to ollama.com. Nothing is stored. Send?";
-  const CLOUD_ROUTE_LABEL = 'This request goes through our server to ollama.com. Nothing is stored.';
+  const CLOUD_RELAY_DETAIL = {
+    en: "Our server doesn't store your API key, the prompt or the answer. Ollama has its own terms.",
+    nl: 'Onze server bewaart je API-sleutel, de prompt en het antwoord niet. Ollama hanteert eigen voorwaarden.',
+  };
+  const CLOUD_RELAY_DETAIL_EN = CLOUD_RELAY_DETAIL.en;
+  const CLOUD_RELAY_CONFIRM_MESSAGE = 'Your message and any note content will go through our server to ollama.com. '
+    + `${CLOUD_RELAY_DETAIL_EN} Send?`;
+  const CLOUD_ROUTE_LABEL = 'This request goes through our server to ollama.com. '
+    + CLOUD_RELAY_DETAIL_EN;
+
+  function cloudRelayDetail() {
+    return consentLocale() === 'nl' ? CLOUD_RELAY_DETAIL.nl : CLOUD_RELAY_DETAIL.en;
+  }
+
+  function cloudRouteLabel() {
+    const via = consentLocale() === 'nl'
+      ? 'Dit verzoek gaat via onze server naar ollama.com.'
+      : 'This request goes through our server to ollama.com.';
+    return `${via} ${cloudRelayDetail()}`;
+  }
+
+  function cloudRelayConfirmMessage() {
+    const lead = consentLocale() === 'nl'
+      ? 'Je bericht en eventuele notitie-inhoud gaan via onze server naar ollama.com.'
+      : 'Your message and any note content will go through our server to ollama.com.';
+    const action = consentLocale() === 'nl' ? ' Versturen?' : ' Send?';
+    return `${lead} ${cloudRelayDetail()}${action}`;
+  }
   const CONTENT_WARN_NOTE = "This send includes this note's title and body text.";
   const CONTENT_WARN_OCR = 'This send includes scanned text from attachments.';
+  const CONSENT_PURPOSE = 'ask-ai';
+  const consentUiCopy = {
+    titleCloud: {
+      en: 'Send via Ollama Cloud',
+      nl: 'Versturen via Ollama Cloud',
+    },
+    titleLocal: {
+      en: 'Send via your Ollama server',
+      nl: 'Versturen via je Ollama-server',
+    },
+    routeCloud: {
+      en: 'Destination: Ollama Cloud (through our server to ollama.com).',
+      nl: 'Bestemming: Ollama Cloud (via onze server naar ollama.com).',
+    },
+    routeLocal: {
+      en: 'Destination: your Ollama server at {host}.',
+      nl: 'Bestemming: je Ollama-server op {host}.',
+    },
+    send: { en: 'Send', nl: 'Versturen' },
+    cancel: { en: 'Cancel', nl: 'Annuleren' },
+    reviewPrefix: { en: 'Review: ', nl: 'Controleer: ' },
+  };
   // Ollama cloud models (https://ollama.com/api/tags) suited to Q&A over a note.
   const SUGGESTED_MODELS = [
     'gpt-oss:120b',
@@ -298,6 +347,72 @@ const NotesAiChat = (() => {
     }
   }
 
+  function consentLocale() {
+    try {
+      return String(document.documentElement?.lang || 'en').toLowerCase().startsWith('nl') ? 'nl' : 'en';
+    } catch (err) {
+      return 'en';
+    }
+  }
+
+  function consentUi(key, extra = {}) {
+    const loc = consentLocale();
+    let text = consentUiCopy[key]?.[loc] || consentUiCopy[key]?.en || '';
+    if (extra.host) text = text.replace('{host}', extra.host);
+    return text;
+  }
+
+  function destinationId(cfg) {
+    const host = normalizeHost(cfg?.host);
+    return isCloudHost(host) ? 'cloud:https://ollama.com' : `local:${host}`;
+  }
+
+  function migrateLegacyConsent() {
+    if (!hasCloudRelayAck()) return null;
+    return {
+      destination: 'cloud:https://ollama.com',
+      purpose: CONSENT_PURPOSE,
+      consentedAt: new Date(0).toISOString(),
+      migrated: true,
+    };
+  }
+
+  function readConsentRecord() {
+    const store = storage();
+    if (!store) return null;
+    try {
+      const raw = store.getItem(CONSENT_RECORD_KEY);
+      if (!raw) return migrateLegacyConsent();
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (!parsed.destination || !parsed.consentedAt || parsed.purpose !== CONSENT_PURPOSE) return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeConsentRecord(cfg) {
+    const store = storage();
+    if (!store) return;
+    const record = {
+      destination: destinationId(cfg),
+      purpose: CONSENT_PURPOSE,
+      consentedAt: new Date().toISOString(),
+    };
+    try {
+      store.setItem(CONSENT_RECORD_KEY, JSON.stringify(record));
+    } catch (err) {
+      /* ignore */
+    }
+  }
+
+  function consentMatchesDestination(cfg) {
+    const record = readConsentRecord();
+    if (!record) return false;
+    return record.destination === destinationId(cfg);
+  }
+
   function hasCloudRelayAck() {
     const store = storage();
     if (!store) return false;
@@ -368,7 +483,7 @@ const NotesAiChat = (() => {
 
   function describeOutboundRoute(cfg) {
     if (isCloudHost(cfg?.host)) {
-      return { cloud: true, label: CLOUD_ROUTE_LABEL };
+      return { cloud: true, label: cloudRouteLabel() };
     }
     const host = normalizeHost(cfg?.host);
     return {
@@ -382,14 +497,17 @@ const NotesAiChat = (() => {
     const body = requestBody({ model, context, history, question });
     const preview = formatOutboundPreview(body);
     const route = describeOutboundRoute(cfg);
+    const cloud = route.cloud;
     const sensitivity = classifyOutboundContent(note, attachments, { includeOcr });
     const contentAck = readContentAck();
-    const needRelayAck = !hasCloudRelayAck();
+    const needRelayAck = cloud && !hasCloudRelayAck();
     const needNoteAck = sensitivity.noteText && !contentAck.note;
     const needOcrAck = sensitivity.ocrText && !contentAck.ocr;
     const loud = needRelayAck || needNoteAck || needOcrAck;
     const warnLines = [];
-    if (needRelayAck) warnLines.push(CLOUD_RELAY_CONFIRM_MESSAGE.replace(/\s*Send\?$/, ''));
+    if (needRelayAck) {
+      warnLines.push(cloudRelayConfirmMessage().replace(/\s*(Send\?|Versturen\?)$/, ''));
+    }
     if (needNoteAck) warnLines.push(CONTENT_WARN_NOTE);
     if (needOcrAck) warnLines.push(CONTENT_WARN_OCR);
     return {
@@ -406,7 +524,7 @@ const NotesAiChat = (() => {
     };
   }
 
-  function showOutboundDialog({
+  async function showOutboundDialog({
     title,
     routeLabel,
     warnLines = [],
@@ -425,22 +543,29 @@ const NotesAiChat = (() => {
     const cancelBtn = el('ai-outbound-cancel');
     const sendBtn = el('ai-outbound-send');
     if (!backdrop || !dialog || !titleEl || !routeEl || !warnEl || !detailsEl || !previewEl || !cancelBtn || !sendBtn) {
-      return Promise.resolve(!!globalThis.confirm?.(CLOUD_RELAY_CONFIRM_MESSAGE));
+      const fallbackMsg = [routeLabel, ...(warnLines || [])].filter(Boolean).join('\n\n')
+        || cloudRelayConfirmMessage();
+      if (typeof deps.confirm === 'function') {
+        return Promise.resolve(!!(await deps.confirm(fallbackMsg, { confirmLabel, cancelLabel })));
+      }
+      return Promise.resolve(!!globalThis.confirm?.(fallbackMsg));
     }
     return new Promise((resolve) => {
       titleEl.textContent = title || 'Send to Ask AI';
       routeEl.textContent = routeLabel || '';
       warnEl.replaceChildren();
       const lines = (warnLines || []).filter(Boolean);
+      const reviewPrefix = consentUi('reviewPrefix');
+      const reviewStrip = consentLocale() === 'nl' ? /^Controleer:\s*/ : /^Review:\s*/;
       if (lines.length) {
         warnEl.hidden = false;
         for (const line of lines) {
           const p = document.createElement('p');
           if (loud && line === lines[0]) {
             const strong = document.createElement('strong');
-            strong.textContent = 'Review: ';
+            strong.textContent = reviewPrefix;
             p.appendChild(strong);
-            p.append(line.replace(/^Review:\s*/, ''));
+            p.append(line.replace(reviewStrip, ''));
           } else {
             p.textContent = line;
           }
@@ -501,9 +626,9 @@ const NotesAiChat = (() => {
     }));
   }
 
-  /** Cloud: preview + consent before each send. Local Ollama skips the prompt. */
+  /** Cloud: preview + per-send content warnings after destination consent exists. */
   async function ensureCloudSendConsent({ cfg, note, attachments, includeOcr, question, history, model }) {
-    if (!isCloudHost(cfg?.host)) return true;
+    if (!isCloudHost(cfg?.host)) return false;
     const plan = outboundPromptPlan({
       cfg,
       note,
@@ -515,28 +640,83 @@ const NotesAiChat = (() => {
     });
     const ok = await promptCloudOutboundSend(plan);
     if (!ok) return false;
-    if (plan.needRelayAck) setCloudRelayAck();
+    if (isCloudHost(cfg?.host) && plan.needRelayAck) setCloudRelayAck();
     if (plan.sensitivity.noteText) setContentAck({ note: true });
     if (plan.sensitivity.ocrText) setContentAck({ ocr: true });
     return true;
   }
 
-  /** One-time confirm before the first Ollama Cloud send on this device. Local Ollama skips. */
-  async function ensureCloudRelayConsent(cfg) {
-    if (!isCloudHost(cfg?.host)) return true;
-    if (hasCloudRelayAck()) return true;
-    let ok = false;
-    if (typeof deps.confirm === 'function') {
-      ok = !!(await deps.confirm(CLOUD_RELAY_CONFIRM_MESSAGE, {
-        title: 'Ask AI',
-        confirmLabel: 'Send',
-        cancelLabel: 'Cancel',
-      }));
-    } else if (typeof globalThis !== 'undefined' && typeof globalThis.confirm === 'function') {
-      ok = !!globalThis.confirm(CLOUD_RELAY_CONFIRM_MESSAGE);
+  async function ensureSendConsent({ cfg, note, attachments, includeOcr, question, history, model }) {
+    const normalized = normalizeSettings(cfg);
+    const cloud = isCloudHost(normalized.host);
+    if (!consentMatchesDestination(normalized)) {
+      const plan = outboundPromptPlan({
+        cfg: normalized,
+        note,
+        attachments,
+        includeOcr,
+        question,
+        history,
+        model: model || normalized.model,
+      });
+      const title = cloud ? consentUi('titleCloud') : consentUi('titleLocal');
+      const routeLabel = cloud
+        ? consentUi('routeCloud')
+        : consentUi('routeLocal', { host: normalizeHost(normalized.host) });
+      const warnLines = plan.warnLines.length ? plan.warnLines : [routeLabel];
+      const ok = await showOutboundDialog({
+        title,
+        routeLabel,
+        warnLines,
+        previewText: plan.preview,
+        loud: true,
+        confirmLabel: consentUi('send'),
+        cancelLabel: consentUi('cancel'),
+      });
+      if (!ok) return false;
+      writeConsentRecord(normalized);
+      if (cloud && plan.needRelayAck) setCloudRelayAck();
+      if (plan.sensitivity.noteText) setContentAck({ note: true });
+      if (plan.sensitivity.ocrText) setContentAck({ ocr: true });
+      return true;
     }
-    if (ok) setCloudRelayAck();
-    return ok;
+    if (cloud) {
+      return ensureCloudSendConsent({
+        cfg: normalized,
+        note,
+        attachments,
+        includeOcr,
+        question,
+        history,
+        model,
+      });
+    }
+    return true;
+  }
+
+  /** Settings key check — requires destination consent; never silently uses cloud. */
+  async function ensureCloudRelayConsent(cfg) {
+    const normalized = normalizeSettings(cfg);
+    if (!isCloudHost(normalized.host)) {
+      return ensureSendConsent({
+        cfg: normalized,
+        note: { content: { title: '', content: '' } },
+        attachments: [],
+        includeOcr: false,
+        question: '',
+        history: [],
+        model: normalized.model,
+      });
+    }
+    return ensureSendConsent({
+      cfg: normalized,
+      note: { content: { title: '', content: '' } },
+      attachments: [],
+      includeOcr: false,
+      question: '',
+      history: [],
+      model: normalized.model,
+    });
   }
 
   function formatMsgTime(ts) {
@@ -657,7 +837,7 @@ const NotesAiChat = (() => {
       return;
     }
     const attachments = deps.getAttachments ? deps.getAttachments(state.noteId) : [];
-    if (!(await ensureCloudSendConsent({
+    if (!(await ensureSendConsent({
       cfg,
       note,
       attachments,
@@ -746,10 +926,12 @@ const NotesAiChat = (() => {
     DEFAULT_MODEL,
     MAX_CONTEXT_CHARS,
     SUGGESTED_MODELS,
+    CONSENT_RECORD_KEY,
     CLOUD_RELAY_ACK_KEY,
     CLOUD_CONTENT_ACK_KEY,
     CLOUD_RELAY_CONFIRM_MESSAGE,
     CLOUD_ROUTE_LABEL,
+    CLOUD_RELAY_DETAIL,
     CONTENT_WARN_NOTE,
     CONTENT_WARN_OCR,
     normalizeSettings,
@@ -757,8 +939,13 @@ const NotesAiChat = (() => {
     isConfigured,
     hasCloudRelayAck,
     setCloudRelayAck,
+    readConsentRecord,
+    writeConsentRecord,
+    destinationId,
+    consentMatchesDestination,
     ensureCloudRelayConsent,
     ensureCloudSendConsent,
+    ensureSendConsent,
     classifyOutboundContent,
     formatOutboundPreview,
     describeOutboundRoute,

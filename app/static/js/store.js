@@ -1592,6 +1592,62 @@ const NotesStore = (() => {
     return row.content?.file_enc || null;
   }
 
+  function ensureSyncRetryKey(item) {
+    if (!item || typeof item !== 'object') return '';
+    if (!item.sync_retry_key) {
+      item.sync_retry_key = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : `retry-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+    return item.sync_retry_key;
+  }
+
+  function rotateSyncRetryKey(item) {
+    if (!item || typeof item !== 'object') return '';
+    delete item.sync_retry_key;
+    const key = ensureSyncRetryKey(item);
+    if (item.sync_push_wrap?.row) {
+      item.sync_push_wrap.row = { ...item.sync_push_wrap.row, sync_retry_key: key };
+    }
+    return key;
+  }
+
+  function retryConflictBlockedLine(label) {
+    return blockedSyncDetailLine(label, syncRetryConflictUserMessage());
+  }
+
+  function syncPushWrapStamp(item, content) {
+    const ts = Number(item?.updated_at) || 0;
+    const tomb = !!(content?.deleted || item?.deleted);
+    return `${ts}|${tomb ? 1 : 0}`;
+  }
+
+  function clearSyncPushWrap(item) {
+    if (item && typeof item === 'object') delete item.sync_push_wrap;
+  }
+
+  function reuseCachedPushRow(item, content) {
+    if (!item || typeof item !== 'object') return null;
+    const cached = item.sync_push_wrap;
+    if (!cached?.row) return null;
+    const stamp = syncPushWrapStamp(item, content);
+    if (cached.stamp !== stamp) return null;
+    const row = { ...cached.row };
+    row.sync_retry_key = ensureSyncRetryKey(item);
+    row.sync_request_hash = cached.row.content_hash;
+    return row;
+  }
+
+  async function wrapItemForPush(uuid, content, item) {
+    const cached = reuseCachedPushRow(item, content);
+    if (cached) return cached;
+    const row = await wrapItem(uuid, content, item.updated_at);
+    if (item && typeof item === 'object') {
+      item.sync_push_wrap = { stamp: syncPushWrapStamp(item, content), row: { ...row } };
+    }
+    return row;
+  }
+
   async function wrapItem(uuid, content, updatedAt) {
     await sealAttachmentContent(content);
     let wrapContent = content;
@@ -1618,7 +1674,7 @@ const NotesStore = (() => {
     const ciphertext = JSON.stringify(payload);
     const content_hash = await NotesCrypto.hashText(ciphertext);
     const ts = Number(updatedAt);
-    return {
+    const row = {
       item_uuid: uuid,
       content_version: 1,
       ciphertext,
@@ -1627,6 +1683,12 @@ const NotesStore = (() => {
       deleted: !!content.deleted,
       updated_at: Number.isFinite(ts) && ts > 0 ? ts : Date.now() / 1000,
     };
+    const live = state.items.get(uuid);
+    if (live) {
+      row.sync_retry_key = ensureSyncRetryKey(live);
+      row.sync_request_hash = content_hash;
+    }
+    return row;
   }
 
   async function decryptCipherPayload(payload, { fast = false } = {}) {
@@ -1771,8 +1833,45 @@ const NotesStore = (() => {
     });
   }
 
+  function mergeIcsRowsForUid(vevents, existing) {
+    const list = vevents || [];
+    const master = list.find((v) => String(v.rrule || '').trim())
+      || list.find((v) => !String(v.ics_recurrence_id || '').trim())
+      || list[0];
+    if (!master) return null;
+    const overrides = { ...((existing && existing.ics_occurrence_overrides) || {}) };
+    const exSet = new Set();
+    (existing && existing.ics_exdates || []).forEach((x) => {
+      const t = String(x || '').trim();
+      if (t) exSet.add(t);
+    });
+    for (const v of list) {
+      (Array.isArray(v.ics_exdates) ? v.ics_exdates : []).forEach((x) => {
+        const t = String(x || '').trim();
+        if (t) exSet.add(t);
+      });
+      const rid = String(v.ics_recurrence_id || '').trim();
+      if (rid && v !== master && !String(v.rrule || '').trim()) {
+        overrides[rid] = {
+          title: String(v.title || '').trim() || 'Untitled',
+          location: String(v.location || ''),
+          notes: String(v.notes || ''),
+          start: String(v.start || ''),
+          end: String(v.end || ''),
+          all_day: !!v.all_day,
+        };
+      }
+    }
+    return {
+      master,
+      overrides,
+      ics_exdates: [...exSet],
+      ical_uid: String(master.ical_uid || '').trim(),
+    };
+  }
+
   /**
-   * Merge ICS rows into the agenda pack. Same ICAL UID replaces the existing row (idempotent).
+   * Merge ICS rows into the agenda pack. Rows sharing ICAL UID compose master + exceptions.
    */
   function importAgendaFromIcs(rows) {
     ensureAgendaPack();
@@ -1784,34 +1883,48 @@ const NotesStore = (() => {
       const u = String(ev && ev.ical_uid || '').trim();
       if (u) byUid.set(u, eid);
     }
+    const groups = new Map();
+    (rows || []).forEach((row, idx) => {
+      const uid = String(row && row.ical_uid || '').trim() || `__anon_${idx}`;
+      if (!groups.has(uid)) groups.set(uid, []);
+      groups.get(uid).push(row);
+    });
     let imported = 0;
     let skipped = 0;
-    for (const row of rows || []) {
-      const uid = String(row && row.ical_uid || '').trim();
-      let id = uid && byUid.has(uid) ? byUid.get(uid) : newUuid();
-      if (uid && !byUid.has(uid)) byUid.set(uid, id);
+    for (const [uid, groupRows] of groups) {
+      const id = uid.startsWith('__anon_') ? newUuid() : (byUid.has(uid) ? byUid.get(uid) : newUuid());
+      if (!uid.startsWith('__anon_') && !byUid.has(uid)) byUid.set(uid, id);
+      const prev = events[id];
+      const merged = mergeIcsRowsForUid(groupRows, prev);
+      if (!merged) continue;
+      const m = merged.master;
+      const icalUid = merged.ical_uid || (uid.startsWith('__anon_') ? '' : uid);
       const nextRow = {
         type: 'agenda_event',
         version: 1,
-        title: String(row.title || '').trim() || 'Untitled',
-        location: String(row.location || ''),
-        notes: String(row.notes || ''),
-        attendees: Array.isArray(row.attendees) ? row.attendees : [],
-        webcall_url: String(row.webcall_url || ''),
-        start: String(row.start || ''),
-        end: String(row.end || ''),
-        all_day: !!row.all_day,
-        rrule: String(row.rrule || ''),
-        ical_uid: uid,
-        source_tz: String(row.source_tz || ''),
+        title: String(m.title || '').trim() || 'Untitled',
+        location: String(m.location || ''),
+        notes: String(m.notes || ''),
+        attendees: Array.isArray(m.attendees) ? m.attendees : [],
+        webcall_url: String(m.webcall_url || ''),
+        start: String(m.start || ''),
+        end: String(m.end || ''),
+        all_day: !!m.all_day,
+        rrule: String(m.rrule || ''),
+        ics_exdates: merged.ics_exdates,
+        ics_occurrence_overrides: merged.overrides,
+        ics_recurrence_id: '',
+        ical_uid: icalUid,
+        source_tz: String(m.source_tz || ''),
         imported_at: new Date().toISOString(),
       };
-      const prev = events[id];
       const prevSig = prev && JSON.stringify({
-        t: prev.title, s: prev.start, e: prev.end, l: prev.location, n: prev.notes, r: prev.rrule, a: prev.all_day,
+        t: prev.title, s: prev.start, e: prev.end, l: prev.location, n: prev.notes,
+        r: prev.rrule, a: prev.all_day, x: prev.ics_exdates, o: prev.ics_occurrence_overrides,
       });
       const nextSig = JSON.stringify({
-        t: nextRow.title, s: nextRow.start, e: nextRow.end, l: nextRow.location, n: nextRow.notes, r: nextRow.rrule, a: nextRow.all_day,
+        t: nextRow.title, s: nextRow.start, e: nextRow.end, l: nextRow.location, n: nextRow.notes,
+        r: nextRow.rrule, a: nextRow.all_day, x: nextRow.ics_exdates, o: nextRow.ics_occurrence_overrides,
       });
       if (prev && prevSig === nextSig) {
         skipped += 1;
@@ -1925,7 +2038,7 @@ const NotesStore = (() => {
       const ciphertext = String(row.ciphertext || '');
       if (!ciphertext) return null;
       const content_hash = await NotesCrypto.hashText(ciphertext);
-      return {
+      const tombstone = {
         item_uuid: uuid,
         content_version: 1,
         ciphertext,
@@ -1935,6 +2048,11 @@ const NotesStore = (() => {
         updated_at: updatedAt,
         ...baseRev,
       };
+      if (row.sync_retry_key) {
+        tombstone.sync_retry_key = row.sync_retry_key;
+        tombstone.sync_request_hash = content_hash;
+      }
+      return tombstone;
     }
     const ciphertext = String(row.ciphertext || '');
     if (!ciphertext) return null;
@@ -1947,7 +2065,7 @@ const NotesStore = (() => {
     // an older ciphertext (kept for known_hashes), which must not describe
     // this re-encrypted copy.
     const content_hash = await NotesCrypto.hashText(ciphertext);
-    return {
+    const payload = {
       item_uuid: uuid,
       content_version: 1,
       ciphertext,
@@ -1957,6 +2075,11 @@ const NotesStore = (() => {
       updated_at: updatedAt,
       ...baseRev,
     };
+    if (row.sync_retry_key) {
+      payload.sync_retry_key = row.sync_retry_key;
+      payload.sync_request_hash = content_hash;
+    }
+    return payload;
   }
 
   async function persistCipherRowFromServer(row) {
@@ -2635,18 +2758,55 @@ const NotesStore = (() => {
     return String(label || '').trim() || (content?.type === 'attachment' ? 'a file' : 'an item');
   }
 
+  function syncBlockedLocaleNl() {
+    return String(typeof document !== 'undefined' && document.documentElement?.lang || '')
+      .toLowerCase()
+      .startsWith('nl');
+  }
+
+  function syncRetryConflictUserMessage() {
+    return syncBlockedLocaleNl()
+      ? 'Deze wijziging kon niet veilig worden opgeslagen. De notitie is mogelijk gewijzigd — bewerk en sla opnieuw op.'
+      : 'This save could not be applied safely. The note may have changed — edit and save again.';
+  }
+
+  function blockedSyncDetailLine(label, detail) {
+    const fallback = syncBlockedLocaleNl() ? 'een item' : 'an item';
+    const name = String(label || '').trim() || fallback;
+    const quoted = `“${name}”`;
+    if (syncBlockedLocaleNl()) {
+      return `${quoted} is niet gesynchroniseerd: ${detail}`;
+    }
+    return `${quoted} did not sync: ${detail}`;
+  }
+
+  function blockedMoreSuffix(count) {
+    const n = Number(count) || 0;
+    if (n <= 0) return '';
+    return syncBlockedLocaleNl() ? ` (+${n} meer)` : ` (+${n} more)`;
+  }
+
   // Items the server refuses for size or quota stay on this device and out of
   // the push queue's way; they are retried by sync() and whenever they change.
   function blockItem(uuid, result) {
     const item = state.items.get(uuid);
+    const status = String(result?.status || '');
+    const serverError = String(result?.error || '').trim();
+    const display = status === 'retry_conflict'
+      ? syncRetryConflictUserMessage()
+      : (serverError || String(result?.reason || ''));
     state.blocked.set(uuid, {
-      status: String(result?.status || ''),
-      reason: String(result?.reason || result?.error || ''),
+      status,
+      reason: String(result?.reason || ''),
+      error: display,
       max_item_bytes: Number(result?.max_item_bytes) || 0,
       updated_at: Number(item?.updated_at) || 0,
       at: Date.now(),
     });
-    logSync('push-blocked', { uuid, status: result?.status, reason: result?.reason || result?.error || '' });
+    if (status === 'retry_conflict') {
+      rotateSyncRetryKey(item);
+    }
+    logSync('push-blocked', { uuid, status: result?.status, reason: result?.reason || '', error: display });
   }
 
   function blockedUnchanged(uuid, item) {
@@ -2667,9 +2827,18 @@ const NotesStore = (() => {
     const first = blockedItems()[0];
     if (!first) return '';
     const label = `“${first.label}”`;
-    const more = state.blocked.size > 1 ? ` (+${state.blocked.size - 1} more)` : '';
-    if (first.status === 'quota_exceeded') return `${label} did not sync: storage quota reached${more}`;
-    if (first.status === 'too_large') return `${label} did not sync: too large for the server${more}`;
+    const more = blockedMoreSuffix(state.blocked.size - 1);
+    if (first.status === 'quota_exceeded') {
+      const detail = syncBlockedLocaleNl() ? 'opslagquotum bereikt' : 'storage quota reached';
+      return blockedSyncDetailLine(first.label, detail) + more;
+    }
+    if (first.status === 'too_large') {
+      const detail = syncBlockedLocaleNl() ? 'te groot voor de server' : 'too large for the server';
+      return blockedSyncDetailLine(first.label, detail) + more;
+    }
+    if (first.status === 'retry_conflict') {
+      return retryConflictBlockedLine(first.label) + more;
+    }
     return `${label} did not sync${more}`;
   }
 
@@ -2691,7 +2860,17 @@ const NotesStore = (() => {
   async function recordPushedState(uuid, pushed, result) {
     const item = state.items.get(uuid);
     if (!item) return;
+    delete item.sync_retry_key;
+    clearSyncPushWrap(item);
     if (pushed?.content_hash) item.content_hash = pushed.content_hash;
+    if (
+      pushed?.content_hash
+      && typeof NotesFreshness !== 'undefined'
+      && item.content
+      && item.content.type === 'agenda_pack'
+    ) {
+      NotesFreshness.noteAccepted(uuid, item.content, pushed.content_hash);
+    }
     if (result?.rev != null && Number.isFinite(Number(result.rev))) item.rev = Number(result.rev);
     if (item.deleted || !pushed?.ciphertext) return;
     try {
@@ -2705,6 +2884,7 @@ const NotesStore = (() => {
         has_blob: !!(existing?.has_blob || pushed.blob_ciphertext
           || (item.content?.type === 'attachment' && item.content.file_enc_stored)),
         rev: item.rev != null ? Number(item.rev) || 0 : undefined,
+        sync_retry_key: undefined,
       });
     } catch (err) {
       /* bookkeeping only; the next pull repairs it */
@@ -2914,6 +3094,9 @@ const NotesStore = (() => {
               // Could not fetch or read the server copy: keep ours queued.
               logSync('conflict-resolve-failed', { uuid, error: err?.message || String(err) });
             }
+          } else if (status === 'retry_conflict') {
+            blockItem(uuid, result);
+            state.dirty.delete(uuid);
           } else if (status === 'quota_exceeded' || status === 'too_large') {
             blockItem(uuid, result);
           }
@@ -2950,7 +3133,7 @@ const NotesStore = (() => {
             deletedIds.add(uuid);
           }
           snapshots.set(uuid, { item, updated_at: item.updated_at });
-          const row = await wrapItem(uuid, content, item.updated_at);
+          const row = await wrapItemForPush(uuid, content, item);
           // The revision this write builds on; the server reports a conflict
           // instead of picking a winner by clock when it has moved on.
           if (item.rev != null && Number.isFinite(Number(item.rev))) row.base_rev = Number(item.rev);
@@ -4591,7 +4774,12 @@ const NotesStore = (() => {
       state.dirty.add(uuid);
       schedulePush();
       if (typeof NotesFreshness !== 'undefined' && NotesFreshness.shouldTrackType(content.type)) {
-        NotesFreshness.noteAccepted(uuid, content, item.content_hash || '');
+        if (content.type === 'agenda_pack') {
+          // Pack bumps ship before wrap; stamp hash after recordPushedState.
+          NotesFreshness.noteAccepted(uuid, content, '');
+        } else {
+          NotesFreshness.noteAccepted(uuid, content, item.content_hash || '');
+        }
         scheduleVaultHeadRefresh();
       }
     }
@@ -6238,6 +6426,11 @@ const NotesStore = (() => {
     conflictCopySuffix: () => CONFLICT_SUFFIX,
     setConflictCopyCallback,
     blockedItems,
+    syncRetryConflictUserMessage,
+    retryConflictBlockedLine,
+    rotateSyncRetryKey,
+    syncPushWrapStamp,
+    reuseCachedPushRow,
     chunkPushRows,
     verifyVaultPassword,
     fetchAttachmentBlobFromServer,

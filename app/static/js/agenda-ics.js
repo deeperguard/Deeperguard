@@ -239,6 +239,13 @@
       }
       const rrule = String(ev.rrule || '').trim();
       if (rrule) lines.push(`RRULE:${rrule.replace(/\s+/g, '')}`);
+      const exdates = Array.isArray(ev.ics_exdates) ? ev.ics_exdates : [];
+      exdates.forEach((x) => {
+        const ex = String(x || '').trim().replace(/\s+/g, '');
+        if (ex) lines.push(`EXDATE:${ex}`);
+      });
+      const rid = String(ev.ics_recurrence_id || '').trim();
+      if (rid) lines.push(`RECURRENCE-ID:${rid.replace(/\s+/g, '')}`);
       lines.push('END:VEVENT');
     }
     lines.push('END:VCALENDAR');
@@ -299,6 +306,12 @@
         endDate = new Date(dts.date.getTime() + 3600000);
       }
       const rruleRow = (map.get('RRULE') || [])[0];
+      const exdateRows = map.get('EXDATE') || [];
+      const icsExdates = exdateRows
+        .map((r) => String(r.value || '').trim().replace(/\s+/g, ''))
+        .filter(Boolean);
+      const ridRow = (map.get('RECURRENCE-ID') || [])[0];
+      const icsRecurrenceId = ridRow ? String(ridRow.value || '').trim() : '';
       const urlRow = (map.get('URL') || [])[0];
       let webcall = urlRow ? sanitizeHttpsUrl(urlRow.value) : '';
       if (!webcall) webcall = extractHttpsFromText(desc) || extractHttpsFromText(loc);
@@ -316,6 +329,8 @@
         end: endDate.toISOString(),
         all_day: allDay,
         rrule: rruleRow ? String(rruleRow.value || '').trim() : '',
+        ics_exdates: icsExdates,
+        ics_recurrence_id: icsRecurrenceId,
         source_tz: String((dtStart.params && dtStart.params.TZID) || ''),
       });
     }

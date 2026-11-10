@@ -66,6 +66,17 @@
     return { start: a, end: b };
   }
 
+  function occDisplayTitle(o) {
+    return String(o.displayTitle || o.ev.title || '');
+  }
+
+  function occurrenceChipAttrs(o) {
+    if (!o.recurring) return '';
+    const ser = o.seriesInstanceStart || o.start;
+    if (!ser || !Number.isFinite(ser.getTime())) return '';
+    return ` data-agenda-occurrence-ms="${ser.getTime()}"`;
+  }
+
   /** Expand instances for range [rangeStart, rangeEnd) — single + RRULE basic FREQ=DAILY/WEEKLY. */
   function expandEventOccurrences(ev, rangeStart, rangeEnd) {
     const span = eventSpan(ev);
@@ -98,9 +109,14 @@
     const untilMatch = rule.match(/UNTIL=([^;:]+)/);
     let until = null;
     if (untilMatch) {
-      const raw = untilMatch[1].replace(/Z$/, '');
-      const p = Date.parse(raw);
-      if (Number.isFinite(p)) until = new Date(p);
+      const R = global.NotesAgendaRecurrence;
+      if (R && typeof R.parseUntil === 'function') {
+        until = R.parseUntil(untilMatch[1]);
+      } else {
+        const raw = untilMatch[1].replace(/Z$/, '');
+        const p = Date.parse(raw);
+        if (Number.isFinite(p)) until = new Date(p);
+      }
     }
     const countMatch = rule.match(/COUNT=(\d+)/);
     const maxCount = countMatch ? Math.max(1, Number(countMatch[1]) || 50) : 400;
@@ -110,6 +126,7 @@
     const duration = curEnd - curStart;
     let n = 0;
     while (n < maxCount && curStart < rangeEnd) {
+      if (until && curStart > until) break;
       const ce = new Date(curStart.getTime() + duration);
       if (ce > rangeStart && curStart < rangeEnd) {
         out.push({
@@ -120,7 +137,6 @@
         });
       }
       n += 1;
-      if (until && curStart > until) break;
       if (freqDaily) {
         curStart = addDays(curStart, interval);
       } else if (freqWeekly) {
@@ -128,6 +144,10 @@
       } else {
         break;
       }
+    }
+    const Occ = global.NotesAgendaOccurrence;
+    if (Occ && typeof Occ.finalizeOccurrences === 'function') {
+      return Occ.finalizeOccurrences(ev, out, rangeStart, rangeEnd);
     }
     return out;
   }
@@ -161,6 +181,12 @@
     anchor: new Date(),
     search: '',
     selectedId: '',
+    editorScope: 'series',
+    editorOccurrenceStartMs: 0,
+    pendingEditor: null,
+    editorReturnFocusId: '',
+    editorReturnFocusOccurrenceMs: 0,
+    seriesOverrideResetConfirmed: false,
   };
 
   let rootEl = null;
@@ -169,6 +195,10 @@
   let editorWired = false;
   let calendarSettingsWired = false;
   let agendaSwipeWired = false;
+  /** @type {HTMLElement | null} */
+  let editorReturnFocus = null;
+  /** @type {HTMLElement | null} */
+  let calendarSettingsReturnFocus = null;
   /** @type {{ active: boolean, x: number, y: number, t: number, locked: string }} */
   let swipe = { active: false, x: 0, y: 0, t: 0, locked: '' };
   const PX_PER_HOUR = 52;
@@ -181,6 +211,8 @@
     const calPanel = document.getElementById('agenda-calendar-settings');
     const calBackdrop = document.getElementById('agenda-calendar-settings-backdrop');
     const calBtn = document.getElementById('agenda-calendar-settings-btn');
+    const returnFocus = calendarSettingsReturnFocus;
+    calendarSettingsReturnFocus = null;
     if (calPanel) {
       calPanel.hidden = true;
       calPanel.setAttribute('aria-hidden', 'true');
@@ -191,12 +223,16 @@
     }
     document.body.classList.remove('agenda-calendar-settings-open');
     if (calBtn) calBtn.setAttribute('aria-expanded', 'false');
+    if (returnFocus && returnFocus.isConnected) returnFocus.focus();
   }
 
   function openCalendarSettingsPanel() {
     const calPanel = document.getElementById('agenda-calendar-settings');
     const calBackdrop = document.getElementById('agenda-calendar-settings-backdrop');
     const calBtn = document.getElementById('agenda-calendar-settings-btn');
+    calendarSettingsReturnFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     if (calPanel) {
       calPanel.hidden = false;
       calPanel.removeAttribute('aria-hidden');
@@ -207,6 +243,8 @@
     }
     document.body.classList.add('agenda-calendar-settings-open');
     if (calBtn) calBtn.setAttribute('aria-expanded', 'true');
+    const closeBtn = document.getElementById('agenda-calendar-settings-close');
+    if (closeBtn) closeBtn.focus();
   }
 
   function wireCalendarSettingsOnce() {
@@ -359,48 +397,136 @@
     });
   }
 
+  let timeGridScrollPlacementGen = 0;
+  let timeGridScrollResizeObs = null;
+
   function applyTimeGridScroll(range, occ) {
+    const placementGen = ++timeGridScrollPlacementGen;
+    const placementLive = () => placementGen === timeGridScrollPlacementGen;
+    if (timeGridScrollResizeObs) {
+      try { timeGridScrollResizeObs.disconnect(); } catch (e) { /* ignore */ }
+      timeGridScrollResizeObs = null;
+    }
     const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
     if (!wrap) return;
     const sk = scrollStorageKey(range);
     const fk = scrollFingerprintStorageKey(range);
-    const fp = scrollScheduleFingerprint(range);
-    const viewportHeight = wrap.clientHeight || 0;
-    const scrollOpts = {
-      pxPerHour: PX_PER_HOUR,
-      defaultDayStartHour: DEFAULT_DAY_START_HOUR,
-      viewportHeight,
-    };
-    let top = preferredTimeGridScrollTop(occ, range);
-    if (sk && fk) {
-      try {
-        const storedFp = sessionStorage.getItem(fk);
-        const raw = sessionStorage.getItem(sk);
-        const Core = global.NotesAgendaScroll;
-        if (Core && typeof Core.pickTimeGridScrollTop === 'function') {
-          top = Core.pickTimeGridScrollTop({
-            currentFingerprint: fp,
-            storedFingerprint: storedFp,
-            storedScrollTop: raw,
-            displayOcc: occ,
-            range,
-            opts: scrollOpts,
-          });
-        } else if (storedFp === fp && raw !== null && raw !== '') {
-          const n = Number(raw);
-          if (Number.isFinite(n)) top = n;
-        }
-      } catch (e) { /* ignore */ }
-    }
-    requestAnimationFrame(() => {
-      const Core = global.NotesAgendaScroll;
-      if (Core && typeof Core.clampTimeGridScrollTop === 'function') {
-        wrap.scrollTop = Core.clampTimeGridScrollTop(top, wrap.scrollHeight, wrap.clientHeight);
-      } else {
-        const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-        wrap.scrollTop = Math.max(0, Math.min(top, max));
+    const Core = global.NotesAgendaScroll;
+    const placeScroll = () => {
+      const viewportHeight = wrap.clientHeight || 0;
+      const scrollOpts = {
+        pxPerHour: PX_PER_HOUR,
+        defaultDayStartHour: DEFAULT_DAY_START_HOUR,
+        viewportHeight,
+      };
+      const fp = scrollScheduleFingerprint(range);
+      let top = preferredTimeGridScrollTop(occ, range);
+      if (sk && fk) {
+        try {
+          const storedFp = sessionStorage.getItem(fk);
+          const raw = sessionStorage.getItem(sk);
+          if (Core && typeof Core.pickTimeGridScrollTop === 'function') {
+            top = Core.pickTimeGridScrollTop({
+              currentFingerprint: fp,
+              storedFingerprint: storedFp,
+              storedScrollTop: raw,
+              displayOcc: occ,
+              range,
+              opts: scrollOpts,
+            });
+          } else if (
+            storedFp
+            && fp
+            && storedFp === fp
+            && raw !== null
+            && raw !== ''
+          ) {
+            const n = Number(raw);
+            if (Number.isFinite(n)) top = n;
+          }
+        } catch (e) { /* ignore */ }
       }
-    });
+      try {
+        wrap.dataset.agendaScrollApplying = '1';
+        if (Core && typeof Core.clampTimeGridScrollTop === 'function') {
+          wrap.scrollTop = Core.clampTimeGridScrollTop(top, wrap.scrollHeight, wrap.clientHeight);
+        } else {
+          const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+          wrap.scrollTop = Math.max(0, Math.min(top, max));
+        }
+      } finally {
+        delete wrap.dataset.agendaScrollApplying;
+      }
+      if (wrap.scrollTop > 0) persistPlacedScroll();
+    };
+    const persistPlacedScroll = () => {
+      if (!sk || !fk) return;
+      const top = wrap.scrollTop;
+      if (top <= 0) return;
+      try {
+        const fp = scrollScheduleFingerprint(range);
+        if (!fp) return;
+        sessionStorage.setItem(fk, fp);
+        sessionStorage.setItem(sk, String(top));
+      } catch (e) { /* ignore */ }
+    };
+    let placedAtScrollHeight = 0;
+    const tryPlace = () => {
+      if (!placementLive() || !wrap.isConnected) return;
+      const sh = wrap.scrollHeight;
+      const ch = wrap.clientHeight;
+      const ready = Core && typeof Core.isTimeGridLayoutReady === 'function'
+        ? Core.isTimeGridLayoutReady(sh, ch)
+        : ch > 0 && sh > ch;
+      if (!ready) return;
+      if (placedAtScrollHeight > 0 && sh <= placedAtScrollHeight + 2) return;
+      placedAtScrollHeight = sh;
+      placeScroll();
+      persistPlacedScroll();
+    };
+    let resizeObs = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObs = new ResizeObserver(() => tryPlace());
+      resizeObs.observe(wrap);
+      timeGridScrollResizeObs = resizeObs;
+    }
+    const finishPlacement = () => {
+      if (!placementLive()) return;
+      if (resizeObs) {
+        try { resizeObs.disconnect(); } catch (e) { /* ignore */ }
+        if (timeGridScrollResizeObs === resizeObs) timeGridScrollResizeObs = null;
+      }
+    };
+    const run = (attempt) => {
+      if (!placementLive()) return;
+      tryPlace();
+      const stable = placedAtScrollHeight > 0 && wrap.scrollHeight <= placedAtScrollHeight + 2;
+      if (stable) {
+        finishPlacement();
+        return;
+      }
+      if (attempt >= 64) return;
+      requestAnimationFrame(() => run(attempt + 1));
+    };
+    tryPlace();
+    requestAnimationFrame(() => run(0));
+  }
+
+  function saveTimeGridScrollSnapshot() {
+    const wrap = rootEl?.querySelector?.('.agenda-scroll-wrap');
+    if (!wrap) return;
+    const range = rangeForView();
+    const sk = scrollStorageKey(range);
+    const fk = scrollFingerprintStorageKey(range);
+    if (!sk || !fk) return;
+    const top = wrap.scrollTop;
+    if (top < 0) return;
+    try {
+      const fp = scrollScheduleFingerprint(range);
+      if (!fp) return;
+      sessionStorage.setItem(fk, fp);
+      sessionStorage.setItem(sk, String(top));
+    } catch (e) { /* ignore */ }
   }
 
   function wireTimeGridScrollPersistence(range) {
@@ -411,8 +537,10 @@
     if (!sk || !fk) return;
     wrap.dataset.agendaScrollKey = sk;
     wrap.onscroll = () => {
+      if (wrap.dataset.agendaScrollApplying === '1') return;
       try {
         const fp = scrollScheduleFingerprint(range);
+        if (!fp) return;
         sessionStorage.setItem(fk, fp);
         sessionStorage.setItem(sk, String(wrap.scrollTop));
       } catch (e) { /* ignore */ }
@@ -431,7 +559,7 @@
       if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('No events to export', true);
       return;
     }
-    const icsText = Ics.buildIcsCalendarFromEvents(rows);
+    const icsText = Ics.buildIcsCalendarFromEvents(flattenEventsForIcsExport(rows));
     const blob = new Blob([icsText], { type: 'text/calendar;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -501,6 +629,7 @@
 
     const onPanStart = (clientX, clientY, target) => {
       if (document.body.classList.contains('agenda-calendar-settings-open')) return;
+      if (document.body.classList.contains('agenda-editor-open')) return;
       if (pane.hidden) return;
       if (agendaSwipeBlockedTarget(target)) {
         swipe.active = false;
@@ -685,9 +814,9 @@
       const clr = ACCENT_PALETTE[hashHue(o.ev.id)];
       const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
       body += (
-        `<button type="button" class="agenda-allday-chip" data-agenda-id="${esc(o.ev.id)}" style="grid-column:${i0 + 1} / span ${span}" title="${esc(o.ev.title)}">`
+        `<button type="button" class="agenda-allday-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="grid-column:${i0 + 1} / span ${span}" title="${esc(occDisplayTitle(o))}">`
         + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-        + `<span class="agenda-chip-title">${esc(o.ev.title)}</span>`
+        + `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`
         + `<span class="agenda-chip-accent" style="background:${clr}"></span>`
         + '</button>'
       );
@@ -730,11 +859,11 @@
         const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
         const timeRange = `${formatTime(o.a)} – ${formatTime(o.b)}`;
         body += (
-          `<button type="button" class="agenda-event-chip" data-agenda-id="${esc(o.ev.id)}" style="top:${top}px;height:${h}px;left:${leftPct}%;width:${wPct}%;--agenda-accent:${clr}">`
+          `<button type="button" class="agenda-event-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="top:${top}px;height:${h}px;left:${leftPct}%;width:${wPct}%;--agenda-accent:${clr}">`
           + `<span class="agenda-chip-accent" style="background:${clr}"></span>`
           + '<span class="agenda-chip-body">'
           + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-          + `<span class="agenda-chip-title">${esc(o.ev.title)}</span>`
+          + `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`
           + (h >= 36 ? `<span class="agenda-chip-time muted">${esc(timeRange)}</span>` : '')
           + '</span></button>'
         );
@@ -746,17 +875,19 @@
     return body;
   }
 
-  function renderAgendaList(occ) {
+  function renderAgendaList(occ, range) {
     const sorted = occ.filter((o) => !o.ev.all_day).sort((a, b) => a.start - b.start);
     const allDay = occ.filter((o) => o.ev.all_day).sort((a, b) => a.start - b.start);
-    let html = '<div class="agenda-list-view">';
+    const rs = range && range.start ? range.start.getTime() : 0;
+    const re = range && range.end ? range.end.getTime() : 0;
+    let html = `<div class="agenda-list-view" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
     if (allDay.length) {
       html += '<p class="agenda-list-section-label muted">All day</p><ul class="agenda-list">';
       allDay.forEach((o) => {
         html += (
-          `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}">`
+          `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
           + `<span class="agenda-list-date">${esc(o.start.toLocaleDateString())}</span>`
-          + `<span class="agenda-list-title">${esc(o.ev.title)}</span>`
+          + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
           + '</button></li>'
         );
       });
@@ -765,9 +896,9 @@
     html += '<p class="agenda-list-section-label muted">Scheduled</p><ul class="agenda-list">';
     sorted.forEach((o) => {
       html += (
-        `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}">`
+        `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
         + `<span class="agenda-list-date">${esc(o.start.toLocaleString())}</span>`
-        + `<span class="agenda-list-title">${esc(o.ev.title)}</span>`
+        + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
         + '</button></li>'
       );
     });
@@ -801,7 +932,9 @@
     while (nWeeks > 1 && !monthWeekHasVisibleContent(days, occ, nWeeks - 1, anchorMonth, anchorYear)) {
       nWeeks -= 1;
     }
-    let html = '<div class="agenda-month-grid">';
+    const rs = startOfDay(days[0]).getTime();
+    const re = addDays(startOfDay(days[days.length - 1]), 1).getTime();
+    let html = `<div class="agenda-month-grid" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
     const weekRow = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     html += '<div class="agenda-month-head">';
     weekRow.forEach((w) => { html += `<div class="agenda-month-dow muted">${w}</div>`; });
@@ -827,11 +960,11 @@
           const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
           const tlabel = o.ev.all_day ? 'All day' : formatTime(o.start);
           html += (
-            `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}" title="${esc(o.ev.title)}">`
+            `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} title="${esc(occDisplayTitle(o))}">`
             + `<span class="agenda-month-ev-accent" style="background:${clr}"></span>`
             + '<span class="agenda-month-ev-body">'
             + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-            + `<span class="agenda-month-ev-title">${esc(o.ev.title)}</span>`
+            + `<span class="agenda-month-ev-title">${esc(occDisplayTitle(o))}</span>`
             + `<span class="agenda-month-ev-time muted">${esc(tlabel)}</span>`
             + '</span></button>'
           );
@@ -870,7 +1003,7 @@
 
     let main = '';
     if (state.view === 'agenda') {
-      main = renderAgendaList(occ);
+      main = renderAgendaList(occ, range);
     } else if (state.view === 'month') {
       main = renderMonthGrid(days, occ);
     } else {
@@ -897,7 +1030,7 @@
       + '<div class="agenda-top-tools">'
       + '<label class="agenda-search-field">'
       + '<svg class="agenda-search-ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M16 16l5 5"/></svg>'
-      + `<input type="search" id="agenda-search" placeholder="Search" value="${esc(state.search)}" autocomplete="off" />`
+      + `<input type="search" id="agenda-search" placeholder="Search" aria-label="Search events" value="${esc(state.search)}" autocomplete="off" />`
       + '</label>'
       + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
       + '<button type="button" class="btn primary agenda-add" id="agenda-add-event">+ Event</button>'
@@ -916,7 +1049,9 @@
 
     rootEl.querySelectorAll('[data-agenda-view]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        state.view = btn.getAttribute('data-agenda-view') || 'week';
+        const next = btn.getAttribute('data-agenda-view') || 'week';
+        if (['day', '3day', 'week'].includes(state.view)) saveTimeGridScrollSnapshot();
+        state.view = next;
         try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
         render();
       });
@@ -934,7 +1069,9 @@
       });
     }
 
-    rootEl.querySelector('#agenda-add-event')?.addEventListener('click', () => {
+    rootEl.querySelector('#agenda-add-event')?.addEventListener('click', (ev) => {
+      const btn = ev.currentTarget;
+      rememberEditorReturnFocus(btn instanceof HTMLElement ? btn : null, '', 0);
       openEditor(null);
     });
     rootEl.querySelector('#agenda-calendar-settings-btn')?.addEventListener('click', () => {
@@ -946,7 +1083,10 @@
     rootEl.querySelectorAll('[data-agenda-id]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-agenda-id');
-        openEditor(id);
+        const rawMs = btn.getAttribute('data-agenda-occurrence-ms');
+        const occurrenceMs = rawMs ? Number(rawMs) : 0;
+        rememberEditorReturnFocus(btn, id, occurrenceMs);
+        beginEditFromClick(id, occurrenceMs);
       });
     });
 
@@ -994,7 +1134,300 @@
     return { ...rest, type: 'agenda_event' };
   }
 
-  function openEditor(id) {
+  function syncEditorDatetimeMode(allDay) {
+    const startEl = document.getElementById('agenda-edit-start');
+    const endEl = document.getElementById('agenda-edit-end');
+    [startEl, endEl].forEach((el) => {
+      if (!el) return;
+      const was = el.value;
+      if (allDay) {
+        el.type = 'date';
+        if (was && was.includes('T')) el.value = was.slice(0, 10);
+      } else {
+        el.type = 'datetime-local';
+        if (was && /^\d{4}-\d{2}-\d{2}$/.test(was)) el.value = `${was}T09:00`;
+      }
+    });
+  }
+
+  function fillRecurrenceEditor(content) {
+    const R = global.NotesAgendaRecurrence;
+    const rrule = (content && content.rrule) || '';
+    const exdates = (content && Array.isArray(content.ics_exdates)) ? content.ics_exdates : [];
+    const sel = document.getElementById('agenda-edit-repeat');
+    const untilEl = document.getElementById('agenda-edit-until');
+    const status = document.getElementById('agenda-edit-rrule-status');
+    const adv = document.getElementById('agenda-edit-rrule-advanced');
+    const raw = document.getElementById('agenda-edit-rrule-raw');
+    const exNote = document.getElementById('agenda-edit-exdates-note');
+    const notice = document.getElementById('agenda-edit-series-notice');
+    if (!R || !sel) return;
+    const p = R.parseAgendaRrule(rrule);
+    sel.value = p.kind;
+    if (untilEl) untilEl.value = p.until ? R.toDateInputValue(p.until) : '';
+    const showAdv = p.kind === 'advanced' && !!p.raw;
+    if (adv) adv.hidden = !showAdv;
+    if (raw) raw.textContent = showAdv ? p.raw : '';
+    if (status) {
+      if (p.kind === 'weekly') status.textContent = 'Repeats every week.';
+      else if (p.kind === 'biweekly') status.textContent = 'Repeats every 2 weeks.';
+      else if (p.kind === 'advanced') status.textContent = 'Imported/custom rule — preserved unless you choose a pattern above.';
+      else status.textContent = '';
+    }
+    if (notice) notice.hidden = !String(rrule || '').trim();
+    if (exNote) {
+      const n = exdates.filter(Boolean).length;
+      if (p.kind === 'advanced' && n > 0) {
+        exNote.hidden = false;
+        exNote.textContent = `${n} imported EXDATE exclusion(s) preserved on save/export.`;
+      } else {
+        exNote.hidden = true;
+        exNote.textContent = '';
+      }
+    }
+  }
+
+  function readRecurrenceForSave(prevRrule) {
+    const R = global.NotesAgendaRecurrence;
+    const sel = document.getElementById('agenda-edit-repeat');
+    const untilEl = document.getElementById('agenda-edit-until');
+    if (!R || !sel) return String(prevRrule || '');
+    const kind = sel.value;
+    if (kind === 'advanced') return String(prevRrule || '').trim();
+    if (kind === 'none') return '';
+    const untilD = untilEl && untilEl.value
+      ? new Date(`${untilEl.value}T12:00:00`)
+      : null;
+    return R.buildAgendaRrule(kind, untilD) || '';
+  }
+
+  function updateRecurrenceStatus() {
+    const sel = document.getElementById('agenda-edit-repeat');
+    const status = document.getElementById('agenda-edit-rrule-status');
+    const adv = document.getElementById('agenda-edit-rrule-advanced');
+    if (!sel || !status) return;
+    const kind = sel.value;
+    if (kind === 'weekly') status.textContent = 'Repeats every week.';
+    else if (kind === 'biweekly') status.textContent = 'Repeats every 2 weeks.';
+    else if (kind === 'advanced') status.textContent = 'Custom rule kept from import.';
+    else status.textContent = '';
+    if (adv) adv.hidden = kind !== 'advanced';
+  }
+
+  function cssAttrEscape(value) {
+    const s = String(value || '');
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(s);
+    return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  function rememberEditorReturnFocus(fromEl, id, occurrenceMs) {
+    if (fromEl instanceof HTMLElement) editorReturnFocus = fromEl;
+    state.editorReturnFocusId = String(id || '');
+    state.editorReturnFocusOccurrenceMs = Number.isFinite(Number(occurrenceMs)) ? Number(occurrenceMs) : 0;
+  }
+
+  function queryEditorReturnFocusChip() {
+    const id = state.editorReturnFocusId;
+    if (!id) return null;
+    const root = rootEl || document.getElementById('agenda-root');
+    if (!root) return null;
+    const escId = cssAttrEscape(id);
+    const ms = state.editorReturnFocusOccurrenceMs;
+    let chip = null;
+    if (ms > 0) {
+      chip = root.querySelector(`[data-agenda-id="${escId}"][data-agenda-occurrence-ms="${ms}"]`);
+    }
+    if (!chip) chip = root.querySelector(`[data-agenda-id="${escId}"]`);
+    return chip instanceof HTMLElement ? chip : null;
+  }
+
+  function focusEditorReturnTarget() {
+    const chip = queryEditorReturnFocusChip();
+    const el = chip
+      || (editorReturnFocus && editorReturnFocus.isConnected ? editorReturnFocus : null)
+      || (rootEl && rootEl.querySelector('.agenda-add'))
+      || document.querySelector('.agenda-add');
+    editorReturnFocus = null;
+    state.editorReturnFocusId = '';
+    state.editorReturnFocusOccurrenceMs = 0;
+    if (el instanceof HTMLElement) el.focus({ preventScroll: false });
+  }
+
+  function beginEditFromClick(id, occurrenceMs) {
+    if (!id) {
+      openEditor(null, { scope: 'series' });
+      return;
+    }
+    const ev = (listAgendaEvents() || []).find((e) => e.id === id);
+    const Occ = global.NotesAgendaOccurrence;
+    const hasRrule = ev && String(ev.rrule || '').trim();
+    const occOk = Occ && Occ.supportsOccurrenceEdit(ev && ev.rrule)
+      && Number.isFinite(occurrenceMs) && occurrenceMs > 0;
+    if (hasRrule && occOk) {
+      state.pendingEditor = { id, occurrenceMs };
+      openScopeChooser(ev);
+      return;
+    }
+    openEditor(id, { scope: 'series' });
+  }
+
+  function setScopeChooserMode(mode) {
+    const pick = document.getElementById('agenda-scope-pick-panel');
+    const reset = document.getElementById('agenda-scope-reset-panel');
+    const heading = document.getElementById('agenda-scope-heading');
+    if (pick) pick.hidden = mode === 'reset';
+    if (reset) reset.hidden = mode !== 'reset';
+    if (heading) {
+      heading.textContent = mode === 'reset' ? 'Save series changes' : 'Edit recurring event';
+    }
+  }
+
+  function closeScopeChooser({ restoreFocus = true } = {}) {
+    const backdrop = document.getElementById('agenda-scope-backdrop');
+    const dialog = document.getElementById('agenda-scope-chooser');
+    if (backdrop) backdrop.hidden = true;
+    if (dialog) dialog.hidden = true;
+    document.body.classList.remove('agenda-scope-open');
+    state.pendingEditor = null;
+    state.seriesOverrideResetConfirmed = false;
+    setScopeChooserMode('pick');
+    if (restoreFocus) focusEditorReturnTarget();
+  }
+
+  function openScopeChooser(ev) {
+    const backdrop = document.getElementById('agenda-scope-backdrop');
+    const dialog = document.getElementById('agenda-scope-chooser');
+    const title = document.getElementById('agenda-scope-title');
+    const adv = document.getElementById('agenda-scope-advanced-note');
+    const customHint = document.getElementById('agenda-scope-customized-hint');
+    if (!backdrop || !dialog) {
+      const pending = state.pendingEditor;
+      state.pendingEditor = null;
+      if (pending) openEditor(pending.id, { scope: 'series', occurrenceMs: pending.occurrenceMs });
+      return;
+    }
+    setScopeChooserMode('pick');
+    if (title) title.textContent = ev && ev.title ? `“${ev.title}”` : 'This event';
+    const Occ = global.NotesAgendaOccurrence;
+    const occBtn = document.querySelector('[data-agenda-edit-scope="occurrence"]');
+    const occSupported = !!(Occ && Occ.supportsOccurrenceEdit(ev && ev.rrule));
+    if (occBtn) occBtn.hidden = !occSupported;
+    if (adv) adv.hidden = occSupported;
+    const customN = Occ && typeof Occ.countCustomizedOverrides === 'function'
+      ? Occ.countCustomizedOverrides(ev && ev.ics_occurrence_overrides, ev)
+      : 0;
+    if (customHint) {
+      if (customN > 0) {
+        customHint.hidden = false;
+        customHint.textContent = customN === 1
+          ? 'This series has 1 customized occurrence.'
+          : `This series has ${customN} customized occurrences.`;
+      } else {
+        customHint.hidden = true;
+        customHint.textContent = '';
+      }
+    }
+    backdrop.hidden = false;
+    dialog.hidden = false;
+    document.body.classList.add('agenda-scope-open');
+  }
+
+  function openScopeChooserSeriesReset(resetCount) {
+    const backdrop = document.getElementById('agenda-scope-backdrop');
+    const dialog = document.getElementById('agenda-scope-chooser');
+    const msg = document.getElementById('agenda-scope-reset-message');
+    const Occ = global.NotesAgendaOccurrence;
+    if (!backdrop || !dialog || !Occ) return false;
+    const text = typeof Occ.seriesOverrideResetMessage === 'function'
+      ? Occ.seriesOverrideResetMessage(resetCount)
+      : '';
+    if (!text) return false;
+    setScopeChooserMode('reset');
+    if (msg) msg.textContent = text;
+    backdrop.hidden = false;
+    dialog.hidden = false;
+    document.body.classList.add('agenda-scope-open');
+    return true;
+  }
+
+  function wireScopeChooser() {
+    if (wireScopeChooser._done) return;
+    wireScopeChooser._done = true;
+    document.getElementById('agenda-scope-cancel')?.addEventListener('click', () => closeScopeChooser());
+    document.getElementById('agenda-scope-reset-cancel')?.addEventListener('click', () => {
+      setScopeChooserMode('pick');
+      const backdrop = document.getElementById('agenda-scope-backdrop');
+      const dialog = document.getElementById('agenda-scope-chooser');
+      if (backdrop) backdrop.hidden = true;
+      if (dialog) dialog.hidden = true;
+      document.body.classList.remove('agenda-scope-open');
+      state.seriesOverrideResetConfirmed = false;
+      setScopeChooserMode('pick');
+      const saveBtn = document.getElementById('agenda-edit-save');
+      if (saveBtn) saveBtn.focus();
+    });
+    document.getElementById('agenda-scope-reset-confirm')?.addEventListener('click', () => {
+      state.seriesOverrideResetConfirmed = true;
+      setScopeChooserMode('pick');
+      const backdrop = document.getElementById('agenda-scope-backdrop');
+      const dialog = document.getElementById('agenda-scope-chooser');
+      if (backdrop) backdrop.hidden = true;
+      if (dialog) dialog.hidden = true;
+      document.body.classList.remove('agenda-scope-open');
+      saveEditor();
+    });
+    document.getElementById('agenda-scope-backdrop')?.addEventListener('click', () => {
+      const resetPanel = document.getElementById('agenda-scope-reset-panel');
+      if (resetPanel && !resetPanel.hidden) {
+        setScopeChooserMode('pick');
+      }
+      closeScopeChooser();
+    });
+    document.querySelectorAll('[data-agenda-edit-scope]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const pending = state.pendingEditor;
+        if (!pending) return closeScopeChooser();
+        const scope = btn.getAttribute('data-agenda-edit-scope') || 'series';
+        closeScopeChooser({ restoreFocus: false });
+        openEditor(pending.id, { scope, occurrenceMs: pending.occurrenceMs });
+      });
+    });
+  }
+
+  function seriesNoticeForEditor(scope, rrule) {
+    const hasRrule = Boolean(String(rrule || '').trim());
+    if (!hasRrule) {
+      return { hidden: true, text: '' };
+    }
+    if (scope === 'occurrence') {
+      return {
+        hidden: false,
+        text: 'Editing this occurrence only. Other dates in the series stay unchanged.',
+      };
+    }
+    return {
+      hidden: false,
+      text: 'Changes apply to the entire recurring series.',
+    };
+  }
+
+  function applyEditorScopeUi(scope, rrule) {
+    const isOcc = scope === 'occurrence';
+    const notice = document.getElementById('agenda-edit-series-notice');
+    const recur = document.querySelector('#agenda-editor .agenda-editor-recurrence');
+    const del = document.getElementById('agenda-edit-delete');
+    const heading = document.getElementById('agenda-edit-visible-title');
+    const seriesNotice = seriesNoticeForEditor(scope, rrule);
+    if (notice) {
+      notice.hidden = seriesNotice.hidden;
+      notice.textContent = seriesNotice.text;
+    }
+    if (recur) recur.hidden = isOcc;
+    if (del) del.textContent = isOcc ? 'Delete occurrence' : 'Delete';
+    if (heading) heading.textContent = isOcc ? 'Edit occurrence' : 'Event';
+  }
+
+  function openEditor(id, opts) {
     const S = getStore();
     if (!S || typeof S.get !== 'function') return;
     let existing = id ? S.get(id) : null;
@@ -1004,10 +1437,16 @@
         existing = { uuid: id, content: agendaRowToContent(ev) };
       }
     }
+    const options = opts && typeof opts === 'object' ? opts : {};
     const content = existing && existing.content?.type === 'agenda_event'
       ? existing.content
       : defaultEvent();
     state.selectedId = existing ? existing.uuid : id || '';
+    const scope = options.scope === 'occurrence' ? 'occurrence' : 'series';
+    state.editorScope = scope;
+    const occMs = Number(options.occurrenceMs) || 0;
+    state.editorOccurrenceStartMs = scope === 'occurrence' ? occMs : 0;
+    wireScopeChooser();
 
     const backdrop = document.getElementById('agenda-editor-backdrop');
     const dialog = document.getElementById('agenda-editor');
@@ -1023,22 +1462,60 @@
     const attEl = document.getElementById('agenda-edit-attendees');
     const joinEl = document.getElementById('agenda-edit-join');
 
-    const s = parseInstant(content.start) || new Date();
-    const endParsed = parseInstant(content.end);
-    const e = endParsed || new Date(s.getTime() + 3600000);
-
-    if (titleEl) titleEl.value = content.title || '';
-    if (locEl) locEl.value = content.location || '';
-    if (startEl) startEl.value = toDatetimeLocal(s);
-    if (endEl) endEl.value = toDatetimeLocal(e);
-    if (allDayEl) {
-      allDayEl.checked = !!content.all_day;
-      [startEl, endEl].forEach((el) => {
-        if (el) el.toggleAttribute('disabled', !!content.all_day);
-      });
+    let s = parseInstant(content.start) || new Date();
+    let endParsed = parseInstant(content.end);
+    let e = endParsed || new Date(s.getTime() + 3600000);
+    const Occ = global.NotesAgendaOccurrence;
+    let overlay = null;
+    if (scope === 'occurrence' && occMs > 0 && Occ) {
+      const seriesStart = new Date(occMs);
+      const rid = Occ.recurrenceIdForStart(seriesStart, content.all_day);
+      overlay = (content.ics_occurrence_overrides && content.ics_occurrence_overrides[rid]) || null;
+      const masterS = parseInstant(content.start) || seriesStart;
+      const masterE = parseInstant(content.end) || new Date(masterS.getTime() + 3600000);
+      const dur = masterE.getTime() - masterS.getTime();
+      s = overlay && overlay.start ? (parseInstant(overlay.start) || seriesStart) : seriesStart;
+      e = overlay && overlay.end ? (parseInstant(overlay.end) || new Date(s.getTime() + dur)) : new Date(s.getTime() + dur);
     }
+    if (titleEl) {
+      titleEl.value = (scope === 'occurrence' && overlay && overlay.title)
+        ? overlay.title
+        : (content.title || '');
+    }
+    if (locEl) {
+      locEl.value = (scope === 'occurrence' && overlay && overlay.location != null)
+        ? overlay.location
+        : (content.location || '');
+    }
+    const allDay = (scope === 'occurrence' && overlay && typeof overlay.all_day === 'boolean')
+      ? overlay.all_day
+      : !!content.all_day;
+    if (allDayEl) allDayEl.checked = allDay;
+    syncEditorDatetimeMode(allDay);
+    if (allDay) {
+      const ds = startOfDay(s);
+      let lastInclusive = ds;
+      if (e.getTime() > ds.getTime() + MS_DAY) {
+        lastInclusive = addDays(startOfDay(e), -1);
+      }
+      if (startEl) {
+        startEl.value = `${ds.getFullYear()}-${pad2(ds.getMonth() + 1)}-${pad2(ds.getDate())}`;
+      }
+      if (endEl) {
+        endEl.value = `${lastInclusive.getFullYear()}-${pad2(lastInclusive.getMonth() + 1)}-${pad2(lastInclusive.getDate())}`;
+      }
+    } else {
+      if (startEl) startEl.value = toDatetimeLocal(s);
+      if (endEl) endEl.value = toDatetimeLocal(e);
+    }
+    if (scope === 'series') fillRecurrenceEditor(content);
+    else fillRecurrenceEditor({ ...content, rrule: content.rrule || '' });
     if (webcallEl) webcallEl.value = content.webcall_url || '';
-    if (notesEl) notesEl.value = content.notes || '';
+    if (notesEl) {
+      notesEl.value = (scope === 'occurrence' && overlay && overlay.notes != null)
+        ? overlay.notes
+        : (content.notes || '');
+    }
     if (attEl) attEl.value = (content.attendees || []).join(', ');
 
     const wc = (global.NotesAgendaIcs && NotesAgendaIcs.sanitizeHttpsUrl)
@@ -1059,9 +1536,20 @@
     }
 
     document.getElementById('agenda-edit-delete')?.toggleAttribute('hidden', !state.selectedId);
+    applyEditorScopeUi(scope, content.rrule || '');
 
+    if (!editorReturnFocus) {
+      const ae = document.activeElement;
+      if (ae instanceof HTMLElement) editorReturnFocus = ae;
+    }
     backdrop.hidden = false;
     dialog.hidden = false;
+    document.body.classList.add('agenda-editor-open');
+    if (titleEl) {
+      requestAnimationFrame(() => {
+        titleEl.focus({ preventScroll: true });
+      });
+    }
   }
 
   function toDatetimeLocal(d) {
@@ -1091,7 +1579,36 @@
       all_day: false,
       rrule: '',
       ical_uid: '',
+      ics_exdates: [],
+      ics_occurrence_overrides: {},
     };
+  }
+
+  function flattenEventsForIcsExport(rows) {
+    const out = [];
+    for (const ev of rows || []) {
+      out.push(ev);
+      const overrides = ev.ics_occurrence_overrides;
+      if (!overrides || typeof overrides !== 'object') continue;
+      Object.keys(overrides).forEach((rid) => {
+        const ov = overrides[rid];
+        if (!ov || ov.cancelled) return;
+        out.push({
+          ...ev,
+          rrule: '',
+          ics_exdates: [],
+          ics_occurrence_overrides: {},
+          ics_recurrence_id: rid,
+          title: ov.title || ev.title,
+          location: ov.location != null ? ov.location : ev.location,
+          notes: ov.notes != null ? ov.notes : ev.notes,
+          start: ov.start || ev.start,
+          end: ov.end || ev.end,
+          all_day: typeof ov.all_day === 'boolean' ? ov.all_day : ev.all_day,
+        });
+      });
+    }
+    return out;
   }
 
   function closeEditor() {
@@ -1099,6 +1616,29 @@
     const dialog = document.getElementById('agenda-editor');
     if (backdrop) backdrop.hidden = true;
     if (dialog) dialog.hidden = true;
+    document.body.classList.remove('agenda-editor-open');
+    state.editorScope = 'series';
+    state.editorOccurrenceStartMs = 0;
+    focusEditorReturnTarget();
+  }
+
+  function handleEscapeKey(ev) {
+    if (!ev || ev.key !== 'Escape') return false;
+    const scopeDialog = document.getElementById('agenda-scope-chooser');
+    if (scopeDialog && !scopeDialog.hidden) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeScopeChooser();
+      return true;
+    }
+    const dialog = document.getElementById('agenda-editor');
+    if (document.body.classList.contains('agenda-editor-open') && dialog && !dialog.hidden) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeEditor();
+      return true;
+    }
+    return false;
   }
 
   function saveEditor() {
@@ -1114,9 +1654,24 @@
     const notesEl = document.getElementById('agenda-edit-notes');
     const attEl = document.getElementById('agenda-edit-attendees');
 
-    const start = fromDatetimeLocal(startEl && startEl.value);
-    let end = fromDatetimeLocal(endEl && endEl.value);
-    if (end <= start) end = new Date(start.getTime() + 3600000);
+    const allDay = !!(allDayEl && allDayEl.checked);
+    let start;
+    let end;
+    if (allDay) {
+      const sd = startEl && startEl.value
+        ? new Date(`${startEl.value}T00:00:00`)
+        : new Date();
+      let ed = endEl && endEl.value
+        ? new Date(`${endEl.value}T00:00:00`)
+        : sd;
+      if (ed < sd) ed = new Date(sd);
+      start = startOfDay(sd);
+      end = addDays(startOfDay(ed), 1);
+    } else {
+      start = fromDatetimeLocal(startEl && startEl.value);
+      end = fromDatetimeLocal(endEl && endEl.value);
+      if (end <= start) end = new Date(start.getTime() + 3600000);
+    }
 
     const wcRaw = String(webcallEl && webcallEl.value || '').trim();
     const wc = global.NotesAgendaIcs && NotesAgendaIcs.sanitizeHttpsUrl
@@ -1137,16 +1692,87 @@
     }
     if (!base) base = defaultEvent();
 
+    const Occ = global.NotesAgendaOccurrence;
+    const Ics = global.NotesAgendaIcs;
+    if (
+      state.editorScope === 'occurrence'
+      && state.editorOccurrenceStartMs > 0
+      && Occ
+    ) {
+      const seriesStart = new Date(state.editorOccurrenceStartMs);
+      const rid = Occ.recurrenceIdForStart(seriesStart, !!base.all_day);
+      const exdates = Occ.normalizeExdates(base.ics_exdates);
+      const overrides = { ...(base.ics_occurrence_overrides || {}) };
+      const moved = allDay !== !!base.all_day
+        || Occ.recurrenceIdForStart(start, allDay) !== Occ.recurrenceIdForStart(seriesStart, !!base.all_day);
+      if (moved && !Occ.isExcludedByExdate(seriesStart, exdates, !!base.all_day)) {
+        exdates.push(rid);
+      }
+      overrides[rid] = {
+        title: String(titleEl && titleEl.value || '').trim() || 'Untitled',
+        location: String(locEl && locEl.value || ''),
+        notes: String(notesEl && notesEl.value || ''),
+        start: start.toISOString(),
+        end: end.toISOString(),
+        all_day: allDay,
+      };
+      const icalUid = Occ.ensureIcalUid(base, id);
+      S.upsertAgendaEvent(id, {
+        ...base,
+        ics_exdates: exdates,
+        ics_occurrence_overrides: overrides,
+        ical_uid: icalUid,
+      });
+      closeEditor();
+      render();
+      return;
+    }
+
+    const rrule = readRecurrenceForSave(base.rrule || '');
+    const icalUid = Occ ? Occ.ensureIcalUid(base, id) : (base.ical_uid || '');
+    const nextStart = start.toISOString();
+    const nextEnd = end.toISOString();
+    const nextTitle = String(titleEl && titleEl.value || '').trim() || 'Untitled';
+    const nextLocation = String(locEl && locEl.value || '');
+    const nextNotes = String(notesEl && notesEl.value || '');
+    const nextPatch = {
+      start: nextStart,
+      end: nextEnd,
+      all_day: allDay,
+      title: nextTitle,
+      location: nextLocation,
+      notes: nextNotes,
+    };
+    const preserved = Occ && typeof Occ.planPreserveOverridesOnSeriesEdit === 'function'
+      ? Occ.planPreserveOverridesOnSeriesEdit(base, nextPatch)
+      : {
+        ics_exdates: base.ics_exdates,
+        ics_occurrence_overrides: base.ics_occurrence_overrides,
+        resetCount: 0,
+      };
+    const resetCount = Number(preserved.resetCount) || 0;
+    if (
+      resetCount > 0
+      && !state.seriesOverrideResetConfirmed
+      && openScopeChooserSeriesReset(resetCount)
+    ) {
+      return;
+    }
+    state.seriesOverrideResetConfirmed = false;
     S.upsertAgendaEvent(id, {
       ...base,
-      title: String(titleEl && titleEl.value || '').trim() || 'Untitled',
-      location: String(locEl && locEl.value || ''),
-      notes: String(notesEl && notesEl.value || ''),
+      title: nextTitle,
+      location: nextLocation,
+      notes: nextNotes,
       webcall_url: wc,
       attendees,
-      start: start.toISOString(),
-      end: end.toISOString(),
-      all_day: !!(allDayEl && allDayEl.checked),
+      start: nextStart,
+      end: nextEnd,
+      all_day: allDay,
+      rrule,
+      ical_uid: icalUid || base.ical_uid || '',
+      ics_exdates: preserved.ics_exdates,
+      ics_occurrence_overrides: preserved.ics_occurrence_overrides,
     });
     closeEditor();
     render();
@@ -1154,7 +1780,33 @@
 
   function deleteEditor() {
     const S = getStore();
-    if (!state.selectedId || !S || typeof S.removeAgendaEvent !== 'function') return;
+    if (!state.selectedId || !S || typeof S.upsertAgendaEvent !== 'function') return;
+    const Occ = global.NotesAgendaOccurrence;
+    if (
+      state.editorScope === 'occurrence'
+      && state.editorOccurrenceStartMs > 0
+      && Occ
+    ) {
+      const prev = S.get(state.selectedId);
+      const base = (prev && prev.content?.type === 'agenda_event')
+        ? prev.content
+        : agendaRowToContent((listAgendaEvents() || []).find((e) => e.id === state.selectedId));
+      const seriesStart = new Date(state.editorOccurrenceStartMs);
+      const rid = Occ.recurrenceIdForStart(seriesStart, !!base.all_day);
+      const exdates = Occ.normalizeExdates(base.ics_exdates);
+      if (!Occ.isExcludedByExdate(seriesStart, exdates, !!base.all_day)) exdates.push(rid);
+      const overrides = { ...(base.ics_occurrence_overrides || {}) };
+      delete overrides[rid];
+      S.upsertAgendaEvent(state.selectedId, {
+        ...base,
+        ics_exdates: exdates,
+        ics_occurrence_overrides: overrides,
+      });
+      closeEditor();
+      render();
+      return;
+    }
+    if (typeof S.removeAgendaEvent !== 'function') return;
     S.removeAgendaEvent(state.selectedId);
     closeEditor();
     render();
@@ -1177,20 +1829,19 @@
   function wireEditor() {
     if (editorWired) return;
     editorWired = true;
+    wireScopeChooser();
     document.getElementById('agenda-edit-cancel')?.addEventListener('click', closeEditor);
     document.getElementById('agenda-edit-save')?.addEventListener('click', saveEditor);
     document.getElementById('agenda-edit-delete')?.addEventListener('click', deleteEditor);
     document.getElementById('agenda-editor-backdrop')?.addEventListener('click', closeEditor);
+    document.addEventListener('keydown', handleEscapeKey, true);
     const ad = document.getElementById('agenda-edit-allday');
-    const startEl = document.getElementById('agenda-edit-start');
-    const endEl = document.getElementById('agenda-edit-end');
-    if (ad && startEl && endEl) {
+    if (ad) {
       ad.addEventListener('change', () => {
-        const on = !!ad.checked;
-        startEl.toggleAttribute('disabled', on);
-        endEl.toggleAttribute('disabled', on);
+        syncEditorDatetimeMode(!!ad.checked);
       });
     }
+    document.getElementById('agenda-edit-repeat')?.addEventListener('change', updateRecurrenceStatus);
     const notesEl = document.getElementById('agenda-edit-notes');
     if (notesEl) {
       notesEl.addEventListener('input', () => {
@@ -1265,6 +1916,10 @@
     render,
     onTabShown,
     openNewEvent,
+    seriesNoticeForEditor,
+    handleEscapeKey,
+    closeEditor,
+    closeScopeChooser,
   };
   global.__notesCloseAgendaCalendarSettings = closeCalendarSettingsPanel;
 }(typeof window !== 'undefined' ? window : globalThis));

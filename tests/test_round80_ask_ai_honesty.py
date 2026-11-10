@@ -54,8 +54,10 @@ class Round80AskAiHonestyTests(unittest.TestCase):
         self.assertIn("ensureCloudRelayConsent", ai)
         self.assertIn("ensureCloudSendConsent", ai)
         self.assertIn("CLOUD_ROUTE_LABEL", ai)
+        self.assertIn("doesn't store your API key", ai)
+        self.assertNotIn("Nothing is stored.", ai)
         self.assertIn(
-            "Your message and any note content will go through our server to ollama.com. Nothing is stored. Send?",
+            "Your message and any note content will go through our server to ollama.com.",
             ai,
         )
         self.assertIn("confirm: (message, options) => confirmAction(message, options)", app)
