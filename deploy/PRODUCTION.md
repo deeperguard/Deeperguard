@@ -193,3 +193,20 @@ Even in strict ZK, the server learns:
 - IP addresses (for rate limiting)
 
 It **cannot** read note titles, bodies, PDFs, or vault passwords without the user's device.
+
+## Database restore
+
+If you replace `notes.db` (or the whole `data/` tree) from **any** backup or snapshot, session rows in that file may still look valid. Cookies from before the incident must not work again.
+
+**Before reopening traffic** (or right after restore, before users hit the site):
+
+```bash
+export NOTES_ROOT=/opt/deeperguard
+export NOTES_REVOKE_ALL_SESSIONS_AFTER_RESTORE_CONFIRM=1
+bash /opt/deeperguard/deploy/revoke-all-sessions-after-restore.sh
+# or: python3 deploy/revoke-all-sessions-after-restore.py --confirm
+```
+
+The script prints how many rows were revoked; running it again is safe (count `0` when nothing is left). Everyone must **sign in again**. Local ciphertext on devices is kept; unsynced edits remain on the device until the user signs back in and sync runs.
+
+Do not skip this step after a partial restore, a failed migration rollback, or copying a DB file from another host.
