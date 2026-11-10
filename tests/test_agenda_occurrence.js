@@ -103,4 +103,118 @@ assert.ok(exported.includes('FREQ=WEEKLY'));
 const reimport = Ics.parseIcsFile(exported);
 assert.ok(reimport.events.length >= 2);
 
+const nov24 = new Date('2026-11-24T12:00:00.000Z');
+const nov24Rid = Occ.recurrenceIdForStart(nov24, false);
+const weeklyMaster = {
+  ...master,
+  title: 'Weekly sync',
+  start: '2026-11-03T12:00:00.000Z',
+  end: '2026-11-03T13:00:00.000Z',
+  rrule: 'FREQ=WEEKLY;INTERVAL=1;BYDAY=TU',
+  ics_exdates: [],
+  ics_occurrence_overrides: {
+    [nov24Rid]: {
+      title: 'Beta v53 one-off',
+      location: '',
+      notes: '',
+      start: nov24.toISOString(),
+      end: '2026-11-24T13:00:00.000Z',
+      all_day: false,
+    },
+  },
+};
+
+let afterTitle = Occ.preserveOverridesOnSeriesEdit(weeklyMaster, {
+  start: weeklyMaster.start,
+  end: weeklyMaster.end,
+  all_day: false,
+});
+afterTitle = { ...weeklyMaster, title: 'Weekly sync (renamed)', ...afterTitle };
+occ = expandRaw(afterTitle, new Date('2026-11-01'), new Date('2026-12-01'));
+const nov24Occ = occ.find((o) => o.start.toISOString().startsWith('2026-11-24T12'));
+assert.ok(nov24Occ, 'Nov 24 instance after series retitle');
+assert.strictEqual(nov24Occ.displayTitle, 'Beta v53 one-off');
+
+const shifted = Occ.preserveOverridesOnSeriesEdit(weeklyMaster, {
+  start: '2026-11-03T13:00:00.000Z',
+  end: '2026-11-03T14:00:00.000Z',
+  all_day: false,
+});
+const shiftedMaster = { ...weeklyMaster, start: '2026-11-03T13:00:00.000Z', end: '2026-11-03T14:00:00.000Z', ...shifted };
+occ = expandRaw(shiftedMaster, new Date('2026-11-01'), new Date('2026-12-01'));
+const nov24Shifted = occ.find((o) => o.start.toISOString().startsWith('2026-11-24T13'));
+assert.ok(nov24Shifted, 'Nov 24 follows +1h series shift');
+assert.strictEqual(nov24Shifted.displayTitle, 'Beta v53 one-off');
+
+const timeFixedRid = Occ.recurrenceIdForStart(new Date('2026-11-17T12:00:00.000Z'), false);
+const timeFixedMaster = {
+  ...weeklyMaster,
+  ics_occurrence_overrides: {
+    [timeFixedRid]: {
+      title: 'Afternoon only',
+      start: '2026-11-17T14:00:00.000Z',
+      end: '2026-11-17T15:00:00.000Z',
+      all_day: false,
+    },
+  },
+  ics_exdates: [timeFixedRid],
+};
+const timeFixedPreserved = Occ.preserveOverridesOnSeriesEdit(timeFixedMaster, {
+  start: '2026-11-03T13:00:00.000Z',
+  end: '2026-11-03T14:00:00.000Z',
+  all_day: false,
+});
+const timeFixedEv = {
+  ...timeFixedMaster,
+  start: '2026-11-03T13:00:00.000Z',
+  end: '2026-11-03T14:00:00.000Z',
+  ...timeFixedPreserved,
+};
+assert.strictEqual(timeFixedPreserved.ics_occurrence_overrides[timeFixedRid].title, 'Afternoon only');
+assert.strictEqual(
+  timeFixedPreserved.ics_occurrence_overrides[timeFixedRid].start,
+  '2026-11-17T14:00:00.000Z',
+);
+assert.ok(timeFixedPreserved.ics_exdates.includes(timeFixedRid));
+occ = expandRaw(timeFixedEv, new Date('2026-11-01'), new Date('2026-12-01'));
+const afternoonNov17 = occ.find((o) => o.displayTitle === 'Afternoon only');
+assert.ok(afternoonNov17);
+assert.strictEqual(afternoonNov17.start.toISOString(), '2026-11-17T14:00:00.000Z');
+
+const exdateMaster = {
+  ...weeklyMaster,
+  ics_exdates: [Occ.recurrenceIdForStart(new Date('2026-11-10T12:00:00.000Z'), false)],
+  ics_occurrence_overrides: weeklyMaster.ics_occurrence_overrides,
+};
+const exShift = Occ.preserveOverridesOnSeriesEdit(exdateMaster, {
+  start: '2026-11-03T13:00:00.000Z',
+  end: '2026-11-03T14:00:00.000Z',
+  all_day: false,
+});
+assert.strictEqual(exShift.ics_exdates.length, 1);
+assert.strictEqual(exShift.ics_exdates[0], Occ.recurrenceIdForStart(new Date('2026-11-10T13:00:00.000Z'), false));
+const exShiftEv = { ...exdateMaster, start: '2026-11-03T13:00:00.000Z', end: '2026-11-03T14:00:00.000Z', ...exShift };
+occ = expandRaw(exShiftEv, new Date('2026-11-01'), new Date('2026-12-01'));
+assert.strictEqual(occ.filter((o) => o.start.toISOString().startsWith('2026-11-10T13')).length, 0);
+
+const exportMaster = { ...shiftedMaster };
+const exportRows = [exportMaster];
+for (const [rid, ov] of Object.entries(exportMaster.ics_occurrence_overrides)) {
+  exportRows.push({
+    ...exportMaster,
+    rrule: '',
+    ics_exdates: [],
+    ics_occurrence_overrides: {},
+    ics_recurrence_id: rid,
+    title: ov.title,
+    start: ov.start,
+    end: ov.end,
+    all_day: ov.all_day,
+  });
+}
+const shiftedIcs = Ics.buildIcsCalendarFromEvents(exportRows);
+assert.ok(shiftedIcs.includes('RECURRENCE-ID:'));
+assert.ok(shiftedIcs.includes('Beta v53 one-off'));
+assert.ok(shiftedIcs.includes(Occ.recurrenceIdForStart(new Date('2026-11-24T13:00:00.000Z'), false)));
+
 console.log('test_agenda_occurrence ok');

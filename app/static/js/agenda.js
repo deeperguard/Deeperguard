@@ -1654,6 +1654,14 @@
 
     const rrule = readRecurrenceForSave(base.rrule || '');
     const icalUid = Occ ? Occ.ensureIcalUid(base, id) : (base.ical_uid || '');
+    const nextStart = start.toISOString();
+    const nextEnd = end.toISOString();
+    const preserved = Occ && typeof Occ.preserveOverridesOnSeriesEdit === 'function'
+      ? Occ.preserveOverridesOnSeriesEdit(base, { start: nextStart, end: nextEnd, all_day: allDay })
+      : {
+        ics_exdates: base.ics_exdates,
+        ics_occurrence_overrides: base.ics_occurrence_overrides,
+      };
     S.upsertAgendaEvent(id, {
       ...base,
       title: String(titleEl && titleEl.value || '').trim() || 'Untitled',
@@ -1661,11 +1669,13 @@
       notes: String(notesEl && notesEl.value || ''),
       webcall_url: wc,
       attendees,
-      start: start.toISOString(),
-      end: end.toISOString(),
+      start: nextStart,
+      end: nextEnd,
       all_day: allDay,
       rrule,
       ical_uid: icalUid || base.ical_uid || '',
+      ics_exdates: preserved.ics_exdates,
+      ics_occurrence_overrides: preserved.ics_occurrence_overrides,
     });
     closeEditor();
     render();

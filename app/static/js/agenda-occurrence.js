@@ -102,6 +102,101 @@
     };
   }
 
+  function masterDurationMs(masterStart, masterEnd) {
+    const a = new Date(masterStart);
+    const b = new Date(masterEnd);
+    if (!Number.isFinite(a.getTime()) || !Number.isFinite(b.getTime())) return 3600000;
+    const d = b.getTime() - a.getTime();
+    return d > 0 ? d : 3600000;
+  }
+
+  /** True when override times still match the series slot identified by rid (title-only edit). */
+  function overrideKeepsSeriesSlotTime(ov, rid, masterStart, masterEnd, seriesAllDay) {
+    if (!ov || !rid) return true;
+    const slot = parseRecurrenceId(rid, seriesAllDay);
+    if (!slot || !Number.isFinite(slot.getTime())) return true;
+    const os = ov.start ? new Date(ov.start) : slot;
+    if (!Number.isFinite(os.getTime())) return true;
+    const duration = masterDurationMs(masterStart, masterEnd);
+    const oe = ov.end ? new Date(ov.end) : new Date(os.getTime() + duration);
+    if (!Number.isFinite(oe.getTime())) return true;
+    if (seriesAllDay) {
+      return startOfDay(os).getTime() === startOfDay(slot).getTime()
+        && Math.abs(oe.getTime() - os.getTime() - duration) < 1000;
+    }
+    return Math.abs(os.getTime() - slot.getTime()) < 1000
+      && Math.abs(oe.getTime() - (slot.getTime() + duration)) < 1000;
+  }
+
+  function shiftRecurrenceToken(token, deltaMs, oldAllDay, newAllDay) {
+    const t = String(token || '').trim();
+    if (!t || !Number.isFinite(deltaMs) || deltaMs === 0) return t;
+    const inst = parseRecurrenceId(t, oldAllDay);
+    if (!inst || !Number.isFinite(inst.getTime())) return t;
+    const shifted = new Date(inst.getTime() + deltaMs);
+    return recurrenceIdForStart(shifted, newAllDay);
+  }
+
+  /**
+   * Re-key occurrence overrides and EXDATEs when the recurring master start/end shifts.
+   * Per-occurrence field overrides are preserved; non-time-overridden slots move with the series delta.
+   */
+  function preserveOverridesOnSeriesEdit(prev, next) {
+    const base = prev && typeof prev === 'object' ? prev : {};
+    const oldAllDay = !!base.all_day;
+    const newAllDay = typeof next.all_day === 'boolean' ? next.all_day : oldAllDay;
+    const oldStartMs = new Date(base.start).getTime();
+    const newStartMs = new Date(next.start).getTime();
+    const deltaMs = (Number.isFinite(oldStartMs) && Number.isFinite(newStartMs))
+      ? newStartMs - oldStartMs
+      : 0;
+    const oldOverrides = (base.ics_occurrence_overrides && typeof base.ics_occurrence_overrides === 'object')
+      ? base.ics_occurrence_overrides
+      : {};
+    if (deltaMs === 0 && oldAllDay === newAllDay) {
+      return {
+        ics_exdates: normalizeExdates(base.ics_exdates),
+        ics_occurrence_overrides: { ...oldOverrides },
+      };
+    }
+    const duration = masterDurationMs(base.start, base.end);
+    const exdates = normalizeExdates(base.ics_exdates).map((ex) => {
+      const ov = oldOverrides[ex];
+      if (ov && !overrideKeepsSeriesSlotTime(ov, ex, base.start, base.end, oldAllDay)) return ex;
+      return shiftRecurrenceToken(ex, deltaMs, oldAllDay, newAllDay);
+    });
+    const overrides = {};
+    for (const [oldRid, ov] of Object.entries(oldOverrides)) {
+      if (!ov || typeof ov !== 'object') continue;
+      const keepsSlot = overrideKeepsSeriesSlotTime(
+        ov, oldRid, base.start, base.end, oldAllDay,
+      );
+      let newRid = oldRid;
+      const patch = { ...ov };
+      if (deltaMs !== 0) {
+        if (keepsSlot) {
+          newRid = shiftRecurrenceToken(oldRid, deltaMs, oldAllDay, newAllDay);
+          if (patch.start) {
+            const os = new Date(patch.start);
+            if (Number.isFinite(os.getTime())) patch.start = new Date(os.getTime() + deltaMs).toISOString();
+          }
+          if (patch.end) {
+            const oe = new Date(patch.end);
+            if (Number.isFinite(oe.getTime())) patch.end = new Date(oe.getTime() + deltaMs).toISOString();
+          } else if (patch.start) {
+            const os = new Date(patch.start);
+            if (Number.isFinite(os.getTime())) {
+              patch.end = new Date(os.getTime() + duration).toISOString();
+            }
+          }
+        }
+      }
+      if (typeof patch.all_day !== 'boolean') patch.all_day = newAllDay;
+      overrides[newRid] = patch;
+    }
+    return { ics_exdates: normalizeExdates(exdates), ics_occurrence_overrides: overrides };
+  }
+
   /**
    * Apply EXDATE filter, per-occurrence overrides, and synthetic moved instances.
    * @param {Array<{ ev, start, end, recurring: boolean }>} raw
@@ -190,6 +285,8 @@
     exdateTokenMatchesInstance,
     isExcludedByExdate,
     supportsOccurrenceEdit,
+    overrideKeepsSeriesSlotTime,
+    preserveOverridesOnSeriesEdit,
     finalizeOccurrences,
     ensureIcalUid,
   };
