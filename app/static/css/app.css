@@ -1079,11 +1079,13 @@ html:not([data-theme="dark"]) .agenda-chip-time {
   font: inherit;
 }
 .agenda-list-when {
-  flex: 0 0 6.5rem;
+  flex: 0 0 auto;
+  min-width: 6.5rem;
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: color-mix(in srgb, var(--text) 78%, transparent);
+  white-space: nowrap;
 }
 html:not([data-theme="dark"]) .agenda-list-when { color: #334155; }
 .agenda-list-row-main {

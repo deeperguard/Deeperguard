@@ -230,21 +230,7 @@ def main() -> int:
                         if desktop:
                             page.click('[data-agenda-view="week"]')
                         else:
-                            page.evaluate(
-                                "() => { document.body.classList.remove('agenda-phone-menu-open'); "
-                                "const b = document.getElementById('agenda-phone-menu-backdrop'); if (b) b.hidden = true; }",
-                            )
-                            page.evaluate(
-                                "() => document.getElementById('agenda-phone-more')?.click()",
-                            )
-                            page.wait_for_timeout(150)
-                            page.evaluate(
-                                '() => document.querySelector(\'#agenda-phone-menu [data-agenda-view="month"]\')?.click()',
-                            )
-                            page.evaluate(
-                                "() => { document.body.classList.remove('agenda-phone-menu-open'); "
-                                "const b = document.getElementById('agenda-phone-menu-backdrop'); if (b) b.hidden = true; }",
-                            )
+                            page.evaluate(PICK_VIEW, "month")
                         page.evaluate(RE_RENDER)
                         page.wait_for_timeout(400)
                         tag = f"agenda-pr-a-{theme}-{vp_name}x{h}"
@@ -258,20 +244,7 @@ def main() -> int:
                             page.click('[data-agenda-view="week"]')
                             page.evaluate(ANCHOR_MON, fx)
                         else:
-                            page.evaluate(
-                                "() => { document.body.classList.remove('agenda-phone-menu-open'); "
-                                "const b = document.getElementById('agenda-phone-menu-backdrop'); if (b) b.hidden = true; }",
-                            )
-                            page.evaluate(
-                                "() => document.getElementById('agenda-phone-more')?.click()",
-                            )
-                            page.wait_for_timeout(150)
-                            page.evaluate(
-                                '() => document.querySelector(\'#agenda-phone-menu [data-agenda-view="agenda"]\')?.click()',
-                            )
-                            page.evaluate(
-                                "() => { document.body.classList.remove('agenda-phone-menu-open'); }",
-                            )
+                            page.evaluate(PICK_VIEW, "agenda")
                         page.evaluate(RE_RENDER)
                         page.wait_for_timeout(500)
                         suffix = "list" if not desktop else "week"

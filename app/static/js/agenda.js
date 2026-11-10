@@ -74,6 +74,11 @@
     return 'week';
   }
 
+  function agendaUiLocale() {
+    const lang = document?.documentElement?.lang;
+    return lang && String(lang).trim() ? String(lang).trim() : 'en';
+  }
+
   function hashHue(id) {
     let h = 0;
     const s = String(id || '');
@@ -198,26 +203,52 @@
       else colEnds[c] = o.b;
       placed.push({ ...o, col: c });
     }
-    for (let i = 0; i < placed.length; i += 1) {
-      let clusterMax = placed[i].col;
-      for (let j = 0; j < placed.length; j += 1) {
-        if (i === j) continue;
-        const a = placed[i];
-        const b = placed[j];
-        if (a.b > b.a && a.a < b.b) clusterMax = Math.max(clusterMax, b.col);
+    const parent = placed.map((_, idx) => idx);
+    const find = (idx) => {
+      let root = idx;
+      while (parent[root] !== root) {
+        parent[root] = parent[parent[root]];
+        root = parent[root];
       }
-      placed[i].colCount = clusterMax + 1;
+      return root;
+    };
+    const unite = (a, b) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra !== rb) parent[rb] = ra;
+    };
+    const overlap = (a, b) => a.b > b.a && a.a < b.b;
+    for (let i = 0; i < placed.length; i += 1) {
+      for (let j = i + 1; j < placed.length; j += 1) {
+        if (overlap(placed[i], placed[j])) unite(i, j);
+      }
     }
+    const clusterMaxCol = new Map();
+    placed.forEach((p, i) => {
+      const root = find(i);
+      const prev = clusterMaxCol.has(root) ? clusterMaxCol.get(root) : -1;
+      clusterMaxCol.set(root, Math.max(prev, p.col));
+    });
+    placed.forEach((p, i) => {
+      p.colCount = clusterMaxCol.get(find(i)) + 1;
+    });
     return placed;
   }
 
   function listDayHeading(d) {
     const ds = startOfDay(d);
     const today = startOfDay(new Date());
-    const when = ds.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    const loc = agendaUiLocale();
+    const when = ds.toLocaleDateString(loc, { weekday: 'short', day: 'numeric', month: 'short' });
     if (ds.getTime() === today.getTime()) return `Today · ${when}`;
-    const prefix = ds.toLocaleDateString(undefined, { weekday: 'long' });
-    return `${prefix} · ${when}`;
+    return when;
+  }
+
+  function listEmptyMessage() {
+    if (state.view === 'day') return 'No events this day.';
+    if (state.view === '3day') return 'No events in this range.';
+    if (state.view === 'week') return 'No events this week.';
+    return 'No events in this period.';
   }
 
   function layoutAllDayLanes(allDayOcc, days) {
@@ -229,7 +260,8 @@
       let i1 = -1;
       days.forEach((d, i) => {
         const t0 = startOfDay(d).getTime();
-        if (t0 >= ds && t0 < de) {
+        const t1 = t0 + MS_DAY;
+        if (de > t0 && ds < t1) {
           if (i0 < 0) i0 = i;
           i1 = i;
         }
@@ -1071,6 +1103,11 @@
     }
     const dayKeys = [...byDay.keys()].sort((a, b) => a - b);
     let html = `<div class="agenda-list-view" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
+    if (!dayKeys.length) {
+      html += `<p class="agenda-list-empty muted">${esc(listEmptyMessage())}</p>`;
+      html += '</div>';
+      return html;
+    }
     dayKeys.forEach((key) => {
       const day = new Date(key);
       const items = sortOccForMonthDay(byDay.get(key));
@@ -2183,6 +2220,7 @@
     handleEscapeKey,
     closeEditor,
     closeScopeChooser,
+    _layoutDayColumns: layoutDayColumns,
   };
   global.__notesCloseAgendaCalendarSettings = closeCalendarSettingsPanel;
 }(typeof window !== 'undefined' ? window : globalThis));
