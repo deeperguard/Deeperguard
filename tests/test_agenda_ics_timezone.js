@@ -43,4 +43,38 @@ function runWithTz(tz) {
 runWithTz('UTC');
 runWithTz('America/Los_Angeles');
 
+function runWeeklyUntilRoundTrip(tz) {
+  const script = `
+    process.env.TZ = ${JSON.stringify(tz)};
+    const fs = require('fs');
+    const vm = require('vm');
+    const root = ${JSON.stringify(root)};
+    vm.runInThisContext(fs.readFileSync(root + '/app/static/js/agenda-recurrence.js', 'utf8'));
+    vm.runInThisContext(fs.readFileSync(root + '/app/static/js/agenda-ics.js', 'utf8'));
+    const R = global.NotesAgendaRecurrence;
+    const Ics = global.NotesAgendaIcs;
+    const start = new Date(2026, 2, 8, 10, 30, 0);
+    const rrule = R.buildAgendaRrule('biweekly', new Date(2026, 5, 30, 12, 0, 0));
+    const cal = Ics.buildIcsCalendarFromEvents([{
+      id: 'w',
+      ical_uid: 'weekly-until',
+      title: 'Series',
+      start: start.toISOString(),
+      end: new Date(2026, 2, 8, 11, 30, 0).toISOString(),
+      all_day: false,
+      rrule,
+    }]);
+    const row = Ics.parseIcsFile(cal).events[0];
+    if (!row.rrule || !row.rrule.includes('FREQ=WEEKLY') || !row.rrule.includes('INTERVAL=2')) process.exit(3);
+    if (row.start !== start.toISOString()) process.exit(4);
+  `;
+  const r = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
+  if (r.status !== 0) {
+    throw new Error(`weekly until TZ ${tz} failed: ${r.status} stderr=${r.stderr}`);
+  }
+}
+
+runWeeklyUntilRoundTrip('UTC');
+runWeeklyUntilRoundTrip('America/Los_Angeles');
+
 console.log('test_agenda_ics_timezone ok');

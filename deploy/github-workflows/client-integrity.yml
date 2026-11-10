@@ -49,5 +49,8 @@ jobs:
           node tests/test_round87_unlock_network_timeout.js
           node tests/test_agenda_month_grid_range.js
           node tests/test_agenda_ics_export_roundtrip.js
+          node tests/test_agenda_ics_exdate_roundtrip.js
           node tests/test_agenda_ics_timezone.js
           node tests/test_agenda_scroll_core.js
+          node tests/test_agenda_recurrence.js
+          node tests/test_agenda_weekly_occurrences.js

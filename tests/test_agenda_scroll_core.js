@@ -100,6 +100,27 @@ assert.strictEqual(top, 1200, 'search filter must not bust scroll fp');
 
 const scrollOpts = { pxPerHour: PX, viewportHeight: VIEW_H };
 top = pickTimeGridScrollTop({
+  currentFingerprint: fpFull,
+  storedFingerprint: fpFull,
+  storedScrollTop: 446,
+  displayOcc: [mon14, wed08],
+  range: range2,
+  opts: scrollOpts,
+});
+assert.strictEqual(top, 446, 'view-hop snapshot: matching fp restores exact saved scroll');
+
+top = pickTimeGridScrollTop({
+  currentFingerprint: '',
+  storedFingerprint: '',
+  storedScrollTop: 416,
+  displayOcc: [mon14, wed08],
+  range: range2,
+  opts: scrollOpts,
+});
+const wantEmptyFp = preferredTimeGridScrollTop([mon14, wed08], range2, scrollOpts);
+assert.strictEqual(top, wantEmptyFp, 'empty fingerprint must not restore stale scrollTop');
+
+top = pickTimeGridScrollTop({
   currentFingerprint: fp1,
   storedFingerprint: fp0,
   storedScrollTop: 900,
@@ -118,5 +139,14 @@ assert.strictEqual(noEvents, 8 * PX, 'empty schedule uses default morning band')
 
 const clamped = clampTimeGridScrollTop(9000, 1200, VIEW_H);
 assert.strictEqual(clamped, 1200 - VIEW_H, 'clamp scroll top to max');
+
+assert.ok(Core.isTimeGridLayoutReady);
+assert.strictEqual(Core.isTimeGridLayoutReady(0, VIEW_H), false, 'clientHeight 0 → not ready');
+assert.strictEqual(Core.isTimeGridLayoutReady(1200, 0), false, 'scrollHeight 0 → not ready');
+assert.strictEqual(Core.isTimeGridLayoutReady(1200, VIEW_H), true);
+assert.strictEqual(Core.isTimeGridLayoutReady(VIEW_H, VIEW_H), false, 'not scrollable until sh > ch');
+
+const wronglyEarly = clampTimeGridScrollTop(446, 0, 0);
+assert.strictEqual(wronglyEarly, 0, 'layout-not-ready clamp would zero scroll — defer placement instead');
 
 console.log('test_agenda_scroll_core ok');

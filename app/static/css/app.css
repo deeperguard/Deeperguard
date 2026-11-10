@@ -194,7 +194,208 @@ html[data-notes-boot="app"] body.locked #app[hidden] {
   flex-direction: column;
   overflow: hidden;
 }
-.agenda-editor.agenda-editor-row-inline { flex-direction: row; align-items: center; gap: 10px; }
+#agenda-editor.agenda-editor {
+  top: max(10px, env(safe-area-inset-top));
+  bottom: max(0px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 20px));
+  max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px));
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  z-index: 210;
+}
+body.agenda-editor-open #agenda-editor-backdrop.agenda-editor-backdrop { z-index: 205; }
+body.agenda-editor-open #agenda-editor.agenda-editor { z-index: 210; }
+.agenda-editor-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 16px 10px;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+#agenda-editor .agenda-editor-scroll .settings-row,
+#agenda-editor .agenda-editor-datetime-row {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.agenda-editor-heading { margin: 0 0 10px; font-size: 17px; font-weight: 680; }
+#agenda-editor.agenda-editor .agenda-editor-series-notice {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: var(--bg-hover);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+#agenda-editor.agenda-editor .agenda-editor-series-notice strong {
+  color: inherit;
+}
+/* Editor max width is ~420px — side-by-side datetime-local clips times on phones. */
+.agenda-editor-datetime-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+#agenda-editor .settings-row.stacked.agenda-editor-datetime-label {
+  padding: 6px 0 8px;
+  border-bottom: 0;
+  gap: 6px;
+  font-size: 14px;
+}
+#agenda-editor .settings-row.checkbox.agenda-editor-allday {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  gap: 12px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+#agenda-editor .settings-row.checkbox.agenda-editor-allday span {
+  font-size: 15px;
+  font-weight: 550;
+}
+@media (max-width: 999px) {
+  #agenda-editor .settings-row.checkbox.agenda-editor-allday {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #agenda-editor .settings-row.checkbox.agenda-editor-allday input[type="checkbox"] {
+    width: auto;
+    flex: 0 0 auto;
+    align-self: center;
+  }
+}
+.agenda-editor-datetime-field {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  min-height: 44px;
+}
+.agenda-editor-datetime-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+#agenda-editor .agenda-editor-datetime-field input[type="datetime-local"],
+#agenda-editor .agenda-editor-datetime-field input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.35;
+  text-align: left;
+  color-scheme: inherit;
+  box-sizing: border-box;
+}
+#agenda-editor .agenda-editor-datetime-field input[type="datetime-local"]:focus,
+#agenda-editor .agenda-editor-datetime-field input[type="date"]:focus { outline: none; }
+#agenda-editor .agenda-editor-datetime-field input[type="datetime-local"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.35em;
+  min-width: 9.5em;
+}
+#agenda-editor .agenda-editor-datetime-field input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-width: 7.5em;
+}
+#agenda-editor .agenda-editor-datetime-field input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: .75;
+  margin-left: 4px;
+}
+.agenda-editor-recurrence {
+  margin: 4px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 10px;
+  border-left: 0;
+  border-right: 0;
+}
+.agenda-editor-recurrence legend { font-size: 12px; font-weight: 650; padding: 0 4px; }
+#agenda-editor .agenda-editor-recurrence .settings-row.stacked {
+  flex: 0 0 auto;
+  align-items: stretch;
+  padding: 4px 0 6px;
+  border-bottom: 0;
+  gap: 4px;
+}
+#agenda-editor .agenda-editor-recurrence select#agenda-edit-repeat {
+  flex: 0 0 auto;
+  flex-grow: 0;
+  width: 100%;
+  min-height: var(--touch);
+  height: var(--touch);
+  max-height: var(--touch);
+  align-self: stretch;
+  line-height: 1.2;
+}
+#agenda-editor .agenda-editor-recurrence #agenda-edit-rrule-status {
+  margin: 0;
+  padding: 0 0 4px;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  font-size: 13px;
+  line-height: 1.35;
+}
+#agenda-editor .agenda-editor-recurrence #agenda-edit-until-wrap input[type="date"] {
+  flex: 0 0 auto;
+  min-height: var(--touch);
+  height: var(--touch);
+  max-height: var(--touch);
+}
+.agenda-editor-exdates-note {
+  margin: 0;
+  padding: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--text) 86%, var(--muted));
+}
+.agenda-editor-rrule-advanced code {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  word-break: break-all;
+}
+#agenda-edit-notes {
+  min-height: 2.75rem;
+  max-height: 5.5rem;
+  resize: vertical;
+  field-sizing: content;
+}
+.agenda-editor-actions {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  position: sticky;
+  bottom: 0;
+}
 .agenda-top {
   flex-shrink: 0;
   padding: 6px 10px 6px;

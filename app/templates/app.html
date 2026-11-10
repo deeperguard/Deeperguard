@@ -2406,36 +2406,66 @@
       <button type="button" class="btn primary" id="account-info-close">OK</button>
     </div>
   </div>
-  <div id="agenda-editor-backdrop" class="settings-backdrop" hidden></div>
-  <div id="agenda-editor" class="confirm-dialog agenda-editor" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-edit-title-label">
-    <h2 id="agenda-edit-title-label" class="sr-only">Edit event</h2>
-    <label class="settings-row stacked">Title
-      <input id="agenda-edit-title" type="text" maxlength="500" autocomplete="off">
-    </label>
-    <label class="settings-row stacked">Starts
-      <input id="agenda-edit-start" type="datetime-local">
-    </label>
-    <label class="settings-row stacked">Ends
-      <input id="agenda-edit-end" type="datetime-local">
-    </label>
-    <label class="settings-row stacked agenda-editor-row-inline">
-      <input id="agenda-edit-allday" type="checkbox"> All day
-    </label>
-    <label class="settings-row stacked">Location
-      <input id="agenda-edit-location" type="text" maxlength="500" autocomplete="off">
-    </label>
-    <label class="settings-row stacked">Join link (https only)
-      <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://">
-    </label>
-    <p id="agenda-edit-join" class="settings-hint" hidden></p>
-    <label class="settings-row stacked">Notes
-      <textarea id="agenda-edit-notes" rows="4" maxlength="16000" autocomplete="off"></textarea>
-    </label>
-    <label class="settings-row stacked">Attendees (comma-separated)
-      <input id="agenda-edit-attendees" type="text" maxlength="2000" autocomplete="off">
-    </label>
-    <p class="settings-hint muted">Shared calendars are not included in this MVP — each vault stays private.</p>
-    <div class="confirm-dialog-actions">
+  <div id="agenda-editor-backdrop" class="settings-backdrop agenda-editor-backdrop" hidden></div>
+  <div id="agenda-editor" class="confirm-dialog agenda-editor" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-edit-visible-title">
+    <div class="agenda-editor-scroll">
+      <h2 id="agenda-edit-visible-title" class="agenda-editor-heading">Event</h2>
+      <p id="agenda-edit-series-notice" class="agenda-editor-series-notice" hidden>
+        Changes apply to the <strong>entire recurring series</strong> (not a single occurrence).
+      </p>
+      <label class="settings-row stacked">Title
+        <input id="agenda-edit-title" type="text" maxlength="500" autocomplete="off">
+      </label>
+      <label class="settings-row checkbox agenda-editor-allday">
+        <span>All day</span>
+        <input id="agenda-edit-allday" type="checkbox">
+      </label>
+      <div class="agenda-editor-datetime-row">
+        <label class="settings-row stacked agenda-editor-datetime-label" for="agenda-edit-start">Starts
+          <span class="agenda-editor-datetime-field">
+            <input id="agenda-edit-start" type="datetime-local" step="60">
+          </span>
+        </label>
+        <label class="settings-row stacked agenda-editor-datetime-label" for="agenda-edit-end">Ends
+          <span class="agenda-editor-datetime-field">
+            <input id="agenda-edit-end" type="datetime-local" step="60">
+          </span>
+        </label>
+      </div>
+      <fieldset class="agenda-editor-recurrence">
+        <legend class="muted">Repeat</legend>
+        <label class="settings-row stacked">Pattern
+          <select id="agenda-edit-repeat">
+            <option value="none">Does not repeat</option>
+            <option value="weekly">Weekly</option>
+            <option value="biweekly">Every 2 weeks</option>
+            <option value="advanced">Keep imported / custom rule</option>
+          </select>
+        </label>
+        <p id="agenda-edit-rrule-status" aria-live="polite"></p>
+        <p id="agenda-edit-exdates-note" class="agenda-editor-exdates-note" hidden></p>
+        <p id="agenda-edit-rrule-advanced" class="agenda-editor-rrule-advanced" hidden>
+          Custom rule: <code id="agenda-edit-rrule-raw"></code>
+        </p>
+        <label class="settings-row stacked" id="agenda-edit-until-wrap">Repeat until (optional)
+          <input id="agenda-edit-until" type="date" autocomplete="off">
+        </label>
+      </fieldset>
+      <label class="settings-row stacked">Location
+        <input id="agenda-edit-location" type="text" maxlength="500" autocomplete="off">
+      </label>
+      <label class="settings-row stacked">Join link (https only)
+        <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://">
+      </label>
+      <p id="agenda-edit-join" class="settings-hint" hidden></p>
+      <label class="settings-row stacked">Notes
+        <textarea id="agenda-edit-notes" rows="2" maxlength="16000" autocomplete="off"></textarea>
+      </label>
+      <label class="settings-row stacked">Attendees (comma-separated)
+        <input id="agenda-edit-attendees" type="text" maxlength="2000" autocomplete="off">
+      </label>
+    </div>
+    <div class="confirm-dialog-actions agenda-editor-actions">
       <button type="button" class="btn ghost" id="agenda-edit-delete" hidden>Delete</button>
       <button type="button" class="btn ghost" id="agenda-edit-cancel">Cancel</button>
       <button type="button" class="btn primary" id="agenda-edit-save">Save</button>
@@ -2560,6 +2590,7 @@
   {{ asset_script('js/store.js') }}
   {{ asset_script('js/vendor/jsQR.js') }}
   {{ asset_script('js/agenda-ics.js') }}
+  {{ asset_script('js/agenda-recurrence.js') }}
   {{ asset_script('js/agenda-scroll-core.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}
