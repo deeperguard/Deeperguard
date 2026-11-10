@@ -40,4 +40,22 @@ assert.ok(bi.includes('INTERVAL=2'));
 assert.strictEqual(R.buildAgendaRrule('none', until), '');
 assert.strictEqual(R.buildAgendaRrule('advanced', until), null);
 
+p = R.parseAgendaRrule('FREQ=DAILY;INTERVAL=1');
+assert.strictEqual(p.kind, 'daily');
+
+p = R.parseAgendaRrule('FREQ=MONTHLY;INTERVAL=1');
+assert.strictEqual(p.kind, 'monthly');
+
+p = R.parseAgendaRrule('FREQ=YEARLY;INTERVAL=1');
+assert.strictEqual(p.kind, 'yearly');
+
+const daily = R.buildAgendaRrule('daily', until);
+assert.ok(daily.includes('FREQ=DAILY'));
+
+const monthly = R.buildAgendaRrule('monthly', until);
+assert.ok(monthly.includes('FREQ=MONTHLY'));
+
+const yearly = R.buildAgendaRrule('yearly', until);
+assert.ok(yearly.includes('FREQ=YEARLY'));
+
 console.log('test_agenda_recurrence ok');

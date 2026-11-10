@@ -1,5 +1,5 @@
 /**
- * Parse/build simple WEEKLY RRULE strings for Agenda editor.
+ * Parse/build simple RRULE strings for Agenda editor.
  * Unsupported/imported rules are preserved verbatim when kind is "advanced".
  */
 (function (global) {
@@ -21,24 +21,39 @@
     return Number.isFinite(t) ? new Date(t) : null;
   }
 
+  function parseInterval(rule) {
+    const intervalMatch = rule.match(/INTERVAL=(\d+)/);
+    return intervalMatch ? Math.max(1, Number(intervalMatch[1]) || 1) : 1;
+  }
+
   function parseAgendaRrule(raw) {
     const original = String(raw || '').trim();
     if (!original) {
       return { kind: 'none', raw: '', until: null, interval: 1 };
     }
     const rule = original.toUpperCase();
-    if (!/^FREQ=WEEKLY/.test(rule)) {
-      return { kind: 'advanced', raw: original, until: parseUntil(rule.match(/UNTIL=([^;:]+)/)?.[1]), interval: 1 };
-    }
-    if (/BYDAY=|BYMONTH=|BYSETPOS=|COUNT=|FREQ=(?!WEEKLY)/.test(rule)) {
-      return { kind: 'advanced', raw: original, until: parseUntil(rule.match(/UNTIL=([^;:]+)/)?.[1]), interval: 1 };
-    }
-    const intervalMatch = rule.match(/INTERVAL=(\d+)/);
-    const interval = intervalMatch ? Math.max(1, Number(intervalMatch[1]) || 1) : 1;
     const until = parseUntil(rule.match(/UNTIL=([^;:]+)/)?.[1]);
-    if (interval === 2) return { kind: 'biweekly', raw: original, until, interval: 2 };
-    if (interval === 1) return { kind: 'weekly', raw: original, until, interval: 1 };
-    return { kind: 'advanced', raw: original, until, interval };
+    if (/BYDAY=|BYMONTH=|BYSETPOS=|COUNT=/.test(rule)) {
+      if (!/^FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY);INTERVAL=\d+(;UNTIL=[^;:]+)?$/.test(rule)) {
+        return { kind: 'advanced', raw: original, until, interval: parseInterval(rule) };
+      }
+    }
+    const interval = parseInterval(rule);
+    if (/^FREQ=DAILY/.test(rule)) {
+      return { kind: 'daily', raw: original, until, interval };
+    }
+    if (/^FREQ=WEEKLY/.test(rule)) {
+      if (interval === 2) return { kind: 'biweekly', raw: original, until, interval: 2 };
+      if (interval === 1) return { kind: 'weekly', raw: original, until, interval: 1 };
+      return { kind: 'advanced', raw: original, until, interval };
+    }
+    if (/^FREQ=MONTHLY/.test(rule)) {
+      return { kind: 'monthly', raw: original, until, interval };
+    }
+    if (/^FREQ=YEARLY/.test(rule)) {
+      return { kind: 'yearly', raw: original, until, interval };
+    }
+    return { kind: 'advanced', raw: original, until, interval: 1 };
   }
 
   function pad2(n) {
@@ -53,8 +68,17 @@
   function buildAgendaRrule(kind, untilDate) {
     if (!kind || kind === 'none') return '';
     if (kind === 'advanced') return null;
+    const freqMap = {
+      daily: 'DAILY',
+      weekly: 'WEEKLY',
+      biweekly: 'WEEKLY',
+      monthly: 'MONTHLY',
+      yearly: 'YEARLY',
+    };
+    const freq = freqMap[kind];
+    if (!freq) return null;
     const interval = kind === 'biweekly' ? 2 : 1;
-    let out = `FREQ=WEEKLY;INTERVAL=${interval}`;
+    let out = `FREQ=${freq};INTERVAL=${interval}`;
     if (untilDate) {
       const d = untilDate instanceof Date ? untilDate : new Date(untilDate);
       if (!Number.isNaN(d.getTime())) out += `;UNTIL=${formatUntilUtc(d)}`;

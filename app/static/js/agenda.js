@@ -136,6 +136,8 @@
     const rule = String(ev.rrule).toUpperCase();
     const freqDaily = /FREQ=DAILY/.test(rule);
     const freqWeekly = /FREQ=WEEKLY/.test(rule);
+    const freqMonthly = /FREQ=MONTHLY/.test(rule);
+    const freqYearly = /FREQ=YEARLY/.test(rule);
     const intervalMatch = rule.match(/INTERVAL=(\d+)/);
     const interval = intervalMatch ? Math.max(1, Number(intervalMatch[1]) || 1) : 1;
     const untilMatch = rule.match(/UNTIL=([^;:]+)/);
@@ -173,6 +175,14 @@
         curStart = addDays(curStart, interval);
       } else if (freqWeekly) {
         curStart = addDays(curStart, 7 * interval);
+      } else if (freqMonthly) {
+        const next = new Date(curStart);
+        next.setMonth(next.getMonth() + interval);
+        curStart = next;
+      } else if (freqYearly) {
+        const next = new Date(curStart);
+        next.setFullYear(next.getFullYear() + interval);
+        curStart = next;
       } else {
         break;
       }
