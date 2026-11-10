@@ -24644,6 +24644,9 @@
         event.preventDefault();
         event.stopPropagation();
       };
+      if (global.NotesAgenda && typeof global.NotesAgenda.handleEscapeKey === 'function') {
+        if (global.NotesAgenda.handleEscapeKey(event)) return;
+      }
       const folderPrompt = document.getElementById('folder-prompt');
       if (folderPrompt && !folderPrompt.hidden) {
         closeFolderPrompt();

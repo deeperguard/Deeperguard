@@ -127,7 +127,11 @@ def main() -> int:
                     }"""
                 )
                 page.click("#app-tab-agenda")
-                page.wait_for_selector(".agenda-scroll-wrap", timeout=20_000)
+                page.wait_for_function(
+                    "() => typeof NotesAgenda !== 'undefined' && !!document.getElementById('agenda-root')",
+                    timeout=60_000,
+                )
+                page.wait_for_selector(".agenda-scroll-wrap", timeout=60_000)
                 page.wait_for_timeout(600)
                 geo = page.evaluate(
                     """() => {
@@ -217,6 +221,101 @@ def main() -> int:
                         "detail": {"before": title0, "after": title1},
                     }
                 )
+                recur_id = page.evaluate(
+                    """() => {
+                      const id = NotesStore.newUuid();
+                      const mon = new Date();
+                      mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+                      mon.setHours(10, 0, 0, 0);
+                      const end = new Date(mon.getTime() + 3600000);
+                      NotesStore.upsertAgendaEvent(id, {
+                        title: 'Escape focus weekly',
+                        start: mon.toISOString(),
+                        end: end.toISOString(),
+                        all_day: false,
+                        rrule: 'FREQ=WEEKLY;INTERVAL=1',
+                        ical_uid: 'br-esc-focus',
+                      });
+                      if (typeof NotesAgenda !== 'undefined' && NotesAgenda.render) NotesAgenda.render();
+                      return id;
+                    }"""
+                )
+                page.wait_for_timeout(400)
+                chip_sel = f'[data-agenda-id="{recur_id}"]'
+                page.locator(chip_sel).first.click()
+                page.wait_for_selector("#agenda-scope-chooser:not([hidden])", timeout=5000)
+                page.locator('[data-agenda-edit-scope="series"]').click()
+                page.wait_for_selector("#agenda-editor:not([hidden])", timeout=5000)
+                page.locator("#agenda-edit-title").focus()
+                page.keyboard.press("Escape")
+                focus_back = page.evaluate(
+                    """(eventId) => {
+                      const chip = document.querySelector(`[data-agenda-id="${eventId}"]`);
+                      const edOpen = !document.getElementById('agenda-editor')?.hidden;
+                      const active = document.activeElement;
+                      const onChip = !!(chip && (active === chip || chip.contains(active)));
+                      return {
+                        ok: !edOpen && onChip,
+                        edOpen,
+                        activeTag: active?.id || active?.className || '',
+                        reason: !chip ? 'no-chip' : '',
+                      };
+                    }""",
+                    recur_id,
+                )
+                results.append(
+                    {
+                        "vp": name,
+                        "check": "editor_escape_focus_chip",
+                        "ok": bool(focus_back.get("ok")),
+                        "detail": focus_back,
+                    }
+                )
+                page.evaluate(
+                    """() => {
+                      if (globalThis.NotesAgenda?.closeEditor) NotesAgenda.closeEditor();
+                      else if (globalThis.NotesAgenda?.closeScopeChooser) NotesAgenda.closeScopeChooser();
+                    }"""
+                )
+                page.wait_for_timeout(200)
+                if w < 900:
+                    page.evaluate(
+                        """() => {
+                          const panel = document.getElementById('search-filter-panel');
+                          if (panel?.hidden && document.getElementById('search-filter-toggle')) {
+                            document.getElementById('search-filter-toggle').click();
+                          }
+                        }"""
+                    )
+                    page.wait_for_function(
+                        "() => document.body.classList.contains('search-filters-open')",
+                        timeout=5000,
+                    )
+                    page.locator(chip_sel).first.click()
+                    page.wait_for_selector("#agenda-scope-chooser:not([hidden])", timeout=5000)
+                    page.keyboard.press("Escape")
+                    escape_order = page.evaluate(
+                        """() => {
+                          const scope = document.getElementById('agenda-scope-chooser');
+                          const scopeStill = !!(scope && scope.hidden);
+                          const filtersStill = document.body.classList.contains('search-filters-open');
+                          const ed = document.getElementById('agenda-editor');
+                          return {
+                            ok: scopeStill && filtersStill && (!ed || ed.hidden),
+                            scopeStill,
+                            filtersStill,
+                            editorOpen: !!(ed && !ed.hidden),
+                          };
+                        }"""
+                    )
+                    results.append(
+                        {
+                            "vp": name,
+                            "check": "escape_scope_before_filters",
+                            "ok": bool(escape_order.get("ok")),
+                            "detail": escape_order,
+                        }
+                    )
                 ctx.close()
             browser.close()
     finally:
