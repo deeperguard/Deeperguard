@@ -2867,7 +2867,7 @@ const NotesStore = (() => {
       pushed?.content_hash
       && typeof NotesFreshness !== 'undefined'
       && item.content
-      && NotesFreshness.shouldTrackType(item.content.type)
+      && item.content.type === 'agenda_pack'
     ) {
       NotesFreshness.noteAccepted(uuid, item.content, pushed.content_hash);
     }
@@ -4774,8 +4774,12 @@ const NotesStore = (() => {
       state.dirty.add(uuid);
       schedulePush();
       if (typeof NotesFreshness !== 'undefined' && NotesFreshness.shouldTrackType(content.type)) {
-        // Ciphertext hash is unknown until wrap/push; adopt after recordPushedState.
-        NotesFreshness.noteAccepted(uuid, content, '');
+        if (content.type === 'agenda_pack') {
+          // Pack bumps ship before wrap; stamp hash after recordPushedState.
+          NotesFreshness.noteAccepted(uuid, content, '');
+        } else {
+          NotesFreshness.noteAccepted(uuid, content, item.content_hash || '');
+        }
         scheduleVaultHeadRefresh();
       }
     }
