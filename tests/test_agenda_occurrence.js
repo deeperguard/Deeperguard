@@ -219,11 +219,11 @@ assert.ok(shiftedIcs.includes(Occ.recurrenceIdForStart(new Date('2026-11-24T13:0
 
 assert.strictEqual(
   Occ.seriesOverrideResetMessage(1),
-  '1 customized occurrence will be reset to the series',
+  '1 edited occurrence will be reset to match the series.',
 );
 assert.strictEqual(
   Occ.seriesOverrideResetMessage(3),
-  '3 customized occurrences will be reset to the series',
+  '3 edited occurrences will be reset to match the series.',
 );
 
 const titleTimeRid = Occ.recurrenceIdForStart(new Date('2026-12-01T12:00:00.000Z'), false);

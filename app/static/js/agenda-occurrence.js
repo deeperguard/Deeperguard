@@ -172,8 +172,8 @@
   function seriesOverrideResetMessage(count) {
     const n = Math.max(0, Number(count) || 0);
     if (n === 0) return '';
-    if (n === 1) return '1 customized occurrence will be reset to the series';
-    return `${n} customized occurrences will be reset to the series`;
+    if (n === 1) return '1 edited occurrence will be reset to match the series.';
+    return `${n} edited occurrences will be reset to match the series.`;
   }
 
   function mergeOverrideSeriesFields(patch, ov, base, next) {
