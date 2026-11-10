@@ -2,7 +2,7 @@
 title: "Your calendar stays in the vault: how Deeperguard Agenda works"
 slug: vault-encrypted-agenda
 date: 2026-11-07
-description: "Appointments and join links belong with your private notes. Here's how vault-encrypted Agenda keeps events on your device until you unlock, what you can import today, and what we deliberately don't sync yet."
+description: "Here's how vault-encrypted Agenda encrypts events on your device before they sync, what you can import today, and what we deliberately don't sync yet."
 cover_image: /static/blog/vault-encrypted-agenda.jpg
 cover_alt: "Soft abstract cream and slate-blue wave shapes with subtle halftone dots, calm privacy-product header with no text"
 draft: false

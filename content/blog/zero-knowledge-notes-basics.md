@@ -20,7 +20,6 @@ Your notes are encrypted on your device before they leave it. The key comes from
 
 - **Encryption happens in your browser.** Notes are encrypted with AES-GCM 256 before they sync. Synced note contents reach our servers as ciphertext; this does not mean account details and sync metadata are encrypted in the same way.
 - **Signing in uses SRP.** This protocol proves you know your password without sending the password to the server.
-- **Text in images is read on your device.** Text extraction happens locally, not on our servers.
 - **The code is source available for review.** Our [verify page](/verify) explains how to check what is running.
 
 ## The honest exception: Ask AI
