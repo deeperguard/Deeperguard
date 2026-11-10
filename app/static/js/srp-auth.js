@@ -91,7 +91,7 @@
     if (pinned != null && challenge < pinned) {
       const err = new Error(
         'This device has seen a newer sign-in method for this account. '
-        + 'Sign in again from a trusted device or contact support.',
+        + 'Sign in again from a trusted device or contact notes@deeperguard.com.',
       );
       err.code = 'srp_kdf_downgrade';
       err.srpKdfDowngrade = true;

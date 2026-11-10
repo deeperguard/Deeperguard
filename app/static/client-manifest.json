@@ -254,10 +254,10 @@
       "url": "/static/js/spreadsheet.385167a74e238c1d.js"
     },
     "js/srp-auth.js": {
-      "bytes": 24149,
-      "sha256": "e183515cf7ebd79c01b30c5b53102256b43606c3f32f60c4534ed98f60b652f0",
-      "sri": "sha384-x+vz0fgXhQBIsK9D3Q6dOjJSLJT40d+/SlVAJuEXSWaeZoPpHq/l8zTiOyI4Ww31",
-      "url": "/static/js/srp-auth.e183515cf7ebd79c.js"
+      "bytes": 24163,
+      "sha256": "11fb1c7d5c27b7b48a87053939061d69d5683ca0a7494e23c53cb188c546900f",
+      "sri": "sha384-ZeQSNZ7RDjJhtwMS8xQpTnacJKd9u5R6ndlI7w5n5R/PvYT3il3VyYWNvVf/XUJy",
+      "url": "/static/js/srp-auth.11fb1c7d5c27b7b4.js"
     },
     "js/store.js": {
       "bytes": 240867,
@@ -405,6 +405,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "963c68742f66298fbd6c2f4010be3ace8fddccf54f19f53d53d2813c449ef9ac",
+  "manifest_sha256": "54ed47e3cf6eee3037b9d0b4c3395ad2a588752cbfac8298e80db82cc3c40c53",
   "version": 1
 }
