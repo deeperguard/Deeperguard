@@ -38,7 +38,7 @@ You'll also see what the server *can* see, including item IDs, timestamps, hashe
 
 ## Step 4: compare with "View on server"
 
-In the unlocked app, open a note, then **Note info → View on server**. The dialog is titled "View on server" and shows two columns: "Server JSON (as stored)" and "Decrypted on this device". The server column should only ever hold ciphertext and metadata.
+In the unlocked app, open a note, click **More actions** in the toolbar, choose **Note info**, then click the **View on server** button in the Note info panel. The dialog is titled "View on server" and shows two columns: "Server JSON (as stored)" and "Decrypted on this device". The server column should only ever hold ciphertext and metadata.
 
 ## The one honest exception: Ask AI
 
