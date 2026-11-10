@@ -1,5 +1,5 @@
 {
-  "asset_count": 67,
+  "asset_count": 68,
   "assets": {
     "css/app.css": {
       "bytes": 276635,
@@ -12,6 +12,12 @@
       "sha256": "bf67166de4dd8ab1afbd4c05f1ef7c754c066509066df9c7e12272f674ef8ca7",
       "sri": "sha384-2KMJyZHqH77iUi2iZ6W4FH7KmdTYxmfuCoDIk487+/9O4R45qqpe19QC/MRRxnpO",
       "url": "/static/css/marketing.bf67166de4dd8ab1.css"
+    },
+    "js/account-totp-auth.js": {
+      "bytes": 3092,
+      "sha256": "f10e061edfdcf40138fb274780caf48977aad90fd6a2d22d09e039afccc325b1",
+      "sri": "sha384-JwiEXz4lAML+wAmC/eZkG/EyX7H+xAf3lFG/yvwfofCH88jgYxTuX4oQSKYOdO8B",
+      "url": "/static/js/account-totp-auth.f10e061edfdcf401.js"
     },
     "js/admin.js": {
       "bytes": 8122,
@@ -56,10 +62,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 964543,
-      "sha256": "16ae43edab3d15f78cabe8d2427759e083a91b045d70d047cde347327fd736bd",
-      "sri": "sha384-hbBwPXPM9qvcuk32g3cpPDjF3Uuwfv/MmEgGxAduoStlSCwvzsOHu8d2WWTUyeom",
-      "url": "/static/js/app.16ae43edab3d15f7.js"
+      "bytes": 963496,
+      "sha256": "2bb87f0778c4867fc0cad261815a3fa9057df55820bf4a6bad8074927b4a7bfa",
+      "sri": "sha384-KEfcgU9n53EfWWiK31nru8h3ZLTl4ngq1v6/c1pw0m/psYTipgbZIQzBm6Zjl2vq",
+      "url": "/static/js/app.2bb87f0778c4867f.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -254,10 +260,10 @@
       "url": "/static/js/spreadsheet.385167a74e238c1d.js"
     },
     "js/srp-auth.js": {
-      "bytes": 24156,
-      "sha256": "9d4e1cf814f4d48ee39947bd8092e160ac84c239e289d48bd1520a3885c53cf2",
-      "sri": "sha384-EReO/tETe7EYfxxtZF8pmj3lHX/M0MkTqr8tUbVs8rXJUfwBLB9qgIeVIqQFlweY",
-      "url": "/static/js/srp-auth.9d4e1cf814f4d48e.js"
+      "bytes": 23795,
+      "sha256": "be8479483c1b6517b56da245c92ba184e75af6abf14ee499950a8ce834229a82",
+      "sri": "sha384-50D1J2yPLxEH3hBdklbsaSgs+l+MbU3t3C6iZLoUKJogaR6530Ic5FrXa6kO020b",
+      "url": "/static/js/srp-auth.be8479483c1b6517.js"
     },
     "js/store.js": {
       "bytes": 240867,
@@ -405,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "fe19b88972285aa4b865d4129dd541eed029a7c09b3e5366711c9111d47cd52d",
+  "manifest_sha256": "4dfba80f01db7a495b040a5502da375f3dd732bcad17e8afe2c4c661edd52a91",
   "version": 1
 }

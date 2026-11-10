@@ -31,9 +31,9 @@ const totpSlice = appJs.slice(
   appJs.indexOf("getElementById('btn-confirm-disable-totp')") + 2400,
 );
 assert.ok(totpSlice.includes("authMethod === 'srp'"));
-assert.ok(totpSlice.includes('srpTotpPasswordProve'));
+assert.ok(totpSlice.includes('srpTotpDisableRotationToken'));
 assert.ok(totpSlice.includes('rotation_token'));
-assert.ok(appJs.includes('accountTotpProveErrorMessage'));
+assert.ok(fs.existsSync(path.join(root, 'app/static/js/account-totp-auth.js')));
 
 // --- behavioral harness mirroring passwordSignIn control flow --------------
 async function passwordSignInHarness({ login, repairLogin, postJson, email, password }) {

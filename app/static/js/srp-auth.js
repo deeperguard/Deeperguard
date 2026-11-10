@@ -531,17 +531,6 @@
     return { srp_salt: salt, srp_verifier: verifier, srp_kdf_version: version };
   }
 
-  async function resync(email, password) {
-    const normalizedEmail = String(email || '').trim().toLowerCase();
-    const srp = await makeVerifier(normalizedEmail, password);
-    return postJson('/api/auth/srp/resync', {
-      email: normalizedEmail,
-      password,
-      srp_salt: srp.srp_salt,
-      srp_verifier: srp.srp_verifier,
-    });
-  }
-
   async function verifyVault(email, password) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     return postJson('/api/auth/verify-vault', {
@@ -626,7 +615,6 @@
     login,
     upgrade,
     makeVerifier,
-    resync,
     verifyVault,
     vaultRecovery,
     accountUnlock,

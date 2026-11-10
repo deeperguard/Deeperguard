@@ -21818,41 +21818,9 @@
     return String(raw || '').replace(/\D/g, '').slice(0, 6);
   }
 
-  function accountTotpApiErrorMessage(err) {
-    const msg = String(err?.message || '').trim();
-    const lower = msg.toLowerCase();
-    if (err?.status === 429) {
-      if (lower.includes('hour')) return msg;
-      if (lower.includes('too many attempts')) return 'Too many attempts. Try again in a few minutes.';
-      return msg;
-    }
-    if (lower === 'invalid code' || msg === 'invalid code') {
-      return "That code didn't work. Check your authenticator and try again.";
-    }
-    return msg;
-  }
-
-  function accountTotpProveErrorMessage(err) {
-    if (err?.status === 401) return 'Password is incorrect.';
-    return accountTotpApiErrorMessage(err) || String(err?.message || '');
-  }
-
-  async function srpTotpPasswordProve(email, password, { button } = {}) {
-    const btn = button || null;
-    const prevLabel = btn ? btn.textContent : '';
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Checking…';
-    }
-    try {
-      return await NotesSrpAuth.passwordChangeProve(email, password);
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = prevLabel;
-      }
-    }
-  }
+  const accountTotpApiErrorMessage = (err) => (
+    window.NotesAccountTotpAuth?.accountTotpApiErrorMessage(err) || String(err?.message || '')
+  );
 
   document.getElementById('btn-setup-totp').addEventListener('click', async () => {
     try {
@@ -21929,22 +21897,21 @@
           passwordEl?.focus();
           return;
         }
-        let proved;
-        try {
-          proved = await srpTotpPasswordProve(email, password, { button: btn });
-        } catch (proveErr) {
-          const message = accountTotpProveErrorMessage(proveErr);
-          toast(message || 'Could not verify your password.', true);
-          if (proveErr?.status === 401) passwordEl?.focus();
+        const prove = window.NotesAccountTotpAuth?.srpTotpDisableRotationToken;
+        if (!prove) {
+          toast('Secure sign-in did not load. Reload the page and try again.', true);
           return;
         }
-        const rotationToken = String(proved?.rotation_token || '').trim();
-        if (!rotationToken) {
-          toast('Could not verify your password — try again.', true);
-          passwordEl?.focus();
-          return;
-        }
-        body.rotation_token = rotationToken;
+        const tokenResult = await prove({
+          email,
+          password,
+          button: btn,
+          passwordChangeProve: NotesSrpAuth.passwordChangeProve.bind(NotesSrpAuth),
+          onToast: toast,
+          onFocusPassword: () => passwordEl?.focus(),
+        });
+        if (!tokenResult.ok) return;
+        body.rotation_token = tokenResult.rotation_token;
       } else if (password) {
         body.password = password;
       }
