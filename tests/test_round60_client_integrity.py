@@ -157,6 +157,7 @@ class Round60ClientIntegrityTests(unittest.TestCase):
     def test_agenda_phone_layout_contract(self):
         proc = subprocess.run(
             ["node", str(REPO / "tests" / "test_agenda_phone_layout.js")],
+            cwd=str(REPO),
             capture_output=True,
             text=True,
             timeout=30,
@@ -164,6 +165,18 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("agenda phone layout ok", proc.stdout)
+
+    def test_agenda_list_polish_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_agenda_list_polish.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("agenda list polish ok", proc.stdout)
 
     def test_agenda_mobile_a11y_contract(self):
         proc = subprocess.run(

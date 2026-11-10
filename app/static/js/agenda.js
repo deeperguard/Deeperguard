@@ -198,8 +198,57 @@
       else colEnds[c] = o.b;
       placed.push({ ...o, col: c });
     }
-    const cols = Math.max(1, colEnds.length);
-    placed.forEach((p) => { p.colCount = cols; });
+    for (let i = 0; i < placed.length; i += 1) {
+      let clusterMax = placed[i].col;
+      for (let j = 0; j < placed.length; j += 1) {
+        if (i === j) continue;
+        const a = placed[i];
+        const b = placed[j];
+        if (a.b > b.a && a.a < b.b) clusterMax = Math.max(clusterMax, b.col);
+      }
+      placed[i].colCount = clusterMax + 1;
+    }
+    return placed;
+  }
+
+  function listDayHeading(d) {
+    const ds = startOfDay(d);
+    const today = startOfDay(new Date());
+    const when = ds.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    if (ds.getTime() === today.getTime()) return `Today · ${when}`;
+    const prefix = ds.toLocaleDateString(undefined, { weekday: 'long' });
+    return `${prefix} · ${when}`;
+  }
+
+  function layoutAllDayLanes(allDayOcc, days) {
+    const placed = [];
+    for (const o of allDayOcc) {
+      const ds = startOfDay(o.start).getTime();
+      const de = startOfDay(o.end).getTime();
+      let i0 = -1;
+      let i1 = -1;
+      days.forEach((d, i) => {
+        const t0 = startOfDay(d).getTime();
+        if (t0 >= ds && t0 < de) {
+          if (i0 < 0) i0 = i;
+          i1 = i;
+        }
+      });
+      if (i0 < 0) continue;
+      placed.push({ o, i0, i1, span: i1 - i0 + 1 });
+    }
+    const laneEnds = [];
+    placed.forEach((p) => {
+      let lane = 0;
+      while (lane < laneEnds.length) {
+        const blocked = laneEnds[lane].some((x) => !(p.i1 < x.i0 || p.i0 > x.i1));
+        if (!blocked) break;
+        lane += 1;
+      }
+      if (!laneEnds[lane]) laneEnds[lane] = [];
+      laneEnds[lane].push({ i0: p.i0, i1: p.i1 });
+      p.lane = lane;
+    });
     return placed;
   }
 
@@ -938,27 +987,18 @@
     let body = '';
     body += '<div class="agenda-allday-row">';
     body += '<div class="agenda-allday-label muted">all day</div>';
-    body += `<div class="agenda-allday-grid" style="--agenda-cols:${days.length}">`;
-    allDayOcc.forEach((o) => {
-      const ds = startOfDay(o.start).getTime();
-      const de = startOfDay(o.end).getTime();
-      let i0 = -1;
-      let i1 = -1;
-      days.forEach((d, i) => {
-        const t0 = startOfDay(d).getTime();
-        if (t0 >= ds && t0 < de) {
-          if (i0 < 0) i0 = i;
-          i1 = i;
-        }
-      });
-      if (i0 < 0) return;
-      const span = i1 - i0 + 1;
+    const allDayLanes = layoutAllDayLanes(allDayOcc, days);
+    const laneCount = Math.max(1, allDayLanes.reduce((m, p) => Math.max(m, p.lane + 1), 0));
+    body += `<div class="agenda-allday-grid" style="--agenda-cols:${days.length};--agenda-allday-lanes:${laneCount}">`;
+    allDayLanes.forEach(({ o, i0, span, lane }) => {
       const clr = ACCENT_PALETTE[hashHue(o.ev.id)];
       const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
+      const title = rec
+        ? `<span class="agenda-chip-title">${'<span class="agenda-rec-glyph" aria-hidden="true">↻</span>'}${esc(occDisplayTitle(o))}</span>`
+        : `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`;
       body += (
-        `<button type="button" class="agenda-allday-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="grid-column:${i0 + 1} / span ${span}" title="${esc(occDisplayTitle(o))}">`
-        + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-        + `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`
+        `<button type="button" class="agenda-allday-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="grid-column:${i0 + 1} / span ${span};grid-row:${lane + 1}" title="${esc(occDisplayTitle(o))}">`
+        + title
         + `<span class="agenda-chip-accent" style="background:${clr}"></span>`
         + '</button>'
       );
@@ -1000,13 +1040,16 @@
         const leftPct = wPct * o.col;
         const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
         const timeRange = `${formatTime(o.a)} – ${formatTime(o.b)}`;
+        const titleHtml = rec
+          ? `<span class="agenda-chip-title">${'<span class="agenda-rec-glyph" aria-hidden="true">↻</span>'}${esc(occDisplayTitle(o))}</span>`
+          : `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`;
+        const compact = h < 36;
         body += (
-          `<button type="button" class="agenda-event-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="top:${top}px;height:${h}px;left:${leftPct}%;width:${wPct}%;--agenda-accent:${clr}">`
+          `<button type="button" class="agenda-event-chip${compact ? ' is-compact' : ''}" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="top:${top}px;height:${h}px;left:${leftPct}%;width:${wPct}%;--agenda-accent:${clr}">`
           + `<span class="agenda-chip-accent" style="background:${clr}"></span>`
           + '<span class="agenda-chip-body">'
-          + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-          + `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`
-          + (h >= 36 ? `<span class="agenda-chip-time muted">${esc(timeRange)}</span>` : '')
+          + titleHtml
+          + (!compact ? `<span class="agenda-chip-time">${esc(timeRange)}</span>` : '')
           + '</span></button>'
         );
       });
@@ -1018,33 +1061,42 @@
   }
 
   function renderAgendaList(occ, range) {
-    const sorted = occ.filter((o) => !o.ev.all_day).sort((a, b) => a.start - b.start);
-    const allDay = occ.filter((o) => o.ev.all_day).sort((a, b) => a.start - b.start);
     const rs = range && range.start ? range.start.getTime() : 0;
     const re = range && range.end ? range.end.getTime() : 0;
+    const byDay = new Map();
+    for (const o of occ) {
+      const key = startOfDay(o.start).getTime();
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key).push(o);
+    }
+    const dayKeys = [...byDay.keys()].sort((a, b) => a - b);
     let html = `<div class="agenda-list-view" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
-    if (allDay.length) {
-      html += '<p class="agenda-list-section-label muted">All day</p><ul class="agenda-list">';
-      allDay.forEach((o) => {
+    dayKeys.forEach((key) => {
+      const day = new Date(key);
+      const items = sortOccForMonthDay(byDay.get(key));
+      html += `<section class="agenda-list-day"><h2 class="agenda-list-day-head">${esc(listDayHeading(day))}</h2><ul class="agenda-list">`;
+      items.forEach((o) => {
+        const when = o.ev.all_day
+          ? 'All day'
+          : `${formatTime(o.start)}–${formatTime(o.end)}`;
+        const loc = String(o.ev.location || '').trim();
+        const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
+        const title = rec
+          ? `${'<span class="agenda-rec-glyph" aria-hidden="true">↻</span>'}${esc(occDisplayTitle(o))}`
+          : esc(occDisplayTitle(o));
         html += (
-          `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
-          + `<span class="agenda-list-date">${esc(o.start.toLocaleDateString())}</span>`
-          + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
-          + '</button></li>'
+          '<li class="agenda-list-item">'
+          + `<button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
+          + `<span class="agenda-list-when">${esc(when)}</span>`
+          + '<span class="agenda-list-row-main">'
+          + `<span class="agenda-list-title">${title}</span>`
+          + (loc ? `<span class="agenda-list-loc muted">${esc(loc)}</span>` : '')
+          + '</span></button></li>'
         );
       });
-      html += '</ul>';
-    }
-    html += '<p class="agenda-list-section-label muted">Scheduled</p><ul class="agenda-list">';
-    sorted.forEach((o) => {
-      html += (
-        `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
-        + `<span class="agenda-list-date">${esc(o.start.toLocaleString())}</span>`
-        + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
-        + '</button></li>'
-      );
+      html += '</ul></section>';
     });
-    html += '</ul></div>';
+    html += '</div>';
     return html;
   }
 
