@@ -43,6 +43,9 @@
                 {% else %}
                 <span class="mk-verify-evidence static">Static{% if verify_metadata_release_tag %} · {{ verify_metadata_release_tag }}{% endif %}</span>
                 {% endif %}
+                {% if row.scope == 'browser' %}
+                <span class="mk-verify-evidence webapp" title="Tested in the web app; not the installed app or iOS." aria-label="Tested in the web app; not the installed app or iOS.">Web app only</span>
+                {% endif %}
                 {% if row.measurement == 'checked' %}
                 <span class="mk-verify-measure checked" title="Required code anchors found in shipped client JS">Anchors OK</span>
                 {% else %}
@@ -51,7 +54,12 @@
               </div>
             </div>
             <p class="mk-verify-metadata-summary">{{ row.summary }}</p>
-            {% if row.sends_nothing_typical %}
+            {% if row.feature_note %}
+            <p class="mk-verify-metadata-feature-note">{{ row.feature_note }}</p>
+            {% endif %}
+            {% if row.scope == 'browser' %}
+            <p class="mk-verify-metadata-traffic-neutral">Syncs as encrypted vault data</p>
+            {% elif row.sends_nothing_typical %}
             <p class="mk-verify-sends-none">Sends nothing</p>
             {% if row.sends_nothing_caveat %}
             <p class="mk-verify-metadata-caveat">{{ row.sends_nothing_caveat }}</p>
@@ -85,7 +93,12 @@
               <tr data-action-id="{{ row.id }}">
                 <th scope="row">{{ row.label }}</th>
                 <td>
-                  {% if row.sends_nothing_typical %}
+                  {% if row.scope == 'browser' %}
+                  <span class="mk-verify-metadata-traffic-neutral">Syncs as encrypted vault data</span>
+                  {% if row.feature_note %}
+                  <span class="mk-verify-metadata-feature-note block">{{ row.feature_note }}</span>
+                  {% endif %}
+                  {% elif row.sends_nothing_typical %}
                   <span class="mk-verify-sends-none">Sends nothing</span>
                   {% if row.sends_nothing_caveat %}
                   <span class="mk-verify-metadata-caveat block">{{ row.sends_nothing_caveat }}</span>
@@ -108,6 +121,9 @@
                     <span class="mk-verify-evidence live">Live{% if verify_metadata_release_tag %} · {{ verify_metadata_release_tag }}{% endif %}</span>
                     {% else %}
                     <span class="mk-verify-evidence static">Static{% if verify_metadata_release_tag %} · {{ verify_metadata_release_tag }}{% endif %}</span>
+                    {% endif %}
+                    {% if row.scope == 'browser' %}
+                    <span class="mk-verify-evidence webapp" title="Tested in the web app; not the installed app or iOS." aria-label="Tested in the web app; not the installed app or iOS.">Web app only</span>
                     {% endif %}
                     {% if row.measurement == 'checked' %}
                     <span class="mk-verify-measure checked" title="Required code anchors found in shipped client JS">Anchors OK</span>
