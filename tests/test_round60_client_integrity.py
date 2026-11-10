@@ -154,6 +154,17 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         digest = hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
         self.assertEqual(digest, manifest["manifest_sha256"])
 
+    def test_agenda_phone_layout_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_agenda_phone_layout.js")],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("agenda phone layout ok", proc.stdout)
+
     def test_agenda_mobile_a11y_contract(self):
         proc = subprocess.run(
             ["node", str(REPO / "tests" / "test_agenda_mobile_a11y.js")],

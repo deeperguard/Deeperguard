@@ -47,6 +47,33 @@
     return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   }
 
+  function formatShortDate(d) {
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function formatRangeTitle(days) {
+    if (!days || !days.length) return monthTitle(state.anchor);
+    const a = days[0];
+    const b = days[days.length - 1];
+    const sameMonth = a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+    if (sameMonth) {
+      const mid = b.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+      return `${a.getDate()}–${b.getDate()} ${mid}`;
+    }
+    return `${formatShortDate(a)} – ${formatShortDate(b)}`;
+  }
+
+  function isAgendaPhoneLayout() {
+    return typeof global.matchMedia === 'function' && global.matchMedia('(max-width: 768px)').matches;
+  }
+
+  function defaultAgendaView() {
+    if (typeof global.matchMedia !== 'function') return 'week';
+    if (global.matchMedia('(max-width: 430px)').matches) return 'day';
+    if (global.matchMedia('(max-width: 768px)').matches) return '3day';
+    return 'week';
+  }
+
   function hashHue(id) {
     let h = 0;
     const s = String(id || '');
@@ -179,6 +206,7 @@
   const state = {
     view: 'week',
     anchor: new Date(),
+    monthPickDay: 0,
     search: '',
     selectedId: '',
     editorScope: 'series',
@@ -753,13 +781,107 @@
 
   function titleForNav(range) {
     if (state.view === 'month') {
-      return monthTitle(state.anchor);
+      return { primary: monthTitle(state.anchor), week: '' };
     }
     if (state.view === 'agenda') {
-      return `Agenda · ${monthTitle(state.anchor)}`;
+      return { primary: `List · ${monthTitle(state.anchor)}`, week: '' };
     }
-    const w = isoWeekNumber(range.start);
-    return `W${pad2(w)} · ${monthTitle(range.start)}`;
+    if (state.view === 'day') {
+      return { primary: formatShortDate(state.anchor), week: '' };
+    }
+    return {
+      primary: formatRangeTitle(range.days),
+      week: `Week ${isoWeekNumber(range.start)}`,
+    };
+  }
+
+  function renderTitleHtml(range) {
+    const t = titleForNav(range);
+    if (t.week) {
+      return (
+        `<h1 class="agenda-title">`
+        + `<span class="agenda-title-primary">${esc(t.primary)}</span>`
+        + `<span class="agenda-title-week muted">${esc(t.week)}</span>`
+        + '</h1>'
+      );
+    }
+    return `<h1 class="agenda-title"><span class="agenda-title-primary">${esc(t.primary)}</span></h1>`;
+  }
+
+  function renderSearchField() {
+    return (
+      '<label class="agenda-search-field">'
+      + '<svg class="agenda-search-ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M16 16l5 5"/></svg>'
+      + `<input type="search" id="agenda-search" placeholder="Search" aria-label="Search events" value="${esc(state.search)}" autocomplete="off" />`
+      + '</label>'
+    );
+  }
+
+  function closePhoneMenu() {
+    document.body.classList.remove('agenda-phone-menu-open');
+    const menu = rootEl?.querySelector?.('#agenda-phone-menu');
+    const btn = rootEl?.querySelector?.('#agenda-phone-more');
+    if (menu) menu.hidden = true;
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function togglePhoneMenu(force) {
+    const open = typeof force === 'boolean'
+      ? force
+      : !document.body.classList.contains('agenda-phone-menu-open');
+    document.body.classList.toggle('agenda-phone-menu-open', open);
+    const menu = rootEl?.querySelector?.('#agenda-phone-menu');
+    const btn = rootEl?.querySelector?.('#agenda-phone-more');
+    if (menu) menu.hidden = !open;
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function syncAgendaFab() {
+    const fab = document.getElementById('agenda-fab-add');
+    const pane = document.getElementById('agenda-pane');
+    if (!fab) return;
+    const visible = !!(pane && !pane.hidden && isAgendaPhoneLayout());
+    fab.hidden = !visible;
+  }
+
+  function renderDesktopHeader(range) {
+    return (
+      '<header class="agenda-top agenda-top-desktop">'
+      + '<div class="agenda-top-row">'
+      + '<div class="agenda-nav">'
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-prev" aria-label="Previous">‹</button>'
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-next" aria-label="Next">›</button>'
+      + renderTitleHtml(range)
+      + '<button type="button" class="btn sm agenda-today" id="agenda-today">Today</button>'
+      + '</div>'
+      + '<div class="agenda-seg-wrap" role="group" aria-label="View">'
+      + renderViewToggles()
+      + '</div>'
+      + '<div class="agenda-top-tools">'
+      + renderSearchField()
+      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
+      + '<button type="button" class="btn primary agenda-add" id="agenda-add-event">+ Event</button>'
+      + '</div></div></header>'
+    );
+  }
+
+  function renderPhoneHeader(range) {
+    const menuOpen = document.body.classList.contains('agenda-phone-menu-open');
+    return (
+      '<header class="agenda-top agenda-top-phone">'
+      + '<div class="agenda-top-row-phone">'
+      + renderTitleHtml(range)
+      + '<button type="button" class="btn sm agenda-today" id="agenda-today">Today</button>'
+      + `<button type="button" class="btn icon agenda-icon-btn agenda-phone-more" id="agenda-phone-more" aria-label="Agenda menu" aria-expanded="${menuOpen ? 'true' : 'false'}" aria-controls="agenda-phone-menu">⋯</button>`
+      + '</div>'
+      + `<div id="agenda-phone-menu" class="agenda-phone-menu" role="region" aria-label="Agenda tools"${menuOpen ? '' : ' hidden'}>`
+      + renderSearchField()
+      + '<div class="agenda-seg-wrap" role="group" aria-label="View">' + renderViewToggles() + '</div>'
+      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
+      + '<button type="button" class="btn primary agenda-cal-action" id="agenda-phone-import">Import calendar (.ics)</button>'
+      + '<button type="button" class="btn ghost agenda-cal-action" id="agenda-phone-export">Export calendar (.ics)</button>'
+      + '</div></header>'
+    );
   }
 
   function esc(s) {
@@ -776,7 +898,7 @@
       { id: 'week', label: 'Week' },
       { id: '3day', label: '3 day' },
       { id: 'day', label: 'Day' },
-      { id: 'agenda', label: 'Agenda' },
+      { id: 'agenda', label: 'List' },
     ];
     return views.map((v) => (
       `<button type="button" class="agenda-seg ${state.view === v.id ? 'is-active' : ''}" data-agenda-view="${esc(v.id)}">${esc(v.label)}</button>`
@@ -925,7 +1047,35 @@
     return false;
   }
 
+  function renderMonthDayList(occ) {
+    const pickMs = state.monthPickDay || startOfDay(new Date()).getTime();
+    const pick = new Date(pickMs);
+    const ds = startOfDay(pick);
+    const de = addDays(ds, 1);
+    const dayOcc = sortOccForMonthDay(occ.filter((o) => o.end > ds && o.start < de));
+    let html = `<div class="agenda-month-daylist" data-agenda-month-pick="${ds.getTime()}">`;
+    html += `<h2 class="agenda-month-daylist-title">${esc(pick.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))}</h2>`;
+    if (!dayOcc.length) {
+      html += '<p class="muted agenda-month-daylist-empty">No events</p>';
+    } else {
+      html += '<ul class="agenda-list">';
+      dayOcc.forEach((o) => {
+        const tlabel = o.ev.all_day ? 'All day' : `${formatTime(o.start)} – ${formatTime(o.end)}`;
+        html += (
+          `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
+          + `<span class="agenda-list-date">${esc(tlabel)}</span>`
+          + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
+          + '</button></li>'
+        );
+      });
+      html += '</ul>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   function renderMonthGrid(days, occ) {
+    const phoneMonth = isAgendaPhoneLayout();
     let nWeeks = Math.ceil(days.length / 7);
     const anchorMonth = state.anchor.getMonth();
     const anchorYear = state.anchor.getFullYear();
@@ -952,24 +1102,37 @@
         const show = sorted.slice(0, MAX_CHIPS);
         const extra = sorted.length > MAX_CHIPS ? sorted.length - MAX_CHIPS : 0;
         const isToday = ds.getTime() === startOfDay(new Date()).getTime();
-        html += `<div class="agenda-month-cell ${inMonth ? '' : 'is-out'} ${isToday ? 'is-today' : ''}">`;
+        const pickActive = state.monthPickDay === ds.getTime();
+        html += `<div class="agenda-month-cell ${inMonth ? '' : 'is-out'} ${isToday ? 'is-today' : ''} ${pickActive ? 'is-pick' : ''}" data-agenda-month-day="${ds.getTime()}">`;
         html += `<div class="agenda-month-date">${day.getDate()}</div>`;
         html += '<div class="agenda-month-events">';
-        show.forEach((o) => {
-          const clr = ACCENT_PALETTE[hashHue(o.ev.id)];
-          const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
-          const tlabel = o.ev.all_day ? 'All day' : formatTime(o.start);
+        if (phoneMonth) {
+          sorted.forEach((o) => {
+            const clr = ACCENT_PALETTE[hashHue(o.ev.id)];
+            html += `<span class="agenda-month-dot" style="--agenda-dot:${clr}" title="${esc(occDisplayTitle(o))}"></span>`;
+          });
+        } else {
+          show.forEach((o) => {
+            const clr = ACCENT_PALETTE[hashHue(o.ev.id)];
+            const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
+            const tlabel = o.ev.all_day ? 'All day' : formatTime(o.start);
+            html += (
+              `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} title="${esc(occDisplayTitle(o))}">`
+              + `<span class="agenda-month-ev-accent" style="background:${clr}"></span>`
+              + '<span class="agenda-month-ev-body">'
+              + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
+              + `<span class="agenda-month-ev-title">${esc(occDisplayTitle(o))}</span>`
+              + `<span class="agenda-month-ev-time muted">${esc(tlabel)}</span>`
+              + '</span></button>'
+            );
+          });
+        }
+        if (extra) {
+          const aria = `Show all events for ${day.toLocaleDateString()}`;
           html += (
-            `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} title="${esc(occDisplayTitle(o))}">`
-            + `<span class="agenda-month-ev-accent" style="background:${clr}"></span>`
-            + '<span class="agenda-month-ev-body">'
-            + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-            + `<span class="agenda-month-ev-title">${esc(occDisplayTitle(o))}</span>`
-            + `<span class="agenda-month-ev-time muted">${esc(tlabel)}</span>`
-            + '</span></button>'
+            `<button type="button" class="agenda-month-more-btn" data-agenda-goto-day="${ds.getTime()}" aria-label="${esc(aria)}">+${extra} more</button>`
           );
-        });
-        if (extra) html += `<span class="agenda-month-more muted" aria-hidden="true">+${extra} more</span>`;
+        }
         html += '</div></div>';
       }
       html += '</div>';
@@ -1006,6 +1169,7 @@
       main = renderAgendaList(occ, range);
     } else if (state.view === 'month') {
       main = renderMonthGrid(days, occ);
+      if (isAgendaPhoneLayout()) main += renderMonthDayList(occ);
     } else {
       main = (
         '<div class="agenda-week-layout">'
@@ -1015,28 +1179,11 @@
       );
     }
 
+    const phone = isAgendaPhoneLayout();
+    rootEl.classList.toggle('agenda-root--phone', phone);
+    const header = phone ? renderPhoneHeader(range) : renderDesktopHeader(range);
     rootEl.innerHTML = (
-      '<header class="agenda-top">'
-      + '<div class="agenda-top-row">'
-      + '<div class="agenda-nav">'
-      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-prev" aria-label="Previous">‹</button>'
-      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-next" aria-label="Next">›</button>'
-      + `<h1 class="agenda-title">${esc(titleForNav(range))}</h1>`
-      + '<button type="button" class="btn sm agenda-today" id="agenda-today">Today</button>'
-      + '</div>'
-      + '<div class="agenda-seg-wrap" role="group" aria-label="View">'
-      + renderViewToggles()
-      + '</div>'
-      + '<div class="agenda-top-tools">'
-      + '<label class="agenda-search-field">'
-      + '<svg class="agenda-search-ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M16 16l5 5"/></svg>'
-      + `<input type="search" id="agenda-search" placeholder="Search" aria-label="Search events" value="${esc(state.search)}" autocomplete="off" />`
-      + '</label>'
-      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
-      + '<button type="button" class="btn primary agenda-add" id="agenda-add-event">+ Event</button>'
-      + '</div>'
-      + '</div>'
-      + '</header>'
+      header
       + `<div class="agenda-body agenda-view-${esc(state.view)}">${main}</div>`
     );
 
@@ -1052,6 +1199,7 @@
         const next = btn.getAttribute('data-agenda-view') || 'week';
         if (['day', '3day', 'week'].includes(state.view)) saveTimeGridScrollSnapshot();
         state.view = next;
+        closePhoneMenu();
         try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
         render();
       });
@@ -1075,9 +1223,36 @@
       openEditor(null);
     });
     rootEl.querySelector('#agenda-calendar-settings-btn')?.addEventListener('click', () => {
+      closePhoneMenu();
       const open = document.body.classList.contains('agenda-calendar-settings-open');
       if (open) closeCalendarSettingsPanel();
       else openCalendarSettingsPanel();
+    });
+    rootEl.querySelector('#agenda-phone-more')?.addEventListener('click', () => {
+      togglePhoneMenu();
+    });
+    rootEl.querySelector('#agenda-phone-import')?.addEventListener('click', () => {
+      closePhoneMenu();
+      fileInput?.click();
+    });
+    rootEl.querySelector('#agenda-phone-export')?.addEventListener('click', () => {
+      closePhoneMenu();
+      exportAgendaToIcs();
+    });
+    document.getElementById('agenda-fab-add')?.addEventListener('click', (ev) => {
+      const btn = ev.currentTarget;
+      rememberEditorReturnFocus(btn instanceof HTMLElement ? btn : null, '', 0);
+      openEditor(null);
+    });
+    rootEl.querySelectorAll('[data-agenda-month-day]').forEach((cell) => {
+      cell.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-agenda-id], [data-agenda-goto-day]')) return;
+        const raw = cell.getAttribute('data-agenda-month-day');
+        const t = raw ? Number(raw) : NaN;
+        if (!Number.isFinite(t)) return;
+        state.monthPickDay = t;
+        render();
+      });
     });
 
     rootEl.querySelectorAll('[data-agenda-id]').forEach((btn) => {
@@ -1106,6 +1281,7 @@
       wireTimeGridScrollPersistence(range);
       applyTimeGridScroll(range, occ);
     }
+    syncAgendaFab();
   }
 
   function addMonthsAnchor(d, n) {
@@ -1624,6 +1800,12 @@
 
   function handleEscapeKey(ev) {
     if (!ev || ev.key !== 'Escape') return false;
+    if (document.body.classList.contains('agenda-phone-menu-open')) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closePhoneMenu();
+      return true;
+    }
     const scopeDialog = document.getElementById('agenda-scope-chooser');
     if (scopeDialog && !scopeDialog.hidden) {
       ev.preventDefault();
@@ -1902,7 +2084,9 @@
     try {
       const saved = sessionStorage.getItem('notes_agenda_view');
       if (saved && /^(day|3day|week|month|agenda)$/.test(saved)) state.view = saved;
+      else state.view = defaultAgendaView();
     } catch (err) { /* ignore */ }
+    state.monthPickDay = startOfDay(new Date()).getTime();
     render();
   }
 
@@ -1916,6 +2100,9 @@
     render,
     onTabShown,
     openNewEvent,
+    isAgendaPhoneLayout,
+    formatRangeTitle,
+    defaultAgendaView,
     seriesNoticeForEditor,
     handleEscapeKey,
     closeEditor,

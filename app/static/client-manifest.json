@@ -2,10 +2,10 @@
   "asset_count": 67,
   "assets": {
     "css/app.css": {
-      "bytes": 276635,
-      "sha256": "f9589862ef1c051a5839d9a0419a34b9652b24617864f8251a98548b28952bde",
-      "sri": "sha384-SHScY2mqx4gbn+8xb5T0yPQsEmbWk50n1XddWuz1QgzpovSoHKvT2+GmSok1nWqg",
-      "url": "/static/css/app.f9589862ef1c051a.css"
+      "bytes": 278480,
+      "sha256": "d2af1e645ff1dfa8435f4923d9eee025459058f1b8c48546090eb16a0f2eef24",
+      "sri": "sha384-urw5RZiai1wIaFTjyWobvzRISW3WLsnRbkuwxf54gdTgRHowVvTYLjvSrTDtBgqN",
+      "url": "/static/css/app.d2af1e645ff1dfa8.css"
     },
     "css/marketing.css": {
       "bytes": 54715,
@@ -38,16 +38,16 @@
       "url": "/static/js/agenda-recurrence.b37c215b6094e68c.js"
     },
     "js/agenda-scroll-core.js": {
-      "bytes": 4315,
-      "sha256": "bbd6d40f71bbde589c7022d36db4af27f099f1f1d54d9d490755480d71aff075",
-      "sri": "sha384-w4SnwsY+pRK9eCLoi75EAcrDw7ZaMzv2iHT/h8cuhGM379gw2E78JOZ6cEtmSJar",
-      "url": "/static/js/agenda-scroll-core.bbd6d40f71bbde58.js"
+      "bytes": 5419,
+      "sha256": "ca5b15ee2a7deb74d53f218e48071ca200e43e21d6c189f022961899fc614131",
+      "sri": "sha384-g3ZU4Y8JWm6M+wRwNDtB7C28eaUjM0rkCg9pIYw8TS9kHZMf+/N8VBMRoEAFf5Gm",
+      "url": "/static/js/agenda-scroll-core.ca5b15ee2a7deb74.js"
     },
     "js/agenda.js": {
-      "bytes": 71975,
-      "sha256": "bdaa049665f0003423a0d14be61a48d6ed888e5250577e78bebb3a9255ca2963",
-      "sri": "sha384-EMwE+PscsDxcU6VdD7ya2J1hqBlpGYIuwIkWVgseycnQUU+528YULYrL2sTvoEk3",
-      "url": "/static/js/agenda.bdaa049665f00034.js"
+      "bytes": 79780,
+      "sha256": "5e1c7b0f72f6ac93badd691aded5ed28c5bbfc89c2e17288ad80d007eebfa275",
+      "sri": "sha384-84BOfqasgxYj1+rz9sNp9E7Pq3QMO2lToFaMQazpjlscHxZxMxzJKtDXH1CzGHJ8",
+      "url": "/static/js/agenda.5e1c7b0f72f6ac93.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -405,6 +405,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "f87901f11e412fb7b7feceebda0d2111f05d1c4fd0f4cb32eb3a134f0407058b",
+  "manifest_sha256": "2ac2b13a8015caff501b19fa424efeeb8329e8ce0419928b538ab6073721dc0a",
   "version": 1
 }
