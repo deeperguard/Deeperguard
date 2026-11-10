@@ -38,12 +38,13 @@ const signIn = srp.slice(
   srp.indexOf('async function passwordSignIn'),
   srp.indexOf('async function register'),
 );
-// Round 73: /api/auth/login only after server code legacy_login (never for SRP).
-assert.ok(signIn.includes("postJson('/api/auth/login'"));
-assert.ok(signIn.includes("legacy_login") || signIn.includes('legacyLogin'));
+// Phase 1: no /api/auth/login POST; repair-login may yield legacy_login_removed.
+assert.ok(!signIn.includes("postJson('/api/auth/login'"), 'no legacy password login POST');
+assert.ok(signIn.includes('legacyLoginRemoved'));
 assert.ok(signIn.includes('incorrectPassword'));
-assert.ok(signIn.includes('if (result?.totp_required) return result;'));
-assert.ok(signIn.indexOf('if (result?.totp_required) return result;') < signIn.indexOf('maybeUpgradeLegacySrp'));
+assert.ok(signIn.includes('result?.totp_required'));
+assert.ok(signIn.includes('return result;'));
+assert.ok(signIn.indexOf('result?.totp_required') < signIn.indexOf('maybeUpgradeLegacySrp'));
 assert.ok(srp.includes('async function maybeUpgradeLegacySrp'));
 assert.ok(srp.includes("postJson('/api/auth/srp/upgrade'"));
 assert.ok(srp.includes("'/api/auth/vault-recovery/challenge'"));

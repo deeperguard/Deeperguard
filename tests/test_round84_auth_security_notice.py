@@ -89,6 +89,44 @@ class Round84AuthSecurityNoticeTests(unittest.TestCase):
             self.notes_db.connection().commit()
         return uid, secret
 
+    def _srp_rotation_token(self, email: str, password: str, csrf: str) -> str:
+        import secrets
+
+        from srp_auth import G, K, N, _from_hex, _h, _to_hex, generate_x, normalize_srp_kdf_version
+
+        challenge = self.client.post(
+            "/api/account/password/challenge",
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(challenge.status_code, 200, challenge.get_json())
+        chal = challenge.get_json()
+        b_hex = str(chal["B"]).lower()
+        stored_salt = str(chal["srp_salt"]).lower()
+        version = normalize_srp_kdf_version(chal.get("srp_kdf_version") or 2)
+        x = generate_x(stored_salt, email, password, kdf_version=version)
+        byte_len = (N.bit_length() + 7) // 8
+        while True:
+            a_bytes = secrets.token_bytes(byte_len)
+            a = int.from_bytes(a_bytes, "big") % N
+            if a != 0:
+                break
+        A = pow(G, a, N)
+        a_hex = _to_hex(A)
+        u = _from_hex(_h(a_hex + b_hex))
+        B = _from_hex(b_hex)
+        v = pow(G, x, N)
+        tmp = (v * K) % N
+        S = pow((B - tmp + N) % N, (u * x + a) % N, N)
+        s_hex = _to_hex(S)
+        m1 = _h(a_hex + b_hex + s_hex)
+        prove = self.client.post(
+            "/api/account/password/prove",
+            json={"A": a_hex, "M1": m1},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(prove.status_code, 200, prove.get_json())
+        return str(prove.get_json()["rotation_token"])
+
     def test_account_payload_includes_auth_security_at(self):
         email = "r84@example.com"
         password = "r84-secure-password-ok"
@@ -151,9 +189,10 @@ class Round84AuthSecurityNoticeTests(unittest.TestCase):
         before = self.notes_db.user_auth_security_at(self.notes_db.get_user_by_id(uid))
         step = totp_mod.current_step(time.time())
         code = __import__("pyotp").TOTP(secret).at(step * 30)
+        rotation_token = self._srp_rotation_token(email, password, csrf)
         res = self.client.post(
             "/api/totp/disable",
-            json={"code": code},
+            json={"code": code, "rotation_token": rotation_token},
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(res.status_code, 200, res.get_json())

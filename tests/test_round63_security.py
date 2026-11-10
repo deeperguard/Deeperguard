@@ -336,15 +336,15 @@ class Round63SecurityTests(unittest.TestCase):
             },
             headers={"X-CSRF-Token": csrf},
         )
-        self.assertEqual(resync.status_code, 403, resync.get_json())
-        self.assertEqual(resync.get_json().get("error"), "2FA required")
+        self.assertEqual(resync.status_code, 410, resync.get_json())
+        self.assertEqual(resync.get_json().get("code"), "legacy_resync_removed")
         user = notes_db.get_user_by_id(uid)
         self.assertEqual(str(user["srp_salt"]).lower(), stored_salt.lower())
         self.assertEqual(int(str(user["srp_verifier"]), 16), int(stored_verifier, 16))
 
         with self.client.session_transaction() as sess:
             sess.clear()
-        allowed = self.client.post(
+        removed = self.client.post(
             "/api/auth/srp/resync",
             json={
                 "email": email,
@@ -354,8 +354,8 @@ class Round63SecurityTests(unittest.TestCase):
                 "srp_kdf_version": 2,
             },
         )
-        self.assertEqual(allowed.status_code, 200, allowed.get_json())
-        self.assertTrue(allowed.get_json().get("srp_resynced"))
+        self.assertEqual(removed.status_code, 410, removed.get_json())
+        self.assertEqual(removed.get_json().get("code"), "legacy_resync_removed")
 
     def _repair_login(self, email: str, password: str):
         challenge = self.client.post(
@@ -483,93 +483,23 @@ class Round63SecurityTests(unittest.TestCase):
         self.assertEqual(account.get_json().get("email"), email)
 
     def test_l22_legacy_argon2_upgrade_without_2fa(self):
-        import db as notes_db
-
-        email = f"l22-legacy-{secrets.token_hex(4)}@example.com"
-        password = "l22-legacy-password"
-        uid, _ = self._create_legacy_user(email, password)
-        ciphertext = self._add_note(uid, password)
-        login = self.client.post("/api/auth/login", json={"email": email, "password": password})
-        self.assertEqual(login.status_code, 200, login.get_json())
-        self.assertEqual(login.get_json().get("auth_method"), "argon2")
-        self.assertFalse(login.get_json().get("totp_required"))
-        csrf = self._csrf()
-        new_salt, new_verifier = self._srp_pair(email, password)
-        upgraded = self.client.post(
-            "/api/auth/srp/upgrade",
-            json={
-                "current_password": password,
-                "srp_salt": new_salt,
-                "srp_verifier": new_verifier,
-                "srp_kdf_version": 2,
-            },
-            headers={"X-CSRF-Token": csrf},
+        # Phase 1 (H1): POST /api/auth/login removed (410 legacy_login_removed).
+        # Legacy Argon2 → SRP upgrade flows use repair-login or an existing session, not password login.
+        res = self.client.post(
+            "/api/auth/login",
+            json={"email": f"l22-legacy-{secrets.token_hex(4)}@example.com", "password": "x"},
         )
-        self.assertEqual(upgraded.status_code, 200, upgraded.get_json())
-        self.assertEqual(upgraded.get_json().get("auth_method"), "srp")
-        user = notes_db.get_user_by_id(uid)
-        self.assertEqual(notes_db.user_auth_method(user), "srp")
-        kept = notes_db.list_items_by_uuid(uid, ["round63-keep-note"])
-        self.assertEqual(kept[0]["ciphertext"], ciphertext)
-        follow = self._login(email, password)
-        self.assertEqual(follow.status_code, 200, follow.get_json())
-        account = self.client.get("/api/account")
-        self.assertEqual(account.status_code, 200, account.get_json())
+        self.assertEqual(res.status_code, 410, res.get_json())
+        self.assertEqual(res.get_json().get("code"), "legacy_login_removed")
 
     def test_l22_legacy_argon2_upgrade_after_totp(self):
-        import db as notes_db
-        import pyotp
-
-        email = f"l22-legacy-2fa-{secrets.token_hex(4)}@example.com"
-        password = "l22-legacy-2fa-password"
-        uid, secret = self._create_legacy_user(email, password, totp=True)
-        ciphertext = self._add_note(uid, password)
-        login = self.client.post("/api/auth/login", json={"email": email, "password": password})
-        self.assertEqual(login.status_code, 200, login.get_json())
-        self.assertEqual(login.get_json().get("auth_method"), "argon2")
-        self.assertTrue(login.get_json().get("totp_required"))
-        csrf = self._csrf()
-        new_salt, new_verifier = self._srp_pair(email, password)
-        denied = self.client.post(
-            "/api/auth/srp/upgrade",
-            json={
-                "current_password": password,
-                "srp_salt": new_salt,
-                "srp_verifier": new_verifier,
-                "srp_kdf_version": 2,
-            },
-            headers={"X-CSRF-Token": csrf},
+        # Phase 1 (H1): same as test_l22_legacy_argon2_upgrade_without_2fa — see 410 on /api/auth/login.
+        res = self.client.post(
+            "/api/auth/login",
+            json={"email": f"l22-legacy-2fa-{secrets.token_hex(4)}@example.com", "password": "x"},
         )
-        self.assertEqual(denied.status_code, 403, denied.get_json())
-        self.assertEqual(denied.get_json().get("error"), "2FA required")
-        self.assertEqual(notes_db.user_auth_method(notes_db.get_user_by_id(uid)), "argon2")
-
-        verified = self.client.post(
-            "/api/totp/verify",
-            json={"code": pyotp.TOTP(secret).now()},
-            headers={"X-CSRF-Token": csrf},
-        )
-        self.assertEqual(verified.status_code, 200, verified.get_json())
-        upgraded = self.client.post(
-            "/api/auth/srp/upgrade",
-            json={
-                "current_password": password,
-                "srp_salt": new_salt,
-                "srp_verifier": new_verifier,
-                "srp_kdf_version": 2,
-            },
-            headers={"X-CSRF-Token": csrf},
-        )
-        self.assertEqual(upgraded.status_code, 200, upgraded.get_json())
-        self.assertEqual(upgraded.get_json().get("auth_method"), "srp")
-        user = notes_db.get_user_by_id(uid)
-        self.assertEqual(notes_db.user_auth_method(user), "srp")
-        kept = notes_db.list_items_by_uuid(uid, ["round63-keep-note"])
-        self.assertEqual(kept[0]["ciphertext"], ciphertext)
-        account = self.client.get("/api/account")
-        self.assertEqual(account.status_code, 200, account.get_json())
-        follow = self._login(email, password)
-        self.assertEqual(follow.status_code, 200, follow.get_json())
+        self.assertEqual(res.status_code, 410, res.get_json())
+        self.assertEqual(res.get_json().get("code"), "legacy_login_removed")
 
     def test_l22_client_defers_writers_until_after_totp(self):
         srp = (REPO / "app" / "static" / "js" / "srp-auth.js").read_text(encoding="utf-8")
@@ -584,12 +514,13 @@ class Round63SecurityTests(unittest.TestCase):
         self.assertNotIn("/api/auth/vault-recovery", exemption)
         self.assertNotIn("/api/auth/srp/upgrade", exemption)
         sign_in = srp[srp.index("async function passwordSignIn") : srp.index("async function register")]
-        self.assertIn("postJson('/api/auth/login'", sign_in)
-        self.assertTrue("legacy_login" in sign_in or "legacyLogin" in sign_in)
+        self.assertNotIn("postJson('/api/auth/login'", sign_in)
+        self.assertIn("legacyLoginRemoved", sign_in)
         self.assertIn("incorrectPassword", sign_in)
-        self.assertIn("if (result?.totp_required) return result;", sign_in)
+        self.assertIn("result?.totp_required", sign_in)
+        self.assertIn("return result;", sign_in)
         self.assertLess(
-            sign_in.index("if (result?.totp_required) return result;"),
+            sign_in.index("result?.totp_required"),
             sign_in.index("maybeUpgradeLegacySrp"),
         )
         self.assertIn("async function maybeUpgradeLegacySrp", srp)

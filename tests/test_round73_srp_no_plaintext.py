@@ -97,8 +97,8 @@ class Round73SrpNoPlaintext(unittest.TestCase):
             "/api/auth/login",
             json={"email": email, "password": password},
         )
-        self.assertEqual(res.status_code, 401)
-        self.assertEqual(res.get_json().get("error"), "invalid credentials")
+        self.assertEqual(res.status_code, 410, res.get_json())
+        self.assertEqual(res.get_json().get("code"), "legacy_login_removed")
 
     def test_repair_login_plaintext_flag_ignored_for_srp(self):
         email = "r73-srp-repair@home.local"
@@ -164,7 +164,11 @@ class Round73SrpNoPlaintext(unittest.TestCase):
             "postJson('/api/auth/repair-login', { email, password })",
             auth_pages,
         )
-        self.assertIn("authMethod !== 'srp'", app_js)
+        totp_auth = (APP_DIR / "static" / "js" / "account-totp-auth.js").read_text(encoding="utf-8")
+        self.assertIn("srpTotpDisableRotationToken", totp_auth)
+        self.assertIn("NotesAccountTotpAuth", app_js)
+        app_html = (APP_DIR / "templates" / "app.html").read_text(encoding="utf-8")
+        self.assertIn("account-totp-auth.js", app_html)
 
 
 if __name__ == "__main__":

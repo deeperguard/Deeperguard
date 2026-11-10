@@ -426,8 +426,8 @@ class Round49SecurityTests(unittest.TestCase):
             "/api/auth/login",
             json={"email": unknown, "password": "x"},
         )
-        self.assertEqual(legacy.status_code, 401)
-        self.assertEqual(legacy.get_json().get("error"), "invalid credentials")
+        self.assertEqual(legacy.status_code, 410, legacy.get_json())
+        self.assertEqual(legacy.get_json().get("code"), "legacy_login_removed")
         self.assertNotIn("auth_method", legacy.get_json() or {})
 
         # Duplicate register → generic 400 (not 409).
