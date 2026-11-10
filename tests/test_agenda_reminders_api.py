@@ -1,7 +1,7 @@
 """Agenda reminder API: zero-knowledge payload keys and sync caps."""
 from __future__ import annotations
 
-import json
+import importlib
 import os
 import sys
 import tempfile
@@ -12,6 +12,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app"
 sys.path.insert(0, str(APP))
+
+_ISOLATED_APP_MODULES = frozenset(
+    {
+        "app",
+        "auth",
+        "config",
+        "db",
+        "srp_auth",
+        "auth_rate_limit",
+        "plans",
+        "mailer",
+        "agenda_reminder_cron",
+    }
+)
+
+
+def _purge_isolated_app_modules() -> None:
+    for name in list(sys.modules):
+        if name in _ISOLATED_APP_MODULES or name.startswith("app."):
+            sys.modules.pop(name, None)
 
 
 class AgendaRemindersApiTest(unittest.TestCase):
@@ -27,19 +47,26 @@ class AgendaRemindersApiTest(unittest.TestCase):
         os.environ["NOTES_SECURE_COOKIES"] = "0"
         (Path(cls._tmp.name) / "keys").mkdir(parents=True, exist_ok=True)
         (Path(cls._tmp.name) / "keys" / "flask-secret").write_text("agenda-rem-secret", encoding="utf-8")
-        import importlib
+        _purge_isolated_app_modules()
+        cls.app_mod = importlib.import_module("app")
+        cls.client = cls.app_mod.app.test_client()
+        import auth_rate_limit as arl
 
-        import app as app_mod
-        import db as db_mod
-
-        importlib.reload(db_mod)
-        importlib.reload(app_mod)
-        cls.app_mod = app_mod
-        cls.client = app_mod.app.test_client()
+        arl._hits.clear()
 
     @classmethod
     def tearDownClass(cls):
         cls._tmp.cleanup()
+        for key in (
+            "NOTES_ROOT",
+            "NOTES_DATA",
+            "NOTES_KEYS",
+            "NOTES_ALLOWED_CIDRS",
+            "NOTES_DISABLE_CIDR_GATE",
+            "NOTES_ALLOW_REGISTER",
+            "NOTES_SECURE_COOKIES",
+        ):
+            os.environ.pop(key, None)
 
     def _csrf_headers(self) -> dict[str, str]:
         import secrets
