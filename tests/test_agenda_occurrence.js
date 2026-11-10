@@ -217,4 +217,111 @@ assert.ok(shiftedIcs.includes('RECURRENCE-ID:'));
 assert.ok(shiftedIcs.includes('Beta v53 one-off'));
 assert.ok(shiftedIcs.includes(Occ.recurrenceIdForStart(new Date('2026-11-24T13:00:00.000Z'), false)));
 
+assert.strictEqual(
+  Occ.seriesOverrideResetMessage(1),
+  '1 customized occurrence will be reset to the series',
+);
+assert.strictEqual(
+  Occ.seriesOverrideResetMessage(3),
+  '3 customized occurrences will be reset to the series',
+);
+
+const titleTimeRid = Occ.recurrenceIdForStart(new Date('2026-12-01T12:00:00.000Z'), false);
+const titleTimeMaster = {
+  ...weeklyMaster,
+  ics_occurrence_overrides: {
+    [titleTimeRid]: {
+      title: 'Board + late',
+      start: '2026-12-01T14:00:00.000Z',
+      end: '2026-12-01T15:00:00.000Z',
+      all_day: false,
+    },
+  },
+  ics_exdates: [titleTimeRid],
+};
+const titleTimePlan = Occ.planPreserveOverridesOnSeriesEdit(titleTimeMaster, {
+  start: '2026-11-03T13:00:00.000Z',
+  end: '2026-11-03T14:00:00.000Z',
+  all_day: false,
+  title: titleTimeMaster.title,
+  location: '',
+  notes: '',
+});
+const titleTimeEv = {
+  ...titleTimeMaster,
+  start: '2026-11-03T13:00:00.000Z',
+  end: '2026-11-03T14:00:00.000Z',
+  ...titleTimePlan,
+};
+assert.strictEqual(titleTimePlan.resetCount, 0);
+assert.strictEqual(titleTimePlan.ics_occurrence_overrides[titleTimeRid].title, 'Board + late');
+assert.strictEqual(titleTimePlan.ics_occurrence_overrides[titleTimeRid].start, '2026-12-01T14:00:00.000Z');
+occ = expandRaw(titleTimeEv, new Date('2026-11-01'), new Date('2026-12-15'));
+const titleTimeOcc = occ.find((o) => o.displayTitle === 'Board + late');
+assert.ok(titleTimeOcc);
+assert.strictEqual(titleTimeOcc.start.toISOString(), '2026-12-01T14:00:00.000Z');
+
+const timeOnlyRid = Occ.recurrenceIdForStart(new Date('2026-12-08T12:00:00.000Z'), false);
+const timeOnlyMaster = {
+  ...weeklyMaster,
+  title: 'Weekly sync',
+  ics_occurrence_overrides: {
+    [timeOnlyRid]: {
+      title: 'Weekly sync',
+      start: '2026-12-08T14:00:00.000Z',
+      end: '2026-12-08T15:00:00.000Z',
+      all_day: false,
+    },
+  },
+  ics_exdates: [timeOnlyRid],
+};
+const timeOnlyPlan = Occ.planPreserveOverridesOnSeriesEdit(timeOnlyMaster, {
+  start: '2026-11-03T13:00:00.000Z',
+  end: '2026-11-03T14:00:00.000Z',
+  all_day: false,
+  title: 'Weekly sync',
+  location: '',
+  notes: '',
+});
+assert.strictEqual(timeOnlyPlan.resetCount, 0);
+assert.strictEqual(timeOnlyPlan.ics_occurrence_overrides[timeOnlyRid].start, '2026-12-08T14:00:00.000Z');
+const timeOnlyEv = {
+  ...timeOnlyMaster,
+  start: '2026-11-03T13:00:00.000Z',
+  end: '2026-11-03T14:00:00.000Z',
+  ...timeOnlyPlan,
+};
+occ = expandRaw(timeOnlyEv, new Date('2026-11-01'), new Date('2026-12-15'));
+const timeOnlyOcc = occ.find((o) => o.start.toISOString() === '2026-12-08T14:00:00.000Z');
+assert.ok(timeOnlyOcc);
+assert.strictEqual(timeOnlyOcc.displayTitle, 'Weekly sync');
+
+const retitlePlan = Occ.planPreserveOverridesOnSeriesEdit(weeklyMaster, {
+  start: weeklyMaster.start,
+  end: weeklyMaster.end,
+  all_day: false,
+  title: 'New series title',
+  location: '',
+  notes: '',
+});
+const nov24NewRid = Occ.recurrenceIdForStart(nov24, false);
+assert.strictEqual(
+  retitlePlan.ics_occurrence_overrides[nov24NewRid].title,
+  'Beta v53 one-off',
+);
+
+const allDayReset = Occ.planPreserveOverridesOnSeriesEdit(weeklyMaster, {
+  start: '2026-11-03T00:00:00.000Z',
+  end: '2026-11-04T00:00:00.000Z',
+  all_day: true,
+  title: weeklyMaster.title,
+});
+assert.strictEqual(allDayReset.resetCount, 1);
+assert.deepStrictEqual(allDayReset.ics_occurrence_overrides, {});
+
+const agendaSrc = fs.readFileSync(path.join(root, 'app/static/js/agenda.js'), 'utf8');
+assert.ok(agendaSrc.includes('agenda-scope-reset-panel'));
+assert.ok(agendaSrc.includes('openScopeChooserSeriesReset'));
+assert.ok(agendaSrc.includes('seriesOverrideResetMessage'));
+
 console.log('test_agenda_occurrence ok');

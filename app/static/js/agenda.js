@@ -186,6 +186,7 @@
     pendingEditor: null,
     editorReturnFocusId: '',
     editorReturnFocusOccurrenceMs: 0,
+    seriesOverrideResetConfirmed: false,
   };
 
   let rootEl = null;
@@ -1270,6 +1271,17 @@
     openEditor(id, { scope: 'series' });
   }
 
+  function setScopeChooserMode(mode) {
+    const pick = document.getElementById('agenda-scope-pick-panel');
+    const reset = document.getElementById('agenda-scope-reset-panel');
+    const heading = document.getElementById('agenda-scope-heading');
+    if (pick) pick.hidden = mode === 'reset';
+    if (reset) reset.hidden = mode !== 'reset';
+    if (heading) {
+      heading.textContent = mode === 'reset' ? 'Save series changes' : 'Edit recurring event';
+    }
+  }
+
   function closeScopeChooser({ restoreFocus = true } = {}) {
     const backdrop = document.getElementById('agenda-scope-backdrop');
     const dialog = document.getElementById('agenda-scope-chooser');
@@ -1277,6 +1289,8 @@
     if (dialog) dialog.hidden = true;
     document.body.classList.remove('agenda-scope-open');
     state.pendingEditor = null;
+    state.seriesOverrideResetConfirmed = false;
+    setScopeChooserMode('pick');
     if (restoreFocus) focusEditorReturnTarget();
   }
 
@@ -1285,28 +1299,82 @@
     const dialog = document.getElementById('agenda-scope-chooser');
     const title = document.getElementById('agenda-scope-title');
     const adv = document.getElementById('agenda-scope-advanced-note');
+    const customHint = document.getElementById('agenda-scope-customized-hint');
     if (!backdrop || !dialog) {
       const pending = state.pendingEditor;
       state.pendingEditor = null;
       if (pending) openEditor(pending.id, { scope: 'series', occurrenceMs: pending.occurrenceMs });
       return;
     }
+    setScopeChooserMode('pick');
     if (title) title.textContent = ev && ev.title ? `“${ev.title}”` : 'This event';
     const Occ = global.NotesAgendaOccurrence;
     const occBtn = document.querySelector('[data-agenda-edit-scope="occurrence"]');
     const occSupported = !!(Occ && Occ.supportsOccurrenceEdit(ev && ev.rrule));
     if (occBtn) occBtn.hidden = !occSupported;
     if (adv) adv.hidden = occSupported;
+    const customN = Occ && typeof Occ.countCustomizedOverrides === 'function'
+      ? Occ.countCustomizedOverrides(ev && ev.ics_occurrence_overrides, ev)
+      : 0;
+    if (customHint) {
+      if (customN > 0) {
+        customHint.hidden = false;
+        customHint.textContent = customN === 1
+          ? 'This series has 1 customized occurrence.'
+          : `This series has ${customN} customized occurrences.`;
+      } else {
+        customHint.hidden = true;
+        customHint.textContent = '';
+      }
+    }
     backdrop.hidden = false;
     dialog.hidden = false;
     document.body.classList.add('agenda-scope-open');
+  }
+
+  function openScopeChooserSeriesReset(resetCount) {
+    const backdrop = document.getElementById('agenda-scope-backdrop');
+    const dialog = document.getElementById('agenda-scope-chooser');
+    const msg = document.getElementById('agenda-scope-reset-message');
+    const Occ = global.NotesAgendaOccurrence;
+    if (!backdrop || !dialog || !Occ) return false;
+    const text = typeof Occ.seriesOverrideResetMessage === 'function'
+      ? Occ.seriesOverrideResetMessage(resetCount)
+      : '';
+    if (!text) return false;
+    setScopeChooserMode('reset');
+    if (msg) msg.textContent = text;
+    backdrop.hidden = false;
+    dialog.hidden = false;
+    document.body.classList.add('agenda-scope-open');
+    return true;
   }
 
   function wireScopeChooser() {
     if (wireScopeChooser._done) return;
     wireScopeChooser._done = true;
     document.getElementById('agenda-scope-cancel')?.addEventListener('click', () => closeScopeChooser());
-    document.getElementById('agenda-scope-backdrop')?.addEventListener('click', () => closeScopeChooser());
+    document.getElementById('agenda-scope-reset-cancel')?.addEventListener('click', () => {
+      setScopeChooserMode('pick');
+      closeScopeChooser();
+    });
+    document.getElementById('agenda-scope-reset-confirm')?.addEventListener('click', () => {
+      state.seriesOverrideResetConfirmed = true;
+      setScopeChooserMode('pick');
+      const backdrop = document.getElementById('agenda-scope-backdrop');
+      const dialog = document.getElementById('agenda-scope-chooser');
+      if (backdrop) backdrop.hidden = true;
+      if (dialog) dialog.hidden = true;
+      document.body.classList.remove('agenda-scope-open');
+      saveEditor();
+    });
+    document.getElementById('agenda-scope-backdrop')?.addEventListener('click', () => {
+      const resetPanel = document.getElementById('agenda-scope-reset-panel');
+      if (resetPanel && !resetPanel.hidden) {
+        setScopeChooserMode('pick');
+      }
+      closeScopeChooser();
+    });
     document.querySelectorAll('[data-agenda-edit-scope]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const pending = state.pendingEditor;
@@ -1656,17 +1724,38 @@
     const icalUid = Occ ? Occ.ensureIcalUid(base, id) : (base.ical_uid || '');
     const nextStart = start.toISOString();
     const nextEnd = end.toISOString();
-    const preserved = Occ && typeof Occ.preserveOverridesOnSeriesEdit === 'function'
-      ? Occ.preserveOverridesOnSeriesEdit(base, { start: nextStart, end: nextEnd, all_day: allDay })
+    const nextTitle = String(titleEl && titleEl.value || '').trim() || 'Untitled';
+    const nextLocation = String(locEl && locEl.value || '');
+    const nextNotes = String(notesEl && notesEl.value || '');
+    const nextPatch = {
+      start: nextStart,
+      end: nextEnd,
+      all_day: allDay,
+      title: nextTitle,
+      location: nextLocation,
+      notes: nextNotes,
+    };
+    const preserved = Occ && typeof Occ.planPreserveOverridesOnSeriesEdit === 'function'
+      ? Occ.planPreserveOverridesOnSeriesEdit(base, nextPatch)
       : {
         ics_exdates: base.ics_exdates,
         ics_occurrence_overrides: base.ics_occurrence_overrides,
+        resetCount: 0,
       };
+    const resetCount = Number(preserved.resetCount) || 0;
+    if (
+      resetCount > 0
+      && !state.seriesOverrideResetConfirmed
+      && openScopeChooserSeriesReset(resetCount)
+    ) {
+      return;
+    }
+    state.seriesOverrideResetConfirmed = false;
     S.upsertAgendaEvent(id, {
       ...base,
-      title: String(titleEl && titleEl.value || '').trim() || 'Untitled',
-      location: String(locEl && locEl.value || ''),
-      notes: String(notesEl && notesEl.value || ''),
+      title: nextTitle,
+      location: nextLocation,
+      notes: nextNotes,
       webcall_url: wc,
       attendees,
       start: nextStart,

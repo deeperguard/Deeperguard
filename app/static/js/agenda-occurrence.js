@@ -137,6 +137,61 @@
     return recurrenceIdForStart(shifted, newAllDay);
   }
 
+  function overrideFieldMatchesMaster(ov, field, master) {
+    if (!ov || !master) return true;
+    if (field === 'title') {
+      const o = String(ov.title || '').trim();
+      const m = String(master.title || '').trim() || 'Untitled';
+      return !o || o === m;
+    }
+    if (field === 'location') {
+      return ov.location == null || String(ov.location) === String(master.location || '');
+    }
+    if (field === 'notes') {
+      return ov.notes == null || String(ov.notes) === String(master.notes || '');
+    }
+    return true;
+  }
+
+  function overrideIsCustomized(ov, rid, master) {
+    if (!ov || ov.cancelled) return false;
+    if (!overrideFieldMatchesMaster(ov, 'title', master)) return true;
+    if (!overrideFieldMatchesMaster(ov, 'location', master)) return true;
+    if (!overrideFieldMatchesMaster(ov, 'notes', master)) return true;
+    return !overrideKeepsSeriesSlotTime(ov, rid, master.start, master.end, !!master.all_day);
+  }
+
+  function countCustomizedOverrides(overrides, master) {
+    let n = 0;
+    for (const [rid, ov] of Object.entries(overrides || {})) {
+      if (overrideIsCustomized(ov, rid, master)) n += 1;
+    }
+    return n;
+  }
+
+  function seriesOverrideResetMessage(count) {
+    const n = Math.max(0, Number(count) || 0);
+    if (n === 0) return '';
+    if (n === 1) return '1 customized occurrence will be reset to the series';
+    return `${n} customized occurrences will be reset to the series`;
+  }
+
+  function mergeOverrideSeriesFields(patch, ov, base, next) {
+    const masterTitle = String(next.title != null ? next.title : base.title || '').trim() || 'Untitled';
+    const masterLoc = next.location != null ? next.location : base.location;
+    const masterNotes = next.notes != null ? next.notes : base.notes;
+    patch.title = overrideFieldMatchesMaster(ov, 'title', base)
+      ? masterTitle
+      : (String(ov.title || '').trim() || masterTitle);
+    patch.location = overrideFieldMatchesMaster(ov, 'location', base)
+      ? masterLoc
+      : ov.location;
+    patch.notes = overrideFieldMatchesMaster(ov, 'notes', base)
+      ? masterNotes
+      : ov.notes;
+    return patch;
+  }
+
   /**
    * Re-key occurrence overrides and EXDATEs when the recurring master start/end shifts.
    * Per-occurrence field overrides are preserved; non-time-overridden slots move with the series delta.
@@ -153,10 +208,23 @@
     const oldOverrides = (base.ics_occurrence_overrides && typeof base.ics_occurrence_overrides === 'object')
       ? base.ics_occurrence_overrides
       : {};
-    if (deltaMs === 0 && oldAllDay === newAllDay) {
+    if (oldAllDay !== newAllDay) {
       return {
         ics_exdates: normalizeExdates(base.ics_exdates),
-        ics_occurrence_overrides: { ...oldOverrides },
+        ics_occurrence_overrides: {},
+        resetCount: countCustomizedOverrides(oldOverrides, base),
+      };
+    }
+    if (deltaMs === 0) {
+      const overrides = {};
+      for (const [rid, ov] of Object.entries(oldOverrides)) {
+        if (!ov || typeof ov !== 'object') continue;
+        overrides[rid] = mergeOverrideSeriesFields({ ...ov }, ov, base, next);
+      }
+      return {
+        ics_exdates: normalizeExdates(base.ics_exdates),
+        ics_occurrence_overrides: overrides,
+        resetCount: 0,
       };
     }
     const duration = masterDurationMs(base.start, base.end);
@@ -172,29 +240,36 @@
         ov, oldRid, base.start, base.end, oldAllDay,
       );
       let newRid = oldRid;
-      const patch = { ...ov };
-      if (deltaMs !== 0) {
-        if (keepsSlot) {
-          newRid = shiftRecurrenceToken(oldRid, deltaMs, oldAllDay, newAllDay);
-          if (patch.start) {
-            const os = new Date(patch.start);
-            if (Number.isFinite(os.getTime())) patch.start = new Date(os.getTime() + deltaMs).toISOString();
-          }
-          if (patch.end) {
-            const oe = new Date(patch.end);
-            if (Number.isFinite(oe.getTime())) patch.end = new Date(oe.getTime() + deltaMs).toISOString();
-          } else if (patch.start) {
-            const os = new Date(patch.start);
-            if (Number.isFinite(os.getTime())) {
-              patch.end = new Date(os.getTime() + duration).toISOString();
-            }
+      let patch = { ...ov };
+      if (keepsSlot) {
+        newRid = shiftRecurrenceToken(oldRid, deltaMs, oldAllDay, newAllDay);
+        if (patch.start) {
+          const os = new Date(patch.start);
+          if (Number.isFinite(os.getTime())) patch.start = new Date(os.getTime() + deltaMs).toISOString();
+        }
+        if (patch.end) {
+          const oe = new Date(patch.end);
+          if (Number.isFinite(oe.getTime())) patch.end = new Date(oe.getTime() + deltaMs).toISOString();
+        } else if (patch.start) {
+          const os = new Date(patch.start);
+          if (Number.isFinite(os.getTime())) {
+            patch.end = new Date(os.getTime() + duration).toISOString();
           }
         }
       }
+      patch = mergeOverrideSeriesFields(patch, ov, base, next);
       if (typeof patch.all_day !== 'boolean') patch.all_day = newAllDay;
       overrides[newRid] = patch;
     }
-    return { ics_exdates: normalizeExdates(exdates), ics_occurrence_overrides: overrides };
+    return {
+      ics_exdates: normalizeExdates(exdates),
+      ics_occurrence_overrides: overrides,
+      resetCount: 0,
+    };
+  }
+
+  function planPreserveOverridesOnSeriesEdit(prev, next) {
+    return preserveOverridesOnSeriesEdit(prev, next);
   }
 
   /**
@@ -286,7 +361,11 @@
     isExcludedByExdate,
     supportsOccurrenceEdit,
     overrideKeepsSeriesSlotTime,
+    overrideIsCustomized,
+    countCustomizedOverrides,
+    seriesOverrideResetMessage,
     preserveOverridesOnSeriesEdit,
+    planPreserveOverridesOnSeriesEdit,
     finalizeOccurrences,
     ensureIcalUid,
   };

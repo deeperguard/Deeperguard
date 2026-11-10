@@ -2409,16 +2409,26 @@
   <div id="agenda-scope-backdrop" class="settings-backdrop agenda-scope-backdrop" hidden></div>
   <div id="agenda-scope-chooser" class="confirm-dialog agenda-scope-chooser" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-scope-heading">
     <h2 id="agenda-scope-heading" class="agenda-editor-heading">Edit recurring event</h2>
-    <p class="agenda-scope-lead">Apply changes to:</p>
-    <p id="agenda-scope-title" class="agenda-scope-event muted"></p>
-    <div class="agenda-scope-actions">
-      <button type="button" class="btn primary agenda-scope-btn" data-agenda-edit-scope="occurrence">This occurrence</button>
-      <button type="button" class="btn ghost agenda-scope-btn" data-agenda-edit-scope="series">Entire series</button>
+    <div id="agenda-scope-pick-panel">
+      <p class="agenda-scope-lead">Apply changes to:</p>
+      <p id="agenda-scope-title" class="agenda-scope-event muted"></p>
+      <p id="agenda-scope-customized-hint" class="agenda-scope-advanced" hidden></p>
+      <div class="agenda-scope-actions">
+        <button type="button" class="btn primary agenda-scope-btn" data-agenda-edit-scope="occurrence">This occurrence</button>
+        <button type="button" class="btn ghost agenda-scope-btn" data-agenda-edit-scope="series">Entire series</button>
+      </div>
+      <p id="agenda-scope-advanced-note" class="agenda-scope-advanced" hidden>
+        Imported/custom rules can only be edited for the entire series (occurrence exceptions not supported for this rule).
+      </p>
+      <button type="button" class="btn ghost agenda-scope-cancel" id="agenda-scope-cancel">Cancel</button>
     </div>
-    <p id="agenda-scope-advanced-note" class="agenda-scope-advanced" hidden>
-      Imported/custom rules can only be edited for the entire series (occurrence exceptions not supported for this rule).
-    </p>
-    <button type="button" class="btn ghost agenda-scope-cancel" id="agenda-scope-cancel">Cancel</button>
+    <div id="agenda-scope-reset-panel" hidden>
+      <p id="agenda-scope-reset-message" class="agenda-scope-lead"></p>
+      <div class="agenda-scope-actions">
+        <button type="button" class="btn primary agenda-scope-btn" id="agenda-scope-reset-confirm">Save</button>
+        <button type="button" class="btn ghost agenda-scope-cancel" id="agenda-scope-reset-cancel">Cancel</button>
+      </div>
+    </div>
   </div>
   <div id="agenda-editor-backdrop" class="settings-backdrop agenda-editor-backdrop" hidden></div>
   <div id="agenda-editor" class="confirm-dialog agenda-editor" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-edit-visible-title">
