@@ -1266,6 +1266,29 @@ def revoke_user_session(session_id: int, user_id: int, *, reason: str = "user") 
         return int(cur.rowcount or 0) > 0
 
 
+def count_active_user_sessions() -> int:
+    with connection() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM user_sessions WHERE revoked_at = 0",
+        ).fetchone()
+        return int(row["c"] or 0)
+
+
+def revoke_all_active_user_sessions(*, reason: str = "db-restore") -> int:
+    """Revoke every non-revoked session row (idempotent). Run after restoring notes.db."""
+    reason = str(reason or "db-restore")[:32]
+    with tx() as conn:
+        cur = conn.execute(
+            """
+            UPDATE user_sessions
+            SET revoked_at = ?, revoke_reason = ?
+            WHERE revoked_at = 0
+            """,
+            (now(), reason),
+        )
+        return int(cur.rowcount or 0)
+
+
 def revoke_session_by_token(token: str, *, reason: str = "logout") -> bool:
     if not token:
         return False

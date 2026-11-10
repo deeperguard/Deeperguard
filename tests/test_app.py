@@ -947,6 +947,69 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(expired.status_code, 401)
         self.assertNotEqual(expired.get_json().get("code"), "session_revoked")
 
+    def test_db_restore_revoke_all_sessions_invalidates_restored_rows(self):
+        import secrets
+
+        import db as notes_db
+        from config import SESSION_SECONDS
+
+        email = "restore.sessions@home.local"
+        self._register_user(email, "restore-pass-1234")
+        user = notes_db.get_user_by_email(email)
+        uid = int(user["id"])
+
+        stale_token = notes_db.create_user_session(
+            uid,
+            device_label="Desktop · Chrome",
+            ip="127.0.0.1",
+        )
+        stale_row = notes_db.get_session_by_token(stale_token)
+        self.assertIsNotNone(stale_row)
+        notes_db.revoke_user_session(int(stale_row["id"]), uid, reason="security")
+
+        with notes_db.tx() as conn:
+            conn.execute(
+                "UPDATE user_sessions SET revoked_at = 0, revoke_reason = '' WHERE id = ?",
+                (int(stale_row["id"]),),
+            )
+
+        stale_client = self.app_mod.app.test_client()
+        with stale_client.session_transaction() as sess:
+            sess["uid"] = uid
+            sess["authed"] = True
+            sess["exp"] = time.time() + SESSION_SECONDS
+            sess["csrf"] = secrets.token_urlsafe(32)
+            sess["totp_ok"] = True
+            sess["sid"] = stale_token
+
+        self.assertEqual(stale_client.get("/api/account").status_code, 200)
+
+        revoked = notes_db.revoke_all_active_user_sessions(reason="db-restore")
+        self.assertGreaterEqual(revoked, 1)
+        self.assertEqual(notes_db.revoke_all_active_user_sessions(reason="db-restore"), 0)
+
+        denied = stale_client.get("/api/account")
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(denied.get_json().get("error"), "login required")
+        self.assertNotEqual(denied.get_json().get("code"), "session_revoked")
+        stored = notes_db.get_user_session(int(stale_row["id"]), uid)
+        self.assertEqual(str(stored["revoke_reason"] or ""), "db-restore")
+
+        fresh_token = notes_db.create_user_session(
+            uid,
+            device_label="Desktop · Chrome",
+            ip="127.0.0.1",
+        )
+        fresh_client = self.app_mod.app.test_client()
+        with fresh_client.session_transaction() as sess:
+            sess["uid"] = uid
+            sess["authed"] = True
+            sess["exp"] = time.time() + SESSION_SECONDS
+            sess["csrf"] = secrets.token_urlsafe(32)
+            sess["totp_ok"] = True
+            sess["sid"] = fresh_token
+        self.assertEqual(fresh_client.get("/api/account").status_code, 200)
+
     def test_remote_sign_out_wipe_is_scoped_to_the_signed_out_account(self):
         """A device id is shared by every account on a browser: one account's
         remote sign-out must not tell another account's expired tab to wipe."""
