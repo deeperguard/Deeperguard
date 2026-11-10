@@ -62,6 +62,14 @@ class Round83VerifyMetadataBaseline(unittest.TestCase):
         self.assertIn('id="verify-metadata-baseline"', body)
         self.assertIn("Compare this with your own DevTools", body)
         self.assertIn("Unlock vault", body)
+        self.assertIn("Agenda recurrence", body)
+        self.assertIn("Repeat events weekly or every 2 weeks, with an optional end date.", body)
+        self.assertIn(
+            "Edit just this occurrence or the entire series. "
+            "Your one-off changes are kept when you edit the series.",
+            body,
+        )
+        self.assertIn("Browser only", body)
         self.assertIn("Sends nothing", body)
         self.assertIn("Static source analysis", body)
         self.assertIn("Actions not in this table yet", body)
@@ -73,7 +81,7 @@ class Round83VerifyMetadataBaseline(unittest.TestCase):
         import verify_metadata_baseline as vmb
 
         data = vmb.load_baseline()
-        self.assertGreaterEqual(data.get("baseline_version", 0), 2)
+        self.assertGreaterEqual(data.get("baseline_version", 0), 3)
         self.assertTrue(data.get("uncovered_actions"))
         path = REPO / "app" / "verify-metadata-baseline.json"
         on_disk = json.loads(path.read_text(encoding="utf-8"))

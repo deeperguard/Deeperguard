@@ -32,7 +32,21 @@ assert.deepStrictEqual(ids, [
   'view-server-copy',
   'idle',
   'lock',
+  'agenda-recurrence',
 ]);
+const agendaRow = baseline.actions.find((a) => a.id === 'agenda-recurrence');
+assert.ok(agendaRow);
+assert.strictEqual(agendaRow.scope, 'browser');
+assert.strictEqual(
+  agendaRow.summary,
+  'Repeat events weekly or every 2 weeks, with an optional end date.',
+);
+assert.strictEqual(
+  agendaRow.feature_note,
+  'Edit just this occurrence or the entire series. Your one-off changes are kept when you edit the series.',
+);
+assert.strictEqual(agendaRow.measurement, 'checked');
+assert.strictEqual(baseline.baseline_version, 3);
 for (const row of baseline.actions) {
   assert.ok(row.label);
   assert.ok(['checked', 'unchecked'].includes(row.measurement));
@@ -65,6 +79,9 @@ assert.ok(verify.includes('id="verify-sync-metadata"'));
 
 assert.ok(css.includes('.mk-verify-metadata-cards'));
 assert.ok(css.includes('.mk-verify-sends-none'));
+assert.ok(css.includes('.mk-verify-evidence.browser'));
+assert.ok(verify.includes("row.scope == 'browser'"));
+assert.ok(verify.includes('mk-verify-metadata-feature-note'));
 assert.ok(css.includes('min-width: 720px'));
 
 assert.ok(appHtml.includes('/verify#verify-metadata-baseline'));

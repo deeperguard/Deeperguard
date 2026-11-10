@@ -28,6 +28,18 @@ EVIDENCE_LIVE_CAPTURE = "live_traffic_capture"
 STORE = (APP / "static" / "js" / "store.js").read_text(encoding="utf-8")
 APP_JS = (APP / "static" / "js" / "app.js").read_text(encoding="utf-8")
 SRP = (APP / "static" / "js" / "srp-auth.js").read_text(encoding="utf-8")
+AGENDA_JS = (APP / "static" / "js" / "agenda.js").read_text(encoding="utf-8")
+AGENDA_OCCURRENCE_JS = (APP / "static" / "js" / "agenda-occurrence.js").read_text(encoding="utf-8")
+AGENDA_RECURRENCE_JS = (APP / "static" / "js" / "agenda-recurrence.js").read_text(encoding="utf-8")
+
+_HAYSTACKS = {
+    "store.js": STORE,
+    "app.js": APP_JS,
+    "srp-auth.js": SRP,
+    "agenda.js": AGENDA_JS,
+    "agenda-occurrence.js": AGENDA_OCCURRENCE_JS,
+    "agenda-recurrence.js": AGENDA_RECURRENCE_JS,
+}
 
 
 def _release_tag() -> str:
@@ -110,7 +122,7 @@ def _checked(required: list[tuple[str, str]]) -> tuple[str, str]:
     """Return (measurement, note) where measurement is checked or unchecked."""
     missing = []
     for needle, label in required:
-        hay = STORE if label == "store.js" else APP_JS if label == "app.js" else SRP
+        hay = _HAYSTACKS.get(label, "")
         if needle not in hay:
             missing.append(f"{label}: {needle}")
     if missing:
@@ -167,6 +179,16 @@ def _actions() -> list[dict]:
             ("function lockVault", "app.js"),
             ("syncWhileLocked", "store.js"),
             ("pushDirtyPersisted", "store.js"),
+        ]
+    )
+
+    agenda_meas, agenda_note = _checked(
+        [
+            ("supportsOccurrenceEdit", "agenda-occurrence.js"),
+            ("preserveOverridesOnSeriesEdit", "agenda-occurrence.js"),
+            ("agenda-scope-chooser", "agenda.js"),
+            ("kind: 'weekly'", "agenda-recurrence.js"),
+            ("'biweekly'", "agenda-recurrence.js"),
         ]
     )
 
@@ -262,13 +284,33 @@ def _actions() -> list[dict]:
             "measurement": lock_meas,
             "measurement_note": lock_note,
         },
+        {
+            "id": "agenda-recurrence",
+            "label": "Agenda recurrence",
+            "scope": "browser",
+            "summary": "Repeat events weekly or every 2 weeks, with an optional end date.",
+            "feature_note": (
+                "Edit just this occurrence or the entire series. "
+                "Your one-off changes are kept when you edit the series."
+            ),
+            "typical_requests": [],
+            "sends_nothing_typical": False,
+            "note_plaintext_on_wire": False,
+            "password_or_vault_key_on_wire": False,
+            **static,
+            "measurement": agenda_meas,
+            "measurement_note": (
+                f"{agenda_note} No agenda-specific /api routes; "
+                "persisted events sync as encrypted agenda pack rows when dirty (edit-save row)."
+            ),
+        },
     ]
 
 
 def build_document() -> dict:
     return {
         "schema_version": 1,
-        "baseline_version": 2,
+        "baseline_version": 3,
         "release_tag": _release_tag(),
         "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "generation": "scripts/regenerate-verify-metadata-baseline.py (static code anchors)",

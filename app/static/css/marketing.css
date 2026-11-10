@@ -2154,6 +2154,20 @@ a.mk-badge-link:hover {
   background: var(--mk-ok-bg);
   border: 1px solid var(--mk-ok-border);
 }
+.mk-verify-evidence.browser {
+  color: var(--mk-text);
+  background: var(--mk-panel-subtle);
+  border: 1px solid var(--mk-border);
+}
+.mk-verify-metadata-feature-note {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.mk-verify-metadata-feature-note.block {
+  display: block;
+  margin-top: 0.35rem;
+}
 .mk-verify-metadata-evidence-badges {
   display: flex;
   flex-wrap: wrap;
