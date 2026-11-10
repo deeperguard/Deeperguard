@@ -515,15 +515,39 @@ body.agenda-editor-open #toast {
   text-overflow: ellipsis;
   max-width: 100%;
 }
+.agenda-phone-menu-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 28;
+  background: rgba(0, 0, 0, 0.38);
+}
+body.agenda-phone-menu-open .agenda-phone-menu-backdrop {
+  display: block;
+}
 .agenda-phone-menu {
-  display: flex;
+  display: none;
+  position: fixed;
+  left: calc(10px + var(--safe-left));
+  right: calc(10px + var(--safe-right));
+  top: calc(52px + var(--safe-top));
+  z-index: 29;
   flex-direction: column;
   gap: 10px;
-  padding: 10px 0 4px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  margin-top: 6px;
+  padding: 12px 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--text) 18%, transparent);
+  max-height: min(72vh, 520px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+body.agenda-phone-menu-open .agenda-phone-menu {
+  display: flex;
 }
 .agenda-fab-add {
+  display: none !important;
   position: fixed;
   right: calc(16px + var(--safe-right));
   bottom: calc(72px + var(--safe-bottom));
@@ -982,6 +1006,11 @@ body.agenda-editor-open #toast {
   .agenda-top-desktop { display: none; }
   .agenda-top-phone { display: block; }
   #app[data-app-tab="agenda"] .fab-stack { display: none !important; }
+  #app[data-app-tab="agenda"] .agenda-fab-add:not([hidden]) {
+    display: inline-flex !important;
+  }
+  .agenda-top-desktop .agenda-add,
+  .agenda-top-phone .agenda-add { display: none !important; }
   .agenda-seg-wrap {
     justify-content: flex-start;
     overflow-x: auto;
@@ -7555,8 +7584,8 @@ body.search-filters-open .fab-stack,
 .shell.editor-open ~ .fab,
 .shell.editor-open .fab-stack { display: none !important; }
 
-/* Agenda: primary new-event affordance (FAB); keep visible while tab is active */
-#app[data-app-tab="agenda"] .fab {
+/* Agenda: note FAB stack hidden on mobile; agenda-fab-add is phone-only (see max-width 768px rule) */
+#app[data-app-tab="agenda"] .fab-stack .fab {
   display: inline-flex !important;
 }
 

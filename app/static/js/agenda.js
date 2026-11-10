@@ -819,9 +819,9 @@
 
   function closePhoneMenu() {
     document.body.classList.remove('agenda-phone-menu-open');
-    const menu = rootEl?.querySelector?.('#agenda-phone-menu');
+    const backdrop = rootEl?.querySelector?.('#agenda-phone-menu-backdrop');
     const btn = rootEl?.querySelector?.('#agenda-phone-more');
-    if (menu) menu.hidden = true;
+    if (backdrop) backdrop.hidden = true;
     if (btn) btn.setAttribute('aria-expanded', 'false');
   }
 
@@ -830,9 +830,9 @@
       ? force
       : !document.body.classList.contains('agenda-phone-menu-open');
     document.body.classList.toggle('agenda-phone-menu-open', open);
-    const menu = rootEl?.querySelector?.('#agenda-phone-menu');
+    const backdrop = rootEl?.querySelector?.('#agenda-phone-menu-backdrop');
     const btn = rootEl?.querySelector?.('#agenda-phone-more');
-    if (menu) menu.hidden = !open;
+    if (backdrop) backdrop.hidden = !open;
     if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
@@ -865,6 +865,19 @@
     );
   }
 
+  function renderPhoneMenuPanel() {
+    return (
+      '<div id="agenda-phone-menu-backdrop" class="agenda-phone-menu-backdrop" hidden aria-hidden="true"></div>'
+      + '<div id="agenda-phone-menu" class="agenda-phone-menu" role="dialog" aria-label="Agenda menu" aria-modal="true">'
+      + renderSearchField()
+      + '<div class="agenda-seg-wrap" role="group" aria-label="View">' + renderViewToggles() + '</div>'
+      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
+      + '<button type="button" class="btn primary agenda-cal-action" id="agenda-phone-import">Import calendar (.ics)</button>'
+      + '<button type="button" class="btn ghost agenda-cal-action" id="agenda-phone-export">Export calendar (.ics)</button>'
+      + '</div>'
+    );
+  }
+
   function renderPhoneHeader(range) {
     const menuOpen = document.body.classList.contains('agenda-phone-menu-open');
     return (
@@ -873,14 +886,8 @@
       + renderTitleHtml(range)
       + '<button type="button" class="btn sm agenda-today" id="agenda-today">Today</button>'
       + `<button type="button" class="btn icon agenda-icon-btn agenda-phone-more" id="agenda-phone-more" aria-label="Agenda menu" aria-expanded="${menuOpen ? 'true' : 'false'}" aria-controls="agenda-phone-menu">⋯</button>`
-      + '</div>'
-      + `<div id="agenda-phone-menu" class="agenda-phone-menu" role="region" aria-label="Agenda tools"${menuOpen ? '' : ' hidden'}>`
-      + renderSearchField()
-      + '<div class="agenda-seg-wrap" role="group" aria-label="View">' + renderViewToggles() + '</div>'
-      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
-      + '<button type="button" class="btn primary agenda-cal-action" id="agenda-phone-import">Import calendar (.ics)</button>'
-      + '<button type="button" class="btn ghost agenda-cal-action" id="agenda-phone-export">Export calendar (.ics)</button>'
       + '</div></header>'
+      + renderPhoneMenuPanel()
     );
   }
 
@@ -1231,6 +1238,9 @@
     rootEl.querySelector('#agenda-phone-more')?.addEventListener('click', () => {
       togglePhoneMenu();
     });
+    rootEl.querySelector('#agenda-phone-menu-backdrop')?.addEventListener('click', () => {
+      closePhoneMenu();
+    });
     rootEl.querySelector('#agenda-phone-import')?.addEventListener('click', () => {
       closePhoneMenu();
       fileInput?.click();
@@ -1282,6 +1292,11 @@
       applyTimeGridScroll(range, occ);
     }
     syncAgendaFab();
+    if (document.body.classList.contains('agenda-phone-menu-open')) {
+      togglePhoneMenu(true);
+    } else {
+      closePhoneMenu();
+    }
   }
 
   function addMonthsAnchor(d, n) {

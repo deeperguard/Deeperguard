@@ -12,6 +12,10 @@ const html = fs.readFileSync(path.join(root, 'app/templates/app.html'), 'utf8');
 
 assert.ok(agendaJs.includes('agenda-top-row-phone'));
 assert.ok(agendaJs.includes('agenda-phone-menu'));
+assert.ok(agendaJs.includes('agenda-phone-menu-backdrop'));
+assert.ok(css.includes('body.agenda-phone-menu-open .agenda-phone-menu'));
+assert.ok(css.includes('.agenda-fab-add'));
+assert.ok(css.includes('#app[data-app-tab="agenda"] .agenda-fab-add:not([hidden])'));
 assert.ok(agendaJs.includes('agenda-fab-add'));
 assert.ok(agendaJs.includes('agenda-month-dot'));
 assert.ok(agendaJs.includes('agenda-month-more-btn'));
