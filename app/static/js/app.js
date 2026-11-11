@@ -4127,6 +4127,8 @@
   window.notesAgendaToast = (message, isError = false) => {
     toast(message, isError);
   };
+  /** Agenda uses the app's own confirm dialog instead of the browser's. */
+  window.notesAgendaConfirm = (message, opts) => confirmAction(message, opts);
 
   const agendaPane = document.getElementById('agenda-pane');
   let agendaUiInited = false;

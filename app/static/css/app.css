@@ -228,6 +228,23 @@ body.agenda-detail-open #agenda-detail-card { z-index: 208; }
   cursor: pointer;
   padding: 0;
 }
+/* The app confirm dialog must sit above the Agenda editor when it asks about a delete. */
+body.agenda-editor-open #confirm-backdrop { z-index: 219; }
+body.agenda-editor-open #confirm-dialog { z-index: 220; }
+.agenda-color-swatch.is-auto {
+  background: conic-gradient(#3b82f6, #10b981, #f59e0b, #ef4444, #8b5cf6, #3b82f6);
+}
+.agenda-color-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.agenda-detail-join {
+  margin: 8px 0;
+}
+.agenda-detail-repeat {
+  margin: 2px 0 8px;
+  font-size: 13px;
+}
 .agenda-color-swatch.is-selected {
   border-color: var(--text);
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px color-mix(in srgb, var(--text) 35%, transparent);
@@ -981,10 +998,28 @@ html:not([data-theme="dark"]) .agenda-chip-time {
   font-weight: 750;
 }
 .agenda-month-date {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  align-self: flex-start;
+  min-width: 26px;
+  min-height: 26px;
+  border-radius: 999px;
   font-weight: 650;
   font-size: 13px;
   margin-bottom: 4px;
   flex-shrink: 0;
+}
+.agenda-month-date:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.agenda-month-date:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .agenda-month-events {
   display: flex;

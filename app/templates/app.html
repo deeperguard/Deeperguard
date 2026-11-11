@@ -2435,7 +2435,9 @@
   <div id="agenda-detail-card" class="confirm-dialog agenda-detail-card" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-detail-title">
     <h2 id="agenda-detail-title" class="agenda-editor-heading">Event</h2>
     <p id="agenda-detail-when" class="agenda-detail-when muted"></p>
+    <p id="agenda-detail-repeat" class="agenda-detail-repeat muted" hidden></p>
     <p id="agenda-detail-location" class="agenda-detail-loc" hidden></p>
+    <p id="agenda-detail-join" class="agenda-detail-join" hidden></p>
     <p id="agenda-detail-notes" class="agenda-detail-notes muted" hidden></p>
     <div class="confirm-dialog-actions agenda-detail-actions">
       <button type="button" class="btn ghost" id="agenda-detail-close">Close</button>
@@ -2450,7 +2452,7 @@
         Changes apply to the <strong>entire recurring series</strong> (not a single occurrence).
       </p>
       <label class="settings-row stacked">Title
-        <input id="agenda-edit-title" type="text" maxlength="500" autocomplete="off">
+        <input id="agenda-edit-title" type="text" maxlength="500" autocomplete="off" placeholder="Add title">
       </label>
       <label class="settings-row checkbox agenda-editor-allday">
         <span>All day</span>
@@ -2494,8 +2496,8 @@
         <input id="agenda-edit-location" type="text" maxlength="500" autocomplete="off">
       </label>
       <fieldset class="agenda-editor-colors">
-        <legend class="muted">Color</legend>
-        <div id="agenda-edit-colors" class="agenda-color-swatches" role="radiogroup" aria-label="Event color"></div>
+        <legend class="muted" id="agenda-edit-colors-legend">Color</legend>
+        <div id="agenda-edit-colors" class="agenda-color-swatches" aria-labelledby="agenda-edit-colors-legend"></div>
       </fieldset>
       <label class="settings-row stacked">Meeting link (https only)
         <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://">

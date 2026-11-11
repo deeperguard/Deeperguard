@@ -7,6 +7,7 @@
     '#3b82f6', '#2563eb', '#0ea5e9', '#10b981',
     '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899',
   ];
+  const EVENT_COLOR_NAMES = ['Blue', 'Dark blue', 'Sky blue', 'Green', 'Amber', 'Red', 'Purple', 'Pink'];
   const ACCENT_PALETTE = EVENT_COLORS;
 
   function pad2(n) {
@@ -44,11 +45,11 @@
   }
 
   function monthTitle(d) {
-    return d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+    return d.toLocaleString(agendaUiLocale(), { month: 'long', year: 'numeric' });
   }
 
   function shortWeekday(d) {
-    return d.toLocaleString(undefined, { weekday: 'short' }).toUpperCase();
+    return d.toLocaleString(agendaUiLocale(), { weekday: 'short' }).toUpperCase();
   }
 
   function formatTime(d) {
@@ -56,7 +57,15 @@
   }
 
   function formatShortDate(d) {
-    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString(agendaUiLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function formatDayTitle(d) {
+    return d.toLocaleDateString(agendaUiLocale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function formatLongDate(d) {
+    return d.toLocaleDateString(agendaUiLocale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   }
 
   function formatRangeTitle(days) {
@@ -65,7 +74,7 @@
     const b = days[days.length - 1];
     const sameMonth = a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
     if (sameMonth) {
-      const mid = b.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+      const mid = b.toLocaleDateString(agendaUiLocale(), { month: 'short', year: 'numeric' });
       return `${a.getDate()}–${b.getDate()} ${mid}`;
     }
     return `${formatShortDate(a)} – ${formatShortDate(b)}`;
@@ -82,9 +91,15 @@
     return 'week';
   }
 
+  /**
+   * One locale for every date in Agenda, so headings and titles never mix languages.
+   * The UI copy is English with 24-hour times; plain "en" would format month-first
+   * (US), so English uses day-first "en-GB" ("Mon 26 Oct 2026").
+   */
   function agendaUiLocale() {
-    const lang = document?.documentElement?.lang;
-    return lang && String(lang).trim() ? String(lang).trim() : 'en';
+    const raw = typeof document !== 'undefined' ? document?.documentElement?.lang : '';
+    const lang = raw && String(raw).trim() ? String(raw).trim() : 'en';
+    return lang.toLowerCase() === 'en' ? 'en-GB' : lang;
   }
 
   function hashHue(id) {
@@ -847,7 +862,7 @@
       return { primary: `List · ${monthTitle(state.anchor)}`, week: '' };
     }
     if (state.view === 'day') {
-      return { primary: formatShortDate(state.anchor), week: '' };
+      return { primary: formatDayTitle(state.anchor), week: '' };
     }
     return {
       primary: formatRangeTitle(range.days),
@@ -955,6 +970,8 @@
     return (
       '<header class="agenda-top agenda-top-phone">'
       + '<div class="agenda-top-row-phone">'
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-prev" aria-label="Previous">‹</button>'
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-next" aria-label="Next">›</button>'
       + renderTitleHtml(range)
       + '<button type="button" class="btn sm agenda-today" id="agenda-today">Today</button>'
       + `<button type="button" class="btn icon agenda-icon-btn agenda-phone-more" id="agenda-phone-more" aria-label="Agenda menu" aria-expanded="${menuOpen ? 'true' : 'false'}" aria-controls="agenda-phone-menu">⋯</button>`
@@ -1075,9 +1092,23 @@
     const re = range && range.end ? range.end.getTime() : 0;
     const byDay = new Map();
     for (const o of occ) {
-      const key = startOfDay(o.start).getTime();
-      if (!byDay.has(key)) byDay.set(key, []);
-      byDay.get(key).push(o);
+      const allDay = o.displayAllDay ?? !!o.ev.all_day;
+      let day = startOfDay(o.start);
+      if (rs && day.getTime() < rs) day = startOfDay(new Date(rs));
+      const lastMs = Math.max(o.start.getTime(), o.end.getTime() - 1);
+      for (let n = 0; n < 62 && day.getTime() <= lastMs && (!re || day.getTime() < re); n += 1) {
+        const next = addDays(day, 1);
+        let when;
+        if (allDay) when = 'All day';
+        else if (o.start >= day && o.end <= next) when = `${formatTime(o.start)}–${formatTime(o.end)}`;
+        else if (o.start >= day) when = `${formatTime(o.start)} →`;
+        else if (o.end <= next) when = `→ ${formatTime(o.end)}`;
+        else when = 'All day';
+        const key = day.getTime();
+        if (!byDay.has(key)) byDay.set(key, []);
+        byDay.get(key).push({ ...o, listWhen: when });
+        day = next;
+      }
     }
     const dayKeys = [...byDay.keys()].sort((a, b) => a - b);
     let html = `<div class="agenda-list-view" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
@@ -1091,10 +1122,8 @@
       const items = sortOccForMonthDay(byDay.get(key));
       html += `<section class="agenda-list-day"><h2 class="agenda-list-day-head">${esc(listDayHeading(day))}</h2><ul class="agenda-list">`;
       items.forEach((o) => {
-        const when = o.ev.all_day
-          ? 'All day'
-          : `${formatTime(o.start)}–${formatTime(o.end)}`;
-        const loc = String(o.ev.location || '').trim();
+        const when = o.listWhen;
+        const loc = String(o.displayLocation ?? o.ev.location ?? '').trim();
         const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
         const title = rec
           ? `${'<span class="agenda-rec-glyph" aria-hidden="true">↻</span>'}${esc(occDisplayTitle(o))}`
@@ -1141,7 +1170,7 @@
     const de = addDays(ds, 1);
     const dayOcc = sortOccForMonthDay(occ.filter((o) => o.end > ds && o.start < de));
     let html = `<div class="agenda-month-daylist" data-agenda-month-pick="${ds.getTime()}">`;
-    html += `<h2 class="agenda-month-daylist-title">${esc(pick.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))}</h2>`;
+    html += `<h2 class="agenda-month-daylist-title">${esc(pick.toLocaleDateString(agendaUiLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))}</h2>`;
     if (!dayOcc.length) {
       html += '<p class="muted agenda-month-daylist-empty">No events</p>';
     } else {
@@ -1191,12 +1220,13 @@
         const isToday = ds.getTime() === startOfDay(new Date()).getTime();
         const pickActive = state.monthPickDay === ds.getTime();
         html += `<div class="agenda-month-cell ${inMonth ? '' : 'is-out'} ${isToday ? 'is-today' : ''} ${pickActive ? 'is-pick' : ''}" data-agenda-month-day="${ds.getTime()}">`;
-        html += `<div class="agenda-month-date">${day.getDate()}</div>`;
+        const dayLabel = `${formatLongDate(day)}, ${sorted.length === 1 ? '1 event' : `${sorted.length} events`}`;
+        html += `<button type="button" class="agenda-month-date" data-agenda-month-pick="${ds.getTime()}" aria-label="${esc(dayLabel)}"${phoneMonth ? ` aria-pressed="${pickActive ? 'true' : 'false'}"` : ''}>${day.getDate()}</button>`;
         html += '<div class="agenda-month-events">';
         if (phoneMonth) {
-          sorted.forEach((o) => {
+          sorted.slice(0, 6).forEach((o) => {
             const clr = eventAccentColor(o.ev);
-            html += `<span class="agenda-month-dot" style="--agenda-dot:${clr}" title="${esc(occDisplayTitle(o))}"></span>`;
+            html += `<span class="agenda-month-dot" style="--agenda-dot:${clr}" aria-hidden="true"></span>`;
           });
         } else {
           show.forEach((o) => {
@@ -1214,8 +1244,8 @@
             );
           });
         }
-        if (extra) {
-          const aria = `Show all events for ${day.toLocaleDateString()}`;
+        if (extra && !phoneMonth) {
+          const aria = `Show all events for ${formatLongDate(day)}`;
           html += (
             `<button type="button" class="agenda-month-more-btn" data-agenda-goto-day="${ds.getTime()}" aria-label="${esc(aria)}">+${extra} more</button>`
           );
@@ -1268,6 +1298,9 @@
 
     const phone = isAgendaPhoneLayout();
     rootEl.classList.toggle('agenda-root--phone', phone);
+    const focused = document.activeElement;
+    const searchHadFocus = !!(focused && focused.id === 'agenda-search' && rootEl.contains(focused));
+    const searchCaret = searchHadFocus ? [focused.selectionStart, focused.selectionEnd] : null;
     const header = phone ? renderPhoneHeader(range) : renderDesktopHeader(range);
     rootEl.innerHTML = (
       header
@@ -1328,6 +1361,23 @@
     rootEl.querySelector('#agenda-phone-export')?.addEventListener('click', () => {
       closePhoneMenu();
       exportAgendaToIcs();
+    });
+    rootEl.querySelectorAll('[data-agenda-month-pick]').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        const t = Number(btn.getAttribute('data-agenda-month-pick'));
+        if (!Number.isFinite(t)) return;
+        ev.stopPropagation();
+        if (isAgendaPhoneLayout()) {
+          state.monthPickDay = t;
+          render();
+          rootEl.querySelector(`[data-agenda-month-pick="${t}"]`)?.focus({ preventScroll: true });
+          return;
+        }
+        state.anchor = new Date(t);
+        state.view = 'day';
+        try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
+        render();
+      });
     });
     rootEl.querySelectorAll('[data-agenda-month-day]').forEach((cell) => {
       cell.addEventListener('click', (ev) => {
@@ -1392,6 +1442,13 @@
     } else {
       closePhoneMenu();
     }
+    if (searchHadFocus) {
+      const again = rootEl.querySelector('#agenda-search');
+      if (again) {
+        again.focus({ preventScroll: true });
+        try { again.setSelectionRange(searchCaret[0], searchCaret[1]); } catch (e) { /* ignore */ }
+      }
+    }
   }
 
   function addMonthsAnchor(d, n) {
@@ -1437,6 +1494,17 @@
     });
   }
 
+  function repeatStatusText(kind) {
+    const map = {
+      daily: 'Repeats every day.',
+      weekly: 'Repeats every week.',
+      biweekly: 'Repeats every 2 weeks.',
+      monthly: 'Repeats every month on the same date (the last day in shorter months).',
+      yearly: 'Repeats every year on the same date.',
+    };
+    return map[kind] || '';
+  }
+
   function fillRecurrenceEditor(content) {
     const R = global.NotesAgendaRecurrence;
     const rrule = (content && content.rrule) || '';
@@ -1456,10 +1524,12 @@
     if (adv) adv.hidden = !showAdv;
     if (raw) raw.textContent = showAdv ? p.raw : '';
     if (status) {
-      if (p.kind === 'weekly') status.textContent = 'Repeats every week.';
-      else if (p.kind === 'biweekly') status.textContent = 'Repeats every 2 weeks.';
-      else if (p.kind === 'advanced') status.textContent = 'Imported/custom rule — preserved unless you choose a pattern above.';
-      else status.textContent = '';
+      if (p.kind === 'advanced') {
+        const shown = typeof R.describeRule === 'function' ? R.describeRule(rrule, new Date(content.start)).supported : true;
+        status.textContent = shown
+          ? 'Imported/custom rule — preserved unless you choose a pattern above.'
+          : 'Imported rule that this app cannot show in full: only the first date appears in the calendar. The rule is preserved unless you choose a pattern above.';
+      } else status.textContent = repeatStatusText(p.kind);
     }
     if (notice) notice.hidden = !String(rrule || '').trim();
     if (exNote) {
@@ -1494,10 +1564,8 @@
     const adv = document.getElementById('agenda-edit-rrule-advanced');
     if (!sel || !status) return;
     const kind = sel.value;
-    if (kind === 'weekly') status.textContent = 'Repeats every week.';
-    else if (kind === 'biweekly') status.textContent = 'Repeats every 2 weeks.';
-    else if (kind === 'advanced') status.textContent = 'Custom rule kept from import.';
-    else status.textContent = '';
+    if (kind === 'advanced') status.textContent = 'Custom rule kept from import.';
+    else status.textContent = repeatStatusText(kind);
     if (adv) adv.hidden = kind !== 'advanced';
   }
 
@@ -1542,13 +1610,15 @@
 
   let detailContext = { id: '', occurrenceMs: 0 };
 
-  function closeDetailCard() {
+  function closeDetailCard(opts) {
     const backdrop = document.getElementById('agenda-detail-backdrop');
     const card = document.getElementById('agenda-detail-card');
+    const wasOpen = !!(card && !card.hidden);
     if (backdrop) backdrop.hidden = true;
     if (card) card.hidden = true;
     document.body.classList.remove('agenda-detail-open');
     detailContext = { id: '', occurrenceMs: 0 };
+    if (wasOpen && !(opts && opts.keepFocusTarget)) focusEditorReturnTarget();
   }
 
   function findOccurrenceForDetail(ev, occurrenceMs) {
@@ -1563,6 +1633,36 @@
     }) || null;
   }
 
+  function detailWhenText(start, end, allDay) {
+    if (!start || !end) return '';
+    if (allDay) {
+      const last = addDays(startOfDay(end), end.getTime() > startOfDay(end).getTime() ? 0 : -1);
+      const first = startOfDay(start);
+      if (last.getTime() <= first.getTime()) return `${formatDayTitle(first)} · All day`;
+      return `${formatDayTitle(first)} – ${formatDayTitle(last)} · All day`;
+    }
+    if (startOfDay(start).getTime() === startOfDay(end).getTime()) {
+      return `${formatDayTitle(start)} · ${formatTime(start)} – ${formatTime(end)}`;
+    }
+    return `${formatDayTitle(start)} ${formatTime(start)} – ${formatDayTitle(end)} ${formatTime(end)}`;
+  }
+
+  function repeatSummary(ev, occ) {
+    const rrule = String((ev && ev.rrule) || '').trim();
+    if (!rrule) return '';
+    if (occ && occ.partial) return 'Repeats with a rule this app cannot show in full. Only the first date is shown.';
+    const R = global.NotesAgendaRecurrence;
+    const kind = R ? R.parseAgendaRrule(rrule).kind : '';
+    const labels = {
+      daily: 'Repeats every day',
+      weekly: 'Repeats every week',
+      biweekly: 'Repeats every 2 weeks',
+      monthly: 'Repeats every month',
+      yearly: 'Repeats every year',
+    };
+    return labels[kind] || 'Repeats (imported rule)';
+  }
+
   function openDetailCard(id, occurrenceMs) {
     const ev = (listAgendaEvents() || []).find((e) => e.id === id);
     if (!ev) return;
@@ -1571,32 +1671,66 @@
     const end = occ ? occ.end : parseInstant(ev.end);
     const titleEl = document.getElementById('agenda-detail-title');
     const when = document.getElementById('agenda-detail-when');
+    const repeat = document.getElementById('agenda-detail-repeat');
     const loc = document.getElementById('agenda-detail-location');
+    const join = document.getElementById('agenda-detail-join');
     const notes = document.getElementById('agenda-detail-notes');
     const backdrop = document.getElementById('agenda-detail-backdrop');
     const card = document.getElementById('agenda-detail-card');
     const displayTitle = occ ? occDisplayTitle(occ) : (ev.title || 'Event');
     const allDay = occ ? (occ.displayAllDay ?? !!occ.ev.all_day) : !!ev.all_day;
-    if (titleEl) titleEl.textContent = displayTitle;
-    if (when) {
-      when.textContent = allDay
-        ? 'All day'
-        : `${formatTime(start)} – ${formatTime(end)}`;
+    if (titleEl) titleEl.textContent = displayTitle || 'Untitled';
+    if (when) when.textContent = detailWhenText(start, end, allDay);
+    const repeatText = repeatSummary(ev, occ);
+    if (repeat) {
+      repeat.hidden = !repeatText;
+      repeat.textContent = repeatText;
     }
-    const locText = String(ev.location || '').trim();
+    const locText = String((occ && occ.displayLocation != null ? occ.displayLocation : ev.location) || '').trim();
     if (loc) {
       loc.hidden = !locText;
       loc.textContent = locText;
     }
-    const noteText = String(ev.notes || '').trim();
+    const noteText = String((occ && occ.displayNotes != null ? occ.displayNotes : ev.notes) || '').trim();
     if (notes) {
       notes.hidden = !noteText;
       notes.textContent = noteText;
+    }
+    const Ics = global.NotesAgendaIcs;
+    const link = Ics
+      ? (Ics.sanitizeHttpsUrl(ev.webcall_url || '') || Ics.extractHttpsFromText(noteText))
+      : '';
+    if (join) {
+      join.hidden = !link;
+      join.innerHTML = link
+        ? `<a class="btn primary sm" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Join meeting</a>`
+        : '';
     }
     detailContext = { id, occurrenceMs: occurrenceMs || 0 };
     if (backdrop) backdrop.hidden = false;
     if (card) card.hidden = false;
     document.body.classList.add('agenda-detail-open');
+    document.getElementById('agenda-detail-edit')?.focus({ preventScroll: true });
+  }
+
+  /** Keep Tab inside an open Agenda dialog. */
+  function trapDialogTab(ev, dialog) {
+    if (ev.key !== 'Tab' || !dialog || dialog.hidden) return;
+    const items = [...dialog.querySelectorAll('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => !el.disabled && !el.hidden && el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (ev.shiftKey && document.activeElement === first) {
+      ev.preventDefault();
+      last.focus();
+    } else if (!ev.shiftKey && document.activeElement === last) {
+      ev.preventDefault();
+      first.focus();
+    } else if (!dialog.contains(document.activeElement)) {
+      ev.preventDefault();
+      first.focus();
+    }
   }
 
   function beginEditFromClick(id, occurrenceMs) {
@@ -1625,7 +1759,7 @@
 
   function continueEditFromDetail() {
     const { id, occurrenceMs } = detailContext;
-    closeDetailCard();
+    closeDetailCard({ keepFocusTarget: true });
     if (!id) return;
     const ev = (listAgendaEvents() || []).find((e) => e.id === id);
     const Occ = global.NotesAgendaOccurrence;
@@ -1792,6 +1926,8 @@
       notice.textContent = seriesNotice.text;
     }
     if (recur) recur.hidden = isOcc;
+    const colors = document.querySelector('#agenda-editor .agenda-editor-colors');
+    if (colors) colors.hidden = isOcc;
     if (del) del.textContent = isOcc ? 'Delete occurrence' : 'Delete';
     if (heading) heading.textContent = isOcc ? 'Edit occurrence' : 'Event';
   }
@@ -1845,6 +1981,19 @@
       const dur = masterE.getTime() - masterS.getTime();
       s = overlay && overlay.start ? (parseInstant(overlay.start) || seriesStart) : seriesStart;
       e = overlay && overlay.end ? (parseInstant(overlay.end) || new Date(s.getTime() + dur)) : new Date(s.getTime() + dur);
+    }
+    if (!id && !(options.draftStart instanceof Date)) {
+      // Start on the day being viewed (today when it is on screen), at the next full hour.
+      const range = rangeForView();
+      const now = new Date();
+      const todayVisible = now >= range.start && now < range.end;
+      if (!todayVisible) {
+        const day = state.view === 'month'
+          ? new Date(state.monthPickDay || state.anchor)
+          : range.start;
+        s = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 9, 0, 0, 0);
+        e = new Date(s.getTime() + 3600000);
+      }
     }
     if (!id && options.draftStart instanceof Date) {
       s = options.draftStart;
@@ -1909,7 +2058,8 @@
     }
 
     document.getElementById('agenda-edit-delete')?.toggleAttribute('hidden', !state.selectedId);
-    state.editorColor = eventAccentColor({ id: state.selectedId || 'new', color: content.color });
+    const savedColor = String(content.color || '').trim().toLowerCase();
+    state.editorColor = EVENT_COLORS.includes(savedColor) ? savedColor : '';
     renderColorSwatches(state.editorColor);
     applyEditorScopeUi(scope, content.rrule || '');
 
@@ -1944,7 +2094,7 @@
     return {
       type: 'agenda_event',
       version: 1,
-      title: 'Team sync',
+      title: '',
       location: '',
       notes: '',
       webcall_url: '',
@@ -2000,6 +2150,8 @@
 
   function handleEscapeKey(ev) {
     if (!ev || ev.key !== 'Escape') return false;
+    const confirmDialog = document.getElementById('confirm-dialog');
+    if (confirmDialog && !confirmDialog.hidden) return false; // the confirm dialog handles its own Escape
     if (document.body.classList.contains('agenda-phone-menu-open')) {
       ev.preventDefault();
       ev.stopPropagation();
@@ -2171,21 +2323,62 @@
   function renderColorSwatches(selected) {
     const wrap = document.getElementById('agenda-edit-colors');
     if (!wrap) return;
-    wrap.innerHTML = EVENT_COLORS.map(
-      (c) => `<button type="button" class="agenda-color-swatch${selected === c ? ' is-selected' : ''}" data-agenda-color="${esc(c)}" style="--swatch:${esc(c)}" aria-label="Event color"></button>`,
-    ).join('');
-    wrap.querySelectorAll('[data-agenda-color]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        state.editorColor = btn.getAttribute('data-agenda-color') || '';
-        renderColorSwatches(state.editorColor);
+    // Set here, not in the template: tests/test_round27_ui.js forbids the literal in app.html.
+    wrap.setAttribute('role', 'radiogroup');
+    const current = String(selected || '');
+    const options = [{ value: '', name: 'Automatic' }]
+      .concat(EVENT_COLORS.map((c, i) => ({ value: c, name: EVENT_COLOR_NAMES[i] || c })));
+    wrap.innerHTML = options.map((o) => {
+      const on = current === o.value;
+      const style = o.value ? ` style="--swatch:${esc(o.value)}"` : '';
+      return (
+        `<button type="button" role="radio" aria-checked="${on ? 'true' : 'false'}" tabindex="${on ? '0' : '-1'}"`
+        + ` class="agenda-color-swatch${o.value ? '' : ' is-auto'}${on ? ' is-selected' : ''}"`
+        + ` data-agenda-color="${esc(o.value)}"${style} aria-label="${esc(o.name)}" title="${esc(o.name)}"></button>`
+      );
+    }).join('');
+    const buttons = [...wrap.querySelectorAll('[data-agenda-color]')];
+    const choose = (btn, focus) => {
+      state.editorColor = btn.getAttribute('data-agenda-color') || '';
+      renderColorSwatches(state.editorColor);
+      if (focus) wrap.querySelector('[aria-checked="true"]')?.focus();
+    };
+    buttons.forEach((btn, i) => {
+      btn.addEventListener('click', () => choose(btn, true));
+      btn.addEventListener('keydown', (ev) => {
+        const step = (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') ? 1
+          : (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') ? -1 : 0;
+        if (!step) return;
+        ev.preventDefault();
+        choose(buttons[(i + step + buttons.length) % buttons.length], true);
       });
     });
+  }
+
+  function confirmAgendaDelete(isOccurrence) {
+    const message = isOccurrence
+      ? 'Delete this occurrence? The other dates in the series stay.'
+      : 'Delete this event? This cannot be undone.';
+    if (typeof global.notesAgendaConfirm === 'function') {
+      return Promise.resolve(global.notesAgendaConfirm(message, {
+        title: isOccurrence ? 'Delete occurrence' : 'Delete event',
+        confirmLabel: 'Delete',
+        danger: true,
+      })).then((ok) => !!ok);
+    }
+    return Promise.resolve(typeof window === 'undefined' || window.confirm(message));
   }
 
   function deleteEditor() {
     const S = getStore();
     if (!state.selectedId || !S || typeof S.upsertAgendaEvent !== 'function') return;
-    if (typeof window !== 'undefined' && !window.confirm('Delete this event? This cannot be undone.')) return;
+    const isOccurrence = state.editorScope === 'occurrence' && state.editorOccurrenceStartMs > 0;
+    confirmAgendaDelete(isOccurrence).then((ok) => { if (ok) deleteEditorConfirmed(); });
+  }
+
+  function deleteEditorConfirmed() {
+    const S = getStore();
+    if (!state.selectedId || !S || typeof S.upsertAgendaEvent !== 'function') return;
     const Occ = global.NotesAgendaOccurrence;
     if (
       state.editorScope === 'occurrence'
@@ -2238,9 +2431,12 @@
     document.getElementById('agenda-edit-cancel')?.addEventListener('click', closeEditor);
     document.getElementById('agenda-edit-save')?.addEventListener('click', saveEditor);
     document.getElementById('agenda-edit-delete')?.addEventListener('click', deleteEditor);
-    document.getElementById('agenda-detail-close')?.addEventListener('click', closeDetailCard);
+    document.getElementById('agenda-detail-close')?.addEventListener('click', () => closeDetailCard());
+    document.getElementById('agenda-detail-card')?.addEventListener('keydown', (ev) => {
+      trapDialogTab(ev, document.getElementById('agenda-detail-card'));
+    });
     document.getElementById('agenda-detail-edit')?.addEventListener('click', continueEditFromDetail);
-    document.getElementById('agenda-detail-backdrop')?.addEventListener('click', closeDetailCard);
+    document.getElementById('agenda-detail-backdrop')?.addEventListener('click', () => closeDetailCard());
     document.getElementById('agenda-editor-backdrop')?.addEventListener('click', closeEditor);
     document.addEventListener('keydown', handleEscapeKey, true);
     const ad = document.getElementById('agenda-edit-allday');
@@ -2314,6 +2510,16 @@
       else state.view = defaultAgendaView();
     } catch (err) { /* ignore */ }
     state.monthPickDay = startOfDay(new Date()).getTime();
+    if (typeof global.matchMedia === 'function') {
+      const mq = global.matchMedia('(max-width: 768px)');
+      const onLayoutChange = () => {
+        const pane = document.getElementById('agenda-pane');
+        if (pane && !pane.hidden) render();
+        else syncAgendaFab();
+      };
+      if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onLayoutChange);
+      else if (typeof mq.addListener === 'function') mq.addListener(onLayoutChange);
+    }
     render();
   }
 
@@ -2335,6 +2541,9 @@
     closeEditor,
     closeScopeChooser,
     _layoutDayColumns: layoutDayColumns,
+    expandEventOccurrences,
+    rangeForView: () => rangeForView(),
+    _state: state,
   };
   global.__notesCloseAgendaCalendarSettings = closeCalendarSettingsPanel;
 }(typeof window !== 'undefined' ? window : globalThis));

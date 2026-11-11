@@ -1,5 +1,13 @@
 # Release notes
 
+## Unreleased
+
+- **Agenda (phone layout, list view, repeat options, interactions — #345–#348 plus review fixes):**
+  - Phone header with previous/next, Today and an overflow menu; month dots with a day list; **List** view grouped by day, with multi-day events under every day they cover.
+  - Repeat patterns: daily, weekly, every 2 weeks, monthly, yearly. Imported weekly `BYDAY` lists and monthly nth-weekday rules (`2TU`, `-1FR`) are shown correctly; rules the app cannot expand show their first date only and say so.
+  - **Date fixes:** repeating events keep their local time across clock changes; the month grid no longer repeats a day in the week the clocks go back; monthly on the 31st and yearly on 29 February clip per period instead of drifting; all-day series repeat; long-running daily series stay visible.
+  - Event detail card (date, repeat, location, **Join meeting**), named colour picker with an automatic default, in-app delete confirmation, empty title for new events starting on the day in view.
+  - Search keeps focus while typing; Agenda dates use one day-first format.
 ## v0.65.52 (Vienna)
 
 - **Ops #334:** After any server `notes.db` restore, operators can revoke all live sessions (`deploy/revoke-all-sessions-after-restore.{sh,py}`) so pre-restore cookies cannot authenticate; runbook in `deploy/PRODUCTION.md`.

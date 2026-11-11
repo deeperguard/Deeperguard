@@ -214,5 +214,18 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertIn("agenda interactions ok", proc.stdout)
 
 
+    def test_agenda_dates_dst_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_agenda_dates_dst.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("agenda dates dst ok", proc.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
