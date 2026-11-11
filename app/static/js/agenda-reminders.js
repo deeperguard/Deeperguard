@@ -34,6 +34,8 @@
 
   const ALLOWED_UPLOAD_KEYS = new Set(['id', 'fire_at', 'channel', 'local_time_label']);
 
+  const PRO_RULE_COPY = 'Event reminders are included with Pro.';
+
   const GENERIC_PUSH_TITLE = 'Deeperguard';
   const genericBody = (localTimeLabel) => (
     localTimeLabel
@@ -43,6 +45,20 @@
 
   /** null = not asked yet. */
   let serverChannels = null;
+
+  function isPlanRequiredError(err) {
+    return !!(err && err.code === 'plan_required');
+  }
+
+  function hasAgendaRemindersEntitlement() {
+    const S = global.NotesStore;
+    const account = (S && typeof S.cachedAccount === 'function' && S.cachedAccount()) || {};
+    const feats = account.plan_features;
+    if (feats && Object.prototype.hasOwnProperty.call(feats, 'agenda_reminders')) {
+      return !!feats.agenda_reminders;
+    }
+    return String(account.plan || 'free').toLowerCase() === 'pro';
+  }
 
   function pad2(n) {
     return String(n).padStart(2, '0');
@@ -279,6 +295,7 @@
   async function syncEventReminders(eventId, eventLike) {
     const S = global.NotesStore;
     if (!S || typeof S.api !== 'function' || !eventId) return;
+    if (!hasAgendaRemindersEntitlement()) return;
     const row = storedEvent(eventId) || eventLike;
     if (!row) return;
     try {
@@ -296,6 +313,7 @@
         S.upsertAgendaEvent(eventId, { ...content, scheduled_reminder_ids: next });
       }
     } catch (err) {
+      if (isPlanRequiredError(err)) throw err;
       queueEvent(eventId);
       throw err;
     }
@@ -305,12 +323,14 @@
   async function cancelEventReminders(eventId, row) {
     const S = global.NotesStore;
     if (!S || typeof S.api !== 'function' || !eventId) return;
+    if (!hasAgendaRemindersEntitlement()) return;
     const ids = (row?.scheduled_reminder_ids || []).map((x) => x && x.id).filter(Boolean);
     dropQueuedEvent(eventId);
     if (!ids.length) return;
     try {
       await postSync([], ids);
     } catch (err) {
+      if (isPlanRequiredError(err)) throw err;
       queueDeletes(ids);
       throw err;
     }
@@ -324,6 +344,7 @@
     flushing = (async () => {
       const S = global.NotesStore;
       if (!S || typeof S.api !== 'function') return;
+      if (!hasAgendaRemindersEntitlement()) return;
       if (typeof S.isUnlocked === 'function' && !S.isUnlocked()) return;
       const p = loadPending();
       if (p.deletes.length) {
@@ -337,7 +358,10 @@
         }
         await syncEventReminders(eventId);
       }
-    })().catch(() => { /* still offline: stays queued */ }).finally(() => { flushing = null; });
+    })().catch((err) => {
+      if (isPlanRequiredError(err)) savePending({ events: [], deletes: [] });
+      /* still offline: stays queued */
+    }).finally(() => { flushing = null; });
     return flushing;
   }
 
@@ -345,6 +369,7 @@
   async function topUp(force) {
     const S = global.NotesStore;
     if (!S || typeof S.listAgendaEvents !== 'function') return;
+    if (!hasAgendaRemindersEntitlement()) return;
     if (typeof S.isUnlocked === 'function' && !S.isUnlocked()) return;
     let last = 0;
     try { last = Number(localStorage.getItem(TOP_UP_KEY)) || 0; } catch (e) { /* ignore */ }
@@ -364,6 +389,7 @@
 
   /** Called when the Agenda tab is shown. */
   function onAgendaShown() {
+    if (!hasAgendaRemindersEntitlement()) return;
     try { localStorage.removeItem(LEGACY_BINDINGS_KEY); } catch (e) { /* ignore */ }
     flushPending().then(() => topUp(false)).catch(() => {});
   }
@@ -388,6 +414,7 @@
   }
 
   function onChannelChange() {
+    if (!hasAgendaRemindersEntitlement()) return;
     saveChannelPrefs();
     // Existing events pick up the new channel choice.
     topUp(true).catch(() => {});
@@ -395,6 +422,7 @@
 
   /** Text for the editor when ticking an offset would do nothing. Empty when reminders can be sent. */
   function editorHint() {
+    if (!hasAgendaRemindersEntitlement()) return '';
     if (!channelPrefs().length) {
       return 'Reminders are off. Turn on email or push reminders in Calendar settings to receive them.';
     }
@@ -410,6 +438,7 @@
   }
 
   async function refreshPushConfigUi() {
+    if (!hasAgendaRemindersEntitlement()) return;
     const btn = document.getElementById('agenda-reminder-enable-push');
     const status = document.getElementById('agenda-reminder-push-status');
     const pushEl = document.getElementById('agenda-reminder-push');
@@ -495,6 +524,9 @@
   global.NotesAgendaReminders = {
     OFFSET_PRESETS,
     PLAN_HORIZON_DAYS,
+    PRO_RULE_COPY,
+    isPlanRequiredError,
+    hasAgendaRemindersEntitlement,
     GENERIC_PUSH_TITLE,
     genericBody,
     normalizeOffsets,

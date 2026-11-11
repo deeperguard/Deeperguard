@@ -32,6 +32,7 @@ const Occ = global.NotesAgendaOccurrence;
 const appHtml = read('app/templates/app.html');
 const plansPy = read('app/plans.py');
 const appPy = read('app/app.py');
+const appJs = read('app/static/js/app.js');
 const cron = read('app/agenda_reminder_cron.py');
 const remindersJs = read('app/static/js/agenda-reminders.js');
 const agendaJs = read('app/static/js/agenda.js');
@@ -50,6 +51,16 @@ assert.ok(plansPy.includes('Email before calendar events. The server sees remind
 assert.ok(plansPy.includes('never event titles, locations or notes.'));
 assert.ok(/agenda_reminders[\s\S]*?"plans": \{PLAN_PRO\}/.test(plansPy), 'agenda_reminders is Pro-only');
 assert.ok(!plansPy.includes('Push or email before calendar events'));
+assert.strictEqual(R.PRO_RULE_COPY, 'Event reminders are included with Pro.');
+assert.ok(appHtml.includes('data-plan-feature="agenda_reminders"'));
+assert.ok(appHtml.includes('data-plan-lock-hint="Event reminders are included with Pro."'));
+assert.ok(appHtml.includes('agenda-reminders-when-entitled'));
+assert.ok(appHtml.includes('agenda-reminders-privacy-hint'));
+assert.ok(appJs.includes('agenda-reminders-privacy-hint'));
+assert.ok(appJs.includes('planLockHint'));
+assert.ok(remindersJs.includes('isPlanRequiredError'));
+assert.ok(remindersJs.includes('hasAgendaRemindersEntitlement'));
+assert.ok(agendaJs.includes('PRO_RULE_COPY'));
 assert.ok(remindersJs.includes("Push isn't available yet."));
 assert.ok(!remindersJs.includes('VAPID keys required'));
 // One expander: reminders must not carry their own repeat-rule stepping.
@@ -136,9 +147,25 @@ const days = (rows) => fireTimes(rows).map((d) => `${d.getMonth() + 1}/${d.getDa
   // No channel switched on: nothing is planned, and the editor says why.
   assert.deepStrictEqual(R.computePlannedReminders(weekly, [], now), []);
   storage.clear();
+  global.NotesStore = {
+    cachedAccount: () => ({ plan: 'pro', plan_features: { agenda_reminders: true } }),
+  };
   assert.ok(R.editorHint().includes('Calendar settings'));
   storage.set('deeperguard-prefs', JSON.stringify({ agenda_reminder_email: true }));
   assert.strictEqual(R.editorHint(), '');
+  global.NotesStore = {
+    cachedAccount: () => ({ plan: 'free', plan_features: { agenda_reminders: false } }),
+  };
+  assert.strictEqual(R.editorHint(), '');
+  let freeApiCalls = 0;
+  global.NotesStore = {
+    cachedAccount: () => ({ plan: 'free', plan_features: { agenda_reminders: false } }),
+    api: () => { freeApiCalls += 1; return { ok: true }; },
+    isUnlocked: () => true,
+    listAgendaEvents: () => [weekly],
+  };
+  await R.syncEventReminders('ev-1');
+  assert.strictEqual(freeApiCalls, 0, 'Free plan does not call reminder sync');
 
   // All-day events remind relative to local midnight and carry no clock label.
   const allDay = base({ all_day: true, start: new Date(2026, 10, 14).toISOString(), end: new Date(2026, 10, 15).toISOString(), reminders: ['d1'] });
@@ -153,6 +180,7 @@ const days = (rows) => fireTimes(rows).map((d) => `${d.getMonth() + 1}/${d.getDa
   let upserts = 0;
   global.NotesStore = {
     isUnlocked: () => true,
+    cachedAccount: () => ({ plan: 'pro', plan_features: { agenda_reminders: true } }),
     listAgendaEvents: () => (stored ? [stored] : []),
     upsertAgendaEvent: (id, content) => { upserts += 1; stored = { ...content, id }; },
     api: async (url, opts) => {
@@ -195,6 +223,22 @@ const days = (rows) => fireTimes(rows).map((d) => `${d.getMonth() + 1}/${d.getDa
     await R.flushPending();
     assert.deepStrictEqual(calls[calls.length - 1].delete_ids.sort(), doomed.scheduled_reminder_ids.map((x) => x.id).sort());
     assert.ok(!storage.has('agenda_reminder_pending_v1'));
+
+    const planErr = new Error('Pro plan required');
+    planErr.code = 'plan_required';
+    planErr.status = 403;
+    stored = { ...weekly, id: 'ev-1', reminders: ['at_start'] };
+    global.NotesStore = {
+      isUnlocked: () => true,
+      cachedAccount: () => ({ plan: 'pro', plan_features: { agenda_reminders: true } }),
+      listAgendaEvents: () => (stored ? [stored] : []),
+      upsertAgendaEvent: (id, content) => { stored = { ...content, id }; },
+      api: async () => { throw planErr; },
+    };
+    storage.delete('agenda_reminder_pending_v1');
+    await assert.rejects(R.syncEventReminders('ev-1'), (e) => R.isPlanRequiredError(e));
+    assert.ok(!storage.has('agenda_reminder_pending_v1'), 'plan_required is not queued for retry');
+    assert.ok(R.isPlanRequiredError(planErr));
   } finally {
     Date.now = realNow;
   }

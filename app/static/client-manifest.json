@@ -38,10 +38,10 @@
       "url": "/static/js/agenda-recurrence.d23577f5a4de6c07.js"
     },
     "js/agenda-reminders.js": {
-      "bytes": 19634,
-      "sha256": "4f977c0f5090c170e33c8e661ab3d248792ae5ff2f0174bdd656bc3940243639",
-      "sri": "sha384-n1CZAnGWjMW39UuSgMm0kcmN0MgRExvxCw6fnNdF7Q6BLWz350ka89MyB/xa1NmJ",
-      "url": "/static/js/agenda-reminders.4f977c0f5090c170.js"
+      "bytes": 20878,
+      "sha256": "ea85c0e906828f4717b3fa00011cff5a6a42feb8316017e12ff9703a9217fa8b",
+      "sri": "sha384-gCdbXvQV9gZkOHtOXsFxWwDMlMBW4WpvXO+GWK4LKvo4wJ5iwSA+s8CN7tso9jSx",
+      "url": "/static/js/agenda-reminders.ea85c0e906828f47.js"
     },
     "js/agenda-scroll-core.js": {
       "bytes": 5525,
@@ -50,10 +50,10 @@
       "url": "/static/js/agenda-scroll-core.60ded1689cd204c0.js"
     },
     "js/agenda.js": {
-      "bytes": 102190,
-      "sha256": "79406cfb878e87e46c82d3bdcb295686aad369b613b3902cb519d8279372295b",
-      "sri": "sha384-dKAf0TPrx1/SuSUFB1ND+AS+59H9n6npor4AuxhoF62gPWY9KphMdz4cMlHClF6T",
-      "url": "/static/js/agenda.79406cfb878e87e4.js"
+      "bytes": 102653,
+      "sha256": "810f7e0527bc1c112592a61acee4bf347d81cacfb3bc65e68d0441a6f880878b",
+      "sri": "sha384-CPAFmaWOtr4Q7fMA0JPpOXy3YY3k2G90HgHcV2vja62YZI7CuZibTRkIegZRPG8c",
+      "url": "/static/js/agenda.810f7e0527bc1c11.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -62,10 +62,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 962457,
-      "sha256": "84cdb1fcdbe55dbe541cdd00df815d5d607beb91187de567de70967cdd92e523",
-      "sri": "sha384-3lh2TdxoQxhiu32I9RnO4eVkAzVHm98Ncnh2rTW1gY0OBHosh63UeMreYUBRGqZe",
-      "url": "/static/js/app.84cdb1fcdbe55dbe.js"
+      "bytes": 962867,
+      "sha256": "a5fb5c369d4a127c3b047c0c0c075208c0719ed2eec981e6dbeeccace80fcdf3",
+      "sri": "sha384-wCJHx+oMOWcJ+0MZ41iwKvA1lxygKh9T9vzNhqg2qWKXuYLVdTtOt6y0c0RKce+1",
+      "url": "/static/js/app.a5fb5c369d4a127c.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -411,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "ba001a524abdd4718843108f00b1dea19041977a785e6da8ceb839b233e2aa13",
+  "manifest_sha256": "48d2fdbf203dbcc6c12886b74913f70286ad753031cd1f6814c047271f437cf0",
   "version": 1
 }

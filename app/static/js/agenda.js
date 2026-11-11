@@ -2123,7 +2123,9 @@
 
   function readReminderOffsetsFromEditor() {
     const R = global.NotesAgendaReminders;
-    if (!R) return [];
+    if (!R || (typeof R.hasAgendaRemindersEntitlement === 'function' && !R.hasAgendaRemindersEntitlement())) {
+      return [];
+    }
     const picked = [];
     document.querySelectorAll('[data-agenda-reminder-offset]:checked').forEach((el) => {
       const k = el.getAttribute('data-agenda-reminder-offset');
@@ -2146,7 +2148,14 @@
   function syncRemindersAfterSave(id) {
     const R = global.NotesAgendaReminders;
     if (!R || !id) return;
-    R.syncEventReminders(id).catch(() => {
+    if (typeof R.hasAgendaRemindersEntitlement === 'function' && !R.hasAgendaRemindersEntitlement()) return;
+    R.syncEventReminders(id).catch((err) => {
+      if (typeof R.isPlanRequiredError === 'function' && R.isPlanRequiredError(err)) {
+        if (typeof global.notesAgendaToast === 'function') {
+          global.notesAgendaToast(R.PRO_RULE_COPY, true);
+        }
+        return;
+      }
       if (typeof global.notesAgendaToast === 'function') {
         global.notesAgendaToast('Reminders could not be updated. They will be retried when you are back online.', true);
       }
