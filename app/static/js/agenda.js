@@ -176,9 +176,10 @@
       } else if (freqWeekly) {
         curStart = addDays(curStart, 7 * interval);
       } else if (freqMonthly) {
-        const next = new Date(curStart);
-        next.setMonth(next.getMonth() + interval);
-        curStart = next;
+        const Rr = global.NotesAgendaRecurrence;
+        curStart = Rr && typeof Rr.addMonthsClipped === 'function'
+          ? Rr.addMonthsClipped(curStart, interval)
+          : (() => { const next = new Date(curStart); next.setMonth(next.getMonth() + interval); return next; })();
       } else if (freqYearly) {
         const next = new Date(curStart);
         next.setFullYear(next.getFullYear() + interval);

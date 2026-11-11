@@ -40,6 +40,7 @@
     }
     const interval = parseInterval(rule);
     if (/^FREQ=DAILY/.test(rule)) {
+      if (interval !== 1) return { kind: 'advanced', raw: original, until, interval };
       return { kind: 'daily', raw: original, until, interval };
     }
     if (/^FREQ=WEEKLY/.test(rule)) {
@@ -48,9 +49,11 @@
       return { kind: 'advanced', raw: original, until, interval };
     }
     if (/^FREQ=MONTHLY/.test(rule)) {
+      if (interval !== 1) return { kind: 'advanced', raw: original, until, interval };
       return { kind: 'monthly', raw: original, until, interval };
     }
     if (/^FREQ=YEARLY/.test(rule)) {
+      if (interval !== 1) return { kind: 'advanced', raw: original, until, interval };
       return { kind: 'yearly', raw: original, until, interval };
     }
     return { kind: 'advanced', raw: original, until, interval: 1 };
@@ -86,6 +89,17 @@
     return out;
   }
 
+  /** Advance by calendar months; clip day-of-month to target month's last day (31 Jan → 28/29 Feb). */
+  function addMonthsClipped(d, delta) {
+    const day = d.getDate();
+    const next = new Date(d.getTime());
+    next.setDate(1);
+    next.setMonth(next.getMonth() + delta);
+    const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    next.setDate(Math.min(day, lastDay));
+    return next;
+  }
+
   function toDateInputValue(d) {
     if (!d || Number.isNaN(d.getTime())) return '';
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -97,5 +111,6 @@
     formatUntilUtc,
     parseUntil,
     toDateInputValue,
+    addMonthsClipped,
   };
 }(typeof window !== 'undefined' ? window : globalThis));
