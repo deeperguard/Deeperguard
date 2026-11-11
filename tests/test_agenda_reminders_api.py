@@ -81,7 +81,7 @@ class AgendaRemindersApiTest(unittest.TestCase):
             sess["csrf"] = token
         return {"X-CSRF-Token": str(token)}
 
-    def _login_free_user(self, verified: bool = True) -> int:
+    def _login_free_user(self, verified: bool = True, plan: str = "pro") -> int:
         from srp_auth import generate_verifier_hex, new_srp_salt_hex
 
         email = f"rem-{uuid.uuid4().hex[:8]}@e2e.invalid"
@@ -137,6 +137,8 @@ class AgendaRemindersApiTest(unittest.TestCase):
         db.connection().execute(
             "UPDATE users SET email_verified = ? WHERE id = ?", (1 if verified else 0, uid)
         )
+        if plan != "free":
+            db.update_user_plan(uid, plan)
         db.connection().commit()
         return uid
 
@@ -167,6 +169,14 @@ class AgendaRemindersApiTest(unittest.TestCase):
                 (uid,),
             ).fetchall()
         ]
+
+    def test_free_plan_blocks_agenda_reminder_sync(self):
+        self._login_free_user(plan="free")
+        res = self._sync([self._row()])
+        self.assertEqual(res.status_code, 403, res.get_json())
+        body = res.get_json()
+        self.assertEqual(body.get("code"), "plan_required")
+        self.assertEqual(body.get("required_plan"), "pro")
 
     def test_push_rows_are_skipped_while_push_is_not_configured(self):
         uid = self._login_free_user()

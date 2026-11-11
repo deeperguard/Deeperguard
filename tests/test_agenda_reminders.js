@@ -30,6 +30,7 @@ for (const f of ['agenda-ics', 'agenda-recurrence', 'agenda-occurrence', 'agenda
 const R = global.NotesAgendaReminders;
 const Occ = global.NotesAgendaOccurrence;
 const appHtml = read('app/templates/app.html');
+const plansPy = read('app/plans.py');
 const appPy = read('app/app.py');
 const cron = read('app/agenda_reminder_cron.py');
 const remindersJs = read('app/static/js/agenda-reminders.js');
@@ -39,6 +40,16 @@ assert.ok(R);
 assert.ok(appHtml.includes("asset_script('js/agenda-reminders.js')"));
 assert.ok(appHtml.includes('agenda-reminder-channel-settings'));
 assert.ok(appHtml.includes('id="agenda-edit-reminders-hint"'));
+assert.ok(appHtml.includes(
+  'Offsets stay in your vault. The server sees reminder times and channel, never event titles, locations or notes.',
+));
+assert.ok(appHtml.includes(
+  'Notifications never include event titles, locations or notes. Email reminders include only the event time.',
+));
+assert.ok(plansPy.includes('Email before calendar events. The server sees reminder times and channel,'));
+assert.ok(plansPy.includes('never event titles, locations or notes.'));
+assert.ok(/agenda_reminders[\s\S]*?"plans": \{PLAN_PRO\}/.test(plansPy), 'agenda_reminders is Pro-only');
+assert.ok(!plansPy.includes('Push or email before calendar events'));
 assert.ok(remindersJs.includes("Push isn't available yet."));
 assert.ok(!remindersJs.includes('VAPID keys required'));
 // One expander: reminders must not carry their own repeat-rule stepping.

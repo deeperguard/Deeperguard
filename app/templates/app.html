@@ -1456,7 +1456,7 @@
           <p class="settings-hint muted agenda-cal-action-sub">Downloads a standard .ics file with your events. The file is <strong>not encrypted</strong> — titles, times, and notes are readable plaintext. Keep it private and share carefully.</p>
           <fieldset class="agenda-reminder-channel-settings">
             <legend class="muted">Event reminders</legend>
-            <p class="settings-hint">Notifications use generic text only — no event title or location is sent to the server.</p>
+            <p class="settings-hint">Notifications never include event titles, locations or notes. Email reminders include only the event time.</p>
             <label class="settings-row checkbox"><span>Email reminders</span><input type="checkbox" id="agenda-reminder-email" data-agenda-reminder-channel="email"></label>
             <p id="agenda-reminder-email-status" class="settings-hint muted" hidden></p>
             <label class="settings-row checkbox"><span>Push reminders</span><input type="checkbox" id="agenda-reminder-push" data-agenda-reminder-channel="push"></label>
@@ -2503,7 +2503,7 @@
       </fieldset>
       <fieldset class="agenda-editor-reminders" id="agenda-edit-reminders-wrap">
         <legend class="muted">Reminders</legend>
-        <p class="settings-hint">Offsets are stored in your vault. The server only sees fire times and delivery channel.</p>
+        <p class="settings-hint">Offsets stay in your vault. The server sees reminder times and channel, never event titles, locations or notes.</p>
         <p id="agenda-edit-reminders-hint" class="settings-hint agenda-reminders-hint" role="status" hidden></p>
         <div class="agenda-reminder-offset-grid">
           <label class="settings-row checkbox"><span>At start</span><input type="checkbox" data-agenda-reminder-offset="at_start"></label>
