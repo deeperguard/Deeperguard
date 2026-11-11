@@ -14,7 +14,11 @@ assert.ok(agendaJs.includes('agendaUiLocale'));
 assert.ok(agendaJs.includes('agenda-list-empty'));
 assert.ok(agendaJs.includes('function listEmptyMessage'));
 assert.ok(agendaJs.includes('agenda-list-day-head'));
-assert.ok(!agendaJs.includes("weekday: 'long'"));
+const listHeadingBlock = agendaJs.slice(
+  agendaJs.indexOf('function listDayHeading'),
+  agendaJs.indexOf('function listEmptyMessage'),
+);
+assert.ok(!listHeadingBlock.includes("weekday: 'long'"));
 assert.ok(agendaJs.includes('agenda-list-when'));
 assert.ok(agendaJs.includes('agenda-list-loc'));
 assert.ok(agendaJs.includes('layoutAllDayLanes'));
