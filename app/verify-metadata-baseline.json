@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "baseline_version": 2,
-  "release_tag": "v0.65.55",
-  "generated_at": "2026-11-10T19:17:09Z",
+  "baseline_version": 3,
+  "release_tag": "v0.65.56",
+  "generated_at": "2026-11-11T08:07:29Z",
   "generation": "scripts/regenerate-verify-metadata-baseline.py (static code anchors)",
   "evidence_legend": {
     "static_source_analysis": "Static source analysis — required strings found in shipped client JS; not a live Network capture.",
@@ -140,6 +140,20 @@
       "evidence_type": "static_source_analysis",
       "measurement": "checked",
       "measurement_note": "Checked against client source (static analysis). Confirm in DevTools."
+    },
+    {
+      "id": "agenda-recurrence",
+      "label": "Agenda recurrence",
+      "scope": "browser",
+      "summary": "Repeat events weekly or every 2 weeks, with an optional end date.",
+      "feature_note": "Edit just this occurrence or the entire series. Your one-off changes are kept when you edit the series.",
+      "typical_requests": [],
+      "sends_nothing_typical": false,
+      "note_plaintext_on_wire": false,
+      "password_or_vault_key_on_wire": false,
+      "evidence_type": "static_source_analysis",
+      "measurement": "checked",
+      "measurement_note": "Checked against client source (static analysis). Confirm in DevTools. No agenda-specific /api routes; persisted events sync as encrypted vault data when dirty."
     }
   ]
 }

@@ -5,7 +5,7 @@ date: 2026-11-08
 description: "Lots of apps say your notes are encrypted. Zero-knowledge means something stricter: the service never holds the key. Here's what that means in plain words, what it protects, and what it can't."
 cover_image: /static/blog/zero-knowledge-notes-basics.jpg
 cover_alt: "Illustration of a laptop showing a notebook page behind a glowing teal padlock, with a gold key resting beside the laptop while small scrambled blocks travel along a dotted line up to a cloud, on a soft cream and blue background"
-draft: true
+draft: false
 ---
 
 “Your notes are encrypted” leaves an important question unanswered: **who holds the key?** Encryption alone does not prevent a service from reading your notes if it can use the decryption key.
@@ -20,7 +20,6 @@ Your notes are encrypted on your device before they leave it. The key comes from
 
 - **Encryption happens in your browser.** Notes are encrypted with AES-GCM 256 before they sync. Synced note contents reach our servers as ciphertext; this does not mean account details and sync metadata are encrypted in the same way.
 - **Signing in uses SRP.** This protocol proves you know your password without sending the password to the server.
-- **Text in images is read on your device.** Text extraction happens locally, not on our servers.
 - **The code is source available for review.** Our [verify page](/verify) explains how to check what is running.
 
 ## The honest exception: Ask AI
