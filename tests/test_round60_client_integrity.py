@@ -189,6 +189,30 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("agenda mobile a11y ok", proc.stdout)
 
+    def test_agenda_recurrence_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_agenda_recurrence.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("test_agenda_recurrence ok", proc.stdout)
+
+    def test_agenda_interactions_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_agenda_interactions.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("agenda interactions ok", proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
