@@ -346,6 +346,8 @@
     }
     document.body.classList.add('agenda-calendar-settings-open');
     if (calBtn) calBtn.setAttribute('aria-expanded', 'true');
+    // Channel availability can change (email confirmed, push enabled): refresh on every open.
+    global.NotesAgendaReminders?.wireAgendaReminderSettings?.();
     const closeBtn = document.getElementById('agenda-calendar-settings-close');
     if (closeBtn) closeBtn.focus();
   }
@@ -2038,6 +2040,7 @@
     if (scope === 'series') fillRecurrenceEditor(content);
     else fillRecurrenceEditor({ ...content, rrule: content.rrule || '' });
     fillReminderOffsetsEditor(content);
+    updateReminderHint();
     if (webcallEl) webcallEl.value = content.webcall_url || '';
     if (notesEl) {
       notesEl.value = (scope === 'occurrence' && overlay && overlay.notes != null)
@@ -2139,15 +2142,24 @@
     });
   }
 
-  function syncRemindersAfterSave(id, body) {
+  /** Bring server reminders in line with the stored event (series or single-occurrence change). */
+  function syncRemindersAfterSave(id) {
     const R = global.NotesAgendaReminders;
-    if (!R || state.editorScope !== 'series' || !id) return;
-    const payload = { ...body, id, reminders: readReminderOffsetsFromEditor() };
-    R.syncEventReminders(id, payload).catch(() => {
-      if (typeof global.toast === 'function') {
-        toast('Reminders will sync when you are back online', true);
+    if (!R || !id) return;
+    R.syncEventReminders(id).catch(() => {
+      if (typeof global.notesAgendaToast === 'function') {
+        global.notesAgendaToast('Reminders could not be updated. They will be retried when you are back online.', true);
       }
     });
+  }
+
+  function updateReminderHint() {
+    const hint = document.getElementById('agenda-edit-reminders-hint');
+    const R = global.NotesAgendaReminders;
+    if (!hint || !R || typeof R.editorHint !== 'function') return;
+    const text = R.editorHint();
+    hint.hidden = !text;
+    hint.textContent = text;
   }
 
   function flattenEventsForIcsExport(rows) {
@@ -2304,7 +2316,7 @@
         ics_occurrence_overrides: overrides,
         ical_uid: icalUid,
       });
-      syncRemindersAfterSave(id, base);
+      syncRemindersAfterSave(id);
       closeEditor();
       render();
       return;
@@ -2359,7 +2371,7 @@
       reminders: readReminderOffsetsFromEditor(),
     };
     S.upsertAgendaEvent(id, nextBody);
-    syncRemindersAfterSave(id, nextBody);
+    syncRemindersAfterSave(id);
     closeEditor();
     render();
   }
@@ -2444,6 +2456,7 @@
         ics_exdates: exdates,
         ics_occurrence_overrides: overrides,
       });
+      syncRemindersAfterSave(state.selectedId);
       closeEditor();
       render();
       return;
@@ -2569,11 +2582,13 @@
       else if (typeof mq.addListener === 'function') mq.addListener(onLayoutChange);
     }
     render();
+    global.NotesAgendaReminders?.onAgendaShown?.();
   }
 
   function onTabShown() {
     try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
     render();
+    global.NotesAgendaReminders?.onAgendaShown?.();
   }
 
   global.NotesAgenda = {

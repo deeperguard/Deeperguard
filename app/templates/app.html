@@ -1458,6 +1458,7 @@
             <legend class="muted">Event reminders</legend>
             <p class="settings-hint">Notifications use generic text only — no event title or location is sent to the server.</p>
             <label class="settings-row checkbox"><span>Email reminders</span><input type="checkbox" id="agenda-reminder-email" data-agenda-reminder-channel="email"></label>
+            <p id="agenda-reminder-email-status" class="settings-hint muted" hidden></p>
             <label class="settings-row checkbox"><span>Push reminders</span><input type="checkbox" id="agenda-reminder-push" data-agenda-reminder-channel="push"></label>
             <button type="button" class="btn primary sm" id="agenda-reminder-enable-push" hidden>Enable push on this device</button>
             <p id="agenda-reminder-push-status" class="settings-hint muted" hidden></p>
@@ -2503,6 +2504,7 @@
       <fieldset class="agenda-editor-reminders" id="agenda-edit-reminders-wrap">
         <legend class="muted">Reminders</legend>
         <p class="settings-hint">Offsets are stored in your vault. The server only sees fire times and delivery channel.</p>
+        <p id="agenda-edit-reminders-hint" class="settings-hint agenda-reminders-hint" role="status" hidden></p>
         <div class="agenda-reminder-offset-grid">
           <label class="settings-row checkbox"><span>At start</span><input type="checkbox" data-agenda-reminder-offset="at_start"></label>
           <label class="settings-row checkbox"><span>5 min before</span><input type="checkbox" data-agenda-reminder-offset="m5"></label>
