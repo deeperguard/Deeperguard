@@ -407,6 +407,22 @@ const NotesStore = (() => {
     try { sessionRevokedHandler(err); } catch (e) { /* ignore */ }
   }
 
+  function vaultKdfEncryptFloor() {
+    try {
+      const floor = Number(localStorage.getItem('notes_vault_kdf_floor'));
+      if (floor >= 2) return 2;
+    } catch (err) {
+      /* ignore */
+    }
+    return 1;
+  }
+
+  function applyVaultKdfFloor(version) {
+    const ver = Number(version) || 1;
+    const floor = vaultKdfEncryptFloor();
+    return ver < floor ? floor : ver;
+  }
+
   function vaultKdfVersionFromAccount(account) {
     const value = Number(account?.vault_kdf_version);
     if (value >= 2) return 2;
@@ -683,6 +699,7 @@ const NotesStore = (() => {
     const next = Number(version) >= 2 ? 2 : 1;
     try {
       localStorage.setItem('notes_vault_kdf_version', String(next));
+      if (next >= 2) localStorage.setItem('notes_vault_kdf_floor', '2');
       if (next >= 2) localStorage.removeItem('notes_vault_kdf_upgrade_pending');
     } catch (err) {
       /* ignore */
@@ -779,7 +796,7 @@ const NotesStore = (() => {
     emitUnlockProgress('kdf', 2, 3);
     state.cryptoKey = derived.key || derived;
     state.saltEncoding = derived.encoding || 'hex';
-    state.kdfVersion = derived.version || kdfVersion;
+    state.kdfVersion = applyVaultKdfFloor(derived.version || kdfVersion);
     state.altCryptoKey = null;
     if (state.kdfProbeMixed) {
       const altVersion = kdfVersion >= 2 ? 1 : 2;

@@ -15,13 +15,9 @@ const signIn = srpJs.slice(
   srpJs.indexOf('async function passwordSignIn'),
   srpJs.indexOf('async function register'),
 );
-assert.ok(signIn.includes('legacy_login') || signIn.includes('legacyLogin'));
+assert.ok(signIn.includes('legacyLoginRemoved'));
 assert.ok(signIn.includes('incorrectPassword'));
-assert.ok(
-  signIn.indexOf('legacyLogin') < signIn.indexOf("postJson('/api/auth/login'")
-  || signIn.indexOf("code === 'legacy_login'") < signIn.indexOf("postJson('/api/auth/login'"),
-  'legacy login must be gated before posting password',
-);
+assert.ok(!signIn.includes("postJson('/api/auth/login'"), 'no legacy password login POST');
 assert.ok(srpJs.includes('Round 73: never POST plaintext password for SRP accounts'));
 
 assert.ok(authPages.includes('showSecureSignInReload'));
@@ -32,10 +28,12 @@ assert.ok(!authPages.includes("postJson('/api/auth/repair-login', { email, passw
 
 const totpSlice = appJs.slice(
   appJs.indexOf("getElementById('btn-confirm-disable-totp')"),
-  appJs.indexOf("getElementById('btn-confirm-disable-totp')") + 1400,
+  appJs.indexOf("getElementById('btn-confirm-disable-totp')") + 2400,
 );
-assert.ok(totpSlice.includes("authMethod !== 'srp'"));
-assert.ok(totpSlice.includes('body.password = password'));
+assert.ok(totpSlice.includes("authMethod === 'srp'"));
+assert.ok(totpSlice.includes('srpTotpDisableRotationToken'));
+assert.ok(totpSlice.includes('rotation_token'));
+assert.ok(fs.existsSync(path.join(root, 'app/static/js/account-totp-auth.js')));
 
 // --- behavioral harness mirroring passwordSignIn control flow --------------
 async function passwordSignInHarness({ login, repairLogin, postJson, email, password }) {
@@ -53,10 +51,10 @@ async function passwordSignInHarness({ login, repairLogin, postJson, email, pass
     } catch (repairErr) {
       if (repairErr?.status === 429) throw repairErr;
       if (repairErr?.legacyLogin || repairErr?.code === 'legacy_login') {
-        result = await postJson('/api/auth/login', {
-          email: normalizedEmail,
-          password,
-        });
+        const err = new Error('legacy removed');
+        err.status = 410;
+        err.legacyLoginRemoved = true;
+        throw err;
       } else {
         const err = new Error('Email or password is incorrect');
         err.status = repairErr?.status || 401;
@@ -114,32 +112,29 @@ async function passwordSignInHarness({ login, repairLogin, postJson, email, pass
   assert.strictEqual(ok.auth_method, 'srp');
   assert.strictEqual(bodies.length, 0);
 
-  // Legacy Argon2: server returns legacy_login → password only on /api/auth/login.
+  // Legacy login hint: client refuses; no /api/auth/login password POST (H1).
   bodies.length = 0;
-  const legacy = await passwordSignInHarness({
-    login: async () => {
-      const err = new Error('invalid credentials');
-      err.status = 401;
-      throw err;
-    },
-    repairLogin: async () => {
-      const err = new Error('invalid credentials');
-      err.status = 401;
-      err.code = 'legacy_login';
-      err.legacyLogin = true;
-      throw err;
-    },
-    postJson: async (url, body) => {
-      bodies.push({ url, body: { ...body } });
-      assert.strictEqual(url, '/api/auth/login');
-      return { auth_method: 'argon2', csrf: 'y' };
-    },
-    email: 'legacy@example.com',
-    password: 'legacy-pass-word',
-  });
-  assert.strictEqual(legacy.auth_method, 'argon2');
-  assert.strictEqual(bodies.length, 1);
-  assert.strictEqual(bodies[0].body.password, 'legacy-pass-word');
+  await assert.rejects(
+    () => passwordSignInHarness({
+      login: async () => {
+        const err = new Error('invalid credentials');
+        err.status = 401;
+        throw err;
+      },
+      repairLogin: async () => {
+        const err = new Error('invalid credentials');
+        err.status = 401;
+        err.code = 'legacy_login';
+        err.legacyLogin = true;
+        throw err;
+      },
+      postJson,
+      email: 'legacy@example.com',
+      password: 'legacy-pass-word',
+    }),
+    (err) => err && err.status === 410,
+  );
+  assert.strictEqual(bodies.length, 0);
 
   // Missing NotesSrpAuth path: signInWithPassword shape (static already covers throw).
   assert.ok(authPages.includes('if (!window.NotesSrpAuth?.passwordSignIn)'));

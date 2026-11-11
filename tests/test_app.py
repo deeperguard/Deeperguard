@@ -255,6 +255,13 @@ class NotesAppTests(unittest.TestCase):
             headers={"X-CSRF-Token": csrf},
         )
 
+    def _srp_rotation_token(self, email: str, password: str, csrf: str | None = None) -> str:
+        csrf = csrf or self._csrf()
+        salt_hex, _ = self._srp_verifier(email, password, kdf_version=2)
+        prove = self._account_password_prove_srp(email, password, salt_hex, csrf)
+        self.assertEqual(prove.status_code, 200, prove.get_json())
+        return str(prove.get_json()["rotation_token"])
+
     def _account_password_commit_srp(self, email: str, new_password: str, rotation_token: str, csrf: str):
         new_salt, new_verifier = self._srp_verifier(email, new_password, kdf_version=2)
         return self.client.post(
@@ -3389,15 +3396,24 @@ class NotesAppTests(unittest.TestCase):
         self.assertNotEqual(str(user["srp_verifier"]), old_verifier)
 
     def test_account_unlock_requires_session(self):
+        import secrets
+        import time
+
+        import db as notes_db
+        from config import SESSION_SECONDS
+
         self._register_legacy_user("unlock@home.local", "unlock-secure-pass")
+        uid = int(notes_db.get_user_by_email("unlock@home.local")["id"])
         with self.client.session_transaction() as sess:
             sess.clear()
         unauth = self.client.post("/api/account/unlock", json={})
         self.assertEqual(unauth.status_code, 401)
-        self.client.post(
-            "/api/auth/login",
-            json={"email": "unlock@home.local", "password": "unlock-secure-pass"},
-        )
+        with self.client.session_transaction() as sess:
+            sess["uid"] = uid
+            sess["authed"] = True
+            sess["exp"] = time.time() + SESSION_SECONDS
+            sess["csrf"] = secrets.token_urlsafe(32)
+            sess["totp_ok"] = True
         csrf = self._csrf()
         missing = self.client.post(
             "/api/account/unlock",
@@ -3472,23 +3488,14 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(pull.get_json().get("total_undeleted"), 0)
 
     def test_legacy_password_login_rate_limited(self):
-        os.environ["NOTES_AUTH_RATE_LIMIT"] = "2"
         self._register_legacy_user("legacy-rate@home.local", "legacy-secure-pass")
-        import auth_rate_limit as arl
-
-        arl._hits.clear()
-        for _ in range(2):
+        for _ in range(3):
             res = self.client.post(
                 "/api/auth/login",
                 json={"email": "legacy-rate@home.local", "password": "wrong"},
             )
-            self.assertEqual(res.status_code, 401)
-        blocked = self.client.post(
-            "/api/auth/login",
-            json={"email": "legacy-rate@home.local", "password": "wrong"},
-        )
-        self.assertEqual(blocked.status_code, 429)
-        self.assertEqual(blocked.get_json()["error"], "too many attempts")
+            self.assertEqual(res.status_code, 410, res.get_json())
+            self.assertEqual(res.get_json().get("code"), "legacy_login_removed")
 
     def test_srp_verify_rate_limited(self):
         os.environ["NOTES_AUTH_RATE_LIMIT"] = "2"
@@ -3850,13 +3857,24 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn("zero-knowledge", res.get_json().get("error", ""))
 
     def test_srp_upgrade_from_legacy_login(self):
+        import secrets
+        import time
+
+        import db as notes_db
+        from config import SESSION_SECONDS
+
         email = "upgrade@home.local"
         password = "upgrade-secure-pass"
         self._register_legacy_user(email, password)
+        uid = int(notes_db.get_user_by_email(email)["id"])
         with self.client.session_transaction() as sess:
             sess.clear()
-        login = self.client.post("/api/auth/login", json={"email": email, "password": password})
-        self.assertEqual(login.status_code, 200)
+        with self.client.session_transaction() as sess:
+            sess["uid"] = uid
+            sess["authed"] = True
+            sess["exp"] = time.time() + SESSION_SECONDS
+            sess["csrf"] = secrets.token_urlsafe(32)
+            sess["totp_ok"] = True
         salt_hex, verifier = self._srp_verifier(email, password)
         csrf = self._csrf()
         hijack = self.client.post(
@@ -3886,7 +3904,6 @@ class NotesAppTests(unittest.TestCase):
         email = "upgrade-rate@home.local"
         password = "upgrade-rate-secure-pass"
         self._register_legacy_user(email, password)
-        self.client.post("/api/auth/login", json={"email": email, "password": password})
         csrf = self._csrf()
         salt_hex, verifier = self._srp_verifier(email, password)
         for _ in range(2):
@@ -3938,12 +3955,8 @@ class NotesAppTests(unittest.TestCase):
                 "srp_verifier": new_verifier,
             },
         )
-        self.assertEqual(resync.status_code, 200)
-        body = resync.get_json()
-        self.assertTrue(body.get("srp_resynced"))
-        self.assertEqual(body.get("email"), email)
-        login = self._srp_login(email, password, new_salt)
-        self.assertEqual(login.status_code, 200)
+        self.assertEqual(resync.status_code, 410, resync.get_json())
+        self.assertEqual(resync.get_json().get("code"), "legacy_resync_removed")
 
     def test_vault_recovery_realigns_login(self):
         import db as notes_db
@@ -4434,26 +4447,11 @@ class NotesAppTests(unittest.TestCase):
             self.assertIsNone(passkey_host_error())
 
     def test_totp_disable_srp_without_password(self):
-        import hashlib
         from unittest.mock import patch
-
-        from srp_auth import G, N
 
         email = "totp-srp@home.local"
         password = "totp-srp-secure-pass"
-        salt_hex = hashlib.sha256(b"totp-salt").hexdigest()
-        hash1 = hashlib.sha256(f"{email}:{password}".encode()).hexdigest()
-        while hash1.startswith("0"):
-            hash1 = hash1[1:]
-        x_hash = hashlib.sha256(f"{salt_hex}{hash1}".upper().encode()).hexdigest()
-        while x_hash.startswith("0"):
-            x_hash = x_hash[1:]
-        x = int(x_hash, 16) % N
-        verifier = format(pow(G, x, N), "x")
-        self.client.post(
-            "/api/auth/srp/register",
-            json={"email": email, "srp_salt": salt_hex, "srp_verifier": verifier},
-        )
+        self._register_user(email, password)
         csrf = self._csrf()
         self.client.post("/api/totp/setup", headers={"X-CSRF-Token": csrf})
         with patch("app.totp_mod.verify_and_step", return_value=(True, 1)):
@@ -4463,9 +4461,16 @@ class NotesAppTests(unittest.TestCase):
                 headers={"X-CSRF-Token": csrf},
             )
             csrf = self._csrf()
-            disabled = self.client.post(
+            without_token = self.client.post(
                 "/api/totp/disable",
                 json={"code": "123456"},
+                headers={"X-CSRF-Token": csrf},
+            )
+            self.assertEqual(without_token.status_code, 401, without_token.get_json())
+            rotation_token = self._srp_rotation_token(email, password, csrf)
+            disabled = self.client.post(
+                "/api/totp/disable",
+                json={"code": "123456", "rotation_token": rotation_token},
                 headers={"X-CSRF-Token": csrf},
             )
         self.assertEqual(disabled.status_code, 200)
@@ -4497,6 +4502,13 @@ class NotesAppTests(unittest.TestCase):
 
         csrf = self._csrf()
         blocked = self.client.post("/api/totp/setup", headers={"X-CSRF-Token": csrf})
+        self.assertEqual(blocked.status_code, 401, blocked.get_json())
+        rotation_token = self._srp_rotation_token("2fa-lock@home.local", "another-secure-pass", csrf)
+        blocked = self.client.post(
+            "/api/totp/setup",
+            json={"rotation_token": rotation_token},
+            headers={"X-CSRF-Token": csrf},
+        )
         self.assertEqual(blocked.status_code, 403)
         self.assertIn("code required", blocked.get_json().get("error", ""))
 
@@ -4520,16 +4532,18 @@ class NotesAppTests(unittest.TestCase):
             )
         uid = notes_db.get_user_by_email("2fa-rotate@home.local")["id"]
         csrf = self._csrf()
+        rotation_token = self._srp_rotation_token("2fa-rotate@home.local", "another-secure-pass", csrf)
         with patch("app.totp_mod.verify_and_step", return_value=(False, 0)):
             denied = self.client.post(
                 "/api/totp/setup",
-                json={"code": "000000"},
+                json={"code": "000000", "rotation_token": rotation_token},
                 headers={"X-CSRF-Token": csrf},
             )
+        rotation_token = self._srp_rotation_token("2fa-rotate@home.local", "another-secure-pass", csrf)
         with patch("app.totp_mod.verify_and_step", side_effect=lambda secret, code, last_step=0: ((True, 1) if code == "654321" else (False, 0))):
             allowed = self.client.post(
                 "/api/totp/setup",
-                json={"code": "654321"},
+                json={"code": "654321", "rotation_token": rotation_token},
                 headers={"X-CSRF-Token": csrf},
             )
         self.assertEqual(denied.status_code, 400)
@@ -4572,16 +4586,24 @@ class NotesAppTests(unittest.TestCase):
                 headers={"X-CSRF-Token": csrf},
             )
         csrf = self._csrf()
+        missing_token = self.client.post(
+            "/api/totp/disable",
+            json={"code": "123456"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(missing_token.status_code, 401, missing_token.get_json())
+        rotation_token = self._srp_rotation_token("2fa-off@home.local", "another-secure-pass", csrf)
         missing = self.client.post(
             "/api/totp/disable",
-            json={},
+            json={"rotation_token": rotation_token},
             headers={"X-CSRF-Token": csrf},
         )
         self.assertEqual(missing.status_code, 403)
+        rotation_token = self._srp_rotation_token("2fa-off@home.local", "another-secure-pass", csrf)
         with patch("app.totp_mod.verify_and_step", return_value=(False, 0)):
             bad = self.client.post(
                 "/api/totp/disable",
-                json={"code": "000000"},
+                json={"code": "000000", "rotation_token": rotation_token},
                 headers={"X-CSRF-Token": csrf},
             )
         self.assertEqual(bad.status_code, 400)

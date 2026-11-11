@@ -646,10 +646,49 @@ def verify_credentials(email: str, password: str) -> tuple[int | None, bool]:
     return int(user["id"]), totp_required
 
 
-def verify_totp_for_current_user(code: str) -> bool:
-    from auth_rate_limit import allow as rate_allow
+def check_totp_code(user, code: str) -> tuple[str, int | None]:
+    """Shared TOTP verify for setup/enable/disable/session verify.
+
+    Returns (status, step) where status is ok | invalid | limited | locked.
+    """
+    from auth_rate_limit import allow as rate_allow, is_locked, record, set_lock
     from db import set_user_totp_last_step, user_totp_last_step
     from totp import verify_and_step
+
+    uid = int(user["id"])
+    lock_key = f"totp-changes-locked:{uid}"
+    if is_locked(lock_key):
+        return "locked", None
+    # Per-user attempt limit (IP-independent, combined across TOTP routes).
+    if not rate_allow(f"totp-user:{uid}", limit=10, window=300.0):
+        return "limited", None
+    secret = str(user["totp_secret"] or "").strip()
+    if not secret:
+        return "invalid", None
+    last_step = user_totp_last_step(user)
+    ok, step = verify_and_step(secret, code, last_step=last_step)
+    if not ok:
+        fails = record(f"totp-fail:{uid}", window=3600.0)
+        if fails >= 30:
+            set_lock(lock_key, 3600.0)
+            try:
+                from signin_alert import send_signin_alert
+
+                send_signin_alert(
+                    uid,
+                    device_key_value=f"totp-fail:{uid}",
+                    country="Unknown",
+                    browser_os="2FA change attempts",
+                    async_send=True,
+                )
+            except Exception:
+                pass
+        return "invalid", None
+    return "ok", step
+
+
+def verify_totp_for_current_user(code: str) -> bool:
+    from db import set_user_totp_last_step
 
     uid = current_user_id()
     if not uid:
@@ -657,12 +696,12 @@ def verify_totp_for_current_user(code: str) -> bool:
     user = get_user_by_id(uid)
     if not user or not user["totp_secret"]:
         return False
-    # Per-user attempt limit (IP-independent).
-    if not rate_allow(f"totp-user:{uid}", limit=10, window=300.0):
+    status, step = check_totp_code(user, code)
+    if status == "limited":
         return False
-    last_step = user_totp_last_step(user)
-    ok, step = verify_and_step(str(user["totp_secret"]), code, last_step=last_step)
-    if not ok:
+    if status == "locked":
+        return False
+    if status != "ok":
         return False
     if step:
         set_user_totp_last_step(uid, step)

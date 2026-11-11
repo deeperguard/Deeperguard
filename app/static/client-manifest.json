@@ -1,5 +1,5 @@
 {
-  "asset_count": 67,
+  "asset_count": 68,
   "assets": {
     "css/app.css": {
       "bytes": 276635,
@@ -12,6 +12,12 @@
       "sha256": "7091c52f885cc1af7397cd69edfe04bfc087db1620010c5de0a277a1c2ae3d7f",
       "sri": "sha384-ijBCIiAZpCo6LRgXIXR2nFIrNqSwKg4e4yBek7JSzHm2WPlUzBwkOYA+td8l725y",
       "url": "/static/css/marketing.7091c52f885cc1af.css"
+    },
+    "js/account-totp-auth.js": {
+      "bytes": 3092,
+      "sha256": "f10e061edfdcf40138fb274780caf48977aad90fd6a2d22d09e039afccc325b1",
+      "sri": "sha384-JwiEXz4lAML+wAmC/eZkG/EyX7H+xAf3lFG/yvwfofCH88jgYxTuX4oQSKYOdO8B",
+      "url": "/static/js/account-totp-auth.f10e061edfdcf401.js"
     },
     "js/admin.js": {
       "bytes": 8122,
@@ -56,10 +62,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 962302,
-      "sha256": "7d0f03da4b7793b46f644e3ca9badc591639fa9c94e33cc371d0018418ddb91e",
-      "sri": "sha384-9/VZBDI2nzP4IgFqFUKTrKnEX0ufxRpugeV/sDErs+V2zjW7OArUSAn6wZKQ/958",
-      "url": "/static/js/app.7d0f03da4b7793b4.js"
+      "bytes": 963496,
+      "sha256": "2bb87f0778c4867fc0cad261815a3fa9057df55820bf4a6bad8074927b4a7bfa",
+      "sri": "sha384-KEfcgU9n53EfWWiK31nru8h3ZLTl4ngq1v6/c1pw0m/psYTipgbZIQzBm6Zjl2vq",
+      "url": "/static/js/app.2bb87f0778c4867f.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -254,16 +260,16 @@
       "url": "/static/js/spreadsheet.385167a74e238c1d.js"
     },
     "js/srp-auth.js": {
-      "bytes": 22159,
-      "sha256": "8ab6a259452579c48e55543cbc84406dc05c4443555bbf142b63660a38ad13cd",
-      "sri": "sha384-e+pCnULMdtm70lJ94ek7LFV6UOMNAJV94ujabVpSuY2edui74SWw8KWo8fQDU506",
-      "url": "/static/js/srp-auth.8ab6a259452579c4.js"
+      "bytes": 23795,
+      "sha256": "be8479483c1b6517b56da245c92ba184e75af6abf14ee499950a8ce834229a82",
+      "sri": "sha384-50D1J2yPLxEH3hBdklbsaSgs+l+MbU3t3C6iZLoUKJogaR6530Ic5FrXa6kO020b",
+      "url": "/static/js/srp-auth.be8479483c1b6517.js"
     },
     "js/store.js": {
-      "bytes": 240393,
-      "sha256": "fc722b99e39e7cc7ce89bc909df654213f23d3423677febfb1a81adadf130f7d",
-      "sri": "sha384-ZPSWpn91DiIww7rhiddOuRGtTKfpUHCw8nXlj+URbeTkBj8jL/Pp7Ph1DYbMm/8r",
-      "url": "/static/js/store.fc722b99e39e7cc7.js"
+      "bytes": 240867,
+      "sha256": "d02fb5e8b11b2d48e788160d16076fcaae4945c1048553122d49743bd328f646",
+      "sri": "sha384-jPFK/48AP/FhTRV40n7eXFER9iepkHTdBkBsdP2blv2VzGocTBrinGPMc/PG0EjB",
+      "url": "/static/js/store.d02fb5e8b11b2d48.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -405,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "f87901f11e412fb7b7feceebda0d2111f05d1c4fd0f4cb32eb3a134f0407058b",
+  "manifest_sha256": "71b3e592ff921ee3472164c1c69daee4e8b68f9d841a0c3c34f67ea5acf821f2",
   "version": 1
 }

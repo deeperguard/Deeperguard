@@ -177,6 +177,8 @@
           <li>Find <code>POST /api/auth/srp/verify</code>. Request JSON contains <code>email</code>, client public value <code>A</code>, and proof <code>M1</code>. Response includes server proof <code>M2</code> plus vault metadata such as <code>kdf_salt</code> / <code>vault_kdf_version</code> for local unlock. There is still no password and no AES vault key.</li>
         </ol>
         <p>Related proofs use the same shape: <code>/api/auth/repair-login/challenge</code> + <code>/api/auth/repair-login</code> (<code>A</code>/<code>M1</code> only), and empty-vault unlock via <code>/api/account/unlock/challenge</code> + <code>/api/account/unlock</code>.</p>
+        <h3>Confirm your password is not in the request body</h3>
+        <p>On any sign-in route above, open the request in DevTools and inspect the JSON body. It should contain only <code>email</code>, the client public value <code>A</code>, and proof <code>M1</code> — not a field named <code>password</code>, not your vault unlock password, and not an AES key. The password stretch and SRP math run only in your browser. If you see a password field on a sign-in request, treat that as a bug and report it.</p>
         <figure class="mk-code-block">
           <figcaption class="mk-code-label">Redacted — POST /api/auth/srp/verify request</figcaption>
           <pre class="mk-code" tabindex="0">

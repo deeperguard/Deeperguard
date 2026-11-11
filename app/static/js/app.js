@@ -21818,13 +21818,17 @@
     return String(raw || '').replace(/\D/g, '').slice(0, 6);
   }
 
+  const accountTotpApiErrorMessage = (err) => (
+    window.NotesAccountTotpAuth?.accountTotpApiErrorMessage(err) || String(err?.message || '')
+  );
+
   document.getElementById('btn-setup-totp').addEventListener('click', async () => {
     try {
       const data = await NotesStore.api('/api/totp/setup', { method: 'POST', body: '{}' });
       document.getElementById('totp-qr').src = data.qr;
       document.getElementById('totp-setup').hidden = false;
     } catch (err) {
-      toast(err.message || 'Could not start 2FA setup', true);
+      toast(accountTotpApiErrorMessage(err) || 'Could not start 2FA setup', true);
     }
   });
 
@@ -21837,7 +21841,7 @@
       document.getElementById('totp-setup').hidden = true;
       toast('2FA enabled');
     } catch (err) {
-      toast(err.message || 'Could not enable 2FA', true);
+      toast(accountTotpApiErrorMessage(err) || 'Could not enable 2FA', true);
     }
   });
 
@@ -21865,7 +21869,9 @@
     }
   });
   document.getElementById('btn-confirm-disable-totp').addEventListener('click', async () => {
-    const password = document.getElementById('totp-disable-password').value;
+    const btn = document.getElementById('btn-confirm-disable-totp');
+    const passwordEl = document.getElementById('totp-disable-password');
+    const password = passwordEl?.value || '';
     const codeEl = document.getElementById('totp-disable-code');
     const code = accountTotpCodeDigits(codeEl?.value);
     if (code.length !== 6) {
@@ -21874,14 +21880,41 @@
       return;
     }
     const body = { code };
-    // Round 73: never send plaintext password for SRP accounts (server ignores it anyway).
     const authMethod = String(
       NotesStore.cachedAccount?.()?.auth_method
       || NotesStore.state?.account?.auth_method
       || '',
     );
-    if (password && authMethod !== 'srp') body.password = password;
     try {
+      if (authMethod === 'srp') {
+        const email = String(
+          NotesStore.cachedAccount?.()?.email
+          || NotesStore.state?.account?.email
+          || '',
+        ).trim().toLowerCase();
+        if (!password) {
+          toast('Enter your account password to disable 2FA.', true);
+          passwordEl?.focus();
+          return;
+        }
+        const prove = window.NotesAccountTotpAuth?.srpTotpDisableRotationToken;
+        if (!prove) {
+          toast('Secure sign-in did not load. Reload the page and try again.', true);
+          return;
+        }
+        const tokenResult = await prove({
+          email,
+          password,
+          button: btn,
+          passwordChangeProve: NotesSrpAuth.passwordChangeProve.bind(NotesSrpAuth),
+          onToast: toast,
+          onFocusPassword: () => passwordEl?.focus(),
+        });
+        if (!tokenResult.ok) return;
+        body.rotation_token = tokenResult.rotation_token;
+      } else if (password) {
+        body.password = password;
+      }
       const data = await NotesStore.api('/api/totp/disable', {
         method: 'POST',
         body: JSON.stringify(body),
@@ -21891,7 +21924,7 @@
       await initSettings();
       toast('2FA disabled');
     } catch (err) {
-      toast(err.message || 'Could not disable 2FA', true);
+      toast(accountTotpApiErrorMessage(err) || err.message || 'Could not disable 2FA', true);
     }
   });
 
