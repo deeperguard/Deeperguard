@@ -2534,6 +2534,129 @@ def api_reminders_upsert():
     return jsonify({"ok": True, **_public_reminder(row)})
 
 
+AGENDA_REMINDER_ALLOWED_KEYS = frozenset({"id", "fire_at", "channel", "local_time_label"})
+AGENDA_PUSH_SUBSCRIPTION_MAX_BYTES = 4096
+
+
+def _agenda_push_configured() -> bool:
+    return bool(
+        os.environ.get("NOTES_VAPID_PUBLIC_KEY", "").strip()
+        and os.environ.get("NOTES_VAPID_PRIVATE_KEY", "").strip()
+    )
+
+
+def _validate_agenda_reminder_payload(item: dict) -> tuple[dict | None, str | None]:
+    if not isinstance(item, dict):
+        return None, "invalid reminder"
+    extra = set(item.keys()) - AGENDA_REMINDER_ALLOWED_KEYS
+    if extra:
+        return None, f"disallowed fields: {', '.join(sorted(extra))}"
+    for banned in ("title", "location", "notes", "item_uuid", "event_id"):
+        if banned in item:
+            return None, "plaintext event fields forbidden"
+    return item, None
+
+
+@app.get("/api/agenda-reminders")
+def api_agenda_reminders_list():
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    user = db.get_user_by_id(uid)
+    blocked = _plan_block(user, "agenda_reminders")
+    if blocked:
+        return blocked
+    rows = db.list_agenda_reminders_public(uid)
+    return jsonify({"ok": True, "reminders": rows})
+
+
+@app.post("/api/agenda-reminders/sync")
+def api_agenda_reminders_sync():
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    user = db.get_user_by_id(uid)
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    blocked = _plan_block(user, "agenda_reminders")
+    if blocked:
+        return blocked
+    ip = auth.client_ip()
+    if not auth_rate_allow(f"agenda-reminders-sync-ip:{ip}", limit=60, window=300.0):
+        return jsonify({"error": "rate limited"}), 429
+    if not auth_rate_allow(f"agenda-reminders-sync-user:{uid}", limit=120, window=300.0):
+        return jsonify({"error": "rate limited"}), 429
+    body = request.get_json(silent=True) or {}
+    raw_reminders = body.get("reminders") or []
+    delete_ids = body.get("delete_ids") or []
+    if not isinstance(raw_reminders, list) or not isinstance(delete_ids, list):
+        return jsonify({"error": "invalid body"}), 400
+    if len(raw_reminders) > 200 or len(delete_ids) > 200:
+        return jsonify({"error": "batch too large"}), 400
+    cleaned: list[dict] = []
+    for item in raw_reminders:
+        valid, err = _validate_agenda_reminder_payload(item)
+        if err:
+            return jsonify({"error": err}), 400
+        cleaned.append(valid)
+    result = db.sync_agenda_reminders(
+        uid,
+        cleaned,
+        delete_ids,
+        allow_push=_agenda_push_configured(),
+        allow_email=email_verify.account_verified(user),
+    )
+    return jsonify({"ok": True, **result})
+
+
+@app.get("/api/agenda-reminders/push-config")
+def api_agenda_push_config():
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    ready = _agenda_push_configured()
+    pub = os.environ.get("NOTES_VAPID_PUBLIC_KEY", "").strip() if ready else ""
+    user = db.get_user_by_id(uid)
+    return jsonify({
+        "ok": True,
+        "vapid_public_key": pub,
+        "push_ready": ready,
+        "email_ready": bool(user and email_verify.account_verified(user)),
+    })
+
+
+@app.post("/api/agenda-reminders/push-subscribe")
+def api_agenda_push_subscribe():
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    user = db.get_user_by_id(uid)
+    blocked = _plan_block(user, "agenda_reminders") if user else None
+    if blocked:
+        return blocked
+    if not _agenda_push_configured():
+        return jsonify({"error": "push not configured", "code": "vapid_missing"}), 503
+    ip = auth.client_ip()
+    if not auth_rate_allow(f"agenda-push-subscribe-ip:{ip}", limit=20, window=300.0):
+        return jsonify({"error": "rate limited"}), 429
+    body = request.get_json(silent=True) or {}
+    endpoint = str(body.get("endpoint") or "").strip()
+    sub = body.get("subscription")
+    if not endpoint or not isinstance(sub, dict) or sub.get("endpoint") != endpoint:
+        return jsonify({"error": "invalid subscription"}), 400
+    from agenda_reminder_cron import push_endpoint_allowed
+    import json as _json
+
+    # The server later POSTs to this URL, so only real browser push services are accepted.
+    if not push_endpoint_allowed(endpoint):
+        return jsonify({"error": "unsupported push service"}), 400
+    encoded = _json.dumps(sub)
+    if len(encoded.encode("utf-8")) > AGENDA_PUSH_SUBSCRIPTION_MAX_BYTES:
+        return jsonify({"error": "invalid subscription"}), 400
+    db.upsert_web_push_subscription(uid, endpoint, encoded)
+    return jsonify({"ok": True})
+
+
 @app.delete("/api/reminders/<item_uuid>")
 def api_reminders_delete(item_uuid: str):
     uid = auth.current_user_id()

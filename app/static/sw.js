@@ -451,3 +451,32 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(cacheFirst(request, isVersioned(url)));
   }
 });
+
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  let payload = { title: 'Deeperguard', body: 'You have an upcoming event', url: '/app' };
+  try {
+    payload = { ...payload, ...event.data.json() };
+  } catch (err) { /* use defaults */ }
+  event.waitUntil(
+    self.registration.showNotification(payload.title || 'Deeperguard', {
+      body: payload.body || 'You have an upcoming event',
+      icon: '/static/icons/icon-192.png',
+      data: { url: payload.url || '/app', reminder_id: payload.reminder_id || '' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/app';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (c.url && 'focus' in c) return c.focus();
+      }
+      if (clients.openWindow) return clients.openWindow(target);
+      return undefined;
+    }),
+  );
+});

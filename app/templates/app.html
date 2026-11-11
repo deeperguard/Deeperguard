@@ -1454,6 +1454,14 @@
           <p class="settings-hint muted agenda-cal-action-sub">Choose a file exported from another calendar.</p>
           <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-export-ics">Export calendar (.ics)</button>
           <p class="settings-hint muted agenda-cal-action-sub">Downloads a standard .ics file with your events. The file is <strong>not encrypted</strong> — titles, times, and notes are readable plaintext. Keep it private and share carefully.</p>
+          <fieldset class="agenda-reminder-channel-settings">
+            <legend class="muted">Event reminders</legend>
+            <p class="settings-hint">Notifications use generic text only — no event title or location is sent to the server.</p>
+            <label class="settings-row checkbox"><span>Email reminders</span><input type="checkbox" id="agenda-reminder-email" data-agenda-reminder-channel="email"></label>
+            <label class="settings-row checkbox"><span>Push reminders</span><input type="checkbox" id="agenda-reminder-push" data-agenda-reminder-channel="push"></label>
+            <button type="button" class="btn primary sm" id="agenda-reminder-enable-push" hidden>Enable push on this device</button>
+            <p id="agenda-reminder-push-status" class="settings-hint muted" hidden></p>
+          </fieldset>
           <button type="button" class="btn ghost sm agenda-calendar-settings-account" id="agenda-open-app-settings">Open app settings…</button>
         </div>
       </aside>
@@ -2492,6 +2500,19 @@
           <input id="agenda-edit-until" type="date" autocomplete="off">
         </label>
       </fieldset>
+      <fieldset class="agenda-editor-reminders" id="agenda-edit-reminders-wrap">
+        <legend class="muted">Reminders</legend>
+        <p class="settings-hint">Offsets are stored in your vault. The server only sees fire times and delivery channel.</p>
+        <div class="agenda-reminder-offset-grid">
+          <label class="settings-row checkbox"><span>At start</span><input type="checkbox" data-agenda-reminder-offset="at_start"></label>
+          <label class="settings-row checkbox"><span>5 min before</span><input type="checkbox" data-agenda-reminder-offset="m5"></label>
+          <label class="settings-row checkbox"><span>10 min before</span><input type="checkbox" data-agenda-reminder-offset="m10"></label>
+          <label class="settings-row checkbox"><span>15 min before</span><input type="checkbox" data-agenda-reminder-offset="m15"></label>
+          <label class="settings-row checkbox"><span>30 min before</span><input type="checkbox" data-agenda-reminder-offset="m30"></label>
+          <label class="settings-row checkbox"><span>1 hour before</span><input type="checkbox" data-agenda-reminder-offset="h1"></label>
+          <label class="settings-row checkbox"><span>1 day before</span><input type="checkbox" data-agenda-reminder-offset="d1"></label>
+        </div>
+      </fieldset>
       <label class="settings-row stacked">Location
         <input id="agenda-edit-location" type="text" maxlength="500" autocomplete="off">
       </label>
@@ -2638,6 +2659,7 @@
   {{ asset_script('js/agenda-recurrence.js') }}
   {{ asset_script('js/agenda-occurrence.js') }}
   {{ asset_script('js/agenda-scroll-core.js') }}
+  {{ asset_script('js/agenda-reminders.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}
   {{ asset_script('js/search.js') }}

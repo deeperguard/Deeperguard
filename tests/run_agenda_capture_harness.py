@@ -193,7 +193,7 @@ def capture(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pr", choices=("a", "b"), default="a")
+    parser.add_argument("--pr", choices=("a", "b", "e"), default="a")
     args = parser.parse_args()
     pr = args.pr
 
@@ -219,7 +219,27 @@ def main() -> int:
             page.wait_for_selector("#agenda-pane", state="attached", timeout=30_000)
             page.wait_for_selector("#agenda-root .agenda-body", state="attached", timeout=30_000)
 
+            if pr == "e":
+                page.evaluate("() => NotesAgendaReminders?.wireAgendaReminderSettings?.()")
+                for theme in ("light", "dark"):
+                    for vp_name, w, h in (("390", 390, 844), ("1280", 1280, 800)):
+                        page.set_viewport_size({"width": w, "height": h})
+                        page.evaluate(DISMISS_CHROME)
+                        page.evaluate(RE_RENDER)
+                        page.evaluate(
+                            "() => document.getElementById('agenda-calendar-settings-btn')?.click()",
+                        )
+                        page.wait_for_timeout(400)
+                        shot = f"agenda-pr-e-{theme}-reminders-{vp_name}x{h}.png"
+                        capture(page, shot, theme)
+                        paths.append(shot)
+                        page.evaluate(
+                            "() => document.getElementById('agenda-calendar-settings-close')?.click()",
+                        )
+                        page.wait_for_timeout(200)
             for theme in ("light", "dark"):
+                if pr == "e":
+                    continue
                 for vp_name, w, h in VIEWPORTS:
                     desktop = w >= 900
                     page.set_viewport_size({"width": w, "height": h})

@@ -369,6 +369,9 @@
       if (typeof window.__notesOpenSettings === 'function') window.__notesOpenSettings();
       else document.getElementById('btn-settings-head')?.click();
     });
+    if (global.NotesAgendaReminders?.wireAgendaReminderSettings) {
+      NotesAgendaReminders.wireAgendaReminderSettings();
+    }
     document.addEventListener('keydown', (ev) => {
       if (ev.key !== 'Escape' || !document.body.classList.contains('agenda-calendar-settings-open')) return;
       closeCalendarSettingsPanel();
@@ -1928,6 +1931,8 @@
     if (recur) recur.hidden = isOcc;
     const colors = document.querySelector('#agenda-editor .agenda-editor-colors');
     if (colors) colors.hidden = isOcc;
+    const rem = document.getElementById('agenda-edit-reminders-wrap');
+    if (rem) rem.hidden = isOcc;
     if (del) del.textContent = isOcc ? 'Delete occurrence' : 'Delete';
     if (heading) heading.textContent = isOcc ? 'Edit occurrence' : 'Event';
   }
@@ -2032,6 +2037,7 @@
     }
     if (scope === 'series') fillRecurrenceEditor(content);
     else fillRecurrenceEditor({ ...content, rrule: content.rrule || '' });
+    fillReminderOffsetsEditor(content);
     if (webcallEl) webcallEl.value = content.webcall_url || '';
     if (notesEl) {
       notesEl.value = (scope === 'occurrence' && overlay && overlay.notes != null)
@@ -2107,7 +2113,41 @@
       ical_uid: '',
       ics_exdates: [],
       ics_occurrence_overrides: {},
+      reminders: [],
+      scheduled_reminder_ids: [],
     };
+  }
+
+  function readReminderOffsetsFromEditor() {
+    const R = global.NotesAgendaReminders;
+    if (!R) return [];
+    const picked = [];
+    document.querySelectorAll('[data-agenda-reminder-offset]:checked').forEach((el) => {
+      const k = el.getAttribute('data-agenda-reminder-offset');
+      if (k) picked.push(k);
+    });
+    return R.normalizeOffsets(picked);
+  }
+
+  function fillReminderOffsetsEditor(content) {
+    const offsets = new Set(
+      (global.NotesAgendaReminders && NotesAgendaReminders.normalizeOffsets(content?.reminders)) || [],
+    );
+    document.querySelectorAll('[data-agenda-reminder-offset]').forEach((el) => {
+      const k = el.getAttribute('data-agenda-reminder-offset');
+      if (el instanceof HTMLInputElement) el.checked = offsets.has(k);
+    });
+  }
+
+  function syncRemindersAfterSave(id, body) {
+    const R = global.NotesAgendaReminders;
+    if (!R || state.editorScope !== 'series' || !id) return;
+    const payload = { ...body, id, reminders: readReminderOffsetsFromEditor() };
+    R.syncEventReminders(id, payload).catch(() => {
+      if (typeof global.toast === 'function') {
+        toast('Reminders will sync when you are back online', true);
+      }
+    });
   }
 
   function flattenEventsForIcsExport(rows) {
@@ -2264,6 +2304,7 @@
         ics_occurrence_overrides: overrides,
         ical_uid: icalUid,
       });
+      syncRemindersAfterSave(id, base);
       closeEditor();
       render();
       return;
@@ -2300,7 +2341,7 @@
       return;
     }
     state.seriesOverrideResetConfirmed = false;
-    S.upsertAgendaEvent(id, {
+    const nextBody = {
       ...base,
       title: nextTitle,
       location: nextLocation,
@@ -2315,7 +2356,10 @@
       ical_uid: icalUid || base.ical_uid || '',
       ics_exdates: preserved.ics_exdates,
       ics_occurrence_overrides: preserved.ics_occurrence_overrides,
-    });
+      reminders: readReminderOffsetsFromEditor(),
+    };
+    S.upsertAgendaEvent(id, nextBody);
+    syncRemindersAfterSave(id, nextBody);
     closeEditor();
     render();
   }
@@ -2405,6 +2449,10 @@
       return;
     }
     if (typeof S.removeAgendaEvent !== 'function') return;
+    const doomed = (listAgendaEvents() || []).find((e) => e.id === state.selectedId);
+    if (global.NotesAgendaReminders && doomed) {
+      NotesAgendaReminders.cancelEventReminders(state.selectedId, doomed).catch(() => {});
+    }
     S.removeAgendaEvent(state.selectedId);
     closeEditor();
     render();
