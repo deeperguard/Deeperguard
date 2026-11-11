@@ -1,5 +1,5 @@
 /**
- * Weekly/biweekly occurrence identity: EXDATE, RECURRENCE-ID keys, override overlay.
+ * Occurrence identity for repeating events: EXDATE, RECURRENCE-ID keys, override overlay.
  */
 (function (global) {
   const Ics = () => global.NotesAgendaIcs;
@@ -88,7 +88,7 @@
     const R = global.NotesAgendaRecurrence;
     if (!R || typeof R.parseAgendaRrule !== 'function') return false;
     const p = R.parseAgendaRrule(String(rrule || ''));
-    return p.kind === 'weekly' || p.kind === 'biweekly';
+    return ['daily', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(p.kind);
   }
 
   function defaultOverridePatch() {
@@ -286,12 +286,25 @@
     const overrideKeysRendered = new Set();
 
     for (const o of raw || []) {
-      const seriesStart = o.start;
+      let seriesStart = o.start;
+      let rid = recurrenceIdForStart(seriesStart, seriesAllDay);
+      // Edits stored before repeat steps became calendar-based are keyed by the old
+      // fixed-24h instant (one hour off after a clock change). Keep honouring them.
+      const legacy = o.legacyStart instanceof Date ? o.legacyStart : null;
+      if (legacy) {
+        const legacyRid = recurrenceIdForStart(legacy, seriesAllDay);
+        const legacyHit = (legacyRid && overrides[legacyRid] && !overrides[rid])
+          || (!isExcludedByExdate(seriesStart, exdates, seriesAllDay)
+            && isExcludedByExdate(legacy, exdates, seriesAllDay));
+        if (legacyHit) {
+          seriesStart = legacy;
+          rid = legacyRid;
+        }
+      }
       if (isExcludedByExdate(seriesStart, exdates, seriesAllDay)) continue;
-      const rid = recurrenceIdForStart(seriesStart, seriesAllDay);
       const ov = rid && overrides[rid];
       if (ov && ov.cancelled) continue;
-      let start = seriesStart;
+      let start = o.start;
       let end = o.end;
       let display = {
         title: ev.title,
@@ -319,6 +332,9 @@
         seriesInstanceStart: seriesStart,
         displayTitle: display.title,
         displayAllDay: display.all_day,
+        displayLocation: display.location,
+        displayNotes: display.notes,
+        partial: !!o.partial,
       });
     }
 

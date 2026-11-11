@@ -14,7 +14,10 @@
   }
 
   function addDays(d, n) {
-    return new Date(d.getTime() + n * 86400000);
+    return new Date(
+      d.getFullYear(), d.getMonth(), d.getDate() + n,
+      d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds(),
+    );
   }
 
   /** Schedule identity for scroll persistence: visible occurrences in period (not search-filtered). */

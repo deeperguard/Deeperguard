@@ -345,5 +345,6 @@
     foldIcsLine,
     buildIcsCalendarFromEvents,
     formatUtcDateTime,
+    formatLocalDateValue,
   };
 }(typeof window !== 'undefined' ? window : globalThis));

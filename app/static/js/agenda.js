@@ -19,8 +19,12 @@
     return x;
   }
 
+  /** Add calendar days; keeps local wall-clock time across clock changes (a day is not always 24 h). */
   function addDays(d, n) {
-    return new Date(d.getTime() + n * MS_DAY);
+    return new Date(
+      d.getFullYear(), d.getMonth(), d.getDate() + n,
+      d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds(),
+    );
   }
 
   /** Monday-based week start (local). */
@@ -119,84 +123,36 @@
     return ` data-agenda-occurrence-ms="${ser.getTime()}"`;
   }
 
-  /** Expand instances for range [rangeStart, rangeEnd) — single + RRULE basic FREQ=DAILY/WEEKLY. */
+  /** Expand instances for range [rangeStart, rangeEnd): single events plus repeat rules (see agenda-recurrence.js). */
   function expandEventOccurrences(ev, rangeStart, rangeEnd) {
     const span = eventSpan(ev);
     if (!span) return [];
     const out = [];
-    if (ev.all_day) {
-      const ds = startOfDay(span.start).getTime();
-      const de = startOfDay(span.end).getTime();
-      const rs = startOfDay(rangeStart).getTime();
-      const re = rangeEnd.getTime();
-      if (de <= rs || ds >= re) return out;
-      const clipStart = Math.max(ds, rs);
-      const clipEnd = Math.min(de, re);
-      if (clipEnd <= clipStart) return out;
-      out.push({ ev, start: new Date(clipStart), end: new Date(clipEnd), recurring: false });
-      return out;
-    }
-
-    if (!ev.rrule || !String(ev.rrule).trim()) {
+    const hasRule = !!(ev.rrule && String(ev.rrule).trim());
+    if (!hasRule) {
+      if (ev.all_day) {
+        const ds = startOfDay(span.start).getTime();
+        const de = startOfDay(span.end).getTime();
+        const rs = startOfDay(rangeStart).getTime();
+        const re = rangeEnd.getTime();
+        if (de <= rs || ds >= re) return out;
+        const clipStart = Math.max(ds, rs);
+        const clipEnd = Math.min(de, re);
+        if (clipEnd <= clipStart) return out;
+        out.push({ ev, start: new Date(clipStart), end: new Date(clipEnd), recurring: false });
+        return out;
+      }
       if (span.end <= rangeStart || span.start >= rangeEnd) return out;
       out.push({ ev, start: span.start, end: span.end, recurring: false });
       return out;
     }
 
-    const rule = String(ev.rrule).toUpperCase();
-    const freqDaily = /FREQ=DAILY/.test(rule);
-    const freqWeekly = /FREQ=WEEKLY/.test(rule);
-    const freqMonthly = /FREQ=MONTHLY/.test(rule);
-    const freqYearly = /FREQ=YEARLY/.test(rule);
-    const intervalMatch = rule.match(/INTERVAL=(\d+)/);
-    const interval = intervalMatch ? Math.max(1, Number(intervalMatch[1]) || 1) : 1;
-    const untilMatch = rule.match(/UNTIL=([^;:]+)/);
-    let until = null;
-    if (untilMatch) {
-      const R = global.NotesAgendaRecurrence;
-      if (R && typeof R.parseUntil === 'function') {
-        until = R.parseUntil(untilMatch[1]);
-      } else {
-        const raw = untilMatch[1].replace(/Z$/, '');
-        const p = Date.parse(raw);
-        if (Number.isFinite(p)) until = new Date(p);
-      }
-    }
-    const countMatch = rule.match(/COUNT=(\d+)/);
-    const maxCount = countMatch ? Math.max(1, Number(countMatch[1]) || 50) : 400;
-
-    let curStart = new Date(span.start);
-    let curEnd = new Date(span.end);
-    const duration = curEnd - curStart;
-    let n = 0;
-    while (n < maxCount && curStart < rangeEnd) {
-      if (until && curStart > until) break;
-      const ce = new Date(curStart.getTime() + duration);
-      if (ce > rangeStart && curStart < rangeEnd) {
-        out.push({
-          ev,
-          start: new Date(curStart),
-          end: ce,
-          recurring: true,
-        });
-      }
-      n += 1;
-      if (freqDaily) {
-        curStart = addDays(curStart, interval);
-      } else if (freqWeekly) {
-        curStart = addDays(curStart, 7 * interval);
-      } else if (freqMonthly) {
-        const Rr = global.NotesAgendaRecurrence;
-        curStart = Rr && typeof Rr.addMonthsClipped === 'function'
-          ? Rr.addMonthsClipped(curStart, interval)
-          : (() => { const next = new Date(curStart); next.setMonth(next.getMonth() + interval); return next; })();
-      } else if (freqYearly) {
-        const next = new Date(curStart);
-        next.setFullYear(next.getFullYear() + interval);
-        curStart = next;
-      } else {
-        break;
-      }
+    // Repeating events (timed and all-day): one shared, calendar-based expander.
+    const R = global.NotesAgendaRecurrence;
+    if (R && typeof R.expandSeries === 'function') {
+      R.expandSeries(ev, rangeStart, rangeEnd).forEach((row) => out.push({ ev, ...row }));
+    } else if (span.end > rangeStart && span.start < rangeEnd) {
+      out.push({ ev, start: span.start, end: span.end, recurring: true, partial: true });
     }
     const Occ = global.NotesAgendaOccurrence;
     if (Occ && typeof Occ.finalizeOccurrences === 'function') {
@@ -281,7 +237,7 @@
       let i1 = -1;
       days.forEach((d, i) => {
         const t0 = startOfDay(d).getTime();
-        const t1 = t0 + MS_DAY;
+        const t1 = addDays(startOfDay(d), 1).getTime();
         if (de > t0 && ds < t1) {
           if (i0 < 0) i0 = i;
           i1 = i;
@@ -459,7 +415,7 @@
     const s = startOfDay(state.anchor);
     const end = addDays(s, 14);
     const dayList = [];
-    for (let t = s.getTime(); t < end.getTime(); t += MS_DAY) dayList.push(new Date(t));
+    for (let i = 0; i < 14; i += 1) dayList.push(addDays(s, i));
     return { start: s, end, days: dayList };
   }
 
@@ -1439,9 +1395,10 @@
   }
 
   function addMonthsAnchor(d, n) {
-    const x = new Date(d);
-    x.setMonth(x.getMonth() + n);
-    return x;
+    // Clip the day so 31 Jan + 1 month is 28/29 Feb, not 3 Mar.
+    const first = new Date(d.getFullYear(), d.getMonth() + n, 1);
+    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    return new Date(first.getFullYear(), first.getMonth(), Math.min(d.getDate(), last), d.getHours(), d.getMinutes());
   }
 
   function shiftAnchor(dir) {
