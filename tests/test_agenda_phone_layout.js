@@ -30,4 +30,16 @@ assert.ok(css.includes('.agenda-fab-add'));
 assert.ok(css.includes('.agenda-month-dot'));
 assert.ok(css.includes('#app[data-app-tab="agenda"] .fab-stack'));
 
+assert.ok(agendaJs.includes('function wireAgendaFabOnce'));
+assert.ok(agendaJs.includes('wireAgendaFabOnce();'));
+assert.ok(agendaJs.includes('let agendaFabWired = false'));
+const renderBody = agendaJs.slice(
+  agendaJs.indexOf('function render() {'),
+  agendaJs.indexOf('  function addMonthsAnchor'),
+);
+assert.ok(
+  !renderBody.includes("getElementById('agenda-fab-add')"),
+  'agenda-fab-add must not be rebound on each render()',
+);
+
 console.log('agenda phone layout ok');

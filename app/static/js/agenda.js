@@ -223,6 +223,7 @@
   let editorWired = false;
   let calendarSettingsWired = false;
   let agendaSwipeWired = false;
+  let agendaFabWired = false;
   /** @type {HTMLElement | null} */
   let editorReturnFocus = null;
   /** @type {HTMLElement | null} */
@@ -844,6 +845,18 @@
     fab.hidden = !visible;
   }
 
+  function wireAgendaFabOnce() {
+    if (agendaFabWired) return;
+    const fab = document.getElementById('agenda-fab-add');
+    if (!fab) return;
+    agendaFabWired = true;
+    fab.addEventListener('click', (ev) => {
+      const btn = ev.currentTarget;
+      rememberEditorReturnFocus(btn instanceof HTMLElement ? btn : null, '', 0);
+      openEditor(null);
+    });
+  }
+
   function renderDesktopHeader(range) {
     return (
       '<header class="agenda-top agenda-top-desktop">'
@@ -1248,11 +1261,6 @@
     rootEl.querySelector('#agenda-phone-export')?.addEventListener('click', () => {
       closePhoneMenu();
       exportAgendaToIcs();
-    });
-    document.getElementById('agenda-fab-add')?.addEventListener('click', (ev) => {
-      const btn = ev.currentTarget;
-      rememberEditorReturnFocus(btn instanceof HTMLElement ? btn : null, '', 0);
-      openEditor(null);
     });
     rootEl.querySelectorAll('[data-agenda-month-day]').forEach((cell) => {
       cell.addEventListener('click', (ev) => {
@@ -2083,6 +2091,7 @@
     if (!rootEl) return;
     wireCalendarSettingsOnce();
     wireAgendaSwipeOnce();
+    wireAgendaFabOnce();
     wireEditor();
     fileInput = document.getElementById('agenda-ics-input');
     if (fileInput) {
