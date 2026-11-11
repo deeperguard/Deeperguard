@@ -1106,18 +1106,29 @@
     document.querySelectorAll('[data-plan-feature]').forEach((el) => {
       const feature = el.dataset.planFeature;
       const allowed = planHas(feature, account);
+      const customHint = String(el.dataset.planLockHint || '').trim();
       el.classList.toggle('plan-locked', !allowed);
+      el.querySelectorAll('.agenda-reminders-privacy-hint').forEach((hint) => {
+        hint.hidden = !allowed;
+      });
+      el.querySelectorAll('.agenda-reminders-when-entitled').forEach((wrap) => {
+        wrap.hidden = !allowed;
+      });
       let lock = el.querySelector('.plan-pro-lock');
       if (!allowed) {
         if (!lock) {
           lock = document.createElement('p');
           lock.className = 'settings-hint plan-pro-lock';
+          el.prepend(lock);
+        }
+        if (customHint) {
+          lock.textContent = customHint;
+        } else {
           const planLabel = account?.plan_label || String(account?.plan || 'Free');
           const billingOn = billingEnabled(account);
           lock.textContent = billingOn
             ? `Included with Pro. You are on ${planLabel} — use Upgrade in Settings.`
             : `Included with Pro. You are on ${planLabel} — contact support to upgrade.`;
-          el.prepend(lock);
         }
         el.querySelectorAll('input, button, select, textarea').forEach((input) => {
           if (input.id === 'btn-disable-totp' && account.totp_enabled) return;
@@ -4127,6 +4138,8 @@
   window.notesAgendaToast = (message, isError = false) => {
     toast(message, isError);
   };
+  /** Agenda uses the app's own confirm dialog instead of the browser's. */
+  window.notesAgendaConfirm = (message, opts) => confirmAction(message, opts);
 
   const agendaPane = document.getElementById('agenda-pane');
   let agendaUiInited = false;

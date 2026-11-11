@@ -3,7 +3,12 @@
  */
 (function (global) {
   const MS_DAY = 86400000;
-  const ACCENT_PALETTE = ['#3b82f6', '#2563eb', '#0ea5e9', '#6366f1', '#8b5cf6'];
+  const EVENT_COLORS = [
+    '#3b82f6', '#2563eb', '#0ea5e9', '#10b981',
+    '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899',
+  ];
+  const EVENT_COLOR_NAMES = ['Blue', 'Dark blue', 'Sky blue', 'Green', 'Amber', 'Red', 'Purple', 'Pink'];
+  const ACCENT_PALETTE = EVENT_COLORS;
 
   function pad2(n) {
     return String(n).padStart(2, '0');
@@ -15,8 +20,12 @@
     return x;
   }
 
+  /** Add calendar days; keeps local wall-clock time across clock changes (a day is not always 24 h). */
   function addDays(d, n) {
-    return new Date(d.getTime() + n * MS_DAY);
+    return new Date(
+      d.getFullYear(), d.getMonth(), d.getDate() + n,
+      d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds(),
+    );
   }
 
   /** Monday-based week start (local). */
@@ -36,22 +45,74 @@
   }
 
   function monthTitle(d) {
-    return d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+    return d.toLocaleString(agendaUiLocale(), { month: 'long', year: 'numeric' });
   }
 
   function shortWeekday(d) {
-    return d.toLocaleString(undefined, { weekday: 'short' }).toUpperCase();
+    return d.toLocaleString(agendaUiLocale(), { weekday: 'short' }).toUpperCase();
   }
 
   function formatTime(d) {
     return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   }
 
+  function formatShortDate(d) {
+    return d.toLocaleDateString(agendaUiLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function formatDayTitle(d) {
+    return d.toLocaleDateString(agendaUiLocale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function formatLongDate(d) {
+    return d.toLocaleDateString(agendaUiLocale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  function formatRangeTitle(days) {
+    if (!days || !days.length) return monthTitle(state.anchor);
+    const a = days[0];
+    const b = days[days.length - 1];
+    const sameMonth = a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+    if (sameMonth) {
+      const mid = b.toLocaleDateString(agendaUiLocale(), { month: 'short', year: 'numeric' });
+      return `${a.getDate()}–${b.getDate()} ${mid}`;
+    }
+    return `${formatShortDate(a)} – ${formatShortDate(b)}`;
+  }
+
+  function isAgendaPhoneLayout() {
+    return typeof global.matchMedia === 'function' && global.matchMedia('(max-width: 768px)').matches;
+  }
+
+  function defaultAgendaView() {
+    if (typeof global.matchMedia !== 'function') return 'week';
+    if (global.matchMedia('(max-width: 430px)').matches) return 'day';
+    if (global.matchMedia('(max-width: 768px)').matches) return '3day';
+    return 'week';
+  }
+
+  /**
+   * One locale for every date in Agenda, so headings and titles never mix languages.
+   * The UI copy is English with 24-hour times; plain "en" would format month-first
+   * (US), so English uses day-first "en-GB" ("Mon 26 Oct 2026").
+   */
+  function agendaUiLocale() {
+    const raw = typeof document !== 'undefined' ? document?.documentElement?.lang : '';
+    const lang = raw && String(raw).trim() ? String(raw).trim() : 'en';
+    return lang.toLowerCase() === 'en' ? 'en-GB' : lang;
+  }
+
   function hashHue(id) {
     let h = 0;
     const s = String(id || '');
     for (let i = 0; i < s.length; i += 1) h = ((h << 5) - h) + s.charCodeAt(i);
-    return Math.abs(h) % ACCENT_PALETTE.length;
+    return Math.abs(h) % EVENT_COLORS.length;
+  }
+
+  function eventAccentColor(ev) {
+    const pick = String(ev?.color || '').trim().toLowerCase();
+    if (EVENT_COLORS.some((c) => c.toLowerCase() === pick)) return pick;
+    return EVENT_COLORS[hashHue(ev?.id || '')];
   }
 
   function parseInstant(iso) {
@@ -77,73 +138,36 @@
     return ` data-agenda-occurrence-ms="${ser.getTime()}"`;
   }
 
-  /** Expand instances for range [rangeStart, rangeEnd) — single + RRULE basic FREQ=DAILY/WEEKLY. */
+  /** Expand instances for range [rangeStart, rangeEnd): single events plus repeat rules (see agenda-recurrence.js). */
   function expandEventOccurrences(ev, rangeStart, rangeEnd) {
     const span = eventSpan(ev);
     if (!span) return [];
     const out = [];
-    if (ev.all_day) {
-      const ds = startOfDay(span.start).getTime();
-      const de = startOfDay(span.end).getTime();
-      const rs = startOfDay(rangeStart).getTime();
-      const re = rangeEnd.getTime();
-      if (de <= rs || ds >= re) return out;
-      const clipStart = Math.max(ds, rs);
-      const clipEnd = Math.min(de, re);
-      if (clipEnd <= clipStart) return out;
-      out.push({ ev, start: new Date(clipStart), end: new Date(clipEnd), recurring: false });
-      return out;
-    }
-
-    if (!ev.rrule || !String(ev.rrule).trim()) {
+    const hasRule = !!(ev.rrule && String(ev.rrule).trim());
+    if (!hasRule) {
+      if (ev.all_day) {
+        const ds = startOfDay(span.start).getTime();
+        const de = startOfDay(span.end).getTime();
+        const rs = startOfDay(rangeStart).getTime();
+        const re = rangeEnd.getTime();
+        if (de <= rs || ds >= re) return out;
+        const clipStart = Math.max(ds, rs);
+        const clipEnd = Math.min(de, re);
+        if (clipEnd <= clipStart) return out;
+        out.push({ ev, start: new Date(clipStart), end: new Date(clipEnd), recurring: false });
+        return out;
+      }
       if (span.end <= rangeStart || span.start >= rangeEnd) return out;
       out.push({ ev, start: span.start, end: span.end, recurring: false });
       return out;
     }
 
-    const rule = String(ev.rrule).toUpperCase();
-    const freqDaily = /FREQ=DAILY/.test(rule);
-    const freqWeekly = /FREQ=WEEKLY/.test(rule);
-    const intervalMatch = rule.match(/INTERVAL=(\d+)/);
-    const interval = intervalMatch ? Math.max(1, Number(intervalMatch[1]) || 1) : 1;
-    const untilMatch = rule.match(/UNTIL=([^;:]+)/);
-    let until = null;
-    if (untilMatch) {
-      const R = global.NotesAgendaRecurrence;
-      if (R && typeof R.parseUntil === 'function') {
-        until = R.parseUntil(untilMatch[1]);
-      } else {
-        const raw = untilMatch[1].replace(/Z$/, '');
-        const p = Date.parse(raw);
-        if (Number.isFinite(p)) until = new Date(p);
-      }
-    }
-    const countMatch = rule.match(/COUNT=(\d+)/);
-    const maxCount = countMatch ? Math.max(1, Number(countMatch[1]) || 50) : 400;
-
-    let curStart = new Date(span.start);
-    let curEnd = new Date(span.end);
-    const duration = curEnd - curStart;
-    let n = 0;
-    while (n < maxCount && curStart < rangeEnd) {
-      if (until && curStart > until) break;
-      const ce = new Date(curStart.getTime() + duration);
-      if (ce > rangeStart && curStart < rangeEnd) {
-        out.push({
-          ev,
-          start: new Date(curStart),
-          end: ce,
-          recurring: true,
-        });
-      }
-      n += 1;
-      if (freqDaily) {
-        curStart = addDays(curStart, interval);
-      } else if (freqWeekly) {
-        curStart = addDays(curStart, 7 * interval);
-      } else {
-        break;
-      }
+    // Repeating events (timed and all-day): one shared, calendar-based expander.
+    const R = global.NotesAgendaRecurrence;
+    if (R && typeof R.expandSeries === 'function') {
+      R.expandSeries(ev, rangeStart, rangeEnd).forEach((row) => out.push({ ev, ...row }));
+    } else if (span.end > rangeStart && span.start < rangeEnd) {
+      out.push({ ev, start: span.start, end: span.end, recurring: true, partial: true });
     }
     const Occ = global.NotesAgendaOccurrence;
     if (Occ && typeof Occ.finalizeOccurrences === 'function') {
@@ -171,14 +195,91 @@
       else colEnds[c] = o.b;
       placed.push({ ...o, col: c });
     }
-    const cols = Math.max(1, colEnds.length);
-    placed.forEach((p) => { p.colCount = cols; });
+    const parent = placed.map((_, idx) => idx);
+    const find = (idx) => {
+      let root = idx;
+      while (parent[root] !== root) {
+        parent[root] = parent[parent[root]];
+        root = parent[root];
+      }
+      return root;
+    };
+    const unite = (a, b) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra !== rb) parent[rb] = ra;
+    };
+    const overlap = (a, b) => a.b > b.a && a.a < b.b;
+    for (let i = 0; i < placed.length; i += 1) {
+      for (let j = i + 1; j < placed.length; j += 1) {
+        if (overlap(placed[i], placed[j])) unite(i, j);
+      }
+    }
+    const clusterMaxCol = new Map();
+    placed.forEach((p, i) => {
+      const root = find(i);
+      const prev = clusterMaxCol.has(root) ? clusterMaxCol.get(root) : -1;
+      clusterMaxCol.set(root, Math.max(prev, p.col));
+    });
+    placed.forEach((p, i) => {
+      p.colCount = clusterMaxCol.get(find(i)) + 1;
+    });
+    return placed;
+  }
+
+  function listDayHeading(d) {
+    const ds = startOfDay(d);
+    const today = startOfDay(new Date());
+    const loc = agendaUiLocale();
+    const when = ds.toLocaleDateString(loc, { weekday: 'short', day: 'numeric', month: 'short' });
+    if (ds.getTime() === today.getTime()) return `Today · ${when}`;
+    return when;
+  }
+
+  function listEmptyMessage() {
+    if (state.view === 'day') return 'No events this day.';
+    if (state.view === '3day') return 'No events in this range.';
+    if (state.view === 'week') return 'No events this week.';
+    return 'No events in this period.';
+  }
+
+  function layoutAllDayLanes(allDayOcc, days) {
+    const placed = [];
+    for (const o of allDayOcc) {
+      const ds = startOfDay(o.start).getTime();
+      const de = startOfDay(o.end).getTime();
+      let i0 = -1;
+      let i1 = -1;
+      days.forEach((d, i) => {
+        const t0 = startOfDay(d).getTime();
+        const t1 = addDays(startOfDay(d), 1).getTime();
+        if (de > t0 && ds < t1) {
+          if (i0 < 0) i0 = i;
+          i1 = i;
+        }
+      });
+      if (i0 < 0) continue;
+      placed.push({ o, i0, i1, span: i1 - i0 + 1 });
+    }
+    const laneEnds = [];
+    placed.forEach((p) => {
+      let lane = 0;
+      while (lane < laneEnds.length) {
+        const blocked = laneEnds[lane].some((x) => !(p.i1 < x.i0 || p.i0 > x.i1));
+        if (!blocked) break;
+        lane += 1;
+      }
+      if (!laneEnds[lane]) laneEnds[lane] = [];
+      laneEnds[lane].push({ i0: p.i0, i1: p.i1 });
+      p.lane = lane;
+    });
     return placed;
   }
 
   const state = {
     view: 'week',
     anchor: new Date(),
+    monthPickDay: 0,
     search: '',
     selectedId: '',
     editorScope: 'series',
@@ -187,6 +288,7 @@
     editorReturnFocusId: '',
     editorReturnFocusOccurrenceMs: 0,
     seriesOverrideResetConfirmed: false,
+    editorColor: '',
   };
 
   let rootEl = null;
@@ -195,6 +297,7 @@
   let editorWired = false;
   let calendarSettingsWired = false;
   let agendaSwipeWired = false;
+  let agendaFabWired = false;
   /** @type {HTMLElement | null} */
   let editorReturnFocus = null;
   /** @type {HTMLElement | null} */
@@ -243,6 +346,8 @@
     }
     document.body.classList.add('agenda-calendar-settings-open');
     if (calBtn) calBtn.setAttribute('aria-expanded', 'true');
+    // Channel availability can change (email confirmed, push enabled): refresh on every open.
+    global.NotesAgendaReminders?.wireAgendaReminderSettings?.();
     const closeBtn = document.getElementById('agenda-calendar-settings-close');
     if (closeBtn) closeBtn.focus();
   }
@@ -266,6 +371,9 @@
       if (typeof window.__notesOpenSettings === 'function') window.__notesOpenSettings();
       else document.getElementById('btn-settings-head')?.click();
     });
+    if (global.NotesAgendaReminders?.wireAgendaReminderSettings) {
+      NotesAgendaReminders.wireAgendaReminderSettings();
+    }
     document.addEventListener('keydown', (ev) => {
       if (ev.key !== 'Escape' || !document.body.classList.contains('agenda-calendar-settings-open')) return;
       closeCalendarSettingsPanel();
@@ -327,7 +435,7 @@
     const s = startOfDay(state.anchor);
     const end = addDays(s, 14);
     const dayList = [];
-    for (let t = s.getTime(); t < end.getTime(); t += MS_DAY) dayList.push(new Date(t));
+    for (let i = 0; i < 14; i += 1) dayList.push(addDays(s, i));
     return { start: s, end, days: dayList };
   }
 
@@ -753,13 +861,128 @@
 
   function titleForNav(range) {
     if (state.view === 'month') {
-      return monthTitle(state.anchor);
+      return { primary: monthTitle(state.anchor), week: '' };
     }
     if (state.view === 'agenda') {
-      return `Agenda · ${monthTitle(state.anchor)}`;
+      return { primary: `List · ${monthTitle(state.anchor)}`, week: '' };
     }
-    const w = isoWeekNumber(range.start);
-    return `W${pad2(w)} · ${monthTitle(range.start)}`;
+    if (state.view === 'day') {
+      return { primary: formatDayTitle(state.anchor), week: '' };
+    }
+    return {
+      primary: formatRangeTitle(range.days),
+      week: `Week ${isoWeekNumber(range.start)}`,
+    };
+  }
+
+  function renderTitleHtml(range) {
+    const t = titleForNav(range);
+    if (t.week) {
+      return (
+        `<h1 class="agenda-title">`
+        + `<span class="agenda-title-primary">${esc(t.primary)}</span>`
+        + `<span class="agenda-title-week muted">${esc(t.week)}</span>`
+        + '</h1>'
+      );
+    }
+    return `<h1 class="agenda-title"><span class="agenda-title-primary">${esc(t.primary)}</span></h1>`;
+  }
+
+  function renderSearchField() {
+    return (
+      '<label class="agenda-search-field">'
+      + '<svg class="agenda-search-ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M16 16l5 5"/></svg>'
+      + `<input type="search" id="agenda-search" placeholder="Search" aria-label="Search events" value="${esc(state.search)}" autocomplete="off" />`
+      + '</label>'
+    );
+  }
+
+  function closePhoneMenu() {
+    document.body.classList.remove('agenda-phone-menu-open');
+    const backdrop = rootEl?.querySelector?.('#agenda-phone-menu-backdrop');
+    const btn = rootEl?.querySelector?.('#agenda-phone-more');
+    if (backdrop) backdrop.hidden = true;
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function togglePhoneMenu(force) {
+    const open = typeof force === 'boolean'
+      ? force
+      : !document.body.classList.contains('agenda-phone-menu-open');
+    document.body.classList.toggle('agenda-phone-menu-open', open);
+    const backdrop = rootEl?.querySelector?.('#agenda-phone-menu-backdrop');
+    const btn = rootEl?.querySelector?.('#agenda-phone-more');
+    if (backdrop) backdrop.hidden = !open;
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function syncAgendaFab() {
+    const fab = document.getElementById('agenda-fab-add');
+    const pane = document.getElementById('agenda-pane');
+    if (!fab) return;
+    const visible = !!(pane && !pane.hidden && isAgendaPhoneLayout());
+    fab.hidden = !visible;
+  }
+
+  function wireAgendaFabOnce() {
+    if (agendaFabWired) return;
+    const fab = document.getElementById('agenda-fab-add');
+    if (!fab) return;
+    agendaFabWired = true;
+    fab.addEventListener('click', (ev) => {
+      const btn = ev.currentTarget;
+      rememberEditorReturnFocus(btn instanceof HTMLElement ? btn : null, '', 0);
+      openEditor(null);
+    });
+  }
+
+  function renderDesktopHeader(range) {
+    return (
+      '<header class="agenda-top agenda-top-desktop">'
+      + '<div class="agenda-top-row">'
+      + '<div class="agenda-nav">'
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-prev" aria-label="Previous">‹</button>'
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-next" aria-label="Next">›</button>'
+      + renderTitleHtml(range)
+      + '<button type="button" class="btn sm agenda-today" id="agenda-today">Today</button>'
+      + '</div>'
+      + '<div class="agenda-seg-wrap" role="group" aria-label="View">'
+      + renderViewToggles()
+      + '</div>'
+      + '<div class="agenda-top-tools">'
+      + renderSearchField()
+      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
+      + '<button type="button" class="btn primary agenda-add" id="agenda-add-event">+ Event</button>'
+      + '</div></div></header>'
+    );
+  }
+
+  function renderPhoneMenuPanel() {
+    return (
+      '<div id="agenda-phone-menu-backdrop" class="agenda-phone-menu-backdrop" hidden aria-hidden="true"></div>'
+      + '<div id="agenda-phone-menu" class="agenda-phone-menu" role="dialog" aria-label="Agenda menu" aria-modal="true">'
+      + renderSearchField()
+      + '<div class="agenda-seg-wrap" role="group" aria-label="View">' + renderViewToggles() + '</div>'
+      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
+      + '<button type="button" class="btn primary agenda-cal-action" id="agenda-phone-import">Import calendar (.ics)</button>'
+      + '<button type="button" class="btn ghost agenda-cal-action" id="agenda-phone-export">Export calendar (.ics)</button>'
+      + '</div>'
+    );
+  }
+
+  function renderPhoneHeader(range) {
+    const menuOpen = document.body.classList.contains('agenda-phone-menu-open');
+    return (
+      '<header class="agenda-top agenda-top-phone">'
+      + '<div class="agenda-top-row-phone">'
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-prev" aria-label="Previous">‹</button>'
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-next" aria-label="Next">›</button>'
+      + renderTitleHtml(range)
+      + '<button type="button" class="btn sm agenda-today" id="agenda-today">Today</button>'
+      + `<button type="button" class="btn icon agenda-icon-btn agenda-phone-more" id="agenda-phone-more" aria-label="Agenda menu" aria-expanded="${menuOpen ? 'true' : 'false'}" aria-controls="agenda-phone-menu">⋯</button>`
+      + '</div></header>'
+      + renderPhoneMenuPanel()
+    );
   }
 
   function esc(s) {
@@ -776,7 +999,7 @@
       { id: 'week', label: 'Week' },
       { id: '3day', label: '3 day' },
       { id: 'day', label: 'Day' },
-      { id: 'agenda', label: 'Agenda' },
+      { id: 'agenda', label: 'List' },
     ];
     return views.map((v) => (
       `<button type="button" class="agenda-seg ${state.view === v.id ? 'is-active' : ''}" data-agenda-view="${esc(v.id)}">${esc(v.label)}</button>`
@@ -796,27 +1019,18 @@
     let body = '';
     body += '<div class="agenda-allday-row">';
     body += '<div class="agenda-allday-label muted">all day</div>';
-    body += `<div class="agenda-allday-grid" style="--agenda-cols:${days.length}">`;
-    allDayOcc.forEach((o) => {
-      const ds = startOfDay(o.start).getTime();
-      const de = startOfDay(o.end).getTime();
-      let i0 = -1;
-      let i1 = -1;
-      days.forEach((d, i) => {
-        const t0 = startOfDay(d).getTime();
-        if (t0 >= ds && t0 < de) {
-          if (i0 < 0) i0 = i;
-          i1 = i;
-        }
-      });
-      if (i0 < 0) return;
-      const span = i1 - i0 + 1;
-      const clr = ACCENT_PALETTE[hashHue(o.ev.id)];
+    const allDayLanes = layoutAllDayLanes(allDayOcc, days);
+    const laneCount = Math.max(1, allDayLanes.reduce((m, p) => Math.max(m, p.lane + 1), 0));
+    body += `<div class="agenda-allday-grid" style="--agenda-cols:${days.length};--agenda-allday-lanes:${laneCount}">`;
+    allDayLanes.forEach(({ o, i0, span, lane }) => {
+      const clr = eventAccentColor(o.ev);
       const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
+      const title = rec
+        ? `<span class="agenda-chip-title">${'<span class="agenda-rec-glyph" aria-hidden="true">↻</span>'}${esc(occDisplayTitle(o))}</span>`
+        : `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`;
       body += (
-        `<button type="button" class="agenda-allday-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="grid-column:${i0 + 1} / span ${span}" title="${esc(occDisplayTitle(o))}">`
-        + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-        + `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`
+        `<button type="button" class="agenda-allday-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="grid-column:${i0 + 1} / span ${span};grid-row:${lane + 1}" title="${esc(occDisplayTitle(o))}">`
+        + title
         + `<span class="agenda-chip-accent" style="background:${clr}"></span>`
         + '</button>'
       );
@@ -853,18 +1067,21 @@
       laid.forEach((o) => {
         const top = ((o.a - ds) / 3600000) * PX_PER_HOUR;
         const h = Math.max(18, ((o.b - o.a) / 3600000) * PX_PER_HOUR);
-        const clr = ACCENT_PALETTE[hashHue(o.ev.id)];
+        const clr = eventAccentColor(o.ev);
         const wPct = 100 / o.colCount;
         const leftPct = wPct * o.col;
         const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
         const timeRange = `${formatTime(o.a)} – ${formatTime(o.b)}`;
+        const titleHtml = rec
+          ? `<span class="agenda-chip-title">${'<span class="agenda-rec-glyph" aria-hidden="true">↻</span>'}${esc(occDisplayTitle(o))}</span>`
+          : `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`;
+        const compact = h < 36;
         body += (
-          `<button type="button" class="agenda-event-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="top:${top}px;height:${h}px;left:${leftPct}%;width:${wPct}%;--agenda-accent:${clr}">`
+          `<button type="button" class="agenda-event-chip${compact ? ' is-compact' : ''}" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="top:${top}px;height:${h}px;left:${leftPct}%;width:${wPct}%;--agenda-accent:${clr}">`
           + `<span class="agenda-chip-accent" style="background:${clr}"></span>`
           + '<span class="agenda-chip-body">'
-          + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-          + `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`
-          + (h >= 36 ? `<span class="agenda-chip-time muted">${esc(timeRange)}</span>` : '')
+          + titleHtml
+          + (!compact ? `<span class="agenda-chip-time">${esc(timeRange)}</span>` : '')
           + '</span></button>'
         );
       });
@@ -876,33 +1093,59 @@
   }
 
   function renderAgendaList(occ, range) {
-    const sorted = occ.filter((o) => !o.ev.all_day).sort((a, b) => a.start - b.start);
-    const allDay = occ.filter((o) => o.ev.all_day).sort((a, b) => a.start - b.start);
     const rs = range && range.start ? range.start.getTime() : 0;
     const re = range && range.end ? range.end.getTime() : 0;
+    const byDay = new Map();
+    for (const o of occ) {
+      const allDay = o.displayAllDay ?? !!o.ev.all_day;
+      let day = startOfDay(o.start);
+      if (rs && day.getTime() < rs) day = startOfDay(new Date(rs));
+      const lastMs = Math.max(o.start.getTime(), o.end.getTime() - 1);
+      for (let n = 0; n < 62 && day.getTime() <= lastMs && (!re || day.getTime() < re); n += 1) {
+        const next = addDays(day, 1);
+        let when;
+        if (allDay) when = 'All day';
+        else if (o.start >= day && o.end <= next) when = `${formatTime(o.start)}–${formatTime(o.end)}`;
+        else if (o.start >= day) when = `${formatTime(o.start)} →`;
+        else if (o.end <= next) when = `→ ${formatTime(o.end)}`;
+        else when = 'All day';
+        const key = day.getTime();
+        if (!byDay.has(key)) byDay.set(key, []);
+        byDay.get(key).push({ ...o, listWhen: when });
+        day = next;
+      }
+    }
+    const dayKeys = [...byDay.keys()].sort((a, b) => a - b);
     let html = `<div class="agenda-list-view" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
-    if (allDay.length) {
-      html += '<p class="agenda-list-section-label muted">All day</p><ul class="agenda-list">';
-      allDay.forEach((o) => {
+    if (!dayKeys.length) {
+      html += `<p class="agenda-list-empty muted">${esc(listEmptyMessage())}</p>`;
+      html += '</div>';
+      return html;
+    }
+    dayKeys.forEach((key) => {
+      const day = new Date(key);
+      const items = sortOccForMonthDay(byDay.get(key));
+      html += `<section class="agenda-list-day"><h2 class="agenda-list-day-head">${esc(listDayHeading(day))}</h2><ul class="agenda-list">`;
+      items.forEach((o) => {
+        const when = o.listWhen;
+        const loc = String(o.displayLocation ?? o.ev.location ?? '').trim();
+        const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
+        const title = rec
+          ? `${'<span class="agenda-rec-glyph" aria-hidden="true">↻</span>'}${esc(occDisplayTitle(o))}`
+          : esc(occDisplayTitle(o));
         html += (
-          `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
-          + `<span class="agenda-list-date">${esc(o.start.toLocaleDateString())}</span>`
-          + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
-          + '</button></li>'
+          '<li class="agenda-list-item">'
+          + `<button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
+          + `<span class="agenda-list-when">${esc(when)}</span>`
+          + '<span class="agenda-list-row-main">'
+          + `<span class="agenda-list-title">${title}</span>`
+          + (loc ? `<span class="agenda-list-loc muted">${esc(loc)}</span>` : '')
+          + '</span></button></li>'
         );
       });
-      html += '</ul>';
-    }
-    html += '<p class="agenda-list-section-label muted">Scheduled</p><ul class="agenda-list">';
-    sorted.forEach((o) => {
-      html += (
-        `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
-        + `<span class="agenda-list-date">${esc(o.start.toLocaleString())}</span>`
-        + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
-        + '</button></li>'
-      );
+      html += '</ul></section>';
     });
-    html += '</ul></div>';
+    html += '</div>';
     return html;
   }
 
@@ -925,7 +1168,35 @@
     return false;
   }
 
+  function renderMonthDayList(occ) {
+    const pickMs = state.monthPickDay || startOfDay(new Date()).getTime();
+    const pick = new Date(pickMs);
+    const ds = startOfDay(pick);
+    const de = addDays(ds, 1);
+    const dayOcc = sortOccForMonthDay(occ.filter((o) => o.end > ds && o.start < de));
+    let html = `<div class="agenda-month-daylist" data-agenda-month-pick="${ds.getTime()}">`;
+    html += `<h2 class="agenda-month-daylist-title">${esc(pick.toLocaleDateString(agendaUiLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))}</h2>`;
+    if (!dayOcc.length) {
+      html += '<p class="muted agenda-month-daylist-empty">No events</p>';
+    } else {
+      html += '<ul class="agenda-list">';
+      dayOcc.forEach((o) => {
+        const tlabel = o.ev.all_day ? 'All day' : `${formatTime(o.start)} – ${formatTime(o.end)}`;
+        html += (
+          `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
+          + `<span class="agenda-list-date">${esc(tlabel)}</span>`
+          + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
+          + '</button></li>'
+        );
+      });
+      html += '</ul>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   function renderMonthGrid(days, occ) {
+    const phoneMonth = isAgendaPhoneLayout();
     let nWeeks = Math.ceil(days.length / 7);
     const anchorMonth = state.anchor.getMonth();
     const anchorYear = state.anchor.getFullYear();
@@ -952,24 +1223,38 @@
         const show = sorted.slice(0, MAX_CHIPS);
         const extra = sorted.length > MAX_CHIPS ? sorted.length - MAX_CHIPS : 0;
         const isToday = ds.getTime() === startOfDay(new Date()).getTime();
-        html += `<div class="agenda-month-cell ${inMonth ? '' : 'is-out'} ${isToday ? 'is-today' : ''}">`;
-        html += `<div class="agenda-month-date">${day.getDate()}</div>`;
+        const pickActive = state.monthPickDay === ds.getTime();
+        html += `<div class="agenda-month-cell ${inMonth ? '' : 'is-out'} ${isToday ? 'is-today' : ''} ${pickActive ? 'is-pick' : ''}" data-agenda-month-day="${ds.getTime()}">`;
+        const dayLabel = `${formatLongDate(day)}, ${sorted.length === 1 ? '1 event' : `${sorted.length} events`}`;
+        html += `<button type="button" class="agenda-month-date" data-agenda-month-pick="${ds.getTime()}" aria-label="${esc(dayLabel)}"${phoneMonth ? ` aria-pressed="${pickActive ? 'true' : 'false'}"` : ''}>${day.getDate()}</button>`;
         html += '<div class="agenda-month-events">';
-        show.forEach((o) => {
-          const clr = ACCENT_PALETTE[hashHue(o.ev.id)];
-          const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
-          const tlabel = o.ev.all_day ? 'All day' : formatTime(o.start);
+        if (phoneMonth) {
+          sorted.slice(0, 6).forEach((o) => {
+            const clr = eventAccentColor(o.ev);
+            html += `<span class="agenda-month-dot" style="--agenda-dot:${clr}" aria-hidden="true"></span>`;
+          });
+        } else {
+          show.forEach((o) => {
+            const clr = eventAccentColor(o.ev);
+            const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
+            const tlabel = o.displayAllDay ?? o.ev.all_day ? 'All day' : formatTime(o.start);
+            html += (
+              `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} title="${esc(occDisplayTitle(o))}">`
+              + `<span class="agenda-month-ev-accent" style="background:${clr}"></span>`
+              + '<span class="agenda-month-ev-body">'
+              + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
+              + `<span class="agenda-month-ev-title">${esc(occDisplayTitle(o))}</span>`
+              + `<span class="agenda-month-ev-time muted">${esc(tlabel)}</span>`
+              + '</span></button>'
+            );
+          });
+        }
+        if (extra && !phoneMonth) {
+          const aria = `Show all events for ${formatLongDate(day)}`;
           html += (
-            `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} title="${esc(occDisplayTitle(o))}">`
-            + `<span class="agenda-month-ev-accent" style="background:${clr}"></span>`
-            + '<span class="agenda-month-ev-body">'
-            + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
-            + `<span class="agenda-month-ev-title">${esc(occDisplayTitle(o))}</span>`
-            + `<span class="agenda-month-ev-time muted">${esc(tlabel)}</span>`
-            + '</span></button>'
+            `<button type="button" class="agenda-month-more-btn" data-agenda-goto-day="${ds.getTime()}" aria-label="${esc(aria)}">+${extra} more</button>`
           );
-        });
-        if (extra) html += `<span class="agenda-month-more muted" aria-hidden="true">+${extra} more</span>`;
+        }
         html += '</div></div>';
       }
       html += '</div>';
@@ -1006,6 +1291,7 @@
       main = renderAgendaList(occ, range);
     } else if (state.view === 'month') {
       main = renderMonthGrid(days, occ);
+      if (isAgendaPhoneLayout()) main += renderMonthDayList(occ);
     } else {
       main = (
         '<div class="agenda-week-layout">'
@@ -1015,28 +1301,14 @@
       );
     }
 
+    const phone = isAgendaPhoneLayout();
+    rootEl.classList.toggle('agenda-root--phone', phone);
+    const focused = document.activeElement;
+    const searchHadFocus = !!(focused && focused.id === 'agenda-search' && rootEl.contains(focused));
+    const searchCaret = searchHadFocus ? [focused.selectionStart, focused.selectionEnd] : null;
+    const header = phone ? renderPhoneHeader(range) : renderDesktopHeader(range);
     rootEl.innerHTML = (
-      '<header class="agenda-top">'
-      + '<div class="agenda-top-row">'
-      + '<div class="agenda-nav">'
-      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-prev" aria-label="Previous">‹</button>'
-      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-next" aria-label="Next">›</button>'
-      + `<h1 class="agenda-title">${esc(titleForNav(range))}</h1>`
-      + '<button type="button" class="btn sm agenda-today" id="agenda-today">Today</button>'
-      + '</div>'
-      + '<div class="agenda-seg-wrap" role="group" aria-label="View">'
-      + renderViewToggles()
-      + '</div>'
-      + '<div class="agenda-top-tools">'
-      + '<label class="agenda-search-field">'
-      + '<svg class="agenda-search-ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M16 16l5 5"/></svg>'
-      + `<input type="search" id="agenda-search" placeholder="Search" aria-label="Search events" value="${esc(state.search)}" autocomplete="off" />`
-      + '</label>'
-      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
-      + '<button type="button" class="btn primary agenda-add" id="agenda-add-event">+ Event</button>'
-      + '</div>'
-      + '</div>'
-      + '</header>'
+      header
       + `<div class="agenda-body agenda-view-${esc(state.view)}">${main}</div>`
     );
 
@@ -1052,6 +1324,7 @@
         const next = btn.getAttribute('data-agenda-view') || 'week';
         if (['day', '3day', 'week'].includes(state.view)) saveTimeGridScrollSnapshot();
         state.view = next;
+        closePhoneMenu();
         try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
         render();
       });
@@ -1075,9 +1348,51 @@
       openEditor(null);
     });
     rootEl.querySelector('#agenda-calendar-settings-btn')?.addEventListener('click', () => {
+      closePhoneMenu();
       const open = document.body.classList.contains('agenda-calendar-settings-open');
       if (open) closeCalendarSettingsPanel();
       else openCalendarSettingsPanel();
+    });
+    rootEl.querySelector('#agenda-phone-more')?.addEventListener('click', () => {
+      togglePhoneMenu();
+    });
+    rootEl.querySelector('#agenda-phone-menu-backdrop')?.addEventListener('click', () => {
+      closePhoneMenu();
+    });
+    rootEl.querySelector('#agenda-phone-import')?.addEventListener('click', () => {
+      closePhoneMenu();
+      fileInput?.click();
+    });
+    rootEl.querySelector('#agenda-phone-export')?.addEventListener('click', () => {
+      closePhoneMenu();
+      exportAgendaToIcs();
+    });
+    rootEl.querySelectorAll('[data-agenda-month-pick]').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        const t = Number(btn.getAttribute('data-agenda-month-pick'));
+        if (!Number.isFinite(t)) return;
+        ev.stopPropagation();
+        if (isAgendaPhoneLayout()) {
+          state.monthPickDay = t;
+          render();
+          rootEl.querySelector(`[data-agenda-month-pick="${t}"]`)?.focus({ preventScroll: true });
+          return;
+        }
+        state.anchor = new Date(t);
+        state.view = 'day';
+        try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
+        render();
+      });
+    });
+    rootEl.querySelectorAll('[data-agenda-month-day]').forEach((cell) => {
+      cell.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-agenda-id], [data-agenda-goto-day]')) return;
+        const raw = cell.getAttribute('data-agenda-month-day');
+        const t = raw ? Number(raw) : NaN;
+        if (!Number.isFinite(t)) return;
+        state.monthPickDay = t;
+        render();
+      });
     });
 
     rootEl.querySelectorAll('[data-agenda-id]').forEach((btn) => {
@@ -1087,6 +1402,26 @@
         const occurrenceMs = rawMs ? Number(rawMs) : 0;
         rememberEditorReturnFocus(btn, id, occurrenceMs);
         beginEditFromClick(id, occurrenceMs);
+      });
+    });
+
+    rootEl.querySelectorAll('.agenda-day-col').forEach((col) => {
+      col.addEventListener('dblclick', (ev) => {
+        if (ev.target && ev.target.closest && ev.target.closest('[data-agenda-id]')) return;
+        if (typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches) return;
+        const raw = col.getAttribute('data-agenda-day');
+        const dayMs = raw ? Number(raw) : NaN;
+        if (!Number.isFinite(dayMs)) return;
+        const rect = col.getBoundingClientRect();
+        const y = ev.clientY - rect.top;
+        const hourPx = PX_PER_HOUR;
+        const minutes = Math.max(0, Math.min(24 * 60 - 30, Math.round(((y / hourPx) * 60) / 30) * 30));
+        const start = new Date(dayMs);
+        start.setHours(0, 0, 0, 0);
+        start.setMinutes(minutes);
+        const end = new Date(start.getTime() + 3600000);
+        rememberEditorReturnFocus(null, '', 0);
+        openEditor(null, { scope: 'series', draftStart: start, draftEnd: end });
       });
     });
 
@@ -1106,12 +1441,26 @@
       wireTimeGridScrollPersistence(range);
       applyTimeGridScroll(range, occ);
     }
+    syncAgendaFab();
+    if (document.body.classList.contains('agenda-phone-menu-open')) {
+      togglePhoneMenu(true);
+    } else {
+      closePhoneMenu();
+    }
+    if (searchHadFocus) {
+      const again = rootEl.querySelector('#agenda-search');
+      if (again) {
+        again.focus({ preventScroll: true });
+        try { again.setSelectionRange(searchCaret[0], searchCaret[1]); } catch (e) { /* ignore */ }
+      }
+    }
   }
 
   function addMonthsAnchor(d, n) {
-    const x = new Date(d);
-    x.setMonth(x.getMonth() + n);
-    return x;
+    // Clip the day so 31 Jan + 1 month is 28/29 Feb, not 3 Mar.
+    const first = new Date(d.getFullYear(), d.getMonth() + n, 1);
+    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    return new Date(first.getFullYear(), first.getMonth(), Math.min(d.getDate(), last), d.getHours(), d.getMinutes());
   }
 
   function shiftAnchor(dir) {
@@ -1150,6 +1499,17 @@
     });
   }
 
+  function repeatStatusText(kind) {
+    const map = {
+      daily: 'Repeats every day.',
+      weekly: 'Repeats every week.',
+      biweekly: 'Repeats every 2 weeks.',
+      monthly: 'Repeats every month on the same date (the last day in shorter months).',
+      yearly: 'Repeats every year on the same date.',
+    };
+    return map[kind] || '';
+  }
+
   function fillRecurrenceEditor(content) {
     const R = global.NotesAgendaRecurrence;
     const rrule = (content && content.rrule) || '';
@@ -1169,10 +1529,12 @@
     if (adv) adv.hidden = !showAdv;
     if (raw) raw.textContent = showAdv ? p.raw : '';
     if (status) {
-      if (p.kind === 'weekly') status.textContent = 'Repeats every week.';
-      else if (p.kind === 'biweekly') status.textContent = 'Repeats every 2 weeks.';
-      else if (p.kind === 'advanced') status.textContent = 'Imported/custom rule — preserved unless you choose a pattern above.';
-      else status.textContent = '';
+      if (p.kind === 'advanced') {
+        const shown = typeof R.describeRule === 'function' ? R.describeRule(rrule, new Date(content.start)).supported : true;
+        status.textContent = shown
+          ? 'Imported/custom rule — preserved unless you choose a pattern above.'
+          : 'Imported rule that this app cannot show in full: only the first date appears in the calendar. The rule is preserved unless you choose a pattern above.';
+      } else status.textContent = repeatStatusText(p.kind);
     }
     if (notice) notice.hidden = !String(rrule || '').trim();
     if (exNote) {
@@ -1207,10 +1569,8 @@
     const adv = document.getElementById('agenda-edit-rrule-advanced');
     if (!sel || !status) return;
     const kind = sel.value;
-    if (kind === 'weekly') status.textContent = 'Repeats every week.';
-    else if (kind === 'biweekly') status.textContent = 'Repeats every 2 weeks.';
-    else if (kind === 'advanced') status.textContent = 'Custom rule kept from import.';
-    else status.textContent = '';
+    if (kind === 'advanced') status.textContent = 'Custom rule kept from import.';
+    else status.textContent = repeatStatusText(kind);
     if (adv) adv.hidden = kind !== 'advanced';
   }
 
@@ -1253,9 +1613,140 @@
     if (el instanceof HTMLElement) el.focus({ preventScroll: false });
   }
 
+  let detailContext = { id: '', occurrenceMs: 0 };
+
+  function closeDetailCard(opts) {
+    const backdrop = document.getElementById('agenda-detail-backdrop');
+    const card = document.getElementById('agenda-detail-card');
+    const wasOpen = !!(card && !card.hidden);
+    if (backdrop) backdrop.hidden = true;
+    if (card) card.hidden = true;
+    document.body.classList.remove('agenda-detail-open');
+    detailContext = { id: '', occurrenceMs: 0 };
+    if (wasOpen && !(opts && opts.keepFocusTarget)) focusEditorReturnTarget();
+  }
+
+  function findOccurrenceForDetail(ev, occurrenceMs) {
+    if (!ev || !(occurrenceMs > 0)) return null;
+    const anchor = new Date(occurrenceMs);
+    const rangeStart = addDays(startOfDay(anchor), -1);
+    const rangeEnd = addDays(startOfDay(anchor), 60);
+    const hits = expandEventOccurrences(ev, rangeStart, rangeEnd);
+    return hits.find((o) => {
+      const ser = o.seriesInstanceStart || o.start;
+      return ser.getTime() === occurrenceMs || o.start.getTime() === occurrenceMs;
+    }) || null;
+  }
+
+  function detailWhenText(start, end, allDay) {
+    if (!start || !end) return '';
+    if (allDay) {
+      const last = addDays(startOfDay(end), end.getTime() > startOfDay(end).getTime() ? 0 : -1);
+      const first = startOfDay(start);
+      if (last.getTime() <= first.getTime()) return `${formatDayTitle(first)} · All day`;
+      return `${formatDayTitle(first)} – ${formatDayTitle(last)} · All day`;
+    }
+    if (startOfDay(start).getTime() === startOfDay(end).getTime()) {
+      return `${formatDayTitle(start)} · ${formatTime(start)} – ${formatTime(end)}`;
+    }
+    return `${formatDayTitle(start)} ${formatTime(start)} – ${formatDayTitle(end)} ${formatTime(end)}`;
+  }
+
+  function repeatSummary(ev, occ) {
+    const rrule = String((ev && ev.rrule) || '').trim();
+    if (!rrule) return '';
+    if (occ && occ.partial) return 'Repeats with a rule this app cannot show in full. Only the first date is shown.';
+    const R = global.NotesAgendaRecurrence;
+    const kind = R ? R.parseAgendaRrule(rrule).kind : '';
+    const labels = {
+      daily: 'Repeats every day',
+      weekly: 'Repeats every week',
+      biweekly: 'Repeats every 2 weeks',
+      monthly: 'Repeats every month',
+      yearly: 'Repeats every year',
+    };
+    return labels[kind] || 'Repeats (imported rule)';
+  }
+
+  function openDetailCard(id, occurrenceMs) {
+    const ev = (listAgendaEvents() || []).find((e) => e.id === id);
+    if (!ev) return;
+    const occ = findOccurrenceForDetail(ev, occurrenceMs);
+    const start = occ ? occ.start : (occurrenceMs > 0 ? new Date(occurrenceMs) : parseInstant(ev.start));
+    const end = occ ? occ.end : parseInstant(ev.end);
+    const titleEl = document.getElementById('agenda-detail-title');
+    const when = document.getElementById('agenda-detail-when');
+    const repeat = document.getElementById('agenda-detail-repeat');
+    const loc = document.getElementById('agenda-detail-location');
+    const join = document.getElementById('agenda-detail-join');
+    const notes = document.getElementById('agenda-detail-notes');
+    const backdrop = document.getElementById('agenda-detail-backdrop');
+    const card = document.getElementById('agenda-detail-card');
+    const displayTitle = occ ? occDisplayTitle(occ) : (ev.title || 'Event');
+    const allDay = occ ? (occ.displayAllDay ?? !!occ.ev.all_day) : !!ev.all_day;
+    if (titleEl) titleEl.textContent = displayTitle || 'Untitled';
+    if (when) when.textContent = detailWhenText(start, end, allDay);
+    const repeatText = repeatSummary(ev, occ);
+    if (repeat) {
+      repeat.hidden = !repeatText;
+      repeat.textContent = repeatText;
+    }
+    const locText = String((occ && occ.displayLocation != null ? occ.displayLocation : ev.location) || '').trim();
+    if (loc) {
+      loc.hidden = !locText;
+      loc.textContent = locText;
+    }
+    const noteText = String((occ && occ.displayNotes != null ? occ.displayNotes : ev.notes) || '').trim();
+    if (notes) {
+      notes.hidden = !noteText;
+      notes.textContent = noteText;
+    }
+    const Ics = global.NotesAgendaIcs;
+    const link = Ics
+      ? (Ics.sanitizeHttpsUrl(ev.webcall_url || '') || Ics.extractHttpsFromText(noteText))
+      : '';
+    if (join) {
+      join.hidden = !link;
+      join.innerHTML = link
+        ? `<a class="btn primary sm" href="${esc(link)}" target="_blank" rel="noopener noreferrer">Join meeting</a>`
+        : '';
+    }
+    detailContext = { id, occurrenceMs: occurrenceMs || 0 };
+    if (backdrop) backdrop.hidden = false;
+    if (card) card.hidden = false;
+    document.body.classList.add('agenda-detail-open');
+    document.getElementById('agenda-detail-edit')?.focus({ preventScroll: true });
+  }
+
+  /** Keep Tab inside an open Agenda dialog. */
+  function trapDialogTab(ev, dialog) {
+    if (ev.key !== 'Tab' || !dialog || dialog.hidden) return;
+    const items = [...dialog.querySelectorAll('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => !el.disabled && !el.hidden && el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (ev.shiftKey && document.activeElement === first) {
+      ev.preventDefault();
+      last.focus();
+    } else if (!ev.shiftKey && document.activeElement === last) {
+      ev.preventDefault();
+      first.focus();
+    } else if (!dialog.contains(document.activeElement)) {
+      ev.preventDefault();
+      first.focus();
+    }
+  }
+
   function beginEditFromClick(id, occurrenceMs) {
     if (!id) {
       openEditor(null, { scope: 'series' });
+      return;
+    }
+    const useDetail = typeof window !== 'undefined'
+      && window.matchMedia('(min-width: 769px)').matches;
+    if (useDetail) {
+      openDetailCard(id, occurrenceMs);
       return;
     }
     const ev = (listAgendaEvents() || []).find((e) => e.id === id);
@@ -1269,6 +1760,23 @@
       return;
     }
     openEditor(id, { scope: 'series' });
+  }
+
+  function continueEditFromDetail() {
+    const { id, occurrenceMs } = detailContext;
+    closeDetailCard({ keepFocusTarget: true });
+    if (!id) return;
+    const ev = (listAgendaEvents() || []).find((e) => e.id === id);
+    const Occ = global.NotesAgendaOccurrence;
+    const hasRrule = ev && String(ev.rrule || '').trim();
+    const occOk = Occ && Occ.supportsOccurrenceEdit(ev && ev.rrule)
+      && Number.isFinite(occurrenceMs) && occurrenceMs > 0;
+    if (hasRrule && occOk) {
+      state.pendingEditor = { id, occurrenceMs };
+      openScopeChooser(ev);
+      return;
+    }
+    openEditor(id, { scope: 'series', occurrenceMs });
   }
 
   function setScopeChooserMode(mode) {
@@ -1423,6 +1931,10 @@
       notice.textContent = seriesNotice.text;
     }
     if (recur) recur.hidden = isOcc;
+    const colors = document.querySelector('#agenda-editor .agenda-editor-colors');
+    if (colors) colors.hidden = isOcc;
+    const rem = document.getElementById('agenda-edit-reminders-wrap');
+    if (rem) rem.hidden = isOcc;
     if (del) del.textContent = isOcc ? 'Delete occurrence' : 'Delete';
     if (heading) heading.textContent = isOcc ? 'Edit occurrence' : 'Event';
   }
@@ -1477,6 +1989,23 @@
       s = overlay && overlay.start ? (parseInstant(overlay.start) || seriesStart) : seriesStart;
       e = overlay && overlay.end ? (parseInstant(overlay.end) || new Date(s.getTime() + dur)) : new Date(s.getTime() + dur);
     }
+    if (!id && !(options.draftStart instanceof Date)) {
+      // Start on the day being viewed (today when it is on screen), at the next full hour.
+      const range = rangeForView();
+      const now = new Date();
+      const todayVisible = now >= range.start && now < range.end;
+      if (!todayVisible) {
+        const day = state.view === 'month'
+          ? new Date(state.monthPickDay || state.anchor)
+          : range.start;
+        s = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 9, 0, 0, 0);
+        e = new Date(s.getTime() + 3600000);
+      }
+    }
+    if (!id && options.draftStart instanceof Date) {
+      s = options.draftStart;
+      e = options.draftEnd instanceof Date ? options.draftEnd : new Date(s.getTime() + 3600000);
+    }
     if (titleEl) {
       titleEl.value = (scope === 'occurrence' && overlay && overlay.title)
         ? overlay.title
@@ -1510,6 +2039,8 @@
     }
     if (scope === 'series') fillRecurrenceEditor(content);
     else fillRecurrenceEditor({ ...content, rrule: content.rrule || '' });
+    fillReminderOffsetsEditor(content);
+    updateReminderHint();
     if (webcallEl) webcallEl.value = content.webcall_url || '';
     if (notesEl) {
       notesEl.value = (scope === 'occurrence' && overlay && overlay.notes != null)
@@ -1528,7 +2059,7 @@
     if (joinEl) {
       if (joinHref) {
         joinEl.hidden = false;
-        joinEl.innerHTML = `Join: <a href="${esc(joinHref)}" target="_blank" rel="noopener noreferrer">${esc(joinHref)}</a>`;
+        joinEl.innerHTML = `Meeting link: <a href="${esc(joinHref)}" target="_blank" rel="noopener noreferrer">${esc(joinHref)}</a>`;
       } else {
         joinEl.hidden = true;
         joinEl.textContent = '';
@@ -1536,6 +2067,9 @@
     }
 
     document.getElementById('agenda-edit-delete')?.toggleAttribute('hidden', !state.selectedId);
+    const savedColor = String(content.color || '').trim().toLowerCase();
+    state.editorColor = EVENT_COLORS.includes(savedColor) ? savedColor : '';
+    renderColorSwatches(state.editorColor);
     applyEditorScopeUi(scope, content.rrule || '');
 
     if (!editorReturnFocus) {
@@ -1569,11 +2103,12 @@
     return {
       type: 'agenda_event',
       version: 1,
-      title: 'Team sync',
+      title: '',
       location: '',
       notes: '',
       webcall_url: '',
       attendees: [],
+      color: '',
       start: s.toISOString(),
       end: e.toISOString(),
       all_day: false,
@@ -1581,7 +2116,59 @@
       ical_uid: '',
       ics_exdates: [],
       ics_occurrence_overrides: {},
+      reminders: [],
+      scheduled_reminder_ids: [],
     };
+  }
+
+  function readReminderOffsetsFromEditor() {
+    const R = global.NotesAgendaReminders;
+    if (!R || (typeof R.hasAgendaRemindersEntitlement === 'function' && !R.hasAgendaRemindersEntitlement())) {
+      return [];
+    }
+    const picked = [];
+    document.querySelectorAll('[data-agenda-reminder-offset]:checked').forEach((el) => {
+      const k = el.getAttribute('data-agenda-reminder-offset');
+      if (k) picked.push(k);
+    });
+    return R.normalizeOffsets(picked);
+  }
+
+  function fillReminderOffsetsEditor(content) {
+    const offsets = new Set(
+      (global.NotesAgendaReminders && NotesAgendaReminders.normalizeOffsets(content?.reminders)) || [],
+    );
+    document.querySelectorAll('[data-agenda-reminder-offset]').forEach((el) => {
+      const k = el.getAttribute('data-agenda-reminder-offset');
+      if (el instanceof HTMLInputElement) el.checked = offsets.has(k);
+    });
+  }
+
+  /** Bring server reminders in line with the stored event (series or single-occurrence change). */
+  function syncRemindersAfterSave(id) {
+    const R = global.NotesAgendaReminders;
+    if (!R || !id) return;
+    if (typeof R.hasAgendaRemindersEntitlement === 'function' && !R.hasAgendaRemindersEntitlement()) return;
+    R.syncEventReminders(id).catch((err) => {
+      if (typeof R.isPlanRequiredError === 'function' && R.isPlanRequiredError(err)) {
+        if (typeof global.notesAgendaToast === 'function') {
+          global.notesAgendaToast(R.PRO_RULE_COPY, true);
+        }
+        return;
+      }
+      if (typeof global.notesAgendaToast === 'function') {
+        global.notesAgendaToast('Reminders could not be updated. They will be retried when you are back online.', true);
+      }
+    });
+  }
+
+  function updateReminderHint() {
+    const hint = document.getElementById('agenda-edit-reminders-hint');
+    const R = global.NotesAgendaReminders;
+    if (!hint || !R || typeof R.editorHint !== 'function') return;
+    const text = R.editorHint();
+    hint.hidden = !text;
+    hint.textContent = text;
   }
 
   function flattenEventsForIcsExport(rows) {
@@ -1624,11 +2211,26 @@
 
   function handleEscapeKey(ev) {
     if (!ev || ev.key !== 'Escape') return false;
+    const confirmDialog = document.getElementById('confirm-dialog');
+    if (confirmDialog && !confirmDialog.hidden) return false; // the confirm dialog handles its own Escape
+    if (document.body.classList.contains('agenda-phone-menu-open')) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closePhoneMenu();
+      return true;
+    }
     const scopeDialog = document.getElementById('agenda-scope-chooser');
     if (scopeDialog && !scopeDialog.hidden) {
       ev.preventDefault();
       ev.stopPropagation();
       closeScopeChooser();
+      return true;
+    }
+    const detail = document.getElementById('agenda-detail-card');
+    if (document.body.classList.contains('agenda-detail-open') && detail && !detail.hidden) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeDetailCard();
       return true;
     }
     const dialog = document.getElementById('agenda-editor');
@@ -1723,6 +2325,7 @@
         ics_occurrence_overrides: overrides,
         ical_uid: icalUid,
       });
+      syncRemindersAfterSave(id);
       closeEditor();
       render();
       return;
@@ -1759,13 +2362,14 @@
       return;
     }
     state.seriesOverrideResetConfirmed = false;
-    S.upsertAgendaEvent(id, {
+    const nextBody = {
       ...base,
       title: nextTitle,
       location: nextLocation,
       notes: nextNotes,
       webcall_url: wc,
       attendees,
+      color: state.editorColor || '',
       start: nextStart,
       end: nextEnd,
       all_day: allDay,
@@ -1773,12 +2377,71 @@
       ical_uid: icalUid || base.ical_uid || '',
       ics_exdates: preserved.ics_exdates,
       ics_occurrence_overrides: preserved.ics_occurrence_overrides,
-    });
+      reminders: readReminderOffsetsFromEditor(),
+    };
+    S.upsertAgendaEvent(id, nextBody);
+    syncRemindersAfterSave(id);
     closeEditor();
     render();
   }
 
+  function renderColorSwatches(selected) {
+    const wrap = document.getElementById('agenda-edit-colors');
+    if (!wrap) return;
+    // Set here, not in the template: tests/test_round27_ui.js forbids the literal in app.html.
+    wrap.setAttribute('role', 'radiogroup');
+    const current = String(selected || '');
+    const options = [{ value: '', name: 'Automatic' }]
+      .concat(EVENT_COLORS.map((c, i) => ({ value: c, name: EVENT_COLOR_NAMES[i] || c })));
+    wrap.innerHTML = options.map((o) => {
+      const on = current === o.value;
+      const style = o.value ? ` style="--swatch:${esc(o.value)}"` : '';
+      return (
+        `<button type="button" role="radio" aria-checked="${on ? 'true' : 'false'}" tabindex="${on ? '0' : '-1'}"`
+        + ` class="agenda-color-swatch${o.value ? '' : ' is-auto'}${on ? ' is-selected' : ''}"`
+        + ` data-agenda-color="${esc(o.value)}"${style} aria-label="${esc(o.name)}" title="${esc(o.name)}"></button>`
+      );
+    }).join('');
+    const buttons = [...wrap.querySelectorAll('[data-agenda-color]')];
+    const choose = (btn, focus) => {
+      state.editorColor = btn.getAttribute('data-agenda-color') || '';
+      renderColorSwatches(state.editorColor);
+      if (focus) wrap.querySelector('[aria-checked="true"]')?.focus();
+    };
+    buttons.forEach((btn, i) => {
+      btn.addEventListener('click', () => choose(btn, true));
+      btn.addEventListener('keydown', (ev) => {
+        const step = (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') ? 1
+          : (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') ? -1 : 0;
+        if (!step) return;
+        ev.preventDefault();
+        choose(buttons[(i + step + buttons.length) % buttons.length], true);
+      });
+    });
+  }
+
+  function confirmAgendaDelete(isOccurrence) {
+    const message = isOccurrence
+      ? 'Delete this occurrence? The other dates in the series stay.'
+      : 'Delete this event? This cannot be undone.';
+    if (typeof global.notesAgendaConfirm === 'function') {
+      return Promise.resolve(global.notesAgendaConfirm(message, {
+        title: isOccurrence ? 'Delete occurrence' : 'Delete event',
+        confirmLabel: 'Delete',
+        danger: true,
+      })).then((ok) => !!ok);
+    }
+    return Promise.resolve(typeof window === 'undefined' || window.confirm(message));
+  }
+
   function deleteEditor() {
+    const S = getStore();
+    if (!state.selectedId || !S || typeof S.upsertAgendaEvent !== 'function') return;
+    const isOccurrence = state.editorScope === 'occurrence' && state.editorOccurrenceStartMs > 0;
+    confirmAgendaDelete(isOccurrence).then((ok) => { if (ok) deleteEditorConfirmed(); });
+  }
+
+  function deleteEditorConfirmed() {
     const S = getStore();
     if (!state.selectedId || !S || typeof S.upsertAgendaEvent !== 'function') return;
     const Occ = global.NotesAgendaOccurrence;
@@ -1802,11 +2465,16 @@
         ics_exdates: exdates,
         ics_occurrence_overrides: overrides,
       });
+      syncRemindersAfterSave(state.selectedId);
       closeEditor();
       render();
       return;
     }
     if (typeof S.removeAgendaEvent !== 'function') return;
+    const doomed = (listAgendaEvents() || []).find((e) => e.id === state.selectedId);
+    if (global.NotesAgendaReminders && doomed) {
+      NotesAgendaReminders.cancelEventReminders(state.selectedId, doomed).catch(() => {});
+    }
     S.removeAgendaEvent(state.selectedId);
     closeEditor();
     render();
@@ -1833,6 +2501,12 @@
     document.getElementById('agenda-edit-cancel')?.addEventListener('click', closeEditor);
     document.getElementById('agenda-edit-save')?.addEventListener('click', saveEditor);
     document.getElementById('agenda-edit-delete')?.addEventListener('click', deleteEditor);
+    document.getElementById('agenda-detail-close')?.addEventListener('click', () => closeDetailCard());
+    document.getElementById('agenda-detail-card')?.addEventListener('keydown', (ev) => {
+      trapDialogTab(ev, document.getElementById('agenda-detail-card'));
+    });
+    document.getElementById('agenda-detail-edit')?.addEventListener('click', continueEditFromDetail);
+    document.getElementById('agenda-detail-backdrop')?.addEventListener('click', () => closeDetailCard());
     document.getElementById('agenda-editor-backdrop')?.addEventListener('click', closeEditor);
     document.addEventListener('keydown', handleEscapeKey, true);
     const ad = document.getElementById('agenda-edit-allday');
@@ -1854,7 +2528,7 @@
         if (joinEl) {
           if (fromDesc) {
             joinEl.hidden = false;
-            joinEl.innerHTML = `Join: <a href="${esc(fromDesc)}" target="_blank" rel="noopener noreferrer">${esc(fromDesc)}</a>`;
+            joinEl.innerHTML = `Meeting link: <a href="${esc(fromDesc)}" target="_blank" rel="noopener noreferrer">${esc(fromDesc)}</a>`;
           } else {
             joinEl.hidden = true;
           }
@@ -1870,7 +2544,7 @@
           : '';
         if (joinEl && wc) {
           joinEl.hidden = false;
-          joinEl.innerHTML = `Join: <a href="${esc(wc)}" target="_blank" rel="noopener noreferrer">${esc(wc)}</a>`;
+          joinEl.innerHTML = `Meeting link: <a href="${esc(wc)}" target="_blank" rel="noopener noreferrer">${esc(wc)}</a>`;
         }
       });
     }
@@ -1886,6 +2560,7 @@
     if (!rootEl) return;
     wireCalendarSettingsOnce();
     wireAgendaSwipeOnce();
+    wireAgendaFabOnce();
     wireEditor();
     fileInput = document.getElementById('agenda-ics-input');
     if (fileInput) {
@@ -1902,13 +2577,27 @@
     try {
       const saved = sessionStorage.getItem('notes_agenda_view');
       if (saved && /^(day|3day|week|month|agenda)$/.test(saved)) state.view = saved;
+      else state.view = defaultAgendaView();
     } catch (err) { /* ignore */ }
+    state.monthPickDay = startOfDay(new Date()).getTime();
+    if (typeof global.matchMedia === 'function') {
+      const mq = global.matchMedia('(max-width: 768px)');
+      const onLayoutChange = () => {
+        const pane = document.getElementById('agenda-pane');
+        if (pane && !pane.hidden) render();
+        else syncAgendaFab();
+      };
+      if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onLayoutChange);
+      else if (typeof mq.addListener === 'function') mq.addListener(onLayoutChange);
+    }
     render();
+    global.NotesAgendaReminders?.onAgendaShown?.();
   }
 
   function onTabShown() {
     try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
     render();
+    global.NotesAgendaReminders?.onAgendaShown?.();
   }
 
   global.NotesAgenda = {
@@ -1916,10 +2605,17 @@
     render,
     onTabShown,
     openNewEvent,
+    isAgendaPhoneLayout,
+    formatRangeTitle,
+    defaultAgendaView,
     seriesNoticeForEditor,
     handleEscapeKey,
     closeEditor,
     closeScopeChooser,
+    _layoutDayColumns: layoutDayColumns,
+    expandEventOccurrences,
+    rangeForView: () => rangeForView(),
+    _state: state,
   };
   global.__notesCloseAgendaCalendarSettings = closeCalendarSettingsPanel;
 }(typeof window !== 'undefined' ? window : globalThis));

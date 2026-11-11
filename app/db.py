@@ -334,6 +334,35 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("UPDATE note_reminders SET title = '' WHERE title != ''")
     conn.executescript(
         """
+        CREATE TABLE IF NOT EXISTS agenda_scheduled_reminders (
+            id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            fire_at REAL NOT NULL,
+            channel TEXT NOT NULL,
+            local_time_label TEXT NOT NULL DEFAULT '',
+            sent_at REAL NOT NULL DEFAULT 0,
+            sending_at REAL NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            PRIMARY KEY (user_id, id),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_agenda_scheduled_reminders_due
+            ON agenda_scheduled_reminders(sent_at, sending_at, fire_at);
+
+        CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            endpoint TEXT NOT NULL,
+            subscription_json TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            UNIQUE(user_id, endpoint),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        """
+    )
+    conn.executescript(
+        """
         CREATE TABLE IF NOT EXISTS srp_challenges (
             id TEXT PRIMARY KEY,
             purpose TEXT NOT NULL,
@@ -3112,3 +3141,269 @@ def prune_secure_sends(now_ts: float | None = None) -> int:
             (cutoff, ts),
         )
         return int(cur.rowcount or 0)
+
+
+AGENDA_REMINDER_PENDING_CAP = 500
+AGENDA_REMINDER_CHANNELS = frozenset({"push", "email"})
+
+
+def _agenda_reminder_row(row) -> dict[str, Any] | None:
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "fire_at": float(row["fire_at"]),
+        "channel": row["channel"],
+        "local_time_label": row["local_time_label"] or "",
+        "sent_at": float(row["sent_at"] or 0),
+    }
+
+
+def count_pending_agenda_reminders(user_id: int, now_ts: float | None = None) -> int:
+    when = float(now_ts if now_ts is not None else now())
+    row = connection().execute(
+        """
+        SELECT COUNT(*) AS n FROM agenda_scheduled_reminders
+        WHERE user_id = ? AND sent_at = 0 AND fire_at > ?
+        """,
+        (user_id, when),
+    ).fetchone()
+    return int(row["n"] if row else 0)
+
+
+AGENDA_REMINDER_LABEL_RE = re.compile(r"^\d{1,2}:\d{2}$")
+AGENDA_REMINDER_SENT_RETENTION_SEC = 7 * 86400.0
+WEB_PUSH_SUBSCRIPTION_CAP = 10
+
+
+def sync_agenda_reminders(
+    user_id: int,
+    reminders: list[dict[str, Any]],
+    delete_ids: list[str],
+    *,
+    allow_push: bool = True,
+    allow_email: bool = True,
+) -> dict[str, Any]:
+    """Apply deletes, then upserts.
+
+    Only rows that are new count against the pending cap, and deletes in the same
+    request free capacity first, so a client at the cap can still replace its rows.
+    Channels the server cannot deliver right now are skipped (and reported) instead of
+    being queued forever.
+    """
+    ts = now()
+    when = ts
+    upserted = 0
+    deleted = 0
+    skipped_push = 0
+    skipped_email = 0
+    rejected_cap = 0
+    rid_re = re.compile(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        re.I,
+    )
+    with tx() as conn:
+        for rid in delete_ids:
+            rid = str(rid or "").strip()
+            if not rid_re.match(rid):
+                continue
+            cur = conn.execute(
+                "DELETE FROM agenda_scheduled_reminders WHERE user_id = ? AND id = ?",
+                (user_id, rid),
+            )
+            if cur.rowcount:
+                deleted += 1
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM agenda_scheduled_reminders
+            WHERE user_id = ? AND sent_at = 0 AND fire_at > ?
+            """,
+            (user_id, when),
+        ).fetchone()
+        pending = int(row["n"] if row else 0)
+        for item in reminders:
+            rid = str(item.get("id") or "").strip()
+            channel = str(item.get("channel") or "").strip().lower()
+            if not rid_re.match(rid) or channel not in AGENDA_REMINDER_CHANNELS:
+                continue
+            if channel == "push" and not allow_push:
+                skipped_push += 1
+                continue
+            if channel == "email" and not allow_email:
+                skipped_email += 1
+                continue
+            try:
+                fire_at = float(item.get("fire_at"))
+            except (TypeError, ValueError):
+                continue
+            if fire_at <= when:
+                continue
+            label = str(item.get("local_time_label") or "").strip()
+            if not AGENDA_REMINDER_LABEL_RE.match(label):
+                label = ""
+            exists = conn.execute(
+                "SELECT 1 FROM agenda_scheduled_reminders WHERE user_id = ? AND id = ?",
+                (user_id, rid),
+            ).fetchone()
+            if not exists:
+                if pending >= AGENDA_REMINDER_PENDING_CAP:
+                    rejected_cap += 1
+                    continue
+                pending += 1
+            conn.execute(
+                """
+                INSERT INTO agenda_scheduled_reminders (
+                    id, user_id, fire_at, channel, local_time_label,
+                    sent_at, sending_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)
+                ON CONFLICT(user_id, id) DO UPDATE SET
+                    fire_at = excluded.fire_at,
+                    channel = excluded.channel,
+                    local_time_label = excluded.local_time_label,
+                    sent_at = CASE
+                        WHEN ABS(agenda_scheduled_reminders.fire_at - excluded.fire_at) < 1
+                        THEN agenda_scheduled_reminders.sent_at
+                        ELSE 0
+                    END,
+                    sending_at = 0,
+                    updated_at = excluded.updated_at
+                """,
+                (rid, user_id, fire_at, channel, label, ts, ts),
+            )
+            upserted += 1
+    return {
+        "upserted": upserted,
+        "deleted": deleted,
+        "skipped_push": skipped_push,
+        "skipped_email": skipped_email,
+        "rejected_cap": rejected_cap,
+        "pending": count_pending_agenda_reminders(user_id, when),
+    }
+
+
+def list_agenda_reminders_public(user_id: int) -> list[dict[str, Any]]:
+    rows = connection().execute(
+        """
+        SELECT id, fire_at, channel, local_time_label, sent_at
+        FROM agenda_scheduled_reminders
+        WHERE user_id = ? AND (sent_at = 0 OR sent_at > ?)
+        ORDER BY fire_at ASC
+        LIMIT 1000
+        """,
+        (user_id, now() - AGENDA_REMINDER_SENT_RETENTION_SEC),
+    ).fetchall()
+    return [r for r in (_agenda_reminder_row(row) for row in rows) if r]
+
+
+def expire_overdue_agenda_reminders(cutoff_ts: float, now_ts: float | None = None) -> int:
+    """Close reminders that are too late to be useful, in bulk, without sending them."""
+    ts = float(now_ts if now_ts is not None else now())
+    with tx() as conn:
+        cur = conn.execute(
+            """
+            UPDATE agenda_scheduled_reminders
+            SET sent_at = ?, sending_at = 0, updated_at = ?
+            WHERE sent_at = 0 AND fire_at < ?
+            """,
+            (ts, ts, float(cutoff_ts)),
+        )
+        return int(cur.rowcount or 0)
+
+
+def prune_sent_agenda_reminders(now_ts: float | None = None) -> int:
+    ts = float(now_ts if now_ts is not None else now())
+    with tx() as conn:
+        cur = conn.execute(
+            "DELETE FROM agenda_scheduled_reminders WHERE sent_at > 0 AND sent_at < ?",
+            (ts - AGENDA_REMINDER_SENT_RETENTION_SEC,),
+        )
+        return int(cur.rowcount or 0)
+
+
+def claim_due_agenda_reminders(now_ts: float | None = None) -> list[dict[str, Any]]:
+    when = float(now_ts if now_ts is not None else now())
+    stale = when - CLAIM_STALE_SEC
+    out: list[dict[str, Any]] = []
+    with tx() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM agenda_scheduled_reminders
+            WHERE sent_at = 0 AND fire_at <= ? AND (sending_at = 0 OR sending_at < ?)
+            ORDER BY fire_at ASC
+            LIMIT 50
+            """,
+            (when, stale),
+        ).fetchall()
+        for row in rows:
+            rid = str(row["id"])
+            uid = int(row["user_id"])
+            conn.execute(
+                "UPDATE agenda_scheduled_reminders SET sending_at = ? WHERE user_id = ? AND id = ?",
+                (when, uid, rid),
+            )
+            merged = dict(row)
+            merged["user_id"] = uid
+            out.append(merged)
+    return out
+
+
+def mark_agenda_reminder_sent(user_id: int, reminder_id: str, when: float | None = None) -> None:
+    ts = float(when if when is not None else now())
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE agenda_scheduled_reminders
+            SET sent_at = ?, sending_at = 0, updated_at = ?
+            WHERE user_id = ? AND id = ?
+            """,
+            (ts, ts, user_id, reminder_id),
+        )
+
+
+def release_agenda_reminder_claim(user_id: int, reminder_id: str) -> None:
+    with tx() as conn:
+        conn.execute(
+            "UPDATE agenda_scheduled_reminders SET sending_at = 0 WHERE user_id = ? AND id = ?",
+            (user_id, reminder_id),
+        )
+
+
+def upsert_web_push_subscription(user_id: int, endpoint: str, subscription_json: str) -> None:
+    ts = now()
+    with tx() as conn:
+        conn.execute(
+            """
+            INSERT INTO web_push_subscriptions (user_id, endpoint, subscription_json, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, endpoint) DO UPDATE SET
+                subscription_json = excluded.subscription_json
+            """,
+            (user_id, endpoint, subscription_json, ts),
+        )
+        # Keep the newest few per account; browsers rotate endpoints and old ones go stale.
+        conn.execute(
+            """
+            DELETE FROM web_push_subscriptions
+            WHERE user_id = ? AND id NOT IN (
+                SELECT id FROM web_push_subscriptions
+                WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?
+            )
+            """,
+            (user_id, user_id, WEB_PUSH_SUBSCRIPTION_CAP),
+        )
+
+
+def delete_web_push_subscription(user_id: int, endpoint: str) -> None:
+    with tx() as conn:
+        conn.execute(
+            "DELETE FROM web_push_subscriptions WHERE user_id = ? AND endpoint = ?",
+            (user_id, endpoint),
+        )
+
+
+def list_web_push_subscriptions(user_id: int) -> list[dict[str, Any]]:
+    rows = connection().execute(
+        "SELECT endpoint, subscription_json FROM web_push_subscriptions WHERE user_id = ?",
+        (user_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]

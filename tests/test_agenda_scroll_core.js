@@ -99,6 +99,8 @@ top = pickTimeGridScrollTop({
 assert.strictEqual(top, 1200, 'search filter must not bust scroll fp');
 
 const scrollOpts = { pxPerHour: PX, viewportHeight: VIEW_H };
+const frozenNow = new Date(2020, 0, 1);
+const scrollOptsFrozen = { ...scrollOpts, now: frozenNow };
 top = pickTimeGridScrollTop({
   currentFingerprint: fpFull,
   storedFingerprint: fpFull,
@@ -115,9 +117,15 @@ top = pickTimeGridScrollTop({
   storedScrollTop: 416,
   displayOcc: [mon14, wed08],
   range: range2,
-  opts: scrollOpts,
+  opts: scrollOptsFrozen,
 });
-const wantEmptyFp = preferredTimeGridScrollTop([mon14, wed08], range2, scrollOpts);
+const anchorNoToday = new Date(2030, 0, 6);
+const rangeNoToday = {
+  start: anchorNoToday,
+  end: addDays(anchorNoToday, 7),
+  days: Array.from({ length: 7 }, (_, i) => addDays(anchorNoToday, i)),
+};
+const wantEmptyFp = preferredTimeGridScrollTop([mon14, wed08], range2, scrollOptsFrozen);
 assert.strictEqual(top, wantEmptyFp, 'empty fingerprint must not restore stale scrollTop');
 
 top = pickTimeGridScrollTop({
@@ -126,15 +134,21 @@ top = pickTimeGridScrollTop({
   storedScrollTop: 900,
   displayOcc: [mon14, wed08],
   range: range2,
-  opts: scrollOpts,
+  opts: scrollOptsFrozen,
 });
-const want = preferredTimeGridScrollTop([mon14, wed08], range2, scrollOpts);
+const want = preferredTimeGridScrollTop([mon14, wed08], range2, scrollOptsFrozen);
 assert.strictEqual(top, want, 'schedule change invalidates saved scroll');
 
-const centered = preferredTimeGridScrollTop([mon14, wed08], range2, { pxPerHour: PX, viewportHeight: VIEW_H });
-assert.strictEqual(centered, 8 * PX - VIEW_H / 2, 'earliest event centered in viewport (Wed 08:00)');
+const ev2030 = { ev: { all_day: false, id: 'z' }, start: new Date(2030, 0, 7, 8, 0, 0), end: new Date(2030, 0, 7, 9, 0, 0) };
+const nearTop = preferredTimeGridScrollTop([ev2030], rangeNoToday, { pxPerHour: PX, viewportHeight: VIEW_H });
+assert.strictEqual(nearTop, 8 * PX - 72, 'earliest event near top of viewport (08:00)');
 
-const noEvents = preferredTimeGridScrollTop([], range2, { pxPerHour: PX, viewportHeight: VIEW_H, defaultDayStartHour: 8 });
+const noEvents = preferredTimeGridScrollTop([], rangeNoToday, {
+  pxPerHour: PX,
+  viewportHeight: VIEW_H,
+  defaultDayStartHour: 8,
+  now: new Date(2020, 0, 1),
+});
 assert.strictEqual(noEvents, 8 * PX, 'empty schedule uses default morning band');
 
 const clamped = clampTimeGridScrollTop(9000, 1200, VIEW_H);

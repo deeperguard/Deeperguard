@@ -223,6 +223,7 @@
       if (notes) lines.push(`DESCRIPTION:${escapeIcsText(notes)}`);
       const wc = sanitizeHttpsUrl(ev.webcall_url || '');
       if (wc) lines.push(`URL:${wc}`);
+      if (/^#[0-9a-f]{6}$/i.test(String(ev.color || ''))) lines.push(`X-DEEPERGUARD-COLOR:${String(ev.color).toLowerCase()}`);
       if (ev.all_day) {
         let endExclusive = new Date(de.getTime());
         const dStart = formatLocalDateValue(ds);
@@ -317,6 +318,8 @@
       if (!webcall) webcall = extractHttpsFromText(desc) || extractHttpsFromText(loc);
       const attendeeLines = map.get('ATTENDEE') || [];
       const attendees = attendeeLines.map((r) => unescapeText(r.value)).filter(Boolean);
+      const colorRaw = String(((map.get('X-DEEPERGUARD-COLOR') || [])[0] || {}).value || '').trim().toLowerCase();
+      const color = /^#[0-9a-f]{6}$/.test(colorRaw) ? colorRaw : '';
       const icalUid = uid || `local-${Date.now()}-${events.length}`;
       events.push({
         ical_uid: icalUid,
@@ -325,6 +328,7 @@
         notes: desc,
         attendees,
         webcall_url: webcall,
+        color,
         start: dts.date.toISOString(),
         end: endDate.toISOString(),
         all_day: allDay,
@@ -345,5 +349,6 @@
     foldIcsLine,
     buildIcsCalendarFromEvents,
     formatUtcDateTime,
+    formatLocalDateValue,
   };
 }(typeof window !== 'undefined' ? window : globalThis));

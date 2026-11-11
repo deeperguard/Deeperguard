@@ -1907,6 +1907,7 @@ const NotesStore = (() => {
         notes: String(m.notes || ''),
         attendees: Array.isArray(m.attendees) ? m.attendees : [],
         webcall_url: String(m.webcall_url || ''),
+        color: String(m.color || ''),
         start: String(m.start || ''),
         end: String(m.end || ''),
         all_day: !!m.all_day,

@@ -1,5 +1,17 @@
 # Release notes
 
+## Unreleased
+
+- **Agenda (phone layout, list view, repeat options, interactions — #345–#348 plus review fixes):**
+  - Phone header with previous/next, Today and an overflow menu; month dots with a day list; **List** view grouped by day, with multi-day events under every day they cover.
+  - Repeat patterns: daily, weekly, every 2 weeks, monthly, yearly. Imported weekly `BYDAY` lists and monthly nth-weekday rules (`2TU`, `-1FR`) are shown correctly; rules the app cannot expand show their first date only and say so.
+  - **Date fixes:** repeating events keep their local time across clock changes; the month grid no longer repeats a day in the week the clocks go back; monthly on the 31st and yearly on 29 February clip per period instead of drifting; all-day series repeat; long-running daily series stay visible.
+  - Event detail card (date, repeat, location, **Join meeting**), named colour picker with an automatic default, in-app delete confirmation, empty title for new events starting on the day in view.
+  - Search keeps focus while typing; Agenda dates use one day-first format.
+- **Agenda reminders (#349 plus review fixes):** per-event email reminders (push when enabled later). The server stores only an opaque id, the fire time, the channel and an optional `HH:MM` label.
+  - Reminders follow the calendar exactly (interval, end date, deleted and moved occurrences) and are planned 60 days ahead, topped up when the app opens; failed updates are retried.
+  - Delivery: reminders more than 30 minutes late are closed unsent (`NOTES_AGENDA_REMINDER_MAX_LATE_SEC`); undeliverable ones never block the queue; email needs a verified address; push endpoints are limited to browser push services.
+  - **Ops:** schedule `app/agenda_reminder_cron.py` (every minute) for email delivery. Do not add VAPID keys until push is enabled.
 ## v0.65.52 (Vienna)
 
 - **Ops #334:** After any server `notes.db` restore, operators can revoke all live sessions (`deploy/revoke-all-sessions-after-restore.{sh,py}`) so pre-restore cookies cannot authenticate; runbook in `deploy/PRODUCTION.md`.

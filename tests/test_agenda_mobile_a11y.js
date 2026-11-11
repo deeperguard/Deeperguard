@@ -25,11 +25,15 @@ assert.ok(agendaJs.includes("document.body.classList.add('agenda-editor-open')")
 assert.ok(agendaJs.includes("document.body.classList.remove('agenda-editor-open')"));
 assert.ok(agendaJs.includes('aria-label="Search events"'));
 assert.ok(agendaJs.includes('function handleEscapeKey'));
-const escFn = agendaJs.slice(agendaJs.indexOf('function handleEscapeKey'), agendaJs.indexOf('function handleEscapeKey') + 800);
+const escFn = agendaJs.slice(agendaJs.indexOf('function handleEscapeKey'), agendaJs.indexOf('function handleEscapeKey') + 1200);
 assert.ok(escFn.includes('agenda-scope-chooser') && escFn.includes('closeScopeChooser()'));
 const scopeEscape = escFn.indexOf('agenda-scope-chooser');
+const detailEscape = escFn.indexOf('agenda-detail');
 const editorEscape = escFn.indexOf("getElementById('agenda-editor')");
-assert.ok(scopeEscape >= 0 && editorEscape > scopeEscape, 'Escape closes scope chooser before editor');
+assert.ok(
+  scopeEscape >= 0 && detailEscape > scopeEscape && editorEscape > detailEscape,
+  'Escape: scope chooser, then detail card, then editor',
+);
 assert.ok(agendaJs.includes('applyEditorScopeUi'));
 assert.ok(agendaJs.includes('focusEditorReturnTarget'));
 assert.ok(agendaJs.includes('#agenda-search') && css.includes('min-height: 44px'));

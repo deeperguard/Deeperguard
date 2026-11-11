@@ -40,4 +40,40 @@ assert.ok(bi.includes('INTERVAL=2'));
 assert.strictEqual(R.buildAgendaRrule('none', until), '');
 assert.strictEqual(R.buildAgendaRrule('advanced', until), null);
 
+p = R.parseAgendaRrule('FREQ=DAILY;INTERVAL=1');
+assert.strictEqual(p.kind, 'daily');
+
+p = R.parseAgendaRrule('FREQ=DAILY;INTERVAL=3');
+assert.strictEqual(p.kind, 'advanced');
+assert.strictEqual(p.raw, 'FREQ=DAILY;INTERVAL=3');
+
+p = R.parseAgendaRrule('FREQ=MONTHLY;INTERVAL=2');
+assert.strictEqual(p.kind, 'advanced');
+
+p = R.parseAgendaRrule('FREQ=MONTHLY;INTERVAL=1');
+assert.strictEqual(p.kind, 'monthly');
+
+p = R.parseAgendaRrule('FREQ=YEARLY;INTERVAL=1');
+assert.strictEqual(p.kind, 'yearly');
+
+const daily = R.buildAgendaRrule('daily', until);
+assert.ok(daily.includes('FREQ=DAILY'));
+
+const monthly = R.buildAgendaRrule('monthly', until);
+assert.ok(monthly.includes('FREQ=MONTHLY'));
+
+const yearly = R.buildAgendaRrule('yearly', until);
+assert.ok(yearly.includes('FREQ=YEARLY'));
+
+assert.strictEqual(typeof R.addMonthsClipped, 'function');
+const jan31 = new Date(2025, 0, 31, 10, 0);
+const feb = R.addMonthsClipped(jan31, 1);
+assert.strictEqual(feb.getFullYear(), 2025);
+assert.strictEqual(feb.getMonth(), 1);
+assert.strictEqual(feb.getDate(), 28);
+const jan29nl = new Date(2025, 0, 29, 9, 0);
+const febFrom29 = R.addMonthsClipped(jan29nl, 1);
+assert.strictEqual(febFrom29.getMonth(), 1);
+assert.strictEqual(febFrom29.getDate(), 28);
+
 console.log('test_agenda_recurrence ok');

@@ -5,6 +5,7 @@
 (function (global) {
   const DEFAULT_PX_PER_HOUR = 52;
   const DEFAULT_DAY_START_HOUR = 8;
+  const SCROLL_TOP_INSET_PX = 72;
 
   function startOfDay(d) {
     const x = new Date(d);
@@ -13,7 +14,10 @@
   }
 
   function addDays(d, n) {
-    return new Date(d.getTime() + n * 86400000);
+    return new Date(
+      d.getFullYear(), d.getMonth(), d.getDate() + n,
+      d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds(),
+    );
   }
 
   /** Schedule identity for scroll persistence: visible occurrences in period (not search-filtered). */
@@ -48,23 +52,47 @@
     return minMin;
   }
 
-  /** Place earliest timed event at vertical center of viewport (px), else default morning band. */
+  /** Minutes anchor for today in view: first timed event today, else current clock time. */
+  function todayAnchorMinutes(occ, days, now) {
+    const ref = now instanceof Date ? now : new Date();
+    const td = startOfDay(ref);
+    const t0 = td.getTime();
+    const inView = (days || []).some((d) => startOfDay(d).getTime() === t0);
+    if (!inView) return null;
+    const dayEnd = addDays(td, 1);
+    let first = null;
+    for (const o of occ || []) {
+      if (!o || !o.ev || o.ev.all_day) continue;
+      if (o.end <= td || o.start >= dayEnd) continue;
+      const a = o.start < td ? td : o.start;
+      const mins = (a - td) / 60000;
+      if (first === null || mins < first) first = mins;
+    }
+    if (first !== null) return first;
+    const nowMin = (ref - td) / 60000;
+    return Math.max(0, Math.min(nowMin, 23 * 60 + 59));
+  }
+
+  /** Place anchor (today or earliest event) near the top of the viewport, else default morning band. */
   function preferredTimeGridScrollTop(occ, range, opts) {
     const pxPerHour = (opts && opts.pxPerHour) || DEFAULT_PX_PER_HOUR;
     const defaultDayStartHour = (opts && opts.defaultDayStartHour) || DEFAULT_DAY_START_HOUR;
     const viewportHeight = Number(opts && opts.viewportHeight) || 0;
-    const minMin = earliestVisibleMinutesInPeriod(
-      occ,
-      range && range.days,
-      range && range.start,
-      range && range.end,
-    );
+    const inset = Number(opts && opts.topInsetPx) || SCROLL_TOP_INSET_PX;
+    const now = (opts && opts.now instanceof Date) ? opts.now : new Date();
+    const todayMin = todayAnchorMinutes(occ, range && range.days, now);
+    let minMin = todayMin;
+    if (minMin === null) {
+      minMin = earliestVisibleMinutesInPeriod(
+        occ,
+        range && range.days,
+        range && range.start,
+        range && range.end,
+      );
+    }
     if (minMin === null) return defaultDayStartHour * pxPerHour;
     const eventTopPx = (minMin / 60) * pxPerHour;
-    if (viewportHeight > 0) {
-      return Math.max(0, eventTopPx - viewportHeight / 2);
-    }
-    return Math.max(0, eventTopPx);
+    return Math.max(0, eventTopPx - inset);
   }
 
   function clampTimeGridScrollTop(top, scrollHeight, clientHeight) {
@@ -117,6 +145,7 @@
   }
 
   global.NotesAgendaScroll = {
+    todayAnchorMinutes,
     scheduleFingerprint,
     earliestVisibleMinutesInPeriod,
     preferredTimeGridScrollTop,
