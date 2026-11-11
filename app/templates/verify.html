@@ -389,7 +389,7 @@ python3 scripts/build-client-manifest.py --print-hash
               <figcaption class="mk-code-label">cosign verify-blob (signed releases)</figcaption>
               <pre class="mk-code" tabindex="0">cosign verify-blob \
   --bundle client-manifest.sigstore.json \
-  --certificate-identity-regexp 'https://github.com/deeperguard/Deeperguard/' \
+  --certificate-identity-regexp '^https://github.com/deeperguard/Deeperguard/.github/workflows/release-client.yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   client-manifest.json</pre>
             </figure>
