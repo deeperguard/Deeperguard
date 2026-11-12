@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Agenda import: time zones.** Invites with a `TZID` (e.g. 09:00 New York) are now placed at the right time on your device (15:00 in Amsterdam) instead of at 09:00 local. Outlook/Exchange zone names (e.g. "W. Europe Standard Time") are recognised; an unknown zone falls back to local time with a warning. Cancelled (`EXDATE`) and moved (`RECURRENCE-ID`) occurrences with a time zone now match their series. Known limit: a repeating series from another zone keeps the local time of its first occurrence, so during the weeks when that zone and yours change clocks on different dates it shows one hour off.
 - **Agenda (phone layout, list view, repeat options, interactions — #345–#348 plus review fixes):**
   - Phone header with previous/next, Today and an overflow menu; month dots with a day list; **List** view grouped by day, with multi-day events under every day they cover.
   - Repeat patterns: daily, weekly, every 2 weeks, monthly, yearly. Imported weekly `BYDAY` lists and monthly nth-weekday rules (`2TU`, `-1FR`) are shown correctly; rules the app cannot expand show their first date only and say so.
