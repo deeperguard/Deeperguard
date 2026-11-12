@@ -44,16 +44,16 @@
       "url": "/static/js/agenda-reminders.417fa2c019b83ec1.js"
     },
     "js/agenda-scroll-core.js": {
-      "bytes": 5525,
-      "sha256": "60ded1689cd204c0c557ea1f43c436fcaf4e8807dad046667638d652df7ccc22",
-      "sri": "sha384-NHMkBVlrlfC3SHHARfwqIdMW9BokjtMadlWbCJ6D0wFRUP39oeqywuWWHPtHYqvk",
-      "url": "/static/js/agenda-scroll-core.60ded1689cd204c0.js"
+      "bytes": 8278,
+      "sha256": "53fb335726779678b2461c8e87b6e51e4f4881b30793afe18b4a6204ee637d5c",
+      "sri": "sha384-2GlKeytwlc946xeE630PQBPBykK7x7wcE2GBMNX+JE1SL8iYtsc+ATIWNRyy6mWQ",
+      "url": "/static/js/agenda-scroll-core.53fb335726779678.js"
     },
     "js/agenda.js": {
-      "bytes": 102653,
-      "sha256": "810f7e0527bc1c112592a61acee4bf347d81cacfb3bc65e68d0441a6f880878b",
-      "sri": "sha384-CPAFmaWOtr4Q7fMA0JPpOXy3YY3k2G90HgHcV2vja62YZI7CuZibTRkIegZRPG8c",
-      "url": "/static/js/agenda.810f7e0527bc1c11.js"
+      "bytes": 107177,
+      "sha256": "147c078e013cd362c8c69e174a459af56f78bcb69657d5c1b91222a52853fe7b",
+      "sri": "sha384-P5eVMVz8BLvs2sxxWPVQLBm7raXMNFazeqoRHqqoiPNEMkzXS8n9TikUp4HPRVc+",
+      "url": "/static/js/agenda.147c078e013cd362.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -62,10 +62,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 962867,
-      "sha256": "a5fb5c369d4a127c3b047c0c0c075208c0719ed2eec981e6dbeeccace80fcdf3",
-      "sri": "sha384-wCJHx+oMOWcJ+0MZ41iwKvA1lxygKh9T9vzNhqg2qWKXuYLVdTtOt6y0c0RKce+1",
-      "url": "/static/js/app.a5fb5c369d4a127c.js"
+      "bytes": 963027,
+      "sha256": "4731c3921ad6140283fb07392b0fccdbd714d921bec392f85d1982c459ac2aaf",
+      "sri": "sha384-D1gsKYqezXO9IgOSwt+fprGVa5TK+bXk5DI2As8F81iWAfraXN/r2HRUKavqj9dq",
+      "url": "/static/js/app.4731c3921ad61402.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -411,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "451468d046db0aa6ad6e03fa6930e5439b4b15a2713653818ba0e12f9aa2662c",
+  "manifest_sha256": "9db6c470e5fe6444e2492ecad508fa317a514b83bac0cc642bdc33856a20f110",
   "version": 1
 }
