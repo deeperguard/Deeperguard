@@ -116,10 +116,10 @@
       "url": "/static/js/crypto.60b77efdfe498e57.js"
     },
     "js/deletion-sync-honesty.js": {
-      "bytes": 2002,
-      "sha256": "6ab0560e1036237e8d506f324189ac097b4dc7569c6a69274b69ccbc7179429e",
-      "sri": "sha384-WGwWym8JurtnA4w/SmBDZ7ZPtZVxweTW5PLENURmpIENFbn9JvwvdQdaiLpAePSw",
-      "url": "/static/js/deletion-sync-honesty.6ab0560e1036237e.js"
+      "bytes": 2505,
+      "sha256": "f015a294f9a6cc1c724c26a4255d37cf2a35bf113c3b010d9691915af195e03a",
+      "sri": "sha384-oeDbHxoWqUVmcl6je1vUZEqTUQNZouLjlBhkSoSegyzZeajekrXF04H2BU5xPliU",
+      "url": "/static/js/deletion-sync-honesty.f015a294f9a6cc1c.js"
     },
     "js/device-phrase.js": {
       "bytes": 3357,
@@ -411,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "5b3b6c41ca528b2c7fbd4ab2a206c47f9ef7710fa2a8b6d552515b2c792f79d1",
+  "manifest_sha256": "2aa45a37064c7eb2acba962ea2c900c22f05e3c22c8b5ca92eb763190fc2b7a4",
   "version": 1
 }
