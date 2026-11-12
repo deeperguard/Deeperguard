@@ -348,9 +348,14 @@ const seriesShiftNext = {
   location: '',
   notes: '',
 };
+const occ2SeriesSlot13 = '2026-11-11T13:00:00.000Z';
 function countAt15(ev) {
   const list = expandRaw(ev, new Date('2026-11-01'), new Date('2026-12-01'));
   return list.filter((o) => o.start.toISOString() === occ2MovedStart);
+}
+function countAt13(ev) {
+  const list = expandRaw(ev, new Date('2026-11-01'), new Date('2026-12-01'));
+  return list.filter((o) => o.start.toISOString() === occ2SeriesSlot13);
 }
 
 const withExdate = {
@@ -370,6 +375,7 @@ assert.strictEqual(exPlan.ics_occurrence_overrides[occ2NewRid].start, occ2MovedS
 assert.ok(exPlan.ics_exdates.includes(occ2NewRid));
 const withExdateEv = { ...withExdate, ...seriesShiftNext, ...exPlan };
 assert.strictEqual(countAt15(withExdateEv).length, 1);
+assert.strictEqual(countAt13(withExdateEv).length, 0);
 assert.strictEqual(countAt15(withExdateEv)[0].displayTitle, 'Occurrence 2 moved');
 
 const overrideOnly = {
@@ -389,6 +395,7 @@ assert.ok(onlyPlan.ics_exdates.includes(occ2NewRid));
 assert.strictEqual(onlyPlan.ics_occurrence_overrides[occ2NewRid].start, occ2MovedStart);
 const overrideOnlyEv = { ...overrideOnly, ...seriesShiftNext, ...onlyPlan };
 assert.strictEqual(countAt15(overrideOnlyEv).length, 1);
+assert.strictEqual(countAt13(overrideOnlyEv).length, 0);
 
 const icsExceptionRows = [
   overrideOnlyEv,

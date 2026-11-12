@@ -1828,8 +1828,8 @@
       if (customN > 0) {
         customHint.hidden = false;
         customHint.textContent = customN === 1
-          ? 'This series has 1 customized occurrence.'
-          : `This series has ${customN} customized occurrences.`;
+          ? 'This series has 1 edited occurrence.'
+          : `This series has ${customN} edited occurrences.`;
       } else {
         customHint.hidden = true;
         customHint.textContent = '';
