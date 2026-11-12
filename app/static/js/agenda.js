@@ -283,6 +283,7 @@
     search: '',
     selectedId: '',
     editorScope: 'series',
+    editorSnapshot: null,
     editorOccurrenceStartMs: 0,
     pendingEditor: null,
     editorReturnFocusId: '',
@@ -2081,12 +2082,62 @@
     backdrop.hidden = false;
     dialog.hidden = false;
     document.body.classList.add('agenda-editor-open');
+    // Remember what the form looked like when it opened, to warn before throwing edits away.
+    state.editorSnapshot = editorFormSignature();
     if (titleEl) {
       requestAnimationFrame(() => {
         titleEl.focus({ preventScroll: true });
       });
     }
   }
+
+  function editorFormSignature() {
+    const Core = global.NotesAgendaScroll;
+    const dialog = document.getElementById('agenda-editor');
+    if (!dialog || !Core || typeof Core.formSignature !== 'function') return null;
+    const controls = [];
+    dialog.querySelectorAll('input, select, textarea').forEach((el) => {
+      controls.push({
+        key: el.id || el.name || '',
+        type: el.type || el.tagName.toLowerCase(),
+        value: el.value,
+        checked: !!el.checked,
+      });
+    });
+    return Core.formSignature(controls);
+  }
+
+  function editorIsDirty() {
+    const Core = global.NotesAgendaScroll;
+    if (!Core || typeof Core.editorHasUnsavedChanges !== 'function') return false;
+    return Core.editorHasUnsavedChanges(state.editorSnapshot, editorFormSignature());
+  }
+
+  /** Cancel / backdrop / Escape: ask first when the form has unsaved changes. */
+  function requestCloseEditor() {
+    if (!editorIsDirty()) {
+      closeEditor();
+      return Promise.resolve(true);
+    }
+    if (editorDiscardPrompt) return editorDiscardPrompt;
+    const message = 'You have unsaved changes. Discard them?';
+    const ask = typeof global.notesAgendaConfirm === 'function'
+      ? Promise.resolve(global.notesAgendaConfirm(message, {
+        title: 'Discard changes',
+        confirmLabel: 'Discard',
+        cancelLabel: 'Keep editing',
+        danger: true,
+      })).then((ok) => !!ok)
+      : Promise.resolve(typeof window === 'undefined' || window.confirm(message));
+    editorDiscardPrompt = ask.then((ok) => {
+      editorDiscardPrompt = null;
+      if (ok) closeEditor();
+      return ok;
+    });
+    return editorDiscardPrompt;
+  }
+
+  let editorDiscardPrompt = null;
 
   function toDatetimeLocal(d) {
     const x = new Date(d);
@@ -2201,6 +2252,7 @@
   }
 
   function closeEditor() {
+    state.editorSnapshot = null;
     const backdrop = document.getElementById('agenda-editor-backdrop');
     const dialog = document.getElementById('agenda-editor');
     if (backdrop) backdrop.hidden = true;
@@ -2239,7 +2291,7 @@
     if (document.body.classList.contains('agenda-editor-open') && dialog && !dialog.hidden) {
       ev.preventDefault();
       ev.stopPropagation();
-      closeEditor();
+      requestCloseEditor();
       return true;
     }
     return false;
@@ -2500,7 +2552,7 @@
     if (editorWired) return;
     editorWired = true;
     wireScopeChooser();
-    document.getElementById('agenda-edit-cancel')?.addEventListener('click', closeEditor);
+    document.getElementById('agenda-edit-cancel')?.addEventListener('click', requestCloseEditor);
     document.getElementById('agenda-edit-save')?.addEventListener('click', saveEditor);
     document.getElementById('agenda-edit-delete')?.addEventListener('click', deleteEditor);
     document.getElementById('agenda-detail-close')?.addEventListener('click', () => closeDetailCard());
@@ -2509,7 +2561,7 @@
     });
     document.getElementById('agenda-detail-edit')?.addEventListener('click', continueEditFromDetail);
     document.getElementById('agenda-detail-backdrop')?.addEventListener('click', () => closeDetailCard());
-    document.getElementById('agenda-editor-backdrop')?.addEventListener('click', closeEditor);
+    document.getElementById('agenda-editor-backdrop')?.addEventListener('click', requestCloseEditor);
     document.addEventListener('keydown', handleEscapeKey, true);
     const ad = document.getElementById('agenda-edit-allday');
     if (ad) {
@@ -2653,6 +2705,7 @@
     seriesNoticeForEditor,
     handleEscapeKey,
     closeEditor,
+    requestCloseEditor,
     closeScopeChooser,
     _layoutDayColumns: layoutDayColumns,
     expandEventOccurrences,

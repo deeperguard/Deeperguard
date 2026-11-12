@@ -194,9 +194,37 @@
     };
   }
 
+  /**
+   * Stable text signature of a form: [{ key, type, value, checked }] -> string.
+   * Buttons and file inputs are ignored; radios and checkboxes count by checked state.
+   */
+  function formSignature(controls) {
+    const parts = [];
+    for (const c of controls || []) {
+      if (!c || !c.key) continue;
+      const type = String(c.type || '').toLowerCase();
+      if (type === 'button' || type === 'submit' || type === 'reset' || type === 'file') continue;
+      if (type === 'checkbox' || type === 'radio') {
+        if (type === 'radio' && !c.checked) continue;
+        parts.push(`${c.key}=${c.checked ? '1' : '0'}${type === 'radio' ? `:${c.value}` : ''}`);
+      } else {
+        parts.push(`${c.key}=${String(c.value == null ? '' : c.value)}`);
+      }
+    }
+    return parts.join('\u0001');
+  }
+
+  /** True when closing the editor would lose edits (snapshot taken when it opened). */
+  function editorHasUnsavedChanges(snapshot, current) {
+    if (snapshot == null) return false;
+    return snapshot !== current;
+  }
+
   global.NotesAgendaScroll = {
     nowLineTop,
     createMinuteClock,
+    formSignature,
+    editorHasUnsavedChanges,
     todayAnchorMinutes,
     scheduleFingerprint,
     earliestVisibleMinutesInPeriod,
