@@ -2495,6 +2495,23 @@
     confirmAgendaDelete(isOccurrence).then((ok) => { if (ok) deleteEditorConfirmed(); });
   }
 
+  /** Toast "… deleted" with Undo: puts the saved content back and re-plans its reminders. */
+  function offerUndoDelete(id, savedContent, message) {
+    if (!id || !savedContent) return;
+    const undo = () => {
+      const S = getStore();
+      if (!S || typeof S.upsertAgendaEvent !== 'function') return;
+      S.upsertAgendaEvent(id, savedContent);
+      syncRemindersAfterSave(id);
+      render();
+    };
+    if (typeof global.notesAgendaToastUndo === 'function') {
+      global.notesAgendaToastUndo(message, undo);
+    } else if (typeof global.notesAgendaToast === 'function') {
+      global.notesAgendaToast(message);
+    }
+  }
+
   function deleteEditorConfirmed() {
     const S = getStore();
     if (!state.selectedId || !S || typeof S.upsertAgendaEvent !== 'function') return;
@@ -2514,6 +2531,8 @@
       if (!Occ.isExcludedByExdate(seriesStart, exdates, !!base.all_day)) exdates.push(rid);
       const overrides = { ...(base.ics_occurrence_overrides || {}) };
       delete overrides[rid];
+      const savedBase = { ...base };
+      const savedId = state.selectedId;
       S.upsertAgendaEvent(state.selectedId, {
         ...base,
         ics_exdates: exdates,
@@ -2522,6 +2541,7 @@
       syncRemindersAfterSave(state.selectedId);
       closeEditor();
       render();
+      offerUndoDelete(savedId, savedBase, 'Occurrence deleted');
       return;
     }
     if (typeof S.removeAgendaEvent !== 'function') return;
@@ -2529,9 +2549,12 @@
     if (global.NotesAgendaReminders && doomed) {
       NotesAgendaReminders.cancelEventReminders(state.selectedId, doomed).catch(() => {});
     }
+    const savedId = state.selectedId;
+    const savedContent = doomed ? agendaRowToContent(doomed) : null;
     S.removeAgendaEvent(state.selectedId);
     closeEditor();
     render();
+    offerUndoDelete(savedId, savedContent, 'Event deleted');
   }
 
   async function importIcsFile(file) {
