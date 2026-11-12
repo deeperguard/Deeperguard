@@ -2419,6 +2419,32 @@
     </div>
   </div>
   <div id="agenda-scope-backdrop" class="settings-backdrop agenda-scope-backdrop" hidden></div>
+  <div id="agenda-sheet-backdrop" class="settings-backdrop agenda-sheet-backdrop" hidden></div>
+  <div id="agenda-sheet" class="confirm-dialog agenda-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-sheet-heading">
+    <h2 id="agenda-sheet-heading" class="agenda-editor-heading">Go to date</h2>
+    <div id="agenda-sheet-goto" hidden>
+      <label class="agenda-sheet-label" for="agenda-goto-date">Date</label>
+      <input type="date" id="agenda-goto-date" class="agenda-sheet-input" />
+      <div class="agenda-scope-actions">
+        <button type="button" class="btn primary agenda-scope-btn" id="agenda-goto-go">Go to date</button>
+        <button type="button" class="btn ghost agenda-scope-btn" id="agenda-goto-today">Today</button>
+        <button type="button" class="btn ghost agenda-scope-cancel" id="agenda-goto-cancel">Cancel</button>
+      </div>
+    </div>
+    <div id="agenda-sheet-help" hidden>
+      <dl class="agenda-shortcut-list">
+        <div><dt><kbd>T</kbd></dt><dd>Today</dd></div>
+        <div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Previous / next</dd></div>
+        <div><dt><kbd>N</kbd></dt><dd>New event</dd></div>
+        <div><dt><kbd>D</kbd> <kbd>3</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>L</kbd></dt><dd>Day, 3 days, week, month, list</dd></div>
+        <div><dt><kbd>G</kbd></dt><dd>Go to date</dd></div>
+        <div><dt><kbd>/</kbd></dt><dd>Search</dd></div>
+        <div><dt><kbd>?</kbd></dt><dd>This list</dd></div>
+        <div><dt><kbd>Esc</kbd></dt><dd>Close a dialog</dd></div>
+      </dl>
+      <button type="button" class="btn ghost agenda-scope-cancel" id="agenda-help-close">Close</button>
+    </div>
+  </div>
   <div id="agenda-scope-chooser" class="confirm-dialog agenda-scope-chooser" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-scope-heading">
     <h2 id="agenda-scope-heading" class="agenda-editor-heading">Edit recurring event</h2>
     <div id="agenda-scope-pick-panel">

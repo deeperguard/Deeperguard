@@ -881,12 +881,12 @@
     if (t.week) {
       return (
         `<h1 class="agenda-title">`
-        + `<span class="agenda-title-primary">${esc(t.primary)}</span>`
+        + `<button type="button" class="agenda-title-primary agenda-title-btn" data-agenda-goto aria-label="${esc(`${t.primary}. Go to date`)}">${esc(t.primary)}</button>`
         + `<span class="agenda-title-week muted">${esc(t.week)}</span>`
         + '</h1>'
       );
     }
-    return `<h1 class="agenda-title"><span class="agenda-title-primary">${esc(t.primary)}</span></h1>`;
+    return `<h1 class="agenda-title"><button type="button" class="agenda-title-primary agenda-title-btn" data-agenda-goto aria-label="${esc(`${t.primary}. Go to date`)}">${esc(t.primary)}</button></h1>`;
   }
 
   function renderSearchField() {
@@ -1321,6 +1321,9 @@
     if (prev) prev.onclick = () => { shiftAnchor(-1); render(); };
     if (next) next.onclick = () => { shiftAnchor(1); render(); };
     if (todayB) todayB.onclick = () => { state.anchor = new Date(); render(); };
+    rootEl.querySelectorAll('[data-agenda-goto]').forEach((btn) => {
+      btn.addEventListener('click', () => openAgendaSheet('goto'));
+    });
 
     rootEl.querySelectorAll('[data-agenda-view]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -2273,6 +2276,12 @@
       closePhoneMenu();
       return true;
     }
+    if (agendaSheetOpen()) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeAgendaSheet();
+      return true;
+    }
     const scopeDialog = document.getElementById('agenda-scope-chooser');
     if (scopeDialog && !scopeDialog.hidden) {
       ev.preventDefault();
@@ -2670,12 +2679,142 @@
     }
   }
 
+  // ---- Go to date + shortcut list (one small shared dialog) -------------------------------------
+
+  let sheetReturnFocus = null;
+
+  function dateInputValue(d) {
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  }
+
+  function agendaSheetOpen() {
+    return document.body.classList.contains('agenda-sheet-open');
+  }
+
+  function openAgendaSheet(mode) {
+    const backdrop = document.getElementById('agenda-sheet-backdrop');
+    const dialog = document.getElementById('agenda-sheet');
+    const heading = document.getElementById('agenda-sheet-heading');
+    const gotoPanel = document.getElementById('agenda-sheet-goto');
+    const helpPanel = document.getElementById('agenda-sheet-help');
+    if (!backdrop || !dialog || !gotoPanel || !helpPanel) return;
+    const ae = document.activeElement;
+    sheetReturnFocus = ae instanceof HTMLElement ? ae : null;
+    const isGoto = mode === 'goto';
+    gotoPanel.hidden = !isGoto;
+    helpPanel.hidden = isGoto;
+    if (heading) heading.textContent = isGoto ? 'Go to date' : 'Keyboard shortcuts';
+    if (isGoto) {
+      const input = document.getElementById('agenda-goto-date');
+      if (input) input.value = dateInputValue(state.anchor instanceof Date ? state.anchor : new Date());
+    }
+    backdrop.hidden = false;
+    dialog.hidden = false;
+    document.body.classList.add('agenda-sheet-open');
+    const focusEl = document.getElementById(isGoto ? 'agenda-goto-date' : 'agenda-help-close');
+    if (focusEl) focusEl.focus({ preventScroll: true });
+  }
+
+  function closeAgendaSheet() {
+    const backdrop = document.getElementById('agenda-sheet-backdrop');
+    const dialog = document.getElementById('agenda-sheet');
+    if (backdrop) backdrop.hidden = true;
+    if (dialog) dialog.hidden = true;
+    document.body.classList.remove('agenda-sheet-open');
+    const back = sheetReturnFocus;
+    sheetReturnFocus = null;
+    if (back && document.contains(back)) back.focus({ preventScroll: true });
+  }
+
+  function goToDateFromSheet() {
+    const input = document.getElementById('agenda-goto-date');
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(input && input.value || ''));
+    if (!m) return;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    if (!Number.isFinite(d.getTime()) || d.getFullYear() !== Number(m[1])) return;
+    state.anchor = d;
+    state.monthPickDay = startOfDay(d).getTime();
+    closeAgendaSheet();
+    render();
+  }
+
+  let sheetWired = false;
+  function wireAgendaSheetOnce() {
+    if (sheetWired) return;
+    sheetWired = true;
+    document.getElementById('agenda-goto-go')?.addEventListener('click', goToDateFromSheet);
+    document.getElementById('agenda-goto-today')?.addEventListener('click', () => {
+      state.anchor = new Date();
+      state.monthPickDay = startOfDay(state.anchor).getTime();
+      closeAgendaSheet();
+      render();
+    });
+    document.getElementById('agenda-goto-cancel')?.addEventListener('click', closeAgendaSheet);
+    document.getElementById('agenda-help-close')?.addEventListener('click', closeAgendaSheet);
+    document.getElementById('agenda-sheet-backdrop')?.addEventListener('click', closeAgendaSheet);
+    document.getElementById('agenda-goto-date')?.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); goToDateFromSheet(); }
+    });
+    document.getElementById('agenda-sheet')?.addEventListener('keydown', (ev) => trapDialogTab(ev, document.getElementById('agenda-sheet')));
+  }
+
+  // ---- Keyboard shortcuts -------------------------------------------------------------------------
+
+  function shortcutsBlocked() {
+    const b = document.body.classList;
+    const confirmDialog = document.getElementById('confirm-dialog');
+    return b.contains('agenda-editor-open') || b.contains('agenda-detail-open') || b.contains('agenda-scope-open')
+      || b.contains('agenda-sheet-open') || b.contains('agenda-calendar-settings-open')
+      || b.contains('agenda-phone-menu-open') || !!(confirmDialog && !confirmDialog.hidden);
+  }
+
+  function runShortcut(action) {
+    if (action === 'today') { state.anchor = new Date(); render(); return; }
+    if (action === 'prev') { shiftAnchor(-1); render(); return; }
+    if (action === 'next') { shiftAnchor(1); render(); return; }
+    if (action === 'new') { openNewEvent(); return; }
+    if (action === 'goto') { openAgendaSheet('goto'); return; }
+    if (action === 'help') { openAgendaSheet('help'); return; }
+    if (action === 'search') {
+      const el = rootEl && rootEl.querySelector('#agenda-search');
+      if (el) el.focus();
+      return;
+    }
+    if (action.startsWith('view:')) {
+      const next = action.slice(5);
+      if (['day', '3day', 'week'].includes(state.view)) saveTimeGridScrollSnapshot();
+      state.view = next;
+      try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
+      render();
+    }
+  }
+
+  let shortcutsWired = false;
+  function wireAgendaShortcutsOnce() {
+    if (shortcutsWired) return;
+    shortcutsWired = true;
+    document.addEventListener('keydown', (ev) => {
+      const Core = global.NotesAgendaScroll;
+      if (!Core || typeof Core.agendaShortcutAction !== 'function') return;
+      const pane = document.getElementById('agenda-pane');
+      const action = Core.agendaShortcutAction(ev, {
+        paneVisible: !!(pane && !pane.hidden),
+        blocked: shortcutsBlocked(),
+      });
+      if (!action) return;
+      ev.preventDefault();
+      runShortcut(action);
+    });
+  }
+
   function init() {
     rootEl = document.getElementById('agenda-root');
     if (!rootEl) return;
     wireCalendarSettingsOnce();
     wireAgendaSwipeOnce();
     wireAgendaFabOnce();
+    wireAgendaSheetOnce();
+    wireAgendaShortcutsOnce();
     wireEditor();
     fileInput = document.getElementById('agenda-ics-input');
     if (fileInput) {
