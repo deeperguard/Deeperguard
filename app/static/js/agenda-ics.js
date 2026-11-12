@@ -42,7 +42,101 @@
     return { name, params, value };
   }
 
-  function parseIcsDate(val) {
+  /** Windows zone names (Outlook / Exchange) for the zones invites most often come from. */
+  const WINDOWS_ZONES = {
+    'w. europe standard time': 'Europe/Berlin',
+    'romance standard time': 'Europe/Paris',
+    'central europe standard time': 'Europe/Budapest',
+    'central european standard time': 'Europe/Warsaw',
+    'gmt standard time': 'Europe/London',
+    'greenwich standard time': 'Atlantic/Reykjavik',
+    'e. europe standard time': 'Europe/Chisinau',
+    'fle standard time': 'Europe/Kiev',
+    'gtb standard time': 'Europe/Bucharest',
+    'russian standard time': 'Europe/Moscow',
+    'turkey standard time': 'Europe/Istanbul',
+    'israel standard time': 'Asia/Jerusalem',
+    'arabian standard time': 'Asia/Dubai',
+    'india standard time': 'Asia/Kolkata',
+    'china standard time': 'Asia/Shanghai',
+    'singapore standard time': 'Asia/Singapore',
+    'tokyo standard time': 'Asia/Tokyo',
+    'korea standard time': 'Asia/Seoul',
+    'aus eastern standard time': 'Australia/Sydney',
+    'new zealand standard time': 'Pacific/Auckland',
+    'eastern standard time': 'America/New_York',
+    'central standard time': 'America/Chicago',
+    'mountain standard time': 'America/Denver',
+    'us mountain standard time': 'America/Phoenix',
+    'pacific standard time': 'America/Los_Angeles',
+    'alaskan standard time': 'America/Anchorage',
+    'hawaiian standard time': 'Pacific/Honolulu',
+    'atlantic standard time': 'America/Halifax',
+    'e. south america standard time': 'America/Sao_Paulo',
+    'south africa standard time': 'Africa/Johannesburg',
+    'utc': 'UTC',
+  };
+
+  const zoneFormatters = new Map();
+
+  function zoneFormatter(zone) {
+    if (zoneFormatters.has(zone)) return zoneFormatters.get(zone);
+    let fmt = null;
+    try {
+      fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: zone,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+    } catch (err) {
+      fmt = null;
+    }
+    zoneFormatters.set(zone, fmt);
+    return fmt;
+  }
+
+  /** IANA zone for an ICS TZID, or '' when it is unknown (then the time is read as local). */
+  function resolveTimeZone(tzid) {
+    let s = String(tzid || '').trim().replace(/^"+|"+$/g, '');
+    if (!s) return '';
+    if (s.startsWith('/')) s = s.split('/').filter(Boolean).slice(-2).join('/');
+    if (zoneFormatter(s)) return s;
+    const win = WINDOWS_ZONES[s.toLowerCase()];
+    if (win && zoneFormatter(win)) return win;
+    return '';
+  }
+
+  /** Offset of `zone` from UTC at instant `ms`, in ms (positive east of Greenwich). */
+  function zoneOffsetMs(zone, ms) {
+    const fmt = zoneFormatter(zone);
+    if (!fmt) return 0;
+    const parts = {};
+    for (const p of fmt.formatToParts(new Date(ms))) parts[p.type] = p.value;
+    const asUtc = Date.UTC(
+      Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+      Number(parts.hour) % 24, Number(parts.minute), Number(parts.second),
+    );
+    return asUtc - Math.floor(ms / 1000) * 1000;
+  }
+
+  /** The instant at which the clock in `zone` shows this wall time. Times in a DST gap move forward. */
+  function zonedWallTimeToDate(y, mo, d, h, mi, se, zone) {
+    const wall = Date.UTC(y, mo, d, h, mi, se);
+    const first = wall - zoneOffsetMs(zone, wall);
+    const second = wall - zoneOffsetMs(zone, first);
+    if (second === first) return new Date(first);
+    // Offset changed between the guesses (near a transition): take the one that round-trips,
+    // otherwise the later instant (wall time skipped by a spring-forward gap).
+    if (second + zoneOffsetMs(zone, second) === wall) return new Date(second);
+    return new Date(Math.max(first, second));
+  }
+
+  function parseIcsDate(val, tzid) {
     const s = String(val || '').trim();
     if (!s) return null;
     const upper = s.toUpperCase();
@@ -69,9 +163,30 @@
       const h = Number(s.slice(9, 11));
       const mi = Number(s.slice(11, 13));
       const se = Number(s.slice(13, 15));
+      const zone = resolveTimeZone(tzid);
+      if (zone) return { date: zonedWallTimeToDate(y, mo, d, h, mi, se, zone), allDay: false, zone };
+      /** No TZID (floating) or an unknown zone: local wall time. */
       return { date: new Date(y, mo, d, h, mi, se), allDay: false };
     }
     return null;
+  }
+
+  /**
+   * EXDATE / RECURRENCE-ID values as keys that match occurrences: timed values become UTC
+   * (`YYYYMMDDTHHMMSSZ`) so a TZID or floating value still matches; dates stay as they are.
+   */
+  function normalizeInstanceTokens(row) {
+    if (!row) return [];
+    const tzid = row.params && row.params.TZID;
+    return String(row.value || '')
+      .split(',')
+      .map((part) => part.trim().replace(/\s+/g, ''))
+      .filter(Boolean)
+      .map((tok) => {
+        if (/^\d{8}$/.test(tok) || /Z$/i.test(tok)) return tok.toUpperCase();
+        const parsed = parseIcsDate(tok, tzid);
+        return parsed && !parsed.allDay ? formatUtcDateTime(parsed.date) : tok;
+      });
   }
 
   function sanitizeHttpsUrl(u) {
@@ -286,7 +401,7 @@
         warnings.push('Skipped VEVENT without DTSTART');
         continue;
       }
-      const dts = parseIcsDate(dtStart.value);
+      const dts = parseIcsDate(dtStart.value, dtStart.params && dtStart.params.TZID);
       if (!dts) {
         warnings.push('Skipped VEVENT with bad DTSTART');
         continue;
@@ -294,7 +409,7 @@
       let endDate = null;
       let allDay = dts.allDay;
       if (dtEnd) {
-        const dte = parseIcsDate(dtEnd.value);
+        const dte = parseIcsDate(dtEnd.value, dtEnd.params && dtEnd.params.TZID);
         if (dte) {
           endDate = dte.date;
           allDay = allDay || dte.allDay;
@@ -308,11 +423,13 @@
       }
       const rruleRow = (map.get('RRULE') || [])[0];
       const exdateRows = map.get('EXDATE') || [];
-      const icsExdates = exdateRows
-        .map((r) => String(r.value || '').trim().replace(/\s+/g, ''))
-        .filter(Boolean);
+      const icsExdates = exdateRows.flatMap((r) => normalizeInstanceTokens(r));
       const ridRow = (map.get('RECURRENCE-ID') || [])[0];
-      const icsRecurrenceId = ridRow ? String(ridRow.value || '').trim() : '';
+      const icsRecurrenceId = ridRow ? (normalizeInstanceTokens(ridRow)[0] || '') : '';
+      const tzidRaw = String((dtStart.params && dtStart.params.TZID) || '');
+      if (tzidRaw && !dts.allDay && !dts.zone) {
+        warnings.push(`Unknown time zone "${tzidRaw}" for "${summary || 'Untitled'}": times read as local time`);
+      }
       const urlRow = (map.get('URL') || [])[0];
       let webcall = urlRow ? sanitizeHttpsUrl(urlRow.value) : '';
       if (!webcall) webcall = extractHttpsFromText(desc) || extractHttpsFromText(loc);
@@ -335,7 +452,7 @@
         rrule: rruleRow ? String(rruleRow.value || '').trim() : '',
         ics_exdates: icsExdates,
         ics_recurrence_id: icsRecurrenceId,
-        source_tz: String((dtStart.params && dtStart.params.TZID) || ''),
+        source_tz: dts.zone || tzidRaw,
       });
     }
     return { events, warnings };
@@ -350,5 +467,7 @@
     buildIcsCalendarFromEvents,
     formatUtcDateTime,
     formatLocalDateValue,
+    resolveTimeZone,
+    zonedWallTimeToDate,
   };
 }(typeof window !== 'undefined' ? window : globalThis));
