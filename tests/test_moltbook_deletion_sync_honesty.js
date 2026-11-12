@@ -34,6 +34,11 @@ assert.ok(singleConfirm.includes('confirmed gone on this device'));
 assert.ok(singleConfirm.includes('pending until sync uploads'));
 assert.ok(singleConfirm.includes('not treat an offline'));
 assert.ok(!singleConfirm.match(/drop them on next sync/i));
+assert.ok(singleConfirm.includes('Not removed:'));
+assert.ok(singleConfirm.includes('Existing backups'));
+assert.ok(singleConfirm.includes('Secure Send links'));
+assert.ok(singleConfirm.includes('encrypted marker'));
+assert.ok(!singleConfirm.match(/permanently erased|gone everywhere|no copies remain/i));
 
 const bulkConfirm = H.permanentDeleteConfirmMessage({ count: 3 });
 assert.ok(bulkConfirm.includes('These 3 notes'));
