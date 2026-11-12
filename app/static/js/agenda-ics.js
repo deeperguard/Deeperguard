@@ -305,7 +305,135 @@
    *   start?: string, end?: string, all_day?: boolean, rrule?: string,
    *   webcall_url?: string, attendees?: string[], ical_uid?: string }>} rows
    */
-  function buildIcsCalendarFromEvents(rows) {
+  function deviceTimeZone() {
+    try {
+      return resolveTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    } catch (err) {
+      return '';
+    }
+  }
+
+  /** Wall-clock parts of instant `ms` in `zone`. */
+  function zoneWallParts(ms, zone) {
+    const w = new Date(ms + zoneOffsetMs(zone, ms));
+    return {
+      y: w.getUTCFullYear(), mo: w.getUTCMonth() + 1, d: w.getUTCDate(),
+      h: w.getUTCHours(), mi: w.getUTCMinutes(), se: w.getUTCSeconds(),
+    };
+  }
+
+  function formatZonedDateTime(ms, zone) {
+    const p = zoneWallParts(ms, zone);
+    return `${pad4(p.y)}${pad2(p.mo)}${pad2(p.d)}T${pad2(p.h)}${pad2(p.mi)}${pad2(p.se)}`;
+  }
+
+  function formatUtcOffset(offsetMs) {
+    const sign = offsetMs < 0 ? '-' : '+';
+    const mins = Math.round(Math.abs(offsetMs) / 60000);
+    return `${sign}${pad2(Math.floor(mins / 60))}${pad2(mins % 60)}`;
+  }
+
+  /** Clock changes of `zone` within `year`: [{ at (ms), from, to (offsets in ms) }]. */
+  function zoneTransitions(zone, year) {
+    const out = [];
+    const dayMs = 86400000;
+    let t = Date.UTC(year, 0, 1);
+    const end = Date.UTC(year + 1, 0, 1);
+    let prev = zoneOffsetMs(zone, t);
+    while (t < end) {
+      const next = t + dayMs;
+      const off = zoneOffsetMs(zone, next);
+      if (off !== prev) {
+        let lo = t;
+        let hi = next;
+        while (hi - lo > 1000) {
+          const mid = Math.floor((lo + hi) / 2);
+          if (zoneOffsetMs(zone, mid) === prev) lo = mid; else hi = mid;
+        }
+        out.push({ at: hi, from: prev, to: off });
+        prev = off;
+      }
+      t = next;
+    }
+    return out;
+  }
+
+  function zoneAbbrev(zone, ms) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'short' }).formatToParts(new Date(ms));
+      const p = parts.find((x) => x.type === 'timeZoneName');
+      return p ? p.value : '';
+    } catch (err) {
+      return '';
+    }
+  }
+
+  /** nth (1..4, or -1 = last) `weekday` (0 = Sunday) of month/year as a UTC calendar day number. */
+  function nthWeekdayOfMonth(year, month1, weekday, n) {
+    if (n > 0) {
+      const first = new Date(Date.UTC(year, month1 - 1, 1)).getUTCDay();
+      return 1 + ((weekday - first + 7) % 7) + (n - 1) * 7;
+    }
+    const days = new Date(Date.UTC(year, month1, 0)).getUTCDate();
+    const lastDow = new Date(Date.UTC(year, month1 - 1, days)).getUTCDay();
+    return days - ((lastDow - weekday + 7) % 7);
+  }
+
+  const ICS_WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+  /**
+   * VTIMEZONE block for `zone`, with yearly rules derived from the clock changes of `year`
+   * (e.g. last Sunday of March / October in Europe). Zones without clock changes get one
+   * fixed observance. Returns [] when the zone has an unusual pattern (then TZID alone is used).
+   */
+  function buildVTimezoneLines(zone, year) {
+    const trans = zoneTransitions(zone, year);
+    const lines = ['BEGIN:VTIMEZONE', `TZID:${zone}`];
+    if (!trans.length) {
+      const off = formatUtcOffset(zoneOffsetMs(zone, Date.UTC(year, 0, 1)));
+      lines.push('BEGIN:STANDARD', 'DTSTART:19700101T000000', `TZOFFSETFROM:${off}`, `TZOFFSETTO:${off}`);
+      const nm = zoneAbbrev(zone, Date.UTC(year, 0, 1));
+      if (nm) lines.push(`TZNAME:${nm}`);
+      lines.push('END:STANDARD', 'END:VTIMEZONE');
+      return lines;
+    }
+    if (trans.length !== 2) return [];
+    for (const tr of trans) {
+      const wallBefore = new Date(tr.at + tr.from); // local time just before the change
+      const month = wallBefore.getUTCMonth() + 1;
+      const day = wallBefore.getUTCDate();
+      const weekday = wallBefore.getUTCDay();
+      const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const n = day + 7 > days ? -1 : Math.ceil(day / 7);
+      const first = nthWeekdayOfMonth(1970, month, weekday, n);
+      const hh = pad2(wallBefore.getUTCHours());
+      const mm = pad2(wallBefore.getUTCMinutes());
+      const kind = tr.to > tr.from ? 'DAYLIGHT' : 'STANDARD';
+      lines.push(
+        `BEGIN:${kind}`,
+        `DTSTART:1970${pad2(month)}${pad2(first)}T${hh}${mm}00`,
+        `TZOFFSETFROM:${formatUtcOffset(tr.from)}`,
+        `TZOFFSETTO:${formatUtcOffset(tr.to)}`,
+        `RRULE:FREQ=YEARLY;BYMONTH=${month};BYDAY=${n}${ICS_WEEKDAYS[weekday]}`,
+      );
+      const nm = zoneAbbrev(zone, tr.at + 86400000);
+      if (nm) lines.push(`TZNAME:${nm}`);
+      lines.push(`END:${kind}`);
+    }
+    lines.push('END:VTIMEZONE');
+    return lines;
+  }
+
+  /**
+   * opts.timeZone: IANA zone for repeating timed events (default: this device's zone).
+   * Repeating events (and edited occurrences of them) are written as local time with TZID,
+   * so "every Monday 09:00" stays 09:00 in other calendar apps across clock changes.
+   * One-off timed events stay in UTC.
+   */
+  function buildIcsCalendarFromEvents(rows, opts) {
+    const zoneOpt = opts && opts.timeZone != null ? resolveTimeZone(opts.timeZone) : deviceTimeZone();
+    const zone = zoneOpt && zoneOpt !== 'UTC' && zoneOpt !== 'Etc/UTC' ? zoneOpt : '';
+    let usesZone = false;
     const now = new Date();
     const dtstamp = formatUtcStamp(now);
     const lines = [
@@ -324,6 +452,8 @@
       if (!Number.isFinite(ds.getTime()) || !Number.isFinite(de.getTime())) continue;
       const uidRaw = String(ev.ical_uid || ev.id || '').trim();
       const uid = uidRaw || `deeperguard-${(ev.id || Math.random().toString(36).slice(2))}@local`;
+      const zoneForEvent = !!zone && !ev.all_day
+        && !!(String(ev.rrule || '').trim() || String(ev.ics_recurrence_id || '').trim());
       lines.push('BEGIN:VEVENT');
       lines.push(`UID:${escapeIcsText(uid)}`);
       lines.push(`DTSTAMP:${dtstamp}`);
@@ -349,20 +479,42 @@
         const dEnd = formatLocalDateValue(endExclusive);
         lines.push(`DTSTART;VALUE=DATE:${dStart}`);
         lines.push(`DTEND;VALUE=DATE:${dEnd}`);
+      } else if (zoneForEvent) {
+        usesZone = true;
+        lines.push(`DTSTART;TZID=${zone}:${formatZonedDateTime(ds.getTime(), zone)}`);
+        lines.push(`DTEND;TZID=${zone}:${formatZonedDateTime(de.getTime(), zone)}`);
       } else {
         lines.push(`DTSTART:${formatUtcDateTime(ds)}`);
         lines.push(`DTEND:${formatUtcDateTime(de)}`);
       }
       const rrule = String(ev.rrule || '').trim();
       if (rrule) lines.push(`RRULE:${rrule.replace(/\s+/g, '')}`);
+      // Instance keys are stored in UTC; for TZID events write them in the same zone.
+      const instanceLine = (name, raw) => {
+        const tok = String(raw || '').trim().replace(/\s+/g, '');
+        if (!tok) return '';
+        if (zoneForEvent && /^\d{8}T\d{6}Z$/i.test(tok)) {
+          const t = Date.UTC(
+            Number(tok.slice(0, 4)), Number(tok.slice(4, 6)) - 1, Number(tok.slice(6, 8)),
+            Number(tok.slice(9, 11)), Number(tok.slice(11, 13)), Number(tok.slice(13, 15)),
+          );
+          return `${name};TZID=${zone}:${formatZonedDateTime(t, zone)}`;
+        }
+        return `${name}:${tok}`;
+      };
       const exdates = Array.isArray(ev.ics_exdates) ? ev.ics_exdates : [];
       exdates.forEach((x) => {
-        const ex = String(x || '').trim().replace(/\s+/g, '');
-        if (ex) lines.push(`EXDATE:${ex}`);
+        const ln = instanceLine('EXDATE', x);
+        if (ln) lines.push(ln);
       });
       const rid = String(ev.ics_recurrence_id || '').trim();
-      if (rid) lines.push(`RECURRENCE-ID:${rid.replace(/\s+/g, '')}`);
+      if (rid) lines.push(instanceLine('RECURRENCE-ID', rid));
       lines.push('END:VEVENT');
+    }
+    if (usesZone) {
+      const tzLines = buildVTimezoneLines(zone, new Date().getFullYear());
+      // VTIMEZONE goes before the events (right after the calendar header, 5 lines).
+      if (tzLines.length) lines.splice(5, 0, ...tzLines);
     }
     lines.push('END:VCALENDAR');
     return `${lines.map((ln) => foldIcsLine(ln)).join('\r\n')}\r\n`;
@@ -469,5 +621,6 @@
     formatLocalDateValue,
     resolveTimeZone,
     zonedWallTimeToDate,
+    buildVTimezoneLines,
   };
 }(typeof window !== 'undefined' ? window : globalThis));
