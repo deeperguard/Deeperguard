@@ -517,6 +517,10 @@
         <p>Free allows {{ free.active_sessions }} signed-in devices at once, Basic allows {{ basic.active_sessions }}, and Pro is unlimited. If you hit the limit, sign out one device from the sign-in screen, then sign in again. Signing out ends that device’s session; your notes are not deleted.</p>
       </details>
       <details>
+        <summary>When I delete a note, is it gone everywhere?</summary>
+        <p>Not immediately. It is removed from the device you delete on right away. On the server, the note is replaced by a small encrypted marker once sync uploads the delete, and your other devices remove it when they next sync (offline ones keep it until then). Existing backups are not changed and age out on their own; backup emails already in your inbox stay until you delete them. Secure Send links keep working until revoked or expired, and we cannot delete copies you exported or that a recipient saved.</p>
+      </details>
+      <details>
         <summary>What happens if I lose my password?</summary>
         <p>Because Deeperguard is zero-knowledge, we <strong>cannot reset or recover your master vault password</strong>. Without it, ciphertext on our servers cannot be decrypted — there is no “forgot password” email that restores access.</p>
         <p><strong>Set up protection early:</strong> On Pro, turn on <strong>daily encrypted email backups</strong> and/or <strong>pCloud encrypted backups</strong> in Settings as soon as your vault is ready. Archives stay encrypted; you still need the vault password to open them, but you will not lose the only copy if a device fails.</p>
