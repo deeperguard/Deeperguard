@@ -36,6 +36,19 @@ Deleting a note reaches some copies and not others. The delete dialog says the s
 
 We do not claim a delete is permanent or complete everywhere. Details: [docs/DELETE_SPEC.md](docs/DELETE_SPEC.md).
 
+## Secure Send links and the limits of fragment-key sharing
+
+Secure Send encrypts in your browser and puts the key in the URL fragment (after `#`). Browsers do not send the fragment to the server, so the server stores only ciphertext. That is weaker than normal vault use, and the app says so when you make a link:
+
+- **The link is the key.** Anyone who has the full link can read the content, and we cannot tell who they are. Without a passphrase, the link alone is enough.
+- **Links leak in ordinary ways:** browser history, chat and email apps that store or preview links, screenshots, shared screens.
+- **Trust in our served code.** The recipient's browser runs JavaScript we serve to decrypt. A compromised or malicious server could serve code that reads the fragment. Fragment keys protect against a passive server, not an active one.
+- **Recipients keep what they see.** Once opened, content can be copied or saved. Revoking or expiry stops new opens only.
+- **Limits help but do not fix this:** a passphrase (combined with the fragment key via Argon2id), expiry (max 7 days) and an open count (max 10) reduce exposure.
+- **Not end-to-end between known parties.** There is no recipient identity or key verification.
+
+Related: deleting a note does not revoke its links (see above).
+
 ## What this file is not
 
 - No third-party penetration test or SOC 2 status is implied.

@@ -19,6 +19,14 @@
   /** Generic download name — never use a server Content-Disposition filename. */
   const GENERIC_DOWNLOAD_NAME = 'attachment.bin';
 
+  /** Plain-language warning shown when a link is made: sharing weakens end-to-end protection. */
+  const SHARING_WARNING = [
+    'Sharing by link weakens encryption.',
+    'Your note stays encrypted on our server, but the key is inside the link. Anyone who gets the full link can read what you share, and we cannot tell who that is.',
+    'Do not post the link where others can see it. Chat and email apps may keep or preview it. Once someone opens it, they can copy or save what they see; we cannot take that back.',
+    'A passphrase, a short expiry and a low open count reduce the risk. They do not remove it.',
+  ].join('\n\n');
+
   function b64url(bytes) {
     const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
     let binary = '';
@@ -228,6 +236,7 @@
     DEFAULT_MAX_VIEWS,
     MAX_VIEWS_CAP,
     LINK_STOPPED,
+    SHARING_WARNING,
     OPEN_VERIFIER_CONTEXT,
     GENERIC_DOWNLOAD_NAME,
     sealPayload,
