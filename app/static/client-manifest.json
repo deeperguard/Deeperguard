@@ -20,10 +20,10 @@
       "url": "/static/js/admin.da5308df76c2a61e.js"
     },
     "js/agenda-ics.js": {
-      "bytes": 17704,
-      "sha256": "55e02d27066bc32a47220f88d52a71051d8ba6e996d6fde9e9de84574cf4167c",
-      "sri": "sha384-qDIBVlqtYhv7HH/IYatudeKcbMhXI4rMHYSUuMS+tTpUdNnZfSnSJCPMgbaQW69b",
-      "url": "/static/js/agenda-ics.55e02d27066bc32a.js"
+      "bytes": 23949,
+      "sha256": "8c7dc9a38a5cfbbdfa8cfee193ba1f3acb308d5467f3f120bd3eaf5ad22e9d33",
+      "sri": "sha384-Kusp/gckimdQNFyUivBmL3hPxeYJM+s6h/d+RRHF2OtFG9zoAE3d17u+/zbLoChr",
+      "url": "/static/js/agenda-ics.8c7dc9a38a5cfbbd.js"
     },
     "js/agenda-occurrence.js": {
       "bytes": 14589,
@@ -44,16 +44,16 @@
       "url": "/static/js/agenda-reminders.417fa2c019b83ec1.js"
     },
     "js/agenda-scroll-core.js": {
-      "bytes": 6764,
-      "sha256": "8437197480d835c796a022d317876bb4f7c11f3e63d734250fa0d63f97f4b404",
-      "sri": "sha384-MzSLUMEMacwWjKGEV/1KKcuWmsVhapKqSTOP7FWuIW+rGx2GsTREj8znaMD/NFu1",
-      "url": "/static/js/agenda-scroll-core.8437197480d835c7.js"
+      "bytes": 9517,
+      "sha256": "c49da39ee0f797b1bcb91d5d316b44a459151db9375fb4407d3a8fced47c5cdf",
+      "sri": "sha384-acphFUd3JIBd5QffcUbJ73xrgR8t5ztjLIGkrrWUhgjrRqCXKwriPUPnjkPc5CDD",
+      "url": "/static/js/agenda-scroll-core.c49da39ee0f797b1.js"
     },
     "js/agenda.js": {
-      "bytes": 108707,
-      "sha256": "1d95db5d2f876f2bb9da77203494a663240bf96e721bd493bc8844acc6a72046",
-      "sri": "sha384-XuFB+oMl+U0ARulPQS+EKHADwyMjrRvpp+8BVG+NPKKb226h1bgidL0cfqbzeQ/H",
-      "url": "/static/js/agenda.1d95db5d2f876f2b.js"
+      "bytes": 113231,
+      "sha256": "71339e4224fcda5d18ac0439879dad6fd6885a069745364fe1e6142b6f983d6c",
+      "sri": "sha384-oFqhOBfLuFsDsEZy1eRDaSuxP2MilIL8Le5Lc911oZw820MrFwvQ60QxhjWwKyVR",
+      "url": "/static/js/agenda.71339e4224fcda5d.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -62,10 +62,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 962867,
-      "sha256": "a5fb5c369d4a127c3b047c0c0c075208c0719ed2eec981e6dbeeccace80fcdf3",
-      "sri": "sha384-wCJHx+oMOWcJ+0MZ41iwKvA1lxygKh9T9vzNhqg2qWKXuYLVdTtOt6y0c0RKce+1",
-      "url": "/static/js/app.a5fb5c369d4a127c.js"
+      "bytes": 963027,
+      "sha256": "4731c3921ad6140283fb07392b0fccdbd714d921bec392f85d1982c459ac2aaf",
+      "sri": "sha384-D1gsKYqezXO9IgOSwt+fprGVa5TK+bXk5DI2As8F81iWAfraXN/r2HRUKavqj9dq",
+      "url": "/static/js/app.4731c3921ad61402.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -411,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "de832b2f0715a48d0b5b90df73fe0f7d9715c35d6ea62d31bd0a15b75f4680b7",
+  "manifest_sha256": "5b3b6c41ca528b2c7fbd4ab2a206c47f9ef7710fa2a8b6d552515b2c792f79d1",
   "version": 1
 }
