@@ -39,8 +39,9 @@ means Secure Send links (above) and anything the user exported.
 - That a Secure Send link stops working because the note was deleted.
 - That an offline or unsynced device is confirmed gone.
 
-## Gaps vs current copy
+## Review status
 
-`app/static/js/deletion-sync-honesty.js` already covers items 1–3. It does not
-mention backups, the retained server marker, or Secure Send links (items 4–5);
-adding them is the follow-up code change.
+Reviewed against `db.upsert_item`, `db.iter_backup_items`, `db.prune_secure_sends`,
+the backup retention settings and the client push payload. The dialog in
+`app/static/js/deletion-sync-honesty.js` now covers items 1–6 and makes none of
+the forbidden claims. SECURITY.md and the marketing FAQ carry the same wording.
