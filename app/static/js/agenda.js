@@ -1059,7 +1059,9 @@
         body += `<div class="agenda-hour-cell" style="height:${PX_PER_HOUR}px"></div>`;
       });
       if (isToday) {
-        const top = (minutesNow / 60) * PX_PER_HOUR;
+        const top = global.NotesAgendaScroll && global.NotesAgendaScroll.nowLineTop
+          ? global.NotesAgendaScroll.nowLineTop(now, PX_PER_HOUR)
+          : (minutesNow / 60) * PX_PER_HOUR;
         body += `<div class="agenda-now-line" style="top:${top}px"></div>`;
       }
       body += '</div>';
@@ -2555,6 +2557,44 @@
     openEditor(null);
   }
 
+  /** Moves the red "now" line(s) without re-rendering (keeps focus, scroll and open editors). */
+  function moveNowLines(now) {
+    const Core = global.NotesAgendaScroll;
+    if (!rootEl || !Core || typeof Core.nowLineTop !== 'function') return;
+    const top = `${Core.nowLineTop(now, PX_PER_HOUR)}px`;
+    rootEl.querySelectorAll('.agenda-now-line').forEach((el) => { el.style.top = top; });
+  }
+
+  function agendaPaneVisible() {
+    const pane = document.getElementById('agenda-pane');
+    return !!(pane && !pane.hidden && !document.hidden);
+  }
+
+  let minuteClock = null;
+
+  function startMinuteClock() {
+    const Core = global.NotesAgendaScroll;
+    if (minuteClock || !Core || typeof Core.createMinuteClock !== 'function') return;
+    minuteClock = Core.createMinuteClock(
+      {
+        onMinute: (now) => moveNowLines(now),
+        // New day: "today" highlights, the now-line and the month dot move to the new date.
+        onNewDay: () => {
+          state.monthPickDay = state.monthPickDay || startOfDay(new Date()).getTime();
+          if (!document.body.classList.contains('agenda-editor-open')) render();
+          else moveNowLines(new Date());
+        },
+      },
+      { isVisible: agendaPaneVisible },
+    );
+    minuteClock.start();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) minuteClock.tick();
+      });
+    }
+  }
+
   function init() {
     rootEl = document.getElementById('agenda-root');
     if (!rootEl) return;
@@ -2591,12 +2631,14 @@
       else if (typeof mq.addListener === 'function') mq.addListener(onLayoutChange);
     }
     render();
+    startMinuteClock();
     global.NotesAgendaReminders?.onAgendaShown?.();
   }
 
   function onTabShown() {
     try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
     render();
+    if (minuteClock) minuteClock.tick();
     global.NotesAgendaReminders?.onAgendaShown?.();
   }
 

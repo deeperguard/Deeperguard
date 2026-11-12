@@ -144,7 +144,59 @@
     return top;
   }
 
+  /** Pixel offset of the "now" line inside a day column (hours * px per hour). */
+  function nowLineTop(now, pxPerHour) {
+    const d = now instanceof Date ? now : new Date(now);
+    const start = startOfDay(d);
+    return ((d.getTime() - start.getTime()) / 3600000) * pxPerHour;
+  }
+
+  /**
+   * Once-a-minute clock for the Agenda. Calls onMinute() every minute and onNewDay() instead
+   * when the calendar day changed since the last tick. Pauses while the page is hidden and
+   * catches up (one tick) when it becomes visible again.
+   *
+   * deps: { now(): Date, setInterval, clearInterval, isVisible(): boolean }
+   */
+  function createMinuteClock({ onMinute, onNewDay }, deps) {
+    const d = deps || {};
+    const nowFn = d.now || (() => new Date());
+    const setIv = d.setInterval || global.setInterval.bind(global);
+    const clearIv = d.clearInterval || global.clearInterval.bind(global);
+    const isVisible = d.isVisible || (() => true);
+    let handle = null;
+    let lastDay = startOfDay(nowFn()).getTime();
+
+    function tick() {
+      if (!isVisible()) return;
+      const day = startOfDay(nowFn()).getTime();
+      if (day !== lastDay) {
+        lastDay = day;
+        if (onNewDay) onNewDay(nowFn());
+        return;
+      }
+      if (onMinute) onMinute(nowFn());
+    }
+
+    return {
+      start() {
+        if (handle !== null) return;
+        lastDay = startOfDay(nowFn()).getTime();
+        handle = setIv(tick, 60000);
+      },
+      stop() {
+        if (handle === null) return;
+        clearIv(handle);
+        handle = null;
+      },
+      tick,
+      get running() { return handle !== null; },
+    };
+  }
+
   global.NotesAgendaScroll = {
+    nowLineTop,
+    createMinuteClock,
     todayAnchorMinutes,
     scheduleFingerprint,
     earliestVisibleMinutesInPeriod,
