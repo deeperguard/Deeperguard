@@ -96,8 +96,8 @@ const exported = Ics.buildIcsCalendarFromEvents([
     end: master.ics_occurrence_overrides[rid].end,
   },
 ]);
-assert.ok(exported.includes('RECURRENCE-ID:'));
-assert.ok(exported.includes('EXDATE:'));
+assert.ok(/^RECURRENCE-ID[;:]/m.test(exported));
+assert.ok(/^EXDATE[;:]/m.test(exported));
 assert.ok(exported.includes('FREQ=WEEKLY'));
 
 const reimport = Ics.parseIcsFile(exported);
@@ -214,7 +214,7 @@ for (const [rid, ov] of Object.entries(exportMaster.ics_occurrence_overrides)) {
     all_day: ov.all_day,
   });
 }
-const shiftedIcs = Ics.buildIcsCalendarFromEvents(exportRows);
+const shiftedIcs = Ics.buildIcsCalendarFromEvents(exportRows, { timeZone: 'UTC' });
 assert.ok(shiftedIcs.includes('RECURRENCE-ID:'));
 assert.ok(shiftedIcs.includes('Beta v53 one-off'));
 assert.ok(shiftedIcs.includes(Occ.recurrenceIdForStart(new Date('2026-11-24T13:00:00.000Z'), false)));
@@ -404,7 +404,8 @@ const icsExceptionRows = [
     all_day: false,
   },
 ];
-const occ2Ics = Ics.buildIcsCalendarFromEvents(icsExceptionRows);
+// UTC export keeps the stored key verbatim; the TZID form is covered by test_agenda_ics_export_tzid.js.
+const occ2Ics = Ics.buildIcsCalendarFromEvents(icsExceptionRows, { timeZone: 'UTC' });
 assert.ok(occ2Ics.includes(`RECURRENCE-ID:${occ2NewRid.replace(/\s+/g, '')}`));
 
 const agendaSrc = fs.readFileSync(path.join(root, 'app/static/js/agenda.js'), 'utf8');

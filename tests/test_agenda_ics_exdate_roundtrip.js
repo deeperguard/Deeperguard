@@ -39,9 +39,10 @@ const edited = {
 };
 const cal = Ics.buildIcsCalendarFromEvents([edited]);
 assert.ok(cal.includes('RRULE:FREQ=MONTHLY'));
-assert.ok(cal.includes('EXDATE:20260406T103000Z'));
-assert.ok(cal.includes('EXDATE:20260504T103000Z'));
-assert.ok(!cal.includes('EXDATE:20260406T103000Z\r\nRRULE'), 'EXDATE lines are separate properties');
+// Repeating events are exported in the device zone (TZID) or in UTC (Z) when it is UTC: either way
+// every skipped date is its own EXDATE property, and the round trip below returns the same instants.
+assert.strictEqual((cal.match(/^EXDATE[;:]/gm) || []).length, 2, 'EXDATE lines are separate properties');
+assert.ok(!/^RRULE:[^\r\n]*EXDATE/m.test(cal));
 
 const back = Ics.parseIcsFile(cal).events[0];
 assert.strictEqual(back.title, edited.title);
