@@ -36,7 +36,12 @@ assert.ok(singleConfirm.includes('not treat an offline'));
 assert.ok(!singleConfirm.match(/drop them on next sync/i));
 assert.ok(singleConfirm.includes('Not removed:'));
 assert.ok(singleConfirm.includes('Existing backups'));
-assert.ok(singleConfirm.includes('Secure Send links'));
+assert.ok(!singleConfirm.includes('Secure Send'));
+const sharedConfirm = H.permanentDeleteConfirmMessage({ count: 1, sharedLinks: 1 });
+assert.ok(sharedConfirm.includes('A Secure Send link made from this note'));
+assert.ok(H.permanentDeleteConfirmMessage({ count: 2, sharedLinks: 2 }).includes('2 Secure Send links'));
+assert.ok(appJs.includes("setAttribute('aria-describedby', 'confirm-message')"));
+assert.ok(appJs.includes('activeSecureSendLinkCount([id])'));
 assert.ok(singleConfirm.includes('encrypted marker'));
 assert.ok(!singleConfirm.match(/permanently erased|gone everywhere|no copies remain/i));
 

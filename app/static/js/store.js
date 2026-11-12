@@ -5159,6 +5159,7 @@ const NotesStore = (() => {
     return {
       uuid: item.uuid,
       sendId: String(item.content?.send_id || ''),
+      noteUuid: String(item.content?.note_uuid || ''),
       shareUrl: String(item.content?.share_url || ''),
       snapshot: snap && typeof snap === 'object'
         ? {
@@ -5173,7 +5174,21 @@ const NotesStore = (() => {
     };
   }
 
-  function saveSecureSendSentRecord({ sendId, shareUrl, snapshot } = {}) {
+  /** Send ids of Secure Send links made from this note (local records only). */
+  function secureSendIdsForNote(noteUuid) {
+    const nid = String(noteUuid || '');
+    if (!nid) return [];
+    const ids = [];
+    for (const item of state.items.values()) {
+      if (item.deleted || item.content?.type !== SECURE_SEND_SENT_TYPE) continue;
+      if (String(item.content?.note_uuid || '') === nid && item.content?.send_id) {
+        ids.push(String(item.content.send_id));
+      }
+    }
+    return ids;
+  }
+
+  function saveSecureSendSentRecord({ sendId, shareUrl, snapshot, noteUuid } = {}) {
     if (!state.cryptoKey) return false;
     const sid = String(sendId || '').trim();
     if (!sid) return false;
@@ -5186,6 +5201,7 @@ const NotesStore = (() => {
     upsert(uuid, {
       type: SECURE_SEND_SENT_TYPE,
       send_id: sid,
+      note_uuid: String(noteUuid || existing?.content?.note_uuid || ''),
       share_url: String(shareUrl || ''),
       snapshot: {
         title: String(snapshot?.title || '').slice(0, 500),
@@ -6526,6 +6542,7 @@ const NotesStore = (() => {
     getGlobalSettings,
     saveGlobalSettings,
     getSecureSendSentRecord,
+    secureSendIdsForNote,
     saveSecureSendSentRecord,
     ackPasswordChanged,
     remotePasswordChanged,

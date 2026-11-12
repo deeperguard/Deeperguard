@@ -5518,6 +5518,7 @@ body.scan-dialog-open {
 }
 .confirm-dialog h2 { margin: 0 0 8px; font-size: 18px; }
 .confirm-dialog p { margin: 0 0 16px; color: var(--muted); line-height: 1.45; }
+#confirm-message { white-space: pre-line; }
 .confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .confirm-dialog-actions .btn {
   min-height: var(--touch);
