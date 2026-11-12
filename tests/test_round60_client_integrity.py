@@ -253,6 +253,15 @@ class Round60ClientIntegrityTests(unittest.TestCase):
     def test_agenda_clock_contract(self):
         proc = subprocess.run(
             ["node", str(REPO / "tests" / "test_agenda_clock.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("agenda clock ok", proc.stdout)
+
     def test_agenda_dirty_guard_contract(self):
         proc = subprocess.run(
             ["node", str(REPO / "tests" / "test_agenda_dirty_guard.js")],
@@ -263,7 +272,6 @@ class Round60ClientIntegrityTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
-        self.assertIn("agenda clock ok", proc.stdout)
         self.assertIn("agenda dirty guard ok", proc.stdout)
 
     def test_agenda_reminders_contract(self):
