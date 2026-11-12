@@ -2261,6 +2261,8 @@ def list_users() -> list[dict[str, Any]]:
 def update_user_plan(user_id: int, plan: str) -> None:
     from plans import normalize_plan, plan_storage_quota_bytes
 
+    from plans import plan_has
+
     normalized = normalize_plan(plan)
     quota = plan_storage_quota_bytes(normalized)
     with tx() as conn:
@@ -2268,6 +2270,21 @@ def update_user_plan(user_id: int, plan: str) -> None:
             "UPDATE users SET plan = ?, storage_quota_bytes = ?, updated_at = ? WHERE id = ?",
             (normalized, quota, now(), int(user_id)),
         )
+        if not plan_has(normalized, "agenda_reminders"):
+            # A plan without reminders must not keep sending the ones already scheduled.
+            conn.execute(
+                "DELETE FROM agenda_scheduled_reminders WHERE user_id = ? AND sent_at = 0",
+                (int(user_id),),
+            )
+
+
+def delete_pending_agenda_reminders(user_id: int) -> int:
+    with tx() as conn:
+        cur = conn.execute(
+            "DELETE FROM agenda_scheduled_reminders WHERE user_id = ? AND sent_at = 0",
+            (int(user_id),),
+        )
+        return int(cur.rowcount or 0)
 
 
 def update_user_stripe_customer(user_id: int, customer_id: str) -> None:

@@ -6,6 +6,7 @@ Delivery rules:
 - A reminder that cannot be delivered at all (push not configured, no subscription,
   unverified address) is closed at once, so it can never sit at the head of the queue
   and hold back other accounts.
+- Reminders of an account whose plan no longer includes them are deleted, not sent.
 - A transient failure is released and retried on the next run until it becomes overdue.
 """
 from __future__ import annotations
@@ -24,6 +25,7 @@ sys.path.insert(0, str(APP_DIR))
 import db  # noqa: E402
 import email_verify  # noqa: E402
 from mailer import send_plain_email  # noqa: E402
+from plans import plan_has  # noqa: E402
 
 log = logging.getLogger("deeperguard.agenda_reminders")
 
@@ -142,6 +144,11 @@ def run_agenda_reminders(now_ts: float | None = None) -> int:
         user = db.get_user_by_id(uid)
         if not user:
             db.mark_agenda_reminder_sent(uid, rid, when)
+            continue
+        if not plan_has(db.user_plan(user), "agenda_reminders"):
+            # Plan changed without going through update_user_plan: drop everything still queued.
+            dropped = db.delete_pending_agenda_reminders(uid)
+            log.info("drop %s agenda reminder(s) user=%s (plan has no reminders)", dropped, uid)
             continue
         channel = str(row["channel"])
         label = str(row.get("local_time_label") or "")
