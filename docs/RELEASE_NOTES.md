@@ -12,6 +12,7 @@
   - Reminders follow the calendar exactly (interval, end date, deleted and moved occurrences) and are planned 60 days ahead, topped up when the app opens; failed updates are retried.
   - Delivery: reminders more than 30 minutes late are closed unsent (`NOTES_AGENDA_REMINDER_MAX_LATE_SEC`); undeliverable ones never block the queue; email needs a verified address; push endpoints are limited to browser push services.
   - **Ops:** schedule `app/agenda_reminder_cron.py` (every minute) for email delivery. Do not add VAPID keys until push is enabled.
+  - Reminders are Pro-only: moving an account to a plan without reminders deletes its scheduled reminders, and the cron never sends for such an account. Back on Pro, the app schedules them again the next time the Agenda opens.
 ## v0.65.52 (Vienna)
 
 - **Ops #334:** After any server `notes.db` restore, operators can revoke all live sessions (`deploy/revoke-all-sessions-after-restore.{sh,py}`) so pre-restore cookies cannot authenticate; runbook in `deploy/PRODUCTION.md`.

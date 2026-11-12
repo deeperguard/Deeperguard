@@ -290,6 +290,46 @@ class AgendaRemindersApiTest(unittest.TestCase):
         self.assertEqual(sent, [])
         self.assertEqual([r["sent_at"] > 0 for r in self._pending(uid)], [True])
 
+    def test_downgrade_removes_pending_reminders(self):
+        import db
+
+        uid = self._login_free_user()
+        self.assertEqual(self._sync([self._row(), self._row()]).get_json()["upserted"], 2)
+        db.update_user_plan(uid, "free")
+        self.assertEqual(self._pending(uid), [])
+        # Staying on Pro (e.g. a renewal) keeps them.
+        other = self._login_free_user()
+        self._sync([self._row()])
+        db.update_user_plan(other, "pro")
+        self.assertEqual(len(self._pending(other)), 1)
+
+    def test_cron_does_not_send_for_accounts_without_reminders_plan(self):
+        import time
+
+        import agenda_reminder_cron as cron
+        import db
+
+        db.connection().execute("DELETE FROM agenda_scheduled_reminders")
+        db.connection().commit()
+        lapsed = self._login_free_user()
+        t0 = time.time()
+        db.sync_agenda_reminders(lapsed, [
+            {"id": str(uuid.uuid4()), "fire_at": t0 + 5, "channel": "email", "local_time_label": "09:00"},
+            {"id": str(uuid.uuid4()), "fire_at": t0 + 86400, "channel": "email", "local_time_label": "10:00"},
+        ], [])
+        # Plan changed outside update_user_plan (direct DB edit, older code path).
+        db.connection().execute("UPDATE users SET plan = 'free' WHERE id = ?", (lapsed,))
+        db.connection().commit()
+        sent = []
+        original = cron.send_plain_email
+        cron.send_plain_email = lambda to, subject, body: sent.append(to)
+        try:
+            self.assertEqual(cron.run_agenda_reminders(t0 + 60), 0)
+        finally:
+            cron.send_plain_email = original
+        self.assertEqual(sent, [])
+        self.assertEqual(self._pending(lapsed), [])
+
     def test_push_endpoint_must_be_a_known_push_service(self):
         import agenda_reminder_cron as cron
 
