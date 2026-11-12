@@ -279,6 +279,13 @@ async function main() {
   console.log('test_round_d2_secure_send ok');
 }
 
+// Sharing warning: plain language, honest, no overclaiming.
+const sharingWarning = require('../app/static/js/secure-send.js').SHARING_WARNING;
+assert.ok(/weakens encryption/i.test(sharingWarning));
+assert.ok(/key is inside the link/i.test(sharingWarning));
+assert.ok(/cannot take that back/i.test(sharingWarning));
+assert.ok(!/permanent|unhackable|completely safe/i.test(sharingWarning));
+
 main().catch((err) => {
   console.error(err);
   process.exit(1);

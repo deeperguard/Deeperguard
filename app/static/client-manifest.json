@@ -242,10 +242,10 @@
       "url": "/static/js/secure-send-receive.203c267260ebcaa1.js"
     },
     "js/secure-send.js": {
-      "bytes": 8811,
-      "sha256": "e66a0321640175ab7715673495b13a66937fd32cacf83926178cc8a0a5bbb1fd",
-      "sri": "sha384-u0o9G5XnZ6MgUgJecp4unMGDniqSxbYdfDNx8xj0idtSRImFUY6g5xsO3OC9ZyYP",
-      "url": "/static/js/secure-send.e66a0321640175ab.js"
+      "bytes": 9467,
+      "sha256": "9d48ca13a4ebf22df1a09f653ffa40563eceae0f2f581cc674d966eafb69944c",
+      "sri": "sha384-zBzrGGNpNCihsDpP3G5clRp+LRrNmxvb0mcMwRByBlyfO15n4WbiGS9fY7yNZ5ph",
+      "url": "/static/js/secure-send.9d48ca13a4ebf22d.js"
     },
     "js/snimport.js": {
       "bytes": 26926,
@@ -411,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "bd928de53acbc441109d3eae9a11bf3d61069fdfdfa0539b002385148dd37251",
+  "manifest_sha256": "446f0e1af31b790766045d4e3eb028bd92b12e73d40adc0dca9a6d5b9318aa8d",
   "version": 1
 }
