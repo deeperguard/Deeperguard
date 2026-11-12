@@ -2,10 +2,10 @@
   "asset_count": 68,
   "assets": {
     "css/app.css": {
-      "bytes": 284221,
-      "sha256": "d00e711581429aeab67d26567f7f2413432605f250114072aa61a80ef99a27b2",
-      "sri": "sha384-EMT/c8VG128JjFG9etK5KGnPFqp6PurHF3XXIt7s8/iylfVQ8ntkhM94VFD1snYx",
-      "url": "/static/css/app.d00e711581429aea.css"
+      "bytes": 284265,
+      "sha256": "3e3c77d21087abb4c633abf75e1b37e6818b5cbbb157887b230144a70d8cb0e4",
+      "sri": "sha384-eGbwqDEJYsR2x9QIazN668HQVEKB0AriRT+1cHgPzQjvXLgKeT2XKXHcHtHwVhz5",
+      "url": "/static/css/app.3e3c77d21087abb4.css"
     },
     "css/marketing.css": {
       "bytes": 54715,
@@ -62,10 +62,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 963027,
-      "sha256": "4731c3921ad6140283fb07392b0fccdbd714d921bec392f85d1982c459ac2aaf",
-      "sri": "sha384-D1gsKYqezXO9IgOSwt+fprGVa5TK+bXk5DI2As8F81iWAfraXN/r2HRUKavqj9dq",
-      "url": "/static/js/app.4731c3921ad61402.js"
+      "bytes": 964200,
+      "sha256": "0ec641fd03b57a8bcca612e697c182cc5765c24126005c604783391d56d7981d",
+      "sri": "sha384-4JSHInwtOcCKMh3xuaYNJOSWLZ+Unl6HJwHI3ooIu/HuO07Qpg0RW/ypMPfLCPCN",
+      "url": "/static/js/app.0ec641fd03b57a8b.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -116,10 +116,10 @@
       "url": "/static/js/crypto.60b77efdfe498e57.js"
     },
     "js/deletion-sync-honesty.js": {
-      "bytes": 2505,
-      "sha256": "f015a294f9a6cc1c724c26a4255d37cf2a35bf113c3b010d9691915af195e03a",
-      "sri": "sha384-oeDbHxoWqUVmcl6je1vUZEqTUQNZouLjlBhkSoSegyzZeajekrXF04H2BU5xPliU",
-      "url": "/static/js/deletion-sync-honesty.f015a294f9a6cc1c.js"
+      "bytes": 2823,
+      "sha256": "3af12efd39b5f9d6a4610221eab1321d8510b69d7f9edb5b7bf10b377ff0ff38",
+      "sri": "sha384-MyXNTAjusGTzhFtCGy9eAkawAeJgLdpbUcsskMo4tfNQvzykbXBNW3L/Bl7agZOf",
+      "url": "/static/js/deletion-sync-honesty.3af12efd39b5f9d6.js"
     },
     "js/device-phrase.js": {
       "bytes": 3357,
@@ -266,10 +266,10 @@
       "url": "/static/js/srp-auth.8ab6a259452579c4.js"
     },
     "js/store.js": {
-      "bytes": 243917,
-      "sha256": "9f9cc5ec4b9879f7cababd25b822a1f9a58ccd3b803406fd607fbeb2edc8ea89",
-      "sri": "sha384-7+AAqKZH+lxjMEo/6/W1UZfxXk9zCRr2n7HbjHnvc/FA2wZr86nyq7L8B9o/EL5/",
-      "url": "/static/js/store.9f9cc5ec4b9879f7.js"
+      "bytes": 244587,
+      "sha256": "c597a1d199ab0d9723c05338400c49f506cf243d44ae8627fba14161ea4dd78e",
+      "sri": "sha384-OOpxP38glkcKhPBU8yYXPRWTztUSCE9KIqcJQKal+IwgZbidNX+8vzEwTMaQKCiP",
+      "url": "/static/js/store.c597a1d199ab0d97.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -411,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "2aa45a37064c7eb2acba962ea2c900c22f05e3c22c8b5ca92eb763190fc2b7a4",
+  "manifest_sha256": "bd928de53acbc441109d3eae9a11bf3d61069fdfdfa0539b002385148dd37251",
   "version": 1
 }

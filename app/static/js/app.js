@@ -4933,6 +4933,7 @@
       titleEl.textContent = title;
       titleEl.removeAttribute('aria-hidden');
       dialog.setAttribute('aria-labelledby', 'confirm-title');
+      dialog.setAttribute('aria-describedby', 'confirm-message');
       messageEl.textContent = message;
       okBtn.textContent = okLabel;
       okBtn.classList.remove('danger');
@@ -5105,6 +5106,7 @@
       titleEl.textContent = title;
       titleEl.removeAttribute('aria-hidden');
       dialog.setAttribute('aria-labelledby', 'confirm-title');
+      dialog.setAttribute('aria-describedby', 'confirm-message');
       messageEl.textContent = message;
       okBtn.textContent = confirmLabel;
       cancelBtn.textContent = cancelLabel;
@@ -9082,14 +9084,30 @@
     btn.disabled = total === 0;
   }
 
+  /** Count live Secure Send links made from these notes (for the delete dialog). */
+  async function activeSecureSendLinkCount(noteIds) {
+    if (!NotesStore.secureSendIdsForNote) return 0;
+    const ids = new Set();
+    noteIds.forEach((nid) => NotesStore.secureSendIdsForNote(nid).forEach((sid) => ids.add(sid)));
+    if (!ids.size) return 0;
+    try {
+      const data = await NotesStore.api('/api/secure-send/sent');
+      const items = Array.isArray(data?.items) ? data.items : [];
+      return items.filter((it) => ids.has(String(it.id)) && it.status === 'active').length;
+    } catch (err) {
+      return ids.size; // cannot check status: err on the side of telling the user
+    }
+  }
+
   async function emptyTrash() {
     const total = trashedNotes().length;
     if (!total) {
       toast('Trash is already empty');
       return;
     }
+    const sharedLinks = await activeSecureSendLinkCount(trashedNotes().map((n) => n.uuid));
     const deleteCopy = window.NotesDeletionSyncHonesty?.permanentDeleteConfirmMessage
-      ? window.NotesDeletionSyncHonesty.permanentDeleteConfirmMessage({ count: total })
+      ? window.NotesDeletionSyncHonesty.permanentDeleteConfirmMessage({ count: total, sharedLinks })
       : `Permanently delete ${total} note${total === 1 ? '' : 's'} in Trash? No undo.`;
     if (!(await confirmAction(
       `${deleteCopy}\n\nNo undo.`,
@@ -20261,8 +20279,9 @@
       toast('This note is protected', true);
       return;
     }
+    const sharedLinks = await activeSecureSendLinkCount([id]);
     const foreverCopy = window.NotesDeletionSyncHonesty?.permanentDeleteConfirmMessage
-      ? window.NotesDeletionSyncHonesty.permanentDeleteConfirmMessage({ count: 1 })
+      ? window.NotesDeletionSyncHonesty.permanentDeleteConfirmMessage({ count: 1, sharedLinks })
       : 'Permanently delete this note from Trash on this device?';
     if (!(await confirmAction(foreverCopy, {
       title: 'Delete forever',
@@ -21162,6 +21181,7 @@
   // D2 Secure Send — compose + Sent list (ciphertext only; key in fragment).
   let secureSendPendingFile = null;
   let secureSendInclusionFromNote = false;
+  let secureSendSourceNoteId = '';
   /** @type {Array<{name: string, bytes: Uint8Array, mime?: string}>} */
   let secureSendStagedEntries = [];
   let secureSendZipNoteTitle = '';
@@ -21254,6 +21274,7 @@
     secureSendPendingFile = null;
     secureSendStagedEntries = [];
     secureSendInclusionFromNote = false;
+    secureSendSourceNoteId = '';
     secureSendZipNoteTitle = '';
     const fileInput = document.getElementById('secure-send-file');
     if (fileInput) fileInput.value = '';
@@ -21368,6 +21389,7 @@
     if (linkInput) linkInput.value = '';
     setSecureSendStatus('');
     clearSecureSendStagedFiles();
+    secureSendSourceNoteId = String(note.uuid || '');
     updateSecureSendFilePickerUi();
   }
 
@@ -21567,6 +21589,7 @@
       if (NotesStore.saveSecureSendSentRecord) {
         NotesStore.saveSecureSendSentRecord({
           sendId: created.id,
+          noteUuid: secureSendSourceNoteId,
           shareUrl: url,
           snapshot: {
             title,

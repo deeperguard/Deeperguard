@@ -23,14 +23,21 @@
     'The server keeps a small encrypted marker so your other devices learn of the delete.'
   );
 
-  const NOT_REMOVED = [
-    'Not removed:',
-    '- Existing backups. They are not changed and age out on their own; backup emails in your inbox stay until you delete them.',
-    '- Secure Send links made from this note. They keep working until revoked or expired.',
-    '- Copies you exported, or that a recipient saved.',
-  ].join('\n');
+  function notRemovedMessage(sharedLinks) {
+    const lines = [
+      'Not removed:',
+      '- Existing backups. They are not changed and age out on their own; backup emails in your inbox stay until you delete them.',
+    ];
+    if (sharedLinks > 0) {
+      lines.push(sharedLinks === 1
+        ? '- A Secure Send link made from this note. It keeps working until revoked or expired.'
+        : `- ${sharedLinks} Secure Send links made from these notes. They keep working until revoked or expired.`);
+    }
+    lines.push('- Copies you exported, or that a recipient saved.');
+    return lines.join('\n');
+  }
 
-  function permanentDeleteConfirmMessage({ count = 1 } = {}) {
+  function permanentDeleteConfirmMessage({ count = 1, sharedLinks = 0 } = {}) {
     const noun = count === 1 ? 'This note' : `These ${count} notes`;
     return [
       `${noun} will be confirmed gone on this device as soon as you confirm.`,
@@ -38,7 +45,7 @@
       SERVER_MARKER,
       OTHER_DEVICES_PENDING,
       NEWER_EDIT,
-      NOT_REMOVED,
+      notRemovedMessage(Number(sharedLinks) || 0),
     ].join('\n\n');
   }
 
