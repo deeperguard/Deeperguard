@@ -1799,22 +1799,31 @@ const NotesStore = (() => {
     }).filter((row) => row && row.type === 'agenda_event');
   }
 
-  function upsertAgendaEvent(uuid, content) {
+  /**
+   * `keepUpdatedAt`: bookkeeping writes (reminder ids) keep the event's own timestamp,
+   * so they never beat a real edit from another device when packs are merged.
+   */
+  function upsertAgendaEvent(uuid, content, { keepUpdatedAt = false } = {}) {
     ensureAgendaPack();
     const pack = agendaPackRecord();
     if (!pack) return;
     const id = String(uuid || newUuid()).trim();
     const events = { ...(pack.content.events || {}) };
+    const now = new Date().toISOString();
+    const prevStamp = keepUpdatedAt && events[id] && events[id].updated_at;
     const next = {
       ...content,
       type: 'agenda_event',
-      updated_at: new Date().toISOString(),
+      updated_at: prevStamp || now,
     };
     events[id] = next;
+    const deletedEvents = { ...(pack.content.deleted_events || {}) };
+    delete deletedEvents[id];
     upsert(AGENDA_PACK_UUID, {
       ...pack.content,
       events,
-      updated_at: new Date().toISOString(),
+      deleted_events: deletedEvents,
+      updated_at: now,
     });
   }
 
@@ -1826,11 +1835,73 @@ const NotesStore = (() => {
     const events = { ...(pack.content.events || {}) };
     if (!events[id]) return;
     delete events[id];
+    const now = new Date().toISOString();
+    // Tombstone: a copy from another device that still has the event must not bring it back.
+    const deletedEvents = { ...(pack.content.deleted_events || {}), [id]: now };
     upsert(AGENDA_PACK_UUID, {
       ...pack.content,
       events,
-      updated_at: new Date().toISOString(),
+      deleted_events: deletedEvents,
+      updated_at: now,
     });
+  }
+
+  const AGENDA_TOMBSTONE_TTL_MS = 60 * 86400000;
+
+  function agendaStampMs(value) {
+    const ms = Date.parse(String(value || ''));
+    return Number.isFinite(ms) ? ms : 0;
+  }
+
+  function agendaEventStampMs(ev) {
+    return Math.max(agendaStampMs(ev && ev.updated_at), agendaStampMs(ev && ev.imported_at));
+  }
+
+  /**
+   * Merge two agenda packs event by event (sync conflict between devices).
+   * - An event only one side has is kept, unless the other side deleted it later.
+   * - An event both sides have: the newer `updated_at` wins; on a tie the local copy.
+   * - A delete beats an edit made before it; an edit made after a delete wins.
+   * Tombstones older than 60 days are dropped.
+   */
+  function mergeAgendaPacks(localPack, remotePack, nowMs = Date.now()) {
+    const local = localPack || {};
+    const remote = remotePack || {};
+    const localEvents = local.events || {};
+    const remoteEvents = remote.events || {};
+    const deleted = {};
+    for (const src of [remote.deleted_events || {}, local.deleted_events || {}]) {
+      for (const [id, at] of Object.entries(src)) {
+        if (agendaStampMs(at) > agendaStampMs(deleted[id])) deleted[id] = at;
+      }
+    }
+    const events = {};
+    const ids = new Set([...Object.keys(remoteEvents), ...Object.keys(localEvents)]);
+    for (const id of ids) {
+      const a = localEvents[id];
+      const b = remoteEvents[id];
+      let winner = a || b;
+      if (a && b) winner = agendaEventStampMs(b) > agendaEventStampMs(a) ? b : a;
+      if (!winner) continue;
+      const deletedAt = agendaStampMs(deleted[id]);
+      if (deletedAt && deletedAt >= agendaEventStampMs(winner)) continue;
+      if (deletedAt) delete deleted[id];
+      events[id] = winner;
+    }
+    for (const [id, at] of Object.entries(deleted)) {
+      if (nowMs - agendaStampMs(at) > AGENDA_TOMBSTONE_TTL_MS) delete deleted[id];
+    }
+    const updated = agendaStampMs(local.updated_at) >= agendaStampMs(remote.updated_at)
+      ? local.updated_at
+      : remote.updated_at;
+    return {
+      ...remote,
+      ...local,
+      type: 'agenda_pack',
+      events,
+      deleted_events: deleted,
+      updated_at: updated || new Date(nowMs).toISOString(),
+    };
   }
 
   function mergeIcsRowsForUid(vevents, existing) {
@@ -1918,6 +1989,7 @@ const NotesStore = (() => {
         ical_uid: icalUid,
         source_tz: String(m.source_tz || ''),
         imported_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       const prevSig = prev && JSON.stringify({
         t: prev.title, s: prev.start, e: prev.end, l: prev.location, n: prev.notes,
@@ -1934,9 +2006,12 @@ const NotesStore = (() => {
       events[id] = nextRow;
       imported += 1;
     }
+    const deletedEvents = { ...(pack.content.deleted_events || {}) };
+    for (const id of Object.keys(events)) delete deletedEvents[id];
     upsert(AGENDA_PACK_UUID, {
       ...pack.content,
       events,
+      deleted_events: deletedEvents,
       updated_at: new Date().toISOString(),
     });
     return { imported, skipped };
@@ -2996,6 +3071,13 @@ const NotesStore = (() => {
         local.content = content;
         await persistLocal(uuid, local);
       }
+      return winLocal();
+    }
+    if (type === 'agenda_pack' && remote.content?.type === 'agenda_pack') {
+      // Both devices changed the calendar: keep every event change, not the newest pack.
+      local.content = mergeAgendaPacks(local.content, remote.content);
+      await persistLocal(uuid, local);
+      logSync('conflict-agenda-merge', { uuid, rev: serverRev });
       return winLocal();
     }
     if (type === 'search_index' && remote.content?.type === 'search_index') {
@@ -6402,6 +6484,7 @@ const NotesStore = (() => {
     listAgendaEvents,
     upsertAgendaEvent,
     removeAgendaEvent,
+    mergeAgendaPacks,
     importAgendaFromIcs,
     searchIndexCovers,
     applySearchIndexEntry,
