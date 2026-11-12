@@ -38,10 +38,10 @@
       "url": "/static/js/agenda-recurrence.d23577f5a4de6c07.js"
     },
     "js/agenda-reminders.js": {
-      "bytes": 20878,
-      "sha256": "ea85c0e906828f4717b3fa00011cff5a6a42feb8316017e12ff9703a9217fa8b",
-      "sri": "sha384-gCdbXvQV9gZkOHtOXsFxWwDMlMBW4WpvXO+GWK4LKvo4wJ5iwSA+s8CN7tso9jSx",
-      "url": "/static/js/agenda-reminders.ea85c0e906828f47.js"
+      "bytes": 20903,
+      "sha256": "417fa2c019b83ec14d65ad50e155b71d67ef6c42b9c403ba931d07f9f46da749",
+      "sri": "sha384-+cMO5cmXHb1ZJtbCbzWA+hPRpYj/Ntefob+Gy8geB8IXJbM0cPfRR8l70VhWF/Pt",
+      "url": "/static/js/agenda-reminders.417fa2c019b83ec1.js"
     },
     "js/agenda-scroll-core.js": {
       "bytes": 5525,
@@ -266,10 +266,10 @@
       "url": "/static/js/srp-auth.8ab6a259452579c4.js"
     },
     "js/store.js": {
-      "bytes": 240431,
-      "sha256": "c10bb2f258c0715b61eacf155bb4a2885c8b816f00d61c52b91d25fe83cef317",
-      "sri": "sha384-xO57w2m+PoKh1R75LTSmgGPhW4dDzem+lWy+6p2vu+eEbpNEzPI23adm11PiT1Ut",
-      "url": "/static/js/store.c10bb2f258c0715b.js"
+      "bytes": 243917,
+      "sha256": "9f9cc5ec4b9879f7cababd25b822a1f9a58ccd3b803406fd607fbeb2edc8ea89",
+      "sri": "sha384-7+AAqKZH+lxjMEo/6/W1UZfxXk9zCRr2n7HbjHnvc/FA2wZr86nyq7L8B9o/EL5/",
+      "url": "/static/js/store.9f9cc5ec4b9879f7.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -411,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "5a9c38ce1ab83ce9d32bd4be0864d26952ce0e732db71edd158362854f3dba2e",
+  "manifest_sha256": "2c59ac34176130ac907ad9dad9e0a30dcb60345e8aecf19be03bc2576d150ea9",
   "version": 1
 }

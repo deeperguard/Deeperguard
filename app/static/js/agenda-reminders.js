@@ -310,7 +310,7 @@
       const current = storedEvent(eventId);
       if (current && typeof S.upsertAgendaEvent === 'function' && !sameScheduled(previous, next)) {
         const { id: _drop, ...content } = current;
-        S.upsertAgendaEvent(eventId, { ...content, scheduled_reminder_ids: next });
+        S.upsertAgendaEvent(eventId, { ...content, scheduled_reminder_ids: next }, { keepUpdatedAt: true });
       }
     } catch (err) {
       if (isPlanRequiredError(err)) throw err;
