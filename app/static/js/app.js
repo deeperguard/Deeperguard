@@ -4138,6 +4138,8 @@
   window.notesAgendaToast = (message, isError = false) => {
     toast(message, isError);
   };
+  /** Agenda: toast with an Undo button (used after deleting an event). */
+  window.notesAgendaToastUndo = (message, onUndo) => toastWithUndo(message, onUndo);
   /** Agenda uses the app's own confirm dialog instead of the browser's. */
   window.notesAgendaConfirm = (message, opts) => confirmAction(message, opts);
 
