@@ -317,6 +317,68 @@ body.agenda-editor-open #confirm-dialog { z-index: 220; }
 .agenda-scope-chooser .agenda-scope-cancel {
   width: 100%;
 }
+.agenda-sheet {
+  max-width: min(420px, 100vw - 24px);
+}
+.agenda-sheet .agenda-sheet-label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.agenda-sheet .agenda-sheet-input {
+  width: 100%;
+  min-height: var(--touch, 44px);
+  margin: 0 0 14px;
+  box-sizing: border-box;
+}
+.agenda-sheet .agenda-scope-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.agenda-sheet .agenda-scope-btn,
+.agenda-sheet .agenda-scope-cancel {
+  min-height: var(--touch, 44px);
+  width: 100%;
+  justify-content: center;
+}
+.agenda-shortcut-list {
+  margin: 0 0 14px;
+  display: grid;
+  gap: 8px;
+}
+.agenda-shortcut-list > div {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+.agenda-shortcut-list dt { margin: 0; white-space: nowrap; }
+.agenda-shortcut-list dd { margin: 0; color: var(--muted); font-size: 14px; }
+.agenda-shortcut-list kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-hover);
+  font: inherit;
+  font-size: 13px;
+  text-align: center;
+}
+body.agenda-sheet-open {
+  overflow: hidden;
+}
+body.agenda-sheet-open #agenda-sheet-backdrop.agenda-sheet-backdrop {
+  z-index: 205;
+}
+body.agenda-sheet-open #agenda-sheet.agenda-sheet {
+  z-index: 210;
+}
+body.agenda-sheet-open #agenda-sheet:not([hidden]) {
+  display: block;
+}
 body.agenda-scope-open {
   overflow: hidden;
 }
@@ -531,6 +593,20 @@ body.agenda-editor-open #toast {
   overflow: visible;
   text-overflow: unset;
 }
+.agenda-title-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.agenda-title-btn:hover { text-decoration: underline; text-decoration-color: var(--muted); text-underline-offset: 3px; }
+.agenda-title-btn:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 3px; }
 .agenda-title-primary {
   font-size: inherit;
   font-weight: inherit;

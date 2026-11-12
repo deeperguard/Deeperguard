@@ -220,11 +220,39 @@
     return snapshot !== current;
   }
 
+  /**
+   * Maps a keydown to an Agenda action, or '' when the key is not ours.
+   * ctx: { paneVisible, blocked } - blocked = a dialog, editor or text field has the keyboard.
+   * ev:  { key, ctrlKey, metaKey, altKey, isComposing, target: { tagName, isContentEditable } }
+   */
+  function agendaShortcutAction(ev, ctx) {
+    if (!ev || !ctx || !ctx.paneVisible || ctx.blocked) return '';
+    if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return '';
+    const tag = String((ev.target && ev.target.tagName) || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (ev.target && ev.target.isContentEditable)) return '';
+    switch (ev.key) {
+      case 't': case 'T': return 'today';
+      case 'ArrowLeft': return 'prev';
+      case 'ArrowRight': return 'next';
+      case 'n': case 'N': return 'new';
+      case 'd': case 'D': return 'view:day';
+      case '3': return 'view:3day';
+      case 'w': case 'W': return 'view:week';
+      case 'm': case 'M': return 'view:month';
+      case 'l': case 'L': return 'view:agenda';
+      case 'g': case 'G': return 'goto';
+      case '/': return 'search';
+      case '?': return 'help';
+      default: return '';
+    }
+  }
+
   global.NotesAgendaScroll = {
     nowLineTop,
     createMinuteClock,
     formSignature,
     editorHasUnsavedChanges,
+    agendaShortcutAction,
     todayAnchorMinutes,
     scheduleFingerprint,
     earliestVisibleMinutesInPeriod,
