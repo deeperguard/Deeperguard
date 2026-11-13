@@ -417,6 +417,80 @@ class D2SecureSendTests(unittest.TestCase):
             self.assertIn("frame-ancestors 'none'", csp)
         self.assertIn('content="noindex,nofollow"', self.client.get(f"/receive/{send_id}").get_data(as_text=True))
 
+    def test_fragment_never_reaches_server(self):
+        import re
+
+        import db as notes_db
+
+        frag = "v1.SECRETFRAGMENTKEYMATERIAL0123456789abcdef"
+        send_id = self._create().get_json()["id"]
+        # Browsers strip the fragment before sending; the server must not echo or persist one.
+        with self.assertNoLogs(level="DEBUG"):
+            page = self.client.get(f"/receive/{send_id}")
+            opened = self.client.post(
+                f"/api/secure-send/{send_id}/open",
+                json={},
+                headers={"Sec-Fetch-Site": "same-origin"},
+            )
+        self.assertNotIn(frag, page.get_data(as_text=True))
+        self.assertEqual(opened.status_code, 200)
+        row = dict(notes_db.get_secure_send(send_id))
+        self.assertNotIn(frag, json.dumps(row, default=str))
+        # Client: the fragment is read from location.hash only and guarded before every request.
+        recv = (ROOT / "app" / "static" / "js" / "secure-send-receive.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("assertNoFragmentLeak(", recv)
+        body_calls = re.findall(r"fetch\([^)]*\)", recv)
+        self.assertTrue(body_calls)
+        for call in body_calls:
+            self.assertNotIn("fragment", call)
+            self.assertNotIn("location", call)
+
+    def test_open_fails_for_expired_and_revoked_links(self):
+        import db as notes_db
+        import secure_send as ss
+
+        expired = self._create().get_json()["id"]
+        with notes_db.tx() as conn:
+            conn.execute(
+                "UPDATE secure_sends SET expires_at = ? WHERE id = ?",
+                (time.time() - 10, expired),
+            )
+        revoked = self._create().get_json()["id"]
+        cancel = self.client.post(
+            f"/api/secure-send/{revoked}/cancel",
+            json={},
+            headers={"X-CSRF-Token": self._csrf()},
+        )
+        self.assertEqual(cancel.status_code, 200)
+        for send_id in (expired, revoked):
+            res = self.client.post(
+                f"/api/secure-send/{send_id}/open",
+                json={},
+                headers={"Sec-Fetch-Site": "same-origin"},
+            )
+            self.assertEqual(res.status_code, 404, send_id)
+            self.assertNotIn("ciphertext", json.dumps(res.get_json() or {}))
+            self.assertFalse(ss.blob_path(send_id).is_file())
+            self.assertEqual(self.client.get(f"/receive/{send_id}").status_code, 404)
+
+    def test_stopped_viewer_page_keeps_privacy_headers(self):
+        import db as notes_db
+
+        send_id = self._create().get_json()["id"]
+        with notes_db.tx() as conn:
+            conn.execute(
+                "UPDATE secure_sends SET expires_at = ? WHERE id = ?",
+                (time.time() - 10, send_id),
+            )
+        res = self.client.get(f"/receive/{send_id}")
+        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.headers.get("Referrer-Policy"), "no-referrer")
+        self.assertIn("noindex", res.headers.get("X-Robots-Tag", ""))
+        self.assertEqual(res.headers.get("Cache-Control"), "no-store")
+        self.assertIn("frame-ancestors 'none'", res.headers.get("Content-Security-Policy", ""))
+
     def test_sender_warning_requires_acknowledgement(self):
         root = ROOT / "app"
         html = (root / "templates" / "app.html").read_text(encoding="utf-8")
