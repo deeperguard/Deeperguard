@@ -571,6 +571,8 @@ def _drop_set_cookie(response):
 
 
 ICS_FETCH_WORKER_CSP = "default-src 'none'; connect-src https:"
+# The 2FA import KDF worker needs no network at all.
+KDF_WORKER_CSP = "default-src 'none'"
 
 
 def _is_ics_fetch_worker_path(path: str) -> bool:
@@ -585,6 +587,9 @@ def _headers(response):
     if _is_ics_fetch_worker_path(request.path):
         # A worker obeys the CSP of its own script response; the page CSP stays narrow.
         response.headers["Content-Security-Policy"] = ICS_FETCH_WORKER_CSP
+        response.headers.pop("Content-Security-Policy-Report-Only", None)
+    if request.path == "/static/js/kdf-worker.js" or client_assets.resolve_hashed_static(request.path) == "js/kdf-worker.js":
+        response.headers["Content-Security-Policy"] = KDF_WORKER_CSP
         response.headers.pop("Content-Security-Policy-Report-Only", None)
     for key, value in auth.security_headers().items():
         response.headers.setdefault(key, value)
