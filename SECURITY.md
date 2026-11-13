@@ -36,6 +36,30 @@ Deleting a note reaches some copies and not others. The delete dialog says the s
 
 We do not claim a delete is permanent or complete everywhere. Details: [docs/DELETE_SPEC.md](docs/DELETE_SPEC.md).
 
+## Locking the vault
+
+Lock runs from the **Lock vault now** button, from the idle timer (**Lock after idle**, default 15 minutes, can be turned off), and from **Lock when leaving the app**. Locking is **best effort**. It reduces what a later script or a person at this browser can read, but it does not guarantee that the key or your notes are gone from memory.
+
+What Lock does in the browser, as far as the app can reach:
+
+- Writes unsaved edits to this device's local store, encrypted, before it drops the key. A push to the server is time-limited and may wait until the next unlock.
+- Drops the vault key and decrypted notes from the app's state, overwrites the key bytes the app holds, clears the search index, and stops the crypto worker.
+- Requires the **vault password** to unlock again. Unlocking runs the full key derivation (Argon2id) from the password you type.
+
+Known gaps in the current build:
+
+- **Remembered password.** If **Remember password on this device** is on, the password and its decryption key stay in this browser's local storage after Lock. Notes can unlock from them on a later page load. Turn the option off on shared devices, and use **Clear saved password**.
+- **Key type.** The vault key is a JavaScript byte array, not a non-extractable `CryptoKey`. While the vault is unlocked, page script can read it.
+- **Some UI state.** Text in open editor fields, and some document workers and object URLs, may not be cleared yet. Plan and tracking: [docs/LOCK_SPEC.md](docs/LOCK_SPEC.md).
+
+Limits of clearing memory in JavaScript:
+
+- JavaScript gives no way to clear memory. The engine can copy values (JIT, string conversion, `postMessage`), and the garbage collector decides when unused objects are freed and reused.
+- Strings, such as the password and note text, cannot be overwritten. They are freed only when collected and may remain in freed heap pages, swap, hibernation files, or crash dumps.
+- Lock protects an unattended device and later script access in the same tab. It does **not** protect against malware, a compromised browser, malicious script while the vault is unlocked, or copies already made (clipboard, screenshots, exports, downloaded attachments).
+- Idle lock depends on timers. Browsers may delay timers in background tabs and on phones. Leaving-the-app lock covers part of that.
+- Closing or reloading the tab drops the key from memory. The next open needs the vault password, unless a remembered password applies (see above).
+
 ## Secure Send links and the limits of fragment-key sharing
 
 Secure Send encrypts in your browser and puts the key in the URL fragment (after `#`). Browsers do not send the fragment to the server, so the server stores only ciphertext. That is weaker than normal vault use, and the app says so when you make a link:

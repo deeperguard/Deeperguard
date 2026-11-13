@@ -1769,7 +1769,7 @@
               <option value="60">60 minutes</option>
             </select>
           </label>
-          <p class="settings-hint">With Off, the vault key stays in memory until you lock or close the tab.</p>
+          <p class="settings-hint">After this long with no input, the vault locks. With Off, the vault key stays in memory until you lock or close the tab. Locking is best effort; it cannot clear everything from memory.</p>
           <label class="settings-row">Lock when leaving the app
             <select id="pref-lock-on-unfocus">
               <option value="never">Never</option>
@@ -1837,6 +1837,7 @@
           <div class="settings-actions">
             <button type="button" id="btn-lock-now" class="btn">Lock vault now</button>
           </div>
+          <p class="settings-hint">Lock drops the vault key and decrypted notes from this tab, as far as the browser allows. Unlocking needs your vault password again. JavaScript cannot fully clear memory, so also lock your device when you step away.</p>
           <div class="settings-actions" data-plan-feature="account_2fa">
             <button type="button" id="btn-setup-totp" class="btn">Set up 2FA</button>
             <button type="button" id="btn-disable-totp" class="btn danger" hidden>Disable 2FA</button>
