@@ -2034,7 +2034,7 @@
   function listedActiveNoteCount() {
     return NotesStore.listNotes().filter((note) => {
       const content = note?.content || {};
-      if (content.trashed || content.archived) return false;
+      if (content.trashed || content.archived || content.is_template) return false;
       return noteShouldList(note);
     }).length;
   }
@@ -3044,6 +3044,7 @@
     documents: 'Files',
     archived: 'Archived',
     trash: 'Trash',
+    templates: 'Templates',
   };
 
   function kindIconSvg(name) {
@@ -8811,7 +8812,7 @@
   function labelCounts(byId) {
     const counts = new Map();
     for (const note of NotesStore.listNotes()) {
-      if (note.content.trashed) continue;
+      if (note.content.trashed || note.content.is_template) continue;
       const seen = new Set();
       for (const id of note.content.tags || []) {
         if (!byId.has(id)) continue;
@@ -9459,6 +9460,12 @@
         body: 'Move a note into this folder, or create a new note.',
       };
     }
+    if (currentFilter === 'templates') {
+      return {
+        title: 'No templates yet',
+        body: 'Open a note and choose “Save as template” in its ⋯ menu. Open a template here to rename or edit it like any note; move it to Trash to delete it. Start a note from one with “New from template”.',
+      };
+    }
     if (currentFilter === 'pinned') {
       return {
         title: 'No starred notes yet',
@@ -9479,6 +9486,11 @@
 
   function emptyListActionsHtml() {
     if (currentFilter === 'pinned' || currentFilter === 'archived') return '';
+    if (currentFilter === 'templates') {
+      return `<div class="note-list-empty-actions">
+                <button type="button" class="btn primary sm" data-empty-template>New from template</button>
+              </div>`;
+    }
     // Tag/folder filters: never imply a sync problem for a brand-new empty view.
     if (currentTag || currentFolder) {
       return `<div class="note-list-empty-actions">
@@ -10721,6 +10733,7 @@
       });
       ui.noteList.querySelector('[data-empty-sync]')?.addEventListener('click', () => triggerPullSync());
       ui.noteList.querySelector('[data-empty-new]')?.addEventListener('click', () => createNote());
+      ui.noteList.querySelector('[data-empty-template]')?.addEventListener('click', () => openTemplateDialog());
       ui.noteList.querySelector('[data-empty-scan]')?.addEventListener('click', pickScanFile);
       renderVaultStats();
       return;
@@ -18409,6 +18422,103 @@
     }
   }
 
+  // --- Templates (spec section 2): encrypted is_template notes, filled client-side ---
+  function saveCurrentAsTemplate() {
+    if (!currentId || !NotesStore.isUnlocked()) return null;
+    flushSave();
+    const result = NotesTemplates.saveAsTemplate(NotesStore, currentId);
+    if (result.error === 'locked') {
+      toast('Protected notes cannot be saved as a template. Remove protection first.', true);
+      return null;
+    }
+    if (result.error) return null;
+    renderNotes();
+    renderTags();
+    toast('Saved as template');
+    return result.id;
+  }
+
+  let templateDialog = null;
+  function templateDialogEls() {
+    return {
+      root: document.getElementById('template-dialog'),
+      list: document.getElementById('template-dialog-list'),
+      name: document.getElementById('template-dialog-name'),
+    };
+  }
+
+  function renderTemplateDialog() {
+    const { list } = templateDialogEls();
+    if (list && templateDialog) list.innerHTML = templateDialog.html();
+    list?.querySelector('.tpl-option.active')?.scrollIntoView?.({ block: 'nearest' });
+  }
+
+  function openTemplateDialog() {
+    if (!NotesStore.isUnlocked()) {
+      toast('Unlock the vault first', true);
+      return null;
+    }
+    flushSave();
+    const els = templateDialogEls();
+    if (!els.root) return null;
+    const opener = document.activeElement;
+    templateDialog = NotesTemplates.createDialog({
+      store: NotesStore,
+      onCreate(id) {
+        if (!id) return;
+        if (currentFilter === 'templates' || currentFilter === 'trash') setFilter('all');
+        renderNotes();
+        renderTags();
+        openNote(id);
+        toast('New note from template');
+      },
+      onClose() {
+        els.root.hidden = true;
+        templateDialog = null;
+        if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
+      },
+      onManage() {
+        setFilter('templates');
+        renderNotes();
+      },
+    });
+    if (els.name) els.name.value = '';
+    els.root.hidden = false;
+    renderTemplateDialog();
+    els.name?.focus();
+    return templateDialog;
+  }
+
+  (() => {
+    const { root, list, name } = templateDialogEls();
+    if (!root) return;
+    root.addEventListener('keydown', (event) => {
+      if (!templateDialog) return;
+      if (templateDialog.keydown(event.key)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (templateDialog) renderTemplateDialog();
+      }
+    });
+    name?.addEventListener('input', () => {
+      templateDialog?.setTitle(name.value);
+      renderTemplateDialog();
+    });
+    list?.addEventListener('click', (event) => {
+      const opt = event.target.closest?.('[data-tpl-index]');
+      if (!opt || !templateDialog) return;
+      templateDialog.select(Number(opt.dataset.tplIndex));
+      renderTemplateDialog();
+      if (event.detail >= 2) templateDialog.confirm();
+    });
+    root.addEventListener('click', (event) => {
+      if (event.target === root) templateDialog?.close();
+    });
+    document.getElementById('template-dialog-cancel')?.addEventListener('click', () => templateDialog?.close());
+    document.getElementById('template-dialog-manage')?.addEventListener('click', () => templateDialog?.manage());
+    document.getElementById('template-dialog-create')?.addEventListener('click', () => templateDialog?.confirm());
+  })();
+
   function createTag(title, { assignToCurrent = false, navigate = true } = {}) {
     const name = String(title || '').trim();
     if (!name) return;
@@ -19115,6 +19225,8 @@
   });
 
   document.getElementById('btn-new').addEventListener('click', () => createNote());
+  document.getElementById('btn-new-from-template')?.addEventListener('click', () => openTemplateDialog());
+  document.getElementById('btn-save-template')?.addEventListener('click', () => saveCurrentAsTemplate());
   document.getElementById('btn-new-list')?.addEventListener('click', () => createNote());
   document.getElementById('btn-list-sort')?.addEventListener('click', () => {
     const idx = NOTE_SORT_ORDER.indexOf(prefs.sort);

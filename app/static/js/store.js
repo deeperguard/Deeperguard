@@ -4671,7 +4671,7 @@ const NotesStore = (() => {
 
   function notesInFolder(folderId) {
     return listNotes()
-      .filter((n) => n.content.folder_id === folderId && !n.content.trashed)
+      .filter((n) => n.content.folder_id === folderId && !n.content.trashed && !n.content.is_template)
       .sort((a, b) => (a.content.title || '').localeCompare(b.content.title || ''));
   }
 
@@ -4715,7 +4715,7 @@ const NotesStore = (() => {
 
   function noteCountForTag(tagId) {
     return listNotes().filter(
-      (n) => !n.content.trashed && (n.content.tags || []).includes(tagId),
+      (n) => !n.content.trashed && !n.content.is_template && (n.content.tags || []).includes(tagId),
     ).length;
   }
 
