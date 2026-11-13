@@ -3726,7 +3726,13 @@ def api_secure_send_open(send_id: str):
         if forbidden in body:
             return jsonify({"error": "invalid payload"}), 400
     open_verifier = str(body.get("open_verifier") or body.get("verifier") or "").strip()
-    result = db.open_secure_send(send_id, open_verifier=open_verifier)
+    try:
+        result = db.open_secure_send(send_id, open_verifier=open_verifier)
+    except Exception:
+        # Fail closed (docs/REVOCATION_SPEC.md): if the revocation record cannot be
+        # read, deny the use rather than releasing ciphertext.
+        logging.getLogger(__name__).exception("secure-send open failed; denying")
+        return jsonify({"error": "not found"}), 404
     if not result:
         return jsonify({"error": "not found"}), 404
     if result.get("error") == "wrong_passphrase":
