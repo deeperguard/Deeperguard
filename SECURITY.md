@@ -103,6 +103,12 @@ Importing a calendar file is processed entirely in the browser. The file and its
 - **Untrusted content:** fetched ICS data goes through the same parser and caps as file import, is shown only as text, and nothing it references is loaded automatically.
 - **Known trade-off:** with direct fetching, an XSS in the app could use the worker to send data to any https host; the page-wide CSP stays narrow and the page itself cannot connect elsewhere.
 
+## Synced settings (encrypted record)
+
+**Status: the client module (`settings-sync.js`) is in this build; migrating the existing preference code to it is not finished.** The rules follow `docs/SETTINGS_SPEC.md`. Allowlisted settings (for example the Agenda view, theme, font size) are stored as one vault item, encrypted in the browser with AES-256-GCM using the vault key, a fresh random IV per save, and the record type and account bound in as authenticated data. The record is padded to a fixed size (1024 bytes) before encryption. It travels through the normal encrypted sync; there is no separate endpoint. Secrets (API keys, tokens), free text and device-only settings never enter this record. After decrypting, unknown keys and invalid values are ignored and defaults apply; if decryption fails, the server copy is not overwritten until you change a setting yourself. Settings are held in memory only and cleared when the vault locks; the module writes nothing to `localStorage`, `sessionStorage`, cookies or the URL.
+
+**Metadata the server can still see:** that a record exists for your account (a stable, opaque item id, rewritten on each change); when it changed and how often (timestamps, sync log of counts and bytes); its size, which is constant (so the number of settings and their values stay hidden) while the record is under 1024 bytes; a content hash that changes on every save; and your IP address and request time. It cannot see key names, values or which setting changed. The older plain `deeperguard-prefs` entry in `localStorage` still holds these settings until the existing preference code is moved to this module.
+
 ## What this file is not
 
 - No third-party penetration test or SOC 2 status is implied.
