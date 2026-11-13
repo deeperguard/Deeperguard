@@ -1,6 +1,22 @@
 # Crypto key-validation audit
 
-Status: audit only. No code was changed. Line references are against the tree at commit `ebdb064`.
+Status: audit written against commit `ebdb064`; line references are to that tree. See "Implementation status" below for what has since been fixed.
+
+## Implementation status
+
+SRP-6a degenerate-value checks (A, B, u):
+
+| Check | Where | Status |
+|---|---|---|
+| `A mod N == 0` (A = 0, N, 2N) | server `SrpServerSession.step2` | Already present; table-driven test in `tests/test_srp_auth.py` |
+| `u == 0` | server `step2` | Already present; test added (monkeypatched `_h`) |
+| `B mod N == 0` | client `SrpClient.step2` | Already present; test added in `tests/test_srp_client_degenerate.js` (B = 0, N, 2N) |
+| `B` not hex / empty | client `step2` | **Done**: rejected with the generic error |
+| `u == 0` | client `step2` | **Done**: rejected with the generic error (an empty/zero hash counts as 0) |
+
+All of these fail with a single generic message (`bad client credentials` on the server, `Invalid server public value` on the client), so the failing check is not revealed. The protocol flow and data formats are unchanged.
+
+Still open (not part of this change): length/canonical bounds on A and B, verifier `v` validation, `S` checks, Secure Send key length, WebAuthn algorithm list (recommendations 1, 2, 3 in part, 4, 5, 6, 8 below).
 
 Motivation: a node-forge Ed25519 flaw let attackers forge signatures by supplying a weak public key. This audit checks whether Deeperguard has the same exposure. It also records which degenerate-input checks exist on each key, signature and SRP-6a path, and which are missing.
 

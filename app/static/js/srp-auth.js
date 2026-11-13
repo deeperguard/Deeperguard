@@ -153,6 +153,7 @@
       bHex = String(bHex || '').toLowerCase();
       saltHex = String(saltHex || '').toLowerCase();
       this.kdfVersion = normalizeSrpKdfVersion(kdfVersion);
+      if (!/^[0-9a-f]+$/.test(bHex)) throw new Error('Invalid server public value');
       this.B = BigInt(`0x${bHex}`);
       if (this.B % N === 0n) throw new Error('Invalid server public value');
       const x = await generateX(saltHex, this.identity, this.password, this.kdfVersion);
@@ -160,7 +161,8 @@
       this.a = randomNonZeroModN();
       this.A = modPow(G, this.a, N);
       const aHex = this.A.toString(16).toLowerCase();
-      const u = BigInt(`0x${await sha256Hex(aHex + bHex)}`);
+      const u = BigInt(`0x${(await sha256Hex(aHex + bHex)) || '0'}`);
+      if (u === 0n) throw new Error('Invalid server public value');
       const exp = (u * x + this.a) % N;
       const tmp = (modPow(G, x, N) * K) % N;
       this.S = modPow((this.B - tmp + N) % N, exp, N);
