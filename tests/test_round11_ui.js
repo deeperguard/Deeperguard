@@ -39,7 +39,7 @@ assert.ok(css.includes('.md-toolbar'));
 assert.ok(css.includes('flex-wrap: nowrap'));
 assert.ok(css.includes('.folder-note {\n  border: 0;\n  background: transparent;\n  color: inherit;\n  font-size: 13px;'));
 assert.ok(auth.includes('stashBootDerivedKey'));
-assert.ok(store.includes('function adoptDerivedVaultKey('));
+assert.ok(!store.includes('function adoptDerivedVaultKey('));
 assert.ok(secrets.includes('notes_boot_kdf'));
 assert.ok(!html.includes('notes@deeperguard.com'));
 assert.ok(html.includes('unlock-support-email'));
