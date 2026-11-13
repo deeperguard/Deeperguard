@@ -4885,6 +4885,13 @@
     });
     const btn = totpImportEl('totp-import-preview-btn');
     if (btn) btn.hidden = false;
+    setTotpAuthyGuide(false);
+  }
+  function setTotpAuthyGuide(show) {
+    const guide = totpImportEl('totp-authy-guide');
+    if (guide) guide.hidden = !show;
+    const dlg = totpImportEl('totp-import-dialog');
+    if (dlg) dlg.querySelectorAll(':scope > .scan-dialog-body:not(#totp-authy-guide)').forEach((el) => { el.hidden = show; });
   }
   function showTotpImportDialog() {
     resetTotpImport();
@@ -21849,6 +21856,13 @@
   document.getElementById('totp-import-preview-btn')?.addEventListener('click', () => {
     const typed = totpImportEl('totp-import-text').value;
     previewTotpImport(typed || totpImport.source).catch(() => setTotpImportError(NotesTotpImport.MESSAGES.invalid));
+  });
+  document.getElementById('totp-import-authy')?.addEventListener('click', () => setTotpAuthyGuide(true));
+  document.getElementById('totp-authy-list')?.addEventListener('click', () => setTotpAuthyGuide(false));
+  document.getElementById('totp-authy-scan')?.addEventListener('click', () => {
+    hideTotpImportDialog();
+    showTotpAddDialog();
+    startTotpQrScan().catch((err) => setTotpAddError(err.message || 'Camera unavailable'));
   });
   document.getElementById('totp-import-confirm')?.addEventListener('click', () => confirmTotpImport());
   document.getElementById('totp-import-pick')?.addEventListener('click', () => openHiddenFileInput(totpImportEl('totp-import-file')));
