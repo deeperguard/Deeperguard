@@ -349,6 +349,7 @@
     if (calBtn) calBtn.setAttribute('aria-expanded', 'true');
     // Channel availability can change (email confirmed, push enabled): refresh on every open.
     global.NotesAgendaReminders?.wireAgendaReminderSettings?.();
+    global.NotesAgendaSubs?.onAgendaShown?.();
     const closeBtn = document.getElementById('agenda-calendar-settings-close');
     if (closeBtn) closeBtn.focus();
   }
@@ -2934,6 +2935,7 @@
     render();
     startMinuteClock();
     global.NotesAgendaReminders?.onAgendaShown?.();
+    global.NotesAgendaSubs?.onAgendaShown?.();
   }
 
   function onTabShown() {
@@ -2941,6 +2943,7 @@
     render();
     if (minuteClock) minuteClock.tick();
     global.NotesAgendaReminders?.onAgendaShown?.();
+    global.NotesAgendaSubs?.onAgendaShown?.();
   }
 
   global.NotesAgenda = {

@@ -878,6 +878,10 @@ const NotesStore = (() => {
     if (typeof NotesCrypto !== 'undefined' && typeof NotesCrypto.terminateWorker === 'function') {
       NotesCrypto.terminateWorker();
     }
+    // Feed subscriptions: clear refresh timers, abort fetches, terminate the fetch worker.
+    if (typeof NotesAgendaSubs !== 'undefined' && typeof NotesAgendaSubs.stopAll === 'function') {
+      NotesAgendaSubs.stopAll();
+    }
     if (typeof NotesFreshness !== 'undefined') {
       NotesFreshness.clearMemory();
     }
@@ -1898,6 +1902,7 @@ const NotesStore = (() => {
     return {
       ...remote,
       ...local,
+      ...(mergeAgendaSubscriptions(local, remote, nowMs) || {}),
       type: 'agenda_pack',
       events,
       deleted_events: deleted,
@@ -1942,8 +1947,52 @@ const NotesStore = (() => {
     };
   }
 
+  function groupIcsRowsByUid(rows) {
+    const groups = new Map();
+    (rows || []).forEach((row, idx) => {
+      const uid = String(row && row.ical_uid || '').trim() || `__anon_${idx}`;
+      if (!groups.has(uid)) groups.set(uid, []);
+      groups.get(uid).push(row);
+    });
+    return groups;
+  }
+
+  function agendaRowFromIcsMerge(merged, uid) {
+    const m = merged.master;
+    const nowIso = new Date().toISOString();
+    return {
+      type: 'agenda_event',
+      version: 1,
+      title: String(m.title || '').trim() || 'Untitled',
+      location: String(m.location || ''),
+      notes: String(m.notes || ''),
+      attendees: Array.isArray(m.attendees) ? m.attendees : [],
+      webcall_url: String(m.webcall_url || ''),
+      color: String(m.color || ''),
+      start: String(m.start || ''),
+      end: String(m.end || ''),
+      all_day: !!m.all_day,
+      rrule: String(m.rrule || ''),
+      ics_exdates: merged.ics_exdates,
+      ics_occurrence_overrides: merged.overrides,
+      ics_recurrence_id: '',
+      ical_uid: merged.ical_uid || (uid.startsWith('__anon_') ? '' : uid),
+      source_tz: String(m.source_tz || ''),
+      imported_at: nowIso,
+      updated_at: nowIso,
+    };
+  }
+
+  function icsEventSignature(row) {
+    return JSON.stringify({
+      t: row.title, s: row.start, e: row.end, l: row.location, n: row.notes,
+      r: row.rrule, a: row.all_day, x: row.ics_exdates, o: row.ics_occurrence_overrides,
+    });
+  }
+
   /**
    * Merge ICS rows into the agenda pack. Rows sharing ICAL UID compose master + exceptions.
+   * Events owned by a feed subscription are never taken over by a file import.
    */
   function importAgendaFromIcs(rows, opts) {
     const source = String((opts && opts.source) || '');
@@ -1954,14 +2003,9 @@ const NotesStore = (() => {
     const byUid = new Map();
     for (const [eid, ev] of Object.entries(events)) {
       const u = String(ev && ev.ical_uid || '').trim();
-      if (u) byUid.set(u, eid);
+      if (u && !(ev && ev.subscription_id)) byUid.set(u, eid);
     }
-    const groups = new Map();
-    (rows || []).forEach((row, idx) => {
-      const uid = String(row && row.ical_uid || '').trim() || `__anon_${idx}`;
-      if (!groups.has(uid)) groups.set(uid, []);
-      groups.get(uid).push(row);
-    });
+    const groups = groupIcsRowsByUid(rows);
     let imported = 0;
     let skipped = 0;
     for (const [uid, groupRows] of groups) {
@@ -1970,41 +2014,11 @@ const NotesStore = (() => {
       const prev = events[id];
       const merged = mergeIcsRowsForUid(groupRows, prev);
       if (!merged) continue;
-      const m = merged.master;
-      const icalUid = merged.ical_uid || (uid.startsWith('__anon_') ? '' : uid);
-      const nextRow = {
-        type: 'agenda_event',
-        version: 1,
-        title: String(m.title || '').trim() || 'Untitled',
-        location: String(m.location || ''),
-        notes: String(m.notes || ''),
-        attendees: Array.isArray(m.attendees) ? m.attendees : [],
-        webcall_url: String(m.webcall_url || ''),
-        color: String(m.color || ''),
-        start: String(m.start || ''),
-        end: String(m.end || ''),
-        all_day: !!m.all_day,
-        rrule: String(m.rrule || ''),
-        ics_exdates: merged.ics_exdates,
-        ics_occurrence_overrides: merged.overrides,
-        ics_recurrence_id: '',
-        ical_uid: icalUid,
-        source_tz: String(m.source_tz || ''),
-        imported_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
+      const nextRow = agendaRowFromIcsMerge(merged, uid);
       // Source label lives inside the encrypted pack; absent on events from before this field.
       const nextSource = source || (prev && prev.source) || '';
       if (nextSource) nextRow.source = nextSource;
-      const prevSig = prev && JSON.stringify({
-        t: prev.title, s: prev.start, e: prev.end, l: prev.location, n: prev.notes,
-        r: prev.rrule, a: prev.all_day, x: prev.ics_exdates, o: prev.ics_occurrence_overrides,
-      });
-      const nextSig = JSON.stringify({
-        t: nextRow.title, s: nextRow.start, e: nextRow.end, l: nextRow.location, n: nextRow.notes,
-        r: nextRow.rrule, a: nextRow.all_day, x: nextRow.ics_exdates, o: nextRow.ics_occurrence_overrides,
-      });
-      if (prev && prevSig === nextSig) {
+      if (prev && icsEventSignature(prev) === icsEventSignature(nextRow)) {
         skipped += 1;
         continue;
       }
@@ -2029,6 +2043,217 @@ const NotesStore = (() => {
     const ids = listAgendaEvents().filter((e) => e.source === l).map((e) => e.id);
     ids.forEach((id) => removeAgendaEvent(id));
     return ids.length;
+  }
+
+  /* ---- Feed subscriptions (docs/ICS_SUBSCRIBE_SPEC.md). The feed url lives only here, in the pack. ---- */
+
+  const AGENDA_SUB_ERROR_CODES = new Set([
+    'E_URL', 'E_NETWORK_OR_CORS', 'E_TIMEOUT', 'E_TOO_LARGE', 'E_NOT_ICS', 'E_PARSE',
+    'E_UPSTREAM', 'E_BLOCKED', 'E_REDIRECT', 'E_RATE', 'E_AUTH', 'E_SHRINK',
+  ]);
+
+  function safeSubErrorCode(code) {
+    return AGENDA_SUB_ERROR_CODES.has(code) ? code : 'E_NETWORK_OR_CORS';
+  }
+
+  /**
+   * Pure: refresh one subscription's events from parsed feed rows (upsert on UID + RECURRENCE-ID
+   * via mergeIcsRowsForUid, prune events no longer in the feed with tombstones).
+   * Returns {content, added, changed, unchanged, removed} or {shrink: true, removed} when the
+   * safety brake applies and `allowShrink` is not set.
+   */
+  function applySubscriptionRefresh(content, subId, rows, opts = {}) {
+    const base = content || defaultAgendaPack();
+    const subs = { ...(base.subscriptions || {}) };
+    const sub = subs[subId];
+    if (!sub) return null;
+    const nowIso = new Date(opts.nowMs || Date.now()).toISOString();
+    const events = { ...(base.events || {}) };
+    const deleted = { ...(base.deleted_events || {}) };
+    const mine = new Map();
+    for (const [eid, ev] of Object.entries(events)) {
+      if (ev && ev.subscription_id === subId) mine.set(String(ev.ical_uid || eid), eid);
+    }
+    const source = String(sub.name || '').trim() || 'Calendar';
+    const seen = new Set();
+    let added = 0;
+    let changed = 0;
+    let unchanged = 0;
+    const writes = [];
+    for (const [uid, groupRows] of groupIcsRowsByUid(rows)) {
+      // The feed is the source of truth: overrides and EXDATEs are rebuilt, not merged with old ones.
+      const merged = mergeIcsRowsForUid(groupRows, null);
+      if (!merged) continue;
+      const nextRow = agendaRowFromIcsMerge(merged, uid);
+      nextRow.subscription_id = subId;
+      nextRow.source = source;
+      const key = nextRow.ical_uid || uid;
+      seen.add(key);
+      const eid = mine.get(key);
+      const prev = eid ? events[eid] : null;
+      if (prev && icsEventSignature(prev) === icsEventSignature(nextRow)) {
+        unchanged += 1;
+        if (prev.source !== source) writes.push([eid, { ...prev, source }]);
+        continue;
+      }
+      if (prev) changed += 1;
+      else added += 1;
+      writes.push([eid || newUuid(), nextRow]);
+    }
+    const doomed = [...mine.entries()].filter(([key]) => !seen.has(key)).map(([, eid]) => eid);
+    if (!opts.allowShrink && doomed.length > 20 && doomed.length * 2 > mine.size) {
+      return { shrink: true, removed: doomed.length };
+    }
+    for (const [eid, row] of writes) {
+      events[eid] = row;
+      delete deleted[eid];
+    }
+    const removedEvents = doomed.map((eid) => ({ id: eid, row: events[eid] }));
+    for (const eid of doomed) {
+      delete events[eid];
+      deleted[eid] = nowIso;
+    }
+    subs[subId] = { ...sub, last_refresh: nowIso, last_error_code: null, updated_at: nowIso };
+    return {
+      content: { ...base, events, deleted_events: deleted, subscriptions: subs, updated_at: nowIso },
+      added,
+      changed,
+      unchanged,
+      removed: doomed.length,
+      removedEvents,
+    };
+  }
+
+  /** Pure: drop a subscription and tombstone all of its events. */
+  function applySubscriptionRemoval(content, subId, nowMs) {
+    const base = content || defaultAgendaPack();
+    const nowIso = new Date(nowMs || Date.now()).toISOString();
+    const subs = { ...(base.subscriptions || {}) };
+    delete subs[subId];
+    const events = { ...(base.events || {}) };
+    const deleted = { ...(base.deleted_events || {}) };
+    const removedEvents = [];
+    for (const [eid, ev] of Object.entries(events)) {
+      if (ev && ev.subscription_id === subId) {
+        delete events[eid];
+        deleted[eid] = nowIso;
+        removedEvents.push({ id: eid, row: ev });
+      }
+    }
+    return {
+      content: {
+        ...base,
+        events,
+        deleted_events: deleted,
+        subscriptions: subs,
+        deleted_subscriptions: { ...(base.deleted_subscriptions || {}), [subId]: nowIso },
+        updated_at: nowIso,
+      },
+      removedEvents,
+    };
+  }
+
+  function writeAgendaPackContent(content) {
+    upsert(AGENDA_PACK_UUID, content);
+  }
+
+  function listAgendaSubscriptions() {
+    const pack = agendaPackRecord();
+    const subs = (pack && pack.content && pack.content.subscriptions) || {};
+    return Object.values(subs).filter((s) => s && s.id);
+  }
+
+  function getAgendaSubscription(subId) {
+    return listAgendaSubscriptions().find((s) => s.id === subId) || null;
+  }
+
+  /** `url` must already be normalised (NotesAgendaSubs.normalizeFeedUrl). */
+  function addAgendaSubscription({ name, url }) {
+    ensureAgendaPack();
+    const pack = agendaPackRecord();
+    if (!pack) throw lockedError();
+    const id = newUuid();
+    const nowIso = new Date().toISOString();
+    const count = Object.keys(pack.content.subscriptions || {}).length;
+    const sub = {
+      id,
+      name: String(name || '').trim().slice(0, 120) || `Calendar ${count + 1}`,
+      url: String(url || ''),
+      mode: 'direct',
+      relay_consent_at: null,
+      last_refresh: null,
+      last_error_code: null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+    writeAgendaPackContent({
+      ...pack.content,
+      subscriptions: { ...(pack.content.subscriptions || {}), [id]: sub },
+      updated_at: nowIso,
+    });
+    return sub;
+  }
+
+  function updateAgendaSubscription(subId, patch) {
+    const pack = agendaPackRecord();
+    const sub = pack && pack.content.subscriptions && pack.content.subscriptions[subId];
+    if (!sub) return null;
+    const next = { ...sub };
+    if (patch && typeof patch.name === 'string' && patch.name.trim()) next.name = patch.name.trim().slice(0, 120);
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'last_error_code')) {
+      next.last_error_code = patch.last_error_code ? safeSubErrorCode(patch.last_error_code) : null;
+    }
+    const nowIso = new Date().toISOString();
+    next.updated_at = nowIso;
+    writeAgendaPackContent({
+      ...pack.content,
+      subscriptions: { ...pack.content.subscriptions, [subId]: next },
+      updated_at: nowIso,
+    });
+    return next;
+  }
+
+  function refreshAgendaSubscriptionRows(subId, rows, opts) {
+    const pack = agendaPackRecord();
+    if (!pack) throw lockedError();
+    const res = applySubscriptionRefresh(pack.content, subId, rows, opts);
+    if (res && res.content) writeAgendaPackContent(res.content);
+    return res;
+  }
+
+  function removeAgendaSubscription(subId) {
+    const pack = agendaPackRecord();
+    if (!pack) throw lockedError();
+    const res = applySubscriptionRemoval(pack.content, subId);
+    writeAgendaPackContent(res.content);
+    return res;
+  }
+
+  function mergeAgendaSubscriptions(local, remote, nowMs) {
+    const has = (p) => p.subscriptions || p.deleted_subscriptions;
+    if (!has(local) && !has(remote)) return null;
+    const deleted = {};
+    for (const src of [remote.deleted_subscriptions || {}, local.deleted_subscriptions || {}]) {
+      for (const [id, at] of Object.entries(src)) {
+        if (agendaStampMs(at) > agendaStampMs(deleted[id])) deleted[id] = at;
+      }
+    }
+    const ls = local.subscriptions || {};
+    const rs = remote.subscriptions || {};
+    const subs = {};
+    for (const id of new Set([...Object.keys(rs), ...Object.keys(ls)])) {
+      const a = ls[id];
+      const b = rs[id];
+      let winner = a || b;
+      if (a && b) winner = agendaStampMs(b.updated_at) > agendaStampMs(a.updated_at) ? b : a;
+      const deletedAt = agendaStampMs(deleted[id]);
+      if (deletedAt && deletedAt >= agendaStampMs(winner.updated_at)) continue;
+      subs[id] = winner;
+    }
+    for (const [id, at] of Object.entries(deleted)) {
+      if (nowMs - agendaStampMs(at) > AGENDA_TOMBSTONE_TTL_MS) delete deleted[id];
+    }
+    return { subscriptions: subs, deleted_subscriptions: deleted };
   }
 
   async function runUnlockMaintenance() {
@@ -6524,6 +6749,14 @@ const NotesStore = (() => {
     mergeAgendaPacks,
     importAgendaFromIcs,
     removeAgendaEventsBySource,
+    listAgendaSubscriptions,
+    getAgendaSubscription,
+    addAgendaSubscription,
+    updateAgendaSubscription,
+    refreshAgendaSubscriptionRows,
+    removeAgendaSubscription,
+    applySubscriptionRefresh,
+    applySubscriptionRemoval,
     searchIndexCovers,
     applySearchIndexEntry,
     mergeSearchEntries,

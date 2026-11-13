@@ -1,5 +1,5 @@
 /**
- * Docs + copy: .ics import help says Deeperguard does not subscribe to feeds,
+ * Docs + copy: .ics import help explains direct feed subscriptions and the manual fallback,
  * and SECURITY.md / PRIVACY.md state the import model with the real caps.
  */
 const assert = require('assert');
@@ -14,7 +14,7 @@ const privacy = read('docs/PRIVACY.md');
 const ics = read('app/static/js/agenda-ics.js');
 
 // In-app help for feed-only calendars.
-assert.ok(html.includes('Deeperguard does not subscribe to feeds.'));
+assert.ok(html.includes('Your browser fetches it straight from the provider; the link never passes through Deeperguard'));
 assert.ok(html.includes('Open the link in a new browser tab, save the .ics file, then import it here.'));
 assert.ok(html.includes('the link never passes through Deeperguard'));
 assert.ok(html.includes('On iOS, the system may offer to add the events to the Calendar app instead of saving a file.'));
@@ -25,7 +25,8 @@ assert.ok(/MAX_ICS_EVENTS = 10000/.test(ics));
 for (const doc of [security, privacy]) {
   assert.ok(doc.includes('10 MB'));
   assert.ok(doc.includes('10,000'));
-  assert.ok(/no calendar feed subscription/i.test(doc) || /does not subscribe to calendar feeds/i.test(doc));
+  assert.ok(/fetche[sd] directly by your browser|your browser fetches it directly/i.test(doc));
+  assert.ok(/does not fetch feed URLs on the server|no(?:t use)? server-side fetching/i.test(doc));
   assert.ok(/encrypted before storage/i.test(doc));
 }
 
