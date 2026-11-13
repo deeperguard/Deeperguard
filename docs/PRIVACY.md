@@ -24,6 +24,10 @@ Standard Notes is open source and encrypts notes end-to-end. Deeperguard aims to
 
 All of the above are encrypted with AES-256-GCM in the browser before sync.
 
+## Calendar (.ics) import
+
+Calendar files you import are parsed in your browser. The file and its events are encrypted before storage, the same as your other Agenda data, so the server stores only ciphertext. Imported files are treated as untrusted: they are capped at 10 MB and 10,000 events, recurrence expansion is capped, and no remote content is loaded. Deeperguard does not subscribe to calendar feeds and does not fetch feed URLs on the server. If you only have a feed link, download the .ics file from your provider yourself and import it. See [SECURITY.md](../SECURITY.md#calendar-ics-import).
+
 ## What the server stores
 
 - SRP verifier (not your password)

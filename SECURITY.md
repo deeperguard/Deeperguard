@@ -87,6 +87,10 @@ Secure Send encrypts in your browser and puts the key in the URL fragment (after
 
 Related: deleting a note does not revoke its links (see above).
 
+## Calendar (.ics) import
+
+Importing a calendar file is processed entirely in the browser. The file and its events are encrypted before storage, like other Agenda data. Imported files are treated as untrusted: they are capped in size (10 MB) and event count (10,000), recurrence expansion is capped, and no remote content (attachments, images, URLs, conferencing links, timezone data) is loaded. There is no calendar feed subscription and no server-side fetching of calendar files or feed URLs. Feed links are not fetched by Deeperguard; you download the .ics file from your provider yourself and import it.
+
 ## What this file is not
 
 - No third-party penetration test or SOC 2 status is implied.
