@@ -11134,3 +11134,71 @@ html.layout-compact #totp-pane #btn-totp-add {
 .agenda-subscription-via { margin-left: .5rem; padding: .1rem .45rem; border: 1px solid currentColor; border-radius: 999px; font-size: .75rem; }
 .agenda-relay-consent-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .55); }
 .agenda-relay-consent { max-width: 28rem; margin: 1rem; padding: 1.25rem; border-radius: .5rem; background: var(--bg, #fff); color: var(--fg, #111); }
+
+/* Nested label tree (WAI-ARIA tree) */
+.tag-list:has(.label-tree) { display: block; }
+.label-tree, .label-group { list-style: none; margin: 0; padding: 0; }
+.label-node { margin: 0; padding: 0; }
+.label-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 2px 4px 2px calc(6px + var(--label-level, 0) * 16px);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--sn-nav-text, var(--text));
+  user-select: none;
+}
+.label-item:hover { background: color-mix(in srgb, var(--tag-color, var(--accent)) 10%, transparent); }
+.label-item.active { background: color-mix(in srgb, var(--tag-color, var(--accent)) 16%, transparent); font-weight: 600; }
+.label-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.label-twisty { width: 14px; flex: 0 0 14px; text-align: center; color: var(--sn-nav-muted, var(--muted)); font-size: 12px; }
+.label-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.label-menu-btn {
+  flex: 0 0 auto;
+  min-width: 28px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0;
+}
+.label-item:hover .label-menu-btn,
+.label-item:focus-within .label-menu-btn,
+.label-menu-btn:focus-visible { opacity: 1; }
+@media (hover: none), (max-width: 768px) {
+  .label-item { min-height: 44px; }
+  .label-menu-btn { opacity: 1; min-width: 44px; min-height: 44px; }
+}
+.label-menu {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  min-width: 200px;
+  padding: 6px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.label-menu [role="menuitem"] {
+  text-align: left;
+  padding: 8px 10px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.label-menu [role="menuitem"]:hover,
+.label-menu [role="menuitem"]:focus-visible { background: color-mix(in srgb, var(--accent) 16%, transparent); outline: none; }
+.label-move-field { display: grid; gap: 6px; font-size: 13px; }
+.label-move-field select { min-height: 36px; max-width: 260px; }
+.label-move-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
