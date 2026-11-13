@@ -39,13 +39,19 @@ const cal = (b) => 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n' + b + 'END:VCALENDAR\r\n
 // Fake store: real pure pack functions from store.js, in-memory pack, lockable.
 let pack = { type: 'agenda_pack', version: 1, events: {}, subscriptions: {} };
 let isOpen = true;
+// Stand-in for the consent rule of store.js updateAgendaSubscription (the real one needs an unlocked vault).
+const updateSub = function (id, patch) {
+  const next = { ...pack.subscriptions[id] };
+  if (patch.last_error_code !== undefined) next.last_error_code = patch.last_error_code;
+  if (patch.mode === 'relay' && patch.relay_consent === true) { next.mode = 'relay'; next.relay_consent_at = new Date().toISOString(); }
+  else if (patch.mode === 'direct') { next.mode = 'direct'; next.relay_consent_at = null; }
+  pack.subscriptions[id] = next;
+};
 const FakeStore = {
   isUnlocked: () => isOpen,
   listAgendaSubscriptions: () => Object.values(pack.subscriptions || {}),
   getAgendaSubscription: (id) => (pack.subscriptions || {})[id] || null,
-  updateAgendaSubscription(id, patch) {
-    pack.subscriptions[id] = { ...pack.subscriptions[id], ...patch };
-  },
+  updateAgendaSubscription(id, patch) { updateSub(id, patch); },
   refreshAgendaSubscriptionRows(id, rows, opts) {
     const r = RealStore.applySubscriptionRefresh(pack, id, rows, opts);
     if (r && r.content) pack = r.content;
@@ -187,6 +193,70 @@ const subEvents = (id) => Object.entries(pack.events).filter(([, e]) => e.subscr
     assert.ok(!s.includes('token=TEST') && !s.includes('feed.example.invalid'), 'link leaked');
   }
   ok('ok no link leaks');
+
+  // Relay: opt-in per subscription, never a silent fallback.
+  {
+    const calls = [];
+    const relayCalls = [];
+    pack.subscriptions.s3 = { id: 's3', name: 'Club', url: FEED_URL, mode: 'direct', relay_consent_at: null, last_error_code: null };
+    Subs._setFetcher(async (url, mode) => { calls.push(mode); return { ok: false, code: 'E_NETWORK_OR_CORS' }; });
+    global.fetch = async (u, init) => { relayCalls.push([u, init]); throw new Error('must not be called'); };
+    let rr = await Subs.refresh('s3');
+    assert.strictEqual(rr.code, 'E_NETWORK_OR_CORS');
+    assert.deepStrictEqual(calls, ['direct'], 'no relay without consent');
+    assert.strictEqual(relayCalls.length, 0);
+    assert.ok(/Deeperguard server/.test(Subs.errorText('E_NETWORK_OR_CORS')));
+
+    Subs._setConsentAsker(async () => false);
+    assert.strictEqual(await Subs.enableRelay('s3'), false);
+    assert.strictEqual(pack.subscriptions.s3.mode, 'direct');
+    assert.ok(/default is no/.test(Subs.CONSENT_TEXT) && /link/.test(Subs.CONSENT_TEXT) && /log/.test(Subs.CONSENT_TEXT));
+    Subs._setConsentAsker(async () => true);
+    assert.strictEqual(await Subs.enableRelay('s3'), true);
+    assert.strictEqual(pack.subscriptions.s3.mode, 'relay');
+    assert.ok(Date.parse(pack.subscriptions.s3.relay_consent_at), 'consent time stored per subscription');
+    assert.strictEqual(pack.subscriptions.s2.mode, undefined, 'other subscriptions untouched');
+
+    calls.length = 0;
+    await Subs.refresh('s3');
+    assert.deepStrictEqual(calls, ['relay']);
+    Subs._setFetcher(null);
+    global.fetch = async (u, init) => {
+      relayCalls.push([u, init]);
+      return { ok: true, text: async () => cal(ev('r', 'Relayed')) };
+    };
+    rr = await Subs.refresh('s3');
+    assert.ok(rr.ok, JSON.stringify(rr));
+    const [ru, rinit] = relayCalls[relayCalls.length - 1];
+    assert.strictEqual(ru, '/api/agenda/ics-relay');
+    assert.strictEqual(rinit.method, 'POST');
+    assert.strictEqual(JSON.parse(rinit.body).url, FEED_URL);
+    assert.ok(!JSON.stringify(rinit.headers).includes('token=TEST'));
+    assert.strictEqual(subEvents('s3').length, 1);
+
+    for (const [status, code] of [[429, 'E_RATE'], [400, 'E_BLOCKED'], [502, 'E_TOO_LARGE'], [504, 'E_TIMEOUT']]) {
+      global.fetch = async () => ({ ok: false, status, json: async () => ({ error: code }) });
+      const er = await Subs.relayFetch(FEED_URL);
+      assert.strictEqual(er.code, code);
+      assert.ok(!Subs.errorText(er.code).includes('example.invalid'));
+    }
+    global.fetch = async () => { throw new TypeError('failed ' + FEED_URL); };
+    assert.strictEqual(JSON.stringify(await Subs.relayFetch(FEED_URL)).includes('token=TEST'), false);
+    global.fetch = async () => ({ ok: false, status: 500, json: async () => ({ error: 'https://x.invalid/?token=TEST' }) });
+    assert.strictEqual((await Subs.relayFetch(FEED_URL)).code, 'E_UPSTREAM');
+
+    // Revoke: back to direct, consent cleared.
+    assert.strictEqual(Subs.disableRelay('s3'), true);
+    assert.strictEqual(pack.subscriptions.s3.mode, 'direct');
+    assert.strictEqual(pack.subscriptions.s3.relay_consent_at, null);
+    calls.length = 0;
+    Subs._setFetcher(async (u, mode) => { calls.push(mode); return { ok: false, code: 'E_NETWORK_OR_CORS' }; });
+    await Subs.refresh('s3');
+    assert.deepStrictEqual(calls, ['direct']);
+    assert.ok(!logged.join('\n').includes('token=TEST'));
+    Subs._setConsentAsker(null);
+    ok('ok relay consent');
+  }
 
   // Worker source: the request contract from the spec.
   const worker = fs.readFileSync(path.join(jsRoot, 'ics-fetch-worker.js'), 'utf8');

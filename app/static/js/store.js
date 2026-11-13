@@ -2204,6 +2204,15 @@ const NotesStore = (() => {
       next.last_error_code = patch.last_error_code ? safeSubErrorCode(patch.last_error_code) : null;
     }
     const nowIso = new Date().toISOString();
+    // Relay only with explicit consent (patch.relay_consent === true); back to direct revokes it.
+    if (patch && patch.mode === 'relay' && patch.relay_consent === true) {
+      next.mode = 'relay';
+      next.relay_consent_at = nowIso;
+      next.last_error_code = null;
+    } else if (patch && patch.mode === 'direct') {
+      next.mode = 'direct';
+      next.relay_consent_at = null;
+    }
     next.updated_at = nowIso;
     writeAgendaPackContent({
       ...pack.content,

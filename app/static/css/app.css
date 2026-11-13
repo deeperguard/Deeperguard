@@ -11130,3 +11130,7 @@ html.layout-compact #totp-pane #btn-totp-add {
 .agenda-import-preview { position: fixed; z-index: 60; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(92vw, 420px); max-height: 80vh; overflow: auto; padding: 1rem; border-radius: 12px; background: var(--bg, #fff); color: inherit; border: 1px solid rgba(128, 128, 128, 0.4); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35); }
 .agenda-import-preview[hidden] { display: none; }
 .agenda-import-opt { display: block; margin: 0.35rem 0; }
+
+.agenda-subscription-via { margin-left: .5rem; padding: .1rem .45rem; border: 1px solid currentColor; border-radius: 999px; font-size: .75rem; }
+.agenda-relay-consent-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .55); }
+.agenda-relay-consent { max-width: 28rem; margin: 1rem; padding: 1.25rem; border-radius: .5rem; background: var(--bg, #fff); color: var(--fg, #111); }
