@@ -1519,10 +1519,11 @@
                 <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"></circle>
                 <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 16l5 5"></path>
               </svg>
-              <input id="totp-search" type="search" placeholder="Search..." autocomplete="off" enterkeyhint="search" aria-label="Search accounts">
+              <input id="totp-search" type="search" placeholder="Search..." autocomplete="off" enterkeyhint="search" aria-label="Search accounts (press / to focus, tag:name to filter)" aria-keyshortcuts="/" aria-controls="totp-list">
             </div>
           </div>
         </div>
+        <div id="totp-tag-chips" class="totp-tag-chips" role="toolbar" aria-label="Filter by tag" hidden></div>
       </div>
       <div id="totp-list-head" class="totp-list-head" hidden aria-hidden="true">
         <span class="totp-list-head-icon" aria-hidden="true"></span>
@@ -2403,6 +2404,10 @@
         <input id="totp-add-host" type="text" maxlength="253" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url" placeholder="login.example.com">
       </label>
       <p class="scan-dialog-lead muted totp-host-hint">Exact hostname only (e.g. <code>login.example.com</code>). Shown when you copy a code — advisory label, not sign-in blocking.</p>
+      <label class="scan-name-field">Tags <span class="muted">(optional, comma separated)</span>
+        <input id="totp-add-tags" type="text" maxlength="400" autocomplete="off" autocapitalize="none" spellcheck="false" list="totp-tag-suggestions" placeholder="Work, Personal">
+      </label>
+      <datalist id="totp-tag-suggestions"></datalist>
       <label class="scan-name-field">Secret or otpauth URL
         <input id="totp-add-secret" type="text" maxlength="512" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="JBSW Y3DP EHPK 3PXP">
       </label>

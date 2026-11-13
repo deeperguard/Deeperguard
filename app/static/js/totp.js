@@ -619,7 +619,8 @@ const NotesTotp = (() => {
     return bound ? `Code · ${bound}` : 'Code · no site set';
   }
 
-  function entryFromFields({ issuer = '', account = '', secret = '', host = '', digits, period, algorithm } = {}) {
+  function entryFromFields({ issuer = '', account = '', secret = '', host = '', digits, period, algorithm, tags } = {}) {
+    const tagList = normalizeTags(tags || []);
     const raw = String(secret || '').trim();
     if (/otpauth:\/\//i.test(raw)) {
       OTP_AUTH_RE.lastIndex = 0;
@@ -633,6 +634,7 @@ const NotesTotp = (() => {
         issuer: String(issuer || parsed.issuer || '').trim(),
         account: String(account || parsed.account || parsed.issuer || 'Account').trim() || 'Account',
         host: bound,
+        tags: tagList,
       };
     }
     if (!looksLikeSecret(raw)) return null;
@@ -646,7 +648,103 @@ const NotesTotp = (() => {
       digits: Number(digits || 6) || 6,
       period: Number(period || 30) || 30,
       algorithm: String(algorithm || 'SHA1').toUpperCase().replace('-', ''),
+      tags: tagList,
     };
+  }
+
+  // --- Tags, schema 2 view and local search (spec sections 2, 2.2 and 7) ---
+  const TAG_LIMITS = { maxTags: 20, maxLength: 40 };
+
+  // Array or comma-separated string -> trimmed, deduped (case-insensitive) tag names.
+  function normalizeTags(input) {
+    const raw = Array.isArray(input) ? input : String(input == null ? '' : input).split(',');
+    const out = [];
+    const seen = new Set();
+    for (const value of raw) {
+      if (typeof value !== 'string' && typeof value !== 'number') continue;
+      const name = String(value).replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/^#+/, '').trim().slice(0, TAG_LIMITS.maxLength).trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(name);
+      if (out.length >= TAG_LIMITS.maxTags) break;
+    }
+    return out;
+  }
+
+  // Lazy schema 1 -> 2 mapping for reading. Never rewrites the item.
+  function accountFields(content) {
+    const c = content && typeof content === 'object' ? content : {};
+    const label = String(c.label || c.account || c.issuer || 'Account');
+    return {
+      schema: Number(c.schema) || 1,
+      label,
+      account: label,
+      otp_type: c.otp_type === 'hotp' ? 'hotp' : 'totp',
+      tags: normalizeTags(Array.isArray(c.tags) ? c.tags : []),
+      icon_id: c.icon_id == null ? null : String(c.icon_id),
+      note: typeof c.note === 'string' ? c.note : '',
+    };
+  }
+
+  // Content for the first write of an item: copies every existing field (also unknown ones),
+  // then writes schema 2 with label and account kept equal.
+  function upgradeContent(content, patch = {}) {
+    const base = { ...(content || {}), ...patch };
+    const view = accountFields(base);
+    const label = String(patch.label || patch.account || view.label).trim() || 'Account';
+    return { ...base, schema: 2, label, account: label, tags: normalizeTags(base.tags || []) };
+  }
+
+  function foldText(value) {
+    return String(value == null ? '' : value).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  }
+
+  function hasTag(entry, tag) {
+    const key = foldText(tag);
+    return (entry && Array.isArray(entry.tags) ? entry.tags : []).some((t) => foldText(t) === key);
+  }
+
+  // In-memory filter. Terms are AND-ed; `tag:x` and `#x` limit to a tag; `activeTag` comes from the chips.
+  function filterAccounts(entries, query, activeTag = '') {
+    const terms = String(query || '').trim().split(/\s+/).filter(Boolean);
+    const tagTerms = [];
+    const textTerms = [];
+    for (const term of terms) {
+      const m = /^(?:tag:|#)(.+)$/i.exec(term);
+      if (m) tagTerms.push(m[1]);
+      else textTerms.push(foldText(term));
+    }
+    if (activeTag) tagTerms.push(activeTag);
+    return (entries || []).filter((entry) => {
+      if (!tagTerms.every((t) => hasTag(entry, t))) return false;
+      if (!textTerms.length) return true;
+      const hay = foldText([entry.issuer, entry.label || entry.account, entry.host, (entry.tags || []).join(' '), entry.note].join(' '));
+      return textTerms.every((t) => hay.includes(t));
+    });
+  }
+
+  // [{ name, count }] sorted by name, for the chip row and tag suggestions.
+  function tagCounts(entries) {
+    const map = new Map();
+    for (const entry of entries || []) {
+      for (const tag of normalizeTags(entry && entry.tags)) {
+        const key = tag.toLowerCase();
+        const row = map.get(key) || { name: tag, count: 0 };
+        row.count += 1;
+        map.set(key, row);
+      }
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  }
+
+  // Rename (or delete, when `to` is empty) one tag in a tag list. Returns null when unchanged.
+  function renameTagIn(tags, from, to) {
+    const list = normalizeTags(tags || []);
+    if (!list.some((t) => foldText(t) === foldText(from))) return null;
+    const next = list.flatMap((t) => (foldText(t) === foldText(from) ? (to ? [to] : []) : [t]));
+    return normalizeTags(next);
   }
 
   function isDeletableTwoFaNote(note) {
@@ -747,6 +845,14 @@ const NotesTotp = (() => {
     hostsMatchExact,
     formatTotpCopyLabel,
     generate,
+    TAG_LIMITS,
+    normalizeTags,
+    accountFields,
+    upgradeContent,
+    foldText,
+    filterAccounts,
+    tagCounts,
+    renameTagIn,
   };
 })();
 

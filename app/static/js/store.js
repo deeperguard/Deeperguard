@@ -4607,7 +4607,7 @@ const NotesStore = (() => {
     const now = new Date().toISOString();
     const id = newUuid();
     const boundHost = normalizeTotpBoundHost(entry && entry.host);
-    upsert(id, {
+    const content = {
       type: 'totp',
       issuer: String((entry && entry.issuer) || '').trim(),
       account: String((entry && (entry.account || entry.issuer)) || 'Account').trim() || 'Account',
@@ -4618,19 +4618,42 @@ const NotesStore = (() => {
       algorithm: String((entry && entry.algorithm) || 'SHA1').toUpperCase().replace('-', ''),
       created_at: now,
       updated_at: now,
-    });
+    };
+    // Schema 2 (docs/2FA_IMPORT_SPEC.md section 2): label mirrors account, tags live inside the
+    // encrypted item content and travel with it through sync.
+    upsert(id, upgradeTotpContent(content, { tags: (entry && entry.tags) || [] }));
     return { uuid: id, created: true, item: get(id) };
   }
 
-  function updateTotpAccount(uuid, { issuer = '', account = '', host } = {}) {
+  function upgradeTotpContent(content, patch) {
+    if (typeof NotesTotp !== 'undefined' && NotesTotp.upgradeContent) return NotesTotp.upgradeContent(content, patch);
+    return { ...content, ...patch };
+  }
+
+  function updateTotpAccount(uuid, { issuer = '', account = '', host, tags } = {}) {
     const item = get(uuid);
     if (!item || item.content?.type !== 'totp') return false;
     const nextIssuer = String(issuer || '').trim();
     const nextAccount = String(account || '').trim() || nextIssuer || 'Account';
-    const next = { ...item.content, issuer: nextIssuer, account: nextAccount };
-    if (host !== undefined) next.host = normalizeTotpBoundHost(host);
-    upsert(uuid, next);
+    const patch = { issuer: nextIssuer, account: nextAccount, label: nextAccount };
+    if (host !== undefined) patch.host = normalizeTotpBoundHost(host);
+    if (tags !== undefined) patch.tags = tags;
+    upsert(uuid, upgradeTotpContent(item.content, patch));
     return true;
+  }
+
+  // Rename a 2FA tag on every account that carries it; an empty `to` deletes the tag.
+  function renameTotpTag(from, to = '') {
+    if (typeof NotesTotp === 'undefined' || !NotesTotp.renameTagIn) return 0;
+    let changed = 0;
+    for (const item of [...state.items.values()]) {
+      if (item.content?.type !== 'totp' || item.deleted) continue;
+      const next = NotesTotp.renameTagIn(item.content.tags, from, to);
+      if (!next) continue;
+      upsert(item.uuid, NotesTotp.upgradeContent(item.content, { tags: next }));
+      changed += 1;
+    }
+    return changed;
   }
 
   function removeTotpAccount(uuid) {
@@ -6779,6 +6802,7 @@ const NotesStore = (() => {
     listTotpAccounts,
     addTotpAccount,
     updateTotpAccount,
+    renameTotpTag,
     removeTotpAccount,
     dedupeTotpAccounts,
     listFolders,
