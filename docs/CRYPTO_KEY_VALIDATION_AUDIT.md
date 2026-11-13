@@ -18,6 +18,12 @@ All of these fail with a single generic message (`bad client credentials` on the
 
 Still open (not part of this change): length/canonical bounds on A and B, verifier `v` validation, `S` checks, Secure Send key length, WebAuthn algorithm list (recommendations 1, 2, 3 in part, 4, 5, 6, 8 below).
 
+## Conclusion: public-key validation for sharing and key exchange
+
+Section 1 and section 2 find no code path that verifies a signature, imports an asymmetric public key, or performs elliptic-curve DH (Ed25519, X25519, ECDH) in this repo. Sharing and Secure Send use symmetric keys only (AES-GCM, HMAC-SHA256). The only key agreement is SRP-6a over a fixed RFC 5054 group, whose degenerate values (A, B, u) are covered in the table above. WebAuthn signature checks and COSE key parsing are delegated to `webauthn` and `cryptography` (OpenSSL), and this repo has no key-parsing code of its own to harden.
+
+So there is nothing to add for degenerate Ed25519/X25519/EC keys (wrong length, non-canonical encoding, all-zero, identity, low-order points), and no code or tests were changed for this item. If asymmetric sharing or per-recipient key wrapping is added later, it must use WebCrypto or a vetted library's built-in checks, reject degenerate keys, and ship with negative tests using known degenerate vectors.
+
 Motivation: a node-forge Ed25519 flaw let attackers forge signatures by supplying a weak public key. This audit checks whether Deeperguard has the same exposure. It also records which degenerate-input checks exist on each key, signature and SRP-6a path, and which are missing.
 
 ## 1. Crypto dependencies
