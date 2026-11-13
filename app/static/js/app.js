@@ -4020,6 +4020,8 @@
     closeSettings(true);
     closeSecureSendPanel(true);
     stopTotpClock();
+    if (totpUi.search) totpUi.search.value = '';
+    totpActiveTag = '';
     const cached = NotesStore.cachedAccount?.() || {};
     showUnlock(cached.email || undefined);
     clearUnlockPasswordField({ force: true });
@@ -4154,6 +4156,9 @@
     issuer: document.getElementById('totp-add-issuer'),
     account: document.getElementById('totp-add-account'),
     host: document.getElementById('totp-add-host'),
+    tags: document.getElementById('totp-add-tags'),
+    tagSuggestions: document.getElementById('totp-tag-suggestions'),
+    tagChips: document.getElementById('totp-tag-chips'),
     secret: document.getElementById('totp-add-secret'),
     error: document.getElementById('totp-add-error'),
     video: document.getElementById('totp-qr-video'),
@@ -4164,6 +4169,8 @@
   let appTab = 'notes';
   let totpEntries = [];
   let totpEditingId = '';
+  // Active tag chip. In memory only, like the search text: never stored or sent anywhere.
+  let totpActiveTag = '';
   let totpDialogTrigger = null;
   let totpClock = 0;
   let totpQrTimer = 0;
@@ -4306,6 +4313,9 @@
       digits: Number(content.digits || 6) || 6,
       period: Number(content.period || 30) || 30,
       algorithm: String(content.algorithm || 'SHA1').toUpperCase().replace('-', ''),
+      // Schema 1 items read as tags: [] (lazy migration, nothing rewritten on read).
+      tags: NotesTotp.accountFields ? NotesTotp.accountFields(content).tags : [],
+      note: typeof content.note === 'string' ? content.note : '',
       created_at: content.created_at || '',
       updated_at: content.updated_at || item.updated_at || '',
     };
@@ -4428,7 +4438,99 @@
       else if (!totpEntries.length) totpUi.meta.textContent = 'Add an account with a QR code or secret';
       else totpUi.meta.textContent = `${totpEntries.length} account${totpEntries.length === 1 ? '' : 's'} in the vault`;
     }
+    renderTotpTagChips();
     if (currentAppTab() === '2fa') renderTotpList();
+  }
+
+  function totpTagCounts() {
+    return NotesTotp.tagCounts ? NotesTotp.tagCounts(totpEntries) : [];
+  }
+
+  function renderTotpTagChips() {
+    const host = totpUi.tagChips;
+    if (!host) return;
+    const counts = totpTagCounts();
+    if (totpActiveTag && !counts.some((t) => t.name.toLowerCase() === totpActiveTag.toLowerCase())) totpActiveTag = '';
+    host.hidden = counts.length === 0;
+    if (!counts.length) {
+      host.replaceChildren();
+      return;
+    }
+    const chip = (name, label, pressed) => `<button type="button" class="tag-chip totp-tag-chip${pressed ? ' is-active' : ''}" data-totp-tag="${escapeAttr(name)}" aria-pressed="${pressed ? 'true' : 'false'}">${label}</button>`;
+    const chips = [chip('', 'All', !totpActiveTag)].concat(counts.map((t) => chip(
+      t.name,
+      `${escapeHtml(t.name)} <span class="totp-tag-count" aria-label="${t.count} account${t.count === 1 ? '' : 's'}">${t.count}</span>`,
+      totpActiveTag.toLowerCase() === t.name.toLowerCase(),
+    )));
+    if (totpActiveTag) {
+      chips.push(`<button type="button" class="btn ghost totp-tag-action" data-totp-tag-rename aria-label="Rename tag ${escapeAttr(totpActiveTag)}">Rename</button>`);
+      chips.push(`<button type="button" class="btn ghost totp-tag-action" data-totp-tag-delete aria-label="Delete tag ${escapeAttr(totpActiveTag)}">Delete tag</button>`);
+    }
+    host.innerHTML = chips.join('');
+  }
+
+  function setTotpActiveTag(name) {
+    totpActiveTag = String(name || '');
+    renderTotpTagChips();
+    if (currentAppTab() === '2fa') renderTotpList();
+    const pressed = totpUi.tagChips?.querySelector('[aria-pressed="true"]');
+    pressed?.focus();
+  }
+
+  async function renameTotpTagPrompt() {
+    const from = totpActiveTag;
+    if (!from) return;
+    const raw = window.prompt(`Rename tag "${from}" on all 2FA accounts to:`, from);
+    if (raw == null) return;
+    const to = (NotesTotp.normalizeTags(raw)[0]) || '';
+    if (!to || to === from) return;
+    const changed = NotesStore.renameTotpTag(from, to);
+    totpActiveTag = to;
+    refreshTotpVault();
+    toast(`Renamed tag on ${changed} account${changed === 1 ? '' : 's'}`);
+  }
+
+  async function deleteTotpTagPrompt() {
+    const from = totpActiveTag;
+    if (!from) return;
+    const ok = await confirmAction(`Remove the tag "${from}" from every 2FA account? The accounts stay.`, {
+      title: 'Delete tag',
+      confirmLabel: 'Delete tag',
+      danger: true,
+    });
+    if (!ok) return;
+    const changed = NotesStore.renameTotpTag(from, '');
+    totpActiveTag = '';
+    refreshTotpVault();
+    toast(`Removed tag from ${changed} account${changed === 1 ? '' : 's'}`);
+  }
+
+  // Autocomplete for the comma-separated tags field: suggest existing 2FA tags for the last fragment.
+  function updateTotpTagSuggestions() {
+    const list = totpUi.tagSuggestions;
+    if (!list || !totpUi.tags) return;
+    const value = String(totpUi.tags.value || '');
+    const cut = value.lastIndexOf(',');
+    const prefix = cut >= 0 ? `${value.slice(0, cut + 1).trim()} ` : '';
+    const fragment = NotesTotp.foldText(value.slice(cut + 1).trim());
+    const used = new Set(NotesTotp.normalizeTags(value.slice(0, cut + 1)).map((t) => t.toLowerCase()));
+    const options = totpTagCounts()
+      .filter((t) => !used.has(t.name.toLowerCase()) && NotesTotp.foldText(t.name).startsWith(fragment))
+      .slice(0, 20);
+    list.replaceChildren(...options.map((t) => {
+      const opt = document.createElement('option');
+      opt.value = `${prefix}${t.name}`;
+      return opt;
+    }));
+  }
+
+  function readTotpDialogTags() {
+    return NotesTotp.normalizeTags(totpUi.tags?.value || '');
+  }
+
+  function resetTotpDialogTags(value = '') {
+    if (totpUi.tags) totpUi.tags.value = value;
+    totpUi.tagSuggestions?.replaceChildren();
   }
 
   function totpEmptyCopy() {
@@ -4437,10 +4539,9 @@
     return 'No authenticator accounts yet.\nTap + to scan a QR code or enter a secret.';
   }
 
+  // Local only: filters the decrypted in-memory list. The query never leaves the page.
   function filteredTotpEntries() {
-    const q = String(totpUi.search?.value || '').trim().toLowerCase();
-    if (!q) return totpEntries;
-    return totpEntries.filter((item) => `${item.issuer} ${item.account} ${item.host || ''}`.toLowerCase().includes(q));
+    return NotesTotp.filterAccounts(totpEntries, totpUi.search?.value || '', totpActiveTag);
   }
 
   function totpRingSvg(progress, ending) {
@@ -4502,6 +4603,9 @@
       const usedMs = totpVaultLastUsedMs(item);
       const changedTitle = changedMs ? listTimeAbsolute(changedMs) : '';
       const usedTitle = usedMs ? listTimeAbsolute(usedMs) : '';
+      const tagLine = (item.tags || []).length
+        ? `<span class="note-item-tags totp-item-tags">${item.tags.map((t) => `<span class="note-tag-chip">${escapeHtml(t)}</span>`).join('')}</span>`
+        : '';
       const changedLabel = totpVaultMetaLabel(changedMs, '—');
       const usedLabel = totpVaultMetaLabel(usedMs, '—');
       return `<div class="totp-item" data-totp-id="${escapeAttr(item.id)}">
@@ -4512,6 +4616,7 @@
               <span class="note-title-row"><strong title="${escapeAttr(label)}">${escapeHtml(label)}</strong></span>
               ${issuer ? `<span class="note-preview" title="${escapeAttr(issuer)}">${escapeHtml(issuer)}</span>` : ''}
               ${hostLine}
+              ${tagLine}
               <span class="note-modified totp-expires">Expires in ${remaining}s</span>
             </span>
             <span class="totp-item-meta">
@@ -4681,6 +4786,7 @@
     if (totpUi.issuer) totpUi.issuer.value = '';
     if (totpUi.account) totpUi.account.value = '';
     if (totpUi.host) totpUi.host.value = '';
+    resetTotpDialogTags();
     if (totpUi.secret) {
       totpUi.secret.value = '';
       totpUi.secret.readOnly = false;
@@ -4704,6 +4810,7 @@
     if (totpUi.issuer) totpUi.issuer.value = '';
     if (totpUi.account) totpUi.account.value = '';
     if (totpUi.host) totpUi.host.value = '';
+    resetTotpDialogTags();
     if (totpUi.secret) totpUi.secret.value = '';
     syncTotpDialogMode();
     setTotpAddError('');
@@ -4723,6 +4830,7 @@
     if (totpUi.issuer) totpUi.issuer.value = item.issuer || '';
     if (totpUi.account) totpUi.account.value = item.account || '';
     if (totpUi.host) totpUi.host.value = item.host || '';
+    resetTotpDialogTags((item.tags || []).join(', '));
     syncTotpDialogMode();
     setTotpAddError('');
     if (totpUi.backdrop) totpUi.backdrop.hidden = false;
@@ -4750,6 +4858,7 @@
       issuer: totpUi.issuer?.value || '',
       account: totpUi.account?.value || '',
       host: totpUi.host?.value || '',
+      tags: readTotpDialogTags(),
       secret: text,
     });
     if (!entry) {
@@ -5000,7 +5109,7 @@
       }
       const boundHost = readTotpDialogHost();
       if (boundHost === null) return;
-      const saved = NotesStore.updateTotpAccount(totpEditingId, { issuer, account, host: boundHost });
+      const saved = NotesStore.updateTotpAccount(totpEditingId, { issuer, account, host: boundHost, tags: readTotpDialogTags() });
       if (!saved) {
         setTotpAddError('That account is no longer in the vault.');
         return;
@@ -5016,6 +5125,7 @@
       issuer: totpUi.issuer?.value || '',
       account: totpUi.account?.value || '',
       host: boundHost,
+      tags: readTotpDialogTags(),
       secret: totpUi.secret?.value || '',
     });
     if (!entry) {
@@ -22076,6 +22186,27 @@
   totpUi.search?.addEventListener('input', () => {
     if (currentAppTab() === '2fa') renderTotpList();
   });
+  totpUi.search?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && totpUi.search.value) {
+      event.preventDefault();
+      totpUi.search.value = '';
+      renderTotpList();
+      return;
+    }
+    if (event.key !== 'Enter' || event.isComposing) return;
+    const rows = filteredTotpEntries();
+    if (rows.length !== 1) return;
+    event.preventDefault();
+    copyTotpEntry(rows[0].id);
+  });
+  totpUi.tagChips?.addEventListener('click', (event) => {
+    if (event.target.closest('[data-totp-tag-rename]')) { renameTotpTagPrompt(); return; }
+    if (event.target.closest('[data-totp-tag-delete]')) { deleteTotpTagPrompt(); return; }
+    const chip = event.target.closest('[data-totp-tag]');
+    if (chip) setTotpActiveTag(chip.dataset.totpTag);
+  });
+  totpUi.tags?.addEventListener('input', updateTotpTagSuggestions);
+  totpUi.tags?.addEventListener('focus', updateTotpTagSuggestions);
   totpUi.list?.addEventListener('click', (event) => {
     const row = event.target.closest('[data-totp-id]');
     if (!row) return;
@@ -25248,7 +25379,12 @@
       }
       if (!typing(e.target) && e.key === '/' && !(e.metaKey || e.ctrlKey || e.altKey)) {
         e.preventDefault();
-        ui.search?.focus();
+        if (currentAppTab() === '2fa' && totpUi.search) {
+          totpUi.search.focus();
+          totpUi.search.select();
+        } else {
+          ui.search?.focus();
+        }
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !e.shiftKey && !e.altKey) {

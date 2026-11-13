@@ -66,7 +66,10 @@ const NotesTotpImport = (() => {
     if (!algorithm || digits == null || period == null) return { skip: 'invalid' };
     const issuer = clean(raw.issuer, 128);
     const account = clean(raw.account, 256) || issuer || 'Account';
-    return { entry: { issuer, account, secret, digits, period, algorithm, otp_type: 'totp' } };
+    const entry = { issuer, account, secret, digits, period, algorithm, otp_type: 'totp' };
+    const tags = Totp.normalizeTags ? Totp.normalizeTags(Array.isArray(raw.tags) ? raw.tags : []) : [];
+    if (tags.length) entry.tags = tags;
+    return { entry };
   }
 
   function parseOtpauthList(input) {
@@ -113,11 +116,22 @@ const NotesTotpImport = (() => {
     }
     if (data.version !== 1 || !db || typeof db !== 'object' || ![1, 2, 3].includes(db.version)) return fail('invalid');
     if (Array.isArray(db.entries) && db.entries.length > LIMITS.maxEntries) return fail('too_many');
+    // db v3: entry.groups holds uuids into db.groups[{uuid,name}]; db v2: entry.group is a name.
+    const groupNames = new Map();
+    for (const g of Array.isArray(db.groups) ? db.groups : []) {
+      if (g && typeof g.uuid === 'string' && typeof g.name === 'string') groupNames.set(g.uuid, g.name);
+    }
     const res = collect(db.entries, (e) => {
       const info = e.info && typeof e.info === 'object' ? e.info : {};
+      const tags = [];
+      if (e.favorite === true) tags.push('Favourite');
+      if (typeof e.group === 'string') tags.push(e.group);
+      for (const id of Array.isArray(e.groups) ? e.groups : []) {
+        if (groupNames.has(id)) tags.push(groupNames.get(id));
+      }
       return {
         type: e.type, issuer: e.issuer, account: e.name,
-        secret: info.secret, algorithm: info.algo, digits: info.digits, period: info.period,
+        secret: info.secret, algorithm: info.algo, digits: info.digits, period: info.period, tags,
       };
     });
     if (!res) return fail('invalid');
@@ -131,12 +145,17 @@ const NotesTotpImport = (() => {
     }
     if (![3, 4].includes(data.schemaVersion)) return fail('invalid');
     if (Array.isArray(data.services) && data.services.length > LIMITS.maxEntries) return fail('too_many');
+    const groupNames = new Map();
+    for (const g of Array.isArray(data.groups) ? data.groups : []) {
+      if (g && typeof g.id === 'string' && typeof g.name === 'string') groupNames.set(g.id, g.name);
+    }
     const res = collect(data.services, (s) => {
       const otp = s.otp && typeof s.otp === 'object' ? s.otp : {};
+      const tags = typeof s.groupId === 'string' && groupNames.has(s.groupId) ? [groupNames.get(s.groupId)] : [];
       return {
         type: otp.tokenType, secret: s.secret,
         issuer: otp.issuer || s.name, account: otp.account || otp.label,
-        algorithm: otp.algorithm, digits: otp.digits, period: otp.period,
+        algorithm: otp.algorithm, digits: otp.digits, period: otp.period, tags,
       };
     });
     if (!res) return fail('invalid');
@@ -204,7 +223,7 @@ const NotesTotpImport = (() => {
     if (first.format === 'aegis') {
       res = inner && typeof inner === 'object' ? parseAegis({ version: root.version, db: inner }) : fail('bad_password');
     } else {
-      res = Array.isArray(inner) ? parse2fas({ schemaVersion: root.schemaVersion, services: inner }) : fail('bad_password');
+      res = Array.isArray(inner) ? parse2fas({ schemaVersion: root.schemaVersion, services: inner, groups: root.groups }) : fail('bad_password');
     }
     if (!res.ok) return res;
     if (!res.entries.length && !res.skipped.length) return fail('none');
@@ -228,7 +247,7 @@ const NotesTotpImport = (() => {
   }
 
   function previewRows(rows) {
-    return rows.map((r) => ({ issuer: r.entry.issuer, account: r.entry.account, duplicate: r.duplicate }));
+    return rows.map((r) => ({ issuer: r.entry.issuer, account: r.entry.account, tags: r.entry.tags || [], duplicate: r.duplicate }));
   }
 
   return { LIMITS, MESSAGES, SKIP_MESSAGES, parse, decryptAndParse, plan, previewRows };

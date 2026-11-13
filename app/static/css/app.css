@@ -1427,6 +1427,31 @@ body.agenda-editor-open {
   padding-right: calc(16px + var(--safe-right));
   flex-shrink: 0;
 }
+.totp-tag-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.totp-tag-chips[hidden] { display: none; }
+.totp-tag-chips::-webkit-scrollbar { display: none; }
+.totp-tag-chips .tag-chip,
+.totp-tag-chips .totp-tag-action {
+  flex: 0 0 auto;
+  min-height: 32px;
+  white-space: nowrap;
+}
+.totp-tag-chip.is-active {
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+.totp-tag-count { opacity: 0.7; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.totp-tag-action { padding: 4px 10px; font-size: 13px; }
+.totp-item-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .totp-list-head {
   display: none;
   gap: 12px;
