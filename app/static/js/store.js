@@ -4696,12 +4696,63 @@ const NotesStore = (() => {
     ).length;
   }
 
+  function tagIndex() {
+    return NotesLabels.indexOf([...state.items.entries()].map(([uuid, i]) => ({ uuid, content: i.content, deleted: i.deleted })));
+  }
+
+  function applyLabelUpdates(updates) {
+    for (const u of updates) upsert(u.uuid, u.content);
+  }
+
+  // Rename = change the leaf name; a legacy flat label is written in the nested shape here.
   function renameTag(uuid, title) {
     const tag = get(uuid);
-    if (!tag || tag.content.type !== 'tag') return;
-    const name = String(title || '').trim();
-    if (!name) return;
-    upsert(uuid, { ...tag.content, title: name });
+    if (!tag || tag.content.type !== 'tag') return false;
+    const plan = NotesLabels.planUpdate(uuid, { name: title }, tagIndex());
+    if (!plan.ok) return false;
+    applyLabelUpdates(plan.updates);
+    return true;
+  }
+
+  // Create a label, optionally under a parent. Returns the uuid or null when rejected.
+  function createTag(name, parentId) {
+    const byId = tagIndex();
+    const nm = NotesLabels.validateName(name);
+    if (!nm.ok || byId.size >= NotesLabels.MAX_LABELS) return null;
+    if (!NotesLabels.validateParent(null, parentId, byId).ok) return null;
+    if (NotesLabels.siblingNameTaken(nm.name, parentId, byId, null)) return null;
+    const uuid = newUuid();
+    const title = (parentId ? NotesLabels.pathOf(parentId, byId) + NotesLabels.SEP : '') + nm.name;
+    upsert(uuid, {
+      ...defaultTag(title),
+      name: nm.name,
+      parent_id: parentId || '',
+      order: NotesLabels.nextOrder(parentId, byId),
+      title_sync: title,
+    });
+    return uuid;
+  }
+
+  // Move a label (and thereby its sub-labels). Rejects cycles and too deep nesting.
+  function moveTag(uuid, parentId) {
+    const plan = NotesLabels.planUpdate(uuid, { parent_id: parentId || '' }, tagIndex());
+    if (!plan.ok) return false;
+    applyLabelUpdates(plan.updates);
+    return true;
+  }
+
+  // Idempotent: writes the nested shape for legacy flat labels, nothing else. Returns the count.
+  function migrateLabels() {
+    const updates = NotesLabels.migrate([...state.items.entries()].map(([uuid, i]) => ({ uuid, content: i.content, deleted: i.deleted })));
+    applyLabelUpdates(updates);
+    return updates.length;
+  }
+
+  // Repairs orphans, cycles and renames done by older clients (spec 1.6). Returns the count.
+  function repairLabels() {
+    const updates = NotesLabels.repair([...state.items.entries()].map(([uuid, i]) => ({ uuid, content: i.content, deleted: i.deleted })));
+    applyLabelUpdates(updates);
+    return updates.length;
   }
 
   function setTagColor(uuid, color) {
@@ -4712,22 +4763,27 @@ const NotesStore = (() => {
     upsert(uuid, { ...tag.content, color: safe });
   }
 
-  function deleteTag(uuid) {
+  // options.children: 'promote' (default, sub-labels move up) or 'delete' (sub-labels go too).
+  function deleteTag(uuid, options) {
     const tag = get(uuid);
     if (!tag || tag.content.type !== 'tag') return;
+    const plan = NotesLabels.planDelete(uuid, options && options.children === 'delete' ? 'delete' : 'promote', tagIndex());
+    const gone = new Set(plan.remove);
     for (const note of listNotes()) {
       const tags = note.content.tags || [];
-      if (!tags.includes(uuid)) continue;
-      upsert(note.uuid, { ...note.content, tags: tags.filter((id) => id !== uuid) });
+      if (!tags.some((id) => gone.has(id))) continue;
+      upsert(note.uuid, { ...note.content, tags: tags.filter((id) => !gone.has(id)) });
     }
-    remove(uuid);
+    applyLabelUpdates(plan.updates);
+    for (const id of plan.remove) remove(id);
   }
 
   function mergeDuplicateTags() {
     const groups = new Map();
     for (const tag of listTags()) {
-      const key = String(tag.content.title || '').trim().toLowerCase();
-      if (!key) continue;
+      const leaf = String(NotesLabels.nameOf(tag.content)).trim().toLowerCase();
+      if (!leaf) continue;
+      const key = NotesLabels.parentOf(tag.content) + '\u0000' + leaf;
       const list = groups.get(key) || [];
       list.push(tag);
       groups.set(key, list);
@@ -6733,6 +6789,10 @@ const NotesStore = (() => {
     listTags,
     noteCountForTag,
     renameTag,
+    createTag,
+    moveTag,
+    migrateLabels,
+    repairLabels,
     setTagColor,
     deleteTag,
     mergeDuplicateTags,

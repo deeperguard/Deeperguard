@@ -151,6 +151,7 @@ global.fetch = async (url, options = {}) => {
   return jsonResponse(200, {});
 };
 global.NotesSanitize = require(path.join(jsRoot, 'sanitize.js'));
+require(path.join(jsRoot, 'labels.js'));
 
 vm.runInThisContext(fs.readFileSync(path.join(vendorRoot, 'noble-crypto.js'), 'utf8'));
 global.NotesCrypto = require(path.join(jsRoot, 'crypto.js'));
