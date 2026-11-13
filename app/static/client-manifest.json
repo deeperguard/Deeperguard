@@ -1,5 +1,5 @@
 {
-  "asset_count": 72,
+  "asset_count": 73,
   "assets": {
     "css/app.css": {
       "bytes": 285181,
@@ -116,10 +116,10 @@
       "url": "/static/js/crypto-worker.1977014a4e794006.js"
     },
     "js/crypto.js": {
-      "bytes": 8320,
-      "sha256": "60b77efdfe498e5792c4c8f3504f0b084da6c8fa2cade46dce6a32c31a8e96fc",
-      "sri": "sha384-6+6yJjPmzqQtMJgXbXiSo6p0PDiTQsK75GQ7m7PVKIL6MXGlt6GI4EcOSMkUzfcZ",
-      "url": "/static/js/crypto.60b77efdfe498e57.js"
+      "bytes": 9503,
+      "sha256": "b0732df1068bb0f236ce9beb5cb01a93b518e8534414dc9f459fcc3931270020",
+      "sri": "sha384-vXXr3UNQsVA2FK/6iF2PGd7U+OKBT7hkagiwBZ2lakIhOofcpQ44fcZXpeWOVIhS",
+      "url": "/static/js/crypto.b0732df1068bb0f2.js"
     },
     "js/deletion-sync-honesty.js": {
       "bytes": 2823,
@@ -264,6 +264,12 @@
       "sha256": "9d48ca13a4ebf22df1a09f653ffa40563eceae0f2f581cc674d966eafb69944c",
       "sri": "sha384-zBzrGGNpNCihsDpP3G5clRp+LRrNmxvb0mcMwRByBlyfO15n4WbiGS9fY7yNZ5ph",
       "url": "/static/js/secure-send.9d48ca13a4ebf22d.js"
+    },
+    "js/settings-sync.js": {
+      "bytes": 8336,
+      "sha256": "85e096098024cb2edbfb5f47a29034b7262d6f518f33f96767f7a86a6c4900ff",
+      "sri": "sha384-cJtg2LcHKOxq+rOaAUu6J6Ep/anKqGqBJ+TQt+t9/pPubhm3Kzp9c3dRsnNFpgPk",
+      "url": "/static/js/settings-sync.85e096098024cb2e.js"
     },
     "js/snimport.js": {
       "bytes": 26926,
@@ -435,6 +441,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "c967ba089fc2c160cbd9acf898a6f63fc6b05fef347dd3afce05edc114b0895c",
+  "manifest_sha256": "39c5f4f4d952773bb15848dc702f2aee16fd5c98a52bdeaed1350390f7188def",
   "version": 1
 }

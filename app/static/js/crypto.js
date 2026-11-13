@@ -129,22 +129,52 @@ const NotesCrypto = (() => {
     return JSON.parse(new TextDecoder().decode(plain));
   }
 
-  async function encryptBytes(key, bytes) {
+  function aadBytes(aad) {
+    return aad == null ? null : (aad instanceof Uint8Array ? aad : new TextEncoder().encode(String(aad)));
+  }
+
+  // Optional `aad` binds the ciphertext to a context (payload v: 2). Without it
+  // the payload stays v: 1 and decrypts exactly as before.
+  async function encryptBytes(key, bytes, { aad } = {}) {
     const iv = randomIv();
     const raw = isRawKey(key) ? key.raw : null;
     if (!raw) throw new Error('Missing encryption key');
     const plain = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
-    const cipher = noble().gcm(alignBytes(raw), iv).encrypt(alignBytes(plain));
-    return { v: 1, iv: b64(iv), data: b64(cipher) };
+    const ad = aadBytes(aad);
+    const cipher = ad
+      ? noble().gcm(alignBytes(raw), iv, ad).encrypt(alignBytes(plain))
+      : noble().gcm(alignBytes(raw), iv).encrypt(alignBytes(plain));
+    return { v: ad ? 2 : 1, iv: b64(iv), data: b64(cipher) };
   }
 
-  async function decryptBytes(key, payload) {
+  async function decryptBytes(key, payload, { aad } = {}) {
     if (!payload || !payload.iv || !payload.data) throw new Error('Missing encrypted file');
     const iv = fromB64(payload.iv);
     const data = fromB64(payload.data);
     const raw = isRawKey(key) ? key.raw : null;
     if (!raw) throw new Error('Missing encryption key');
-    return noble().gcm(alignBytes(raw), iv).decrypt(data);
+    const ad = aadBytes(aad);
+    if (Number(payload.v) === 2 && !ad) throw new Error('Missing authenticated context');
+    return ad
+      ? noble().gcm(alignBytes(raw), iv, ad).decrypt(data)
+      : noble().gcm(alignBytes(raw), iv).decrypt(data);
+  }
+
+  // HMAC-SHA256 built on the library sha256 (RFC 2104), for deterministic ids.
+  function hmacSha256(keyBytes, msgBytes) {
+    const { sha256 } = noble();
+    let k = alignBytes(keyBytes);
+    if (k.length > 64) k = sha256(k);
+    const ipad = new Uint8Array(64 + msgBytes.length);
+    const opad = new Uint8Array(96);
+    for (let i = 0; i < 64; i += 1) {
+      const b = i < k.length ? k[i] : 0;
+      ipad[i] = b ^ 0x36;
+      opad[i] = b ^ 0x5c;
+    }
+    ipad.set(msgBytes, 64);
+    opad.set(sha256(ipad), 64);
+    return sha256(opad);
   }
 
   async function hashText(text) {
@@ -256,6 +286,7 @@ const NotesCrypto = (() => {
     decryptBytes,
     hashText,
     hashBytes,
+    hmacSha256,
     VAULT_KDF_V1,
     VAULT_KDF_V2,
     ARGON2_PARAMS,
