@@ -12,7 +12,11 @@ const NotesTotpImport = (() => {
     too_many: 'That file has too many accounts to import.',
     unknown: 'Unknown or damaged import format.',
     invalid: 'Unknown or damaged import format.',
-    encrypted: 'Encrypted import is coming soon.',
+    encrypted: 'This export is encrypted. Enter its password.',
+    bad_password: 'Wrong password or damaged file',
+    kdf_limit: 'This file asks for more computing power than we allow, so it was not opened.',
+    no_slot: 'This Aegis backup has no password slot',
+    cancelled: 'Cancelled.',
     none: 'No importable accounts were found.',
   };
   const SKIP_MESSAGES = {
@@ -104,7 +108,9 @@ const NotesTotpImport = (() => {
 
   function parseAegis(data) {
     const db = data.db;
-    if (typeof db === 'string' || (data.header && (data.header.slots || data.header.params))) return fail('encrypted');
+    if (typeof db === 'string' || (data.header && (data.header.slots || data.header.params))) {
+      return Object.assign(fail('encrypted'), { format: 'aegis' });
+    }
     if (data.version !== 1 || !db || typeof db !== 'object' || ![1, 2, 3].includes(db.version)) return fail('invalid');
     if (Array.isArray(db.entries) && db.entries.length > LIMITS.maxEntries) return fail('too_many');
     const res = collect(db.entries, (e) => {
@@ -120,7 +126,9 @@ const NotesTotpImport = (() => {
 
   function parse2fas(data) {
     const hasServices = Array.isArray(data.services) && data.services.length > 0;
-    if (typeof data.servicesEncrypted === 'string' && data.servicesEncrypted && !hasServices) return fail('encrypted');
+    if (typeof data.servicesEncrypted === 'string' && data.servicesEncrypted && !hasServices) {
+      return Object.assign(fail('encrypted'), { format: '2fas' });
+    }
     if (![3, 4].includes(data.schemaVersion)) return fail('invalid');
     if (Array.isArray(data.services) && data.services.length > LIMITS.maxEntries) return fail('too_many');
     const res = collect(data.services, (s) => {
@@ -158,6 +166,51 @@ const NotesTotpImport = (() => {
     return res;
   }
 
+  // Encrypted Aegis / 2FAS. The KDF and decryption run in kdf-worker.js (own CSP). `run(job)` returns
+  // a promise of {ok, text} or {ok:false, code}; the default starts a worker that handle.cancel()
+  // stops. The password is encoded here and only lives in the job buffer, which the worker zeroes.
+  // Nothing is stored, logged or sent.
+  function defaultRun(handle) {
+    return (job) => new Promise((resolve) => {
+      const meta = typeof document !== 'undefined' ? document.querySelector('meta[name="notes-kdf-worker"]') : null;
+      let worker;
+      try { worker = new Worker((meta && meta.getAttribute('content')) || '/static/js/kdf-worker.js'); } catch (e) { resolve({ ok: false, code: 'bad_password' }); return; }
+      const done = (res) => { try { worker.terminate(); } catch (e) { /* ignore */ } handle.cancel = null; resolve(res); };
+      handle.cancel = () => done({ ok: false, code: 'cancelled' });
+      worker.onmessage = (ev) => done(ev.data && ev.data.ok ? { ok: true, text: ev.data.text } : { ok: false, code: (ev.data && ev.data.code) || 'bad_password' });
+      worker.onerror = () => done({ ok: false, code: 'bad_password' });
+      worker.postMessage(job, [job.password.buffer]);
+    });
+  }
+
+  async function decryptAndParse(input, password, opts) {
+    const first = parse(input);
+    if (first.error !== 'encrypted') return first;
+    const root = parseJsonRoot(String(input).replace(/^﻿/, '').trim());
+    const handle = (opts && opts.handle) || {};
+    const run = (opts && opts.run) || defaultRun(handle);
+    const bytes = new TextEncoder().encode(String(password || ''));
+    const data = first.format === 'aegis'
+      ? { slots: root.header && root.header.slots, params: root.header && root.header.params, db: root.db }
+      : { servicesEncrypted: root.servicesEncrypted, reference: root.reference, iterations: root.iterations };
+    let out;
+    try { out = await run({ id: 1, format: first.format, password: bytes, data }); } finally { bytes.fill(0); }
+    if (!out || !out.ok) return fail(out && MESSAGES[out.code] ? out.code : 'bad_password');
+    let inner = null;
+    if (!jsonDepthOk(out.text, LIMITS.maxDepth)) return fail('bad_password');
+    try { inner = JSON.parse(out.text); } catch (e) { return fail('bad_password'); }
+    out.text = '';
+    let res;
+    if (first.format === 'aegis') {
+      res = inner && typeof inner === 'object' ? parseAegis({ version: root.version, db: inner }) : fail('bad_password');
+    } else {
+      res = Array.isArray(inner) ? parse2fas({ schemaVersion: root.schemaVersion, services: inner }) : fail('bad_password');
+    }
+    if (!res.ok) return res;
+    if (!res.entries.length && !res.skipped.length) return fail('none');
+    return res;
+  }
+
   function norm(secret) { return Totp.normalizeSecret ? Totp.normalizeSecret(secret) : String(secret); }
 
   // Rows for the preview. `existingSecrets` is an iterable of vault secrets. Duplicates against
@@ -178,7 +231,7 @@ const NotesTotpImport = (() => {
     return rows.map((r) => ({ issuer: r.entry.issuer, account: r.entry.account, duplicate: r.duplicate }));
   }
 
-  return { LIMITS, MESSAGES, SKIP_MESSAGES, parse, plan, previewRows };
+  return { LIMITS, MESSAGES, SKIP_MESSAGES, parse, decryptAndParse, plan, previewRows };
 })();
 
 if (typeof window !== 'undefined') window.NotesTotpImport = NotesTotpImport;

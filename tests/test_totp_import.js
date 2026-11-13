@@ -84,7 +84,7 @@ assert.deepEqual(res.skipped, ['hotp']);
 // Encrypted formats are recognised
 res = Imp.parse(JSON.stringify({ version: 1, header: { slots: [{ type: 1 }], params: { nonce: 'aa', tag: 'bb' } }, db: 'AAAA' }));
 assert.equal(res.error, 'encrypted');
-assert.match(res.message, /coming soon/);
+assert.match(res.message, /encrypted/);
 res = Imp.parse(JSON.stringify({ schemaVersion: 4, services: [], servicesEncrypted: 'a:b:c' }));
 assert.equal(res.error, 'encrypted');
 

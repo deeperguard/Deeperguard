@@ -18,6 +18,7 @@
   <meta name="notes-verify-ask-ai-pin" content="{{ verify_ask_ai_pin_id }}">
   <meta name="notes-crypto-worker" content="{{ asset_url('js/crypto-worker.js') }}">
   <meta name="notes-ics-fetch-worker" content="{{ asset_url('js/ics-fetch-worker.js') }}">
+  <meta name="notes-kdf-worker" content="{{ asset_url('js/kdf-worker.js') }}">
   <meta name="google-oauth-client-id" content="{{ google_oauth_client_id|default('', true) }}">
   <meta name="dropbox-app-key" content="{{ dropbox_app_key|default('', true) }}">
   <title>Deeperguard</title>
@@ -2419,12 +2420,15 @@
       <h2 id="totp-import-title">Import 2FA accounts</h2>
     </header>
     <div class="scan-dialog-body">
-      <p class="scan-dialog-lead muted">Choose a file or paste text: a list of otpauth:// links (one per line), a plain Aegis export or a plain 2FAS export. Everything stays in this browser and is saved encrypted in your vault.</p>
+      <p class="scan-dialog-lead muted">Choose a file or paste text: a list of otpauth:// links (one per line), or an Aegis or 2FAS export (plain or password-protected). Everything stays in this browser and is saved encrypted in your vault.</p>
       <div class="scan-add-actions">
         <button type="button" class="btn scan-add-btn" id="totp-import-pick">Choose file</button>
       </div>
       <label class="scan-name-field">Or paste text
         <textarea id="totp-import-text" rows="4" autocomplete="off" autocapitalize="none" spellcheck="false"></textarea>
+      </label>
+      <label id="totp-import-password-row" class="scan-name-field" hidden>Export password
+        <input id="totp-import-password" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="1024">
       </label>
       <p id="totp-import-error" class="error" hidden></p>
       <div id="totp-import-preview" hidden>

@@ -4016,6 +4016,7 @@
     rememberOpen(null);
     hideScanDialog();
     hideTotpAddDialog();
+    hideTotpImportDialog();
     closeSettings(true);
     closeSecureSendPanel(true);
     stopTotpClock();
@@ -4862,9 +4863,16 @@
   }
 
   // ---- 2FA import (docs/2FA_IMPORT_SPEC.md section 3). Never log or show secrets here. ----
-  const totpImport = { rows: [], skipped: 0 };
+  const totpImport = { rows: [], skipped: 0, source: '', handle: {}, busy: false };
   function totpImportEl(id) { return document.getElementById(id); }
   function resetTotpImport() {
+    if (totpImport.handle.cancel) totpImport.handle.cancel();
+    totpImport.source = '';
+    totpImport.busy = false;
+    const pw = totpImportEl('totp-import-password');
+    if (pw) pw.value = '';
+    const pwRow = totpImportEl('totp-import-password-row');
+    if (pwRow) pwRow.hidden = true;
     totpImport.rows = [];
     totpImport.skipped = 0;
     const text = totpImportEl('totp-import-text');
@@ -4896,13 +4904,40 @@
     el.textContent = message || '';
     el.hidden = !message;
   }
-  function previewTotpImport(raw) {
+  async function previewTotpImport(raw) {
+    if (totpImport.busy) return;
     setTotpImportError('');
-    const res = NotesTotpImport.parse(String(raw || ''));
+    const text = String(raw || '');
+    const pwEl = totpImportEl('totp-import-password');
+    let res = NotesTotpImport.parse(text);
+    if (!res.ok && res.error === 'encrypted') {
+      const password = pwEl ? pwEl.value : '';
+      if (!password) {
+        // Ask for the password; the file text stays in memory only until the dialog closes.
+        totpImport.source = text;
+        totpImportEl('totp-import-password-row').hidden = false;
+        pwEl.focus();
+        setTotpImportError(res.message);
+        return;
+      }
+      totpImport.busy = true;
+      setTotpImportError('Decrypting, this can take a few seconds...');
+      try {
+        res = await NotesTotpImport.decryptAndParse(text, password, { handle: totpImport.handle });
+      } finally {
+        totpImport.busy = false;
+        pwEl.value = '';
+      }
+      if (totpImportEl('totp-import-dialog').hidden) return;
+      setTotpImportError('');
+      if (res.error === 'bad_password') pwEl.focus();
+    }
     if (!res.ok) {
       setTotpImportError(res.message);
       return;
     }
+    totpImport.source = '';
+    totpImportEl('totp-import-password-row').hidden = true;
     const existing = NotesStore.listTotpAccounts().map((item) => item.content.secret);
     totpImport.rows = NotesTotpImport.plan(res.entries, existing);
     totpImport.skipped = res.skipped.length;
@@ -4944,7 +4979,7 @@
       setTotpImportError(NotesTotpImport.MESSAGES.too_large);
       return;
     }
-    previewTotpImport(await file.text());
+    await previewTotpImport(await file.text());
   }
 
   async function saveTotpAddDialog() {
@@ -21811,7 +21846,10 @@
   document.getElementById('btn-totp-import')?.addEventListener('click', () => showTotpImportDialog());
   document.getElementById('totp-import-backdrop')?.addEventListener('click', () => hideTotpImportDialog());
   document.getElementById('totp-import-cancel')?.addEventListener('click', () => hideTotpImportDialog());
-  document.getElementById('totp-import-preview-btn')?.addEventListener('click', () => previewTotpImport(totpImportEl('totp-import-text').value));
+  document.getElementById('totp-import-preview-btn')?.addEventListener('click', () => {
+    const typed = totpImportEl('totp-import-text').value;
+    previewTotpImport(typed || totpImport.source).catch(() => setTotpImportError(NotesTotpImport.MESSAGES.invalid));
+  });
   document.getElementById('totp-import-confirm')?.addEventListener('click', () => confirmTotpImport());
   document.getElementById('totp-import-pick')?.addEventListener('click', () => openHiddenFileInput(totpImportEl('totp-import-file')));
   document.getElementById('totp-import-file')?.addEventListener('change', (event) => {
