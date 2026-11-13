@@ -60,6 +60,16 @@ Limits of clearing memory in JavaScript:
 - Idle lock depends on timers. Browsers may delay timers in background tabs and on phones. Leaving-the-app lock covers part of that.
 - Closing or reloading the tab drops the key from memory. The next open needs the vault password, unless a remembered password applies (see above).
 
+### Sleep and hibernation
+
+Lock does not run just because the device sleeps. Hiding the tab or putting the device to sleep flushes pending edits and releases some preview data, but the vault key stays in memory until Lock runs (idle timer, **Lock when leaving the app**, or **Lock vault now**). Suspend-to-RAM keeps that memory powered, so a key still held at sleep time is still in RAM. Hibernation writes RAM to disk, including the key and any decrypted text still in memory. The browser cannot reliably detect hibernation or clear the key before it happens.
+
+So protection of a locked or hibernated device depends on **OS full-disk encryption**: FileVault (macOS), BitLocker (Windows), LUKS or similar (Linux), or device encryption (iOS and Android). With full-disk encryption on, a hibernation file or swap is encrypted at rest. Without it, a lost or stolen device may expose the key and recent notes to anyone who can read the disk. Practical steps:
+
+- Turn on full-disk encryption on every device where you use the vault, and check that it is active.
+- Lock manually (**Lock vault now**) before you close the lid on a shared or public device, and set a short idle timer.
+- Turn off **Remember password on this device** on shared devices, since the remembered password is also stored on disk.
+
 ## Logging out, revoking devices, and changing your password
 
 Logging out, revoking a device from the session list, and changing your password stop the server from giving that device new data. None of them takes back data the device already holds. A device that has the vault key or password and a copy of the ciphertext can keep reading that copy while offline, and no server-side action stops it. There is no offline lease. Full details and practical steps: [docs/REVOCATION_LIMITS.md](docs/REVOCATION_LIMITS.md).
