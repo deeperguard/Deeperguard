@@ -520,18 +520,6 @@ const NotesStore = (() => {
     return derived;
   }
 
-  function adoptDerivedVaultKey(password, stashed) {
-    const raw = stashed?.raw;
-    if (!raw || !stashed.salt) return false;
-    const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
-    rememberDerivedKdf(String(password || ''), stashed.salt, stashed.version || 2, {
-      key: { raw: bytes },
-      encoding: stashed.encoding || '',
-      version: stashed.version || 2,
-    });
-    return true;
-  }
-
   async function scoreVaultKdfVersion(password, salt, kdfVersion, ciphers) {
     let ok = 0;
     try {
@@ -837,6 +825,15 @@ const NotesStore = (() => {
     return err;
   }
 
+  function zeroKeyBytes(key) {
+    try {
+      const raw = key && key.raw;
+      if (raw && typeof raw.fill === 'function') raw.fill(0);
+    } catch (err) {
+      /* best effort: JS cannot guarantee erasure */
+    }
+  }
+
   function lock() {
     state.lockEpoch += 1;
     // Keep the persisted unsynced queue — it is restored by loadLocal after the
@@ -850,6 +847,10 @@ const NotesStore = (() => {
     }
     clearTimeout(state.saveTimer);
     state.saveTimer = null;
+    // Zero every owned copy of the key bytes, then drop all references.
+    zeroKeyBytes(state.cryptoKey);
+    zeroKeyBytes(state.altCryptoKey);
+    if (lastDerivedKdf) zeroKeyBytes(lastDerivedKdf.key);
     state.cryptoKey = null;
     state.altCryptoKey = null;
     state.kdfProbeMixed = false;
@@ -6427,7 +6428,6 @@ const NotesStore = (() => {
     api,
     setSessionRevokedHandler,
     unlock,
-    adoptDerivedVaultKey,
     isUnlocked,
     isKeyVerified,
     markKeyVerified,

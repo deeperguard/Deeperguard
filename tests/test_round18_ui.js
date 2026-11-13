@@ -70,7 +70,7 @@ assert.ok(registerSlice.includes("Preparing your vault…"));
 assert.ok(registerSlice.includes('requestAnimationFrame'));
 assert.ok(registerSlice.indexOf("Preparing your vault…") < registerSlice.indexOf('deriveKeyInWorker'));
 assert.ok(registerSlice.indexOf('requestAnimationFrame') < registerSlice.indexOf('deriveKeyInWorker'));
-assert.ok(appJs.includes('adoptDerivedVaultKey'));
+assert.ok(!appJs.includes('adoptDerivedVaultKey'));
 assert.ok(html.includes("sessionStorage.getItem('notes_just_registered') === '1'"));
 
 // 4. Signed-out /app shares one health read instead of a fan-out.

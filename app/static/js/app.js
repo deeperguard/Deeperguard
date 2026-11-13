@@ -8362,11 +8362,9 @@
       } catch (err) {
         sessionPassword = '';
       }
-      const bootDerived = (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.takeBootDerivedKey)
-        ? NotesVaultSecrets.takeBootDerivedKey()
-        : null;
-      if (bootDerived && sessionPassword && typeof NotesStore.adoptDerivedVaultKey === 'function') {
-        NotesStore.adoptDerivedVaultKey(sessionPassword, bootDerived);
+      // Discard any stashed derived key: unlock always re-runs Argon2id.
+      if (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.takeBootDerivedKey) {
+        NotesVaultSecrets.takeBootDerivedKey();
       }
       const cached = NotesStore.cachedAccount();
       const bootSalt = cached.kdf_salt
