@@ -11227,3 +11227,20 @@ html.layout-compact #totp-pane #btn-totp-add {
 .label-move-field { display: grid; gap: 6px; font-size: 13px; }
 .label-move-field select { min-height: 36px; max-width: 260px; }
 .label-move-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
+
+/* New from template dialog (spec section 2). */
+.template-dialog[hidden] { display: none; }
+.template-dialog { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.4); }
+.template-dialog-card { width: min(94vw, 520px); max-height: 86vh; overflow: auto; padding: 1rem 1.1rem; border-radius: 12px; background: var(--bg, #fff); color: inherit; border: 1px solid rgba(128, 128, 128, 0.4); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35); display: flex; flex-direction: column; gap: 0.6rem; }
+.template-dialog-card h2 { margin: 0; font-size: 1.05rem; }
+.template-dialog-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; }
+.template-dialog-field input { font: inherit; padding: 0.45rem 0.6rem; border-radius: 8px; border: 1px solid rgba(128, 128, 128, 0.5); background: transparent; color: inherit; }
+.template-dialog-help, .tpl-hint { margin: 0; font-size: 0.8rem; opacity: 0.75; }
+.tpl-list { list-style: none; margin: 0; padding: 0.25rem; border: 1px solid rgba(128, 128, 128, 0.35); border-radius: 8px; max-height: 12rem; overflow: auto; }
+.tpl-option { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.45rem 0.6rem; border-radius: 6px; cursor: pointer; }
+.tpl-option:hover { background: rgba(128, 128, 128, 0.12); }
+.tpl-option.active { background: var(--accent, #2563eb); color: #fff; }
+.tpl-badge { font-size: 0.7rem; opacity: 0.8; border: 1px solid currentColor; border-radius: 999px; padding: 0 0.4rem; }
+.tpl-preview { margin: 0; max-height: 10rem; overflow: auto; white-space: pre-wrap; font-size: 0.8rem; padding: 0.5rem 0.6rem; border-radius: 8px; background: rgba(128, 128, 128, 0.08); }
+.template-dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap; }
+.template-dialog-actions #template-dialog-manage { margin-right: auto; }

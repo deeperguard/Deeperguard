@@ -304,6 +304,19 @@
       <button type="button" id="btn-app-update-cancel" class="btn ghost sm">Cancel</button>
     </div>
   </div>
+  <div id="template-dialog" class="template-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="template-dialog-title">
+    <div class="template-dialog-card">
+      <h2 id="template-dialog-title">New from template</h2>
+      <label class="template-dialog-field">Title <input type="text" id="template-dialog-name" autocomplete="off" placeholder="Untitled" aria-describedby="template-dialog-help"></label>
+      <p id="template-dialog-help" class="template-dialog-help">Use ↑ ↓ to pick a template, Enter to create, Esc to cancel. {% raw %}{{date}}, {{time}} and {{title}}{% endraw %} are filled in on this device, in your time zone. Attachments are not copied.</p>
+      <div id="template-dialog-list"></div>
+      <div class="template-dialog-actions">
+        <button type="button" id="template-dialog-manage" class="btn ghost sm">Manage templates</button>
+        <button type="button" id="template-dialog-cancel" class="btn ghost sm">Cancel</button>
+        <button type="button" id="template-dialog-create" class="btn primary sm">Create note</button>
+      </div>
+    </div>
+  </div>
   <div id="file-download-progress" class="file-download-progress" hidden role="dialog" aria-modal="true" aria-live="polite" aria-busy="true" aria-labelledby="file-download-progress-title">
     <div class="file-download-progress-card" tabindex="-1">
       <p id="file-download-progress-title">Downloading…</p>
@@ -749,6 +762,7 @@
               <path d="M11 12h1v4h1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
+          <button type="button" id="btn-new-from-template" class="btn icon" title="New from template" aria-label="New from template" aria-haspopup="dialog"><svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2"/></svg></button>
           <button type="button" id="btn-new" class="btn icon" title="New note" aria-label="New note">+</button>
         </div>
         <div id="sync-progress" class="sync-progress" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Sync progress">
@@ -791,6 +805,7 @@
             <button type="button" class="filter" data-filter="pinned" title="Starred"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 3 15 9 21 10 16.5 14.5 18 21 12 17.5 6 21 7.5 14.5 3 10 9 9"/></svg><span>Starred</span></button>
             <button type="button" class="filter" data-filter="archived" title="Archived"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Archived</span></button>
             <button type="button" class="filter" data-filter="trash" title="Trash"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13"/></svg><span>Trash</span></button>
+            <button type="button" class="filter" data-filter="templates" title="Templates"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2"/></svg><span>Templates</span></button>
             <button type="button" class="filter" data-filter="untagged" title="Untagged"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12l8-8h7v7l-8 8z"/><circle cx="16" cy="8" r="1" fill="currentColor"/></svg><span>Untagged</span></button>
           </nav>
         </details>
@@ -803,6 +818,7 @@
             <option value="documents">Files</option>
             <option value="archived">Archived</option>
             <option value="trash">Trash</option>
+            <option value="templates">Templates</option>
           </select>
         </label>
         <label class="sort-select-wrap sort-select-wrap--sidebar">
@@ -1332,6 +1348,10 @@
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
               <span class="editor-menu-label">Duplicate</span>
+            </button>
+            <button type="button" id="btn-save-template" class="btn icon toolbar-secondary editor-toolbar-menu-item" role="menuitem" title="Save as template" aria-label="Save as template">
+              <svg class="ui-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2"/></svg>
+              <span class="editor-menu-label">Save as template</span>
             </button>
             <div class="editor-menu-sep" role="separator"></div>
             <button type="button" id="btn-trash" class="btn icon toolbar-secondary editor-toolbar-menu-item" role="menuitem" title="Trash" aria-label="Trash">
@@ -2781,6 +2801,7 @@
   {{ asset_script('js/totp.js') }}
   {{ asset_script('js/totp-import.js') }}
   {{ asset_script('js/search.js') }}
+  {{ asset_script('js/templates.js') }}
   {{ asset_script('js/spreadsheet.js') }}
   {{ asset_script('js/markdown.js') }}
   {{ asset_script('js/in-doc-nav.js') }}

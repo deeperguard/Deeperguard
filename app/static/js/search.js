@@ -893,6 +893,14 @@ const NotesSearch = (() => {
           return false;
         }
 
+        // Templates (encrypted is_template flag) only list under "Templates"
+        // and in Trash; never among normal notes or search results.
+        if (filter === 'templates') {
+          if (!c.is_template || c.trashed) return false;
+        } else if (c.is_template && filter !== 'trash') {
+          return false;
+        }
+
         if (filter === 'pinned' && !c.starred) return false;
         if (filter === 'all' && !context && (c.archived || c.trashed)) return false;
         if (filter === 'untagged') {
