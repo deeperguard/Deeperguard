@@ -2573,7 +2573,7 @@
     Ics.validateIcsFile(file);
     const text = await file.text();
     const { events, warnings } = Ics.parseIcsFile(text);
-    const res = S.importAgendaFromIcs(events);
+    const res = S.importAgendaFromIcs(events, { source: Ics.makeSourceLabel(file.name) });
     let msg = `Imported ${res.imported} event${res.imported === 1 ? '' : 's'}`;
     if (res.skipped) msg += `, skipped ${res.skipped} duplicate${res.skipped === 1 ? '' : 's'}`;
     if (warnings.length) msg += `. ${warnings.length} parse warning(s).`;

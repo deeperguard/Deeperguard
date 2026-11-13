@@ -1945,7 +1945,8 @@ const NotesStore = (() => {
   /**
    * Merge ICS rows into the agenda pack. Rows sharing ICAL UID compose master + exceptions.
    */
-  function importAgendaFromIcs(rows) {
+  function importAgendaFromIcs(rows, opts) {
+    const source = String((opts && opts.source) || '');
     ensureAgendaPack();
     const pack = agendaPackRecord();
     if (!pack) return { imported: 0, skipped: 0 };
@@ -1992,6 +1993,9 @@ const NotesStore = (() => {
         imported_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
+      // Source label lives inside the encrypted pack; absent on events from before this field.
+      const nextSource = source || (prev && prev.source) || '';
+      if (nextSource) nextRow.source = nextSource;
       const prevSig = prev && JSON.stringify({
         t: prev.title, s: prev.start, e: prev.end, l: prev.location, n: prev.notes,
         r: prev.rrule, a: prev.all_day, x: prev.ics_exdates, o: prev.ics_occurrence_overrides,
@@ -2016,6 +2020,15 @@ const NotesStore = (() => {
       updated_at: new Date().toISOString(),
     });
     return { imported, skipped };
+  }
+
+  /** Remove every imported event carrying this source label (tombstoned like a normal delete). */
+  function removeAgendaEventsBySource(label) {
+    const l = String(label || '');
+    if (!l) return 0;
+    const ids = listAgendaEvents().filter((e) => e.source === l).map((e) => e.id);
+    ids.forEach((id) => removeAgendaEvent(id));
+    return ids.length;
   }
 
   async function runUnlockMaintenance() {
@@ -6502,6 +6515,7 @@ const NotesStore = (() => {
     removeAgendaEvent,
     mergeAgendaPacks,
     importAgendaFromIcs,
+    removeAgendaEventsBySource,
     searchIndexCovers,
     applySearchIndexEntry,
     mergeSearchEntries,
