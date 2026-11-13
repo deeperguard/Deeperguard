@@ -21525,9 +21525,27 @@
       toast(err?.message || 'Share failed', true);
     }
   });
-  document.getElementById('btn-secure-send-create')?.addEventListener('click', async () => {
+  const secureSendAck = document.getElementById('secure-send-ack');
+  const secureSendCreateBtn = document.getElementById('btn-secure-send-create');
+  const secureSendWarningEl = document.getElementById('secure-send-warning');
+  if (secureSendWarningEl && window.NotesSecureSend?.SHARING_WARNING) {
+    String(NotesSecureSend.SHARING_WARNING).split('\n\n').forEach((text, i) => {
+      const p = document.createElement('p');
+      if (i === 0) p.style.fontWeight = '600';
+      p.textContent = text;
+      secureSendWarningEl.appendChild(p);
+    });
+  }
+  secureSendAck?.addEventListener('change', () => {
+    if (secureSendCreateBtn) secureSendCreateBtn.disabled = !secureSendAck.checked;
+  });
+  secureSendCreateBtn?.addEventListener('click', async () => {
     if (!window.NotesSecureSend || !window.NotesStore || !window.NotesCrypto) {
       setSecureSendStatus('Secure Send is unavailable on this build.');
+      return;
+    }
+    if (!secureSendAck?.checked) {
+      setSecureSendStatus('Confirm that you understand the warning before creating a link.');
       return;
     }
     const title = document.getElementById('secure-send-title')?.value || '';
@@ -21604,7 +21622,7 @@
       setSecureSendStatus(err?.message || 'Could not create link');
       toast(err?.message || 'Secure Send failed', true);
     } finally {
-      if (btn) btn.disabled = false;
+      if (btn) btn.disabled = !secureSendAck?.checked;
     }
   });
   document.getElementById('btn-secure-send-copy')?.addEventListener('click', async () => {
