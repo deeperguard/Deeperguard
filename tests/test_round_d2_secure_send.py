@@ -512,6 +512,52 @@ class D2SecureSendTests(unittest.TestCase):
             self.assertFalse(ss.blob_path(send_id).is_file())
             self.assertEqual(self.client.get(f"/receive/{send_id}").status_code, 404)
 
+    def test_open_denied_when_revocation_record_unreadable(self):
+        from unittest import mock
+
+        import db as notes_db
+
+        send_id = self._create().get_json()["id"]
+        with mock.patch.object(notes_db, "tx", side_effect=RuntimeError("db down")):
+            res = self.client.post(
+                f"/api/secure-send/{send_id}/open",
+                json={},
+                headers={"Sec-Fetch-Site": "same-origin"},
+            )
+        self.assertEqual(res.status_code, 404)
+        self.assertNotIn("ciphertext", json.dumps(res.get_json() or {}))
+
+    def test_revoked_link_not_reactivated_and_non_owner_cannot_revoke(self):
+        import db as notes_db
+
+        send_id = self._create().get_json()["id"]
+        self.assertFalse(notes_db.cancel_secure_send(send_id, 999999))
+        with notes_db.tx() as conn:
+            row = conn.execute(
+                "SELECT canceled_at FROM secure_sends WHERE id = ?", (send_id,)
+            ).fetchone()
+        self.assertFalse(row["canceled_at"])
+        self.assertTrue(
+            self.client.post(
+                f"/api/secure-send/{send_id}/cancel",
+                json={},
+                headers={"X-CSRF-Token": self._csrf()},
+            ).get_json()["ok"]
+        )
+        with notes_db.tx() as conn:
+            first = conn.execute(
+                "SELECT canceled_at FROM secure_sends WHERE id = ?", (send_id,)
+            ).fetchone()["canceled_at"]
+        self.assertTrue(first)
+        # Second cancel keeps the original timestamp; open stays refused.
+        notes_db.cancel_secure_send(send_id, 1)
+        with notes_db.tx() as conn:
+            again = conn.execute(
+                "SELECT canceled_at FROM secure_sends WHERE id = ?", (send_id,)
+            ).fetchone()["canceled_at"]
+        self.assertEqual(first, again)
+        self.assertIsNone(notes_db.open_secure_send(send_id))
+
     def test_stopped_viewer_page_keeps_privacy_headers(self):
         import db as notes_db
 
