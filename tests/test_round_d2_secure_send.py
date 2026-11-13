@@ -152,6 +152,43 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertTrue(ss.blob_path(live).is_file())  # has a DB row
         self.assertTrue(ss.blob_path(fresh).is_file())  # inside grace window
 
+    def test_sweep_stale_tmp_next_to_live_bin_keeps_bin(self):
+        import db as notes_db
+        import secure_send as ss
+
+        live = self._create().get_json()["id"]
+        tmp = ss.blob_path(live).with_suffix(".tmp")
+        tmp.write_bytes(b"x")
+        old = time.time() - 7200
+        for path in (tmp, ss.blob_path(live)):
+            os.utime(path, (old, old))
+        notes_db._sweep_orphan_secure_send_blobs(time.time())
+        self.assertFalse(tmp.exists())
+        self.assertTrue(ss.blob_path(live).is_file())
+
+    def test_sweep_removes_old_orphan_bin(self):
+        import db as notes_db
+        import secure_send as ss
+
+        orphan = ss.new_send_id()
+        ss.write_ciphertext(orphan, {"v": 1, "iv": "AA", "data": "AA"})
+        old = time.time() - 7200
+        os.utime(ss.blob_path(orphan), (old, old))
+        notes_db._sweep_orphan_secure_send_blobs(time.time())
+        self.assertFalse(ss.blob_path(orphan).exists())
+
+    def test_sweep_leaves_files_within_grace_period(self):
+        import db as notes_db
+        import secure_send as ss
+
+        orphan = ss.new_send_id()
+        ss.write_ciphertext(orphan, {"v": 1, "iv": "AA", "data": "AA"})
+        tmp = ss.blob_path(orphan).with_suffix(".tmp")
+        tmp.write_bytes(b"x")
+        notes_db._sweep_orphan_secure_send_blobs(time.time())
+        self.assertTrue(ss.blob_path(orphan).is_file())
+        self.assertTrue(tmp.is_file())
+
     def test_create_does_not_log_key_material(self):
         verifier = "V" * 43
         with self.assertNoLogs(level="DEBUG"):
