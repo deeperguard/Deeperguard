@@ -2423,6 +2423,7 @@
       <p class="scan-dialog-lead muted">Choose a file or paste text: a list of otpauth:// links (one per line), or an Aegis or 2FAS export (plain or password-protected). Everything stays in this browser and is saved encrypted in your vault.</p>
       <div class="scan-add-actions">
         <button type="button" class="btn scan-add-btn" id="totp-import-pick">Choose file</button>
+        <button type="button" class="btn ghost scan-add-btn" id="totp-import-authy">I'm coming from Authy</button>
       </div>
       <label class="scan-name-field">Or paste text
         <textarea id="totp-import-text" rows="4" autocomplete="off" autocapitalize="none" spellcheck="false"></textarea>
@@ -2436,6 +2437,23 @@
         <ul id="totp-import-list" class="totp-import-list"></ul>
       </div>
       <p id="totp-import-advice" class="scan-dialog-lead muted" hidden>Import finished. The export file contains your secrets in plain text: delete it from your device, including any downloads folder and cloud copies.</p>
+    </div>
+    <div id="totp-authy-guide" class="scan-dialog-body" hidden>
+      <h3>Moving from Authy</h3>
+      <p class="scan-dialog-lead muted">Authy has no official export, so there is no Authy import here. The reliable way is to set up 2FA again for each site and scan the new QR code with our scanner.</p>
+      <ol class="totp-authy-steps">
+        <li>Sign in to the site and open its security or 2FA settings.</li>
+        <li>Choose to set up a new authenticator app (or turn 2FA off and on again). The site shows a new QR code.</li>
+        <li>Press <strong>Open QR scanner</strong> below and scan that code. Check the account, then add it.</li>
+        <li>Confirm on the site that a code from this app works.</li>
+        <li>Repeat for every account.</li>
+      </ol>
+      <p class="scan-dialog-lead muted"><strong>Tip:</strong> only delete Authy, or its accounts, once every code works here. Setting 2FA up again also gives each account a fresh secret.</p>
+      <p class="scan-dialog-lead muted">Already have your secrets as a list of <code>otpauth://</code> links? Use the otpauth list import instead.</p>
+      <div class="scan-add-actions">
+        <button type="button" class="btn primary scan-add-btn" id="totp-authy-scan">Open QR scanner</button>
+        <button type="button" class="btn ghost scan-add-btn" id="totp-authy-list">Import an otpauth list</button>
+      </div>
     </div>
     <footer class="scan-dialog-foot">
       <button type="button" class="btn ghost" id="totp-import-cancel">Close</button>
