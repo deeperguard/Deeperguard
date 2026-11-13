@@ -103,6 +103,9 @@
   const MS_DAY = 86400000;
   const WEEKDAY_INDEX = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
   const EXPAND_STEP_CAP = 5000;
+  /** Hard limits so an endless or huge rule cannot hang the browser. */
+  const MAX_OCCURRENCES_PER_RULE = 2000;
+  const MAX_HORIZON_YEARS = 50;
 
   function daysInMonth(y, m) {
     return new Date(y, m + 1, 0).getDate();
@@ -240,7 +243,11 @@
     const endFor = (start) => (allDay ? addCalendarDays(start, durDays) : new Date(start.getTime() + durMs));
     const rule = describeRule(ev.rrule, base);
     const out = [];
+    const horizon = new Date(base.getTime());
+    horizon.setFullYear(horizon.getFullYear() + MAX_HORIZON_YEARS);
+    if (rangeEnd > horizon) rangeEnd = horizon;
     const emit = (start, legacyMs) => {
+      if (out.length >= MAX_OCCURRENCES_PER_RULE) return;
       const end = endFor(start);
       if (end > rangeStart && start < rangeEnd) {
         const row = { start, end, recurring: true };
@@ -362,5 +369,7 @@
     addCalendarMonths,
     describeRule,
     expandSeries,
+    MAX_OCCURRENCES_PER_RULE,
+    MAX_HORIZON_YEARS,
   };
 }(typeof window !== 'undefined' ? window : globalThis));

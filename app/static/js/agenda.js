@@ -2570,6 +2570,7 @@
     const S = getStore();
     const Ics = global.NotesAgendaIcs;
     if (!file || !S || !Ics || typeof S.importAgendaFromIcs !== 'function') return;
+    Ics.validateIcsFile(file);
     const text = await file.text();
     const { events, warnings } = Ics.parseIcsFile(text);
     const res = S.importAgendaFromIcs(events);
