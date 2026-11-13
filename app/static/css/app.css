@@ -11126,3 +11126,7 @@ html.layout-compact #totp-pane #btn-totp-add {
   min-width: 44px;
   min-height: 44px;
 }
+
+.agenda-import-preview { position: fixed; z-index: 60; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(92vw, 420px); max-height: 80vh; overflow: auto; padding: 1rem; border-radius: 12px; background: var(--bg, #fff); color: inherit; border: 1px solid rgba(128, 128, 128, 0.4); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35); }
+.agenda-import-preview[hidden] { display: none; }
+.agenda-import-opt { display: block; margin: 0.35rem 0; }
