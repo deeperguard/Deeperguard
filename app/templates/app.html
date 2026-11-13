@@ -1495,6 +1495,7 @@
         </div>
         <div class="totp-head-actions">
           <button type="button" id="btn-totp-add" class="btn icon" title="Add account" aria-label="Add account">+</button>
+          <button type="button" id="btn-totp-import" class="btn ghost" title="Import accounts">Import</button>
           <button type="button" id="btn-totp-lock" class="btn icon" title="Lock vault" aria-label="Lock vault">
             <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -2411,6 +2412,34 @@
       <button type="button" class="btn primary" id="totp-add-save">Add</button>
     </footer>
   </div>
+  <div id="totp-import-backdrop" class="scan-backdrop" hidden></div>
+  <div id="totp-import-dialog" class="scan-dialog totp-add-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="totp-import-title">
+    <div class="scan-dialog-handle" aria-hidden="true"></div>
+    <header class="scan-dialog-head">
+      <h2 id="totp-import-title">Import 2FA accounts</h2>
+    </header>
+    <div class="scan-dialog-body">
+      <p class="scan-dialog-lead muted">Choose a file or paste text: a list of otpauth:// links (one per line), a plain Aegis export or a plain 2FAS export. Everything stays in this browser and is saved encrypted in your vault.</p>
+      <div class="scan-add-actions">
+        <button type="button" class="btn scan-add-btn" id="totp-import-pick">Choose file</button>
+      </div>
+      <label class="scan-name-field">Or paste text
+        <textarea id="totp-import-text" rows="4" autocomplete="off" autocapitalize="none" spellcheck="false"></textarea>
+      </label>
+      <p id="totp-import-error" class="error" hidden></p>
+      <div id="totp-import-preview" hidden>
+        <p id="totp-import-summary" class="scan-status"></p>
+        <ul id="totp-import-list" class="totp-import-list"></ul>
+      </div>
+      <p id="totp-import-advice" class="scan-dialog-lead muted" hidden>Import finished. The export file contains your secrets in plain text: delete it from your device, including any downloads folder and cloud copies.</p>
+    </div>
+    <footer class="scan-dialog-foot">
+      <button type="button" class="btn ghost" id="totp-import-cancel">Close</button>
+      <button type="button" class="btn" id="totp-import-preview-btn">Preview</button>
+      <button type="button" class="btn primary" id="totp-import-confirm" hidden>Import</button>
+    </footer>
+  </div>
+  <input id="totp-import-file" class="sr-file" type="file" accept=".json,.2fas,.txt,text/plain,application/json" tabindex="-1" aria-hidden="true">
   <div id="doc-backdrop" class="settings-backdrop" hidden></div>
   <div id="tag-manage-backdrop" class="settings-backdrop" hidden></div>
   <div id="tag-manage-dialog" class="confirm-dialog tag-manage-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="tag-manage-title">
@@ -2720,6 +2749,7 @@
   {{ asset_script('js/agenda-reminders.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}
+  {{ asset_script('js/totp-import.js') }}
   {{ asset_script('js/search.js') }}
   {{ asset_script('js/spreadsheet.js') }}
   {{ asset_script('js/markdown.js') }}
