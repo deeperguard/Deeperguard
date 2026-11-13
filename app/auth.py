@@ -1143,6 +1143,11 @@ def security_headers() -> dict[str, str]:
         "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
         "Cross-Origin-Resource-Policy": "same-origin",
     }
+    if _csp_on_secure_send_shell():
+        # Public link pages: never leak the URL (or its fragment) via Referer; stay out of indexes.
+        headers["Referrer-Policy"] = "no-referrer"
+        headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+        headers["Cache-Control"] = "no-store"
     if os.environ.get("NOTES_SECURE_COOKIES", "0") == "1":
         headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     policy = content_security_policy()

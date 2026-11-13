@@ -403,6 +403,28 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertEqual(again.status_code, 200)
         self.assertIn("This can be opened 2 more times.", again.get_data(as_text=True))
 
+    def test_receive_page_privacy_headers(self):
+        send_id = self._create(max_views=1).get_json()["id"]
+        for sid in (send_id, "nope"):
+            res = self.client.get(f"/receive/{sid}")
+            self.assertEqual(res.headers.get("Referrer-Policy"), "no-referrer")
+            self.assertIn("noindex", res.headers.get("X-Robots-Tag", ""))
+            self.assertEqual(res.headers.get("Cache-Control"), "no-store")
+            csp = res.headers.get("Content-Security-Policy", "")
+            self.assertIn("default-src 'self'", csp)
+            self.assertNotIn("'unsafe-eval'", csp)
+            self.assertNotIn("script-src 'self' 'unsafe-inline'", csp)
+            self.assertIn("frame-ancestors 'none'", csp)
+        self.assertIn('content="noindex,nofollow"', self.client.get(f"/receive/{send_id}").get_data(as_text=True))
+
+    def test_sender_warning_requires_acknowledgement(self):
+        root = ROOT / "app"
+        html = (root / "templates" / "app.html").read_text(encoding="utf-8")
+        self.assertIn('id="secure-send-ack"', html)
+        self.assertRegex(html, r'id="btn-secure-send-create"[^>]*\bdisabled\b')
+        js = (root / "static" / "js" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("!secureSendAck?.checked", js)
+
     def test_receive_intro_once_for_single_open(self):
         created = self._create(max_views=1)
         send_id = created.get_json()["id"]
