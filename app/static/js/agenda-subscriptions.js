@@ -17,7 +17,7 @@
 
   const ERROR_TEXT = {
     E_URL: 'This is not a valid https calendar link. Use a webcal:// or https:// link; http is not accepted.',
-    E_NETWORK_OR_CORS: 'The calendar provider blocks fetching the feed directly from the browser (CORS), or the network failed. Fetching through Deeperguard is not available yet.',
+    E_NETWORK_OR_CORS: 'The calendar provider blocks fetching the feed directly from the browser (CORS), or the network failed. You can choose to fetch it through the Deeperguard server instead.',
     E_TIMEOUT: 'The calendar provider did not answer within 10 seconds.',
     E_TOO_LARGE: 'The feed is larger than 2 MB.',
     E_NOT_ICS: 'The link did not return a calendar (.ics) feed.',
@@ -115,9 +115,55 @@
     });
   }
 
-  function fetchText(url) {
-    return (fetcherOverride || workerFetch)(url);
+  const RELAY_CODES = new Set(Object.keys(ERROR_TEXT));
+
+  /** Relay route: the link goes only in the POST body. Errors become fixed codes, never texts from the network. */
+  async function relayFetch(url) {
+    let csrf = '';
+    try {
+      const NS = global.NotesStore;
+      csrf = (NS && typeof NS.csrf === 'function' && NS.csrf()) || '';
+      if (!csrf && NS && typeof NS.loadAccount === 'function') {
+        const account = await NS.loadAccount();
+        csrf = (account && account.csrf) || '';
+      }
+    } catch (e) { /* the route answers E_AUTH */ }
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), 15000) : null;
+    try {
+      const res = await global.fetch('/api/agenda/ics-relay', {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ url }),
+        signal: ctl ? ctl.signal : undefined,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const code = data && typeof data.error === 'string' && RELAY_CODES.has(data.error) ? data.error : 'E_UPSTREAM';
+        return { ok: false, code };
+      }
+      return { ok: true, text: await res.text() };
+    } catch (e) {
+      return { ok: false, code: e && e.name === 'AbortError' ? 'E_TIMEOUT' : 'E_UPSTREAM' };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
+
+  /** mode 'relay' only when the caller passes it (subscription with recorded consent); never a fallback. */
+  function fetchText(url, mode) {
+    if (fetcherOverride) return fetcherOverride(url, mode === 'relay' ? 'relay' : 'direct');
+    return mode === 'relay' ? relayFetch(url) : workerFetch(url);
+  }
+
+  function usesRelay(sub) {
+    return !!(sub && sub.mode === 'relay' && sub.relay_consent_at);
+  }
+
+  const CONSENT_TEXT = 'The Deeperguard server will see this calendar link (often with a secret token) and the calendar contents while it fetches them. It does not store or log them. Only do this if you accept that. The default is no.';
 
   /** Fetch result → parsed events via the existing .ics parser. Returns {ok, events} or {ok:false, code}. */
   function parseFeed(res) {
@@ -134,9 +180,9 @@
   }
 
   /** Fetch + parse without saving (preview before subscribing). */
-  async function previewUrl(url) {
+  async function previewUrl(url, mode) {
     const myEpoch = epoch;
-    const out = parseFeed(await fetchText(url));
+    const out = parseFeed(await fetchText(url, mode));
     if (myEpoch !== epoch) return { ok: false, code: 'E_LOCKED' };
     return out;
   }
@@ -154,7 +200,7 @@
       if (!sub) return { ok: false, code: 'E_URL' };
       const myEpoch = epoch;
       lastAttempt.set(subId, Date.now());
-      const out = parseFeed(await fetchText(sub.url));
+      const out = parseFeed(await fetchText(sub.url, usesRelay(sub) ? 'relay' : 'direct'));
       // Late response after lock (or a lock/unlock cycle): drop it.
       if (myEpoch !== epoch || !unlocked()) return { ok: false, code: 'E_LOCKED' };
       if (!out.ok) {
@@ -253,6 +299,60 @@
     return 'Not refreshed yet';
   }
 
+  let consentAsker = null;
+
+  /** Consent dialog; resolves true only after the explicit "Yes" button. Escape / backdrop / "No" = false. */
+  function askRelayConsent() {
+    if (consentAsker) return consentAsker();
+    return new Promise((resolve) => {
+      const back = el('div', 'agenda-relay-consent-backdrop');
+      const box = el('div', 'agenda-relay-consent');
+      box.setAttribute('role', 'dialog');
+      box.setAttribute('aria-modal', 'true');
+      box.setAttribute('aria-labelledby', 'agenda-relay-consent-title');
+      const title = el('h3', '', 'Fetch through the Deeperguard server?');
+      title.id = 'agenda-relay-consent-title';
+      box.appendChild(title);
+      box.appendChild(el('p', '', CONSENT_TEXT));
+      const no = el('button', 'btn primary', 'No, keep direct');
+      const yes = el('button', 'btn', 'Yes, use the server');
+      no.type = 'button';
+      yes.type = 'button';
+      const onKey = (ev) => { if (ev.key === 'Escape') finish(false); };
+      const finish = (v) => {
+        document.removeEventListener('keydown', onKey, true);
+        back.remove();
+        resolve(v);
+      };
+      no.addEventListener('click', () => finish(false));
+      yes.addEventListener('click', () => finish(true));
+      back.addEventListener('click', (ev) => { if (ev.target === back) finish(false); });
+      document.addEventListener('keydown', onKey, true);
+      const actions = el('div', 'agenda-subscription-actions');
+      actions.appendChild(no);
+      actions.appendChild(yes);
+      box.appendChild(actions);
+      back.appendChild(box);
+      document.body.appendChild(back);
+      no.focus();
+    });
+  }
+
+  /** Switch one subscription to the relay after explicit consent. Returns true when switched. */
+  async function enableRelay(subId) {
+    if (!unlocked()) return false;
+    if (!(await askRelayConsent()) || !unlocked()) return false;
+    store().updateAgendaSubscription(subId, { mode: 'relay', relay_consent: true });
+    return true;
+  }
+
+  /** Back to direct fetching; withdraws the consent. */
+  function disableRelay(subId) {
+    if (!unlocked()) return false;
+    store().updateAgendaSubscription(subId, { mode: 'direct' });
+    return true;
+  }
+
   function rerenderAgenda() {
     if (global.NotesAgenda && typeof global.NotesAgenda.render === 'function') global.NotesAgenda.render();
   }
@@ -271,6 +371,11 @@
     subs.forEach((sub) => {
       const row = el('div', 'agenda-subscription-row');
       row.appendChild(el('strong', '', sub.name));
+      if (usesRelay(sub)) {
+        const tag = el('span', 'agenda-subscription-via', 'via server');
+        tag.title = 'Fetched through the Deeperguard server, which sees the link and the calendar while fetching';
+        row.appendChild(tag);
+      }
       const status = el('p', 'settings-hint' + (sub.last_error_code ? ' agenda-subscription-error' : ''), statusText(sub));
       if (sub.last_error_code) status.setAttribute('role', 'alert');
       row.appendChild(status);
@@ -300,6 +405,23 @@
         renderList();
         rerenderAgenda();
       });
+      if (usesRelay(sub)) {
+        btn('Switch to direct', () => {
+          disableRelay(sub.id);
+          toast('Consent withdrawn; fetching directly again');
+          renderList();
+        });
+      } else if (sub.last_error_code === 'E_NETWORK_OR_CORS') {
+        btn('Fetch via server…', async () => {
+          if (await enableRelay(sub.id)) {
+            renderList();
+            const res = await refresh(sub.id);
+            toast(res.ok ? 'Refreshed via server' : errorText(res.code), !res.ok);
+            renderList();
+            rerenderAgenda();
+          }
+        });
+      }
       btn('Delete', () => {
         const ok = global.confirm && global.confirm(`Delete the subscription "${sub.name}" and all of its events?`);
         if (!ok) return;
@@ -323,12 +445,53 @@
     const urlInput = document.getElementById('agenda-subscribe-url');
     const nameInput = document.getElementById('agenda-subscribe-name');
     const preview = document.getElementById('agenda-subscribe-preview');
-    const showError = (code) => {
+    const showError = (code, url) => {
       preview.textContent = '';
       const p = el('p', 'settings-hint agenda-subscription-error', errorText(code));
       p.setAttribute('role', 'alert');
       preview.appendChild(p);
       preview.hidden = false;
+      if (code === 'E_NETWORK_OR_CORS' && url) {
+        const b = el('button', 'btn sm', 'Fetch via server…');
+        b.type = 'button';
+        b.addEventListener('click', async () => {
+          if (!unlocked() || !(await askRelayConsent())) return;
+          preview.textContent = 'Fetching preview via server…';
+          const via = await previewUrl(url, 'relay');
+          if (!via.ok) showError(via.code);
+          else showPreview(via, url, 'relay');
+        });
+        preview.appendChild(b);
+      }
+    };
+    const showPreview = (out, url, mode) => {
+      preview.textContent = '';
+      preview.appendChild(el('p', 'agenda-import-counts', `${out.events.length} event${out.events.length === 1 ? '' : 's'} in this feed${mode === 'relay' ? ' (via server)' : ''}`));
+      const ul = el('ul', 'agenda-subscribe-sample');
+      out.events.slice(0, 5).forEach((e) => ul.appendChild(el('li', '', `${e.title || 'Untitled'} · ${e.start || ''}`)));
+      preview.appendChild(ul);
+      preview.appendChild(el('p', 'settings-hint muted', 'Events from a subscription are replaced at every refresh; local edits to them are lost.'));
+      const ok = el('button', 'btn primary', 'Subscribe');
+      ok.type = 'button';
+      ok.addEventListener('click', () => {
+        if (!unlocked()) {
+          showError('E_LOCKED');
+          return;
+        }
+        const S = store();
+        const sub = S.addAgendaSubscription({ name: nameInput.value, url });
+        // Consent was given in the dialog just before this preview.
+        if (mode === 'relay') S.updateAgendaSubscription(sub.id, { mode: 'relay', relay_consent: true });
+        S.refreshAgendaSubscriptionRows(sub.id, out.events, { allowShrink: true });
+        urlInput.value = '';
+        nameInput.value = '';
+        preview.hidden = true;
+        preview.textContent = '';
+        toast(`Subscribed to ${sub.name}`);
+        renderList();
+        rerenderAgenda();
+      });
+      preview.appendChild(ok);
     };
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
@@ -345,36 +508,12 @@
       }
       preview.hidden = false;
       preview.textContent = 'Fetching preview…';
-      const out = await previewUrl(url);
+      const out = await previewUrl(url, 'direct');
       if (!out.ok) {
-        showError(out.code);
+        showError(out.code, url);
         return;
       }
-      preview.textContent = '';
-      preview.appendChild(el('p', 'agenda-import-counts', `${out.events.length} event${out.events.length === 1 ? '' : 's'} in this feed`));
-      const ul = el('ul', 'agenda-subscribe-sample');
-      out.events.slice(0, 5).forEach((e) => ul.appendChild(el('li', '', `${e.title || 'Untitled'} · ${e.start || ''}`)));
-      preview.appendChild(ul);
-      preview.appendChild(el('p', 'settings-hint muted', 'Events from a subscription are replaced at every refresh; local edits to them are lost.'));
-      const ok = el('button', 'btn primary', 'Subscribe');
-      ok.type = 'button';
-      ok.addEventListener('click', () => {
-        if (!unlocked()) {
-          showError('E_LOCKED');
-          return;
-        }
-        const S = store();
-        const sub = S.addAgendaSubscription({ name: nameInput.value, url });
-        S.refreshAgendaSubscriptionRows(sub.id, out.events, { allowShrink: true });
-        urlInput.value = '';
-        nameInput.value = '';
-        preview.hidden = true;
-        preview.textContent = '';
-        toast(`Subscribed to ${sub.name}`);
-        renderList();
-        rerenderAgenda();
-      });
-      preview.appendChild(ok);
+      showPreview(out, url, 'direct');
     });
   }
 
@@ -394,6 +533,10 @@
     errorText,
     previewUrl,
     refresh,
+    relayFetch,
+    enableRelay,
+    disableRelay,
+    CONSENT_TEXT,
     tick,
     start,
     stopAll,
@@ -401,6 +544,7 @@
     renderList,
     _setStore(s) { storeOverride = s; },
     _setFetcher(f) { fetcherOverride = f; },
+    _setConsentAsker(f) { consentAsker = f; },
     _timerActive: () => !!tickTimer,
   };
 }(typeof window !== 'undefined' ? window : globalThis));
