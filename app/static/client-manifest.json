@@ -62,10 +62,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 964903,
-      "sha256": "173b4b7dbdbb0be38031afea65fb7b7f151909ad6558d561ae7c15a906c5bb93",
-      "sri": "sha384-W0mVqPhowOTuXjKZoMCrgI6AveipOF3y2QIUiqnfYSIJayxI649cm4IUClpcVUdV",
-      "url": "/static/js/app.173b4b7dbdbb0be3.js"
+      "bytes": 964894,
+      "sha256": "3d1e221d45a00cc6778213e313ef3cab4228a0e8d769858f55bb4ee5d942bfa3",
+      "sri": "sha384-C8e3QMlbJYE50oET8g7jCFjMiUD6AwnZeqnDWHUhodtYPtUOllA7naMzVCXfi8nP",
+      "url": "/static/js/app.3d1e221d45a00cc6.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -320,10 +320,10 @@
       "url": "/static/js/vault-sync-progress.f40622618d2cbde4.js"
     },
     "js/vaultlock.js": {
-      "bytes": 4363,
-      "sha256": "db0b1aa55badc554920a21ba0441d46eb4b061bc6d202311c6f114a19cfcc438",
-      "sri": "sha384-tSU2LF6simpRAZ/KKRj/B8JWICayrYgS5TUu2I1Sqwcg7NoHG+rXlzNapPvlMSg5",
-      "url": "/static/js/vaultlock.db0b1aa55badc554.js"
+      "bytes": 5776,
+      "sha256": "c0409fdafbfd4f441ac21147a158e1323802c326454330730b1fbd64a03736da",
+      "sri": "sha384-YnnW357DC1fkiYTEnBkUSBK+fmZlOe4y1WDmrf9vu9AnU01l9Y/b1Sje0uvtgHpL",
+      "url": "/static/js/vaultlock.c0409fdafbfd4f44.js"
     },
     "js/vendor/heic2any/heic2any.min.js": {
       "bytes": 1351840,
@@ -411,6 +411,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "213c9fae93086a5fbedbff50321e891846bc2900be6d79c60bad3557a1926ff3",
+  "manifest_sha256": "d4022660aea4150f8f15bfbe6f17183c639d0f35cb93d19f8d410b3a054d6d67",
   "version": 1
 }

@@ -1281,7 +1281,6 @@
   }
   let toastTimer = null;
   let tagPressTimer = null;
-  let idleTimer = null;
   let unfocusTimer = null;
   let unfocusLocking = false;
   let unfocusClearTimer = null;
@@ -3578,21 +3577,17 @@
     } catch (err) { /* ignore */ }
   }
 
+  const idleLock = NotesVaultLock.createIdleLock({
+    getMinutes: () => prefs.autoLockMin,
+    isUnlocked: () => NotesStore.isUnlocked(),
+    busy: () => !!(unlockInFlight || (unlockScreen && !unlockScreen.hidden)
+      || (IS_IOS && iosTune()?.isTypingInField?.())),
+    // lockVault saves unsaved edits (flushSave -> encrypted persist) before evicting the key.
+    onIdle: (minutes) => { lockVault('Locked after idle.', { reason: `idle-${minutes}min` }); },
+  });
+
   function bumpIdle() {
-    clearTimeout(idleTimer);
-    let minutes = Number(prefs.autoLockMin) || 0;
-    if (!minutes || !NotesStore.isUnlocked()) return;
-    idleTimer = setTimeout(() => {
-      if (unlockInFlight || (unlockScreen && !unlockScreen.hidden)) {
-        bumpIdle();
-        return;
-      }
-      if (IS_IOS && iosTune()?.isTypingInField?.()) {
-        bumpIdle();
-        return;
-      }
-      lockVault('Locked after idle.', { reason: `idle-${minutes}min` });
-    }, minutes * 60 * 1000);
+    idleLock.bump();
   }
 
   function unfocusSyncBlocksLock() {
@@ -3975,7 +3970,7 @@
     } else {
       NotesStore.abandonLocalForPasswordRotation?.();
     }
-    clearTimeout(idleTimer);
+    idleLock.stop();
     clearTimeout(unfocusTimer);
     unfocusTimer = null;
     // Keep polling while locked so ciphertext push/pull continues in the background.
@@ -21091,6 +21086,7 @@
   document.getElementById('pref-auto-lock').addEventListener('change', (e) => {
     prefs.autoLockMin = Number(e.target.value) || 0;
     savePrefs();
+    bumpIdle();
   });
   document.getElementById('pref-lock-on-unfocus')?.addEventListener('change', (e) => {
     const next = String(e.target.value || 'never');
