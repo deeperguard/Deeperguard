@@ -1440,7 +1440,8 @@
     </main>
     </div>
     <section id="agenda-pane" class="agenda-pane" hidden>
-      <input id="agenda-ics-input" type="file" class="sr-file" accept="text/calendar,.ics" tabindex="-1" aria-hidden="true">
+      <input id="agenda-ics-input" type="file" class="sr-file" accept="text/calendar,.ics" multiple tabindex="-1" aria-hidden="true">
+      <div id="agenda-import-preview" class="agenda-import-preview" role="dialog" aria-modal="true" aria-label="Import preview" hidden></div>
       <div id="agenda-calendar-settings-backdrop" class="agenda-calendar-settings-backdrop" hidden aria-hidden="true"></div>
       <aside id="agenda-calendar-settings" class="agenda-calendar-settings" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="agenda-calendar-settings-heading">
         <header class="agenda-calendar-settings-head">
@@ -1451,7 +1452,8 @@
           <p class="settings-hint">Import or export calendar files on this device only. If Agenda looks out of date after an update, close the tab and open Deeperguard again (the offline worker fetches a fresh shell).</p>
           <p class="settings-hint">Import supports .ics from other apps. Events stay encrypted in your vault; only https links are used as join targets.</p>
           <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-import-ics">Import calendar (.ics)</button>
-          <p class="settings-hint muted agenda-cal-action-sub">Choose a file exported from another calendar.</p>
+          <p class="settings-hint muted agenda-cal-action-sub">Choose one or more files exported from another calendar, or drop .ics files onto the Agenda. You will see a preview before anything is saved.</p>
+          <p class="settings-hint muted agenda-cal-action-sub">Have a calendar feed link? Open it in a new tab, save the .ics file, then import it here — the download goes straight from the provider to your device, never through Deeperguard. On iOS, the system may offer to add the events to the Calendar app instead of saving a file.</p>
           <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-export-ics">Export calendar (.ics)</button>
           <p class="settings-hint muted agenda-cal-action-sub">Downloads a standard .ics file with your events. The file is <strong>not encrypted</strong> — titles, times, and notes are readable plaintext. Keep it private and share carefully.</p>
           <fieldset class="agenda-reminder-channel-settings" data-plan-feature="agenda_reminders" data-plan-lock-hint="Event reminders are included with Pro.">

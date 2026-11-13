@@ -2566,19 +2566,108 @@
     offerUndoDelete(savedId, savedContent, 'Event deleted');
   }
 
-  async function importIcsFile(file) {
+  function toastMsg(msg, isErr) {
+    if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast(msg, !!isErr);
+  }
+
+  /** Read and parse several files (each limited by validateIcsFile + parser caps), then show a preview. */
+  async function importIcsFiles(fileList) {
     const S = getStore();
     const Ics = global.NotesAgendaIcs;
-    if (!file || !S || !Ics || typeof S.importAgendaFromIcs !== 'function') return;
-    Ics.validateIcsFile(file);
-    const text = await file.text();
-    const { events, warnings } = Ics.parseIcsFile(text);
-    const res = S.importAgendaFromIcs(events, { source: Ics.makeSourceLabel(file.name) });
-    let msg = `Imported ${res.imported} event${res.imported === 1 ? '' : 's'}`;
-    if (res.skipped) msg += `, skipped ${res.skipped} duplicate${res.skipped === 1 ? '' : 's'}`;
-    if (warnings.length) msg += `. ${warnings.length} parse warning(s).`;
-    if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast(msg);
-    render();
+    const files = Array.from(fileList || []);
+    if (!files.length || !S || !Ics || typeof S.importAgendaFromIcs !== 'function') return;
+    const entries = [];
+    const failed = [];
+    for (const f of files) {
+      try {
+        Ics.validateIcsFile(f);
+        entries.push({ name: f.name, text: await f.text() });
+      } catch (err) {
+        failed.push({ name: f.name, events: [], warnings: [], error: String((err && err.message) || err) });
+      }
+    }
+    showImportPreview(Ics.parseIcsEntries(entries).concat(failed));
+  }
+
+  function showImportPreview(parsed) {
+    const S = getStore();
+    const Ics = global.NotesAgendaIcs;
+    const box = document.getElementById('agenda-import-preview');
+    if (!box) return;
+    const opts = { description: false, attendees: false, locations: false };
+    const stripped = () => parsed.map((f) => ({ ...f, events: Ics.stripImportFields(f.events, opts) }));
+    const close = () => { box.hidden = true; box.textContent = ''; };
+    const draw = () => {
+      box.textContent = '';
+      const all = stripped().flatMap((f) => f.events);
+      const d = Ics.diffImport(S.listAgendaEvents(), all);
+      const h = document.createElement('h3');
+      h.textContent = 'Import preview';
+      box.appendChild(h);
+      parsed.forEach((f) => {
+        const p = document.createElement('p');
+        p.className = 'settings-hint';
+        p.textContent = f.error
+          ? `${f.name}: ${f.error}`
+          : `${f.name}: ${f.events.length} event${f.events.length === 1 ? '' : 's'}`
+            + (f.warnings.length ? `, ${f.warnings.length} warning(s)` : '');
+        box.appendChild(p);
+      });
+      const counts = document.createElement('p');
+      counts.className = 'agenda-import-counts';
+      counts.textContent = `New: ${d.new.length} · Changed: ${d.changed.length} · Unchanged: ${d.unchanged.length}`;
+      box.appendChild(counts);
+      [['description', 'Drop descriptions'], ['attendees', 'Drop attendees'], ['locations', 'Drop locations']].forEach(([k, label]) => {
+        const l = document.createElement('label');
+        l.className = 'agenda-import-opt';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = opts[k];
+        cb.addEventListener('change', () => { opts[k] = cb.checked; draw(); });
+        l.appendChild(cb);
+        l.appendChild(document.createTextNode(` ${label}`));
+        box.appendChild(l);
+      });
+      const row = document.createElement('div');
+      const ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'btn primary';
+      ok.textContent = 'Import';
+      ok.disabled = d.new.length + d.changed.length === 0;
+      ok.addEventListener('click', () => {
+        let imported = 0;
+        stripped().forEach((f) => {
+          if (f.error || !f.events.length) return;
+          imported += S.importAgendaFromIcs(f.events, { source: Ics.makeSourceLabel(f.name) }).imported;
+        });
+        close();
+        toastMsg(`Imported ${imported} event${imported === 1 ? '' : 's'}`);
+        render();
+      });
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'btn ghost';
+      cancel.textContent = 'Cancel';
+      cancel.addEventListener('click', close);
+      row.appendChild(ok);
+      row.appendChild(cancel);
+      box.appendChild(row);
+    };
+    box.hidden = false;
+    draw();
+  }
+
+  function wireIcsDropOnce() {
+    const pane = document.getElementById('agenda-pane');
+    if (!pane || pane.dataset.icsDrop) return;
+    pane.dataset.icsDrop = '1';
+    const hasFiles = (ev) => ev.dataTransfer && Array.from(ev.dataTransfer.types || []).includes('Files');
+    pane.addEventListener('dragover', (ev) => { if (hasFiles(ev)) ev.preventDefault(); });
+    pane.addEventListener('drop', (ev) => {
+      if (!hasFiles(ev)) return;
+      ev.preventDefault();
+      importIcsFiles(ev.dataTransfer.files).catch((err) => toastMsg(err.message || 'ICS import failed', true));
+    });
   }
 
   function wireEditor() {
@@ -2818,15 +2907,12 @@
     wireAgendaShortcutsOnce();
     wireEditor();
     fileInput = document.getElementById('agenda-ics-input');
+    wireIcsDropOnce();
     if (fileInput) {
       fileInput.addEventListener('change', (ev) => {
-        const f = ev.target.files && ev.target.files[0];
+        const fl = Array.from(ev.target.files || []);
         ev.target.value = '';
-        if (f) importIcsFile(f).catch((err) => {
-          if (typeof global.notesAgendaToast === 'function') {
-            global.notesAgendaToast(err.message || 'ICS import failed', true);
-          }
-        });
+        if (fl.length) importIcsFiles(fl).catch((err) => toastMsg(err.message || 'ICS import failed', true));
       });
     }
     try {

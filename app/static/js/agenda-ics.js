@@ -716,7 +716,46 @@
     return (existingEvents || []).filter((e) => e && e.source === l).map((e) => e.id);
   }
 
+  /**
+   * Pure: copy of rows with the chosen fields removed before saving.
+   * opts: { description, attendees, locations } (true = drop). Dropping the description also
+   * drops a join link that was only taken from it; an explicit URL property is kept.
+   */
+  function stripImportFields(rows, opts) {
+    const o = opts || {};
+    return (rows || []).map((r) => {
+      const c = { ...r };
+      if (o.description) {
+        c.notes = '';
+        if (c.webcall_url && !c.url_from_property && c.webcall_url === extractHttpsFromText(r.notes || '')) c.webcall_url = '';
+      }
+      if (o.attendees) c.attendees = [];
+      if (o.locations) c.location = '';
+      return c;
+    });
+  }
+
+  /**
+   * Run several already-read files through the existing parser (and its limits).
+   * entries: [{ name, text }]. A bad file yields {name, error} and does not stop the others.
+   */
+  function parseIcsEntries(entries) {
+    const files = [];
+    for (const e of entries || []) {
+      const name = String((e && e.name) || 'import');
+      try {
+        const { events, warnings } = parseIcsFile(e.text);
+        files.push({ name, events, warnings, error: '' });
+      } catch (err) {
+        files.push({ name, events: [], warnings: [], error: String((err && err.message) || err) });
+      }
+    }
+    return files;
+  }
+
   global.NotesAgendaIcs = {
+    stripImportFields,
+    parseIcsEntries,
     diffImport,
     makeSourceLabel,
     idsWithSource,
