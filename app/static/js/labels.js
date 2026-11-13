@@ -236,7 +236,7 @@
   const api = {
     SEP, MAX_DEPTH, MAX_LABELS, MAX_NAME,
     indexOf, nameOf, parentOf, validateName, validateParent, ancestors, descendants,
-    depthOf, subtreeHeight, siblingNameTaken, pathOf, nextOrder, migrate, repair, planUpdate, planDelete,
+    depthOf, childrenOf, subtreeHeight, siblingNameTaken, pathOf, nextOrder, migrate, repair, planUpdate, planDelete,
   };
   if (typeof window !== 'undefined') window.NotesLabels = api;
   if (typeof globalThis !== 'undefined') globalThis.NotesLabels = api;

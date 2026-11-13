@@ -859,7 +859,7 @@ const NotesSearch = (() => {
     return !!(content?.locked || content?.prevent_edit);
   }
 
-  function filterNotes(notes, { query, filter, tagId, folderId, tagMap, folderMap, sort, searchOptions = {} }) {
+  function filterNotes(notes, { query, filter, tagId, tagScope, folderId, tagMap, folderMap, sort, searchOptions = {} }) {
     const opts = defaultSearchOptions(searchOptions);
     const q = String(query || '').trim();
     const context = searchContextActive(q, opts);
@@ -905,7 +905,11 @@ const NotesSearch = (() => {
           if (!(c.attachments || []).length) return false;
         }
 
-        if (tagId && tagId !== '__untagged__' && !(c.tags || []).includes(tagId)) return false;
+        if (tagId && tagId !== '__untagged__') {
+          // tagScope = the label plus its sub-labels (nested labels); falls back to the label alone.
+          const scope = tagScope && tagScope.length ? tagScope : [tagId];
+          if (!scope.some((id) => (c.tags || []).includes(id))) return false;
+        }
         if (folderId && c.folder_id !== folderId) return false;
         if (opts.tagIds.length) {
           const noteTags = c.tags || [];

@@ -8678,63 +8678,276 @@
     bar.querySelector('[data-tag-rename]')?.addEventListener('click', () => beginRenameTag(currentTag));
   }
 
-  function bindTagLongPress(btn, uuid) {
-    const clear = () => {
-      if (tagPressTimer) {
-        clearTimeout(tagPressTimer);
-        tagPressTimer = null;
+  let labelOpen = null; // Set of expanded label uuids (ids only, never names)
+  function openLabels() {
+    if (!labelOpen) labelOpen = NotesLabelTree.loadOpen(localStorage);
+    return labelOpen;
+  }
+  function setLabelOpen(uuid, open) {
+    const set = openLabels();
+    if (open) set.add(uuid); else set.delete(uuid);
+    NotesLabelTree.saveOpen(localStorage, set);
+  }
+
+  function labelIndex() {
+    return NotesLabels.indexOf(NotesStore.listTags().map((t) => ({ uuid: t.uuid, content: t.content })));
+  }
+
+  function currentTagScope() {
+    return currentTag ? NotesLabelTree.scope(currentTag, labelIndex()) : null;
+  }
+
+  // Notes per label including sub-labels; each note counted once per label.
+  function labelCounts(byId) {
+    const counts = new Map();
+    for (const note of NotesStore.listNotes()) {
+      if (note.content.trashed) continue;
+      const seen = new Set();
+      for (const id of note.content.tags || []) {
+        if (!byId.has(id)) continue;
+        seen.add(id);
+        NotesLabels.ancestors(id, byId).forEach((a) => seen.add(a));
       }
-    };
-    const start = () => {
-      clear();
+      seen.forEach((id) => counts.set(id, (counts.get(id) || 0) + 1));
+    }
+    return counts;
+  }
+
+  function selectLabel(uuid) {
+    currentTag = currentTag === uuid ? null : uuid;
+    if (currentTag) currentFolder = null;
+    if (currentTag && (currentFilter === 'untagged' || currentFilter === 'trash')) {
+      setFilter('all');
+    }
+    applyTagSection();
+    renderTags();
+    renderNotes();
+    closeEditorIfNoteLeftView();
+    if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
+  }
+
+  function labelItemEl(uuid) {
+    return ui.tagList.querySelector(`[data-label="${CSS.escape(uuid)}"]`);
+  }
+
+  function focusLabel(uuid) {
+    const el = labelItemEl(uuid);
+    if (!el) return;
+    ui.tagList.querySelectorAll('[data-label][tabindex="0"]').forEach((n) => { n.tabIndex = -1; });
+    el.tabIndex = 0;
+    el.focus();
+  }
+
+  function labelAction(uuid, action) {
+    if (action === 'sub') beginCreateSubLabel(uuid);
+    else if (action === 'rename') beginRenameTag(uuid);
+    else if (action === 'delete') deleteCurrentTag(uuid);
+    else if (action === 'delete-all') deleteCurrentTag(uuid, 'delete');
+  }
+
+  function beginCreateSubLabel(parentId) {
+    if (!NotesStore.isUnlocked()) { toast('Unlock the vault first', true); return; }
+    const parent = NotesStore.get(parentId);
+    if (!parent) return;
+    const section = document.getElementById('tag-section');
+    if (section) section.open = true;
+    const composer = document.getElementById('tag-composer');
+    const input = document.getElementById('tag-name-input');
+    composer.hidden = false;
+    composer.dataset.parent = parentId;
+    input.placeholder = `Sub-label of ${NotesLabels.nameOf(parent.content)}`;
+    input.value = '';
+    input.focus();
+  }
+
+  function closeLabelMenu(restoreFocus) {
+    const menu = document.getElementById('label-menu');
+    if (!menu) return;
+    const owner = menu.dataset.owner;
+    menu.remove();
+    if (restoreFocus && owner) focusLabel(owner);
+  }
+
+  function moveLabel(uuid, parentId) {
+    if (!NotesStore.moveTag(uuid, parentId || '')) {
+      toast('Cannot move here (a label cannot go inside itself, names must be unique, max depth 8)', true);
+      return false;
+    }
+    if (parentId) setLabelOpen(parentId, true);
+    invalidateTagMap();
+    renderTags();
+    renderNotes();
+    if (currentId) renderTagBar(NotesStore.get(currentId));
+    focusLabel(uuid);
+    toast('Label moved');
+    return true;
+  }
+
+  function openLabelMenu(uuid, anchor) {
+    closeLabelMenu(false);
+    const byId = labelIndex();
+    const hasKids = NotesLabels.childrenOf(uuid, byId).length > 0;
+    const menu = document.createElement('div');
+    menu.id = 'label-menu';
+    menu.className = 'label-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Label actions');
+    menu.dataset.owner = uuid;
+    const entry = (action, text) => `<button type="button" role="menuitem" tabindex="-1" data-act="${action}">${text}</button>`;
+    menu.innerHTML = entry('sub', 'New sub-label')
+      + entry('rename', 'Rename')
+      + entry('move', 'Move to…')
+      + entry('delete', hasKids ? 'Delete (sub-labels move up)' : 'Delete')
+      + (hasKids ? entry('delete-all', 'Delete with sub-labels') : '');
+    document.body.appendChild(menu);
+    const rect = anchor.getBoundingClientRect();
+    menu.style.top = `${Math.min(rect.bottom, window.innerHeight - 200)}px`;
+    menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 240))}px`;
+    const items = () => [...menu.querySelectorAll('[role="menuitem"]')];
+    items()[0].focus();
+    menu.addEventListener('keydown', (event) => {
+      const list = items();
+      const i = list.indexOf(document.activeElement);
+      if (event.key === 'ArrowDown') { event.preventDefault(); list[(i + 1) % list.length].focus(); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); list[(i - 1 + list.length) % list.length].focus(); }
+      else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeLabelMenu(true); }
+      else if (event.key === 'Tab') { event.preventDefault(); closeLabelMenu(true); }
+    });
+    menu.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-act]');
+      if (!btn) return;
+      const act = btn.dataset.act;
+      if (act === 'move') { showLabelMoveStep(menu, uuid, byId); return; }
+      closeLabelMenu(false);
+      labelAction(uuid, act);
+    });
+    setTimeout(() => {
+      const away = (event) => {
+        if (!document.getElementById('label-menu')) { document.removeEventListener('pointerdown', away, true); return; }
+        if (!menu.contains(event.target)) { document.removeEventListener('pointerdown', away, true); closeLabelMenu(false); }
+      };
+      document.addEventListener('pointerdown', away, true);
+    }, 0);
+  }
+
+  function showLabelMoveStep(menu, uuid, byId) {
+    const targets = NotesLabelTree.moveTargets(uuid, byId);
+    const current = NotesLabels.parentOf(byId.get(uuid));
+    menu.setAttribute('role', 'dialog');
+    menu.setAttribute('aria-label', 'Move label');
+    menu.innerHTML = `<label class="label-move-field">Move to
+      <select id="label-move-select" aria-label="New parent label">
+        <option value="">(Top level)</option>
+        ${targets.map((id) => `<option value="${escapeAttr(id)}"${id === current ? ' selected' : ''}>${escapeHtml(NotesLabels.pathOf(id, byId))}</option>`).join('')}
+      </select></label>
+      <div class="label-move-actions"><button type="button" class="btn ghost sm" data-move-cancel>Cancel</button><button type="button" class="btn primary sm" data-move-ok>Move</button></div>`;
+    const select = menu.querySelector('select');
+    select.focus();
+    const ok = () => { closeLabelMenu(false); moveLabel(uuid, select.value); };
+    menu.querySelector('[data-move-ok]').addEventListener('click', ok);
+    menu.querySelector('[data-move-cancel]').addEventListener('click', () => closeLabelMenu(true));
+    select.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); ok(); }
+    });
+  }
+
+  function bindLabelTree() {
+    if (ui.tagList.dataset.treeBound) return;
+    ui.tagList.dataset.treeBound = '1';
+    ui.tagList.addEventListener('click', (event) => {
+      const menuBtn = event.target.closest('[data-label-menu]');
+      if (menuBtn) { event.stopPropagation(); openLabelMenu(menuBtn.dataset.labelMenu, menuBtn); return; }
+      const twisty = event.target.closest('[data-label-toggle]');
+      const item = event.target.closest('[data-label]');
+      if (!item) return;
+      const uuid = item.dataset.label;
+      if (twisty && twisty.textContent.trim()) {
+        setLabelOpen(uuid, !openLabels().has(uuid));
+        renderTags();
+        focusLabel(uuid);
+        return;
+      }
+      selectLabel(uuid);
+      focusLabel(uuid);
+    });
+    ui.tagList.addEventListener('keydown', (event) => {
+      const item = event.target.closest('[data-label]');
+      if (!item || event.target !== item) return;
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      const key = event.shiftKey && event.key === 'F10' ? 'ContextMenu' : event.key;
+      const rows = NotesLabelTree.visibleRows(labelIndex(), openLabels());
+      const act = NotesLabelTree.navigate(rows, item.dataset.label, key);
+      if (!Object.keys(act).length) return;
+      event.preventDefault();
+      if (act.focus) focusLabel(act.focus);
+      else if (act.expand || act.collapse) {
+        setLabelOpen(act.expand || act.collapse, !!act.expand);
+        renderTags();
+        focusLabel(act.expand || act.collapse);
+      } else if (act.select) {
+        selectLabel(act.select);
+        focusLabel(act.select);
+      } else if (act.rename) beginRenameTag(act.rename);
+      else if (act.menu) openLabelMenu(act.menu, item.querySelector('[data-label-menu]') || item);
+    });
+    ui.tagList.addEventListener('contextmenu', (event) => {
+      const item = event.target.closest('[data-label]');
+      if (!item) return;
+      event.preventDefault();
+      openLabelMenu(item.dataset.label, item.querySelector('[data-label-menu]') || item);
+    });
+    // Long press opens the same menu on touch screens.
+    ui.tagList.addEventListener('pointerdown', (event) => {
+      const item = event.target.closest('[data-label]');
+      if (!item || event.pointerType === 'mouse' || event.target.closest('[data-label-menu]')) return;
+      if (tagPressTimer) clearTimeout(tagPressTimer);
       tagPressTimer = setTimeout(() => {
         tagPressTimer = null;
-        beginRenameTag(uuid);
+        openLabelMenu(item.dataset.label, item.querySelector('[data-label-menu]') || item);
       }, 520);
-    };
-    btn.addEventListener('pointerdown', start);
-    btn.addEventListener('pointerup', clear);
-    btn.addEventListener('pointerleave', clear);
-    btn.addEventListener('pointercancel', clear);
-    btn.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
-      beginRenameTag(uuid);
     });
+    ['pointerup', 'pointerleave', 'pointercancel', 'pointermove'].forEach((name) => {
+      ui.tagList.addEventListener(name, () => { if (tagPressTimer) { clearTimeout(tagPressTimer); tagPressTimer = null; } });
+    });
+    // Drag and drop is a mouse extra; the menu above does the same without a mouse.
+    let dragged = null;
+    ui.tagList.addEventListener('dragstart', (event) => {
+      const item = event.target.closest('[data-label]');
+      if (!item) return;
+      dragged = item.dataset.label;
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', '');
+    });
+    ui.tagList.addEventListener('dragover', (event) => {
+      const item = event.target.closest('[data-label]');
+      if (dragged && item && item.dataset.label !== dragged) event.preventDefault();
+    });
+    ui.tagList.addEventListener('drop', (event) => {
+      const item = event.target.closest('[data-label]');
+      if (!dragged || !item) return;
+      event.preventDefault();
+      const id = dragged;
+      dragged = null;
+      if (item.dataset.label !== id) moveLabel(id, item.dataset.label);
+    });
+    ui.tagList.addEventListener('dragend', () => { dragged = null; });
   }
 
   function renderTags() {
     const tags = NotesStore.listTags();
-    ui.tagList.innerHTML = tags
-      .map((t) => {
-        const count = NotesStore.noteCountForTag(t.uuid);
-        const active = currentTag === t.uuid ? 'active' : '';
-        const color = safeColor(t.content.color);
-        return `<div class="tag-row" data-tag-row="${escapeAttr(t.uuid)}">
-          <div class="tag-chip-wrap ${active}" style="--tag-color:${color}">
-            <button type="button" class="tag-chip ${active}" data-tag="${escapeAttr(t.uuid)}">
-              <span class="tag-dot"></span>
-              <span class="tag-name"># ${escapeHtml(t.content.title)}</span>
-              <span class="tag-count">${count}</span>
-            </button>
-          </div>
-        </div>`;
-      })
-      .join('');
-    ui.tagList.querySelectorAll('[data-tag]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        currentTag = currentTag === btn.dataset.tag ? null : btn.dataset.tag;
-        if (currentTag) currentFolder = null;
-        if (currentTag && (currentFilter === 'untagged' || currentFilter === 'trash')) {
-          setFilter('all');
-        }
-        applyTagSection();
-        renderTags();
-        renderNotes();
-        closeEditorIfNoteLeftView();
-        if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
-      });
-      bindTagLongPress(btn, btn.dataset.tag);
-    });
+    const byId = labelIndex();
+    const counts = labelCounts(byId);
+    const hadFocus = ui.tagList.contains(document.activeElement) ? document.activeElement.closest('[data-label]') : null;
+    const focusId = hadFocus ? hadFocus.dataset.label : null;
+    ui.tagList.innerHTML = tags.length ? NotesLabelTree.html(byId, {
+      open: openLabels(),
+      selected: currentTag,
+      active: focusId || currentTag,
+      count: (id) => counts.get(id) || 0,
+      color: (id) => safeColor(byId.get(id).color),
+    }) : '';
+    bindLabelTree();
+    if (focusId) focusLabel(focusId);
     renderTagColorBar();
     renderSearchFilterTags();
     renderFolders();
@@ -9096,8 +9309,14 @@
   function hideTagComposer() {
     const composer = document.getElementById('tag-composer');
     const input = document.getElementById('tag-name-input');
-    if (composer) composer.hidden = true;
-    if (input) input.value = '';
+    if (composer) {
+      composer.hidden = true;
+      delete composer.dataset.parent;
+    }
+    if (input) {
+      input.value = '';
+      input.placeholder = 'Tag name';
+    }
   }
 
   function isNoteProtected(note) {
@@ -9302,6 +9521,7 @@
       query: '',
       filter: currentFilter,
       tagId: currentTag,
+      tagScope: currentTagScope(),
       folderId: currentFolder,
       tagMap: tagMap(),
       folderMap: folderMap(),
@@ -9337,14 +9557,15 @@
   function beginRenameTag(uuid) {
     const bar = document.getElementById('tag-color-bar');
     if (bar) bar.hidden = true;
-    const row = ui.tagList.querySelector(`[data-tag-row="${uuid}"]`);
+    const row = labelItemEl(uuid);
     const tag = NotesStore.get(uuid);
     if (!row || !tag) return;
+    const original = NotesLabels.nameOf(tag.content);
     const input = document.createElement('input');
     input.className = 'tag-rename-input';
-    input.value = tag.content.title || '';
-    input.maxLength = 80;
-    input.setAttribute('aria-label', 'Rename tag');
+    input.value = original;
+    input.maxLength = 64;
+    input.setAttribute('aria-label', 'Rename label');
     input.addEventListener('input', () => syncTagLimitHint(input));
     row.replaceWith(input);
     input.focus();
@@ -9353,10 +9574,10 @@
     const commit = () => {
       if (done) return;
       done = true;
-      const title = input.value.trim();
-      if (title && title !== tag.content.title) {
-        NotesStore.renameTag(uuid, title);
-        invalidateTagMap();
+      const name = input.value.trim();
+      if (name && name !== original) {
+        if (NotesStore.renameTag(uuid, name)) invalidateTagMap();
+        else toast('Cannot rename (name taken, empty, or contains /)', true);
       }
       renderTags();
       renderNotes();
@@ -9366,54 +9587,60 @@
       if (event.key === 'Enter') {
         event.preventDefault();
         commit();
+        focusLabel(uuid);
       }
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
         done = true;
         renderTags();
+        focusLabel(uuid);
       }
     });
     input.addEventListener('blur', commit);
   }
 
-  function deleteCurrentTag(uuid) {
+  function deleteCurrentTag(uuid, children = 'promote') {
     const tag = NotesStore.get(uuid);
     if (!tag) return;
-    const title = tag.content.title || 'this tag';
-    const count = NotesStore.noteCountForTag(uuid);
-    const detail = count ? ` It will be removed from ${count} note${count === 1 ? '' : 's'}.` : '';
+    const byId = labelIndex();
+    const title = NotesLabels.nameOf(tag.content) || 'this tag';
+    const subs = NotesLabels.descendants(uuid, byId);
+    const gone = new Set(children === 'delete' ? [uuid, ...subs] : [uuid]);
+    const count = NotesStore.listNotes().filter((n) => (n.content?.tags || []).some((id) => gone.has(id))).length;
+    let detail = count ? ` It will be removed from ${count} note${count === 1 ? '' : 's'}.` : '';
+    if (subs.length) {
+      detail += children === 'delete'
+        ? ` ${subs.length} sub-label${subs.length === 1 ? '' : 's'} will be deleted too.`
+        : ' Its sub-labels move up one level.';
+    }
     confirmAction(`Delete “${title}”?${detail}`, {
       title: 'Delete tag',
       confirmLabel: 'Delete',
       danger: true,
     }).then((ok) => {
       if (!ok) return;
-      const snapshot = {
-        uuid,
-        content: { ...tag.content },
-        noteIds: NotesStore.listNotes()
-          .filter((n) => (n.content?.tags || []).includes(uuid))
-          .map((n) => n.uuid),
-        wasCurrent: currentTag === uuid,
-      };
-      NotesStore.deleteTag(uuid);
+      const labelSnapshots = [uuid, ...subs].map((id) => ({ uuid: id, content: { ...NotesStore.get(id).content } }));
+      const noteSnapshots = NotesStore.listNotes()
+        .filter((n) => (n.content?.tags || []).some((id) => gone.has(id)))
+        .map((n) => ({ uuid: n.uuid, tags: [...(n.content.tags || [])] }));
+      const prevCurrent = currentTag;
+      const wasCurrent = Boolean(currentTag && gone.has(currentTag));
+      NotesStore.deleteTag(uuid, { children });
       invalidateTagMap();
-      if (currentTag === uuid) currentTag = null;
+      if (wasCurrent) currentTag = null;
       renderTags();
       renderNotes();
       if (currentId) renderTagBar(NotesStore.get(currentId));
       toastWithUndo('Tag deleted', () => {
-        NotesStore.upsert(snapshot.uuid, { ...snapshot.content });
-        snapshot.noteIds.forEach((noteId) => {
-          const note = NotesStore.get(noteId);
+        labelSnapshots.forEach((snap) => NotesStore.upsert(snap.uuid, { ...snap.content }));
+        noteSnapshots.forEach((snap) => {
+          const note = NotesStore.get(snap.uuid);
           if (!note || note.deleted) return;
-          const tags = new Set(note.content.tags || []);
-          tags.add(snapshot.uuid);
-          NotesStore.upsert(noteId, { ...note.content, tags: [...tags] });
+          NotesStore.upsert(snap.uuid, { ...note.content, tags: snap.tags });
         });
         invalidateTagMap();
-        if (snapshot.wasCurrent) currentTag = snapshot.uuid;
+        if (wasCurrent) currentTag = prevCurrent;
         renderTags();
         renderNotes();
         if (currentId) renderTagBar(NotesStore.get(currentId));
@@ -9837,7 +10064,7 @@
     }, wait);
   }
 
-  function listStoredFiles({ query = '', tagId = null, folderId = null, titlesOnly = false, includeProtected = false } = {}) {
+  function listStoredFiles({ query = '', tagId = null, tagScope = null, folderId = null, titlesOnly = false, includeProtected = false } = {}) {
     const files = [];
     const attachments = typeof NotesStore.listVisibleAttachments === 'function'
       ? NotesStore.listVisibleAttachments()
@@ -9845,7 +10072,7 @@
     for (const att of attachments) {
       const note = NotesStore.get(att.content.note_id);
       if (!note || note.deleted || note.content?.trashed || note.content?.archived) continue;
-      if (tagId && !(note.content.tags || []).includes(tagId)) continue;
+      if (tagId && !(tagScope && tagScope.length ? tagScope : [tagId]).some((id) => (note.content.tags || []).includes(id))) continue;
       if (folderId && note.content.folder_id !== folderId) continue;
       if (!NotesSearch.fileRowMatches(att, note, query, { titlesOnly, includeProtected })) continue;
       files.push({ att, note });
@@ -10264,6 +10491,7 @@
       query: ui.search.value,
       filter: currentFilter,
       tagId: currentTag,
+      tagScope: currentTagScope(),
       folderId: currentFolder,
       tagMap: tagMap(),
       folderMap: folderMap(),
@@ -10275,6 +10503,7 @@
     const files = listingFiles ? listStoredFiles({
       query,
       tagId: currentTag,
+      tagScope: currentTagScope(),
       folderId: currentFolder,
       titlesOnly: searchOptions.titlesOnly,
       includeProtected: searchOptions.includeProtected,
@@ -18077,6 +18306,21 @@
       toast('Unlock the vault first', true);
       return;
     }
+    const parentId = document.getElementById('tag-composer')?.dataset.parent || '';
+    if (parentId && !assignToCurrent) {
+      const id = NotesStore.createTag(name, parentId);
+      if (!id) {
+        toast('Cannot create sub-label (name taken, contains /, or too deep)', true);
+        return;
+      }
+      setLabelOpen(parentId, true);
+      hideTagComposer();
+      invalidateTagMap();
+      renderTags();
+      toast('Sub-label created');
+      focusLabel(id);
+      return;
+    }
     try {
       const existing = findTagByTitle(name);
       const id = existing?.uuid || NotesStore.newUuid();
@@ -19160,7 +19404,9 @@
     if (section) section.open = true;
     const composer = document.getElementById('tag-composer');
     composer.hidden = false;
+    delete composer.dataset.parent;
     const input = document.getElementById('tag-name-input');
+    input.placeholder = 'Tag name';
     if (input && !input.dataset.limitBound) {
       input.dataset.limitBound = '1';
       input.addEventListener('input', () => syncTagLimitHint(input));
