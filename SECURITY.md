@@ -91,6 +91,18 @@ Related: deleting a note does not revoke its links (see above).
 
 Importing a calendar file is processed entirely in the browser. The file and its events are encrypted before storage, like other Agenda data. Imported files are treated as untrusted: they are capped in size (10 MB) and event count (10,000), recurrence expansion is capped, and no remote content (attachments, images, URLs, conferencing links, timezone data) is loaded. There is no calendar feed subscription and no server-side fetching of calendar files or feed URLs. Feed links are not fetched by Deeperguard; you download the .ics file from your provider yourself and import it.
 
+### Calendar subscriptions (planned, not yet available)
+
+**Status: not implemented in this build.** The statements above (no feed subscription, no server-side fetching) are what the code does today. This section records what is specified in `docs/ICS_SUBSCRIBE_SPEC.md` so that the app's texts and behaviour can be checked against it when the feature ships. Nothing here describes current behaviour.
+
+- **Link storage:** the feed link is stored only inside the encrypted vault pack. It is never written to logs, error messages (only fixed error codes), toasts, analytics, `localStorage` or exports.
+- **Direct fetch (default):** the browser fetches the feed itself, from a dedicated worker with a narrow CSP (`connect-src https:` only, for that worker). It uses GET only, no credentials, no referrer, no custom headers, a 2 MB limit and a 10 s limit. The calendar provider sees your IP address and the time of each refresh.
+- **Relay (opt-in per subscription):** if the provider blocks direct fetching (CORS), you may choose, per subscription, to fetch through the Deeperguard server. This is an exception to "the server only sees ciphertext": during the fetch the server sees the link and the calendar content. Nothing is stored or logged (no link, host, content or error details). The relay requires login, accepts only `https` on port 443, allows 30 requests per hour per user, 2 MB and 10 s.
+- **SSRF protection (relay):** the host is resolved once and every address must be public (loopback, private, link-local/metadata, CGNAT, reserved, multicast and mapped IPv6 are refused); the connection is pinned to the validated IP; redirects are followed manually (max 3) and re-checked at each hop.
+- **Refresh only with an open vault:** there is no background, service-worker or server-side refresh. Timers stop when the vault locks, in-flight fetches are aborted, and automatic refreshes are at least 30 minutes apart.
+- **Untrusted content:** fetched ICS data goes through the same parser and caps as file import, is shown only as text, and nothing it references is loaded automatically.
+- **Known trade-off:** with direct fetching, an XSS in the app could use the worker to send data to any https host; the page-wide CSP stays narrow and the page itself cannot connect elsewhere.
+
 ## What this file is not
 
 - No third-party penetration test or SOC 2 status is implied.
