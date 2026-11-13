@@ -1761,12 +1761,15 @@
           <p class="settings-hint">Use <a href="https://www.deeperguard.com/">https://www.deeperguard.com/</a> on iPhone. Passkeys require that hostname.</p>
           <label class="settings-row">Lock after idle
             <select id="pref-auto-lock">
-              <option value="0">Never</option>
+              <option value="0">Off</option>
+              <option value="1">1 minute</option>
               <option value="5">5 minutes</option>
               <option value="15">15 minutes</option>
               <option value="30">30 minutes</option>
+              <option value="60">60 minutes</option>
             </select>
           </label>
+          <p class="settings-hint">With Off, the vault key stays in memory until you lock or close the tab.</p>
           <label class="settings-row">Lock when leaving the app
             <select id="pref-lock-on-unfocus">
               <option value="never">Never</option>

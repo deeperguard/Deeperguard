@@ -117,7 +117,51 @@
     return !!isError;
   }
 
+  const AUTO_LOCK_DEFAULT_MIN = 15;
+  const AUTO_LOCK_OPTIONS = [0, 1, 5, 15, 30, 60];
+
+  /** Minutes as a number; 0 = off. Invalid or negative values fall back to the default. */
+  function normalizeAutoLockMin(value) {
+    if (value === '' || value === null || value === undefined) return AUTO_LOCK_DEFAULT_MIN;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return AUTO_LOCK_DEFAULT_MIN;
+    return n;
+  }
+
+  /**
+   * Idle timer. bump() (call on user input) restarts it; when it fires it calls
+   * onIdle(minutes), the same path as the manual Lock. If busy() is true it
+   * re-arms instead of locking.
+   */
+  function createIdleLock({ getMinutes, isUnlocked, busy, onIdle, setTimer, clearTimer } = {}) {
+    const set = setTimer || ((fn, ms) => setTimeout(fn, ms));
+    const clear = clearTimer || ((t) => clearTimeout(t));
+    let timer = null;
+    function stop() {
+      if (timer !== null) clear(timer);
+      timer = null;
+    }
+    function bump() {
+      stop();
+      const minutes = normalizeAutoLockMin(getMinutes());
+      if (!minutes || !isUnlocked()) return;
+      timer = set(() => {
+        timer = null;
+        if (busy && busy()) {
+          bump();
+          return;
+        }
+        onIdle(minutes);
+      }, minutes * 60 * 1000);
+    }
+    return { bump, stop };
+  }
+
   return {
+    AUTO_LOCK_DEFAULT_MIN,
+    AUTO_LOCK_OPTIONS,
+    normalizeAutoLockMin,
+    createIdleLock,
     UNFOCUS_MS,
     UNFOCUS_AT_KEY,
     VISIBLE_CLEAR_MS,
