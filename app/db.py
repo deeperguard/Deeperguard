@@ -3129,6 +3129,29 @@ def cancel_secure_send(send_id: str, sender_user_id: int) -> bool:
     return True
 
 
+def _sweep_orphan_secure_send_blobs(ts: float) -> None:
+    """Remove blobs with no DB row (failed create, restored backups) and stale .tmp files."""
+    from secure_send import blob_dir, purge_ciphertext
+
+    grace = 3600.0  # leave in-flight creates alone
+    for path in blob_dir().iterdir():
+        if path.suffix not in (".bin", ".tmp"):
+            continue
+        try:
+            if ts - path.stat().st_mtime < grace:
+                continue
+        except OSError:
+            continue
+        send_id = path.stem
+        if path.suffix == ".bin":
+            row = connection().execute(
+                "SELECT 1 FROM secure_sends WHERE id = ?", (send_id,)
+            ).fetchone()
+            if row:
+                continue
+        purge_ciphertext(send_id)
+
+
 def prune_secure_sends(now_ts: float | None = None) -> int:
     """Purge ciphertext for expired / canceled / locked-out rows; drop ancient tombstones."""
     from secure_send import purge_ciphertext
@@ -3144,6 +3167,7 @@ def prune_secure_sends(now_ts: float | None = None) -> int:
     ).fetchall()
     for row in rows:
         purge_ciphertext(str(row["id"]))
+    _sweep_orphan_secure_send_blobs(ts)
     # Hard-delete tombstones older than 7 days past expiry.
     cutoff = ts - (7 * 24 * 3600)
     with tx() as conn:

@@ -132,6 +132,32 @@ class D2SecureSendTests(unittest.TestCase):
         self.assertFalse(ss.blob_path(send_id).is_file())
         self.assertEqual(self.client.get(f"/receive/{send_id}").status_code, 404)
 
+    def test_gc_sweeps_orphan_blobs_and_keeps_live_ones(self):
+        import db as notes_db
+        import secure_send as ss
+
+        live = self._create().get_json()["id"]
+        orphan = ss.new_send_id()
+        ss.write_ciphertext(orphan, {"v": 1, "iv": "AA", "data": "AA"})
+        stale_tmp = ss.blob_path(orphan).with_suffix(".tmp")
+        stale_tmp.write_bytes(b"x")
+        fresh = ss.new_send_id()
+        ss.write_ciphertext(fresh, {"v": 1, "iv": "AA", "data": "AA"})
+        old = time.time() - 7200
+        for path in (ss.blob_path(orphan), stale_tmp, ss.blob_path(live)):
+            os.utime(path, (old, old))
+        notes_db.prune_secure_sends()
+        self.assertFalse(ss.blob_path(orphan).exists())
+        self.assertFalse(stale_tmp.exists())
+        self.assertTrue(ss.blob_path(live).is_file())  # has a DB row
+        self.assertTrue(ss.blob_path(fresh).is_file())  # inside grace window
+
+    def test_create_does_not_log_key_material(self):
+        verifier = "V" * 43
+        with self.assertNoLogs(level="DEBUG"):
+            res = self._create(open_verifier=verifier)
+        self.assertEqual(res.status_code, 200)
+
     def test_rejects_plaintext_file_metadata_and_keys(self):
         for payload in (
             {"filename": "secret.pdf"},
