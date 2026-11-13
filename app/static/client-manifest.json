@@ -1,5 +1,5 @@
 {
-  "asset_count": 68,
+  "asset_count": 70,
   "assets": {
     "css/app.css": {
       "bytes": 284714,
@@ -49,11 +49,17 @@
       "sri": "sha384-acphFUd3JIBd5QffcUbJ73xrgR8t5ztjLIGkrrWUhgjrRqCXKwriPUPnjkPc5CDD",
       "url": "/static/js/agenda-scroll-core.c49da39ee0f797b1.js"
     },
+    "js/agenda-subscriptions.js": {
+      "bytes": 15038,
+      "sha256": "217b8e9bb469ac49919d17ecdb0983da26db11b1f0f40dd564b77d0c7a34ce74",
+      "sri": "sha384-YOhf/yToMDrBO08gfJWlFieNRE8F+sSA5yPQrNsVo0fEIn71cSjJ8hktnGQNDdma",
+      "url": "/static/js/agenda-subscriptions.217b8e9bb469ac49.js"
+    },
     "js/agenda.js": {
-      "bytes": 116840,
-      "sha256": "5b438c1a7b050d2236302cce4e98f6a06343a1088d27e5f2128ee5c6e19cfd4d",
-      "sri": "sha384-bmvgIPVtfax9H5833v/xcT2ATzdAhAfKZGFVPHAYKsfaOiBxnW1O7nG730mPAfjX",
-      "url": "/static/js/agenda.5b438c1a7b050d22.js"
+      "bytes": 116981,
+      "sha256": "3f73b113ed4b4f992a96eb3d111c2c69e7a5c33545ac4b7c6b4bf7b9756fa77b",
+      "sri": "sha384-/b1WX53mXAYBZfB8d4sIr35TG+000GNDVX6rZUnKBsmp7AY+JCR1n+P0pBJcm1X1",
+      "url": "/static/js/agenda.3f73b113ed4b4f99.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -132,6 +138,12 @@
       "sha256": "e9cadbfd81d6cea251df4155caf95b8f96b9aea7b6523edb24e5813bc79321d6",
       "sri": "sha384-bo/4nxncp1AMAe1kyS7QRUFs7tzPsfR+y9tvkbjG8Xvuw8ACeuJntMWmLC1ZbUEO",
       "url": "/static/js/freshness.e9cadbfd81d6cea2.js"
+    },
+    "js/ics-fetch-worker.js": {
+      "bytes": 3146,
+      "sha256": "0f5acf47eed91776a97e1bd587f2dbe1fea6cdea492c03f2e8017bd37d9cc063",
+      "sri": "sha384-pvJna75pohzCNECK3dYD79uHvr45tCNw+L4Li/qRoRoZkTrg7xIyu8jyv7pf3Z4S",
+      "url": "/static/js/ics-fetch-worker.0f5acf47eed91776.js"
     },
     "js/idb.js": {
       "bytes": 8225,
@@ -266,10 +278,10 @@
       "url": "/static/js/srp-auth.e306b78c29503b1e.js"
     },
     "js/store.js": {
-      "bytes": 245741,
-      "sha256": "dc3ba89e16a6d64517803b1ac1ea4aa959bd768422cfc7d92a64d129047d8810",
-      "sri": "sha384-kkWoOfFUB7DCGDGgU88HKYDlm/GearIFxZGPGPL8qaYclG//V5gkFFS96Fq7znVH",
-      "url": "/static/js/store.dc3ba89e16a6d645.js"
+      "bytes": 254254,
+      "sha256": "8af2d3276d08fcd7d5684ac6af6afac2cc935ea4089a6738f066acccd2b8e95e",
+      "sri": "sha384-5YqgCNhXBZiMvZ6DWu9OSeHnuvcAwDDErO6e/Q2c1hESb/Ixa83xur+wTF9bWcGA",
+      "url": "/static/js/store.8af2d3276d08fcd7.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -411,6 +423,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "5e3c8a1a1fd9db6621f89b3df23c16a553aa37ff2caaab69a0c40d9122e53684",
+  "manifest_sha256": "e8516d61f9da0fd8a441979a068d71a80462d3f476f39c86f7cf9a9e0b56f908",
   "version": 1
 }

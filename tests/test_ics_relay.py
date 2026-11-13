@@ -474,6 +474,23 @@ class RelayRouteTest(unittest.TestCase):
             for needle in ("example.invalid", "token=TEST", "TEST", "internal.invalid", "CONTENT-MARKER", "feed.ics"):
                 self.assertNotIn(needle, text, needle)
 
+    def test_fetch_worker_has_own_csp_and_page_csp_stays_narrow(self):
+        import client_assets
+
+        worker_csp = "default-src 'none'; connect-src https:"
+        paths = ["/static/js/ics-fetch-worker.js", client_assets.asset_url("js/ics-fetch-worker.js")]
+        for path in paths:
+            resp = self.client.get(path)
+            self.assertEqual(resp.status_code, 200, path)
+            self.assertEqual(resp.headers.get("Content-Security-Policy"), worker_csp, path)
+            self.assertEqual(resp.headers.get("X-Content-Type-Options"), "nosniff")
+            resp.close()
+        page = self.client.get("/static/js/agenda-subscriptions.js")
+        page_csp = page.headers.get("Content-Security-Policy", "")
+        page.close()
+        connect = next(d for d in page_csp.split(";") if d.strip().startswith("connect-src"))
+        self.assertNotIn("https:", connect.split())
+
 
 if __name__ == "__main__":
     unittest.main()

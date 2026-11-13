@@ -89,11 +89,11 @@ Related: deleting a note does not revoke its links (see above).
 
 ## Calendar (.ics) import
 
-Importing a calendar file is processed entirely in the browser. The file and its events are encrypted before storage, like other Agenda data. Imported files are treated as untrusted: they are capped in size (10 MB) and event count (10,000), recurrence expansion is capped, and no remote content (attachments, images, URLs, conferencing links, timezone data) is loaded. There is no calendar feed subscription and no server-side fetching of calendar files or feed URLs. Feed links are not fetched by Deeperguard; you download the .ics file from your provider yourself and import it.
+Importing a calendar file is processed entirely in the browser. The file and its events are encrypted before storage, like other Agenda data. Imported files are treated as untrusted: they are capped in size (10 MB) and event count (10,000), recurrence expansion is capped, and no remote content (attachments, images, URLs, conferencing links, timezone data) is loaded. Calendar feed subscriptions are fetched directly by your browser (see below); the app does not use server-side fetching of calendar files or feed URLs. You can also download the .ics file from your provider yourself and import it.
 
-### Calendar subscriptions (planned, not yet available)
+### Calendar subscriptions (direct fetch available; relay planned)
 
-**Status: not implemented in this build.** The statements above (no feed subscription, no server-side fetching) are what the code does today. This section records what is specified in `docs/ICS_SUBSCRIBE_SPEC.md` so that the app's texts and behaviour can be checked against it when the feature ships. Nothing here describes current behaviour.
+**Status: direct fetch is available in this build; the relay is not yet available.** The bullets below follow `docs/ICS_SUBSCRIBE_SPEC.md`. Until the relay ships in the app, a feed whose provider blocks direct fetching shows an error, and you can still download the .ics file yourself and import it.
 
 - **Link storage:** the feed link is stored only inside the encrypted vault pack. It is never written to logs, error messages (only fixed error codes), toasts, analytics, `localStorage` or exports.
 - **Direct fetch (default):** the browser fetches the feed itself, from a dedicated worker with a narrow CSP (`connect-src https:` only, for that worker). It uses GET only, no credentials, no referrer, no custom headers, a 2 MB limit and a 10 s limit. The calendar provider sees your IP address and the time of each refresh.
