@@ -49,6 +49,31 @@ class SrpStep2SecurityTests(unittest.TestCase):
             sess.step2("1a", "")
         self.assertEqual(sess.state, 1)
 
+    def test_step2_rejects_u_zero_generically(self):
+        import srp_auth
+
+        sess, *_ = self._server_session()
+        orig = srp_auth._h
+        srp_auth._h = lambda _s: "0"
+        try:
+            with self.assertRaises(ValueError) as ctx:
+                sess.step2("1a", "abc")
+        finally:
+            srp_auth._h = orig
+        self.assertEqual(str(ctx.exception), "bad client credentials")
+        self.assertEqual(sess.state, 1)
+
+    def test_degenerate_errors_are_indistinguishable(self):
+        from srp_auth import N, _to_hex
+
+        messages = set()
+        for a_hex in ("0", _to_hex(N), _to_hex(2 * N), "zz"):
+            sess, *_ = self._server_session()
+            with self.assertRaises(ValueError) as ctx:
+                sess.step2(a_hex, "abc")
+            messages.add(str(ctx.exception))
+        self.assertEqual(messages, {"bad client credentials"})
+
     def test_step2_accepts_valid_thinbus_proof(self):
         sess, salt, _verifier, b_hex, email, password, G, K, N, _from_hex, _h, _to_hex, secrets = self._server_session()
         b_hex = b_hex.lower()
