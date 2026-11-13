@@ -3142,6 +3142,13 @@ def _sweep_orphan_secure_send_blobs(ts: float) -> None:
                 continue
         except OSError:
             continue
+        if path.suffix == ".tmp":
+            # Never go through purge_ciphertext(): it would also unlink a live <id>.bin.
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            continue
         send_id = path.stem
         if path.suffix == ".bin":
             row = connection().execute(
