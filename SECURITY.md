@@ -60,6 +60,10 @@ Limits of clearing memory in JavaScript:
 - Idle lock depends on timers. Browsers may delay timers in background tabs and on phones. Leaving-the-app lock covers part of that.
 - Closing or reloading the tab drops the key from memory. The next open needs the vault password, unless a remembered password applies (see above).
 
+## Logging out, revoking devices, and changing your password
+
+Logging out, revoking a device from the session list, and changing your password stop the server from giving that device new data. None of them takes back data the device already holds. A device that has the vault key or password and a copy of the ciphertext can keep reading that copy while offline, and no server-side action stops it. There is no offline lease. Full details and practical steps: [docs/REVOCATION_LIMITS.md](docs/REVOCATION_LIMITS.md).
+
 ## Secure Send links and the limits of fragment-key sharing
 
 Secure Send encrypts in your browser and puts the key in the URL fragment (after `#`). Browsers do not send the fragment to the server, so the server stores only ciphertext. That is weaker than normal vault use, and the app says so when you make a link:
