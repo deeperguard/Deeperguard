@@ -26,6 +26,8 @@ Titles, bodies, tags, attachments, extracted document text, and version history 
 
 The ciphertext is cached in IndexedDB, so notes open offline and the site can be added to the home screen as a PWA. Scans and PDFs are read with Tesseract and pdf.js in the browser; the text is encrypted into the note, and search runs on the decrypted copy locally. Each edit keeps the previous copy inside the encrypted note, so an older version can be restored.
 
+Signing out, revoking a device, and changing your password do not remove data a device already holds offline. See [docs/REVOCATION_LIMITS.md](docs/REVOCATION_LIMITS.md).
+
 ## What the server holds
 
 Ciphertext blobs, the SRP verifier, the account email, sessions, and sync metadata: item ids, timestamps, and sizes. Reminder email does not include note titles.
