@@ -5933,6 +5933,7 @@ const NotesStore = (() => {
     let rotated = false;
     let oldKey = null;
     let newKey = null;
+    const wasVerified = !!state.keyVerified;
     try {
       if (!(await verifyVaultPassword(current))) {
         throw new Error('Current password does not match this vault.');
@@ -6016,6 +6017,10 @@ const NotesStore = (() => {
       await unlock(next, salt, { kdfVersion: state.kdfVersion });
       newKey = state.cryptoKey;
       rotated = true;
+      // The current password was just proven to the server and the old key
+      // decrypted the vault, so the key derived from the new password may be
+      // pushed. unlock() leaves browsers unverified; the pushDirty gate stays.
+      state.keyVerified = true;
       const ts = Date.now() / 1000;
       for (const { uuid, item } of snapshot) {
         if (item.content?.type === 'attachment' && item.content.file_enc) {
@@ -6102,6 +6107,9 @@ const NotesStore = (() => {
       if (rotated) {
         try {
           await unlock(current, salt, { kdfVersion: state.kdfVersion });
+          // Old key was verified before the change; restore that so the
+          // rollback flush can overwrite rows already pushed under the new key.
+          state.keyVerified = wasVerified;
           const now = Date.now() / 1000;
           for (const { uuid } of snapshot) {
             const live = state.items.get(uuid);
