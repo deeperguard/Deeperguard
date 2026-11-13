@@ -1,5 +1,5 @@
 {
-  "asset_count": 70,
+  "asset_count": 71,
   "assets": {
     "css/app.css": {
       "bytes": 285181,
@@ -68,10 +68,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 964894,
-      "sha256": "3d1e221d45a00cc6778213e313ef3cab4228a0e8d769858f55bb4ee5d942bfa3",
-      "sri": "sha384-C8e3QMlbJYE50oET8g7jCFjMiUD6AwnZeqnDWHUhodtYPtUOllA7naMzVCXfi8nP",
-      "url": "/static/js/app.3d1e221d45a00cc6.js"
+      "bytes": 969494,
+      "sha256": "f5c58bdb752b6fed68875aafc57fc5e1f8d97c8da64d0e01ea969c23b5451ea1",
+      "sri": "sha384-MLeITS8LukSagUEJ/b0F/na7lmFU+TVSSD+xSCxR84aimaupp/CI7HmD3WMDuqiu",
+      "url": "/static/js/app.f5c58bdb752b6fed.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -301,6 +301,12 @@
       "sri": "sha384-IP6v1A7l/FZ7oT8aaZ8juyzKy1xzdHW4p1dSaDLC+CzVTlH1Kx8gncspZpXM1ZzH",
       "url": "/static/js/tagsuggest.a1570c6c241dd88c.js"
     },
+    "js/totp-import.js": {
+      "bytes": 8074,
+      "sha256": "a996e8fce4fb7eb683cc423636ff66bf2a8a29e20923e661a40c25fea9e54e54",
+      "sri": "sha384-vi5p2sDmpIAW2qtPF9UOcRmF2QBUonCs7nZFAjz1LJzdsKc6RLsopKBJrlzq5vQv",
+      "url": "/static/js/totp-import.a996e8fce4fb7eb6.js"
+    },
     "js/totp-page.js": {
       "bytes": 5048,
       "sha256": "ffa4f5fd1b4b772c0a1aff460f52f7b2bf11a6f81802a640463f532a40aa235f",
@@ -308,10 +314,10 @@
       "url": "/static/js/totp-page.ffa4f5fd1b4b772c.js"
     },
     "js/totp.js": {
-      "bytes": 23670,
-      "sha256": "51d559eb229fd574b2c3231defeedcb1ad9aaeb5dc1dc0f835cafd4ece041d69",
-      "sri": "sha384-enUuIRc6gU8rmK09KrgGQ0Z36CVS10T1Rfy1mfCfEsWX5tCztalIS8000CiykoC4",
-      "url": "/static/js/totp.51d559eb229fd574.js"
+      "bytes": 26716,
+      "sha256": "04b721be480a10cd76149b41aa8db32a9bba2ae5f80d536bf2b6a6f474709323",
+      "sri": "sha384-gA9WX4PJDh5SnUZ9jbg0BQ3WN+Mk0H7O/cJJxLTpoY5YY8ITSyvttz7Qb2u//gxZ",
+      "url": "/static/js/totp.04b721be480a10cd.js"
     },
     "js/vault-copy-meta.js": {
       "bytes": 2559,
@@ -423,6 +429,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "f3aceac1aa2a6a6defff4113b0198d74c81b220c6bdb4fb600769ae0873f6863",
+  "manifest_sha256": "d4d47d24a7d4c27e6820528f26ead38982ab7ed83537f1e19d8927108f0b32c1",
   "version": 1
 }

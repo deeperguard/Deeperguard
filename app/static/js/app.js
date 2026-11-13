@@ -4861,6 +4861,92 @@
     }
   }
 
+  // ---- 2FA import (docs/2FA_IMPORT_SPEC.md section 3). Never log or show secrets here. ----
+  const totpImport = { rows: [], skipped: 0 };
+  function totpImportEl(id) { return document.getElementById(id); }
+  function resetTotpImport() {
+    totpImport.rows = [];
+    totpImport.skipped = 0;
+    const text = totpImportEl('totp-import-text');
+    if (text) text.value = '';
+    const list = totpImportEl('totp-import-list');
+    if (list) list.textContent = '';
+    ['totp-import-preview', 'totp-import-error', 'totp-import-advice', 'totp-import-confirm'].forEach((id) => {
+      const el = totpImportEl(id);
+      if (el) el.hidden = true;
+    });
+    const btn = totpImportEl('totp-import-preview-btn');
+    if (btn) btn.hidden = false;
+  }
+  function showTotpImportDialog() {
+    resetTotpImport();
+    totpImportEl('totp-import-dialog').hidden = false;
+    totpImportEl('totp-import-backdrop').hidden = false;
+    document.body.classList.add('scan-dialog-open');
+  }
+  function hideTotpImportDialog() {
+    resetTotpImport();
+    totpImportEl('totp-import-dialog').hidden = true;
+    totpImportEl('totp-import-backdrop').hidden = true;
+    document.body.classList.remove('scan-dialog-open');
+  }
+  function setTotpImportError(message) {
+    const el = totpImportEl('totp-import-error');
+    if (!el) return;
+    el.textContent = message || '';
+    el.hidden = !message;
+  }
+  function previewTotpImport(raw) {
+    setTotpImportError('');
+    const res = NotesTotpImport.parse(String(raw || ''));
+    if (!res.ok) {
+      setTotpImportError(res.message);
+      return;
+    }
+    const existing = NotesStore.listTotpAccounts().map((item) => item.content.secret);
+    totpImport.rows = NotesTotpImport.plan(res.entries, existing);
+    totpImport.skipped = res.skipped.length;
+    const list = totpImportEl('totp-import-list');
+    list.textContent = '';
+    NotesTotpImport.previewRows(totpImport.rows).forEach((row) => {
+      const li = document.createElement('li');
+      li.textContent = `${row.issuer ? `${row.issuer} - ` : ''}${row.account}${row.duplicate ? ' (already in vault, skipped)' : ''}`;
+      list.appendChild(li);
+    });
+    const fresh = totpImport.rows.filter((r) => !r.duplicate).length;
+    const dupes = totpImport.rows.length - fresh;
+    totpImportEl('totp-import-summary').textContent = `${fresh} to import, ${dupes} already in vault, ${totpImport.skipped} skipped (invalid or unsupported). Secrets are not shown.`;
+    totpImportEl('totp-import-preview').hidden = false;
+    totpImportEl('totp-import-confirm').hidden = fresh === 0;
+    totpImportEl('totp-import-confirm').textContent = `Import ${fresh}`;
+  }
+  function confirmTotpImport() {
+    let added = 0;
+    for (const row of totpImport.rows) {
+      if (row.duplicate) continue;
+      try {
+        if (NotesStore.addTotpAccount(row.entry).created) added += 1;
+      } catch (err) { /* skip entry, no content in errors */ }
+    }
+    totpImport.rows = [];
+    totpImportEl('totp-import-text').value = '';
+    totpImportEl('totp-import-list').textContent = '';
+    totpImportEl('totp-import-preview').hidden = true;
+    totpImportEl('totp-import-confirm').hidden = true;
+    totpImportEl('totp-import-preview-btn').hidden = true;
+    totpImportEl('totp-import-advice').hidden = false;
+    refreshTotpVault();
+    toast(`Imported ${added} account${added === 1 ? '' : 's'}`);
+  }
+  async function readTotpImportFile(file) {
+    if (!file) return;
+    if (file.size > NotesTotpImport.LIMITS.maxChars) {
+      setTotpImportError(NotesTotpImport.MESSAGES.too_large);
+      return;
+    }
+    previewTotpImport(await file.text());
+  }
+
   async function saveTotpAddDialog() {
     if (totpEditingId) {
       const issuer = String(totpUi.issuer?.value || '').trim();
@@ -21722,6 +21808,17 @@
     copyTotpEntry(row.dataset.totpId, totpCodeFromListRow(row));
   });
   totpUi.add?.addEventListener('click', () => showTotpAddDialog());
+  document.getElementById('btn-totp-import')?.addEventListener('click', () => showTotpImportDialog());
+  document.getElementById('totp-import-backdrop')?.addEventListener('click', () => hideTotpImportDialog());
+  document.getElementById('totp-import-cancel')?.addEventListener('click', () => hideTotpImportDialog());
+  document.getElementById('totp-import-preview-btn')?.addEventListener('click', () => previewTotpImport(totpImportEl('totp-import-text').value));
+  document.getElementById('totp-import-confirm')?.addEventListener('click', () => confirmTotpImport());
+  document.getElementById('totp-import-pick')?.addEventListener('click', () => openHiddenFileInput(totpImportEl('totp-import-file')));
+  document.getElementById('totp-import-file')?.addEventListener('change', (event) => {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    readTotpImportFile(file).catch(() => setTotpImportError(NotesTotpImport.MESSAGES.invalid));
+  });
   totpUi.backdrop?.addEventListener('click', () => hideTotpAddDialog());
   document.getElementById('totp-add-cancel')?.addEventListener('click', () => hideTotpAddDialog());
   document.getElementById('totp-add-save')?.addEventListener('click', () => {

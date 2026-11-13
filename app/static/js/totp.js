@@ -271,28 +271,97 @@ const NotesTotp = (() => {
     return { issuer: '', account: text.trim() };
   }
 
-  function parseOtpauth(url) {
+  const OTPAUTH_MAX_LEN = 4096;
+  const OTPAUTH_ALGOS = { SHA1: 'SHA1', 'SHA-1': 'SHA1', SHA256: 'SHA256', 'SHA-256': 'SHA256', SHA512: 'SHA512', 'SHA-512': 'SHA512' };
+
+  function strictInt(value, min, max) {
+    if (!/^\d{1,16}$/.test(String(value))) return null;
+    const n = Number(value);
+    return Number.isSafeInteger(n) && n >= min && n <= max ? n : null;
+  }
+
+  function cleanText(value, max) {
+    return String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, max);
+  }
+
+  // Strict otpauth:// parser. Returns { ok: true, entry } or { ok: false, reason }.
+  // Reasons are short codes and never contain any part of the input.
+  function parseOtpauthStrict(url) {
+    const text = String(url == null ? '' : url).trim();
+    if (!text || text.length > OTPAUTH_MAX_LEN) return { ok: false, reason: 'invalid' };
     let parsed;
     try {
-      parsed = new URL(url);
+      parsed = new URL(text);
     } catch (err) {
-      return null;
+      return { ok: false, reason: 'invalid' };
     }
-    if (parsed.protocol !== 'otpauth:') return null;
+    if (parsed.protocol !== 'otpauth:') return { ok: false, reason: 'invalid' };
     const type = String(parsed.hostname || '').toLowerCase();
-    if (type !== 'totp') return null;
-    const secret = parsed.searchParams.get('secret') || '';
-    if (!looksLikeSecret(secret)) return null;
-    const label = decodeLabel(parsed.pathname.replace(/^\//, ''));
-    const issuer = (parsed.searchParams.get('issuer') || label.issuer || '').trim();
-    return {
+    if (type !== 'totp' && type !== 'hotp') return { ok: false, reason: 'invalid' };
+    const params = new Map();
+    for (const [key, value] of parsed.searchParams) {
+      const k = key.toLowerCase();
+      if (params.has(k)) return { ok: false, reason: 'invalid' };
+      params.set(k, value);
+    }
+    const rawSecret = params.get('secret') || '';
+    if (rawSecret.length > 256) return { ok: false, reason: 'invalid' };
+    const secret = rawSecret.toUpperCase().replace(/[\s\-]/g, '').replace(/=+$/g, '');
+    if (secret.length < 8 || /[^A-Z2-7]/.test(secret) || !decodeBase32(secret)) return { ok: false, reason: 'invalid' };
+    if (decodeBase32(secret).length > 128) return { ok: false, reason: 'invalid' };
+    let labelText;
+    try {
+      labelText = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
+    } catch (err) {
+      return { ok: false, reason: 'invalid' };
+    }
+    if (labelText.length > 512) return { ok: false, reason: 'invalid' };
+    const colon = labelText.indexOf(':');
+    const labelIssuer = colon > 0 ? labelText.slice(0, colon) : '';
+    const labelAccount = colon > 0 ? labelText.slice(colon + 1) : labelText;
+    const issuerParam = params.get('issuer');
+    if (issuerParam != null && issuerParam.length > 256) return { ok: false, reason: 'invalid' };
+    const issuer = cleanText(issuerParam || labelIssuer, 128);
+    let algorithm = 'SHA1';
+    if (params.has('algorithm')) {
+      algorithm = OTPAUTH_ALGOS[String(params.get('algorithm')).toUpperCase()];
+      if (!algorithm) return { ok: false, reason: 'invalid' };
+    }
+    let digits = 6;
+    if (params.has('digits')) {
+      digits = strictInt(params.get('digits'), 6, 8);
+      if (digits == null) return { ok: false, reason: 'invalid' };
+    }
+    const entry = {
+      otp_type: type,
       issuer,
-      account: label.account || issuer || 'Account',
-      secret: secret.toUpperCase().replace(/[\s\-]/g, ''),
-      digits: Number(parsed.searchParams.get('digits') || 6) || 6,
-      period: Number(parsed.searchParams.get('period') || 30) || 30,
-      algorithm: (parsed.searchParams.get('algorithm') || 'SHA1').toUpperCase().replace('-', ''),
+      account: cleanText(labelAccount, 256) || issuer || 'Account',
+      secret,
+      digits,
+      algorithm,
     };
+    if (type === 'totp') {
+      let period = 30;
+      if (params.has('period')) {
+        period = strictInt(params.get('period'), 1, 300);
+        if (period == null) return { ok: false, reason: 'invalid' };
+      }
+      entry.period = period;
+    } else {
+      if (!params.has('counter')) return { ok: false, reason: 'hotp-counter' };
+      const counter = strictInt(params.get('counter'), 0, Number.MAX_SAFE_INTEGER);
+      if (counter == null) return { ok: false, reason: 'invalid' };
+      entry.counter = counter;
+    }
+    return { ok: true, entry };
+  }
+
+  // Legacy wrapper: TOTP only, null on anything invalid.
+  function parseOtpauth(url) {
+    const res = parseOtpauthStrict(url);
+    if (!res.ok || res.entry.otp_type !== 'totp') return null;
+    const { issuer, account, secret, digits, period, algorithm } = res.entry;
+    return { issuer, account, secret, digits, period, algorithm };
   }
 
   function stripDecor(line) {
@@ -666,6 +735,7 @@ const NotesTotp = (() => {
     decodeBase32,
     looksLikeSecret,
     parseOtpauth,
+    parseOtpauthStrict,
     parseText,
     parseNotes,
     extractNoteBody,
