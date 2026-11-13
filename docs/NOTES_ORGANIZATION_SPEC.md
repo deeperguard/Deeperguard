@@ -177,6 +177,22 @@ code paths reviewed (`renameTag`, `setTagColor`, `deleteTag`, `upsert` of notes
 with `{...note.content}`) all spread the existing content; any that do not must be
 fixed first, in a release that precedes the first nested label a user can create.
 
+### 1.9 Implementation status (data layer, phase 1)
+
+Implemented in `app/static/js/labels.js` (pure model) and `store.js`
+(`createTag`, `moveTag`, `renameTag`, `deleteTag(uuid, {children})`,
+`migrateLabels`, `repairLabels`, group key of `mergeDuplicateTags`). Tests:
+`tests/test_nested_labels.js`. No UI yet, no server change.
+
+- `migrateLabels()` is an explicit, idempotent call (nothing runs it at unlock, per 1.7);
+  it only adds `name`, `parent_id`, `order`, `title_sync` and keeps every other field.
+- Cycles, unknown parents and depth > 8 are refused on write and repaired on read.
+- Known limit: an old client that renames a *parent* only rewrites that label's
+  `title`; the new client adopts it as the leaf name on `repairLabels()` and then
+  refreshes descendant titles. Until then old clients see stale path prefixes on
+  children. An old client that moves nothing cannot corrupt `parent_id`; it cannot
+  create hierarchy.
+
 ## 2. Templates
 
 ### 2.1 Storage: a note with an encrypted flag
