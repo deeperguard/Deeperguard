@@ -59,6 +59,11 @@ Set `NOTES_STRICT_ZK=0` or `NOTES_SERVER_OCR=1` only for local debugging — not
 | Compromised server disk | No (ciphertext only) |
 | Compromised server + live RAM | Unlikely for bulk vault; sessions may be active |
 | Stolen device + weak password | Yes — use a strong vault password and device lock |
+| Someone at your unlocked device, after Lock or idle lock | Lock is best effort (see below) |
+
+### Locking
+
+Lock drops the vault key and decrypted notes from the browser tab, as far as the browser allows, and unlocking requires your vault password again. JavaScript cannot fully clear memory, so Lock does not guarantee that the key or notes are gone from memory. A remembered password on this device, if you turned that option on, stays in local storage after Lock. Details and limits: [SECURITY.md](../SECURITY.md#locking-the-vault).
 
 ## Further reading
 
