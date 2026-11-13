@@ -549,6 +549,20 @@
     return s.length > 0 && bad / s.length > 0.02;
   }
 
+  /** Stable (non-crypto) 53-bit string hash, used for events that have no UID. */
+  function stableHash(str) {
+    let h1 = 0xdeadbeef;
+    let h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i += 1) {
+      const c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761);
+      h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+
   function parseIcsFile(text) {
     if (String(text || '').length > MAX_ICS_BYTES) {
       throw new Error('This file is larger than 10 MB and was not imported.');
@@ -627,7 +641,7 @@
       const attendees = attendeeLines.map((r) => unescapeText(r.value)).filter(Boolean);
       const colorRaw = String(((map.get('X-DEEPERGUARD-COLOR') || [])[0] || {}).value || '').trim().toLowerCase();
       const color = /^#[0-9a-f]{6}$/.test(colorRaw) ? colorRaw : '';
-      const icalUid = uid || `local-${Date.now()}-${events.length}`;
+      const icalUid = uid || `nouid-${stableHash(`${dtStart.value}|${summary}`)}`;
       events.push({
         ical_uid: icalUid,
         title: summary || 'Untitled',
@@ -648,7 +662,65 @@
     return { events, warnings };
   }
 
+  function importFields(r) {
+    return JSON.stringify([
+      r.title || '', r.start || '', r.end || '', r.location || '', r.notes || '',
+      r.rrule || '', !!r.all_day, (r.ics_exdates || []).slice().sort(),
+    ]);
+  }
+
+  /** Build key -> comparable signature for stored events (masters plus per-occurrence overrides). */
+  function existingImportIndex(existingEvents) {
+    const idx = new Map();
+    for (const ev of existingEvents || []) {
+      const uid = String(ev && ev.ical_uid || '').trim();
+      if (!uid) continue;
+      idx.set(uid, importFields(ev));
+      const ov = ev.ics_occurrence_overrides || {};
+      for (const rid of Object.keys(ov)) {
+        idx.set(`${uid}|${rid}`, importFields({ ...ov[rid], rrule: '', ics_exdates: [] }));
+      }
+    }
+    return idx;
+  }
+
+  /**
+   * Compare parsed rows with stored events. Key = ical_uid (+ "|" + ics_recurrence_id for overrides).
+   * Pure: returns {new, changed, unchanged}, each a list of the parsed rows.
+   */
+  function diffImport(existingEvents, parsedEvents) {
+    const idx = existingImportIndex(existingEvents);
+    const out = { new: [], changed: [], unchanged: [] };
+    for (const row of parsedEvents || []) {
+      const uid = String(row && row.ical_uid || '').trim();
+      const rid = String(row && row.ics_recurrence_id || '').trim();
+      const key = rid ? `${uid}|${rid}` : uid;
+      if (!idx.has(key)) out.new.push(row);
+      else if (idx.get(key) === importFields(rid ? { ...row, rrule: '', ics_exdates: [] } : row)) out.unchanged.push(row);
+      else out.changed.push(row);
+    }
+    return out;
+  }
+
+  /** Label such as "work.ics (2026-11-13)"; stored inside the encrypted event data only. */
+  function makeSourceLabel(fileName, now) {
+    const d = (now instanceof Date ? now : new Date()).toISOString().slice(0, 10);
+    const name = String(fileName || 'import').replace(/[\u0000-\u001f]/g, '').slice(0, 120);
+    return `${name} (${d})`;
+  }
+
+  /** Ids of stored events whose source label equals `label` (non-empty). */
+  function idsWithSource(existingEvents, label) {
+    const l = String(label || '');
+    if (!l) return [];
+    return (existingEvents || []).filter((e) => e && e.source === l).map((e) => e.id);
+  }
+
   global.NotesAgendaIcs = {
+    diffImport,
+    makeSourceLabel,
+    idsWithSource,
+    stableHash,
     parseIcsFile,
     validateIcsFile,
     looksBinary,
