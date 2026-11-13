@@ -1,6 +1,6 @@
 /**
  * ICS (iCalendar) parser for on-device import: VEVENT, RRULE string preservation,
- * VALARM/VTIMEZONE blocks skipped. No network. https URLs only for join hints.
+ * VALARM/VTIMEZONE blocks skipped. No network; ATTACH, IMAGE, URL-fetch and CONFERENCE are ignored. https URLs only for join hints.
  */
 (function (global) {
   function unfoldLines(raw) {
@@ -520,13 +520,51 @@
     return `${lines.map((ln) => foldIcsLine(ln)).join('\r\n')}\r\n`;
   }
 
+  const MAX_ICS_BYTES = 10 * 1024 * 1024;
+  const MAX_ICS_EVENTS = 10000;
+
+  /** Throws a user-facing Error when a file is too big or does not look like text/calendar. */
+  function validateIcsFile(file) {
+    if (!file) throw new Error('No file selected.');
+    if (Number(file.size) > MAX_ICS_BYTES) {
+      throw new Error('This file is larger than 10 MB and was not imported.');
+    }
+    const name = String(file.name || '').toLowerCase();
+    const type = String(file.type || '').toLowerCase().split(';')[0].trim();
+    const okType = !type || type === 'text/calendar' || type === 'text/plain' || type === 'application/ics';
+    if (!okType || (name && !/\.(ics|ical|ifb|txt)$/.test(name))) {
+      throw new Error('Only .ics calendar text files can be imported.');
+    }
+  }
+
+  /** True when the text looks binary (NUL bytes or many control/replacement characters). */
+  function looksBinary(text) {
+    const s = String(text || '').slice(0, 8192);
+    if (s.indexOf('\u0000') >= 0) return true;
+    let bad = 0;
+    for (let i = 0; i < s.length; i += 1) {
+      const c = s.charCodeAt(i);
+      if ((c < 32 && c !== 9 && c !== 10 && c !== 13) || c === 0xfffd) bad += 1;
+    }
+    return s.length > 0 && bad / s.length > 0.02;
+  }
+
   function parseIcsFile(text) {
+    if (String(text || '').length > MAX_ICS_BYTES) {
+      throw new Error('This file is larger than 10 MB and was not imported.');
+    }
+    if (looksBinary(text)) {
+      throw new Error('This file is not a text calendar and was not imported.');
+    }
     const warnings = [];
     const blocks = [];
     let cur = null;
     for (const line of unfoldLines(text)) {
       const u = line.toUpperCase();
       if (u === 'BEGIN:VEVENT') {
+        if (blocks.length >= MAX_ICS_EVENTS) {
+          throw new Error(`This calendar has more than ${MAX_ICS_EVENTS.toLocaleString('en-US')} events and was not imported.`);
+        }
         cur = { props: [] };
         blocks.push(cur);
       } else if (u === 'END:VEVENT') {
@@ -612,6 +650,10 @@
 
   global.NotesAgendaIcs = {
     parseIcsFile,
+    validateIcsFile,
+    looksBinary,
+    MAX_ICS_BYTES,
+    MAX_ICS_EVENTS,
     sanitizeHttpsUrl,
     extractHttpsFromText,
     escapeIcsText,
