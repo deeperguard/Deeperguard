@@ -17,6 +17,7 @@ import blog
 import ask_ai_provider_pin
 import verify_metadata_baseline
 import ai_relay
+import ics_relay
 import auth
 import client_assets
 import db
@@ -978,6 +979,42 @@ def api_ai_ollama_info(what: str):
     except ai_relay.RelayError as err:
         return jsonify({"error": err.message}), err.status
     return jsonify(payload), status
+
+
+# Agenda feed relay (docs/ICS_SUBSCRIBE_SPEC.md section 4): fetches a calendar
+# feed for the signed-in client. The URL travels in the JSON body only. Nothing
+# (URL, host, content) is stored or logged; failures answer with a fixed code.
+ICS_RELAY_LIMIT = 30
+ICS_RELAY_WINDOW = 3600
+ICS_RELAY_MAX_BODY = 4096
+
+
+def _ics_relay_error(code: str):
+    return jsonify({"error": code}), ics_relay.STATUS.get(code, 502)
+
+
+@app.post("/api/agenda/ics-relay")
+def api_agenda_ics_relay():
+    uid = auth.current_user_id()
+    if not uid:
+        return _ics_relay_error("E_AUTH")
+    if not auth_rate_allow(f"ics-relay:{uid}", limit=ICS_RELAY_LIMIT, window=ICS_RELAY_WINDOW):
+        return _ics_relay_error("E_RATE")
+    try:
+        if request.content_length is None or request.content_length > ICS_RELAY_MAX_BODY:
+            return _ics_relay_error("E_URL")
+        body = request.get_json(silent=True)
+        url = body.get("url") if isinstance(body, dict) else None
+        data = ics_relay.fetch_feed(url)
+    except ics_relay.RelayError as err:
+        return _ics_relay_error(err.code)
+    except Exception:  # noqa: BLE001 - no log.exception: tracebacks can contain the URL
+        return _ics_relay_error("E_UPSTREAM")
+    resp = make_response(data, 200)
+    resp.headers["Content-Type"] = "text/plain; charset=utf-8"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/login", methods=["GET", "POST"])
