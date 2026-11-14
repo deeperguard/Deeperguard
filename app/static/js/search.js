@@ -628,12 +628,37 @@ const NotesSearch = (() => {
     return { pinned, rest };
   }
 
-  function derivedTitleFromBody(text) {
-    const line = String(text || '').split(/\r?\n/).map((part) => part.trim()).find(Boolean) || '';
-    const collapsed = line.replace(/\s+/g, ' ').trim();
+  function firstBodyLine(text) {
+    return String(text || '').split(/\r?\n/).map((part) => part.trim()).find(Boolean) || '';
+  }
+
+  function clipTitle(line) {
+    const collapsed = String(line || '').replace(/\s+/g, ' ').trim();
     if (!collapsed) return '';
     if (collapsed.length <= 60) return collapsed;
     return `${collapsed.slice(0, 59).trimEnd()}…`;
+  }
+
+  // Markdown links/images ("[Tekst](dg-note:<id>)", "[a](https://…)") show as
+  // their label in a derived title. Only the title is cleaned; the body is not.
+  function stripMarkdownLinks(line) {
+    return String(line || '').replace(/!?\[([^\]\n]*)\]\([^)\s]*(?:\s+"[^"\n]*")?\)/g, '$1');
+  }
+
+  function derivedTitleFromBody(text) {
+    return clipTitle(stripMarkdownLinks(firstBodyLine(text)));
+  }
+
+  // The derivation used before links were stripped. Titles stored with it
+  // (e.g. a raw "[Tekst](dg-note:…)") are still auto-derived, not user-typed.
+  function legacyDerivedTitleFromBody(text) {
+    return clipTitle(firstBodyLine(text));
+  }
+
+  function titleIsDerivedFromBody(title, body) {
+    const stored = String(title || '').trim();
+    if (!stored) return false;
+    return stored === derivedTitleFromBody(body) || stored === legacyDerivedTitleFromBody(body);
   }
 
   function safeParseJson(raw) {
@@ -749,7 +774,14 @@ const NotesSearch = (() => {
       if (isPlaceholderTitle(stored)) return '';
       return stored;
     }
-    if (!isPlaceholderTitle(stored)) return stored;
+    if (!isPlaceholderTitle(stored)) {
+      // A title stored by the old derivation still shows the cleaned form.
+      // Only titles with "[" can differ, so other notes never read the body.
+      if (stored.includes('[') && stored === legacyDerivedTitleFromBody(note?.content?.content)) {
+        return derivedTitleFromBody(note?.content?.content);
+      }
+      return stored;
+    }
     const body = String(note?.content?.content || '').trim();
     if (looksLikeSpreadsheetPayload(body)) {
       return fallbackSpreadsheetTitle(body, note);
@@ -1128,6 +1160,8 @@ const NotesSearch = (() => {
     partitionPinnedNotes,
     compareNotesForSort,
     derivedTitleFromBody,
+    legacyDerivedTitleFromBody,
+    titleIsDerivedFromBody,
     effectiveNoteTitle,
     noteIsEmptyStub,
     noteHasBeenSaved,
