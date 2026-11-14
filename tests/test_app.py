@@ -1936,6 +1936,12 @@ class NotesAppTests(unittest.TestCase):
     def test_client_attachment_encryption(self):
         self._run_node_script("test_store_attachments.js")
 
+    def test_client_search_privacy_and_perf(self):
+        # Real store + search: attachment-OCR hit labelled as attachment, text-node
+        # snippets, highlight on open, no plaintext stored or sent, index wiped on
+        # lock/sign-out, and 1000 notes searched within a time budget.
+        self._run_node_script("test_search_privacy_perf.js")
+
     def test_client_attachment_search_isolation(self):
         self._run_node_script("test_attachment_search_isolation.js")
         self._run_node_script("test_attachment_render_owner.js")
