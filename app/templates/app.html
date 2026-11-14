@@ -2702,6 +2702,10 @@
       <label class="settings-row stacked">Location
         <input id="agenda-edit-location" type="text" maxlength="500" autocomplete="off">
       </label>
+      <label class="settings-row stacked" id="agenda-edit-tz-row">Time zone
+        <input id="agenda-edit-tz" type="text" list="agenda-tz-list" maxlength="64" autocomplete="off" spellcheck="false">
+        <datalist id="agenda-tz-list"></datalist>
+      </label>
       <label class="settings-row stacked" id="agenda-edit-calendar-row">Calendar
         <select id="agenda-edit-calendar"></select>
       </label>
@@ -2850,6 +2854,7 @@
   {{ asset_script('js/agenda-ics.js') }}
   {{ asset_script('js/agenda-subscriptions.js') }}
   {{ asset_script('js/agenda-calendars.js') }}
+  {{ asset_script('js/agenda-tz.js') }}
   {{ asset_script('js/agenda-recurrence.js') }}
   {{ asset_script('js/agenda-occurrence.js') }}
   {{ asset_script('js/agenda-scroll-core.js') }}
