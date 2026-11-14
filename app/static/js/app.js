@@ -4257,6 +4257,9 @@
     lastNotesRenderKey = '';
     if (ui.noteList) ui.noteList.replaceChildren();
     unlockedNotes.clear();
+    // Undo/redo stacks hold plaintext title+body snapshots.
+    noteUndoStacks.clear();
+    noteRedoStacks.clear();
     clearListThumbCache();
     clearPreviewCache();
     if (typeof NotesAiChat !== 'undefined') NotesAiChat.reset();

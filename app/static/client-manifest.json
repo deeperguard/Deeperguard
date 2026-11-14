@@ -92,10 +92,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1013111,
-      "sha256": "832783cb234658f2227b7f71869613a82ac97198a9f22ae86c4a2e544843ec6a",
-      "sri": "sha384-WQj1KFBcP8BS8Lh64ZJjgzghYijAE7x7D87qT+As46Jy8mZo0i1AogqEoow6ghJG",
-      "url": "/static/js/app.832783cb234658f2.js"
+      "bytes": 1013228,
+      "sha256": "70d75d0aeff0305f43d75297c7b383ee85ed5fdf8e83af636851e7e83de22a3a",
+      "sri": "sha384-UGKRMb2zyn4xtz75k4KdAPcg3654utqjFwY2K3pJTbJ73f174/MGx8v5lEii+ozh",
+      "url": "/static/js/app.70d75d0aeff0305f.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -140,10 +140,10 @@
       "url": "/static/js/conflict-copy.b8dc7a91c94051a9.js"
     },
     "js/crypto-worker.js": {
-      "bytes": 3543,
-      "sha256": "1977014a4e7940062565244cc97c0a4dda2468c7edf9e4f1468cb8699fb16260",
-      "sri": "sha384-aZNd8lkUEHHLnUNTejOq259iYCx2pcJcQ2qMaxG4Rp+JT8N23qkpU+P3pDg5k47K",
-      "url": "/static/js/crypto-worker.1977014a4e794006.js"
+      "bytes": 3723,
+      "sha256": "0f28b964f018c3fb9eac7694d9ae5efa1e4c6e50a4ff44751f7b5bc97f78a44e",
+      "sri": "sha384-GOEJ16QT6FsT2KOZmX9mJYHQvZ+QwtTY5sX+QNYsW9bv4zKg5mokhOcJ900yZrxv",
+      "url": "/static/js/crypto-worker.0f28b964f018c3fb.js"
     },
     "js/crypto.js": {
       "bytes": 9503,
@@ -344,10 +344,10 @@
       "url": "/static/js/srp-auth.e306b78c29503b1e.js"
     },
     "js/store.js": {
-      "bytes": 267522,
-      "sha256": "32618eb559a3247f8173533ee4989d51e43a32f8e71c4ebcb4f6426c6125765a",
-      "sri": "sha384-O20uh/4Do/UXndKjXwLIZS0y5RtANNyQpdW42r3d8RRDLxbNY2WhIXyHjOtqjL2O",
-      "url": "/static/js/store.32618eb559a3247f.js"
+      "bytes": 267670,
+      "sha256": "91a1ad7c84baca1626fa8daa02f4e520e512f7ce1efa47dd5866924e97c0318b",
+      "sri": "sha384-Qmb3+LiYIgvSQ2qGRNNoK6GbRTR3JwtcwbQAhSctskgTLkLhSZQI1C0VejtKoG96",
+      "url": "/static/js/store.91a1ad7c84baca16.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -507,6 +507,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "5968cb0fb44113e78c9eb312cc15bd3e2651dd2c40cd75e281140d492dc9b563",
+  "manifest_sha256": "8829af01131e50735dd9a51882d0bbbca49296e11d5f6f68f52051dc6b7f6b6c",
   "version": 1
 }
