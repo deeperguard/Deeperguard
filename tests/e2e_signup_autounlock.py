@@ -28,8 +28,9 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def start_server(root: Path, port: int):
+def start_server(root: Path, port: int, extra_env: dict | None = None):
     env = dict(os.environ)
+    env.update(extra_env or {})
     env.update(
         NOTES_ROOT=str(root),
         NOTES_DATA=str(root / "data"),
