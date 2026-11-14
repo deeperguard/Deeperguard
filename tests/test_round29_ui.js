@@ -61,9 +61,9 @@ assert.ok(appCss.includes('overflow-x: auto'));
 const { render } = require('../app/static/js/markdown.js');
 const tableHtml = render('| A | B |\n| --- | --- |\n| 1 | 2 |\n\n```\n| not | a | table |\n```');
 assert.match(tableHtml, /<div class="md-table-wrap"><table>/);
-assert.match(tableHtml, /<th>A<\/th>/);
-assert.match(tableHtml, /<td>1<\/td>/);
-assert.match(tableHtml, /<pre class="code-preview"><code>/);
+assert.match(tableHtml, /<th dir="auto">A<\/th>/);
+assert.match(tableHtml, /<td dir="auto">1<\/td>/);
+assert.match(tableHtml, /<pre class="code-preview" dir="ltr"><code dir="ltr">/);
 assert.doesNotMatch(tableHtml, /<pre[^>]*>[\s\S]*<table/);
 
 console.log('test_round29_ui ok');

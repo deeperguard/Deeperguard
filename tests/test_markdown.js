@@ -6,7 +6,7 @@ assert.match(html, /task-toggle/);
 assert.match(html, /data-checked="0"/);
 assert.match(html, /data-checked="1"/);
 assert.match(html, /<strong>bold<\/strong>/);
-assert.match(html, /<pre(?: class="code-preview")?><code/);
+assert.match(html, /<pre(?: class="code-preview")?(?: dir="ltr")?><code/);
 assert.doesNotMatch(html, /<em>not italic<\/em>/);
 
 const linked = render('See [link](https://example.com) and [bad](javascript:alert(1)).');
@@ -37,7 +37,7 @@ const coded = render('`http://example.com` stays code');
 assert.match(coded, /<code>http:\/\/example.com<\/code>/);
 assert.doesNotMatch(coded, /<code><a /);
 const blanks = render('a\n\n\nb');
-assert.match(blanks, /<p><br><\/p>/);
+assert.match(blanks, /<p dir="auto"><br><\/p>/);
 
 const flipped = toggleTaskAt('- [ ] one\n- [x] two', 1);
 assert.strictEqual(flipped, '- [ ] one\n- [ ] two');
@@ -66,7 +66,7 @@ assert.match(safe, /<a href="https:\/\/example.com"/);
 
 const table = render('# Table test\n\n| Col A | Col B |\n| --- | ---: |\n| **x** | y |\n| a | b |\n');
 assert.match(table, /<div class="md-table-wrap"><table>/);
-assert.match(table, /<th>Col A<\/th>/);
+assert.match(table, /<th dir="auto">Col A<\/th>/);
 assert.match(table, /text-align:right/);
 assert.match(table, /<strong>x<\/strong>/);
 assert.doesNotMatch(table, /\| Col A \|/);

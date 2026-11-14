@@ -47,8 +47,8 @@ assert.ok(html.includes('unlock-support-email'));
 const { render } = require('../app/static/js/markdown.js');
 const preview = render('# Title\n\nHello\n\n- item');
 assert.ok(!preview.includes('<p></p>'));
-assert.ok(!preview.includes('<p><h1'));
-assert.ok(preview.includes('<h1>Title</h1>'));
-assert.ok(preview.includes('<p>Hello</p>'));
+assert.ok(!preview.includes('<p dir="auto"><h1'));
+assert.ok(preview.includes('<h1 dir="auto">Title</h1>'));
+assert.ok(preview.includes('<p dir="auto">Hello</p>'));
 
 console.log('ok');

@@ -1719,6 +1719,7 @@
   }
 
   function htmlWithoutInlineHandlers(html) {
+    if (window.NotesSanitize?.sanitizePreviewAttrs) return NotesSanitize.sanitizePreviewAttrs(html);
     return String(html || '').replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   }
 
@@ -14079,7 +14080,7 @@
       }
       const text = ocrMarkdown(currentId);
       ui.preview.innerHTML = text
-        ? NotesMarkdown.render(text)
+        ? htmlWithoutInlineHandlers(NotesMarkdown.render(text))
         : '<p class="muted">OCR is still running, or no text was found. Stay on the document preview in the meantime.</p>';
       markAutoDir(ui.preview);
       highlightPreview();
@@ -14398,8 +14399,12 @@
   function markAutoDir(root) {
     if (!root) return;
     root.setAttribute('dir', 'auto');
-    root.querySelectorAll('p, li, h1, h2, h3, h4, blockquote, pre, td, th').forEach((el) => {
+    root.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th').forEach((el) => {
       el.setAttribute('dir', 'auto');
+    });
+    // Code stays left-to-right even inside an RTL note.
+    root.querySelectorAll('pre, pre code').forEach((el) => {
+      el.setAttribute('dir', 'ltr');
     });
   }
 

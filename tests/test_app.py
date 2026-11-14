@@ -1927,6 +1927,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_code_copy_button(self):
         self._run_node_script("test_code_copy_button.js")
 
+    def test_client_rtl_preview(self):
+        self._run_node_script("test_rtl_preview.js")
+
     def test_client_preview_search_paint(self):
         self._run_node_script("test_preview_paint.js")
 
