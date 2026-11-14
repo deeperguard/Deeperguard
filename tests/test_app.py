@@ -1936,6 +1936,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_remove_source(self):
         self._run_node_script("test_remove_source.js")
 
+    def test_client_unlock_worker_watchdog(self):
+        self._run_node_script("test_unlock_worker_watchdog.js")
+
     def test_client_crypto_bytes(self):
         self._run_node_script("test_crypto.js")
 

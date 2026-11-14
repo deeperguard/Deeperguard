@@ -6437,7 +6437,7 @@
 
   const UNLOCK_PHASE_WEIGHT = {
     kdf: { start: 0, size: 18, label: 'Deriving vault key' },
-    decrypt: { start: 18, size: 52, label: 'Opening notes' },
+    decrypt: { start: 18, size: 52, label: 'Opening vault' },
     attachments: { start: 70, size: 14, label: 'Loading attachments' },
     sync: { start: 84, size: 16, label: 'Syncing' },
     done: { start: 100, size: 0, label: 'Ready' },
@@ -6451,7 +6451,7 @@
   }
 
   function unlockProgressLabel(phase) {
-    if (phase === 'kdf' && loginProgress.displayed >= 8) return 'Checking password';
+    if (phase === 'kdf' && loginProgress.displayed >= 8) return 'Deriving key';
     return (UNLOCK_PHASE_WEIGHT[phase] || UNLOCK_PHASE_WEIGHT.decrypt).label;
   }
 
@@ -6493,7 +6493,7 @@
     const indeterminate = loginProgress.phase === 'kdf';
     const pct = loginProgress.displayed;
     const text = indeterminate
-      ? 'Checking password…'
+      ? 'Deriving key…'
       : `${unlockProgressLabel(loginProgress.phase)}… ${pct}%`;
     const overlay = document.getElementById('login-progress-overlay');
     const overlayStatus = document.getElementById('login-progress-status');
@@ -8507,6 +8507,11 @@
       unlockSubmit.textContent = 'Unlock';
       unlockSubmit.removeAttribute('aria-busy');
       unlockSubmit.classList.remove('is-checking');
+    } finally {
+      // Safety net: whatever happened above, never leave the button stuck.
+      if (!unlockInFlight && unlockSubmit?.disabled && unlockSubmit.textContent === 'Checking…') {
+        resetLoginProgress();
+      }
     }
   }
 
