@@ -11794,3 +11794,93 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
     animation: none !important;
   }
 }
+
+/* Notes list, editor, attachments and OCR polish (docs/UI_POLISH.md 2.3/2.4).
+   Visual only: shared tokens, one primary action in empty states, readable
+   OCR progress/error and a toast that never squeezes its message. */
+.note-list-empty {
+  margin: var(--space-3) var(--space-2);
+  padding: var(--space-5) var(--space-4);
+  border-radius: var(--radius-md);
+  gap: var(--space-2);
+}
+.note-list-empty > p { margin: 0; line-height: var(--note-body-line); }
+.note-list-empty-title { font-size: var(--text-md); line-height: 1.3; }
+.note-list-empty-actions { gap: var(--space-2); margin-top: var(--space-2); }
+.note-list-empty-actions .btn.ghost { border-color: transparent; color: var(--accent); }
+.note-list-empty-actions .btn.primary { font-weight: 600; }
+@media (max-width: 599px) {
+  .note-list-empty-actions .btn.primary { flex: 1 1 100%; }
+}
+.note-title-row h3 { line-height: 1.3; }
+.note-preview { margin-top: var(--space-1); }
+.note-item-meta { gap: var(--space-2); margin-top: var(--space-2); }
+.note-row-delete:focus-visible,
+.note-row-more:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.attachment-item {
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  line-height: 1.4;
+}
+.attachment-main > strong { overflow-wrap: anywhere; }
+.attachment-item-actions { gap: var(--space-2); }
+.attachment-overflow-menu { gap: var(--space-1); border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
+
+.ocr-text { margin-top: var(--space-1); font-size: var(--text-sm); line-height: 1.4; }
+.ocr-text.ocr-progress,
+.ocr-text.ocr-failed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border-radius: 8px;
+}
+.ocr-text.ocr-progress {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+.ocr-text.ocr-progress::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-round);
+  background: var(--accent);
+}
+.ocr-text.ocr-failed {
+  color: color-mix(in srgb, var(--danger) 80%, var(--text));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  font-weight: 600;
+}
+.ocr-text.ocr-failed::before {
+  content: '!';
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-round);
+  background: var(--danger);
+  color: var(--on-danger);
+  font-size: var(--text-xs);
+  line-height: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ocr-text.ocr-progress::before { animation: ios-pdf-pulse 1.1s ease-in-out infinite; }
+}
+
+.toast {
+  width: max-content;
+  max-width: min(420px, calc(100vw - 2 * var(--space-3)));
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-base);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.toast .toast-undo { flex: 0 0 auto; color: var(--accent); font-weight: 600; }
