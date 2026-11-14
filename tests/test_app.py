@@ -1879,6 +1879,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_vaultlock(self):
         self._run_node_script("test_vaultlock.js")
 
+    def test_client_folder_tag_explain(self):
+        self._run_node_script("test_folder_tag_explain.js")
+
     def test_client_search_filters(self):
         self._run_node_script("test_search.js")
 

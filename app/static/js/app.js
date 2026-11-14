@@ -20172,6 +20172,29 @@
     toast('Folder created');
   }
 
+  // Folder vs tag explanation; locale follows <html lang> like ai-chat.js / auth-pages.js.
+  const FOLDER_TAG_EXPLAIN = {
+    en: {
+      folder: 'Folder: each note sits in exactly one folder.',
+      tag: 'Tag: a note can have several tags — handy for grouping across folders.',
+    },
+    nl: {
+      folder: 'Map: elke notitie staat in precies één map.',
+      tag: 'Label: een notitie kan meerdere labels hebben, handig om over mappen heen te groeperen.',
+    },
+  };
+
+  function applyFolderTagExplain() {
+    const lang = String(document.documentElement?.lang || 'en').toLowerCase().startsWith('nl') ? 'nl' : 'en';
+    const texts = FOLDER_TAG_EXPLAIN[lang];
+    document.querySelectorAll('[data-explain]').forEach((el) => {
+      const text = texts[el.getAttribute('data-explain')];
+      if (!text) return;
+      if (el.getAttribute('data-explain-attr') === 'title') el.setAttribute('title', text);
+      else el.textContent = text;
+    });
+  }
+
   function closeFolderPrompt() {
     const dialog = document.getElementById('folder-prompt');
     const input = document.getElementById('folder-prompt-input');
@@ -25995,6 +26018,7 @@
   window.notesRunAllDeviceTests = runAllDeviceTests;
   window.notesClearAppCaches = clearAppCaches;
 
+  applyFolderTagExplain();
   initPaneSplitter();
   boot();
 })();
