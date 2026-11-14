@@ -137,7 +137,35 @@
     return `${hm(startMs, tz)} ${zoneCity(tz)}`;
   }
 
+  /**
+   * Default end for a new timed event, as a datetime-local value ('YYYY-MM-DDTHH:MM'):
+   * the start wall-clock time plus one hour on the same date, capped at 23:59. Pure string
+   * arithmetic on the wall clock (no milliseconds), so a DST change never shifts the hour.
+   * Returns '' for an unparsable start.
+   */
+  function defaultEndInput(startInput) {
+    const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(String(startInput || ''));
+    if (!m) return '';
+    const mins = Number(m[2]) * 60 + Number(m[3]) + 60;
+    if (mins > 23 * 60 + 59) return `${m[1]}T23:59`;
+    return `${m[1]}T${pad2(Math.floor(mins / 60))}:${pad2(mins % 60)}`;
+  }
+
+  /**
+   * Editor decision: the end value to show after the start (or all-day mode) changed.
+   * Only a new, timed event whose end the user has not edited follows the start; in every
+   * other case (existing event, all-day, end touched by the user) the end stays as it is.
+   */
+  function followEndInput(opts) {
+    const o = opts || {};
+    const end = String(o.end || '');
+    if (!o.isNew || o.allDay || o.endTouched) return end;
+    return defaultEndInput(o.start) || end;
+  }
+
   global.NotesAgendaTz = {
+    defaultEndInput,
+    followEndInput,
     deviceTz,
     isValidTz,
     effectiveTz,
