@@ -312,7 +312,7 @@ def save_pcloud_settings(
 def run_pcloud_backups() -> int:
     pc.migrate_all_pcloud_secrets(KEYS_DIR)
     synced = 0
-    if config.pcloud_service_remote():
+    if service_source():
         managed_healthcheck()  # result only logged; legacy token users are unaffected
     managed_ids = {int(u["id"]) for u in db.users_with_managed_backup_enabled()}
     for user in db.users_with_pcloud_enabled():
@@ -370,25 +370,72 @@ def _classify_rclone_failure(stderr: str) -> str:
     return ERR_UNAVAILABLE
 
 
+ADMIN_REMOTE_NAME = "dgservice"
+SOURCE_ENV = "env"
+SOURCE_ADMIN = "admin"
+
+
+def _stored_token_configured() -> bool:
+    try:
+        import pcloud_service_token as pst
+
+        return bool(pst.status()["configured"])
+    except Exception:
+        return False
+
+
+def service_source() -> str:
+    """'env' (NOTES_PCLOUD_SERVICE_REMOTE wins), 'admin' (stored token) or '' (none)."""
+    if config.pcloud_service_remote():
+        return SOURCE_ENV
+    if _stored_token_configured():
+        return SOURCE_ADMIN
+    return ""
+
+
+def service_status() -> dict[str, Any]:
+    src = service_source()
+    return {"configured": bool(src), "source": src or "not_configured"}
+
+
 def _managed_remote_name() -> str:
-    remote = config.pcloud_service_remote()
-    if not remote or not config.pcloud_service_root():
+    src = service_source()
+    if not src or not config.pcloud_service_root():
         raise ManagedBackupError(ERR_NOT_CONFIGURED)
-    return remote
+    return config.pcloud_service_remote() if src == SOURCE_ENV else ADMIN_REMOTE_NAME
+
+
+def _admin_remote_env() -> dict[str, str]:
+    """Subprocess env with the stored token as an in-memory rclone remote."""
+    import pcloud_service_token as pst
+
+    try:
+        token_json, region = pst.decrypt_for_use()
+    except pst.TokenError:
+        raise ManagedBackupError(ERR_AUTH) from None
+    prefix = f"RCLONE_CONFIG_{ADMIN_REMOTE_NAME.upper()}_"
+    env = dict(os.environ)
+    env[prefix + "TYPE"] = "pcloud"
+    env[prefix + "TOKEN"] = token_json
+    env[prefix + "HOSTNAME"] = pcloud_hostname(region)
+    return env
 
 
 def _run_managed_rclone(args: list[str], *, timeout: int) -> subprocess.CompletedProcess[str]:
     """Run rclone for the service remote. Raises ManagedBackupError(code) on any failure."""
-    remote = _managed_remote_name()
-    del remote  # validated only; callers embed it through _remote_spec
+    _managed_remote_name()  # validates configuration; callers embed it through _remote_spec
     try:
         binary = rclone_bin()
     except RuntimeError:
         raise ManagedBackupError(ERR_RCLONE_MISSING) from None
     cmd = [binary]
-    cfg = config.pcloud_service_rclone_config()
-    if cfg:
-        cmd += ["--config", cfg]
+    env = None
+    if service_source() == SOURCE_ADMIN:
+        env = _admin_remote_env()  # decrypted just before the call, subprocess-only
+    else:
+        cfg = config.pcloud_service_rclone_config()
+        if cfg:
+            cmd += ["--config", cfg]
     cmd += list(args)
     try:
         proc = subprocess.run(
@@ -399,14 +446,35 @@ def _run_managed_rclone(args: list[str], *, timeout: int) -> subprocess.Complete
             timeout=timeout,
             stdin=subprocess.DEVNULL,
             shell=False,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         raise ManagedBackupError(ERR_TIMEOUT) from None
     except OSError:
         raise ManagedBackupError(ERR_RCLONE_MISSING) from None
+    finally:
+        env = None
     if proc.returncode != 0:
+        # classify then discard: rclone output (which may echo the token) is never kept
         raise ManagedBackupError(_classify_rclone_failure(proc.stderr or ""))
+    proc.stderr = ""
     return proc
+
+
+def test_connection() -> dict[str, Any]:
+    """Cheap read-only check (lsd on the remote root). Returns only ok + fixed category."""
+    try:
+        remote = _managed_remote_name()
+        _run_managed_rclone(["lsd", f"{remote}:", "--max-depth", "1"],
+                            timeout=HEALTHCHECK_TIMEOUT_SECONDS)
+        return {"ok": True, "category": "ok"}
+    except ManagedBackupError as exc:
+        return {"ok": False, "category": exc.code}
+    except Exception:
+        return {"ok": False, "category": ERR_UNAVAILABLE}
+
+
+test_connection.__test__ = False  # not a pytest test
 
 
 def _remote_spec(relative: str) -> str:
