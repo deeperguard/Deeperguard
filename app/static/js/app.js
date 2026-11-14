@@ -22442,7 +22442,9 @@
     if (viewsEl && window.NotesSecureSend) {
       viewsEl.value = String(NotesSecureSend.DEFAULT_MAX_VIEWS || 1);
     }
-    if (daysEl) daysEl.value = '7';
+    if (daysEl) daysEl.value = '1';
+    const noPassEl = document.getElementById('secure-send-no-passphrase');
+    if (noPassEl) noPassEl.checked = false;
     if (wrap) wrap.hidden = true;
     if (linkInput) linkInput.value = '';
     setSecureSendStatus('');
@@ -22614,13 +22616,17 @@
     const passphrase = document.getElementById('secure-send-passphrase')?.value || '';
     const maxViews = Number(NotesSecureSend.MAX_VIEWS_CAP) || 10;
     let views = Number(document.getElementById('secure-send-views')?.value || 1);
-    let days = Number(document.getElementById('secure-send-days')?.value || 7);
+    let days = Number(document.getElementById('secure-send-days')?.value || 1);
     if (!Number.isFinite(views) || views < 1) views = 1;
     if (views > maxViews) views = maxViews;
     if (!Number.isFinite(days) || days < 1) days = 1;
     if (days > 7) days = 7;
     if (!title.trim() && !body.trim() && !file) {
       setSecureSendStatus('Add a title, note, or file.');
+      return;
+    }
+    if (!passphrase && !document.getElementById('secure-send-no-passphrase')?.checked) {
+      setSecureSendStatus('Enter a passphrase, or tick "Send without a passphrase".');
       return;
     }
     const btn = document.getElementById('btn-secure-send-create');

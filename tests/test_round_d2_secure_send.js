@@ -24,7 +24,7 @@ assert.ok(appHtml.includes('btn-secure-send-head'));
 assert.ok(appHtml.includes('btn-settings-open-secure-send'));
 assert.ok(!appHtml.includes('id="secure-send-settings"'));
 assert.ok(appHtml.includes('Number of opens'));
-assert.ok(appHtml.includes('Default 1. The link stops working after this many opens or 7 days.'));
+assert.ok(appHtml.includes('Default 1. The link stops working after this many opens or when it expires.'));
 assert.ok(appHtml.includes('The key is in the link itself and never reaches our server'));
 assert.ok(appHtml.includes('max="10"'));
 assert.ok(appHtml.includes('btn-secure-send-copy'));
@@ -290,3 +290,8 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+// Hardening (#82 2.4): receive page clears the fragment; passphrase is the default.
+assert.ok(receiveJs.includes('history.replaceState'));
+assert.ok(appHtml.includes('id="secure-send-no-passphrase"'));
+assert.ok(appJs.includes('Send without a passphrase'));
