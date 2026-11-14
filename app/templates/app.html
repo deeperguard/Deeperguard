@@ -1522,6 +1522,14 @@
           <p class="settings-hint muted agenda-cal-action-sub">Feed blocked by the provider? Open the link in a new browser tab, save the .ics file, then import it here. The download goes straight from the provider to your device; the link never passes through Deeperguard. On iOS, the system may offer to add the events to the Calendar app instead of saving a file.</p>
           <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-export-ics">Export calendar (.ics)</button>
           <p class="settings-hint muted agenda-cal-action-sub">Downloads a standard .ics file with your events. The file is <strong>not encrypted</strong> — titles, times, and notes are readable plaintext. Keep it private and share carefully.</p>
+          <fieldset class="agenda-local-reminder-settings" id="agenda-local-reminder-settings">
+            <legend class="muted">Reminders in this browser</legend>
+            <p class="settings-hint" id="agenda-local-reminder-explainer"><strong>Reminders only work while Deeperguard is open in your browser</strong> (a tab or the installed app) and your vault is unlocked. These reminders send no email and no push message, and nothing about them goes to the server or to anyone else. They show inside Deeperguard and, if you allow it, as a browser notification. A reminder you miss because Deeperguard was closed is shown once as &ldquo;Missed&rdquo; the next time you open it.</p>
+            <p class="settings-hint muted">Email and push reminders are a separate, optional Pro feature (below). Only those can reach you when Deeperguard is closed.</p>
+            <button type="button" class="btn sm" id="agenda-local-reminder-allow" hidden>Allow browser notifications</button>
+            <p id="agenda-local-reminder-permission-status" class="settings-hint muted" role="status"></p>
+            <p class="settings-hint muted">Default reminders for new events are set per calendar under &ldquo;My calendars&rdquo; (Edit).</p>
+          </fieldset>
           <fieldset class="agenda-reminder-channel-settings" data-plan-feature="agenda_reminders" data-plan-lock-hint="Event reminders are included with Pro.">
             <legend class="muted">Event reminders</legend>
             <p class="settings-hint agenda-reminders-privacy-hint">Notifications never include event titles, locations or notes. Email reminders include only the event time.</p>
@@ -2683,20 +2691,24 @@
           <input id="agenda-edit-until" type="date" autocomplete="off">
         </label>
       </fieldset>
-      <fieldset class="agenda-editor-reminders" id="agenda-edit-reminders-wrap" data-plan-feature="agenda_reminders" data-plan-lock-hint="Event reminders are included with Pro.">
+      <fieldset class="agenda-editor-reminders" id="agenda-edit-reminders-wrap">
         <legend class="muted">Reminders</legend>
-        <p class="settings-hint agenda-reminders-privacy-hint">Offsets stay in your vault. The server sees reminder times and channel, never event titles, locations or notes.</p>
-        <p id="agenda-edit-reminders-hint" class="settings-hint agenda-reminders-hint" role="status" hidden></p>
-        <div class="agenda-reminders-when-entitled">
         <div class="agenda-reminder-offset-grid">
-          <label class="settings-row checkbox"><span>At start</span><input type="checkbox" data-agenda-reminder-offset="at_start"></label>
-          <label class="settings-row checkbox"><span>5 min before</span><input type="checkbox" data-agenda-reminder-offset="m5"></label>
-          <label class="settings-row checkbox"><span>10 min before</span><input type="checkbox" data-agenda-reminder-offset="m10"></label>
-          <label class="settings-row checkbox"><span>15 min before</span><input type="checkbox" data-agenda-reminder-offset="m15"></label>
-          <label class="settings-row checkbox"><span>30 min before</span><input type="checkbox" data-agenda-reminder-offset="m30"></label>
-          <label class="settings-row checkbox"><span>1 hour before</span><input type="checkbox" data-agenda-reminder-offset="h1"></label>
-          <label class="settings-row checkbox"><span>1 day before</span><input type="checkbox" data-agenda-reminder-offset="d1"></label>
+          <label class="settings-row checkbox"><span>At start</span><input type="checkbox" data-agenda-reminder-offset="0"></label>
+          <label class="settings-row checkbox"><span>5 min before</span><input type="checkbox" data-agenda-reminder-offset="5"></label>
+          <label class="settings-row checkbox"><span>10 min before</span><input type="checkbox" data-agenda-reminder-offset="10"></label>
+          <label class="settings-row checkbox"><span>15 min before</span><input type="checkbox" data-agenda-reminder-offset="15"></label>
+          <label class="settings-row checkbox"><span>30 min before</span><input type="checkbox" data-agenda-reminder-offset="30"></label>
+          <label class="settings-row checkbox"><span>1 hour before</span><input type="checkbox" data-agenda-reminder-offset="60"></label>
+          <label class="settings-row checkbox"><span>1 day before</span><input type="checkbox" data-agenda-reminder-offset="1440"></label>
         </div>
+        <label class="settings-row stacked">Custom (minutes before, e.g. 20 or 20, 120)
+          <input id="agenda-edit-reminders-custom" type="text" inputmode="numeric" maxlength="60" autocomplete="off" spellcheck="false">
+        </label>
+        <p class="settings-hint agenda-local-reminders-hint">Reminders only work while Deeperguard is open in your browser. They show in the app and, if you allowed it, as a browser notification. These reminders send no email and no push message.</p>
+        <div class="agenda-editor-server-reminders" data-plan-feature="agenda_reminders" data-plan-lock-hint="Email and push reminders, which also work when Deeperguard is closed, are a separate Pro option.">
+          <p class="settings-hint agenda-reminders-privacy-hint">Email and push reminders (Pro, optional). Offsets stay in your vault. The server sees reminder times and channel, never event titles, locations or notes.</p>
+          <p id="agenda-edit-reminders-hint" class="settings-hint agenda-reminders-hint" role="status" hidden></p>
         </div>
       </fieldset>
       <label class="settings-row stacked">Location
@@ -2859,6 +2871,7 @@
   {{ asset_script('js/agenda-occurrence.js') }}
   {{ asset_script('js/agenda-scroll-core.js') }}
   {{ asset_script('js/agenda-reminders.js') }}
+  {{ asset_script('js/agenda-local-reminders.js') }}
   {{ asset_script('js/agenda-tasks.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}

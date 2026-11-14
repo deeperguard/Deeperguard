@@ -2498,7 +2498,7 @@
     }
     if (scope === 'series') fillRecurrenceEditor(content);
     else fillRecurrenceEditor({ ...content, rrule: content.rrule || '' });
-    fillReminderOffsetsEditor(content);
+    fillReminderOffsetsEditor(existing ? content : { ...content, reminders: calendarDefaultReminders(content.calendarId) });
     updateReminderHint();
     if (webcallEl) webcallEl.value = content.webcall_url || '';
     if (notesEl) {
@@ -2632,27 +2632,43 @@
     };
   }
 
+  /**
+   * Offsets in minutes from the editor (presets plus the custom field). Local reminders work on
+   * every plan; the server channels (Pro) are gated separately in `syncEventReminders`.
+   */
   function readReminderOffsetsFromEditor() {
     const R = global.NotesAgendaReminders;
-    if (!R || (typeof R.hasAgendaRemindersEntitlement === 'function' && !R.hasAgendaRemindersEntitlement())) {
-      return [];
-    }
+    if (!R || typeof R.offsetMinutes !== 'function') return [];
     const picked = [];
     document.querySelectorAll('[data-agenda-reminder-offset]:checked').forEach((el) => {
-      const k = el.getAttribute('data-agenda-reminder-offset');
-      if (k) picked.push(k);
+      picked.push(el.getAttribute('data-agenda-reminder-offset'));
     });
-    return R.normalizeOffsets(picked);
+    const custom = document.getElementById('agenda-edit-reminders-custom');
+    if (custom instanceof HTMLInputElement) picked.push(...custom.value.split(/[\s,;]+/));
+    return R.offsetMinutes(picked);
   }
 
   function fillReminderOffsetsEditor(content) {
-    const offsets = new Set(
-      (global.NotesAgendaReminders && NotesAgendaReminders.normalizeOffsets(content?.reminders)) || [],
-    );
+    const R = global.NotesAgendaReminders;
+    const offsets = (R && typeof R.offsetMinutes === 'function' && R.offsetMinutes(content?.reminders)) || [];
+    const presets = new Set();
     document.querySelectorAll('[data-agenda-reminder-offset]').forEach((el) => {
-      const k = el.getAttribute('data-agenda-reminder-offset');
-      if (el instanceof HTMLInputElement) el.checked = offsets.has(k);
+      const n = Number(el.getAttribute('data-agenda-reminder-offset'));
+      presets.add(n);
+      if (el instanceof HTMLInputElement) el.checked = offsets.includes(n);
     });
+    const custom = document.getElementById('agenda-edit-reminders-custom');
+    if (custom instanceof HTMLInputElement) custom.value = offsets.filter((n) => !presets.has(n)).join(', ');
+    state.remindersTouched = false;
+  }
+
+  /** Default reminders of a calendar (minutes), used for new events. */
+  function calendarDefaultReminders(calendarId) {
+    const Cals = global.NotesAgendaCalendars;
+    const R = global.NotesAgendaReminders;
+    if (!Cals || !R || typeof R.offsetMinutes !== 'function') return [];
+    const cal = Cals.calendarForEvent({ calendarId: calendarId || '' });
+    return R.offsetMinutes(cal && cal.default_reminders);
   }
 
   /** Bring server reminders in line with the stored event (series or single-occurrence change). */
@@ -3185,6 +3201,12 @@
       });
     }
     document.getElementById('agenda-edit-repeat')?.addEventListener('change', updateRecurrenceStatus);
+    document.getElementById('agenda-edit-reminders-wrap')?.addEventListener('change', () => { state.remindersTouched = true; });
+    document.getElementById('agenda-edit-calendar')?.addEventListener('change', (e) => {
+      // A new event follows the chosen calendar's default reminders until the user picks their own.
+      if (state.selectedId || state.remindersTouched) return;
+      fillReminderOffsetsEditor({ reminders: calendarDefaultReminders(e.target.value) });
+    });
     const notesEl = document.getElementById('agenda-edit-notes');
     if (notesEl) {
       notesEl.addEventListener('input', () => {

@@ -73,6 +73,42 @@
     return [...new Set(raw.map((x) => String(x).trim()).filter((k) => k && k !== 'none' && OFFSET_PRESETS[k] != null))];
   }
 
+  /** Longest offset accepted (4 weeks) and most offsets per event (docs/design/calendar-multi.md §2.2). */
+  const MAX_OFFSET_MINUTES = 28 * 24 * 60;
+  const MAX_OFFSETS = 8;
+
+  /**
+   * Offsets in minutes before the start: sorted, unique, whole numbers 0..MAX_OFFSET_MINUTES, at most
+   * MAX_OFFSETS. Accepts minutes (numbers or digit strings) and the older preset keys ('m15' = 15).
+   */
+  function offsetMinutes(raw) {
+    if (!Array.isArray(raw)) return [];
+    const out = new Set();
+    for (const x of raw) {
+      const k = String(x ?? '').trim();
+      let n = null;
+      if (Object.prototype.hasOwnProperty.call(OFFSET_PRESETS, k)) n = OFFSET_PRESETS[k];
+      else if (/^\d{1,6}$/.test(k)) n = Number(k);
+      if (n != null && n >= 0 && n <= MAX_OFFSET_MINUTES) out.add(n);
+    }
+    return [...out].sort((a, b) => a - b).slice(0, MAX_OFFSETS);
+  }
+
+  /** Key used in reminder ids: the preset name when there is one, so ids made before minutes stay the same. */
+  function offsetIdPart(minutes) {
+    const preset = Object.keys(OFFSET_PRESETS).find((k) => OFFSET_PRESETS[k] === minutes);
+    return preset || `min${minutes}`;
+  }
+
+  /** "15 min before", "1 hour before", "At start" (for checkboxes, banners and notifications). */
+  function offsetLabel(minutes) {
+    const n = Number(minutes) || 0;
+    if (n === 0) return 'At start';
+    if (n % 1440 === 0) return n === 1440 ? '1 day before' : `${n / 1440} days before`;
+    if (n % 60 === 0) return n === 60 ? '1 hour before' : `${n / 60} hours before`;
+    return `${n} min before`;
+  }
+
   /**
    * Upcoming occurrences as { start, slotMs }: `start` is when the occurrence really begins
    * (after a per-occurrence edit), `slotMs` identifies its place in the series.
@@ -114,7 +150,7 @@
 
   /** Planned reminder rows without ids (see `planReminders`). Each row carries a stable `_key`. */
   function computePlannedReminders(ev, channels, nowMs) {
-    const offsets = normalizeOffsets(ev.reminders);
+    const offsets = offsetMinutes(ev.reminders);
     if (!offsets.length || !channels || !channels.length) return [];
     const rangeStart = new Date(nowMs);
     const rangeEnd = new Date(nowMs + (PLAN_HORIZON_DAYS + 1) * MS_DAY);
@@ -122,8 +158,9 @@
     const occ = expandOccurrences(ev, rangeStart, rangeEnd).slice(0, MAX_OCCURRENCES_PER_EVENT);
     const out = [];
     for (const o of occ) {
-      for (const key of offsets) {
-        const fireAt = o.start.getTime() - OFFSET_PRESETS[key] * MS_MIN;
+      for (const minutes of offsets) {
+        const key = offsetIdPart(minutes);
+        const fireAt = o.start.getTime() - minutes * MS_MIN;
         if (fireAt <= nowMs || fireAt > horizonMs) continue;
         const label = ev.all_day ? '' : localTimeLabel(o.start);
         for (const channel of channels) {
@@ -376,7 +413,7 @@
     if (!force && Date.now() - last < TOP_UP_INTERVAL_MS) return;
     try { localStorage.setItem(TOP_UP_KEY, String(Date.now())); } catch (e) { /* ignore */ }
     const rows = S.listAgendaEvents().filter((e) => (
-      normalizeOffsets(e.reminders).length || (e.scheduled_reminder_ids || []).length
+      offsetMinutes(e.reminders).length || (e.scheduled_reminder_ids || []).length
     ));
     for (const row of rows) {
       try {
@@ -424,7 +461,7 @@
   function editorHint() {
     if (!hasAgendaRemindersEntitlement()) return '';
     if (!channelPrefs().length) {
-      return 'Reminders are off. Turn on email or push reminders in Calendar settings to receive them.';
+      return 'Email and push reminders are off. Turn them on in Calendar settings if you also want them when Deeperguard is closed.';
     }
     if (serverChannels) {
       const usable = channelPrefs().filter((c) => (c === 'push' ? serverChannels.push : serverChannels.email));
@@ -530,6 +567,10 @@
     GENERIC_PUSH_TITLE,
     genericBody,
     normalizeOffsets,
+    offsetMinutes,
+    offsetLabel,
+    MAX_OFFSET_MINUTES,
+    MAX_OFFSETS,
     computePlannedReminders,
     planReminders,
     reminderIdForKey,
