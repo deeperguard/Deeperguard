@@ -1493,6 +1493,12 @@
         <div class="agenda-calendar-settings-body">
           <p class="settings-hint">Import or export calendar files on this device only. If Agenda looks out of date after an update, close the tab and open Deeperguard again (the offline worker fetches a fresh shell).</p>
           <p class="settings-hint">Import supports .ics from other apps. Events stay encrypted in your vault; only https links are used as join targets.</p>
+          <section class="agenda-calendars" aria-labelledby="agenda-calendars-heading">
+            <h3 id="agenda-calendars-heading" class="section-label">My calendars</h3>
+            <p class="settings-hint muted">Untick a calendar to hide its events. Names and colors stay encrypted in your vault.</p>
+            <div id="agenda-calendars-list"></div>
+            <p id="agenda-calendars-status" class="sr-only" aria-live="polite"></p>
+          </section>
           <fieldset class="agenda-task-prefs">
             <legend class="section-label">Tasks</legend>
             <label class="settings-hint"><input type="checkbox" id="agenda-pref-show-tasks"> Show tasks</label>
@@ -2696,6 +2702,9 @@
       <label class="settings-row stacked">Location
         <input id="agenda-edit-location" type="text" maxlength="500" autocomplete="off">
       </label>
+      <label class="settings-row stacked" id="agenda-edit-calendar-row">Calendar
+        <select id="agenda-edit-calendar"></select>
+      </label>
       <fieldset class="agenda-editor-colors">
         <legend class="muted" id="agenda-edit-colors-legend">Color</legend>
         <div id="agenda-edit-colors" class="agenda-color-swatches" aria-labelledby="agenda-edit-colors-legend"></div>
@@ -2840,6 +2849,7 @@
   {{ asset_script('js/vendor/jsQR.js') }}
   {{ asset_script('js/agenda-ics.js') }}
   {{ asset_script('js/agenda-subscriptions.js') }}
+  {{ asset_script('js/agenda-calendars.js') }}
   {{ asset_script('js/agenda-recurrence.js') }}
   {{ asset_script('js/agenda-occurrence.js') }}
   {{ asset_script('js/agenda-scroll-core.js') }}
