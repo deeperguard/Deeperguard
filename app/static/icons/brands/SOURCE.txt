@@ -1,0 +1,12 @@
+Brand icons for 2FA accounts
+
+Source: SEED SET: monogram badges drawn by this project (CC0-1.0), not the Simple Icons drawings.
+Replace by running scripts/vendor-brand-icons.py --tarball simple-icons-14.0.0.tgz --sha256 <hex>
+Upstream set: Simple Icons, https://simpleicons.org (CC0-1.0), see LICENSE.txt.
+Allow-list: 60 slugs, see scripts/vendor-brand-icons.py.
+
+Trademarks: the logos are trademarks of their respective owners. They are shown only to
+identify the account the user added (nominative use), never to suggest endorsement or
+partnership, and never in our own marketing. On a removal request from a trademark owner
+the slug is dropped from the allow-list in scripts/vendor-brand-icons.py and the account
+falls back to the letter avatar.

@@ -11466,3 +11466,66 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .agenda-cal-delete-choice { display: flex; flex-direction: column; gap: 6px; border: 0; margin: 0; padding: 0; }
 .agenda-cal-delete-choice select { margin-left: 4px; max-width: 12rem; }
 .agenda-cal-form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 2FA account icons: vendored brand sprite or letter avatar (docs/2FA_IMPORT_SPEC.md, section 6). */
+.totp-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--totp-icon-bg, #475569);
+  color: var(--totp-icon-fg, #fff);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+html[data-theme="dark"] .totp-icon { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); }
+.totp-icon-svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: currentColor;
+  shape-rendering: geometricPrecision;
+}
+.totp-icon-letter {
+  font: 700 15px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.totp-icon-field[hidden] { display: none; }
+.totp-icon-field { display: grid; gap: 8px; }
+.totp-icon-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+  max-height: 216px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.totp-icon-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.totp-icon-option:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.totp-icon-option[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.totp-icon-option-label {
+  font-size: 11px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.totp-icon-note, .totp-icon-empty { font-size: 12px; margin: 0; }

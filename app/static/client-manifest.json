@@ -1,11 +1,11 @@
 {
-  "asset_count": 82,
+  "asset_count": 84,
   "assets": {
     "css/app.css": {
-      "bytes": 301450,
-      "sha256": "e39da464d9e8a8848cd720440ae986e28e083fcf13a1d89ec5291aa0ed59467f",
-      "sri": "sha384-POibTPV9ziKDNeGph8Lnhm5iwqEob0SsoXD/QLVM9ABcJP+ZEzkVMegxNsrB7PUI",
-      "url": "/static/css/app.e39da464d9e8a884.css"
+      "bytes": 303172,
+      "sha256": "759e944de5cff35efed2ddc1c58fbbb17038cc02a94a9a14b08076274496cda4",
+      "sri": "sha384-Y1E3ljhW5gT+SWN+YCyi94jesSbtPo0OfyAL1RWuAktsV7uZOxKKv51nudgr5jIp",
+      "url": "/static/css/app.759e944de5cff35e.css"
     },
     "css/marketing.css": {
       "bytes": 54715,
@@ -80,10 +80,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1011539,
-      "sha256": "c0b87944dc4bf10f3bcd9600f2994bc1821bc97a86665684c19d22e26cb4137c",
-      "sri": "sha384-Nqz73wEhyLbCS3XwyS+AnlLJMR4ysDi5zFhAQOJPKxfA6vDg9E4SmD9Tjd6BxXi/",
-      "url": "/static/js/app.c0b87944dc4bf10f.js"
+      "bytes": 1013801,
+      "sha256": "fe9bac9ac51e3cba438bf48c4f21734f4c61b941f87a7a52290223ed8e094f1b",
+      "sri": "sha384-Kytf9iMTvOTqva2dx6oTNQ3LzUoEzhAzyi2HpkTGIeMdOynNlSYHdsUpbIV67u1H",
+      "url": "/static/js/app.fe9bac9ac51e3cba.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -332,10 +332,10 @@
       "url": "/static/js/srp-auth.e306b78c29503b1e.js"
     },
     "js/store.js": {
-      "bytes": 267522,
-      "sha256": "32618eb559a3247f8173533ee4989d51e43a32f8e71c4ebcb4f6426c6125765a",
-      "sri": "sha384-O20uh/4Do/UXndKjXwLIZS0y5RtANNyQpdW42r3d8RRDLxbNY2WhIXyHjOtqjL2O",
-      "url": "/static/js/store.32618eb559a3247f.js"
+      "bytes": 267783,
+      "sha256": "44d808893d9ae5dbc89f6b29333e928e02734ef3b9e696e9e7ad8de6ac87c467",
+      "sri": "sha384-C/DS6RSXO4J4fOtaAqnowad1YX+ssQYBGuTDIw+IkGFxbIcxFKJbBcEZyeEpNgUm",
+      "url": "/static/js/store.44d808893d9ae5db.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -360,6 +360,18 @@
       "sha256": "22874ad2b9f4309c8e5263b0cb1d592c0cb3877a3841b2367d90fd1add407797",
       "sri": "sha384-IExuq/coO6MQvCtxY7pMzdoTxMi1v7PieXCBhUPe9zqlNpmgLi4yXJGQvyLDkE07",
       "url": "/static/js/templates.22874ad2b9f4309c.js"
+    },
+    "js/totp-brands.js": {
+      "bytes": 5413,
+      "sha256": "cb5a701cf8697e52e5a2a5ede3ab3ac725d481a5cc4c4535a3ae19fc344a66ae",
+      "sri": "sha384-MEob5OyVFMHyzKKxxWWgGiaaiOGAFvOGPoyR9+vyIJX9z0m95Fbs5zQZ/j3gw/Jl",
+      "url": "/static/js/totp-brands.cb5a701cf8697e52.js"
+    },
+    "js/totp-icons.js": {
+      "bytes": 6584,
+      "sha256": "325dfe2ce7684ed08b8319e0fbcb8dc3f057110e580265c30802407fe16af269",
+      "sri": "sha384-Jnyg8dmgwbVNhKB4K47GItGf7/rMkI1Oze2YvcVTHynmr2/xO0OLULutkuD2Jb5/",
+      "url": "/static/js/totp-icons.325dfe2ce7684ed0.js"
     },
     "js/totp-import.js": {
       "bytes": 22185,
@@ -495,6 +507,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "bdab4e02afbee62a3bc7846da33003af8336da6892bb113c04df19a41603e9a0",
+  "manifest_sha256": "bc9e8f48c0674311508c99a77243ddcaa7a0011d523814bb581f7fdcf72735a5",
   "version": 1
 }

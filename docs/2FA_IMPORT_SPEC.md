@@ -50,7 +50,7 @@ Read from the code at the time of writing, not assumed.
 | QR from image | `importTotpQrFile` (`app.js:4840`), button `btn-totp-pick-qr` (`app.js:21733`) | `createImageBitmap`, with an `<img>` + object URL as fallback. Also the fallback when there is no camera. |
 | Vendored decoder | `app/static/js/vendor/jsQR.js`, loaded in `app/templates/app.html:2714`, hashed in `app/static/client-manifest.json` | SHA-256 `bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859`. |
 | Search | `filteredTotpEntries` (`app.js:4439`) | Case-insensitive substring over `issuer account host`. |
-| Icon | `kindIconSvg('totp')` (`app.js:3175`, `:4508`) | One generic icon for every account. No per-issuer icons. |
+| Icon | `totp-icons.js`, `totp-brands.js`, `icons/brands/` (section 6) | Implemented: issuer/host matching, letter avatar, picker in the edit dialog, `icon_id` in the vault item. The bundled sprite is still the CC0 **seed set** (monogram badges from `scripts/vendor-brand-icons.py --seed`). Swap it for the Simple Icons drawings by running the script with `--tarball` and `--sha256`. |
 | Tests | `tests/test_totp.js`, `tests/test_vault_totp_host.js`, `tests/test_clipboard_totp_ios.js`, `tests/test_round86_totp_list_narrow.js` | RFC 6238 vectors, note detection, parsing, host binding, copy, layout. |
 
 Not part of this work: `app/totp.py` and `app/static/js/totp-page.js`. Those
