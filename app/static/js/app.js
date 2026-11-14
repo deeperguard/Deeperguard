@@ -1899,6 +1899,9 @@
     if (!ui.preview || ui.preview._externalLinksBound) return;
     ui.preview._externalLinksBound = true;
     ui.preview.addEventListener('click', (event) => {
+      // The code-copy button has its own delegated handler on this same element
+      // (stopPropagation cannot stop it); clicking it must not switch to edit mode.
+      if (event.target?.closest?.('.code-copy-btn')) return;
       const link = event.target?.closest?.('a[href]');
       if (link && ui.preview.contains(link) && link.dataset?.dgNote) {
         event.preventDefault();

@@ -2,10 +2,10 @@
   "asset_count": 86,
   "assets": {
     "css/app.css": {
-      "bytes": 310971,
-      "sha256": "3bc6607ab5b554ce027b7d77b3e38c2894f645296876569abee64fa71d0326c6",
-      "sri": "sha384-DfMC2idtTkM80Tqj/qLfSifQ70RZP/eLxQH6fAiSzr9vQoGiRg1+r59CF516oi9Q",
-      "url": "/static/css/app.3bc6607ab5b554ce.css"
+      "bytes": 312426,
+      "sha256": "a906d63e2adc9d7da9390cbc3db4ba9be7005be8353baac35209bc068c409570",
+      "sri": "sha384-G9jihlfzfOWYR8hfU8StVZB3GEvkcSGbyg+QPjidbHekEPPkzUYnMzEWowmMtAbi",
+      "url": "/static/css/app.a906d63e2adc9d7d.css"
     },
     "css/marketing.css": {
       "bytes": 54715,
@@ -92,16 +92,16 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1011504,
-      "sha256": "002f818852c91a3215618ad6a74e0c26664da1556a00423cedadc6ea5af0adbb",
-      "sri": "sha384-/ID1tgIA9vNw1hYkESLj3J/q8mJdmQnzUTJMd7y/EeWqMV2fulg4XwI8c4T3GGXe",
-      "url": "/static/js/app.002f818852c91a32.js"
+      "bytes": 1011731,
+      "sha256": "0da9f1eebabc4f69918f77ff57169b7b8c80ba64cfdeb3a8496a73b584514dec",
+      "sri": "sha384-1d1HQVC3EvefVMU1yl0npJe4kVMAwtGxXywRmkQtUoBtBKkN3U4dUBCaF1RIlBtp",
+      "url": "/static/js/app.0da9f1eebabc4f69.js"
     },
     "js/auth-pages.js": {
-      "bytes": 41555,
-      "sha256": "341073f0dcd86032e2950c296ba18166b3c3ce6dd2f954c94fa5ec6ab5cffee2",
-      "sri": "sha384-Zk94eHR99lZ1cQbuYDOUTMdqHdsnKCmuFn6zyDZ81wFyeM17j/zQUwjDh7hPMfJa",
-      "url": "/static/js/auth-pages.341073f0dcd86032.js"
+      "bytes": 41606,
+      "sha256": "660f7ceddd1158ecea35458595f4235c8c28ed1f010113a60895ea2a0932e2d4",
+      "sri": "sha384-Qwzb9SLk10CrtYivojw/+j9+6LWIgQaCvwJX6vwdK49BDY3mFmkZh9JSAaeQi/kZ",
+      "url": "/static/js/auth-pages.660f7ceddd1158ec.js"
     },
     "js/backlinks.js": {
       "bytes": 12651,
@@ -519,6 +519,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "60c9eb7959e1a4d84dac8017bce6e9b816cefcadab723a09130e30ffb5884649",
+  "manifest_sha256": "997670ad61dcb7dd9a1e8413909101777b6b7f487ec5132a73978438065ed3d5",
   "version": 1
 }

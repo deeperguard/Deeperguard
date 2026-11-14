@@ -12,7 +12,7 @@
       <h1>Deeperguard</h1>
       {% include 'partials/zk-plain.html' %}
       {% include 'partials/device-phrase-banner.html' %}
-      <p class="auth-hint">Sign in with your account password. The vault unlocks with that same password, unless you changed the vault password in Settings. They start as one password. We cannot recover it.</p>
+      <p class="auth-hint">Sign in with your account password. It also unlocks your vault, unless you set a separate vault password in Settings. We cannot recover it if you forget it.</p>
     </div>
     {% if signed_in_email %}
     <div class="signed-in-notice" role="status">
@@ -25,19 +25,19 @@
     {% endif %}
     <form id="login-form" class="stack" novalidate>
       <label>Email
-        <input type="email" name="email" autocomplete="username" required aria-required="true">
+        <input type="email" name="email" autocomplete="username" required aria-required="true" aria-describedby="login-error">
       </label>
       <div id="login-password-block">
         <label>Account password
-          <input id="login-password" type="password" autocomplete="current-password" required aria-required="true">
+          <input id="login-password" type="password" autocomplete="current-password" required aria-required="true" aria-describedby="login-password-hint login-error">
         </label>
-        <p class="hint">This password signs you in. It also decrypts notes on this device until you change the vault password in Settings. It never leaves your browser.</p>
+        <p id="login-password-hint" class="hint">The password you chose when you created your account.</p>
       </div>
       <div id="login-recovery-block" class="stack" hidden>
         <label>Recovery code
-          <input id="login-recovery-code" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" inputmode="text" placeholder="XXXX-XXXX-XXXX">
+          <input id="login-recovery-code" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" inputmode="text" placeholder="XXXX-XXXX-XXXX" aria-describedby="login-recovery-hint login-error">
         </label>
-        <p class="hint">One-time recovery codes work only after their waiting period ends. They sign you into your account — you still unlock the vault with your master password.</p>
+        <p id="login-recovery-hint" class="hint">Each recovery code works once, and only after its waiting period ends. It signs you in; you still need your vault password to unlock your notes.</p>
         <button type="button" id="login-recovery-submit" class="btn subtle block">Sign in with recovery code</button>
       </div>
       <p id="login-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
@@ -46,10 +46,10 @@
         <ul id="session-cap-list" class="session-cap-list"></ul>
         <p id="session-cap-status" class="auth-status muted" hidden></p>
       </div>
-      <p id="login-status" class="auth-status muted" hidden></p>
+      <p id="login-status" class="auth-status muted" role="status" aria-live="polite" hidden></p>
       <button type="button" id="login-submit" class="btn primary block">Sign in</button>
       <button type="button" class="btn subtle block" id="webauthn-login">Sign in with passkey</button>
-      <p class="hint center">Passkeys sign you into your account only — vault unlock still needs your master password on this device.</p>
+      <p class="hint center">A passkey signs you in. Unlocking your notes still needs your vault password.</p>
       <p class="hint center"><button type="button" class="btn link" id="login-toggle-recovery" hidden>Use a recovery code</button></p>
     </form>
     {% with auth_guard_form_id='login-form', auth_guard_submit_id='login-submit', auth_guard_fn='__notesSubmitLogin', auth_guard_queued='__notesLoginQueued' %}
