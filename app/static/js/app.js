@@ -1163,6 +1163,7 @@
   }
 
   let currentId = null;
+  let backlinksPanel = null; // NotesBacklinks controller, set at init
   let listSelectionId = null;
   let currentFilter = 'all';
   let filterBeforeFiles = 'all';
@@ -14243,6 +14244,7 @@
         if (currentId !== id) return;
         renderAttachments(id);
         renderHistory(note);
+        renderBacklinks(id);
         if (typeof NotesAiChat !== 'undefined') NotesAiChat.onNoteChanged(id);
       };
       if (typeof requestIdleCallback === 'function') {
@@ -20339,6 +20341,30 @@
       if (query) syncFindHighlights(query);
     }
   });
+  // Backlinks panel (spec section 4): index lives in memory only.
+  backlinksPanel = window.NotesBacklinks
+    ? NotesBacklinks.connect({
+      store: NotesStore,
+      titleOf: (item) => NotesSearch.effectiveNoteTitle(item),
+      onChange: (touched) => {
+        if (!currentId) {
+          const el = document.getElementById('backlinks');
+          if (el && !touched) el.textContent = '';
+          return;
+        }
+        if (!touched || touched.has(currentId)) {
+          renderBacklinks(currentId);
+        }
+      },
+    })
+    : null;
+  function renderBacklinks(id) {
+    const el = document.getElementById('backlinks');
+    if (!el || !backlinksPanel) return;
+    if (!id) { el.textContent = ''; return; }
+    backlinksPanel.ensureBuilt();
+    backlinksPanel.render(el, id, (uuid) => { if (NotesStore.get(uuid)) openNote(uuid); });
+  }
   if (window.NotesLinks) {
     NotesLinks.attachPicker({
       textarea: ui.body,

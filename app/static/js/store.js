@@ -859,6 +859,8 @@ const NotesStore = (() => {
     attachmentDecryptInFlight = null;
     lastDerivedKdf = null;
     state.items.clear();
+    // The backlink index is derived from plaintext: it goes with the items.
+    if (typeof NotesBacklinks !== 'undefined' && NotesBacklinks.clear) NotesBacklinks.clear();
     state.blocked.clear();
     state.undecryptable.clear();
     state.refillAttempted = false;
@@ -1399,6 +1401,19 @@ const NotesStore = (() => {
 
   function searchFolderMap() {
     return new Map(listFolders().map((folder) => [folder.uuid, folder]));
+  }
+
+  // Item-change listeners (backlink index, spec section 4.3). `null` means
+  // "rebuild everything"; listeners only receive uuids, never content.
+  const itemChangedListeners = new Set();
+  function onItemChanged(fn) {
+    itemChangedListeners.add(fn);
+    return () => itemChangedListeners.delete(fn);
+  }
+  function fireItemChanged(uuid) {
+    for (const fn of itemChangedListeners) {
+      try { fn(uuid); } catch (_) { /* ignore */ }
+    }
   }
 
   function rebuildSearchIndex() {
@@ -2278,6 +2293,7 @@ const NotesStore = (() => {
     // before the first search. This does not delete attachment bytes.
     for (const note of listNotes()) refreshNoteSearchText(note.uuid);
     rebuildSearchIndex();
+    fireItemChanged(null);
   }
 
   function scheduleUnlockMaintenance() {
@@ -3226,6 +3242,7 @@ const NotesStore = (() => {
       state.items.delete(uuid);
       try { await NotesIDB.deleteItem(uuid); } catch (err) { /* ignore */ }
       if (typeof NotesSearch !== 'undefined' && NotesSearch.removeFromIndex) NotesSearch.removeFromIndex(uuid);
+      fireItemChanged(uuid);
       if (parentNoteId) refreshNoteSearchText(parentNoteId);
       logSync('conflict-adopt', { uuid, deleted: true });
       return;
@@ -3237,6 +3254,7 @@ const NotesStore = (() => {
     await persistLocal(uuid, remote);
     if (remote.content?.type === 'note') {
       updateSearchIndexFor(uuid);
+      fireItemChanged(uuid);
       if (onNoteIngested) {
         try {
           onNoteIngested(uuid, {
@@ -3751,6 +3769,7 @@ const NotesStore = (() => {
               if (typeof NotesSearch !== 'undefined' && NotesSearch.removeFromIndex) {
                 NotesSearch.removeFromIndex(row.item_uuid);
               }
+              fireItemChanged(row.item_uuid);
               // A file deleted on another device leaves this note; its copied
               // scan text and filename list must not keep matching searches.
               if (parentNoteId) refreshNoteSearchText(parentNoteId);
@@ -3773,6 +3792,7 @@ const NotesStore = (() => {
                 protectionPushNeeded = true;
                 await persistLocal(row.item_uuid, next);
                 updateSearchIndexFor(row.item_uuid);
+                fireItemChanged(row.item_uuid);
                 applied = true;
                 protectionMerged = true;
               }
@@ -3835,6 +3855,8 @@ const NotesStore = (() => {
             }
             if (remote.content?.type === 'note') {
               if (!progress?.deferSearchIndex) updateSearchIndexFor(row.item_uuid);
+              // Backlinks follow every incoming note, also during the first pull.
+              fireItemChanged(row.item_uuid);
               protectionMerged = !!remote.content.locked !== prevLocked
                 || !!remote.content.prevent_edit !== prevPrevent;
             }
@@ -4179,6 +4201,7 @@ const NotesStore = (() => {
       // that the duplicate plan is settled, rather than per pulled row.
       for (const note of listNotes()) refreshNoteSearchText(note.uuid);
       rebuildSearchIndex();
+      fireItemChanged(null);
     }
     return {
       ...lastData,
@@ -5193,7 +5216,10 @@ const NotesStore = (() => {
         scheduleVaultHeadRefresh();
       }
     }
-    if (content.type === 'note') updateSearchIndexFor(uuid);
+    if (content.type === 'note') {
+      updateSearchIndexFor(uuid);
+      fireItemChanged(uuid);
+    }
     persistLocal(uuid, item);
   }
 
@@ -5964,6 +5990,7 @@ const NotesStore = (() => {
     }
     if (item.content?.type === 'attachment') dropSearchIndexEntry(uuid);
     discardItem(uuid);
+    fireItemChanged(uuid);
     state.blocked.delete(uuid);
     invalidateShadowDuplicates();
     try { NotesIDB.deleteItem(uuid); } catch (_) { /* ignore */ }
@@ -6001,6 +6028,7 @@ const NotesStore = (() => {
       NotesFreshness.noteAccepted(uuid, null, '', { deleted: true });
       scheduleVaultHeadRefresh();
     }
+    fireItemChanged(uuid);
     persistLocal(uuid, item);
     schedulePush();
     return true;
@@ -6754,6 +6782,7 @@ const NotesStore = (() => {
     setSyncStatusCallback,
     setUnlockProgressCallback,
     setNoteIngestedCallback,
+    onItemChanged,
     setVaultPullCallbacks,
     emitSync,
     logSync,
