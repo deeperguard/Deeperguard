@@ -143,6 +143,10 @@ const NotesSettingsSync = (() => {
       return SETTINGS_ALLOWLIST[key].def;
     }
 
+    function hasSetting(key) {
+      return loaded && isAllowed(key) && hasOwn(keys, key);
+    }
+
     // Call after unlock, and again after a sync pull (merges per key).
     async function load() {
       if (!store.isUnlocked()) return false; // nothing is read before unlock
@@ -212,7 +216,7 @@ const NotesSettingsSync = (() => {
       }
     }
 
-    return { getSetting, setSetting, load, flush, lock, itemUuid };
+    return { getSetting, hasSetting, setSetting, load, flush, lock, itemUuid };
   }
 
   return {

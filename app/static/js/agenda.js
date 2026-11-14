@@ -1753,7 +1753,7 @@
         if (['day', '3day', 'week'].includes(state.view)) saveTimeGridScrollSnapshot();
         state.view = next;
         closePhoneMenu();
-        try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
+        global.NotesUiSettings?.set?.('agendaView', state.view);
         render();
       });
     });
@@ -1815,7 +1815,7 @@
         }
         state.anchor = new Date(t);
         state.view = 'day';
-        try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
+        global.NotesUiSettings?.set?.('agendaView', state.view);
         render();
       });
     });
@@ -3390,7 +3390,7 @@
       const next = action.slice(5);
       if (['day', '3day', 'week'].includes(state.view)) saveTimeGridScrollSnapshot();
       state.view = next;
-      try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
+      global.NotesUiSettings?.set?.('agendaView', state.view);
       render();
     }
   }
@@ -3431,6 +3431,12 @@
     });
   }
 
+  // Saved view from the encrypted settings record (only readable once unlocked).
+  function syncedAgendaView() {
+    const v = global.NotesUiSettings?.get?.('agendaView');
+    return typeof v === 'string' && /^(day|3day|week|month|agenda)$/.test(v) ? v : '';
+  }
+
   function init() {
     rootEl = document.getElementById('agenda-root');
     if (!rootEl) return;
@@ -3449,11 +3455,7 @@
         if (fl.length) importIcsFiles(fl).catch((err) => toastMsg(err.message || 'ICS import failed', true));
       });
     }
-    try {
-      const saved = sessionStorage.getItem('notes_agenda_view');
-      if (saved && /^(day|3day|week|month|agenda)$/.test(saved)) state.view = saved;
-      else state.view = defaultAgendaView();
-    } catch (err) { /* ignore */ }
+    state.view = syncedAgendaView() || defaultAgendaView();
     state.monthPickDay = startOfDay(new Date()).getTime();
     if (typeof global.matchMedia === 'function') {
       const mq = global.matchMedia('(max-width: 768px)');
@@ -3472,7 +3474,8 @@
   }
 
   function onTabShown() {
-    try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
+    const synced = syncedAgendaView();
+    if (synced) state.view = synced;
     render();
     if (minuteClock) minuteClock.tick();
     global.NotesAgendaReminders?.onAgendaShown?.();

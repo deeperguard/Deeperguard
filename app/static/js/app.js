@@ -382,7 +382,85 @@
     applyPrefs();
     renderNotes();
     pushGlobalPrefs();
+    saveUiSettingsFromPrefs();
   }
+
+  // Encrypted allowlisted settings record (docs/SETTINGS_SPEC.md, settings-sync.js).
+  // Only readable while the vault is unlocked; dropped as soon as it is not.
+  let uiSettings = null;
+  let uiSettingsReady = false;
+
+  function uiSettingsInstance() {
+    if (!window.NotesStore?.isUnlocked?.()) {
+      uiSettings = null;
+      uiSettingsReady = false;
+      return null;
+    }
+    if (!uiSettings && window.NotesSettingsSync) {
+      uiSettings = NotesSettingsSync.create({
+        store: NotesStore,
+        crypto: NotesCrypto,
+        getKey: () => NotesStore.getVaultKey(),
+      });
+    }
+    return uiSettings;
+  }
+
+  // Resolves once the record is decrypted (or there is nothing to read).
+  async function loadUiSettings() {
+    const inst = uiSettingsInstance();
+    if (!inst) return false;
+    try {
+      uiSettingsReady = await inst.load();
+    } catch (err) {
+      uiSettingsReady = false;
+    }
+    return uiSettingsReady;
+  }
+
+  function getUiSetting(key) {
+    const inst = uiSettingsInstance();
+    return inst && uiSettingsReady ? inst.getSetting(key) : undefined;
+  }
+
+  function setUiSetting(key, value) {
+    const inst = uiSettingsInstance();
+    if (!inst || !uiSettingsReady) return false;
+    if (JSON.stringify(inst.getSetting(key)) === JSON.stringify(value)) return false;
+    if (!inst.setSetting(key, value)) return false;
+    inst.flush().catch(() => {});
+    return true;
+  }
+
+  // Keys a user changed explicitly are stored; keys the record already holds
+  // win over the legacy item (called after every legacy pull).
+  function applyUiSettingsToPrefs() {
+    if (!uiSettingsReady || !uiSettings) return;
+    let changed = false;
+    for (const key of Object.keys(NotesSettingsSync.SETTINGS_ALLOWLIST)) {
+      if (key === 'agendaView' || !(key in prefs)) continue;
+      const inst = uiSettings;
+      const value = inst.getSetting(key);
+      if (value !== undefined && value !== null && inst.hasSetting?.(key) && prefs[key] !== value) {
+        prefs[key] = value;
+        changed = true;
+      }
+    }
+    if (changed) {
+      try { localStorage.setItem('deeperguard-prefs', localPrefsJson()); } catch (err) { /* ignore */ }
+      applyPrefs();
+    }
+  }
+
+  function saveUiSettingsFromPrefs() {
+    if (!uiSettingsReady) return;
+    for (const key of Object.keys(NotesSettingsSync.SETTINGS_ALLOWLIST)) {
+      if (key === 'agendaView' || !(key in prefs)) continue;
+      setUiSetting(key, prefs[key]);
+    }
+  }
+
+  window.NotesUiSettings = { get: getUiSetting, set: setUiSetting, load: loadUiSettings };
 
   const LIST_PANE_MIN = 200;
   const LIST_PANE_DEFAULT = 280;
@@ -4268,6 +4346,9 @@
     try { window.NotesCloudBackup?.clearPlaintextDropboxTokensFromLocal?.(); } catch (err) { /* ignore */ }
     globalPrefsAppliedAt = 0;
     globalPrefsHydrated = false;
+    try { uiSettings?.lock?.().catch(() => {}); } catch (err) { /* ignore */ }
+    uiSettings = null;
+    uiSettingsReady = false;
     NotesStore.lock();
     sessionExpiredAlertShown = false;
     try { sessionStorage.removeItem('notes_totp_resync'); } catch (err) { /* ignore */ }
@@ -4513,16 +4594,21 @@
       resetNoteTransientChrome();
       closeDocPreview();
       if (typeof globalThis.NotesAgenda !== 'undefined') {
-        if (!agendaUiInited) {
-          NotesAgenda.init();
-          agendaUiInited = true;
-        } else {
-          try {
-            NotesAgenda.onTabShown();
-          } catch (err) {
-            /* ignore */
+        // Apply the synced view before the first paint (no visible jump).
+        const showAgenda = () => {
+          if (!agendaUiInited) {
+            NotesAgenda.init();
+            agendaUiInited = true;
+          } else {
+            try {
+              NotesAgenda.onTabShown();
+            } catch (err) {
+              /* ignore */
+            }
           }
-        }
+        };
+        if (uiSettingsReady || !NotesStore.isUnlocked()) showAgenda();
+        else loadUiSettings().then(showAgenda, showAgenda);
       }
     } else {
       stopTotpClock();
@@ -6983,6 +7069,8 @@
       }
     }
     pullGlobalPrefs({ render: false });
+    await loadUiSettings();
+    applyUiSettingsToPrefs();
     renderTags();
     renderNotes();
     applyPrefs();
@@ -25199,6 +25287,7 @@
           if (synced === false) return false;
           markNetworkReachable();
           pullGlobalPrefs();
+          loadUiSettings().then(applyUiSettingsToPrefs).catch(() => {});
           const noteCount = listedActiveNoteCount();
           if (noteCount > 0) clearVaultSyncError();
           vaultDownloadStalled = false;

@@ -7023,6 +7023,8 @@ const NotesStore = (() => {
     restoreDirtyQueue,
     rememberLastSync,
     hasKey: isUnlocked,
+    // Vault key for the encrypted settings record (null while locked).
+    getVaultKey: () => state.cryptoKey,
     listNotes,
     countTotpItems,
     listTotpAccounts,
