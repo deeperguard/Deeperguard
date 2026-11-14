@@ -274,6 +274,19 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("sync agenda safety ok", proc.stdout)
 
+    def test_sync_agenda_subscriptions_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_sync_agenda_subscriptions.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("sync agenda subscriptions ok", proc.stdout)
+        self.assertNotIn("tok-9f2c1e7a55b04d1e", proc.stdout + proc.stderr)
+
     def test_agenda_tz_contract(self):
         proc = subprocess.run(
             ["node", str(REPO / "tests" / "test_agenda_tz.js")],
