@@ -326,6 +326,7 @@
     editorReturnFocusOccurrenceMs: 0,
     seriesOverrideResetConfirmed: false,
     editorColor: '',
+    editorEndTouched: false,
   };
 
   let rootEl = null;
@@ -1936,6 +1937,26 @@
     });
   }
 
+  /**
+   * A new timed event's end follows its start (start + 1 h, same date) until the user edits
+   * the end. Setting .value from code fires no input/change event, so only real user input
+   * sets editorEndTouched.
+   */
+  function syncEndToStart() {
+    const Tz = tzApi();
+    const startEl = document.getElementById('agenda-edit-start');
+    const endEl = document.getElementById('agenda-edit-end');
+    const allDayEl = document.getElementById('agenda-edit-allday');
+    if (!Tz || typeof Tz.followEndInput !== 'function' || !startEl || !endEl) return;
+    endEl.value = Tz.followEndInput({
+      isNew: !state.selectedId,
+      allDay: !!(allDayEl && allDayEl.checked),
+      endTouched: state.editorEndTouched,
+      start: startEl.value,
+      end: endEl.value,
+    });
+  }
+
   function repeatStatusText(kind) {
     const map = {
       daily: 'Repeats every day.',
@@ -2483,6 +2504,8 @@
       if (startEl) startEl.value = zone ? Tz.toLocalInput(s.getTime(), zone) : toDatetimeLocal(s);
       if (endEl) endEl.value = zone ? Tz.toLocalInput(e.getTime(), zone) : toDatetimeLocal(e);
     }
+    state.editorEndTouched = false;
+    syncEndToStart();
     {
       const Tz = tzApi();
       const tzEl = document.getElementById('agenda-edit-tz');
@@ -3198,8 +3221,13 @@
     if (ad) {
       ad.addEventListener('change', () => {
         syncEditorDatetimeMode(!!ad.checked);
+        syncEndToStart();
       });
     }
+    ['input', 'change'].forEach((type) => {
+      document.getElementById('agenda-edit-start')?.addEventListener(type, syncEndToStart);
+      document.getElementById('agenda-edit-end')?.addEventListener(type, () => { state.editorEndTouched = true; });
+    });
     document.getElementById('agenda-edit-repeat')?.addEventListener('change', updateRecurrenceStatus);
     document.getElementById('agenda-edit-reminders-wrap')?.addEventListener('change', () => { state.remindersTouched = true; });
     document.getElementById('agenda-edit-calendar')?.addEventListener('change', (e) => {
@@ -3499,6 +3527,7 @@
     _renderMonthGrid: renderMonthGrid,
     _renderTaskStrip: renderTaskStrip,
     expandEventOccurrences,
+    _syncEndToStart: syncEndToStart,
     rangeForView: () => rangeForView(),
     _state: state,
   };

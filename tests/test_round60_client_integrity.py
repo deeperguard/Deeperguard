@@ -291,6 +291,18 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("agenda tz ok", proc.stdout)
 
+    def test_agenda_default_end_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_agenda_default_end.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("agenda default end ok", proc.stdout)
+
     def test_agenda_calendars_contract(self):
         proc = subprocess.run(
             ["node", str(REPO / "tests" / "test_agenda_calendars.js")],
