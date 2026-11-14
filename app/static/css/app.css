@@ -4018,6 +4018,13 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 .filter-section:not([open]) .section-chevron-open { display: none; }
 .tag-section:not([open]) .section-chevron-closed,
 .filter-section:not([open]) .section-chevron-closed { display: inline; }
+/* Folder vs tag explanation (sidebar + dialogs); --muted is theme-aware. */
+.nav-explain {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
 .tag-section-actions {
   display: flex;
   flex-wrap: wrap;

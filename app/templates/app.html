@@ -851,12 +851,13 @@
       </div>
       <div class="nav-browse" id="nav-browse">
       <details class="tag-section" id="tag-section" open>
-        <summary class="section-label"><span class="sn-tags">Tags</span><span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
+        <summary class="section-label"><span title="Tag: a note can have several tags — handy for grouping across folders." data-explain="tag" data-explain-attr="title" class="sn-tags">Tags</span><span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
         <div class="nav-browse-panel">
+        <p class="muted nav-explain" id="tag-section-explain" data-explain="tag">Tag: a note can have several tags — handy for grouping across folders.</p>
         <div id="tag-list" class="tag-list"></div>
         <div id="tag-color-bar" class="tag-color-bar" hidden></div>
         <div class="tag-composer" id="tag-composer" hidden>
-          <input id="tag-name-input" type="text" maxlength="80" placeholder="Tag name" autocomplete="off">
+          <input id="tag-name-input" type="text" maxlength="80" placeholder="Tag name" autocomplete="off" aria-describedby="tag-section-explain">
           <div class="tag-composer-actions">
             <button type="button" class="btn ghost sm" id="tag-create-cancel">Cancel</button>
             <button type="button" class="btn primary sm" id="tag-create-confirm">Create</button>
@@ -869,11 +870,12 @@
         </div>
       </details>
       <details class="tag-section folder-section" id="folder-section" open>
-        <summary class="section-label"><span>Folders</span><span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
+        <summary class="section-label"><span title="Folder: each note sits in exactly one folder." data-explain="folder" data-explain-attr="title">Folders</span><span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
         <div class="nav-browse-panel">
+        <p class="muted nav-explain" id="folder-section-explain" data-explain="folder">Folder: each note sits in exactly one folder.</p>
         <div id="folder-list" class="folder-list"></div>
         <div class="tag-composer" id="folder-composer" hidden>
-          <input id="folder-name-input" type="text" maxlength="80" placeholder="Folder name" autocomplete="off">
+          <input id="folder-name-input" type="text" maxlength="80" placeholder="Folder name" autocomplete="off" aria-describedby="folder-section-explain">
           <div class="tag-composer-actions">
             <button type="button" class="btn ghost sm" id="folder-create-cancel">Cancel</button>
             <button type="button" class="btn primary sm" id="folder-create-confirm">Create</button>
@@ -2550,8 +2552,9 @@
   <input id="totp-import-file" class="sr-file" type="file" accept=".json,.2fas,.txt,text/plain,application/json" tabindex="-1" aria-hidden="true">
   <div id="doc-backdrop" class="settings-backdrop" hidden></div>
   <div id="tag-manage-backdrop" class="settings-backdrop" hidden></div>
-  <div id="tag-manage-dialog" class="confirm-dialog tag-manage-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="tag-manage-title">
+  <div id="tag-manage-dialog" class="confirm-dialog tag-manage-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="tag-manage-title" aria-describedby="tag-manage-explain">
     <h2 id="tag-manage-title">Manage tags</h2>
+    <p class="muted nav-explain" id="tag-manage-explain" data-explain="tag">Tag: a note can have several tags — handy for grouping across folders.</p>
     <form id="tag-manage-create" class="tag-manage-create">
       <input id="tag-manage-name" type="text" maxlength="80" placeholder="New tag" autocomplete="off" aria-label="New tag name">
       <button type="button" class="btn primary sm" id="tag-manage-add">Create</button>
@@ -2757,8 +2760,9 @@
       <button type="button" class="btn primary" id="hero-guide-close">Got it</button>
     </div>
   </div>
-  <div id="folder-prompt" class="confirm-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="folder-prompt-title">
+  <div id="folder-prompt" class="confirm-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="folder-prompt-title" aria-describedby="folder-prompt-explain">
     <h2 id="folder-prompt-title">New folder</h2>
+    <p class="muted nav-explain" id="folder-prompt-explain" data-explain="folder">Folder: each note sits in exactly one folder.</p>
     <label class="settings-row stacked">Folder name
       <input id="folder-prompt-input" type="text" autocomplete="off" maxlength="80">
     </label>
