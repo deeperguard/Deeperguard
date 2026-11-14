@@ -23379,6 +23379,25 @@
     }
   });
 
+  document.getElementById('btn-agenda-backup-restore')?.addEventListener('click', async () => {
+    const info = document.getElementById('agenda-backup-info');
+    try {
+      const list = await NotesStore.listAgendaBackups();
+      if (!list.length) {
+        if (info) info.textContent = 'No local agenda back-up yet.';
+        return;
+      }
+      const when = new Date(list[0].at).toLocaleString();
+      if (!window.confirm(`Restore the agenda back-up from ${when}? Your current agenda is backed up first.`)) return;
+      const ok = await NotesStore.restoreAgendaBackup(list[0].index);
+      const msg = ok ? 'Agenda back-up restored.' : 'Could not restore the agenda back-up.';
+      if (info) info.textContent = msg;
+      toast(msg, !ok);
+    } catch (err) {
+      toast('Could not restore the agenda back-up.', true);
+    }
+  });
+
   document.getElementById('btn-save-backup').addEventListener('click', async () => {
     const email = document.getElementById('backup-email').value;
     const enabled = document.getElementById('backup-enabled').checked;

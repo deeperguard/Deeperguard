@@ -1867,6 +1867,59 @@ const NotesStore = (() => {
   }
 
   /**
+   * Local encrypted safety copies of the agenda pack (last few versions), taken before every
+   * sync merge. Same vault key (AES-256-GCM); stored in IndexedDB meta, never sent to the server.
+   */
+  const AGENDA_BACKUP_KEEP = 3;
+  const AGENDA_BACKUP_META = 'agenda_backups';
+
+  async function readAgendaBackupRows() {
+    try {
+      const rows = await NotesIDB.getMeta(AGENDA_BACKUP_META);
+      return Array.isArray(rows) ? rows : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  async function backupAgendaData(content) {
+    try {
+      if (!state.cryptoKey || !content || content.type !== 'agenda_pack') return false;
+      const n = Object.keys(content.events || {}).length;
+      const ct = await NotesCrypto.encryptObject(state.cryptoKey, content);
+      const rows = await readAgendaBackupRows();
+      rows.push({ at: new Date().toISOString(), events: n, ct });
+      await NotesIDB.putMeta(AGENDA_BACKUP_META, rows.slice(-AGENDA_BACKUP_KEEP));
+      return true;
+    } catch (err) {
+      console.warn('agenda backup failed');
+      return false;
+    }
+  }
+
+  /** Newest first; metadata only (no titles or times). */
+  async function listAgendaBackups() {
+    const rows = await readAgendaBackupRows();
+    return rows.map((r, index) => ({ index, at: r.at, events: r.events || 0 })).reverse();
+  }
+
+  /** Put a backup back as the local agenda (default: the newest) and queue it for sync. */
+  async function restoreAgendaBackup(index) {
+    if (!state.cryptoKey) throw lockedError();
+    const rows = await readAgendaBackupRows();
+    const row = rows[index == null ? rows.length - 1 : index];
+    if (!row) return false;
+    const restored = await NotesCrypto.decryptObject(state.cryptoKey, row.ct);
+    if (!restored || restored.type !== 'agenda_pack') return false;
+    const current = agendaPackRecord();
+    if (current) await backupAgendaData(current.content);
+    const now = new Date().toISOString();
+    upsert(AGENDA_PACK_UUID, { ...restored, updated_at: now });
+    fireItemChanged(AGENDA_PACK_UUID);
+    return true;
+  }
+
+  /**
    * Calendars (docs/design/calendar-multi.md §2.1, option A): a `calendars` map inside the
    * encrypted agenda_pack, merged per entry like subscriptions. An event without `calendarId`
    * (or pointing at an unknown or deleted calendar) belongs to the default calendar. The
@@ -2481,11 +2534,8 @@ const NotesStore = (() => {
     await migratePlainAttachments();
     await migrateLegacyBlobs();
     repairStoredAttachmentCopies();
-    try {
-      ensureAgendaPack();
-    } catch (err) {
-      /* unlocked after maintenance; ignore */
-    }
+    // No empty agenda pack here: a device that has not pulled yet must not push a
+    // blank pack over the server copy. Reads work without a pack; the first edit creates it.
     // Rewrite copied scan text from the attachments the note list shows
     // before the first search. This does not delete attachment bytes.
     for (const note of listNotes()) refreshNoteSearchText(note.uuid);
@@ -2570,7 +2620,9 @@ const NotesStore = (() => {
     const uuid = String(row?.uuid || row?.item_uuid || '').trim();
     if (!uuid) return null;
     const updatedAt = Number(row.updated_at) || Date.now() / 1000;
-    const baseRev = row.rev != null && row.rev !== '' ? { base_rev: Number(row.rev) || 0 } : {};
+    const baseRev = row.rev != null && row.rev !== ''
+      ? { base_rev: Number(row.rev) || 0 }
+      : (uuid === AGENDA_PACK_UUID ? { base_rev: 0 } : {});
     if (row.deleted) {
       const ciphertext = String(row.ciphertext || '');
       if (!ciphertext) return null;
@@ -3538,7 +3590,9 @@ const NotesStore = (() => {
     }
     if (type === 'agenda_pack' && remote.content?.type === 'agenda_pack') {
       // Both devices changed the calendar: keep every event change, not the newest pack.
+      await backupAgendaData(local.content);
       local.content = mergeAgendaPacks(local.content, remote.content);
+      local.sync_push_wrap = null; // merged content: never re-send the cached pre-merge ciphertext
       await persistLocal(uuid, local);
       logSync('conflict-agenda-merge', { uuid, rev: serverRev });
       return winLocal();
@@ -3683,6 +3737,10 @@ const NotesStore = (() => {
           // The revision this write builds on; the server reports a conflict
           // instead of picking a winner by clock when it has moved on.
           if (item.rev != null && Number.isFinite(Number(item.rev))) row.base_rev = Number(item.rev);
+          // Agenda pack without a known server revision: "I know no server version", so an
+          // existing server pack answers with a conflict (merged per event) instead of
+          // being overwritten by clock (docs/AGENDA_SYNC_BUG.md).
+          else if (uuid === AGENDA_PACK_UUID) row.base_rev = 0;
           rowsByUuid.set(uuid, row);
           payload.push(row);
         }
@@ -3975,6 +4033,23 @@ const NotesStore = (() => {
               }
               applied = true;
             }
+          } else if (
+            local && !local.deleted
+            && local.content?.type === 'agenda_pack' && remote.content?.type === 'agenda_pack'
+            && (state.dirty.has(row.item_uuid) || !(Number(local.rev) > 0))
+          ) {
+            // Never pick a whole agenda pack by clock: merge per event, keep both sides.
+            await backupAgendaData(local.content);
+            const merged = mergeAgendaPacks(local.content, remote.content);
+            const next = {
+              ...local, content: merged, rev: Number(row.rev) || local.rev, sync_push_wrap: null,
+            };
+            state.items.set(row.item_uuid, next);
+            state.dirty.add(row.item_uuid);
+            await persistLocal(row.item_uuid, next);
+            schedulePush();
+            fireItemChanged(row.item_uuid);
+            applied = true;
           } else if (localWins) {
             if (local?.content?.type === 'note' && remote.content?.type === 'note') {
               const { changed, content } = mergeCrossDeviceProtection(local.content, remote.content);
@@ -4037,6 +4112,9 @@ const NotesStore = (() => {
                 state.dirty.add(row.item_uuid);
                 schedulePush();
               }
+            }
+            if (local?.content?.type === 'agenda_pack' && remote.content?.type === 'agenda_pack') {
+              await backupAgendaData(local.content);
             }
             if (remote.content?.type === 'note') attachLiveIds(remote.content, row.item_uuid);
             state.items.set(row.item_uuid, remote);
@@ -7067,6 +7145,9 @@ const NotesStore = (() => {
     upsertAgendaTask,
     removeAgendaTask,
     upsertAgendaEvent,
+    listAgendaBackups,
+    restoreAgendaBackup,
+    backupAgendaData,
     removeAgendaEvent,
     mergeAgendaPacks,
     DEFAULT_CALENDAR_ID,

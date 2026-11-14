@@ -4,11 +4,8 @@
 // fake server that follows the push rules of app/db.py (_plan_sync_item: rev,
 // base_rev -> conflict, no base_rev -> last-writer-wins by updated_at -> stale).
 //
-//   node tests/test_sync_agenda_two_devices.js            report; exit 0 while the
-//                                                          known bug reproduces, exit 1
-//                                                          on "UNEXPECTED PASS" or a crash
-//   AGENDA_SYNC_STRICT=1 node tests/...two_devices.js     exit 1 on any data loss
-//                                                          (expected failure on main)
+//   node tests/test_sync_agenda_two_devices.js            exit 0 and "agenda two devices ok"
+//                                                          when nothing is lost, else exit 1
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
@@ -121,6 +118,15 @@ async function runDevice(stateFile, serverFile, action) {
     });
     NotesStore.addAgendaSubscription({ name: 'Team', url: FEED_URL });
   }
+  if (action === 'delete-dentist') {
+    const ev = NotesStore.listAgendaEvents().find((e) => e.title === 'Dentist');
+    NotesStore.removeAgendaEvent(ev.id);
+  }
+  if (action === 'restore-backup') {
+    const list = await NotesStore.listAgendaBackups();
+    assert.ok(list.length >= 1 && list.length <= 3, 'backups kept: 1..3');
+    assert.ok(await NotesStore.restoreAgendaBackup(list[0].index));
+  }
   if (action === 'create-offline-b') {
     // B adds its own appointments before its first sync has reached the server.
     for (const title of ['B: gym', 'B: dinner', 'B: school', 'B: train']) {
@@ -129,7 +135,7 @@ async function runDevice(stateFile, serverFile, action) {
       });
     }
   }
-  await NotesStore.sync({ quiet: true });
+  if (action !== 'restore-backup') await NotesStore.sync({ quiet: true });
   await h.tick(10);
   if (NotesStore.state.dirty.size) await NotesStore.pushDirty({ quiet: true });
   h.stopPushTimer();
@@ -162,26 +168,35 @@ function step(dir, device, action) {
 
 const WANT_FEEDS = [FEED_URL];
 
-function check(label, got, failures, WANT_EVENTS) {
+function check(label, got, failures, WANT_EVENTS, wantFeeds = WANT_FEEDS) {
   const okEvents = JSON.stringify(got.events) === JSON.stringify(WANT_EVENTS);
-  const okFeeds = JSON.stringify(got.feeds) === JSON.stringify(WANT_FEEDS);
+  const okFeeds = JSON.stringify(got.feeds) === JSON.stringify(wantFeeds);
   console.log(`  ${label}: events=${JSON.stringify(got.events)} feeds=${JSON.stringify(got.feeds)} dirty=${got.dirty}`
     + `${okEvents && okFeeds ? '' : '  <-- DATA LOSS'}`);
   if (!okEvents) failures.push(`${label}: events ${JSON.stringify(got.events)} != ${JSON.stringify(WANT_EVENTS)}`);
-  if (!okFeeds) failures.push(`${label}: feeds ${JSON.stringify(got.feeds)} != ${JSON.stringify(WANT_FEEDS)}`);
+  if (!okFeeds) failures.push(`${label}: feeds ${JSON.stringify(got.feeds)} != ${JSON.stringify(wantFeeds)}`);
 }
 
-function scenario(name, wantEvents, steps) {
+function scenario(name, wantEvents, steps, wantFeeds = WANT_FEEDS) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agenda-two-devices-'));
   const failures = [];
   console.log(`scenario ${name}`);
   try {
     for (const [device, action, label] of steps) {
+      if (device === 'server') {
+        action(path.join(dir, 'server.json'));
+        continue;
+      }
       const got = step(dir, device, action);
-      if (label) check(label, got, failures, wantEvents);
+      if (label) check(label, got, failures, wantEvents, wantFeeds);
     }
     const srv = loadServer(path.join(dir, 'server.json'));
     console.log(`  server pushes: ${JSON.stringify(srv.pushLog || [])}`);
+    // The server only ever receives ciphertext: no titles, times or feed URLs in plain text.
+    const wire = JSON.stringify(srv);
+    for (const secret of ['Dentist', 'Team lunch', 'B: gym', 'calendar.example.org', '2026-11-2']) {
+      if (wire.includes(secret)) failures.push(`plaintext "${secret}" reached the server`);
+    }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -217,25 +232,40 @@ async function main() {
     ['C', 'sync', 'C (fresh) after sync'],
   ]));
 
-  const strict = process.env.AGENDA_SYNC_STRICT === '1';
+  // 4. A server set that is empty (wiped, or a stale replica) never removes local items.
+  failures.push(...scenario('empty-server-set-keeps-local-items', AB, [
+    ['A', 'create', 'A after create+sync'],
+    ['server', (file) => {
+      const srv = loadServer(file);
+      srv.rows = {};
+      fs.writeFileSync(file, JSON.stringify(srv));
+    }],
+    ['A', 'sync', 'A after sync with empty server'],
+  ]));
+  // 5. Only a tombstone removes an item, and it reaches every device.
+  failures.push(...scenario('tombstone-deletes-everywhere', ['Team lunch'], [
+    ['A', 'create', null],
+    ['B', 'sync', null],
+    ['A', 'delete-dentist', 'A after delete'],
+    ['B', 'sync', 'B after delete'],
+    ['C', 'sync', 'C (fresh) after delete'],
+  ]));
+  // 6. A local encrypted back-up is taken before a sync merge and can be restored
+  // (restore-backup does not sync: it shows the restored local agenda).
+  failures.push(...scenario('backup-restore', ['B: dinner', 'B: gym', 'B: school', 'B: train'], [
+    ['A', 'create', null],
+    ['B', 'create-offline-b', null],
+    ['B', 'restore-backup', 'B after restoring the last backup'],
+  ], []));
+
   if (!failures.length) {
     console.log('agenda two devices: no data loss');
-    if (strict) {
-      console.log('agenda two devices ok');
-      process.exit(0);
-    }
-    // The known bug no longer reproduces: drop the expected-failure marker in
-    // tests/test_round60_client_integrity.py and update docs/AGENDA_SYNC_BUG.md.
-    console.error('UNEXPECTED PASS: agenda data loss no longer reproduces (docs/AGENDA_SYNC_BUG.md)');
-    process.exit(1);
+    console.log('agenda two devices ok');
+    process.exit(0);
   }
-  console.log(`agenda two devices: ${failures.length} data-loss findings`);
+  console.log(`agenda two devices: ${failures.length} findings`);
   failures.forEach((f) => console.log(`  - ${f}`));
-  if (strict) {
-    assert.fail(`agenda data lost across devices (docs/AGENDA_SYNC_BUG.md):\n${failures.join('\n')}`);
-  }
-  console.log('agenda two devices: KNOWN BUG reproduced (docs/AGENDA_SYNC_BUG.md)');
-  process.exit(0);
+  process.exit(1);
 }
 
 if (process.argv[2] === '--device') {
