@@ -10885,6 +10885,35 @@ body.editor-toolbar-tip-suppress .find-btn.btn.icon[aria-label]:focus-visible::a
   font-size: 0.9em;
   white-space: pre;
 }
+#preview pre.code-preview {
+  position: relative;
+}
+#preview .code-copy-btn {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--border, currentColor);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8em;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+#preview pre.code-preview:hover .code-copy-btn,
+#preview pre.code-preview:focus-within .code-copy-btn,
+#preview .code-copy-btn:focus-visible,
+#preview .code-copy-btn.is-copied {
+  opacity: 1;
+}
+@media (hover: none) {
+  #preview .code-copy-btn {
+    opacity: 1;
+  }
+}
 .editor-head,
 .editor-actions {
   overflow: visible;
