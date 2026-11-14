@@ -63,17 +63,26 @@ async function deriveKey(password, salt, kdfVersion) {
   const version = Number(kdfVersion) === VAULT_KDF_V2 ? VAULT_KDF_V2 : VAULT_KDF_V1;
   if (version === VAULT_KDF_V2) {
     const raw = await deriveRawV2(password, salt);
-    return { raw: b64(raw), encoding: 'argon2id', version: VAULT_KDF_V2 };
+    const out = { raw: b64(raw), encoding: 'argon2id', version: VAULT_KDF_V2 };
+    raw.fill(0); // best effort; the base64 string copy cannot be zeroed
+    return out;
   }
   const raw = deriveRawV1(password, salt);
-  return { raw: b64(raw), encoding: 'sha256', version: VAULT_KDF_V1 };
+  const out = { raw: b64(raw), encoding: 'sha256', version: VAULT_KDF_V1 };
+  raw.fill(0);
+  return out;
 }
 
 async function decryptObject(rawB64, payload) {
   const raw = alignBytes(fromB64(rawB64));
   const iv = fromB64(payload.iv);
   const data = fromB64(payload.data);
-  const plain = NobleCrypto.gcm(raw, iv).decrypt(data);
+  let plain;
+  try {
+    plain = NobleCrypto.gcm(raw, iv).decrypt(data);
+  } finally {
+    raw.fill(0);
+  }
   return JSON.parse(new TextDecoder().decode(plain));
 }
 

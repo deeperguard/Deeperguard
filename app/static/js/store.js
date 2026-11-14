@@ -859,6 +859,9 @@ const NotesStore = (() => {
     attachmentDecryptInFlight = null;
     lastDerivedKdf = null;
     state.items.clear();
+    // Derived plaintext caches (note text fingerprints, attachment indexes).
+    recentNoteFingerprints.clear();
+    invalidateShadowDuplicates();
     // The backlink index is derived from plaintext: it goes with the items.
     if (typeof NotesBacklinks !== 'undefined' && NotesBacklinks.clear) NotesBacklinks.clear();
     state.blocked.clear();
