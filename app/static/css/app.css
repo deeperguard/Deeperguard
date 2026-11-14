@@ -11244,3 +11244,17 @@ html.layout-compact #totp-pane #btn-totp-add {
 .tpl-preview { margin: 0; max-height: 10rem; overflow: auto; white-space: pre-wrap; font-size: 0.8rem; padding: 0.5rem 0.6rem; border-radius: 8px; background: rgba(128, 128, 128, 0.08); }
 .template-dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap; }
 .template-dialog-actions #template-dialog-manage { margin-right: auto; }
+
+/* Note links (ID-based) and the [[ picker */
+.note-body-wrap { position: relative; }
+.note-link-picker { position: absolute; left: 12px; top: 40px; z-index: 30; margin: 0; padding: 4px; list-style: none; min-width: 220px; max-width: min(420px, 90%); max-height: 240px; overflow: auto; background: var(--surface, #fff); color: inherit; border: 1px solid var(--border, #c8ccd4); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18); }
+.note-link-picker[hidden] { display: none; }
+.note-link-picker-option, .note-link-picker-empty { padding: 6px 10px; border-radius: 6px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-link-picker-empty { cursor: default; opacity: .7; }
+.note-link-picker-option[aria-selected="true"] { background: var(--accent, #2f6fed); color: #fff; }
+a.note-link { cursor: pointer; text-decoration: underline; }
+a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: var(--danger, #b3261e); }
+.note-link-dead-tag { font-size: .85em; text-decoration: none; display: inline-block; }
+.note-link-dead-panel { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; padding: 8px 10px; border: 1px solid var(--danger, #b3261e); border-radius: 8px; }
+.note-link-dead-panel p { margin: 0 8px 0 0; }
+.note-link-relink-results { flex-basis: 100%; margin: 0; padding: 0; list-style: none; }

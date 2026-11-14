@@ -1721,7 +1721,21 @@
     return String(html || '').replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   }
 
+  function noteLinkLookup(uuid) {
+    const it = NotesStore.get(uuid);
+    if (!it || it.deleted || it.content?.type !== 'note') return null;
+    return { title: it.content.title, trashed: !!it.content.trashed };
+  }
+
   function renderNoteBodyPreview(text, editor) {
+    if (window.NotesLinks && String(text || '').includes('](dg-note:')) {
+      const prepared = NotesLinks.prepareRender(text, noteLinkLookup);
+      return prepared.restore(renderNoteBodyPreviewRaw(prepared.text, editor));
+    }
+    return renderNoteBodyPreviewRaw(text, editor);
+  }
+
+  function renderNoteBodyPreviewRaw(text, editor) {
     let html;
     if (window.NotesSpreadsheet?.isPayload?.(text)) {
       html = NotesSpreadsheet.renderPreview(text);
@@ -1791,11 +1805,103 @@
     return true;
   }
 
+  // --- Note links (spec section 3) ---
+  function noteLinkCandidates() {
+    return listNotes().map((n) => ({
+      uuid: n.uuid, title: n.content.title, updated_at: n.content.updated_at,
+      trashed: !!n.content.trashed, is_template: !!n.content.is_template,
+    }));
+  }
+
+  function setBodyText(value, caret) {
+    ui.body.value = value;
+    if (typeof caret === 'number') ui.body.setSelectionRange?.(caret, caret);
+    ui.body.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function closeDeadLinkPanel() {
+    document.getElementById('note-link-dead-panel')?.remove();
+  }
+
+  function activateNoteLink(link) {
+    const uuid = link.dataset.dgNote;
+    if (!link.dataset.dead) {
+      if (uuid && NotesStore.get(uuid)) openNote(uuid);
+      return;
+    }
+    showDeadLinkPanel(link, uuid, link.dataset.dead);
+  }
+
+  function showDeadLinkPanel(anchor, uuid, kind) {
+    closeDeadLinkPanel();
+    const panel = document.createElement('div');
+    panel.id = 'note-link-dead-panel';
+    panel.className = 'note-link-dead-panel';
+    panel.setAttribute('role', 'alert');
+    const msg = document.createElement('p');
+    msg.textContent = kind === 'trashed'
+      ? 'This note is in the trash.'
+      : 'This note is deleted or not in your vault.';
+    panel.appendChild(msg);
+    const mk = (label, fn) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn small';
+      b.textContent = label;
+      b.addEventListener('click', fn);
+      panel.appendChild(b);
+      return b;
+    };
+    const finish = (text) => { closeDeadLinkPanel(); setBodyText(text); refreshPreview(); };
+    if (kind === 'trashed') mk('Restore from trash', () => { closeDeadLinkPanel(); restoreNoteKeepOpen(uuid); });
+    mk('Relink…', () => {
+      const input = document.createElement('input');
+      input.type = 'search';
+      input.setAttribute('aria-label', 'Search notes to link to');
+      const results = document.createElement('ul');
+      results.className = 'note-link-relink-results';
+      const paint = () => {
+        results.textContent = '';
+        NotesLinks.searchNotes(noteLinkCandidates(), input.value, { excludeId: currentId }).forEach((r) => {
+          const li = document.createElement('li');
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = r.title;
+          b.addEventListener('click', () => finish(NotesLinks.relinkLink(ui.body.value, uuid, r)));
+          li.appendChild(b);
+          results.appendChild(li);
+        });
+      };
+      input.addEventListener('input', paint);
+      panel.appendChild(input);
+      panel.appendChild(results);
+      paint();
+      input.focus();
+    });
+    mk('Remove link', () => finish(NotesLinks.removeLink(ui.body.value, uuid)));
+    mk('Close', closeDeadLinkPanel);
+    anchor.after(panel);
+  }
+
+  function restoreNoteKeepOpen(id) {
+    const note = NotesStore.get(id);
+    if (!note?.content?.trashed) return;
+    NotesStore.upsert(id, { ...note.content, trashed: false });
+    refreshPreview();
+    toast('Restored to notes');
+  }
+
   function bindPreviewExternalLinks() {
     if (!ui.preview || ui.preview._externalLinksBound) return;
     ui.preview._externalLinksBound = true;
     ui.preview.addEventListener('click', (event) => {
       const link = event.target?.closest?.('a[href]');
+      if (link && ui.preview.contains(link) && link.dataset?.dgNote) {
+        event.preventDefault();
+        event.stopPropagation();
+        activateNoteLink(link);
+        return;
+      }
       if (link && ui.preview.contains(link)) {
         const href = link.getAttribute('href') || '';
         if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
@@ -20233,6 +20339,17 @@
       if (query) syncFindHighlights(query);
     }
   });
+  if (window.NotesLinks) {
+    NotesLinks.attachPicker({
+      textarea: ui.body,
+      getNotes: noteLinkCandidates,
+      getExcludeId: () => currentId,
+      onChoose: (note, trigger) => {
+        const next = NotesLinks.applyChoice(ui.body.value, trigger, note);
+        setBodyText(next.value, next.caret);
+      },
+    });
+  }
   ui.body.addEventListener('scroll', () => {
     syncFindHighlightScroll();
     syncEditLinkScroll();
