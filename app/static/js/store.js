@@ -1866,6 +1866,34 @@ const NotesStore = (() => {
     });
   }
 
+  /**
+   * Dated tasks (docs/REMINDERS_TASKS_SPEC.md §2.2): each task is its own encrypted
+   * `agenda_task` item, so old clients sync it untouched and never list it as a note
+   * or an event.
+   */
+  function listAgendaTasks() {
+    return [...state.items.values()]
+      .filter((i) => i.content?.type === 'agenda_task' && !i.deleted)
+      .map((i) => ({ ...i.content, id: i.uuid }));
+  }
+
+  function upsertAgendaTask(uuid, content) {
+    const id = String(uuid || newUuid()).trim();
+    const prev = state.items.get(id);
+    if (prev && !prev.deleted && prev.content?.type && prev.content.type !== 'agenda_task') return '';
+    const next = { ...(content || {}), type: 'agenda_task' };
+    delete next.id;
+    upsert(id, next);
+    return id;
+  }
+
+  function removeAgendaTask(uuid) {
+    const id = String(uuid || '').trim();
+    const item = id && state.items.get(id);
+    if (!item || item.content?.type !== 'agenda_task') return false;
+    return remove(id);
+  }
+
   const AGENDA_TOMBSTONE_TTL_MS = 60 * 86400000;
 
   function agendaStampMs(value) {
@@ -6866,6 +6894,9 @@ const NotesStore = (() => {
     SEARCH_INDEX_UUID,
     AGENDA_PACK_UUID,
     listAgendaEvents,
+    listAgendaTasks,
+    upsertAgendaTask,
+    removeAgendaTask,
     upsertAgendaEvent,
     removeAgendaEvent,
     mergeAgendaPacks,

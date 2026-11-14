@@ -333,6 +333,21 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("test_agenda_reminders ok", proc.stdout)
 
+    def test_agenda_tasks(self):
+        for script, marker in (
+            ("test_agenda_tasks.js", "test_agenda_tasks.js: ok"),
+            ("test_agenda_tasks_store.js", "test_agenda_tasks_store.js: ok"),
+        ):
+            proc = subprocess.run(
+                ["node", str(REPO / "tests" / script)],
+                cwd=str(REPO),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+            self.assertIn(marker, proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
