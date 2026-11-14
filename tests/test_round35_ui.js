@@ -16,8 +16,9 @@ const storeJs = fs.readFileSync(path.join(root, 'app/static/js/store.js'), 'utf8
 assert.ok(appJs.includes('function closePhoneBrowseOverlay'));
 assert.ok(appJs.includes("closePhoneBrowseOverlay({ focusChip: true })"));
 assert.ok(appJs.includes("addEventListener('pointerdown'"));
-const escapeBlock = appJs.split("if (event.key !== 'Escape') return;")[1] || '';
-assert.ok(escapeBlock.includes('closePhoneBrowseOverlay'));
+const escapeBlocks = appJs.split("if (event.key !== 'Escape') return;").slice(1);
+// The global Escape handler (after the first Escape guard) closes the overlay.
+assert.ok(escapeBlocks.join('').includes('if (closePhoneBrowseOverlay({ focusChip: true })) {'));
 
 // --- 2. Desktop collapse prefs ≠ phone overlay open state ----------------
 assert.ok(appJs.includes("let phoneBrowseOpen = null"));

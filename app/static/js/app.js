@@ -5679,77 +5679,11 @@
     }
   }
 
-  function confirmAction(message, {
-    title = 'Confirm',
-    confirmLabel = 'Confirm',
-    cancelLabel = 'Cancel',
-    extraLabel = '',
-    danger = false,
-  } = {}) {
-    return new Promise((resolve) => {
-      const backdrop = document.getElementById('confirm-backdrop');
-      const dialog = document.getElementById('confirm-dialog');
-      const titleEl = document.getElementById('confirm-title');
-      const messageEl = document.getElementById('confirm-message');
-      const okBtn = document.getElementById('confirm-ok');
-      const cancelBtn = document.getElementById('confirm-cancel');
-      const extraBtn = document.getElementById('confirm-extra');
-      if (!backdrop || !dialog || !titleEl || !messageEl || !okBtn || !cancelBtn) {
-        resolve(window.confirm(String(message || title)));
-        return;
-      }
-      cancelBtn.hidden = false;
-      if (extraBtn) {
-        extraBtn.hidden = !extraLabel;
-        extraBtn.textContent = extraLabel || 'Attach anyway';
-      }
-      titleEl.id = 'confirm-title';
-      titleEl.textContent = title;
-      titleEl.removeAttribute('aria-hidden');
-      dialog.setAttribute('aria-labelledby', 'confirm-title');
-      dialog.setAttribute('aria-describedby', 'confirm-message');
-      messageEl.textContent = message;
-      okBtn.textContent = confirmLabel;
-      cancelBtn.textContent = cancelLabel;
-      okBtn.classList.toggle('danger', !!danger);
-      backdrop.hidden = false;
-      dialog.hidden = false;
-      const unlockVisible = !!(document.getElementById('unlock-screen') && !document.getElementById('unlock-screen').hidden);
-      document.body.classList.add('confirm-open');
-      document.body.classList.toggle('confirm-over-unlock', unlockVisible);
-      dialog.setAttribute('tabindex', '-1');
-      const cleanup = (value) => {
-        backdrop.hidden = true;
-        dialog.hidden = true;
-        document.body.classList.remove('confirm-open', 'confirm-over-unlock');
-        if (extraBtn) {
-          extraBtn.hidden = true;
-          extraBtn.removeEventListener('click', onExtra);
-        }
-        okBtn.removeEventListener('click', onOk);
-        cancelBtn.removeEventListener('click', onCancel);
-        backdrop.removeEventListener('click', onCancel);
-        document.removeEventListener('keydown', onKey, true);
-        resolve(value);
-      };
-      const onOk = () => cleanup(true);
-      const onCancel = () => cleanup(false);
-      const onExtra = () => cleanup('extra');
-      const onKey = (event) => {
-        if (event.key !== 'Escape') return;
-        event.preventDefault();
-        event.stopPropagation();
-        onCancel();
-      };
-      okBtn.addEventListener('click', onOk);
-      cancelBtn.addEventListener('click', onCancel);
-      if (extraBtn && extraLabel) extraBtn.addEventListener('click', onExtra);
-      backdrop.addEventListener('click', onCancel);
-      document.addEventListener('keydown', onKey, true);
-      window.setTimeout(() => {
-        if (!dialog.hidden) cancelBtn.focus();
-      }, 0);
-    });
+  // Shared confirm flow lives in dialog-a11y.js (Escape/close/backdrop = cancel).
+  function confirmAction(message, options = {}) {
+    const pending = window.DialogA11y?.confirm(message, options);
+    if (pending) return pending;
+    return Promise.resolve(window.confirm(String(message || options.title || 'Confirm')));
   }
 
   NotesStore.setCsrf(ui.csrf || NotesStore.csrf());

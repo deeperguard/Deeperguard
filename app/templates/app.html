@@ -2777,9 +2777,14 @@
       <button type="button" class="btn primary" id="folder-prompt-ok">Create</button>
     </div>
   </div>
-  <div id="confirm-dialog" class="confirm-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-    <h2 id="confirm-title">Confirm</h2>
-    <p id="confirm-message"></p>
+  <div id="confirm-dialog" class="confirm-dialog dialog-pattern" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <div class="dialog-head">
+      <h2 id="confirm-title">Confirm</h2>
+      <button type="button" class="btn icon dialog-close" id="confirm-close" aria-label="Cancel" title="Cancel" data-dialog-close><svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="dialog-body">
+      <p id="confirm-message"></p>
+    </div>
     <div class="confirm-dialog-actions">
       <button type="button" class="btn ghost" id="confirm-cancel">Cancel</button>
       <button type="button" class="btn" id="confirm-extra" hidden>Attach anyway</button>
@@ -2914,6 +2919,7 @@
   {{ asset_script('js/cloud-backup.js') }}
   {{ asset_script('js/secure-send-note-attachments.js') }}
   {{ asset_script('js/quick-capture.js') }}
+  {{ asset_script('js/dialog-a11y.js') }}
   {{ asset_script('js/app.js') }}
 </body>
 </html>
