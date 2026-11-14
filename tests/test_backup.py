@@ -168,7 +168,7 @@ class BackupHelperTests(unittest.TestCase):
             return Proc()
 
         with patch.object(self.backup_pcloud, "ensure_local_full_backup", return_value=(local, 2, 99)), patch.object(
-            self.backup_pcloud, "write_rclone_config", return_value=Path("/tmp/rclone.conf")
+            self.backup_pcloud, "rclone_remote_env", return_value={}
         ), patch.object(self.backup_pcloud, "rclone_bin", return_value="/usr/bin/rclone"), patch.object(
             self.backup_pcloud, "pcloud_credentials_configured", return_value=True), patch.object(
             self.backup_pcloud.db, "get_user_by_id", return_value={
@@ -219,17 +219,13 @@ class BackupHelperTests(unittest.TestCase):
         out = self.backup_pcloud.normalize_pcloud_token('{"access_token":"abc","token_type":"bearer"}')
         self.assertIn("access_token", out)
 
-    def test_write_rclone_config_uses_oauth_token(self):
+    def test_rclone_remote_env_uses_oauth_token(self):
         token = '{"access_token":"abc","token_type":"bearer"}'
         with patch.object(self.backup_pcloud, "pcloud_token", return_value=token):
-            path = self.backup_pcloud.write_rclone_config(9, "eu")
-        try:
-            text = path.read_text(encoding="utf-8")
-            self.assertIn("type = pcloud", text)
-            self.assertIn("hostname = eapi.pcloud.com", text)
-            self.assertIn(token, text)
-        finally:
-            path.unlink(missing_ok=True)
+            env = self.backup_pcloud.rclone_remote_env(9, "eu")
+        self.assertEqual(env["RCLONE_CONFIG_DEEPERGUARD_TYPE"], "pcloud")
+        self.assertEqual(env["RCLONE_CONFIG_DEEPERGUARD_HOSTNAME"], "eapi.pcloud.com")
+        self.assertEqual(env["RCLONE_CONFIG_DEEPERGUARD_TOKEN"], token)
 
     def test_run_pcloud_backups_emails_when_token_missing(self):
         sent = []
