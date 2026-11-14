@@ -55,7 +55,7 @@ function buttonsIn(container) {
 
 const source = 'Intro\n\n```js\nconst a = "<b>" && 1;\nconsole.log(a);\n```\n\nMid\n\n```\nplain   text\n```\n';
 const html = render(source);
-assert.match(html, /<pre class="code-preview" data-lang="js"><code/);
+assert.match(html, /<pre class="code-preview" dir="ltr" data-lang="js"><code dir="ltr"/);
 assert.doesNotMatch(html, /<button/i, 'markdown output itself carries no button HTML');
 
 (async () => {

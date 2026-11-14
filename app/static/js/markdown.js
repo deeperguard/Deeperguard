@@ -144,10 +144,10 @@
       return align ? ` style="text-align:${align}"` : '';
     };
     const head = table.header.map((cell, idx) => (
-      `<th${alignAttr(idx)}>${renderInlineCell(cell)}</th>`
+      `<th dir="auto"${alignAttr(idx)}>${renderInlineCell(cell)}</th>`
     )).join('');
     const body = table.rows.map((row) => (
-      `<tr>${row.map((cell, idx) => `<td${alignAttr(idx)}>${renderInlineCell(cell)}</td>`).join('')}</tr>`
+      `<tr>${row.map((cell, idx) => `<td dir="auto"${alignAttr(idx)}>${renderInlineCell(cell)}</td>`).join('')}</tr>`
     )).join('');
     return `<div class="md-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
@@ -171,9 +171,13 @@
       if (hash) return `<a href="${escapeAttr(hash)}">${label}</a>`;
       return full;
     });
-    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    html = html.replace(/^### (.+)$/gm, '<h3 dir="auto">$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2 dir="auto">$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1 dir="auto">$1</h1>');
+    // "> quote" lines (escaped to "&gt; ") become one <blockquote> per run.
+    html = html.replace(/^&gt; ?.*(?:\n&gt; ?.*)*$/gm, (block) => (
+      `<blockquote dir="auto">${block.split('\n').map((line) => line.replace(/^&gt; ?/, '')).join('<br>')}</blockquote>`
+    ));
     html = applyEmphasisOutsideTags(html, (text) => (
       text
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -183,16 +187,16 @@
     html = applyEmphasisOutsideTags(html, (text) => text.replace(/`([^`]+)`/g, '<code>$1</code>'));
     html = html.replace(/^\s*[-*] \[([ xX])\] (.*)$/gm, (_, checked, label) => {
       const on = checked !== ' ';
-      return `<li class="task${on ? ' done' : ''}"><button type="button" class="task-toggle" data-checked="${on ? '1' : '0'}" aria-checked="${on}">${on ? '☑' : '☐'}</button> ${label}</li>`;
+      return `<li class="task${on ? ' done' : ''}" dir="auto"><button type="button" class="task-toggle" data-checked="${on ? '1' : '0'}" aria-checked="${on}">${on ? '☑' : '☐'}</button> ${label}</li>`;
     });
-    html = html.replace(/^\s*[-*] (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/^\s*[-*] (.+)$/gm, '<li dir="auto">$1</li>');
     html = html.replace(/(<li[\s\S]*?<\/li>\n?)+/g, (block) => `<ul>${block}</ul>`);
     html = html.replace(/@@FENCE(\d+)@@/g, (_, i) => {
       const fence = fences[Number(i)] || { lang: '', code: '' };
       const safeLang = escapeAttr(fence.lang);
       const lang = fence.lang ? ` class="language-${safeLang}"` : '';
       const body = highlightFence(fence.code, fence.lang);
-      return `<pre class="code-preview"${fence.lang ? ` data-lang="${safeLang}"` : ''}><code${lang}>${body}</code></pre>`;
+      return `<pre class="code-preview" dir="ltr"${fence.lang ? ` data-lang="${safeLang}"` : ''}><code dir="ltr"${lang}>${body}</code></pre>`;
     });
     html = html.replace(/@@TABLE(\d+)@@/g, (_, i) => renderTable(tables[Number(i)] || { header: [], aligns: [], rows: [] }));
     html = autolinkOutsideTags(html);
@@ -262,7 +266,7 @@
         // "\n\n" is a normal paragraph break; each extra newline is another
         // blank line the Preview should keep as <p><br></p>.
         const blankParas = Math.max(0, chunk.length - 2);
-        for (let n = 0; n < blankParas; n += 1) parts.push('<p><br></p>');
+        for (let n = 0; n < blankParas; n += 1) parts.push('<p dir="auto"><br></p>');
         continue;
       }
       const trimmed = chunk.replace(/^\n+|\n+$/g, '');
@@ -271,7 +275,7 @@
         const bit = piece.trim();
         if (!bit) return;
         if (/^<(?:h\d|ul|ol|pre|blockquote|div)\b/i.test(bit)) parts.push(bit);
-        else parts.push(`<p>${bit.replace(/\n/g, '<br>')}</p>`);
+        else parts.push(`<p dir="auto">${bit.replace(/\n/g, '<br>')}</p>`);
       });
     }
     return parts.join('');
