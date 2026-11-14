@@ -570,3 +570,82 @@ def run_managed_backups() -> list[dict[str, Any]]:
             "size": size, "kept": kept, "at": time.time(),
         })
     return results
+
+
+# --- Result e-mail after each managed run (plain text, fixed templates) ---
+
+_FAILURE_TEXT = {
+    "plan": (
+        "Your current plan does not include automatic pCloud backup, so nothing was uploaded.",
+        "Upgrade your plan or switch the backup off in Settings.",
+    ),
+    "quota": (
+        "The backup storage is full, so the backup could not be saved.",
+        "Please contact support; the backup is retried automatically at the next scheduled run.",
+    ),
+    "timeout": (
+        "The upload took too long and was stopped.",
+        "No action is needed; it is retried automatically at the next scheduled run.",
+    ),
+}
+_FAILURE_DEFAULT = (
+    "The backup service could not save your backup.",
+    "No action is needed; it is retried automatically at the next scheduled run. "
+    "If this keeps happening, please contact support.",
+)
+
+
+def managed_mail_recipient(user: Any) -> str:
+    """Verified address of the user, or '' (never an unverified one)."""
+    import email_verify
+
+    for cand in (str(user["backup_email"] or "").strip(), str(user["email"] or "").strip()):
+        if cand and email_verify.recipient_verified(user, cand):
+            return cand
+    return ""
+
+
+def managed_result_mail(result: dict[str, Any]) -> tuple[str, str]:
+    stamp = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(float(result.get("at") or time.time())))
+    if result.get("ok"):
+        size_kb = max(1, (int(result.get("size") or 0) + 1023) // 1024)
+        return (
+            "Deeperguard: pCloud backup succeeded",
+            "Your automatic pCloud backup completed.\n\n"
+            f"Time: {stamp}\n"
+            f"Size: {size_kb} KB\n"
+            f"Backups kept: {int(result.get('kept') or 0)}\n\n"
+            "The backup contains only your encrypted data. You can switch it off in Settings.\n",
+        )
+    reason, todo = _FAILURE_TEXT.get(str(result.get("code")), _FAILURE_DEFAULT)
+    return (
+        "Deeperguard: pCloud backup failed",
+        "Your automatic pCloud backup did not complete.\n\n"
+        f"Time: {stamp}\n"
+        f"Reason: {reason}\n"
+        f"What you can do: {todo}\n",
+    )
+
+
+def notify_managed_results(results: list[dict[str, Any]]) -> int:
+    """Send exactly one mail per user per run. Never raises; returns mails sent."""
+    sent = 0
+    for result in results:
+        uid = result.get("user_id")
+        try:
+            user = db.get_user_by_id(int(uid))
+            if user is None:
+                continue
+            pref = str(user["pcloud_mail_pref"] or "both")
+            if result.get("ok") and pref == "failures":
+                continue
+            recipient = managed_mail_recipient(user)
+            if not recipient:
+                log.warning("managed pcloud mail skipped — no verified address user_id=%s", uid)
+                continue
+            subject, body = managed_result_mail(result)
+            send_plain_email(recipient, subject, body)
+            sent += 1
+        except Exception as exc:
+            log.error("managed pcloud mail not sent user_id=%s: %s", uid, type(exc).__name__)
+    return sent
