@@ -105,17 +105,24 @@ aangemaakte standaardagenda, zonder dat iemand iets hoeft te doen. (De code
 noemt het veld `calendarId`; "agendaId" in de opdracht is hetzelfde veld.
 Hernoem niet.)
 
-**Lui en alleen-lezen.** Er is geen losse migratiestap die alle afspraken
-herschrijft. Een afspraak zonder `calendarId` wordt bij het lezen als
-standaardagenda behandeld. `listAgendaCalendars()` toont de standaardagenda
-in het geheugen als het pack hem nog niet bevat, en schrijft niets.
+**Bij het ontgrendelen.** `migrateAgendaCalendars()` draait in de
+unlock-onderhoudsstap (`runUnlockMaintenance()`), na `ensureAgendaPack()`. Heeft
+het pack afspraken of agenda's, dan (1) maakt hij de standaardagenda aan als
+`DEFAULT_CALENDAR_ID` ontbreekt (naam 'Agenda', kleur `blue`), (2) geeft hij elke
+afspraak zonder `calendarId`, of met een onbekende of verwijderde agenda, de
+`calendarId` van de standaardagenda, en (3) voegt hij dubbele standaardagenda's
+samen (zie hieronder). Er verdwijnt geen afspraak; alleen `calendarId` verandert.
+De `updated_at` van een afspraak blijft gelijk (boekhouding, zoals bij
+herinnering-ids), zodat de migratie nooit een echte wijziging van een ander
+apparaat overschrijft bij het samenvoegen. Een leeg pack wordt niet herschreven;
+`listAgendaCalendars()` toont de standaardagenda dan alleen in het geheugen.
+Het resultaat gaat versleuteld mee in `agenda_pack`, net als afspraken.
 
-**Idempotent.** `ensureDefaultCalendar()` schrijft de standaardagenda alleen
-als de sleutel `DEFAULT_CALENDAR_ID` ontbreekt en geeft anders `false`. Een
-tweede aanroep doet niets. Hij draait vóór de eerste agenda-schrijfactie
-(`upsertAgendaCalendar()` roept hem aan). Afspraken worden niet aangepast, dus
-er is niets dat dubbel kan worden gemigreerd, ook niet bij een onderbroken of
-herhaalde run.
+**Idempotent.** De logica zit in de pure functie `normalizeAgendaCalendars()`,
+die `null` teruggeeft als er niets verandert; dan wordt er niets geschreven.
+Een tweede run (ook na een onderbroken run) verandert dus niets.
+`ensureDefaultCalendar()` schrijft de standaardagenda alleen als de sleutel
+ontbreekt (`upsertAgendaCalendar()` roept hem aan).
 
 **Oudere clients behouden het onbekende veld.** Een oude client leest het pack
 als JSON-object en schrijft `{...pack.content, events, ...}` terug
@@ -148,7 +155,11 @@ en een id ongelijk aan `DEFAULT_CALENDAR_ID`: (1) zet de afspraken met dat
 (2) neem naam en kleur over van de agenda met het nieuwste
 `updated_at` naar `DEFAULT_CALENDAR_ID`; (3) zet een tombstone voor het
 overbodige id. Het resultaat is voor alle apparaten gelijk, ongeacht
-de volgorde. Deze vangnetregel is nog niet gebouwd (§8).
+de volgorde. Gebouwd: `mergeAgendaPacks()` past deze regel na elke merge toe
+(`normalizeAgendaCalendars(..., { assignEvents: false })`) en de
+unlock-migratie ook. Afwijking: de `updated_at` van verplaatste afspraken blijft
+gelijk; omdat de regel na elke merge opnieuw draait, komen apparaten toch op
+hetzelfde uit. Test: `tests/test_agenda_calendar_migration.js`.
 
 Een gewone (niet-standaard) agenda die op twee apparaten met hetzelfde id
 bestaat, wordt per entry op `updated_at` samengevoegd; de nieuwste volledige
@@ -266,7 +277,8 @@ aanmaken, verbergen, hernoemen en verwijderen; controleren op een telefoonscherm
 ## 8. Gaten en open punten
 
 1. De vangnetregel voor een duplicaat-standaardagenda met afwijkend id (§3) is
-   niet gebouwd; met het vaste id is het risico klein.
+   gebouwd (`normalizeAgendaCalendars()`), maar laat de `updated_at` van
+   verplaatste afspraken staan; zie §3.
 2. `mergeAgendaCalendars()` voegt per hele entry samen: gelijktijdig hernoemen
    op het ene en omkleuren of verbergen op het andere apparaat verliest een van de
    twee. Per-veld-samenvoegen (met een `updated_at` per veld) is mogelijk, maar
