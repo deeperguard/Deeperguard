@@ -1,11 +1,11 @@
 {
-  "asset_count": 79,
+  "asset_count": 80,
   "assets": {
     "css/app.css": {
-      "bytes": 293252,
-      "sha256": "9539f8ce17ede6ec0c11d479e99590432667fb8a13fcf902e97f702e19d7a90d",
-      "sri": "sha384-huq4FSM/h3GmaIOtADcTBDk9N6Kw3wtFOTnmsnaYACOhRi96EygKGKXNT+RAchaz",
-      "url": "/static/css/app.9539f8ce17ede6ec.css"
+      "bytes": 296803,
+      "sha256": "8d5f3a92f409a414131e4f9cdcecc71c029f8855deadbb826783c2dc0ab4ad6d",
+      "sri": "sha384-NbZ7p7iQbR5mc2IXHgkF7lvvqhKSXMoMaWJUolnwzlOlAUbkY0X23Y79Lihhy+so",
+      "url": "/static/css/app.8d5f3a92f409a414.css"
     },
     "css/marketing.css": {
       "bytes": 54715,
@@ -55,11 +55,17 @@
       "sri": "sha384-26Xk+cd5O7gPtkXUwZW7PNFLJh7/GzY7U2RnfnTr+CeOJWsXFIhwx+n+YmUjouY4",
       "url": "/static/js/agenda-subscriptions.a9f967aa2e89cf8c.js"
     },
+    "js/agenda-tasks.js": {
+      "bytes": 6449,
+      "sha256": "311bcea729501b1bdb40e55f4efec4468929277cf92fb9d2fb120f1d2cec3c6c",
+      "sri": "sha384-lkTOmcmX1NPZa8o439v01kc8FZNOy07gP87/7WtPXWuWrDkvZQNYnm0Ap/UXxZie",
+      "url": "/static/js/agenda-tasks.311bcea729501b1b.js"
+    },
     "js/agenda.js": {
-      "bytes": 116981,
-      "sha256": "3f73b113ed4b4f992a96eb3d111c2c69e7a5c33545ac4b7c6b4bf7b9756fa77b",
-      "sri": "sha384-/b1WX53mXAYBZfB8d4sIr35TG+000GNDVX6rZUnKBsmp7AY+JCR1n+P0pBJcm1X1",
-      "url": "/static/js/agenda.3f73b113ed4b4f99.js"
+      "bytes": 133913,
+      "sha256": "32223fe0c3d308595a7c11048998f1c06812fde05f4d11c682bb9a46062e6a5c",
+      "sri": "sha384-0DzBIT6//6G10eMfDseh1Q+wDEgWeLZil7G702N3/9sKrDeik04v4IkXwtU8xbTc",
+      "url": "/static/js/agenda.32223fe0c3d30859.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -320,10 +326,10 @@
       "url": "/static/js/srp-auth.e306b78c29503b1e.js"
     },
     "js/store.js": {
-      "bytes": 259542,
-      "sha256": "d9a001d574b2c209cd6d1e9cfc4d540a31c26f39d7158e5f2956fedd6cbd6119",
-      "sri": "sha384-NPky1tNvTG+t/kGDkunle8qAsE89uoU6HT1rdayCXBrX8yg0x3cA+OR4kd6jDWQM",
-      "url": "/static/js/store.d9a001d574b2c209.js"
+      "bytes": 260581,
+      "sha256": "179840d3d568bb3f38d17c2b7d8ef8324626c552a4449b4b4a162cefb42b2ce5",
+      "sri": "sha384-BXlAReW4xt25MA7BXqmWxBxNuzSkMgfLw/y+75A0S4KJYb0SZL/0t8MfZk4BfWOf",
+      "url": "/static/js/store.179840d3d568bb3f.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -477,6 +483,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "f72f288f10dbb39b90dc43ac44de9ce1ff56004b2ec99a21487102648f5a4efb",
+  "manifest_sha256": "c167687d46e8183ec95e30790d043e80caa68f019f77c6b451710d2d992dd548",
   "version": 1
 }
