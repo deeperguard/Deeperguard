@@ -187,6 +187,8 @@ const NotesCrypto = (() => {
     return Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
   }
 
+  const WORKER_TIMEOUT_MS = 90000;
+  let workerTimeoutMs = WORKER_TIMEOUT_MS;
   let workerRef = null;
   let workerMsgId = 0;
   const workerWaiters = new Map();
@@ -234,9 +236,31 @@ const NotesCrypto = (() => {
     if (!worker) return Promise.reject(new Error('crypto worker unavailable'));
     const id = ++workerMsgId;
     return new Promise((resolve, reject) => {
-      workerWaiters.set(id, { resolve, reject });
-      worker.postMessage({ id, type, ...payload });
+      // Watchdog: a worker that is killed or frozen never answers; without a
+      // deadline the unlock button would stay on "Checking…" forever.
+      const timer = setTimeout(() => {
+        if (!workerWaiters.has(id)) return;
+        workerWaiters.delete(id);
+        terminateWorker();
+        reject(new Error('crypto worker timed out'));
+      }, workerTimeoutMs);
+      const settle = (fn) => (value) => {
+        clearTimeout(timer);
+        fn(value);
+      };
+      workerWaiters.set(id, { resolve: settle(resolve), reject: settle(reject) });
+      try {
+        worker.postMessage({ id, type, ...payload });
+      } catch (err) {
+        workerWaiters.delete(id);
+        clearTimeout(timer);
+        reject(err);
+      }
     });
+  }
+
+  function setWorkerTimeoutMs(ms) {
+    workerTimeoutMs = Number(ms) > 0 ? Number(ms) : WORKER_TIMEOUT_MS;
   }
 
   async function deriveKeyInWorker(password, salt, options = {}) {
@@ -280,6 +304,7 @@ const NotesCrypto = (() => {
     decryptObjectInWorker,
     workerEnabled,
     terminateWorker,
+    setWorkerTimeoutMs,
     encryptObject,
     decryptObject,
     encryptBytes,

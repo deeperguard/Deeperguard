@@ -137,3 +137,15 @@ settled, geen rejection).
    in `tests/test_round16_ui.js` / `test_round19_ui.js`, e2e's in `tests/e2e_*.py`.
 5. **Niet in scope hier**: sneller maken van Argon2 (bv. WASM) of lagere kosten. Dat raakt de
    beveiligingsmarge en vraagt een aparte beslissing; de parameters blijven zoals ze zijn.
+
+## Uitgevoerd (taak #118)
+
+Diagnose was "traag zonder voortgang" plus latente hang-paden, dus geen NOOP_OK. Argon2id-parameters,
+SRP-stappen en sleutelafhandeling zijn ongewijzigd. Wijzigingen:
+
+- `crypto.js` `workerCall`: watchdog (90 s, `setWorkerTimeoutMs` voor tests) die de waiter
+  rejected en de worker beëindigt; `store.js` valt dan terug op de bestaande hoofdthread-afleiding. (pad A)
+- `app.js` `submitUnlockForm`: `finally` die de knop vrijgeeft als hij nog op `Checking…` staat. (pad C)
+- Voortgangstekst tijdens afleiding: "Deriving key…" en daarna "Opening vault…" in `#unlock-status`.
+- Test: `tests/test_unlock_worker_watchdog.js` (hangende/falende/crashende worker settelt binnen de
+  tijdslimiet, normale afleiding slaagt, `finally` aanwezig).
