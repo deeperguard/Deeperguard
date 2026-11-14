@@ -56,6 +56,25 @@
     return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   }
 
+  function tzApi() {
+    return global.NotesAgendaTz || null;
+  }
+
+  /** Zone used to read and write the editor's date-time fields ('' = device zone). */
+  function editorZone() {
+    const Tz = tzApi();
+    const el = document.getElementById('agenda-edit-tz');
+    const v = el ? String(el.value || '').trim() : '';
+    return Tz && Tz.isValidTz(v) ? v : '';
+  }
+
+  function fillTzList() {
+    const Tz = tzApi();
+    const list = document.getElementById('agenda-tz-list');
+    if (!Tz || !list || list.childElementCount) return;
+    list.innerHTML = Tz.listZones().map((z) => `<option value="${esc(z)}"></option>`).join('');
+  }
+
   function formatShortDate(d) {
     return d.toLocaleDateString(agendaUiLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
   }
@@ -1900,6 +1919,8 @@
   }
 
   function syncEditorDatetimeMode(allDay) {
+    const tzRow = document.getElementById('agenda-edit-tz-row');
+    if (tzRow) tzRow.hidden = !!allDay || state.editorScope === 'occurrence';
     const startEl = document.getElementById('agenda-edit-start');
     const endEl = document.getElementById('agenda-edit-end');
     [startEl, endEl].forEach((el) => {
@@ -2101,7 +2122,11 @@
     const displayTitle = occ ? occDisplayTitle(occ) : (ev.title || 'Event');
     const allDay = occ ? (occ.displayAllDay ?? !!occ.ev.all_day) : !!ev.all_day;
     if (titleEl) titleEl.textContent = displayTitle || 'Untitled';
-    if (when) when.textContent = detailWhenText(start, end, allDay);
+    if (when) {
+      const Tz = tzApi();
+      const orig = Tz && !allDay && start ? Tz.originalTimeLabel(start.getTime(), ev.tz) : '';
+      when.textContent = detailWhenText(start, end, allDay) + (orig ? ` (${orig})` : '');
+    }
     const repeatText = repeatSummary(ev, occ);
     if (repeat) {
       repeat.hidden = !repeatText;
@@ -2372,6 +2397,7 @@
       ? existing.content
       : defaultEvent();
     state.selectedId = existing ? existing.uuid : id || '';
+    editorBaseTz = String(content.tz || '');
     const scope = options.scope === 'occurrence' ? 'occurrence' : 'series';
     state.editorScope = scope;
     const occMs = Number(options.occurrenceMs) || 0;
@@ -2452,8 +2478,23 @@
         endEl.value = `${lastInclusive.getFullYear()}-${pad2(lastInclusive.getMonth() + 1)}-${pad2(lastInclusive.getDate())}`;
       }
     } else {
-      if (startEl) startEl.value = toDatetimeLocal(s);
-      if (endEl) endEl.value = toDatetimeLocal(e);
+      const Tz = tzApi();
+      const zone = Tz && Tz.isValidTz(content.tz) ? content.tz : '';
+      if (startEl) startEl.value = zone ? Tz.toLocalInput(s.getTime(), zone) : toDatetimeLocal(s);
+      if (endEl) endEl.value = zone ? Tz.toLocalInput(e.getTime(), zone) : toDatetimeLocal(e);
+    }
+    {
+      const Tz = tzApi();
+      const tzEl = document.getElementById('agenda-edit-tz');
+      if (tzEl && Tz) {
+        fillTzList();
+        const own = Tz.isValidTz(content.tz) ? content.tz : '';
+        // New events default to the device zone; old events without tz stay blank (= device).
+        tzEl.value = own || (id ? '' : Tz.deviceTz());
+        tzEl.placeholder = `Device (${Tz.deviceTz()})`;
+      }
+      const tzRow = document.getElementById('agenda-edit-tz-row');
+      if (tzRow) tzRow.hidden = allDay || scope === 'occurrence';
     }
     if (scope === 'series') fillRecurrenceEditor(content);
     else fillRecurrenceEditor({ ...content, rrule: content.rrule || '' });
@@ -2554,6 +2595,7 @@
   }
 
   let editorDiscardPrompt = null;
+  let editorBaseTz = '';
 
   function toDatetimeLocal(d) {
     const x = new Date(d);
@@ -2753,8 +2795,14 @@
       start = startOfDay(sd);
       end = addDays(startOfDay(ed), 1);
     } else {
-      start = fromDatetimeLocal(startEl && startEl.value);
-      end = fromDatetimeLocal(endEl && endEl.value);
+      const Tz = tzApi();
+      const zone = state.editorScope === 'occurrence' ? '' : editorZone();
+      const occZone = state.editorScope === 'occurrence' && Tz && Tz.isValidTz(editorBaseTz) ? editorBaseTz : '';
+      const z = zone || occZone;
+      start = z ? new Date(Tz.fromLocalInput(startEl && startEl.value, z)) : fromDatetimeLocal(startEl && startEl.value);
+      end = z ? new Date(Tz.fromLocalInput(endEl && endEl.value, z)) : fromDatetimeLocal(endEl && endEl.value);
+      if (Number.isNaN(start.getTime())) start = new Date();
+      if (Number.isNaN(end.getTime())) end = new Date(start.getTime() + 3600000);
       if (end <= start) end = new Date(start.getTime() + 3600000);
     }
 
@@ -2863,6 +2911,9 @@
       ics_occurrence_overrides: preserved.ics_occurrence_overrides,
       reminders: readReminderOffsetsFromEditor(),
     };
+    const nextTz = allDay ? '' : editorZone();
+    if (nextTz) nextBody.tz = nextTz;
+    else delete nextBody.tz;
     S.upsertAgendaEvent(id, nextBody);
     syncRemindersAfterSave(id);
     closeEditor();
