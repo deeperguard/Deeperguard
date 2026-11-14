@@ -1394,6 +1394,7 @@
       const next = wrap.firstElementChild;
       if (!next) continue;
       row.replaceWith(next);
+      fillSearchSnippets(next, query);
       updated += 1;
       next.querySelectorAll('.note-list-thumb[data-thumb-id]').forEach((el) => {
         observeThumb(el.dataset.noteId, el.dataset.thumbId, el, { forList: true });
@@ -3249,6 +3250,23 @@
     return preferred.slice(0, 2);
   }
 
+  // Snippet text waiting for its row; each entry is consumed by fillSearchSnippets.
+  const pendingSearchSnippets = new Map();
+
+  function fillSearchSnippets(root, query) {
+    if (root?.querySelectorAll) {
+      root.querySelectorAll('.note-preview[data-search-snippet]').forEach((el) => {
+        const id = el.closest('.note-row')?.dataset.id;
+        if (!id || !pendingSearchSnippets.has(id)) return;
+        NotesSearch.fillSnippet(el, pendingSearchSnippets.get(id), query);
+        el.removeAttribute('data-search-snippet');
+        pendingSearchSnippets.delete(id);
+      });
+    }
+    // Rows that were built but not shown hold no plaintext afterwards.
+    pendingSearchSnippets.clear();
+  }
+
   function noteListPreview(note, fallbackSnippet, query) {
     if (isTwoFaListNote(note) && window.NotesTotp?.parseText) {
       const count = NotesTotp.parseText(note.content.content || '').length;
@@ -3275,10 +3293,13 @@
         ${more ? `<p class="note-preview-more">And ${more} other open task${more === 1 ? '' : 's'}.</p>` : ''}`;
     }
     if (!fallbackSnippet) return '';
-    const snippetHtml = query
-      ? NotesSearch.highlightPlain(String(fallbackSnippet).slice(0, 120), query)
-      : escapeHtml(String(fallbackSnippet).slice(0, 120));
-    return `<p class="note-preview">${snippetHtml}</p>`;
+    if (query) {
+      // Search hits: the snippet is filled with text nodes after the row is in
+      // the DOM (fillSearchSnippets), so note or OCR text is never parsed as HTML.
+      pendingSearchSnippets.set(note.uuid, String(fallbackSnippet).slice(0, 120));
+      return '<p class="note-preview" data-search-snippet="1"></p>';
+    }
+    return `<p class="note-preview">${escapeHtml(String(fallbackSnippet).slice(0, 120))}</p>`;
   }
 
   function noteKindMeta(note) {
@@ -11168,6 +11189,7 @@
         : notes.map((note) => renderNoteRow(note, query)).join('');
       ui.noteList.innerHTML = `<div class="note-section" data-virtual="0">${flat}</div>`;
     }
+    fillSearchSnippets(ui.noteList, query);
     markActiveNoteRow();
     if (!ui.noteList._virtualScrollBound) {
       ui.noteList._virtualScrollBound = true;

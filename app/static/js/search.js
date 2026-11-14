@@ -349,6 +349,7 @@ const NotesSearch = (() => {
   function clearMemoryIndex() {
     noteIndex.clear();
     termCache.clear();
+    foldCache.clear();
   }
 
   function memoryIndexActive() {
@@ -989,6 +990,31 @@ const NotesSearch = (() => {
     return html + escapeHtml(source.slice(last));
   }
 
+  // Search-result snippet built from text nodes and <mark> elements only, so
+  // note or OCR text is never parsed as HTML. Returns the number of marks.
+  function fillSnippet(el, text, query) {
+    if (!el) return 0;
+    const doc = el.ownerDocument;
+    const source = String(text ?? '');
+    el.textContent = '';
+    if (!doc) {
+      el.textContent = source;
+      return 0;
+    }
+    const ranges = String(query || '').trim() ? findMatches(source, query) : [];
+    let last = 0;
+    for (const { start, end } of ranges) {
+      if (start > last) el.appendChild(doc.createTextNode(source.slice(last, start)));
+      const mark = doc.createElement('mark');
+      mark.className = 'search-hit';
+      mark.textContent = source.slice(start, end);
+      el.appendChild(mark);
+      last = end;
+    }
+    if (last < source.length) el.appendChild(doc.createTextNode(source.slice(last)));
+    return ranges.length;
+  }
+
   function applyHighlights(root, query, { caseSensitive = false, literal = false } = {}) {
     if (!root || !String(query || '').trim()) return 0;
     const doc = root.ownerDocument;
@@ -1112,6 +1138,7 @@ const NotesSearch = (() => {
     composeSearchListMeta,
     sameNoteContent,
     highlightPlain,
+    fillSnippet,
     applyHighlights,
     defaultSearchOptions,
     countActiveSearchFilters,
