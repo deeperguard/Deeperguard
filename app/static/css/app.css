@@ -11747,3 +11747,43 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
     animation: none !important;
   }
 }
+
+/* Sign-in / registration / recovery / unlock polish (idea #92). Visual only. */
+.auth-card { border-radius: var(--radius-lg); padding: 32px 24px 24px; }
+html[data-theme="light"] .auth-card { background: var(--bg-elevated); border-color: var(--border); }
+html[data-theme="light"] .auth-page { background: var(--bg); }
+.auth-card input:not([type="checkbox"]) { width: 100%; min-height: var(--touch); box-sizing: border-box; }
+.auth-card label, .auth-field { line-height: 1.3; }
+.auth-card .hint, .auth-card .auth-hint, .auth-card .error, .auth-card .field-error,
+.auth-card .auth-status, .auth-card .unlock-status { line-height: 1.45; overflow-wrap: anywhere; }
+.auth-card .error, .auth-card .field-error { font-size: 14px; font-weight: 500; }
+html[data-theme="light"] .auth-card .error,
+html[data-theme="light"] .auth-card .field-error { color: #b42318; }
+.auth-card .hint, .auth-card .auth-hint { margin: 0; }
+.field-error { margin: 0; }
+.auth-card .btn { white-space: normal; text-align: center; }
+.auth-card .btn.block { min-height: var(--touch); }
+.auth-card input[aria-invalid="true"]:not([type="checkbox"]) { border-color: var(--danger); }
+#login-submit:disabled::before, #register-submit:disabled::before {
+  content: '';
+  display: inline-block;
+  width: 14px; height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: var(--on-accent);
+  border-radius: 50%;
+  animation: unlock-checking-spin 0.7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  #login-submit:disabled::before, #register-submit:disabled::before,
+  #unlock-submit.is-checking::before { animation-duration: 2s; }
+}
+@media (max-width: 520px) {
+  .auth-page { padding-left: calc(12px + var(--safe-left)); padding-right: calc(12px + var(--safe-right)); }
+  .auth-card { padding: 24px 16px 20px; }
+  .password-toggle { min-width: 4rem; }
+}
+.auth-card .hint, .auth-card .auth-hint { color: var(--muted); }
+#login-password-block .hint { margin-top: 8px; }
+#login-error { margin: 0; }

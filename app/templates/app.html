@@ -582,7 +582,7 @@
       </div>
       <form id="unlock-form" class="stack" novalidate autocomplete="off">
         <label>Vault password
-          <input id="unlock-password" type="password" autocomplete="current-password" required aria-required="true">
+          <input id="unlock-password" type="password" autocomplete="current-password" required aria-required="true" aria-describedby="unlock-error unlock-status">
         </label>
         <p id="unlock-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" hidden></p>
         <p id="unlock-recovery-hint" class="auth-hint" hidden>If you changed it in Settings, the vault password is different from the password you use to sign in. They start as the same password.</p>

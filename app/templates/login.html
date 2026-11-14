@@ -25,17 +25,17 @@
     {% endif %}
     <form id="login-form" class="stack" novalidate>
       <label>Email
-        <input type="email" name="email" autocomplete="username" required aria-required="true">
+        <input type="email" name="email" autocomplete="username" required aria-required="true" aria-describedby="login-error">
       </label>
       <div id="login-password-block">
         <label>Account password
-          <input id="login-password" type="password" autocomplete="current-password" required aria-required="true">
+          <input id="login-password" type="password" autocomplete="current-password" required aria-required="true" aria-describedby="login-password-hint login-error">
         </label>
-        <p class="hint">This password signs you in. It also decrypts notes on this device until you change the vault password in Settings. It never leaves your browser.</p>
+        <p id="login-password-hint" class="hint">This password signs you in. It also decrypts notes on this device until you change the vault password in Settings. The password itself is not sent to the server.</p>
       </div>
       <div id="login-recovery-block" class="stack" hidden>
         <label>Recovery code
-          <input id="login-recovery-code" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" inputmode="text" placeholder="XXXX-XXXX-XXXX">
+          <input id="login-recovery-code" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" inputmode="text" placeholder="XXXX-XXXX-XXXX" aria-describedby="login-error">
         </label>
         <p class="hint">One-time recovery codes work only after their waiting period ends. They sign you into your account — you still unlock the vault with your master password.</p>
         <button type="button" id="login-recovery-submit" class="btn subtle block">Sign in with recovery code</button>
