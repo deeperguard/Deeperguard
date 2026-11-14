@@ -538,7 +538,19 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  if (!event.data) return;
+  if (!event.data) {
+    // Opt-in window reminder: the push is empty on purpose. Always show something (iOS drops
+    // subscriptions after silent pushes). Per-reminder local text is a later milestone (M3).
+    event.waitUntil(
+      self.registration.showNotification('Deeperguard', {
+        body: 'You have a reminder',
+        icon: '/static/icons/icon-192.png',
+        tag: 'dg-window-reminder',
+        data: { url: '/app' },
+      }),
+    );
+    return;
+  }
   let payload = { title: 'Deeperguard', body: 'You have an upcoming event', url: '/app' };
   try {
     payload = { ...payload, ...event.data.json() };

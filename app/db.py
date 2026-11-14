@@ -359,6 +359,20 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             UNIQUE(user_id, endpoint),
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
+
+        -- Opt-in closed-app reminders (docs/design/push-reminders.md). Exactly these columns:
+        -- a random id and a 15-minute window, never the exact time, text or item.
+        CREATE TABLE IF NOT EXISTS push_reminder_windows (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            device_id INTEGER NOT NULL,
+            window_start INTEGER NOT NULL,
+            created_at REAL NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY(device_id) REFERENCES web_push_subscriptions(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_push_reminder_windows_due
+            ON push_reminder_windows(window_start);
         """
     )
     conn.executescript(
@@ -3453,5 +3467,72 @@ def list_web_push_subscriptions(user_id: int) -> list[dict[str, Any]]:
     rows = connection().execute(
         "SELECT endpoint, subscription_json FROM web_push_subscriptions WHERE user_id = ?",
         (user_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+PUSH_WINDOW_SEC = 900
+PUSH_WINDOW_CAP = 50
+
+
+def put_push_windows(user_id: int, endpoint: str, windows: list[tuple[str, int]]) -> str:
+    """Store windows for one device. Returns "ok", "no_device" or "cap"."""
+    ts = now()
+    with tx() as conn:
+        dev = conn.execute(
+            "SELECT id FROM web_push_subscriptions WHERE user_id = ? AND endpoint = ?",
+            (user_id, endpoint),
+        ).fetchone()
+        if not dev:
+            return "no_device"
+        existing = {
+            r["id"]
+            for r in conn.execute(
+                "SELECT id FROM push_reminder_windows WHERE user_id = ?", (user_id,)
+            ).fetchall()
+        }
+        if len(existing | {w[0] for w in windows}) > PUSH_WINDOW_CAP:
+            return "cap"
+        for rid, start in windows:
+            if rid in existing:
+                conn.execute(
+                    "UPDATE push_reminder_windows SET window_start = ?, device_id = ? "
+                    "WHERE id = ? AND user_id = ?",
+                    (int(start), dev["id"], rid, user_id),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO push_reminder_windows (id, user_id, device_id, window_start, created_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (rid, user_id, dev["id"], int(start), ts),
+                )
+    return "ok"
+
+
+def delete_push_windows(user_id: int, ids: list[str] | None = None, endpoint: str | None = None) -> int:
+    """Delete by id, or every window of one device (turning the option off)."""
+    n = 0
+    with tx() as conn:
+        for rid in ids or []:
+            n += conn.execute(
+                "DELETE FROM push_reminder_windows WHERE user_id = ? AND id = ?", (user_id, rid)
+            ).rowcount
+        if endpoint:
+            n += conn.execute(
+                "DELETE FROM push_reminder_windows WHERE user_id = ? AND device_id IN ("
+                "SELECT id FROM web_push_subscriptions WHERE user_id = ? AND endpoint = ?)",
+                (user_id, user_id, endpoint),
+            ).rowcount
+    return n
+
+
+def due_push_windows(now_ts: float) -> list[dict[str, Any]]:
+    rows = connection().execute(
+        """
+        SELECT w.id, w.user_id, w.window_start, s.endpoint, s.subscription_json
+        FROM push_reminder_windows w JOIN web_push_subscriptions s ON s.id = w.device_id
+        WHERE w.window_start <= ? ORDER BY w.window_start LIMIT 500
+        """,
+        (int(now_ts),),
     ).fetchall()
     return [dict(r) for r in rows]
