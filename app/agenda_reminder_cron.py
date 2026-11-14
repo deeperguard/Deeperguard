@@ -2,7 +2,8 @@
 
 Delivery rules:
 - A reminder more than MAX_LATE_SEC overdue is closed without sending: "you have an
-  event at 09:00" is wrong at 17:00.
+  event coming up soon" is wrong hours later.
+- Email text is generic: no event time (see agenda_email_body).
 - A reminder that cannot be delivered at all (push not configured, no subscription,
   unverified address) is closed at once, so it can never sit at the head of the queue
   and hold back other accounts.
@@ -73,10 +74,19 @@ def agenda_reminder_line(local_time_label: str) -> str:
     return "You have an upcoming event."
 
 
-def agenda_email_body(local_time_label: str) -> str:
+EMAIL_REMINDER_LINE = "You have an event coming up soon."
+
+
+def agenda_email_body(local_time_label: str = "") -> str:
+    """Generic text only: no event time, title or date. Any stored label is ignored.
+
+    The mail relay and the recipient's mail provider read and keep this text, so it says
+    nothing beyond "a reminder arrived around now" (docs/design/calendar-multi.md §5.2).
+    """
     return (
-        f"{agenda_reminder_line(local_time_label)}\n\n"
-        "Open Deeperguard to view your calendar. Event details are encrypted on your device.\n\n"
+        f"{EMAIL_REMINDER_LINE}\n\n"
+        "Open Deeperguard to see what it is. Event details are encrypted on your device.\n"
+        "This reminder can arrive up to 15 minutes early.\n\n"
         f"{UNSUB_HINT}\n"
     )
 

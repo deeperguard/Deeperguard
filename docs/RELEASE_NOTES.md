@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Calendar email reminders are now generic.** An email reminder says only "You have an event coming up soon.", without the event time. The app uploads only the 15-minute window it is due in (rounded down, so it can arrive up to 15 minutes early, never late) and no `HH:MM` label; the server also rounds and drops the label for older app versions. Push and local reminders are unchanged. Email reminders stay opt-in (off by default) and Pro-only; the setting now says who sees what.
 - **Agenda: the "now" line keeps moving.** The red line in Day/Week view moves every minute while the Agenda is open, and "today" switches at midnight (the view re-renders unless the event editor is open). Nothing runs while the tab is hidden; coming back catches up at once.
 - **Agenda: no more silently lost edits.** Closing the event editor with Cancel, a click outside it, or Escape now asks "You have unsaved changes. Discard them?" when something was changed; an untouched editor closes straight away.
 - **Agenda: undo after delete.** Deleting an event or a single occurrence shows "Event deleted" / "Occurrence deleted" with an **Undo** button (about 6 seconds). Undo brings back the event with its repeat, exceptions and reminders.

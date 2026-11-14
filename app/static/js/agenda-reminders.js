@@ -1,6 +1,10 @@
 /**
  * Agenda reminders: client-side fire times; server sees only id + fire_at + channel + optional local time label.
  *
+ * - Email (docs/design/calendar-multi.md §5.2, generic text and coarse window): the fire time is rounded
+ *   down to a 15-minute UTC window and no local time label is sent, so the server and the mail providers
+ *   learn only "around this quarter hour", and the mail says nothing about the event. Rounding is
+ *   deterministic (no random jitter), so every device uploads the same window for the same reminder.
  * - Occurrences come from the same expander the calendar draws with (interval, until, count,
  *   deleted and moved occurrences), so a reminder never fires for a date that is not shown.
  * - Reminder ids are derived from (event id, occurrence slot, offset, channel). The event id is a
@@ -31,6 +35,9 @@
     h1: 60,
     d1: 24 * 60,
   };
+
+  /** Email reminders go out at the start of this window (seconds); up to 15 minutes early, never late. */
+  const EMAIL_WINDOW_SEC = 900;
 
   const ALLOWED_UPLOAD_KEYS = new Set(['id', 'fire_at', 'channel', 'local_time_label']);
 
@@ -165,11 +172,17 @@
         const label = ev.all_day ? '' : localTimeLabel(o.start);
         for (const channel of channels) {
           if (out.length >= MAX_ROWS_PER_EVENT) return out;
+          const email = channel === 'email';
+          const fireSec = email
+            ? Math.floor(fireAt / 1000 / EMAIL_WINDOW_SEC) * EMAIL_WINDOW_SEC
+            : Math.floor(fireAt / 1000);
+          // The window already started: the server would refuse it. The local reminder still fires.
+          if (fireSec * 1000 <= nowMs) continue;
           out.push({
             id: '',
-            fire_at: Math.floor(fireAt / 1000),
+            fire_at: fireSec,
             channel,
-            local_time_label: label,
+            local_time_label: email ? '' : label,
             _key: `agenda-reminder|${ev.id || ''}|${o.slotMs}|${key}|${channel}`,
           });
         }
@@ -566,6 +579,7 @@
     hasAgendaRemindersEntitlement,
     GENERIC_PUSH_TITLE,
     genericBody,
+    EMAIL_WINDOW_SEC,
     normalizeOffsets,
     offsetMinutes,
     offsetLabel,

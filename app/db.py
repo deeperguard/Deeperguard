@@ -3235,6 +3235,9 @@ def count_pending_agenda_reminders(user_id: int, now_ts: float | None = None) ->
 
 AGENDA_REMINDER_LABEL_RE = re.compile(r"^\d{1,2}:\d{2}$")
 AGENDA_REMINDER_SENT_RETENTION_SEC = 7 * 86400.0
+# Email reminders are stored as a 15-minute window without a time label (docs/design/calendar-multi.md
+# §5.2): the server, the mail relay and the inbox provider never learn the exact minute or the event time.
+AGENDA_EMAIL_WINDOW_SEC = 900
 WEB_PUSH_SUBSCRIPTION_CAP = 10
 
 
@@ -3298,10 +3301,13 @@ def sync_agenda_reminders(
                 fire_at = float(item.get("fire_at"))
             except (TypeError, ValueError):
                 continue
+            if channel == "email":
+                # Older clients still send the exact time and a label: coarsen before storing.
+                fire_at = float(int(fire_at // AGENDA_EMAIL_WINDOW_SEC) * AGENDA_EMAIL_WINDOW_SEC)
             if fire_at <= when:
                 continue
             label = str(item.get("local_time_label") or "").strip()
-            if not AGENDA_REMINDER_LABEL_RE.match(label):
+            if channel == "email" or not AGENDA_REMINDER_LABEL_RE.match(label):
                 label = ""
             exists = conn.execute(
                 "SELECT 1 FROM agenda_scheduled_reminders WHERE user_id = ? AND id = ?",
