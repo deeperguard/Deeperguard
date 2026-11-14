@@ -1922,6 +1922,73 @@ const NotesStore = (() => {
     return true;
   }
 
+  /**
+   * Calendar migration (docs/CALENDARS_SPEC.md §3), pure: returns new pack content, or null
+   * when nothing changes, so a second run writes nothing.
+   * - Folds extra calendars marked `is_default` (another id) into DEFAULT_CALENDAR_ID: their
+   *   events move over, the newest name/color wins, the extra id gets a tombstone.
+   * - `assignEvents`: also creates the default calendar and gives every event without a
+   *   calendarId, or with an unknown/deleted one, the default calendar.
+   * Event `updated_at` is kept (bookkeeping, like reminder ids), so this never beats a real
+   * edit from another device; the rule runs again after every merge, so devices converge.
+   */
+  function normalizeAgendaCalendars(content, nowIso, { assignEvents = true } = {}) {
+    if (!content || typeof content !== 'object') return null;
+    const events = content.events || {};
+    const cals = agendaPackCalendars(content);
+    const extraDefaults = Object.keys(cals)
+      .filter((id) => id !== DEFAULT_CALENDAR_ID && cals[id].is_default === true)
+      .sort();
+    const hasEvents = Object.values(events).some((ev) => ev && ev.type === 'agenda_event');
+    if (!extraDefaults.length && (!assignEvents || (!hasEvents && !Object.keys(cals).length))) return null;
+    const now = nowIso || new Date().toISOString();
+    let changed = false;
+    const calendars = { ...(content.calendars || {}) };
+    const deleted = { ...(content.deleted_calendars || {}) };
+    let def = cals[DEFAULT_CALENDAR_ID];
+    if (!def) {
+      def = defaultAgendaCalendar(now);
+      changed = true;
+    }
+    for (const id of extraDefaults) {
+      const dup = cals[id];
+      if (agendaStampMs(dup.updated_at) > agendaStampMs(def.updated_at)) {
+        def = { ...def, name: dup.name ?? def.name, color: dup.color ?? def.color, updated_at: dup.updated_at };
+      }
+      delete calendars[id];
+      if (agendaStampMs(now) > agendaStampMs(deleted[id])) deleted[id] = now;
+      changed = true;
+    }
+    if (def.is_default !== true) {
+      def = { ...def, is_default: true };
+      changed = true;
+    }
+    calendars[DEFAULT_CALENDAR_ID] = def;
+    const known = agendaPackCalendars({ calendars });
+    const nextEvents = { ...events };
+    for (const [evId, ev] of Object.entries(events)) {
+      if (!ev || ev.type !== 'agenda_event') continue;
+      const cid = String(ev.calendarId || '').trim();
+      const move = assignEvents ? !known[cid] : extraDefaults.includes(cid);
+      if (!move) continue;
+      nextEvents[evId] = { ...ev, calendarId: DEFAULT_CALENDAR_ID };
+      changed = true;
+    }
+    if (!changed) return null;
+    return { ...content, events: nextEvents, calendars, deleted_calendars: deleted };
+  }
+
+  /** Runs once per unlock; idempotent. Returns true when the pack was rewritten. */
+  function migrateAgendaCalendars() {
+    const pack = agendaPackRecord();
+    if (!pack) return false;
+    const now = new Date().toISOString();
+    const next = normalizeAgendaCalendars(pack.content, now);
+    if (!next) return false;
+    upsert(AGENDA_PACK_UUID, { ...next, updated_at: now });
+    return true;
+  }
+
   /** Calendar an event is shown in; never writes. */
   function agendaEventCalendarId(ev, calendars) {
     const id = String((ev && ev.calendarId) || '').trim();
@@ -2080,7 +2147,7 @@ const NotesStore = (() => {
     const updated = agendaStampMs(local.updated_at) >= agendaStampMs(remote.updated_at)
       ? local.updated_at
       : remote.updated_at;
-    return {
+    const merged = {
       ...remote,
       ...local,
       ...(mergeAgendaSubscriptions(local, remote, nowMs) || {}),
@@ -2090,6 +2157,8 @@ const NotesStore = (() => {
       deleted_events: deleted,
       updated_at: updated || new Date(nowMs).toISOString(),
     };
+    // Safety net (CALENDARS_SPEC §3): a second default calendar under another id is folded in.
+    return normalizeAgendaCalendars(merged, new Date(nowMs).toISOString(), { assignEvents: false }) || merged;
   }
 
   function mergeIcsRowsForUid(vevents, existing) {
@@ -2483,6 +2552,7 @@ const NotesStore = (() => {
     repairStoredAttachmentCopies();
     try {
       ensureAgendaPack();
+      migrateAgendaCalendars();
     } catch (err) {
       /* unlocked after maintenance; ignore */
     }
@@ -3539,6 +3609,8 @@ const NotesStore = (() => {
     if (type === 'agenda_pack' && remote.content?.type === 'agenda_pack') {
       // Both devices changed the calendar: keep every event change, not the newest pack.
       local.content = mergeAgendaPacks(local.content, remote.content);
+      // The content changed but `updated_at` may not: never re-push the pre-merge ciphertext.
+      clearSyncPushWrap(local);
       await persistLocal(uuid, local);
       logSync('conflict-agenda-merge', { uuid, rev: serverRev });
       return winLocal();
@@ -7072,6 +7144,7 @@ const NotesStore = (() => {
     DEFAULT_CALENDAR_ID,
     listAgendaCalendars,
     ensureDefaultCalendar,
+    migrateAgendaCalendars,
     upsertAgendaCalendar,
     removeAgendaCalendar,
     agendaEventCalendarId,
