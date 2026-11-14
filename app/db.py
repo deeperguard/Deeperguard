@@ -168,6 +168,14 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN pcloud_last_sync_status TEXT NOT NULL DEFAULT ''")
     if "pcloud_last_sync_detail" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN pcloud_last_sync_detail TEXT NOT NULL DEFAULT ''")
+    if "managed_backup_enabled" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN managed_backup_enabled INTEGER NOT NULL DEFAULT 0")
+    if "pcloud_dir_id" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN pcloud_dir_id TEXT NOT NULL DEFAULT ''")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_pcloud_dir_id "
+        "ON users(pcloud_dir_id) WHERE pcloud_dir_id != ''"
+    )
     if "vault_kdf_version" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN vault_kdf_version INTEGER NOT NULL DEFAULT 1")
     if "auth_method" not in cols:
@@ -1712,6 +1720,31 @@ def count_email_sends_for_recipient(recipient: str, kind: str, since: float) -> 
         (recipient.strip().lower(), kind, float(since)),
     ).fetchone()
     return int(row[0] if row else 0)
+
+
+def enable_managed_backup(user_id: int) -> str:
+    """Switch managed backup on; create the opaque directory id once. Returns the id."""
+    conn = connection()
+    conn.execute(
+        "UPDATE users SET pcloud_dir_id = ? WHERE id = ? AND pcloud_dir_id = ''",
+        (secrets.token_hex(16), int(user_id)),
+    )
+    conn.execute(
+        "UPDATE users SET managed_backup_enabled = 1, updated_at = ? WHERE id = ?",
+        (time.time(), int(user_id)),
+    )
+    conn.commit()
+    row = conn.execute("SELECT pcloud_dir_id FROM users WHERE id = ?", (int(user_id),)).fetchone()
+    return str(row[0]) if row else ""
+
+
+def disable_managed_backup(user_id: int) -> None:
+    conn = connection()
+    conn.execute(
+        "UPDATE users SET managed_backup_enabled = 0, updated_at = ? WHERE id = ?",
+        (time.time(), int(user_id)),
+    )
+    conn.commit()
 
 
 def update_pcloud_settings(
