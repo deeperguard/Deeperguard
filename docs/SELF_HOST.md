@@ -34,6 +34,8 @@ See `deploy/deeperguard.env.example` for SMTP, quotas, registration policy (`NOT
 
 Daily encrypted vault backups run via cron (`deploy/cron/deeperguard-backup`). Pro users can also enable email and pCloud backups in app Settings.
 
+Client-side encrypted backup to your own WebDAV/Nextcloud server is **planned, not yet available** (gepland, nog niet beschikbaar); see [WEBDAV_BACKUP_DESIGN.md](WEBDAV_BACKUP_DESIGN.md).
+
 ## Troubleshooting
 
 | Symptom | Fix |
