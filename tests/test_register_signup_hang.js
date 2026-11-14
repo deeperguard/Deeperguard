@@ -34,6 +34,7 @@ function buildSandbox(lang = 'en') {
     validity: { valid: true },
     addEventListener() {},
     setAttribute() {},
+    removeAttribute() {},
   });
   const getEl = (id) => {
     if (!elements.has(id)) {
