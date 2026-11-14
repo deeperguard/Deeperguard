@@ -740,6 +740,7 @@
             <div class="brand-copy">
               <div class="brand-title-row">
                 <strong>Notes <span id="app-version" class="app-version">v{{ build }}</span> <span id="app-client-hash" class="app-client-hash muted" title="Client manifest SHA-256">{{ client_hash_short }}</span></strong>
+                {% include 'partials/release-version.html' %}
                 <span id="list-plan-badge" class="plan-badge plan-badge-sm" hidden aria-label="Subscription plan">Pro</span>
               </div>
               <p id="sync-meta" class="sync-meta">Not synced yet</p>
