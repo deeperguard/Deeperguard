@@ -23483,6 +23483,12 @@
     backupNowCooldownTimer = setInterval(tick, 1000);
   }
 
+  document.getElementById('agenda-backup-restore')?.addEventListener('click', async () => {
+    if (!window.confirm('Restore the last local agenda backup? Events from the backup are added back.')) return;
+    const res = await NotesStore.restoreAgendaBackup();
+    toast(res.ok ? 'Agenda backup restored' : 'No local agenda backup available', !res.ok);
+  });
+
   document.getElementById('btn-backup-now').addEventListener('click', async () => {
     const btn = document.getElementById('btn-backup-now');
     const account = NotesStore.cachedAccount?.() || {};

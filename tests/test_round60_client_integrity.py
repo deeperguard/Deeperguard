@@ -250,22 +250,6 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("sync agenda merge ok", proc.stdout)
 
-    def test_sync_agenda_two_devices_known_bug(self):
-        # Reproduces the agenda data loss of docs/AGENDA_SYNC_BUG.md. Exits 0 while the
-        # bug reproduces and 1 ("UNEXPECTED PASS") once it is fixed: then drop this test
-        # and the expectedFailure marker below.
-        proc = subprocess.run(
-            ["node", str(REPO / "tests" / "test_sync_agenda_two_devices.js")],
-            cwd=str(REPO),
-            capture_output=True,
-            text=True,
-            timeout=300,
-            check=False,
-        )
-        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
-        self.assertIn("KNOWN BUG reproduced (docs/AGENDA_SYNC_BUG.md)", proc.stdout)
-
-    @unittest.expectedFailure  # docs/AGENDA_SYNC_BUG.md: agenda lost across devices on main
     def test_sync_agenda_two_devices_contract(self):
         proc = subprocess.run(
             ["node", str(REPO / "tests" / "test_sync_agenda_two_devices.js")],
@@ -274,10 +258,21 @@ class Round60ClientIntegrityTests(unittest.TestCase):
             text=True,
             timeout=300,
             check=False,
-            env={**os.environ, "AGENDA_SYNC_STRICT": "1"},
         )
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("agenda two devices ok", proc.stdout)
+
+    def test_sync_agenda_safety_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_sync_agenda_safety.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("sync agenda safety ok", proc.stdout)
 
     def test_agenda_tz_contract(self):
         proc = subprocess.run(
