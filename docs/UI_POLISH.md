@@ -645,6 +645,20 @@ stroke 2, 20px in 44px, the same size everywhere; text glyphs ("x" or "x" in
 
 ### 4.3 Dialog pattern
 
+**Status (shared tokens/buttons/dialogs task):** the tokens from section 3
+are CSS variables in `app.css` (dark in `:root`, light in the first
+`html[data-theme="light"]` block); the button states from 4.1 are one shared
+rule set on `.btn`; and `app/static/js/dialog-a11y.js` gives **every**
+`role="dialog"`/`role="alertdialog"` element with `aria-modal="true"` the shared
+behaviour: focus trap, safe initial focus (never a `.danger` button), and focus
+back to the opener on close. It also adds the short open/close fade, which is
+off under `prefers-reduced-motion`. `confirmAction()` uses `DialogA11y.confirm()`:
+Escape, the X button and the backdrop always resolve `false`, and they are
+ignored while the dialog or one of its buttons has `aria-busy="true"`. So far only
+`#confirm-dialog` uses the full header/close/body/actions markup
+(`.dialog-pattern`). The other dialogs keep their own markup and Escape
+handling, and the per-area tasks in section 6 move them to `.dialog-pattern`.
+
 One structure for every modal (confirm, prompts, sheets, editors, add/import,
 detail cards). Wrapper `role="dialog"` (or `alertdialog` for unavoidable
 decisions) `aria-modal="true"`, `aria-labelledby` = title id,
