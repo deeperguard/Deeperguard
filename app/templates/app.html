@@ -1496,6 +1496,11 @@
         <div class="agenda-calendar-settings-body">
           <p class="settings-hint">Import or export calendar files on this device only. If Agenda looks out of date after an update, close the tab and open Deeperguard again (the offline worker fetches a fresh shell).</p>
           <p class="settings-hint">Import supports .ics from other apps. Events stay encrypted in your vault; only https links are used as join targets.</p>
+          <section class="agenda-backup" aria-labelledby="agenda-backup-heading">
+            <h3 id="agenda-backup-heading" class="section-label">Agenda backup</h3>
+            <p class="settings-hint muted">Before every sync merge this device keeps an encrypted copy of your agenda (last 3). Restoring puts the newest copy back and syncs it.</p>
+            <button type="button" class="btn" id="agenda-backup-restore">Restore last local agenda backup</button>
+          </section>
           <section class="agenda-calendars" aria-labelledby="agenda-calendars-heading">
             <h3 id="agenda-calendars-heading" class="section-label">My calendars</h3>
             <p class="settings-hint muted">Untick a calendar to hide its events. Names and colors stay encrypted in your vault.</p>

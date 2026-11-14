@@ -1804,6 +1804,57 @@ const NotesStore = (() => {
     return item;
   }
 
+  // Encrypted local safety copies of the agenda pack (newest last), taken before a
+  // sync merge. Same vault key and AES-GCM helper as sync; nothing readable is stored
+  // or logged.
+  const AGENDA_BACKUP_KEEP = 3;
+  async function backupAgendaPack(reason) {
+    try {
+      const pack = agendaPackRecord();
+      if (!pack || !state.cryptoKey) return;
+      const payload = await NotesCrypto.encryptObject(state.cryptoKey, pack.content);
+      const list = await listAgendaBackups();
+      list.push({ at: Date.now(), reason: String(reason || ''), payload });
+      await NotesIDB.putMeta('agenda_backups', list.slice(-AGENDA_BACKUP_KEEP));
+    } catch (err) {
+      logSync('agenda-backup-failed', {});
+    }
+  }
+
+  async function listAgendaBackups() {
+    try {
+      const list = await NotesIDB.getMeta('agenda_backups');
+      return Array.isArray(list) ? list : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  /** Put the newest local agenda backup back (merged-in as the local pack, then synced). */
+  async function restoreAgendaBackup() {
+    const list = await listAgendaBackups();
+    const last = list[list.length - 1];
+    if (!last || !state.cryptoKey) return { ok: false, count: 0 };
+    let content;
+    try {
+      content = await NotesCrypto.decryptObject(state.cryptoKey, last.payload);
+    } catch (err) {
+      return { ok: false, count: 0 };
+    }
+    if (!content || content.type !== 'agenda_pack') return { ok: false, count: 0 };
+    ensureAgendaPack();
+    const rec = state.items.get(AGENDA_PACK_UUID);
+    const merged = mergeAgendaPacks(content, rec.content || {});
+    // Restoring means the backup's events come back, even ones deleted since.
+    for (const id of Object.keys(content.events || {})) {
+      if (merged.deleted_events) delete merged.deleted_events[id];
+      merged.events[id] = content.events[id];
+    }
+    merged.updated_at = new Date().toISOString();
+    upsert(AGENDA_PACK_UUID, merged);
+    return { ok: true, count: Object.keys(merged.events || {}).length };
+  }
+
   function ensureAgendaPack() {
     if (agendaPackRecord()) return;
     upsert(AGENDA_PACK_UUID, defaultAgendaPack());
@@ -2481,11 +2532,8 @@ const NotesStore = (() => {
     await migratePlainAttachments();
     await migrateLegacyBlobs();
     repairStoredAttachmentCopies();
-    try {
-      ensureAgendaPack();
-    } catch (err) {
-      /* unlocked after maintenance; ignore */
-    }
+    // No ensureAgendaPack() here: an empty pack made before the first pull would
+    // overwrite the server's agenda (docs/AGENDA_SYNC_BUG.md). Reads work without it.
     // Rewrite copied scan text from the attachments the note list shows
     // before the first search. This does not delete attachment bytes.
     for (const note of listNotes()) refreshNoteSearchText(note.uuid);
@@ -3538,7 +3586,9 @@ const NotesStore = (() => {
     }
     if (type === 'agenda_pack' && remote.content?.type === 'agenda_pack') {
       // Both devices changed the calendar: keep every event change, not the newest pack.
+      await backupAgendaPack('pre-merge');
       local.content = mergeAgendaPacks(local.content, remote.content);
+      clearSyncPushWrap(local); // merged content: never re-send the cached pre-merge ciphertext
       await persistLocal(uuid, local);
       logSync('conflict-agenda-merge', { uuid, rev: serverRev });
       return winLocal();
@@ -3683,6 +3733,9 @@ const NotesStore = (() => {
           // The revision this write builds on; the server reports a conflict
           // instead of picking a winner by clock when it has moved on.
           if (item.rev != null && Number.isFinite(Number(item.rev))) row.base_rev = Number(item.rev);
+          // Agenda pack: "I know no server version" must conflict (and merge), never
+          // fall back to last-writer-wins on the whole pack.
+          else if (uuid === AGENDA_PACK_UUID) row.base_rev = 0;
           rowsByUuid.set(uuid, row);
           payload.push(row);
         }
@@ -3877,6 +3930,8 @@ const NotesStore = (() => {
     const localRev = Number(local.rev) || 0;
     const rowRev = Number(row?.rev) || 0;
     const dirtyLocal = state.dirty.has(row.item_uuid);
+    // An agenda pack is merged, never picked by clock (see applySyncPayload).
+    if (local.content?.type === 'agenda_pack' && !(localRev > 0 && rowRev > 0 && !dirtyLocal)) return false;
     if (localRev > 0 && rowRev > 0) {
       if (dirtyLocal) return true;
       return localRev >= rowRev;
@@ -4030,6 +4085,23 @@ const NotesStore = (() => {
             const prevLocked = !!local?.content?.locked;
             const prevPrevent = !!local?.content?.prevent_edit;
             previousContent = local?.content || null;
+            if (
+              remote.content?.type === 'agenda_pack'
+              && local?.content?.type === 'agenda_pack'
+              && !row.deleted
+            ) {
+              // Never take a server pack whole: an empty or older one must not wipe
+              // local events. Only tombstones remove items (mergeAgendaPacks).
+              const merged = mergeAgendaPacks(local.content, remote.content);
+              const keysOf = (c) => ['events', 'subscriptions', 'calendars', 'deleted_events']
+                .map((k) => Object.keys(c?.[k] || {}).sort().join(',')).join('|');
+              if (keysOf(merged) !== keysOf(remote.content)) {
+                await backupAgendaPack('pre-merge');
+                state.dirty.add(row.item_uuid);
+                schedulePush();
+              }
+              remote.content = merged;
+            }
             if (remote.content?.type === 'search_index') {
               const merged = mergeSearchEntries(local?.content?.entries, remote.content.entries);
               if (!searchEntriesEqual(remote.content.entries, merged)) {
@@ -7069,6 +7141,8 @@ const NotesStore = (() => {
     upsertAgendaEvent,
     removeAgendaEvent,
     mergeAgendaPacks,
+    listAgendaBackups,
+    restoreAgendaBackup,
     DEFAULT_CALENDAR_ID,
     listAgendaCalendars,
     ensureDefaultCalendar,

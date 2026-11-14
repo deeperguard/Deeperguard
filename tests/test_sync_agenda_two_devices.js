@@ -4,11 +4,7 @@
 // fake server that follows the push rules of app/db.py (_plan_sync_item: rev,
 // base_rev -> conflict, no base_rev -> last-writer-wins by updated_at -> stale).
 //
-//   node tests/test_sync_agenda_two_devices.js            report; exit 0 while the
-//                                                          known bug reproduces, exit 1
-//                                                          on "UNEXPECTED PASS" or a crash
-//   AGENDA_SYNC_STRICT=1 node tests/...two_devices.js     exit 1 on any data loss
-//                                                          (expected failure on main)
+//   node tests/test_sync_agenda_two_devices.js   exit 1 on any data loss
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
@@ -217,25 +213,14 @@ async function main() {
     ['C', 'sync', 'C (fresh) after sync'],
   ]));
 
-  const strict = process.env.AGENDA_SYNC_STRICT === '1';
   if (!failures.length) {
     console.log('agenda two devices: no data loss');
-    if (strict) {
-      console.log('agenda two devices ok');
-      process.exit(0);
-    }
-    // The known bug no longer reproduces: drop the expected-failure marker in
-    // tests/test_round60_client_integrity.py and update docs/AGENDA_SYNC_BUG.md.
-    console.error('UNEXPECTED PASS: agenda data loss no longer reproduces (docs/AGENDA_SYNC_BUG.md)');
-    process.exit(1);
+    console.log('agenda two devices ok');
+    process.exit(0);
   }
   console.log(`agenda two devices: ${failures.length} data-loss findings`);
   failures.forEach((f) => console.log(`  - ${f}`));
-  if (strict) {
-    assert.fail(`agenda data lost across devices (docs/AGENDA_SYNC_BUG.md):\n${failures.join('\n')}`);
-  }
-  console.log('agenda two devices: KNOWN BUG reproduced (docs/AGENDA_SYNC_BUG.md)');
-  process.exit(0);
+  assert.fail(`agenda data lost across devices (docs/AGENDA_SYNC_BUG.md):\n${failures.join('\n')}`);
 }
 
 if (process.argv[2] === '--device') {
