@@ -374,6 +374,34 @@ def smtp_password() -> str:
     return SMTP_PASS or read_secret(smtp_password_path())
 
 
+PCLOUD_SERVICE_REMOTE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$")
+_PCLOUD_ROOT_SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$")
+
+
+def pcloud_service_remote() -> str:
+    """Name of the operator's rclone remote; empty (feature unavailable) if unset or invalid."""
+    name = os.environ.get("NOTES_PCLOUD_SERVICE_REMOTE", "").strip()
+    return name if PCLOUD_SERVICE_REMOTE_RE.match(name) else ""
+
+
+def pcloud_service_root() -> str:
+    """Normalised base folder in the service remote; empty if the setting is invalid."""
+    raw = os.environ.get("NOTES_PCLOUD_SERVICE_ROOT", "").strip() or "Deeperguard/users"
+    parts = raw.strip("/").split("/")
+    if not 1 <= len(parts) <= 4:
+        return ""
+    for part in parts:
+        if part in (".", "..") or not _PCLOUD_ROOT_SEGMENT_RE.match(part):
+            return ""
+    return "/".join(parts)
+
+
+def pcloud_service_rclone_config() -> str:
+    """Optional absolute path to an rclone config file ('' = rclone default)."""
+    raw = os.environ.get("NOTES_PCLOUD_SERVICE_RCLONE_CONFIG", "").strip()
+    return raw
+
+
 def pcloud_rclone_config_path(user_id: int) -> Path:
     """Legacy persisted rclone config (removed at migration); prefer ephemeral configs."""
     return KEYS_DIR / f"pcloud-rclone-{int(user_id)}.conf"

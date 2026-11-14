@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Any
 import db
 import pcloud_credentials as pc
 from backup_mail import backups_dir, ensure_local_full_backup
+import config
 from config import KEYS_DIR, pcloud_token, pcloud_token_path, pcloud_token_set, write_pcloud_token
 from mailer import send_plain_email
 
@@ -307,6 +309,8 @@ def save_pcloud_settings(
 def run_pcloud_backups() -> int:
     pc.migrate_all_pcloud_secrets(KEYS_DIR)
     synced = 0
+    if config.pcloud_service_remote():
+        managed_healthcheck()  # result only logged; legacy token users are unaffected
     for user in db.users_with_pcloud_enabled():
         uid = int(user["id"])
         remote_path = normalize_remote_path(str(user["pcloud_remote_path"] or ""))
@@ -325,3 +329,119 @@ def run_pcloud_backups() -> int:
             log.error("pcloud backup failed user=%s: %s", user["email"], exc)
             notify_pcloud_backup_failure(user, detail)
     return synced
+
+
+# --- Managed (service remote) backup: rclone wrapper, health check, per-user path ---
+
+HEALTHCHECK_DIR = "__healthcheck"
+HEALTHCHECK_TIMEOUT_SECONDS = 60
+_DIR_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+
+ERR_NOT_CONFIGURED = "not_configured"
+ERR_RCLONE_MISSING = "rclone_missing"
+ERR_UNAVAILABLE = "remote_unavailable"
+ERR_TIMEOUT = "timeout"
+ERR_QUOTA = "quota"
+ERR_AUTH = "auth"
+ERR_BAD_PATH = "bad_path"
+
+
+class ManagedBackupError(RuntimeError):
+    """Carries only a fixed error code; never rclone output."""
+
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+def _classify_rclone_failure(stderr: str) -> str:
+    """Map rclone stderr to a fixed code. The text itself is discarded."""
+    low = (stderr or "").lower()
+    if "quota" in low or "insufficient storage" in low or "over quota" in low:
+        return ERR_QUOTA
+    if "401" in low or "unauthorized" in low or "empty token" in low:
+        return ERR_AUTH
+    return ERR_UNAVAILABLE
+
+
+def _managed_remote_name() -> str:
+    remote = config.pcloud_service_remote()
+    if not remote or not config.pcloud_service_root():
+        raise ManagedBackupError(ERR_NOT_CONFIGURED)
+    return remote
+
+
+def _run_managed_rclone(args: list[str], *, timeout: int) -> subprocess.CompletedProcess[str]:
+    """Run rclone for the service remote. Raises ManagedBackupError(code) on any failure."""
+    remote = _managed_remote_name()
+    del remote  # validated only; callers embed it through _remote_spec
+    try:
+        binary = rclone_bin()
+    except RuntimeError:
+        raise ManagedBackupError(ERR_RCLONE_MISSING) from None
+    cmd = [binary]
+    cfg = config.pcloud_service_rclone_config()
+    if cfg:
+        cmd += ["--config", cfg]
+    cmd += list(args)
+    try:
+        proc = subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            stdin=subprocess.DEVNULL,
+            shell=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise ManagedBackupError(ERR_TIMEOUT) from None
+    except OSError:
+        raise ManagedBackupError(ERR_RCLONE_MISSING) from None
+    if proc.returncode != 0:
+        raise ManagedBackupError(_classify_rclone_failure(proc.stderr or ""))
+    return proc
+
+
+def _remote_spec(relative: str) -> str:
+    return f"{_managed_remote_name()}:{config.pcloud_service_root()}/{relative}"
+
+
+def managed_healthcheck() -> dict[str, Any]:
+    """Cheap check on the fixed health-check folder. Never lists user folders, never raises."""
+    try:
+        spec = _remote_spec(HEALTHCHECK_DIR)
+        try:
+            _run_managed_rclone(
+                ["lsf", spec, "--max-depth", "1", "--files-only"],
+                timeout=HEALTHCHECK_TIMEOUT_SECONDS,
+            )
+        except ManagedBackupError as exc:
+            if exc.code != ERR_UNAVAILABLE:
+                raise
+            _run_managed_rclone(["mkdir", spec], timeout=HEALTHCHECK_TIMEOUT_SECONDS)
+        return {"available": True, "reason_code": ""}
+    except ManagedBackupError as exc:
+        log.warning("managed pcloud backup unavailable: %s", exc.code)
+        return {"available": False, "reason_code": exc.code}
+    except Exception:
+        log.warning("managed pcloud backup unavailable: %s", ERR_UNAVAILABLE)
+        return {"available": False, "reason_code": ERR_UNAVAILABLE}
+
+
+def user_backup_path(user: Any) -> str:
+    """Remote directory (without remote name) for one user.
+
+    Built only from the stored opaque id and the configured root. Raises
+    ManagedBackupError if either is invalid.
+    """
+    root = config.pcloud_service_root()
+    if not root:
+        raise ManagedBackupError(ERR_NOT_CONFIGURED)
+    try:
+        dir_id = user["pcloud_dir_id"]
+    except (KeyError, IndexError, TypeError):
+        raise ManagedBackupError(ERR_BAD_PATH) from None
+    if not isinstance(dir_id, str) or not _DIR_ID_RE.fullmatch(dir_id):
+        raise ManagedBackupError(ERR_BAD_PATH)
+    return f"{root}/{dir_id}"
