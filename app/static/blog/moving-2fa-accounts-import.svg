@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Accounts moving into a vault</title>
+  <desc id="desc">Abstract rows of rounded tiles flowing along dashed lines into a rounded shape</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e3a5f"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="980" cy="120" r="170" fill="#38bdf8" opacity="0.1"/>
+  <circle cx="200" cy="540" r="210" fill="#22c55e" opacity="0.07"/>
+  <g fill="#1e293b" stroke="#94a3b8" stroke-width="5">
+    <rect x="150" y="170" width="220" height="70" rx="18"/>
+    <rect x="150" y="280" width="220" height="70" rx="18"/>
+    <rect x="150" y="390" width="220" height="70" rx="18"/>
+  </g>
+  <g stroke="#38bdf8" stroke-width="8" stroke-linecap="round" stroke-dasharray="14 14" fill="none" opacity="0.85">
+    <path d="M390 205 C560 205 600 315 760 315"/>
+    <path d="M390 315 H760"/>
+    <path d="M390 425 C560 425 600 315 760 315"/>
+  </g>
+  <g fill="#38bdf8" opacity="0.5">
+    <circle cx="190" cy="205" r="12"/>
+    <circle cx="190" cy="315" r="12"/>
+    <circle cx="190" cy="425" r="12"/>
+  </g>
+  <rect x="780" y="210" width="260" height="210" rx="36" fill="#1e293b" stroke="#e2e8f0" stroke-width="7"/>
+  <path d="M860 210 V190 a50 50 0 0 1 100 0 v20" fill="none" stroke="#e2e8f0" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="910" cy="315" r="26" fill="#0f172a" stroke="#22c55e" stroke-width="6"/>
+</svg>
