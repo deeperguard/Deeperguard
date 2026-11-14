@@ -45,6 +45,8 @@
         <h2>What the server can and cannot see</h2>
         <p><strong>Cannot read:</strong> note titles, bodies, attachments, 2FA secrets in the vault, Secure Send contents (without the link fragment).</p>
         <p><strong>Can see (metadata):</strong> account email, item IDs, timestamps, ciphertext sizes, and similar sync metadata.</p>
+        <p><strong>2FA import and QR scanning:</strong> Aegis, 2FAS, Google Authenticator and otpauth imports, and the camera QR scanner, run in your browser. The export file, its password and camera frames are not sent to the server; imported accounts sync as vault ciphertext.</p>
+        <p><strong>Calendar subscriptions:</strong> by default your browser fetches a subscribed feed directly, so the calendar provider sees your IP address. If you switch a subscription to the optional server relay, our server sees that feed link and the calendar while it fetches it.</p>
         <p><strong>Full DevTools walkthrough:</strong> <a href="/verify">/verify</a></p>
       </article>
 
