@@ -4581,6 +4581,7 @@
       account: content.account || content.issuer || 'Account',
       secret: content.secret || '',
       host,
+      icon_id: typeof content.icon_id === 'string' ? content.icon_id : null,
       digits: Number(content.digits || 6) || 6,
       period: Number(content.period || 30) || 30,
       algorithm: String(content.algorithm || 'SHA1').toUpperCase().replace('-', ''),
@@ -4825,6 +4826,30 @@
     </svg>`;
   }
 
+  function totpIconHtml(item) {
+    return typeof NotesTotpIcons !== 'undefined' ? NotesTotpIcons.iconHtml(item) : kindIconSvg('totp');
+  }
+
+  // Icon picker in the edit dialog. '' = automatic (stored as null), 'letter', or a vendored slug.
+  let totpIconChoice = '';
+  function renderTotpIconPicker() {
+    const box = document.getElementById('totp-icon-results');
+    if (!box || typeof NotesTotpIcons === 'undefined') return;
+    const q = document.getElementById('totp-icon-search')?.value || '';
+    const preview = {
+      issuer: totpUi.issuer?.value || '',
+      account: totpUi.account?.value || '',
+      host: totpUi.host?.value || '',
+    };
+    const opt = (value, title, html) => `<button type="button" class="totp-icon-option" data-totp-icon="${escapeAttr(value)}" aria-pressed="${totpIconChoice === value ? 'true' : 'false'}" title="${escapeAttr(title)}">${html}<span class="totp-icon-option-label">${escapeHtml(title)}</span></button>`;
+    const fixed = q.trim() ? [] : [
+      opt('', 'Automatic', NotesTotpIcons.iconHtml({ ...preview, icon_id: null })),
+      opt('letter', 'Letter', NotesTotpIcons.letterHtml(preview)),
+    ];
+    const hits = NotesTotpIcons.search(q, 80).map((b) => opt(b.slug, b.title, NotesTotpIcons.brandHtml(b.slug)));
+    box.innerHTML = fixed.concat(hits).join('') || '<p class="muted totp-icon-empty">No icon found. Automatic or Letter still work.</p>';
+  }
+
   async function renderTotpList() {
     if (!totpUi.list) return;
     const token = ++totpRenderToken;
@@ -4881,7 +4906,7 @@
       const usedLabel = totpVaultMetaLabel(usedMs, '—');
       return `<div class="totp-item" data-totp-id="${escapeAttr(item.id)}">
         <button type="button" class="totp-item-main" data-totp-copy aria-label="Copy code for ${escapeAttr(label)}${boundHost ? ` (${boundHost})` : ' (no site set)'}">
-          <span class="note-kind-icon note-kind-icon--totp" aria-hidden="true">${kindIconSvg('totp')}</span>
+          <span class="note-kind-icon note-kind-icon--totp" aria-hidden="true">${totpIconHtml(item)}</span>
           <span class="totp-item-account">
             <span class="totp-item-body">
               <span class="note-title-row"><strong title="${escapeAttr(label)}">${escapeHtml(label)}</strong></span>
@@ -5048,6 +5073,8 @@
     document.querySelectorAll('#totp-add-dialog .scan-add-actions, #totp-add-dialog .scan-dialog-lead').forEach((el) => {
       el.hidden = editing;
     });
+    const iconField = document.getElementById('totp-icon-field');
+    if (iconField) iconField.hidden = !editing;
   }
 
   function hideTotpAddDialog() {
@@ -5106,6 +5133,10 @@
     if (totpUi.account) totpUi.account.value = item.account || '';
     if (totpUi.host) totpUi.host.value = item.host || '';
     resetTotpDialogTags((item.tags || []).join(', '));
+    totpIconChoice = item.icon_id || '';
+    const iconSearch = document.getElementById('totp-icon-search');
+    if (iconSearch) iconSearch.value = '';
+    renderTotpIconPicker();
     syncTotpDialogMode();
     setTotpAddError('');
     if (totpUi.backdrop) totpUi.backdrop.hidden = false;
@@ -5472,7 +5503,7 @@
       }
       const boundHost = readTotpDialogHost();
       if (boundHost === null) return;
-      const saved = NotesStore.updateTotpAccount(totpEditingId, { issuer, account, host: boundHost, tags: readTotpDialogTags() });
+      const saved = NotesStore.updateTotpAccount(totpEditingId, { issuer, account, host: boundHost, tags: readTotpDialogTags(), icon_id: totpIconChoice || null });
       if (!saved) {
         setTotpAddError('That account is no longer in the vault.');
         return;
@@ -22721,6 +22752,14 @@
   });
   document.querySelectorAll('.app-tab').forEach((btn) => {
     btn.addEventListener('click', () => setAppTab(btn.dataset.appTab));
+  });
+  document.getElementById('totp-icon-search')?.addEventListener('input', renderTotpIconPicker);
+  document.getElementById('totp-icon-results')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-totp-icon]');
+    if (!btn) return;
+    totpIconChoice = btn.dataset.totpIcon || '';
+    renderTotpIconPicker();
+    document.querySelector(`#totp-icon-results [data-totp-icon="${CSS.escape(totpIconChoice)}"]`)?.focus();
   });
   totpUi.search?.addEventListener('input', () => {
     if (currentAppTab() === '2fa') renderTotpList();

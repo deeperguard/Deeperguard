@@ -1,0 +1,356 @@
+{
+ "adobe": {
+  "aliases": [],
+  "hex": "FF0000",
+  "title": "Adobe"
+ },
+ "airbnb": {
+  "aliases": [],
+  "hex": "FF5A5F",
+  "title": "Airbnb"
+ },
+ "amazon": {
+  "aliases": [
+   "amazon.de",
+   "amazon.nl",
+   "amazon.co.uk"
+  ],
+  "hex": "FF9900",
+  "title": "Amazon"
+ },
+ "amazonwebservices": {
+  "aliases": [
+   "aws",
+   "awsconsole"
+  ],
+  "hex": "232F3E",
+  "title": "Amazon Web Services"
+ },
+ "apple": {
+  "aliases": [
+   "appleid",
+   "icloud"
+  ],
+  "hex": "000000",
+  "title": "Apple"
+ },
+ "atlassian": {
+  "aliases": [
+   "jira",
+   "confluence"
+  ],
+  "hex": "0052CC",
+  "title": "Atlassian"
+ },
+ "binance": {
+  "aliases": [],
+  "hex": "F0B90B",
+  "title": "Binance"
+ },
+ "bitbucket": {
+  "aliases": [],
+  "hex": "0052CC",
+  "title": "Bitbucket"
+ },
+ "bitwarden": {
+  "aliases": [],
+  "hex": "175DDC",
+  "title": "Bitwarden"
+ },
+ "cloudflare": {
+  "aliases": [],
+  "hex": "F38020",
+  "title": "Cloudflare"
+ },
+ "coinbase": {
+  "aliases": [],
+  "hex": "0052FF",
+  "title": "Coinbase"
+ },
+ "digitalocean": {
+  "aliases": [],
+  "hex": "0080FF",
+  "title": "DigitalOcean"
+ },
+ "discord": {
+  "aliases": [],
+  "hex": "5865F2",
+  "title": "Discord"
+ },
+ "docker": {
+  "aliases": [
+   "dockerhub"
+  ],
+  "hex": "2496ED",
+  "title": "Docker"
+ },
+ "dropbox": {
+  "aliases": [],
+  "hex": "0061FF",
+  "title": "Dropbox"
+ },
+ "ebay": {
+  "aliases": [],
+  "hex": "E53238",
+  "title": "eBay"
+ },
+ "epicgames": {
+  "aliases": [
+   "epic"
+  ],
+  "hex": "313131",
+  "title": "Epic Games"
+ },
+ "facebook": {
+  "aliases": [
+   "meta"
+  ],
+  "hex": "0866FF",
+  "title": "Facebook"
+ },
+ "figma": {
+  "aliases": [],
+  "hex": "F24E1E",
+  "title": "Figma"
+ },
+ "github": {
+  "aliases": [],
+  "hex": "181717",
+  "title": "GitHub"
+ },
+ "gitlab": {
+  "aliases": [],
+  "hex": "FC6D26",
+  "title": "GitLab"
+ },
+ "gmail": {
+  "aliases": [],
+  "hex": "EA4335",
+  "title": "Gmail"
+ },
+ "google": {
+  "aliases": [
+   "googleworkspace",
+   "gsuite",
+   "googleaccount"
+  ],
+  "hex": "4285F4",
+  "title": "Google"
+ },
+ "heroku": {
+  "aliases": [],
+  "hex": "430098",
+  "title": "Heroku"
+ },
+ "hetzner": {
+  "aliases": [],
+  "hex": "D50C2D",
+  "title": "Hetzner"
+ },
+ "instagram": {
+  "aliases": [],
+  "hex": "E4405F",
+  "title": "Instagram"
+ },
+ "kraken": {
+  "aliases": [],
+  "hex": "5741D9",
+  "title": "Kraken"
+ },
+ "linkedin": {
+  "aliases": [],
+  "hex": "0A66C2",
+  "title": "LinkedIn"
+ },
+ "mailchimp": {
+  "aliases": [],
+  "hex": "FFE01B",
+  "title": "Mailchimp"
+ },
+ "mastodon": {
+  "aliases": [],
+  "hex": "6364FF",
+  "title": "Mastodon"
+ },
+ "microsoft": {
+  "aliases": [
+   "microsoftaccount",
+   "outlook",
+   "live",
+   "hotmail",
+   "office365",
+   "microsoft365",
+   "azure"
+  ],
+  "hex": "5E5E5E",
+  "title": "Microsoft"
+ },
+ "namecheap": {
+  "aliases": [],
+  "hex": "DE3723",
+  "title": "Namecheap"
+ },
+ "netlify": {
+  "aliases": [],
+  "hex": "00C7B7",
+  "title": "Netlify"
+ },
+ "nextcloud": {
+  "aliases": [],
+  "hex": "0082C9",
+  "title": "Nextcloud"
+ },
+ "nintendo": {
+  "aliases": [
+   "nintendoaccount"
+  ],
+  "hex": "E60012",
+  "title": "Nintendo"
+ },
+ "notion": {
+  "aliases": [],
+  "hex": "000000",
+  "title": "Notion"
+ },
+ "npm": {
+  "aliases": [
+   "npmjs"
+  ],
+  "hex": "CB3837",
+  "title": "npm"
+ },
+ "openai": {
+  "aliases": [
+   "chatgpt"
+  ],
+  "hex": "412991",
+  "title": "OpenAI"
+ },
+ "ovh": {
+  "aliases": [
+   "ovhcloud"
+  ],
+  "hex": "123F6D",
+  "title": "OVH"
+ },
+ "paypal": {
+  "aliases": [],
+  "hex": "002991",
+  "title": "PayPal"
+ },
+ "playstation": {
+  "aliases": [
+   "psn",
+   "sony",
+   "playstationnetwork"
+  ],
+  "hex": "0070D1",
+  "title": "PlayStation"
+ },
+ "protonmail": {
+  "aliases": [
+   "proton",
+   "protonme"
+  ],
+  "hex": "6D4AFF",
+  "title": "Proton Mail"
+ },
+ "pypi": {
+  "aliases": [],
+  "hex": "3775A9",
+  "title": "PyPI"
+ },
+ "reddit": {
+  "aliases": [],
+  "hex": "FF4500",
+  "title": "Reddit"
+ },
+ "salesforce": {
+  "aliases": [],
+  "hex": "00A1E0",
+  "title": "Salesforce"
+ },
+ "shopify": {
+  "aliases": [],
+  "hex": "7AB55C",
+  "title": "Shopify"
+ },
+ "slack": {
+  "aliases": [],
+  "hex": "4A154B",
+  "title": "Slack"
+ },
+ "snapchat": {
+  "aliases": [],
+  "hex": "FFFC00",
+  "title": "Snapchat"
+ },
+ "steam": {
+  "aliases": [
+   "steampowered"
+  ],
+  "hex": "000000",
+  "title": "Steam"
+ },
+ "stripe": {
+  "aliases": [],
+  "hex": "635BFF",
+  "title": "Stripe"
+ },
+ "tiktok": {
+  "aliases": [],
+  "hex": "000000",
+  "title": "TikTok"
+ },
+ "tumblr": {
+  "aliases": [],
+  "hex": "36465D",
+  "title": "Tumblr"
+ },
+ "twilio": {
+  "aliases": [
+   "authy"
+  ],
+  "hex": "F22F46",
+  "title": "Twilio"
+ },
+ "twitch": {
+  "aliases": [],
+  "hex": "9146FF",
+  "title": "Twitch"
+ },
+ "ubisoft": {
+  "aliases": [
+   "uplay"
+  ],
+  "hex": "000000",
+  "title": "Ubisoft"
+ },
+ "vercel": {
+  "aliases": [],
+  "hex": "000000",
+  "title": "Vercel"
+ },
+ "wordpress": {
+  "aliases": [],
+  "hex": "21759B",
+  "title": "WordPress"
+ },
+ "x": {
+  "aliases": [
+   "twitter"
+  ],
+  "hex": "000000",
+  "title": "X"
+ },
+ "zoho": {
+  "aliases": [],
+  "hex": "E42527",
+  "title": "Zoho"
+ },
+ "zoom": {
+  "aliases": [],
+  "hex": "0B5CFF",
+  "title": "Zoom"
+ }
+}

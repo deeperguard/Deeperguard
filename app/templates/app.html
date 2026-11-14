@@ -2476,6 +2476,12 @@
         <input id="totp-add-host" type="text" maxlength="253" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url" placeholder="login.example.com">
       </label>
       <p class="scan-dialog-lead muted totp-host-hint">Exact hostname only (e.g. <code>login.example.com</code>). Shown when you copy a code — advisory label, not sign-in blocking.</p>
+      <div id="totp-icon-field" class="scan-name-field totp-icon-field" hidden>
+        <label for="totp-icon-search">Icon</label>
+        <input id="totp-icon-search" type="search" maxlength="60" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Search icons">
+        <div id="totp-icon-results" class="totp-icon-results" role="group" aria-label="Icon"></div>
+        <p class="muted totp-icon-note">Icons are bundled with the app and never loaded from other sites. Logos are trademarks of their owners.</p>
+      </div>
       <label class="scan-name-field">Tags <span class="muted">(optional, comma separated)</span>
         <input id="totp-add-tags" type="text" maxlength="400" autocomplete="off" autocapitalize="none" spellcheck="false" list="totp-tag-suggestions" placeholder="Work, Personal">
       </label>
@@ -2858,6 +2864,8 @@
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}
   {{ asset_script('js/totp-import.js') }}
+  {{ asset_script('js/totp-brands.js') }}
+  {{ asset_script('js/totp-icons.js') }}
   {{ asset_script('js/totp-qr-camera.js') }}
   {{ asset_script('js/search.js') }}
   {{ asset_script('js/templates.js') }}

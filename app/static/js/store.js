@@ -4850,7 +4850,7 @@ const NotesStore = (() => {
     return { ...content, ...patch };
   }
 
-  function updateTotpAccount(uuid, { issuer = '', account = '', host, tags } = {}) {
+  function updateTotpAccount(uuid, { issuer = '', account = '', host, tags, icon_id } = {}) {
     const item = get(uuid);
     if (!item || item.content?.type !== 'totp') return false;
     const nextIssuer = String(issuer || '').trim();
@@ -4858,6 +4858,10 @@ const NotesStore = (() => {
     const patch = { issuer: nextIssuer, account: nextAccount, label: nextAccount };
     if (host !== undefined) patch.host = normalizeTotpBoundHost(host);
     if (tags !== undefined) patch.tags = tags;
+    // Icon choice lives inside the encrypted item: a vendored slug, 'letter', or null (automatic).
+    if (icon_id !== undefined) {
+      patch.icon_id = (icon_id === 'letter' || /^[a-z0-9]{1,64}$/.test(String(icon_id || ''))) ? icon_id : null;
+    }
     upsert(uuid, upgradeTotpContent(item.content, patch));
     return true;
   }
