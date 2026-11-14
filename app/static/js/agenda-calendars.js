@@ -100,7 +100,13 @@
 
   // ---- actions (used by the UI and the tests) ----------------------------------
 
-  function createCalendar(name, color) {
+  /** Default reminders (minutes) as stored on a calendar; same rules as an event's `reminders`. */
+  function cleanDefaultReminders(raw) {
+    const R = global.NotesAgendaReminders;
+    return R && typeof R.offsetMinutes === 'function' ? R.offsetMinutes(raw) : [];
+  }
+
+  function createCalendar(name, color, defaultReminders) {
     const S = getStore();
     const n = cleanName(name);
     if (!S || !n) return '';
@@ -111,7 +117,7 @@
       color: paletteEntry(color).key,
       visible: true,
       order,
-      default_reminders: [],
+      default_reminders: cleanDefaultReminders(defaultReminders),
     });
   }
 
@@ -127,6 +133,7 @@
     }
     if (patch && 'color' in patch) next.color = paletteEntry(patch.color).key;
     if (patch && 'visible' in patch) next.visible = !!patch.visible;
+    if (patch && 'default_reminders' in patch) next.default_reminders = cleanDefaultReminders(patch.default_reminders);
     const { id: _drop, ...rest } = cal;
     S.upsertAgendaCalendar(id, { ...rest, ...next });
     return true;
@@ -172,6 +179,36 @@
     );
   }
 
+  const DEFAULT_REMINDER_PRESETS = [0, 5, 10, 15, 30, 60, 1440];
+
+  function defaultRemindersHtml(cal) {
+    const R = global.NotesAgendaReminders;
+    const current = cleanDefaultReminders(cal && cal.default_reminders);
+    const label = (n) => (R && typeof R.offsetLabel === 'function' ? R.offsetLabel(n) : `${n} min before`);
+    const custom = current.filter((n) => !DEFAULT_REMINDER_PRESETS.includes(n)).join(', ');
+    return (
+      '<fieldset class="agenda-cal-default-reminders"><legend class="muted">Default reminders for new events</legend>'
+      + DEFAULT_REMINDER_PRESETS.map((n) => (
+        `<label class="settings-row checkbox"><span>${esc(label(n))}</span>`
+        + `<input type="checkbox" name="default_reminder" value="${n}"${current.includes(n) ? ' checked' : ''}></label>`
+      )).join('')
+      + '<label class="settings-row stacked">Custom (minutes before, e.g. 20 or 20, 120)'
+      + `<input type="text" name="default_reminder_custom" inputmode="numeric" maxlength="60" autocomplete="off" value="${esc(custom)}"></label>`
+      + '<p class="settings-hint muted">Reminders only work while Deeperguard is open in your browser. They send no email and no push message.</p>'
+      + '</fieldset>'
+    );
+  }
+
+  /** Minutes picked in a calendar form (preset checkboxes plus the custom field). */
+  function readDefaultReminders(form) {
+    const picked = [...form.querySelectorAll('input[name="default_reminder"]')]
+      .filter((el) => el.checked)
+      .map((el) => el.value);
+    const custom = form.querySelector('input[name="default_reminder_custom"]');
+    if (custom) picked.push(...String(custom.value || '').split(/[\s,;]+/));
+    return cleanDefaultReminders(picked);
+  }
+
   function editFormHtml(cal) {
     const isNew = !cal;
     const prefix = isNew ? 'agenda-cal-new' : `agenda-cal-edit-${cal.id}`;
@@ -182,6 +219,7 @@
       + `<input type="text" name="name" id="${esc(prefix)}-name" maxlength="${NAME_MAX}" required autocomplete="off"`
       + ` value="${esc(isNew ? '' : cal.name)}"></label>`
       + colorPickerHtml(prefix, isNew ? PALETTE[listCalendars().length % PALETTE.length].key : cal.color)
+      + defaultRemindersHtml(cal)
       + '<div class="agenda-cal-form-actions">'
       + `<button type="submit" class="btn primary sm">${isNew ? 'Create calendar' : 'Save'}</button>`
       + '<button type="button" class="btn ghost sm" data-agenda-cal-action="cancel">Cancel</button>'
@@ -336,6 +374,7 @@
     if (editId) {
       const name = cleanName(fd.get('name'));
       const color = [...form.querySelectorAll('input[type="radio"]')].find((r) => r.checked)?.value;
+      const defaultReminders = readDefaultReminders(form);
       if (!name) {
         form.querySelector('input[name="name"]')?.focus();
         announce('Enter a name for the calendar');
@@ -343,10 +382,10 @@
       }
       let id = editId;
       if (editId === 'new') {
-        id = createCalendar(name, color);
+        id = createCalendar(name, color, defaultReminders);
         announce(`Calendar ${name} created`);
       } else {
-        updateCalendar(editId, { name, color });
+        updateCalendar(editId, { name, color, default_reminders: defaultReminders });
         announce(`Calendar ${name} saved`);
       }
       ui.editing = '';
