@@ -11381,3 +11381,88 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .totp-cam-status.error { color: #ffb4b4; }
 .totp-cam-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .totp-cam-actions .btn, .totp-cam-head .btn { color: #fff; border-color: rgba(255, 255, 255, .5); min-height: 44px; }
+
+/* ---- Multiple calendars (docs/design/calendar-multi.md, M2) ---------------------------- */
+/* Calendar name label on every event: palette background + text color (>= 4.5:1, checked by
+   tests/test_agenda_calendars_ui.js), so color is never the only cue. Never below 11px. */
+.agenda-cal-label {
+  display: inline-block;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.agenda-cal-label.is-compact { font-size: 11px; padding: 0 5px; }
+.agenda-event-chip.is-compact .agenda-chip-body {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+.agenda-event-chip.is-compact .agenda-cal-label { font-size: 11px; padding: 0 4px; line-height: 1.2; }
+.agenda-allday-chip .agenda-cal-label { margin-left: 6px; font-size: 11px; padding: 0 5px; }
+.agenda-list-row .agenda-cal-label { margin-top: 2px; }
+.agenda-month-ev-body .agenda-cal-label { margin: 1px 0; }
+
+.agenda-calendars { display: flex; flex-direction: column; gap: 8px; }
+.agenda-cal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.agenda-cal-row { border-radius: 10px; }
+.agenda-cal-row:focus-within { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.agenda-cal-row-main { display: flex; align-items: center; gap: 4px; min-height: 40px; padding: 2px 4px; }
+.agenda-cal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  font-size: 14px;
+}
+.agenda-cal-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.agenda-cal-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.agenda-cal-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-cal-row.is-hidden .agenda-cal-name { color: var(--muted); text-decoration: line-through; }
+.agenda-cal-row.is-hidden .agenda-cal-dot { opacity: .45; }
+.agenda-cal-add { align-self: flex-start; }
+.agenda-cal-form,
+.agenda-cal-delete {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 4px 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.agenda-cal-colors { display: flex; flex-wrap: wrap; gap: 6px; border: 0; margin: 0; padding: 0; }
+.agenda-cal-colors legend { font-size: 12px; margin-bottom: 4px; }
+.agenda-cal-color { position: relative; display: inline-flex; cursor: pointer; }
+.agenda-cal-color input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.agenda-cal-color-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  border: 2px solid transparent;
+}
+.agenda-cal-color input:checked + .agenda-cal-color-swatch {
+  border-color: var(--text);
+  box-shadow: inset 0 0 0 2px var(--bg);
+}
+.agenda-cal-color input:focus-visible + .agenda-cal-color-swatch {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.agenda-cal-delete-choice { display: flex; flex-direction: column; gap: 6px; border: 0; margin: 0; padding: 0; }
+.agenda-cal-delete-choice select { margin-left: 4px; max-width: 12rem; }
+.agenda-cal-form-actions { display: flex; gap: 8px; flex-wrap: wrap; }

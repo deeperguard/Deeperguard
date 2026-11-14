@@ -109,10 +109,27 @@
     return Math.abs(h) % EVENT_COLORS.length;
   }
 
+  /** Per-event color stays an override; otherwise the event follows its calendar's color. */
   function eventAccentColor(ev) {
     const pick = String(ev?.color || '').trim().toLowerCase();
     if (EVENT_COLORS.some((c) => c.toLowerCase() === pick)) return pick;
+    const Cals = global.NotesAgendaCalendars;
+    const cal = Cals ? Cals.calendarForEvent(ev, state.calendarMap || undefined) : null;
+    if (cal) return Cals.paletteEntry(cal.color).bg;
     return EVENT_COLORS[hashHue(ev?.id || '')];
+  }
+
+  /** Calendar name label next to the color, so color is never the only cue (WCAG 1.4.1). */
+  function calendarLabelHtml(ev, extraClass) {
+    const Cals = global.NotesAgendaCalendars;
+    if (!Cals) return '';
+    return Cals.labelHtml(Cals.calendarForEvent(ev, state.calendarMap || undefined), extraClass);
+  }
+
+  function calendarNameForEvent(ev) {
+    const Cals = global.NotesAgendaCalendars;
+    const cal = Cals ? Cals.calendarForEvent(ev, state.calendarMap || undefined) : null;
+    return cal ? String(cal.name || '') : '';
   }
 
   function parseInstant(iso) {
@@ -350,6 +367,7 @@
     // Channel availability can change (email confirmed, push enabled): refresh on every open.
     global.NotesAgendaReminders?.wireAgendaReminderSettings?.();
     global.NotesAgendaSubs?.onAgendaShown?.();
+    global.NotesAgendaCalendars?.wire?.({ onChange: render });
     const closeBtn = document.getElementById('agenda-calendar-settings-close');
     if (closeBtn) closeBtn.focus();
   }
@@ -1202,8 +1220,17 @@
     );
   }
 
+  /** Events of calendars the user switched off are not drawn (export still includes them). */
+  function visibleAgendaEvents() {
+    const Cals = global.NotesAgendaCalendars;
+    const events = listAgendaEvents();
+    if (!Cals) return events;
+    const map = state.calendarMap || Cals.calendarMap();
+    return events.filter((ev) => Cals.isEventVisible(ev, map));
+  }
+
   function buildOccurrences(rangeStart, rangeEnd) {
-    const events = filterEvents(state.search, listAgendaEvents());
+    const events = filterEvents(state.search, visibleAgendaEvents());
     const occ = [];
     for (const ev of events) {
       occ.push(...expandEventOccurrences(ev, rangeStart, rangeEnd));
@@ -1383,8 +1410,9 @@
         ? `<span class="agenda-chip-title">${'<span class="agenda-rec-glyph" aria-hidden="true">↻</span>'}${esc(occDisplayTitle(o))}</span>`
         : `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`;
       body += (
-        `<button type="button" class="agenda-allday-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="grid-column:${i0 + 1} / span ${span};grid-row:${lane + 1}" title="${esc(occDisplayTitle(o))}">`
+        `<button type="button" class="agenda-allday-chip" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="grid-column:${i0 + 1} / span ${span};grid-row:${lane + 1}" title="${esc(`${occDisplayTitle(o)} · ${calendarNameForEvent(o.ev)}`)}">`
         + title
+        + calendarLabelHtml(o.ev)
         + `<span class="agenda-chip-accent" style="background:${clr}"></span>`
         + '</button>'
       );
@@ -1433,10 +1461,11 @@
           : `<span class="agenda-chip-title">${esc(occDisplayTitle(o))}</span>`;
         const compact = h < 36;
         body += (
-          `<button type="button" class="agenda-event-chip${compact ? ' is-compact' : ''}" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="top:${top}px;height:${h}px;left:${leftPct}%;width:${wPct}%;--agenda-accent:${clr}">`
+          `<button type="button" class="agenda-event-chip${compact ? ' is-compact' : ''}" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} title="${esc(`${occDisplayTitle(o)} · ${calendarNameForEvent(o.ev)}`)}" style="top:${top}px;height:${h}px;left:${leftPct}%;width:${wPct}%;--agenda-accent:${clr}">`
           + `<span class="agenda-chip-accent" style="background:${clr}"></span>`
           + '<span class="agenda-chip-body">'
           + titleHtml
+          + calendarLabelHtml(o.ev)
           + (!compact ? `<span class="agenda-chip-time">${esc(timeRange)}</span>` : '')
           + '</span></button>'
         );
@@ -1499,6 +1528,7 @@
           + `<span class="agenda-list-when">${esc(when)}</span>`
           + '<span class="agenda-list-row-main">'
           + `<span class="agenda-list-title">${title}</span>`
+          + calendarLabelHtml(o.ev)
           + (loc ? `<span class="agenda-list-loc muted">${esc(loc)}</span>` : '')
           + '</span></button></li>'
         );
@@ -1550,6 +1580,7 @@
           `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
           + `<span class="agenda-list-date">${esc(tlabel)}</span>`
           + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
+          + calendarLabelHtml(o.ev)
           + '</button></li>'
         );
       });
@@ -1610,11 +1641,12 @@
             const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
             const tlabel = o.displayAllDay ?? o.ev.all_day ? 'All day' : formatTime(o.start);
             html += (
-              `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} title="${esc(occDisplayTitle(o))}">`
+              `<button type="button" class="agenda-month-ev" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} title="${esc(`${occDisplayTitle(o)} · ${calendarNameForEvent(o.ev)}`)}">`
               + `<span class="agenda-month-ev-accent" style="background:${clr}"></span>`
               + '<span class="agenda-month-ev-body">'
               + (rec ? '<span class="agenda-rec-glyph" aria-hidden="true">↻</span>' : '')
               + `<span class="agenda-month-ev-title">${esc(occDisplayTitle(o))}</span>`
+              + calendarLabelHtml(o.ev, 'is-compact')
               + `<span class="agenda-month-ev-time muted">${esc(tlabel)}</span>`
               + '</span></button>'
             );
@@ -1653,6 +1685,7 @@
 
   function render() {
     if (!rootEl) return;
+    state.calendarMap = global.NotesAgendaCalendars ? global.NotesAgendaCalendars.calendarMap() : null;
     const range = rangeForView();
     const occ = buildOccurrences(range.start, range.end);
     const days = range.days;
@@ -2316,6 +2349,8 @@
     if (recur) recur.hidden = isOcc;
     const colors = document.querySelector('#agenda-editor .agenda-editor-colors');
     if (colors) colors.hidden = isOcc;
+    const calRow = document.getElementById('agenda-edit-calendar-row');
+    if (calRow) calRow.hidden = isOcc;
     const rem = document.getElementById('agenda-edit-reminders-wrap');
     if (rem) rem.hidden = isOcc;
     if (del) del.textContent = isOcc ? 'Delete occurrence' : 'Delete';
@@ -2453,6 +2488,7 @@
     const savedColor = String(content.color || '').trim().toLowerCase();
     state.editorColor = EVENT_COLORS.includes(savedColor) ? savedColor : '';
     renderColorSwatches(state.editorColor);
+    fillCalendarSelect(content);
     applyEditorScopeUi(scope, content.rrule || '');
 
     if (!editorReturnFocus) {
@@ -2817,6 +2853,7 @@
       webcall_url: wc,
       attendees,
       color: state.editorColor || '',
+      calendarId: readCalendarSelect(base),
       start: nextStart,
       end: nextEnd,
       all_day: allDay,
@@ -2832,13 +2869,34 @@
     render();
   }
 
+  /** Calendar picker in the editor; the option text is the name, so no color-only cue. */
+  function fillCalendarSelect(content) {
+    const sel = document.getElementById('agenda-edit-calendar');
+    const Cals = global.NotesAgendaCalendars;
+    if (!sel || !Cals) return;
+    const cals = Cals.listCalendars();
+    const current = Cals.calendarForEvent(content || {});
+    sel.innerHTML = cals.map((c) => {
+      const p = Cals.paletteEntry(c.color);
+      const hidden = c.visible === false ? ' (hidden)' : '';
+      return `<option value="${esc(c.id)}" data-agenda-cal-color="${esc(p.key)}">${esc(c.name || 'Agenda')}${hidden}</option>`;
+    }).join('');
+    if (current) sel.value = current.id;
+  }
+
+  function readCalendarSelect(base) {
+    const sel = document.getElementById('agenda-edit-calendar');
+    const v = sel && !sel.closest('[hidden]') ? String(sel.value || '').trim() : '';
+    return v || String((base && base.calendarId) || '');
+  }
+
   function renderColorSwatches(selected) {
     const wrap = document.getElementById('agenda-edit-colors');
     if (!wrap) return;
     // Set here, not in the template: tests/test_round27_ui.js forbids the literal in app.html.
     wrap.setAttribute('role', 'radiogroup');
     const current = String(selected || '');
-    const options = [{ value: '', name: 'Automatic' }]
+    const options = [{ value: '', name: 'Calendar color' }]
       .concat(EVENT_COLORS.map((c, i) => ({ value: c, name: EVENT_COLOR_NAMES[i] || c })));
     wrap.innerHTML = options.map((o) => {
       const on = current === o.value;
