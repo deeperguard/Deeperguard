@@ -2,10 +2,10 @@
   "asset_count": 86,
   "assets": {
     "css/app.css": {
-      "bytes": 313970,
-      "sha256": "d6a1ecf300a2c9e0b79cee45669ef9bc41827927b5660a87909cd99c74396669",
-      "sri": "sha384-0gEQVy3h+JxjKegcnHXYmkx7m5Pp/j/xndmtl/kc26AQ39PMyOkzjVFJlOEfKQMP",
-      "url": "/static/css/app.d6a1ecf300a2c9e0.css"
+      "bytes": 315425,
+      "sha256": "b356c8fc334def94b3557825b107dd4eeeada0f09a90fc022c6d2ce0f4c21ed1",
+      "sri": "sha384-cj8S9DitwKelzDYqmneBqzCZkift2Rji0NYPAOjSjPCXOcsytw5esfB0yuqB73UM",
+      "url": "/static/css/app.b356c8fc334def94.css"
     },
     "css/marketing.css": {
       "bytes": 54715,
@@ -92,16 +92,16 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1011580,
-      "sha256": "b60ac3f7acbd305b5871afe34cf1bcf078ec112bcb878e015138472339015ee4",
-      "sri": "sha384-KN5o3yGhhkANfhrlzoBBxVzRERmCpF33oScJWNuNz6kWcIr8j/NGMonMh+0DxW83",
-      "url": "/static/js/app.b60ac3f7acbd305b.js"
+      "bytes": 1011807,
+      "sha256": "556407eaaf0da7c0f5c35f847a18e404234de65a02e7d98b4e59d59dc7c61328",
+      "sri": "sha384-Fr3f15kZEHFdGbFF+4b45ruL7k+9aFLpHuQbzAAVMkHrDOfuz98jO2X+hQPTgEcV",
+      "url": "/static/js/app.556407eaaf0da7c0.js"
     },
     "js/auth-pages.js": {
-      "bytes": 41555,
-      "sha256": "341073f0dcd86032e2950c296ba18166b3c3ce6dd2f954c94fa5ec6ab5cffee2",
-      "sri": "sha384-Zk94eHR99lZ1cQbuYDOUTMdqHdsnKCmuFn6zyDZ81wFyeM17j/zQUwjDh7hPMfJa",
-      "url": "/static/js/auth-pages.341073f0dcd86032.js"
+      "bytes": 41606,
+      "sha256": "660f7ceddd1158ecea35458595f4235c8c28ed1f010113a60895ea2a0932e2d4",
+      "sri": "sha384-Qwzb9SLk10CrtYivojw/+j9+6LWIgQaCvwJX6vwdK49BDY3mFmkZh9JSAaeQi/kZ",
+      "url": "/static/js/auth-pages.660f7ceddd1158ec.js"
     },
     "js/backlinks.js": {
       "bytes": 12651,
@@ -519,6 +519,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "767220442a07e43a5ce398dd624d4a72dec23646b8ee200e5978c10208381faf",
+  "manifest_sha256": "a1f22ba6fd1a89cd0024948c3edb715c4e13c6d0e2ea5682cff8e636dd5ebba7",
   "version": 1
 }

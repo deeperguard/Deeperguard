@@ -10,7 +10,7 @@
       {% include 'partials/auth-brand.html' %}
       <h1>Create account</h1>
       {% include 'partials/zk-plain.html' %}
-      <p class="auth-hint"><strong>One password.</strong> Creating an account unlocks the vault on this device automatically. The account password and the vault password start as the same password. You can set a different vault password later in Settings. We cannot recover it.</p>
+      <p class="auth-hint"><strong>One password to start.</strong> It signs you in, and creating an account unlocks the vault on this device automatically. You can set a separate vault password later in Settings. We cannot recover it if you forget it.</p>
     </div>
     {% if signed_in_email %}
     <div class="signed-in-notice" role="status">
@@ -23,13 +23,13 @@
     {% else %}
     <form id="register-form" class="stack" novalidate>
       <label for="register-email">Email
-        <input id="register-email" type="email" name="email" autocomplete="email" inputmode="email" required aria-required="true" aria-invalid="false" aria-describedby="register-email-error">
+        <input id="register-email" type="email" name="email" autocomplete="email" inputmode="email" required aria-required="true" aria-describedby="register-email-error">
       </label>
       <p id="register-email-error" class="field-error" role="alert" hidden></p>
       <div class="auth-field">
         <label id="register-password-label" for="register-password">Password</label>
         <span class="password-field-wrap">
-          <input id="register-password" type="password" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-labelledby="register-password-label" aria-describedby="register-password-hint register-password-error register-strength">
+          <input id="register-password" type="password" autocomplete="new-password" required aria-required="true" aria-labelledby="register-password-label" aria-describedby="register-password-hint register-password-error register-strength">
           <button type="button" class="password-toggle btn ghost sm" data-target="register-password" aria-label="Show password">Show</button>
         </span>
       </div>
@@ -42,18 +42,18 @@
       <div class="auth-field">
         <label id="register-password2-label" for="register-password2">Confirm password</label>
         <span class="password-field-wrap">
-          <input id="register-password2" type="password" autocomplete="new-password" required aria-required="true" aria-invalid="false" aria-labelledby="register-password2-label" aria-describedby="register-password2-error">
+          <input id="register-password2" type="password" autocomplete="new-password" required aria-required="true" aria-labelledby="register-password2-label" aria-describedby="register-password2-error">
           <button type="button" class="password-toggle btn ghost sm" data-target="register-password2" aria-label="Show password">Show</button>
         </span>
       </div>
       <p id="register-password2-error" class="field-error" role="alert" hidden></p>
       <label class="consent-row" for="register-terms">
-        <input id="register-terms" type="checkbox" name="terms" value="yes" required aria-required="true" aria-invalid="false" aria-describedby="register-terms-error">
+        <input id="register-terms" type="checkbox" name="terms" value="yes" required aria-required="true" aria-describedby="register-terms-error">
         <span>I agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy policy</a>.</span>
       </label>
       <p id="register-terms-error" class="field-error" role="alert" hidden></p>
       <label class="consent-row" for="register-recover-ack">
-        <input id="register-recover-ack" type="checkbox" name="recover_ack" value="yes" required aria-required="true" aria-invalid="false" aria-describedby="register-recover-error">
+        <input id="register-recover-ack" type="checkbox" name="recover_ack" value="yes" required aria-required="true" aria-describedby="register-recover-error">
         <span>I understand Deeperguard can't recover my notes if I forget this password</span>
       </label>
       <p id="register-recover-error" class="field-error" role="alert" hidden></p>
@@ -66,11 +66,13 @@
       <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="light"></div>
       {% endif %}
       <p class="auth-hint">New accounts start on <strong>Free</strong> (50&nbsp;MB encrypted storage, sync, attachments, on-device OCR). <strong>Basic</strong> is €2.99/month or €29/year (100&nbsp;MB) and <strong>Pro</strong> is €6.99/month or €69/year (5&nbsp;GB) with passkeys, backups, and the vault authenticator. Creating an account does not ask for a code. We email a verification code to this address, and you only enter it in Settings before encrypted backups are sent.</p>
-      <p id="register-error" class="error" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
+      <p id="register-error" class="error" role="alert" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
       <p id="register-soft-fail-signin" class="muted center" hidden><a href="/login" id="register-soft-fail-signin-link">Already have an account? Sign in</a></p>
       <p id="register-hang-live" class="error" aria-live="polite" hidden></p>
       <button type="button" id="register-retry" class="btn block" hidden>Retry</button>
-      <button type="button" id="register-submit" class="btn primary block">Create account</button>
+      <div class="auth-submit" aria-live="polite">
+        <button type="button" id="register-submit" class="btn primary block">Create account</button>
+      </div>
     </form>
     {% with auth_guard_form_id='register-form', auth_guard_submit_id='register-submit', auth_guard_fn='__notesSubmitRegister', auth_guard_queued='__notesRegisterQueued' %}
     {% include 'partials/auth-native-submit-guard.html' %}

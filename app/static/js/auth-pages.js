@@ -549,7 +549,10 @@ function setFieldError(inputId, errorId, message) {
     error.textContent = message || '';
     error.hidden = !message;
   }
-  if (input) input.setAttribute('aria-invalid', message ? 'true' : 'false');
+  if (input) {
+    if (message) input.setAttribute('aria-invalid', 'true');
+    else input.removeAttribute('aria-invalid');
+  }
 }
 
 const COMMON_PASSWORD_FRAGMENTS = [

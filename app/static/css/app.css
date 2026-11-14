@@ -2298,8 +2298,29 @@ html[data-theme="light"] .auth-card {
 .field-error {
   margin: -4px 0 0;
   color: var(--danger);
-  font-size: 13px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
+.auth-card .error {
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.auth-card .hint { margin: 0; line-height: 1.45; }
+.auth-card div:not(.stack) > label + .hint { margin-top: var(--space-2); }
+/* .auth-card label is a grid; keep checkbox and text side by side. */
+.auth-card label.consent-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-weight: 400;
+  color: var(--text);
+  line-height: 1.4;
+}
+.auth-submit { display: grid; }
 .auth-field {
   display: grid;
   gap: 6px;
@@ -2978,6 +2999,31 @@ html[data-theme="light"] .zk-badge {
 }
 @keyframes unlock-checking-spin {
   to { transform: rotate(360deg); }
+}
+/* Visible busy state while the key is derived on sign-in / registration.
+   auth-pages.js disables the button and swaps its label for the duration. */
+#login-submit:disabled,
+#register-submit:disabled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+#login-submit:disabled::before,
+#register-submit:disabled::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, var(--on-accent) 35%, transparent);
+  border-top-color: var(--on-accent);
+  border-radius: var(--radius-round);
+  animation: unlock-checking-spin 0.7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  #login-submit:disabled::before,
+  #register-submit:disabled::before,
+  #unlock-submit.is-checking::before { animation-duration: 2s; }
 }
 #unlock-form .btn.block { margin-top: 0; }
 .unlock-status {
@@ -7499,7 +7545,8 @@ html[data-theme="light"] {
   --muted: #8e8e93;
   --accent: #086dd6;
   --accent-soft: rgba(8, 109, 214, 0.12);
-  --danger: #d94848;
+  /* UI_POLISH.md section 3: >= 4.5:1 on white for 13px error text. */
+  --danger: #c93636;
   --sn-search: #f2f2f7;
   --sn-icon-note: #086dd6;
   --sn-icon-util: #e68619;
