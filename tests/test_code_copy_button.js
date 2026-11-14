@@ -150,6 +150,13 @@ assert.doesNotMatch(html, /<button/i, 'markdown output itself carries no button 
   const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
   assert.ok(appJs.includes('NotesPreview?.bindCodeCopy?.(ui.preview'));
   assert.ok(appJs.includes('NotesPreview?.decorateCodeBlocks?.(ui.preview)'));
+  // Regression: the preview's click-to-edit handler shares the element with the
+  // copy handler, so it must skip copy-button clicks (else the preview closes
+  // and 'Gekopieerd' is never seen).
+  const fnStart = appJs.indexOf('function bindPreviewExternalLinks');
+  const guardAt = appJs.indexOf("closest?.('.code-copy-btn')", fnStart);
+  const editAt = appJs.indexOf("editorMode = 'edit'", fnStart);
+  assert.ok(fnStart > 0 && guardAt > fnStart && guardAt < editAt, 'click-to-edit ignores the copy button');
   const css = fs.readFileSync(path.join(root, 'app/static/css/app.css'), 'utf8');
   assert.match(css, /\.code-copy-btn\s*\{[^}]*inset-inline-end/);
   assert.match(css, /@media \(hover: none\)\s*\{\s*#preview \.code-copy-btn/);
