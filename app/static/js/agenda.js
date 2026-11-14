@@ -376,6 +376,16 @@
     if (global.NotesAgendaReminders?.wireAgendaReminderSettings) {
       NotesAgendaReminders.wireAgendaReminderSettings();
     }
+    [['agenda-pref-show-tasks', TASK_PREF_SHOW, true], ['agenda-pref-show-completed', TASK_PREF_DONE, false]]
+      .forEach(([elId, key, def]) => {
+        const cb = document.getElementById(elId);
+        if (!cb) return;
+        cb.checked = taskPref(key, def);
+        cb.addEventListener('change', () => {
+          setTaskPref(key, cb.checked);
+          render();
+        });
+      });
     document.addEventListener('keydown', (ev) => {
       if (ev.key !== 'Escape' || !document.body.classList.contains('agenda-calendar-settings-open')) return;
       closeCalendarSettingsPanel();
@@ -390,6 +400,346 @@
     const S = getStore();
     if (!S || typeof S.listAgendaEvents !== 'function') return [];
     return S.listAgendaEvents();
+  }
+
+  // ---- dated tasks (docs/REMINDERS_TASKS_SPEC.md §3) -----------------------
+  const TASK_PREF_SHOW = 'notes_agenda_show_tasks';
+  const TASK_PREF_DONE = 'notes_agenda_show_completed';
+
+  function taskPref(key, def) {
+    try {
+      const v = localStorage.getItem(key);
+      return v == null ? def : v === '1';
+    } catch (e) {
+      return def;
+    }
+  }
+
+  function setTaskPref(key, on) {
+    try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) { /* ignore */ }
+  }
+
+  function listAgendaTasks() {
+    const S = getStore();
+    if (!S || typeof S.listAgendaTasks !== 'function') return [];
+    return S.listAgendaTasks() || [];
+  }
+
+  function placedTasksForRange(range) {
+    const T = global.NotesAgendaTasks;
+    if (!T || !taskPref(TASK_PREF_SHOW, true)) return [];
+    const q = String(state.search || '').trim().toLowerCase();
+    const tasks = listAgendaTasks().filter((t) => !q
+      || String(t.title || '').toLowerCase().includes(q)
+      || String(t.notes || '').toLowerCase().includes(q));
+    try {
+      return T.placeTasks(tasks, range.start, range.end, new Date(), { showCompleted: taskPref(TASK_PREF_DONE, false) });
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function tasksOnDay(placed, dayMs) {
+    return placed.filter((p) => p.dayMs === dayMs);
+  }
+
+  /** One task: native checkbox with a visible label, plus a visible "Edit" button. */
+  function renderTaskItem(p, variant) {
+    const T = global.NotesAgendaTasks;
+    const t = p.task;
+    const done = T.isDone(t);
+    const name = T.accessibleName(t, p.overdue, agendaUiLocale());
+    const cbId = `agenda-task-cb-${esc(t.id)}-${p.dayMs}-${variant}`;
+    const when = p.overdue ? T.formatDue(t, agendaUiLocale()) : (t.due_time || '');
+    const cls = `agenda-task agenda-task--${variant}${done ? ' is-done' : ''}${p.overdue ? ' is-overdue' : ''}`;
+    return (
+      `<li class="${cls}" role="listitem" data-agenda-task="${esc(t.id)}" title="${esc(name)}">`
+      + `<input type="checkbox" class="agenda-task-check" id="${cbId}" data-agenda-task-toggle="${esc(t.id)}"`
+      + `${done ? ' checked' : ''}${t.readOnly ? ' disabled' : ''} aria-label="${esc(name)}">`
+      + `<label class="agenda-task-label" for="${cbId}">`
+      + `<span class="agenda-task-title">${esc(t.title)}</span>`
+      + (when ? `<span class="agenda-task-when muted">${esc(when)}</span>` : '')
+      + '</label>'
+      + `<button type="button" class="btn ghost sm agenda-task-open" data-agenda-task-open="${esc(t.id)}" aria-label="${esc(`Edit task ${t.title}`)}">Edit</button>`
+      + '</li>'
+    );
+  }
+
+  function renderTaskList(items, variant, label) {
+    if (!items.length) return '';
+    return `<ul class="agenda-task-list agenda-task-list--${variant}" role="list" aria-label="${esc(label)}">`
+      + items.map((p) => renderTaskItem(p, variant)).join('') + '</ul>';
+  }
+
+  /** Overdue group first (once, on today), then the day's own tasks. */
+  function renderDayTasks(items, variant) {
+    const overdue = items.filter((p) => p.overdue);
+    const own = items.filter((p) => !p.overdue);
+    let html = '';
+    if (overdue.length) {
+      html += `<p class="agenda-task-group-head">Overdue</p>${renderTaskList(overdue, variant, 'Overdue tasks')}`;
+    }
+    html += renderTaskList(own, variant, 'Tasks');
+    return html;
+  }
+
+  /** Week, 3-day and day views: a task row per day above the time grid. */
+  function renderTaskStrip(days, placed) {
+    if (!placed.length) return '';
+    let html = '<div class="agenda-task-strip">';
+    html += '<div class="agenda-corner agenda-task-strip-label muted">Tasks</div>';
+    html += `<div class="agenda-task-strip-cols" style="--agenda-cols:${days.length}">`;
+    days.forEach((d) => {
+      const ms = startOfDay(d).getTime();
+      html += `<div class="agenda-task-strip-cell" data-agenda-task-day="${ms}">${renderDayTasks(tasksOnDay(placed, ms), 'chip')}</div>`;
+    });
+    html += '</div></div>';
+    return html;
+  }
+
+  function announceTask(msg) {
+    let live = document.getElementById('agenda-task-live');
+    if (!live) {
+      live = document.createElement('div');
+      live.id = 'agenda-task-live';
+      live.className = 'sr-only';
+      live.setAttribute('aria-live', 'polite');
+      live.setAttribute('role', 'status');
+      document.body.appendChild(live);
+    }
+    live.textContent = '';
+    setTimeout(() => { live.textContent = msg; }, 30);
+  }
+
+  function findTask(id) {
+    return listAgendaTasks().find((t) => t.id === id) || null;
+  }
+
+  function focusTaskControl(id, selector) {
+    if (!rootEl || !id) return;
+    const el = rootEl.querySelector(`[${selector}="${cssAttrEscape(id)}"]`);
+    if (el) el.focus({ preventScroll: false });
+  }
+
+  function setTaskDone(id, done) {
+    const S = getStore();
+    const T = global.NotesAgendaTasks;
+    const task = findTask(id);
+    if (!S || !T || !task || T.normalizeTask(task).readOnly) return;
+    const before = { ...task };
+    S.upsertAgendaTask(id, T.withDone(task, done));
+    render();
+    focusTaskControl(id, 'data-agenda-task-toggle');
+    if (!done) {
+      announceTask(`Task reopened: ${task.title}.`);
+      return;
+    }
+    announceTask(`Task done: ${task.title}. Undo available.`);
+    const undo = () => {
+      const st = getStore();
+      if (!st) return;
+      st.upsertAgendaTask(id, T.withDone(before, false));
+      render();
+      announceTask(`Task reopened: ${task.title}.`);
+    };
+    if (typeof global.notesAgendaToastUndo === 'function') global.notesAgendaToastUndo('Task done.', undo);
+    else toastMsg('Task done.');
+  }
+
+  let taskDialogReturnFocus = null;
+  let taskDialogId = '';
+
+  function ensureTaskDialog() {
+    let dlg = document.getElementById('agenda-task-dialog');
+    if (dlg) return dlg;
+    dlg = document.createElement('div');
+    dlg.id = 'agenda-task-dialog';
+    dlg.className = 'agenda-task-dialog';
+    dlg.hidden = true;
+    dlg.setAttribute('role', 'dialog');
+    dlg.setAttribute('aria-modal', 'true');
+    dlg.setAttribute('aria-labelledby', 'agenda-task-dialog-title');
+    dlg.innerHTML = (
+      '<form class="agenda-task-form" novalidate>'
+      + '<h2 id="agenda-task-dialog-title" class="agenda-task-dialog-title">Task</h2>'
+      + '<label for="agenda-task-title">Title</label>'
+      + '<input id="agenda-task-title" type="text" maxlength="300" autocomplete="off" required>'
+      + '<div class="agenda-task-form-row">'
+      + '<span><label for="agenda-task-due">Due date</label><input id="agenda-task-due" type="date" required></span>'
+      + '<span><label for="agenda-task-time">Time (optional)</label><input id="agenda-task-time" type="time"></span>'
+      + '</div>'
+      + '<label for="agenda-task-notes">Notes</label>'
+      + '<textarea id="agenda-task-notes" rows="3" maxlength="5000"></textarea>'
+      + '<label class="agenda-task-form-done"><input id="agenda-task-done" type="checkbox"> Done</label>'
+      + '<p id="agenda-task-error" class="error" role="alert" hidden></p>'
+      + '<p id="agenda-task-readonly" class="muted" hidden>Update Deeperguard to edit this task.</p>'
+      + '<div class="agenda-task-form-actions">'
+      + '<button type="button" class="btn danger ghost" id="agenda-task-delete">Delete</button>'
+      + '<span class="agenda-task-form-spacer"></span>'
+      + '<button type="button" class="btn ghost" id="agenda-task-cancel">Cancel</button>'
+      + '<button type="submit" class="btn primary" id="agenda-task-save">Save</button>'
+      + '</div></form>'
+    );
+    document.body.appendChild(dlg);
+    dlg.querySelector('form').addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      saveTaskDialog();
+    });
+    dlg.querySelector('#agenda-task-cancel').addEventListener('click', () => closeTaskDialog());
+    dlg.querySelector('#agenda-task-delete').addEventListener('click', () => deleteTaskFromDialog());
+    dlg.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        closeTaskDialog();
+        return;
+      }
+      trapDialogTab(ev, dlg);
+    });
+    return dlg;
+  }
+
+  function openTaskDialog(id, opts) {
+    const T = global.NotesAgendaTasks;
+    if (!T) return;
+    const o = opts || {};
+    const task = id ? findTask(id) : null;
+    if (id && !task) return;
+    const dlg = ensureTaskDialog();
+    taskDialogId = task ? task.id : '';
+    taskDialogReturnFocus = o.returnFocus || (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    const norm = task ? T.normalizeTask(task) : null;
+    const day = o.dayMs ? new Date(o.dayMs) : new Date();
+    dlg.querySelector('#agenda-task-dialog-title').textContent = task ? 'Edit task' : 'New task';
+    dlg.querySelector('#agenda-task-title').value = task ? String(task.title || '') : '';
+    dlg.querySelector('#agenda-task-due').value = task ? String(task.due || '') : T.dateKey(day);
+    dlg.querySelector('#agenda-task-time').value = norm ? norm.due_time : '';
+    dlg.querySelector('#agenda-task-notes').value = norm ? norm.notes : '';
+    dlg.querySelector('#agenda-task-done').checked = !!(task && T.isDone(task));
+    dlg.querySelector('#agenda-task-delete').hidden = !task;
+    const ro = !!(norm && norm.readOnly);
+    dlg.querySelector('#agenda-task-readonly').hidden = !ro;
+    dlg.querySelector('#agenda-task-save').disabled = ro;
+    dlg.querySelector('#agenda-task-delete').disabled = ro;
+    const err = dlg.querySelector('#agenda-task-error');
+    err.hidden = true;
+    err.textContent = '';
+    dlg.hidden = false;
+    document.body.classList.add('agenda-task-open');
+    dlg.querySelector('#agenda-task-title').focus();
+  }
+
+  function closeTaskDialog() {
+    const dlg = document.getElementById('agenda-task-dialog');
+    if (dlg) dlg.hidden = true;
+    document.body.classList.remove('agenda-task-open');
+    const id = taskDialogId;
+    const back = taskDialogReturnFocus;
+    taskDialogId = '';
+    taskDialogReturnFocus = null;
+    if (back && back.isConnected) back.focus();
+    else if (id) focusTaskControl(id, 'data-agenda-task-toggle');
+  }
+
+  function saveTaskDialog() {
+    const S = getStore();
+    const T = global.NotesAgendaTasks;
+    const dlg = document.getElementById('agenda-task-dialog');
+    if (!S || !T || !dlg || typeof S.upsertAgendaTask !== 'function') return;
+    const prev = taskDialogId ? findTask(taskDialogId) : null;
+    const wasDone = !!(prev && T.isDone(prev));
+    const wantDone = dlg.querySelector('#agenda-task-done').checked;
+    const next = T.buildTask({
+      title: dlg.querySelector('#agenda-task-title').value,
+      due: dlg.querySelector('#agenda-task-due').value,
+      due_time: dlg.querySelector('#agenda-task-time').value,
+      notes: dlg.querySelector('#agenda-task-notes').value,
+      done_at: wantDone ? (wasDone ? prev.done_at : new Date().toISOString()) : '',
+    }, prev);
+    if (!next) {
+      const err = dlg.querySelector('#agenda-task-error');
+      err.textContent = 'Enter a title and a valid due date.';
+      err.hidden = false;
+      return;
+    }
+    let id;
+    try {
+      id = S.upsertAgendaTask(taskDialogId, next);
+    } catch (e) {
+      toastMsg(e && e.message ? e.message : 'Could not save the task', true);
+      return;
+    }
+    if (!id) return;
+    taskDialogId = id;
+    taskDialogReturnFocus = null;
+    closeTaskDialog();
+    render();
+    focusTaskControl(id, 'data-agenda-task-toggle');
+    announceTask(prev ? `Task saved: ${next.title}.` : `Task added: ${next.title}.`);
+  }
+
+  function deleteTaskFromDialog() {
+    const S = getStore();
+    const id = taskDialogId;
+    const task = id ? findTask(id) : null;
+    if (!S || !task || typeof S.removeAgendaTask !== 'function') return;
+    const saved = { ...task };
+    S.removeAgendaTask(id);
+    taskDialogReturnFocus = null;
+    taskDialogId = '';
+    closeTaskDialog();
+    render();
+    rootEl?.querySelector('#agenda-add-task')?.focus();
+    announceTask(`Task deleted: ${saved.title}. Undo available.`);
+    const undo = () => {
+      const st = getStore();
+      if (!st) return;
+      // A fresh id: the old one carries a delete tombstone.
+      st.upsertAgendaTask('', { ...saved });
+      render();
+    };
+    if (typeof global.notesAgendaToastUndo === 'function') global.notesAgendaToastUndo('Task deleted.', undo);
+    else toastMsg('Task deleted.');
+  }
+
+  function selectedDayMs() {
+    if (state.view === 'month' && state.monthPickDay) return state.monthPickDay;
+    return startOfDay(state.anchor || new Date()).getTime();
+  }
+
+  function openNewTask() {
+    openTaskDialog('', { dayMs: selectedDayMs() });
+  }
+
+  function wireTaskControls() {
+    if (!rootEl) return;
+    rootEl.querySelectorAll('[data-agenda-task-toggle]').forEach((cb) => {
+      cb.addEventListener('change', () => setTaskDone(cb.getAttribute('data-agenda-task-toggle'), cb.checked));
+      cb.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          openTaskDialog(cb.getAttribute('data-agenda-task-toggle'), { returnFocus: cb });
+        }
+      });
+    });
+    rootEl.querySelectorAll('[data-agenda-task-open]').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        openTaskDialog(btn.getAttribute('data-agenda-task-open'), { returnFocus: btn });
+      });
+    });
+    rootEl.querySelectorAll('[data-agenda-task]').forEach((row) => {
+      row.addEventListener('click', (ev) => ev.stopPropagation());
+      row.addEventListener('keydown', (ev) => {
+        if ((ev.key === 'x' || ev.key === 'X') && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+          const cb = row.querySelector('[data-agenda-task-toggle]');
+          if (!cb || cb.disabled) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          setTaskDone(row.getAttribute('data-agenda-task'), !cb.checked);
+        }
+      });
+    });
   }
 
   function rangeForView() {
@@ -954,6 +1304,7 @@
       + '<div class="agenda-top-tools">'
       + renderSearchField()
       + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
+      + '<button type="button" class="btn agenda-add agenda-add-task" id="agenda-add-task">+ Task</button>'
       + '<button type="button" class="btn primary agenda-add" id="agenda-add-event">+ Event</button>'
       + '</div></div></header>'
     );
@@ -966,6 +1317,7 @@
       + renderSearchField()
       + '<div class="agenda-seg-wrap" role="group" aria-label="View">' + renderViewToggles() + '</div>'
       + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
+      + '<button type="button" class="btn agenda-cal-action" id="agenda-phone-add-task">+ Task</button>'
       + '<button type="button" class="btn primary agenda-cal-action" id="agenda-phone-import">Import calendar (.ics)</button>'
       + '<button type="button" class="btn ghost agenda-cal-action" id="agenda-phone-export">Export calendar (.ics)</button>'
       + '</div>'
@@ -1096,7 +1448,7 @@
     return body;
   }
 
-  function renderAgendaList(occ, range) {
+  function renderAgendaList(occ, range, placed) {
     const rs = range && range.start ? range.start.getTime() : 0;
     const re = range && range.end ? range.end.getTime() : 0;
     const byDay = new Map();
@@ -1119,6 +1471,8 @@
         day = next;
       }
     }
+    const taskDays = new Set((placed || []).map((p) => p.dayMs));
+    taskDays.forEach((k) => { if (!byDay.has(k)) byDay.set(k, []); });
     const dayKeys = [...byDay.keys()].sort((a, b) => a - b);
     let html = `<div class="agenda-list-view" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
     if (!dayKeys.length) {
@@ -1129,7 +1483,9 @@
     dayKeys.forEach((key) => {
       const day = new Date(key);
       const items = sortOccForMonthDay(byDay.get(key));
-      html += `<section class="agenda-list-day"><h2 class="agenda-list-day-head">${esc(listDayHeading(day))}</h2><ul class="agenda-list">`;
+      html += `<section class="agenda-list-day"><h2 class="agenda-list-day-head">${esc(listDayHeading(day))}</h2>`;
+      html += renderDayTasks(tasksOnDay(placed || [], key), 'row');
+      html += '<ul class="agenda-list">';
       items.forEach((o) => {
         const when = o.listWhen;
         const loc = String(o.displayLocation ?? o.ev.location ?? '').trim();
@@ -1172,7 +1528,7 @@
     return false;
   }
 
-  function renderMonthDayList(occ) {
+  function renderMonthDayList(occ, placed) {
     const pickMs = state.monthPickDay || startOfDay(new Date()).getTime();
     const pick = new Date(pickMs);
     const ds = startOfDay(pick);
@@ -1180,7 +1536,11 @@
     const dayOcc = sortOccForMonthDay(occ.filter((o) => o.end > ds && o.start < de));
     let html = `<div class="agenda-month-daylist" data-agenda-month-pick="${ds.getTime()}">`;
     html += `<h2 class="agenda-month-daylist-title">${esc(pick.toLocaleDateString(agendaUiLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))}</h2>`;
-    if (!dayOcc.length) {
+    const dayTasks = tasksOnDay(placed || [], ds.getTime());
+    html += renderDayTasks(dayTasks, 'row');
+    if (!dayOcc.length && dayTasks.length) {
+      // Tasks only: no "No events" line under them.
+    } else if (!dayOcc.length) {
       html += '<p class="muted agenda-month-daylist-empty">No events</p>';
     } else {
       html += '<ul class="agenda-list">';
@@ -1199,7 +1559,7 @@
     return html;
   }
 
-  function renderMonthGrid(days, occ) {
+  function renderMonthGrid(days, occ, placed) {
     const phoneMonth = isAgendaPhoneLayout();
     let nWeeks = Math.ceil(days.length / 7);
     const anchorMonth = state.anchor.getMonth();
@@ -1224,20 +1584,27 @@
         const inMonth = day.getMonth() === anchorMonth && day.getFullYear() === anchorYear;
         const dayOcc = occ.filter((o) => o.end > ds && o.start < de);
         const sorted = sortOccForMonthDay(dayOcc);
-        const show = sorted.slice(0, MAX_CHIPS);
-        const extra = sorted.length > MAX_CHIPS ? sorted.length - MAX_CHIPS : 0;
+        const dayTasks = tasksOnDay(placed || [], ds.getTime());
+        const taskShow = dayTasks.slice(0, MAX_CHIPS);
+        const show = sorted.slice(0, Math.max(0, MAX_CHIPS - taskShow.length));
+        const extra = (sorted.length - show.length) + (dayTasks.length - taskShow.length);
         const isToday = ds.getTime() === startOfDay(new Date()).getTime();
         const pickActive = state.monthPickDay === ds.getTime();
         html += `<div class="agenda-month-cell ${inMonth ? '' : 'is-out'} ${isToday ? 'is-today' : ''} ${pickActive ? 'is-pick' : ''}" data-agenda-month-day="${ds.getTime()}">`;
-        const dayLabel = `${formatLongDate(day)}, ${sorted.length === 1 ? '1 event' : `${sorted.length} events`}`;
+        const taskCount = dayTasks.length ? `, ${dayTasks.length === 1 ? '1 task' : `${dayTasks.length} tasks`}` : '';
+        const dayLabel = `${formatLongDate(day)}, ${sorted.length === 1 ? '1 event' : `${sorted.length} events`}${taskCount}`;
         html += `<button type="button" class="agenda-month-date" data-agenda-month-pick="${ds.getTime()}" aria-label="${esc(dayLabel)}"${phoneMonth ? ` aria-pressed="${pickActive ? 'true' : 'false'}"` : ''}>${day.getDate()}</button>`;
         html += '<div class="agenda-month-events">';
         if (phoneMonth) {
+          dayTasks.slice(0, 3).forEach(() => {
+            html += '<span class="agenda-month-dot agenda-month-dot--task" aria-hidden="true"></span>';
+          });
           sorted.slice(0, 6).forEach((o) => {
             const clr = eventAccentColor(o.ev);
             html += `<span class="agenda-month-dot" style="--agenda-dot:${clr}" aria-hidden="true"></span>`;
           });
         } else {
+          html += renderDayTasks(taskShow, 'chip');
           show.forEach((o) => {
             const clr = eventAccentColor(o.ev);
             const rec = o.recurring || (o.ev.rrule && String(o.ev.rrule).trim());
@@ -1254,7 +1621,7 @@
           });
         }
         if (extra && !phoneMonth) {
-          const aria = `Show all events for ${formatLongDate(day)}`;
+          const aria = `Show all events and tasks for ${formatLongDate(day)}`;
           html += (
             `<button type="button" class="agenda-month-more-btn" data-agenda-goto-day="${ds.getTime()}" aria-label="${esc(aria)}">+${extra} more</button>`
           );
@@ -1289,17 +1656,19 @@
     const range = rangeForView();
     const occ = buildOccurrences(range.start, range.end);
     const days = range.days;
+    const placed = placedTasksForRange(range);
 
     let main = '';
     if (state.view === 'agenda') {
-      main = renderAgendaList(occ, range);
+      main = renderAgendaList(occ, range, placed);
     } else if (state.view === 'month') {
-      main = renderMonthGrid(days, occ);
-      if (isAgendaPhoneLayout()) main += renderMonthDayList(occ);
+      main = renderMonthGrid(days, occ, placed);
+      if (isAgendaPhoneLayout()) main += renderMonthDayList(occ, placed);
     } else {
       main = (
         '<div class="agenda-week-layout">'
         + renderDayHeaders(days)
+        + renderTaskStrip(days, placed)
         + renderTimedGrid(days, occ)
         + '</div>'
       );
@@ -1354,6 +1723,13 @@
       rememberEditorReturnFocus(btn instanceof HTMLElement ? btn : null, '', 0);
       openEditor(null);
     });
+    rootEl.querySelectorAll('#agenda-add-task, #agenda-phone-add-task').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        closePhoneMenu();
+        openNewTask();
+      });
+    });
+    wireTaskControls();
     rootEl.querySelector('#agenda-calendar-settings-btn')?.addEventListener('click', () => {
       closePhoneMenu();
       const open = document.body.classList.contains('agenda-calendar-settings-open');
@@ -1393,7 +1769,7 @@
     });
     rootEl.querySelectorAll('[data-agenda-month-day]').forEach((cell) => {
       cell.addEventListener('click', (ev) => {
-        if (ev.target.closest('[data-agenda-id], [data-agenda-goto-day]')) return;
+        if (ev.target.closest('[data-agenda-id], [data-agenda-goto-day], [data-agenda-task]')) return;
         const raw = cell.getAttribute('data-agenda-month-day');
         const t = raw ? Number(raw) : NaN;
         if (!Number.isFinite(t)) return;
@@ -2304,6 +2680,13 @@
       requestCloseEditor();
       return true;
     }
+    const taskDialog = document.getElementById('agenda-task-dialog');
+    if (taskDialog && !taskDialog.hidden) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeTaskDialog();
+      return true;
+    }
     return false;
   }
 
@@ -2856,7 +3239,7 @@
     const confirmDialog = document.getElementById('confirm-dialog');
     return b.contains('agenda-editor-open') || b.contains('agenda-detail-open') || b.contains('agenda-scope-open')
       || b.contains('agenda-sheet-open') || b.contains('agenda-calendar-settings-open')
-      || b.contains('agenda-phone-menu-open') || !!(confirmDialog && !confirmDialog.hidden);
+      || b.contains('agenda-phone-menu-open') || b.contains('agenda-task-open') || !!(confirmDialog && !confirmDialog.hidden);
   }
 
   function runShortcut(action) {
@@ -2864,6 +3247,7 @@
     if (action === 'prev') { shiftAnchor(-1); render(); return; }
     if (action === 'next') { shiftAnchor(1); render(); return; }
     if (action === 'new') { openNewEvent(); return; }
+    if (action === 'newTask') { openNewTask(); return; }
     if (action === 'goto') { openAgendaSheet('goto'); return; }
     if (action === 'help') { openAgendaSheet('help'); return; }
     if (action === 'search') {
@@ -2881,6 +3265,8 @@
   }
 
   let shortcutsWired = false;
+  let pendingNew = 0;
+  const NEW_CHORD_MS = 600;
   function wireAgendaShortcutsOnce() {
     if (shortcutsWired) return;
     shortcutsWired = true;
@@ -2892,8 +3278,24 @@
         paneVisible: !!(pane && !pane.hidden),
         blocked: shortcutsBlocked(),
       });
+      // "n" then "t" creates a task for the selected day; a lone "n" still opens a new event.
+      if (pendingNew) {
+        clearTimeout(pendingNew);
+        pendingNew = 0;
+        if (action === 'today' && (ev.key === 't' || ev.key === 'T')) {
+          ev.preventDefault();
+          runShortcut('newTask');
+          return;
+        }
+        runShortcut('new');
+        if (action === 'new') return;
+      }
       if (!action) return;
       ev.preventDefault();
+      if (action === 'new') {
+        pendingNew = setTimeout(() => { pendingNew = 0; runShortcut('new'); }, NEW_CHORD_MS);
+        return;
+      }
       runShortcut(action);
     });
   }
@@ -2951,6 +3353,7 @@
     render,
     onTabShown,
     openNewEvent,
+    openNewTask,
     isAgendaPhoneLayout,
     formatRangeTitle,
     defaultAgendaView,
@@ -2960,6 +3363,10 @@
     requestCloseEditor,
     closeScopeChooser,
     _layoutDayColumns: layoutDayColumns,
+    _placedTasksForRange: (range) => placedTasksForRange(range),
+    _renderAgendaList: renderAgendaList,
+    _renderMonthGrid: renderMonthGrid,
+    _renderTaskStrip: renderTaskStrip,
     expandEventOccurrences,
     rangeForView: () => rangeForView(),
     _state: state,

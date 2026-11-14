@@ -1493,6 +1493,11 @@
         <div class="agenda-calendar-settings-body">
           <p class="settings-hint">Import or export calendar files on this device only. If Agenda looks out of date after an update, close the tab and open Deeperguard again (the offline worker fetches a fresh shell).</p>
           <p class="settings-hint">Import supports .ics from other apps. Events stay encrypted in your vault; only https links are used as join targets.</p>
+          <fieldset class="agenda-task-prefs">
+            <legend class="section-label">Tasks</legend>
+            <label class="settings-hint"><input type="checkbox" id="agenda-pref-show-tasks"> Show tasks</label>
+            <label class="settings-hint"><input type="checkbox" id="agenda-pref-show-completed"> Show completed tasks older than 7 days</label>
+          </fieldset>
           <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-import-ics">Import calendar (.ics)</button>
           <p class="settings-hint muted agenda-cal-action-sub">Choose one or more files exported from another calendar, or drop .ics files onto the Agenda. You will see a preview before anything is saved.</p>
           <section class="agenda-subscriptions" aria-labelledby="agenda-subscriptions-heading">
@@ -2818,6 +2823,7 @@
   {{ asset_script('js/agenda-occurrence.js') }}
   {{ asset_script('js/agenda-scroll-core.js') }}
   {{ asset_script('js/agenda-reminders.js') }}
+  {{ asset_script('js/agenda-tasks.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}
   {{ asset_script('js/totp-import.js') }}
