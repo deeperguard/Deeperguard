@@ -317,6 +317,24 @@
       </div>
     </div>
   </div>
+  <div id="quick-capture" class="template-dialog quick-capture" hidden role="dialog" aria-modal="true" aria-labelledby="quick-capture-title">
+    <div class="template-dialog-card">
+      <h2 id="quick-capture-title">Quick capture</h2>
+      <div class="quick-capture-kind" role="radiogroup" aria-label="Save as">
+        <label><input type="radio" name="quick-capture-kind" id="quick-capture-note" value="note" checked> Note</label>
+        <label><input type="radio" name="quick-capture-kind" id="quick-capture-task" value="task"> Task</label>
+      </div>
+      <p id="quick-capture-shared" class="template-dialog-help" hidden>Shared from another app. Check the text before you save it.</p>
+      <label class="template-dialog-field">Text
+        <textarea id="quick-capture-text" rows="6" autocomplete="off" spellcheck="true" aria-describedby="quick-capture-hint"></textarea>
+      </label>
+      <p id="quick-capture-hint" class="template-dialog-help">Saved encrypted on this device, then synced. Shortcut works while Deeperguard is open.</p>
+      <div class="template-dialog-actions">
+        <button type="button" id="quick-capture-cancel" class="btn ghost sm">Cancel</button>
+        <button type="button" id="quick-capture-save" class="btn primary sm" aria-keyshortcuts="Control+Enter Meta+Enter">Save</button>
+      </div>
+    </div>
+  </div>
   <div id="file-download-progress" class="file-download-progress" hidden role="dialog" aria-modal="true" aria-live="polite" aria-busy="true" aria-labelledby="file-download-progress-title">
     <div class="file-download-progress-card" tabindex="-1">
       <p id="file-download-progress-title">Downloading…</p>
@@ -568,6 +586,7 @@
         </label>
         <p id="unlock-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" hidden></p>
         <p id="unlock-recovery-hint" class="auth-hint" hidden>If you changed it in Settings, the vault password is different from the password you use to sign in. They start as the same password.</p>
+        <p id="unlock-share-hint" class="auth-hint" role="status" hidden>Shared content is waiting. Unlock to save it. It is kept only in memory and is discarded if you close this page.</p>
         <p id="unlock-session-hint" class="auth-hint" hidden>Your sign-in expired. Enter your vault password to continue and resume sync.</p>
         <a id="unlock-session-signin" class="btn ghost block" hidden href="/login?reason=session-expired">Sign in again</a>
         <p id="unlock-update-hint" class="auth-hint ocr-stale" hidden aria-live="polite"></p>
@@ -2541,6 +2560,7 @@
         <div><dt><kbd>D</kbd> <kbd>3</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>L</kbd></dt><dd>Day, 3 days, week, month, list</dd></div>
         <div><dt><kbd>G</kbd></dt><dd>Go to date</dd></div>
         <div><dt><kbd>/</kbd></dt><dd>Search</dd></div>
+        <div><dt><kbd>Ctrl</kbd>/<kbd>⌘</kbd> <kbd>Shift</kbd> <kbd>K</kbd></dt><dd>Quick capture (note or task)</dd></div>
         <div><dt><kbd>?</kbd></dt><dd>This list</dd></div>
         <div><dt><kbd>Esc</kbd></dt><dd>Close a dialog</dd></div>
       </dl>
@@ -2826,6 +2846,7 @@
   {{ asset_script('js/vault-sync-progress.js') }}
   {{ asset_script('js/cloud-backup.js') }}
   {{ asset_script('js/secure-send-note-attachments.js') }}
+  {{ asset_script('js/quick-capture.js') }}
   {{ asset_script('js/app.js') }}
 </body>
 </html>

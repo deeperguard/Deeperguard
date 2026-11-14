@@ -403,11 +403,83 @@ async function cacheFirst(request, versioned) {
   return fetch(request);
 }
 
+// Web Share Target (docs/REMINDERS_TASKS_SPEC.md section 6). Shared content is
+// untrusted and plaintext: it lives in this variable only (never Cache Storage,
+// IndexedDB or the URL), is handed out once, and expires after 2 minutes.
+const SHARE_PATH = '/app/share-target';
+const SHARE_MAX_CHARS = 64 * 1024;
+const SHARE_TTL_MS = 2 * 60 * 1000;
+const SHARE_CUT_MARKER = '\n[… shared text was cut off]';
+let pendingShare = null;
+let pendingShareTimer = null;
+
+function dropPendingShare() {
+  pendingShare = null;
+  if (pendingShareTimer) clearTimeout(pendingShareTimer);
+  pendingShareTimer = null;
+}
+
+function boundShareFields(fields) {
+  let budget = SHARE_MAX_CHARS;
+  let cut = false;
+  const out = {};
+  for (const name of ['title', 'text', 'url']) {
+    let value = typeof fields[name] === 'string' ? fields[name] : '';
+    if (value.length > budget) {
+      value = value.slice(0, budget);
+      cut = true;
+    }
+    budget -= value.length;
+    out[name] = value;
+  }
+  if (cut) out.text += SHARE_CUT_MARKER;
+  return out;
+}
+
+async function receiveShare(request) {
+  dropPendingShare();
+  try {
+    const form = await request.formData();
+    const fields = boundShareFields({
+      title: form.get('title'),
+      text: form.get('text'),
+      url: form.get('url'),
+    });
+    if (fields.title || fields.text || fields.url) {
+      pendingShare = { ...fields, at: Date.now() };
+      pendingShareTimer = setTimeout(dropPendingShare, SHARE_TTL_MS);
+    }
+  } catch (err) {
+    dropPendingShare();
+  }
+  return Response.redirect(new URL('/app?action=share', self.location.origin).href, 303);
+}
+
+function takePendingShare() {
+  const share = pendingShare;
+  dropPendingShare();
+  if (!share || Date.now() - share.at > SHARE_TTL_MS) return null;
+  return { title: share.title, text: share.text, url: share.url };
+}
+
 self.addEventListener('message', (event) => {
   const data = event.data || {};
   if (data.type === 'SKIP_WAITING') {
     // Explicit Update tap — safe to activate now.
     self.skipWaiting();
+    return;
+  }
+  if (data.type === 'notes-share-take') {
+    const sharePort = event.ports && event.ports[0];
+    // Only same-origin window clients may take the share.
+    const source = event.source;
+    let sameOriginClient = false;
+    try {
+      sameOriginClient = !!(source && new URL(source.url).origin === self.location.origin);
+    } catch (err) {
+      sameOriginClient = false;
+    }
+    if (sharePort) sharePort.postMessage({ share: sameOriginClient ? takePendingShare() : null });
     return;
   }
   if (data.type !== 'notes-build-ping') return;
@@ -427,6 +499,19 @@ self.addEventListener('periodicsync', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;
+  if (request.method === 'POST') {
+    let postUrl = null;
+    try {
+      postUrl = new URL(request.url);
+    } catch (err) {
+      postUrl = null;
+    }
+    // The share never reaches the server, so it is not in any server log.
+    if (postUrl && sameOrigin(postUrl) && postUrl.pathname === SHARE_PATH) {
+      event.respondWith(receiveShare(request));
+    }
+    return;
+  }
   if (request.method !== 'GET') return;
   let url;
   try {

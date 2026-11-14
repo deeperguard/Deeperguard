@@ -3942,11 +3942,169 @@
       createNote();
       return;
     }
+    if (action === 'capture') {
+      clearLaunchActionFromUrl();
+      openQuickCapture();
+      return;
+    }
+    if (action === 'share') {
+      clearLaunchActionFromUrl();
+      // Already asked at boot when the page loaded; reuse that answer.
+      startPendingShareRequest().then(() => openPendingCapture());
+      return;
+    }
     if (action === 'search') {
       ui.search?.focus();
       scrollFocusedFieldIntoView();
     }
   }
+
+  function launchActionFromUrl() {
+    try {
+      return new URLSearchParams(location.search).get('action') || '';
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function clearLaunchActionFromUrl() {
+    try {
+      const url = new URL(location.href);
+      if (!url.searchParams.has('action')) return;
+      url.searchParams.delete('action');
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    } catch (err) { /* ignore */ }
+  }
+
+  // --- Quick capture (spec sections 5 and 6) ---
+  // Pending text (a share, or a capture asked for while locked) lives in this
+  // JS variable only. It is never written to any browser storage or the
+  // server; it is saved through the encrypted NotesStore path only after the
+  // user presses Save in the sheet.
+  let pendingCapture = null;
+  let pendingShareRequest = null;
+  let quickCaptureOpener = null;
+
+  function quickCaptureEls() {
+    return {
+      root: document.getElementById('quick-capture'),
+      text: document.getElementById('quick-capture-text'),
+      note: document.getElementById('quick-capture-note'),
+      task: document.getElementById('quick-capture-task'),
+      shared: document.getElementById('quick-capture-shared'),
+    };
+  }
+
+  function isQuickCaptureOpen() {
+    const { root } = quickCaptureEls();
+    return !!(root && !root.hidden);
+  }
+
+  function captureVaultOpen() {
+    return NotesStore.isUnlocked() && document.body.classList.contains('unlocked') && !isUnlockScreenVisible();
+  }
+
+  function updateUnlockShareHint() {
+    const hint = document.getElementById('unlock-share-hint');
+    if (hint) hint.hidden = !(pendingCapture && pendingCapture.shared && !NotesStore.isUnlocked());
+  }
+
+  function otherModalOpen() {
+    return [...document.querySelectorAll('[role="dialog"][aria-modal="true"], [role="alertdialog"]')]
+      .some((el) => el.id !== 'quick-capture' && !el.hidden && el.getClientRects().length > 0);
+  }
+
+  function openQuickCapture({ text = '', shared = false } = {}) {
+    const els = quickCaptureEls();
+    if (!els.root || !els.text) return false;
+    if (!captureVaultOpen()) {
+      // Locked: remember in memory only and show the unlock screen.
+      pendingCapture = { text, shared };
+      updateUnlockShareHint();
+      return false;
+    }
+    if (!isQuickCaptureOpen()) quickCaptureOpener = document.activeElement;
+    els.text.value = text;
+    if (els.note) els.note.checked = true;
+    if (els.shared) els.shared.hidden = !shared;
+    els.root.hidden = false;
+    // The text now lives in the sheet only; Cancel discards it.
+    pendingCapture = null;
+    updateUnlockShareHint();
+    els.text.focus();
+    try { els.text.setSelectionRange(els.text.value.length, els.text.value.length); } catch (err) { /* ignore */ }
+    return true;
+  }
+
+  function openPendingCapture() {
+    if (!pendingCapture || !captureVaultOpen() || isQuickCaptureOpen()) return false;
+    return openQuickCapture(pendingCapture);
+  }
+
+  function closeQuickCapture() {
+    const els = quickCaptureEls();
+    if (!els.root) return;
+    const wasOpen = !els.root.hidden;
+    els.root.hidden = true;
+    if (els.text) els.text.value = '';
+    if (els.shared) els.shared.hidden = true;
+    const opener = quickCaptureOpener;
+    quickCaptureOpener = null;
+    if (wasOpen && opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
+  }
+
+  function discardQuickCapture() {
+    pendingCapture = null;
+    closeQuickCapture();
+    updateUnlockShareHint();
+  }
+
+  function saveQuickCapture() {
+    const els = quickCaptureEls();
+    if (!isQuickCaptureOpen() || !NotesStore.isUnlocked()) return null;
+    const kind = els.task && els.task.checked ? 'task' : 'note';
+    const payload = NotesQuickCapture.buildCapturePayload(els.text.value, kind, NotesStore.defaultNote());
+    if (!payload) {
+      toast('Type something to save', true);
+      els.text.focus();
+      return null;
+    }
+    try {
+      flushSave();
+      const id = NotesStore.newUuid();
+      NotesStore.upsert(id, payload);
+      renderNotes();
+      renderTags();
+      updateEmptyStateVisibility();
+      closeQuickCapture();
+      toast(kind === 'task' ? 'Task saved' : 'Note saved');
+      return id;
+    } catch (err) {
+      toast(err.message || String(err), true);
+      return null;
+    }
+  }
+
+  function startPendingShareRequest() {
+    if (pendingShareRequest) return pendingShareRequest;
+    if (!('serviceWorker' in navigator) || !window.NotesQuickCapture) return Promise.resolve('');
+    pendingShareRequest = NotesQuickCapture.requestPendingShare(navigator.serviceWorker).then((share) => {
+      const text = NotesQuickCapture.shareToText(share);
+      if (text) {
+        pendingCapture = { text, shared: true };
+        updateUnlockShareHint();
+        // Vault may already be open (no unlock needed): show the sheet now.
+        openPendingCapture();
+      }
+      return text;
+    }).finally(() => {
+      pendingShareRequest = null;
+    });
+    return pendingShareRequest;
+  }
+
+  // Same-document launch (URL changed without a reload) re-runs the action.
+  window.addEventListener('notes-launch-action', () => handleLaunchAction());
 
   let settingsKeySaveDepth = 0;
 
@@ -4047,6 +4205,8 @@
       ? NotesVaultLock.isAppUpdating(document.body, window.__notesUpdateInFlight)
       : !!(document.body.classList.contains('app-updating') || window.__notesUpdateInFlight);
     if (window.NotesVaultLock?.mayLockVault && !NotesVaultLock.mayLockVault({ updating })) return;
+    // Spec 9 rule 4: locking an open vault drops any unsaved capture/share text.
+    if (NotesStore.isUnlocked()) discardQuickCapture();
     // Round 72: never leave empty-device reachability probes running after lock.
     stopEmptyDeviceBackgroundRetry();
     setEmptyDeviceUnlockUi('clear');
@@ -6641,6 +6801,7 @@
     const recovery = document.getElementById('unlock-recovery-hint');
     if (recovery) recovery.hidden = !vaultSyncError;
     hideUnlockSessionHint();
+    updateUnlockShareHint();
     clearUnlockPasswordField();
     unlockSubmit.disabled = false;
     unlockSubmit.textContent = 'Unlock';
@@ -7031,6 +7192,7 @@
         }
         setTimeout(() => flushPendingUpdatePrompt(), 1200);
         markJustUnlocked();
+        openPendingCapture();
         await ensureServerSession({ prompt: false }).catch(() => false);
         schedulePostUnlockSync(needsReload);
       } catch (err) {
@@ -19650,6 +19812,33 @@
       requestAnimationFrame(() => document.getElementById('scan-name')?.focus());
     }
   });
+  // Quick capture: Ctrl/Cmd+Shift+K from anywhere in the open app (capture
+  // phase so editor handlers cannot swallow it); Esc / Ctrl+Enter in the sheet.
+  document.addEventListener('keydown', (event) => {
+    if (isQuickCaptureOpen()) {
+      if (event.isComposing) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        discardQuickCapture();
+        return;
+      }
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        event.stopPropagation();
+        saveQuickCapture();
+      }
+      return;
+    }
+    if (!window.NotesQuickCapture?.isCaptureShortcut(event)) return;
+    if (!captureVaultOpen() || otherModalOpen()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openQuickCapture();
+  }, true);
+  document.getElementById('quick-capture-save')?.addEventListener('click', () => saveQuickCapture());
+  document.getElementById('quick-capture-cancel')?.addEventListener('click', () => discardQuickCapture());
+
   document.getElementById('scan-name').addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -25319,6 +25508,9 @@
         checkAppUpdate().catch(() => {});
       });
       reconcileServiceWorkerBuild().catch(() => {});
+      // Take a shared item out of the worker now, so the unlock screen can say
+      // it is waiting. It stays in this page's memory only.
+      if (launchActionFromUrl() === 'share') startPendingShareRequest();
     }
     // pdf.js loads lazily when a document is opened — never at boot (iOS memory).
     if (!(await ensureUnlocked())) return;
