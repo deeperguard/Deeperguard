@@ -12048,3 +12048,110 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 }
 .totp-cam-actions .btn:focus-visible,
 .totp-cam-head .btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* Settings, session/device panels and Secure Send (UI polish task 112).
+   Shared tokens only; layout and behaviour unchanged. */
+.settings-head { padding: var(--space-4) var(--space-5); gap: var(--space-3); }
+.settings-head h2 { font-size: var(--text-lg); line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+.settings-body { padding: var(--space-5) var(--space-4) var(--space-7); }
+.settings-group { margin: 0 0 var(--space-6); }
+.settings-group > h3 {
+  margin: 0 var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+.settings-card {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.settings-row {
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  line-height: 1.4;
+}
+.settings-hint {
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  font-size: var(--text-sm);
+}
+.settings-actions { gap: var(--space-2); padding: var(--space-3) var(--space-4); }
+.settings-nested { padding: 0 var(--space-4) var(--space-4); }
+.settings-subtitle { padding: var(--space-3) var(--space-4) 0; font-size: var(--text-md); }
+.settings-account { padding: var(--space-3) var(--space-4) 0; }
+/* Selects and toggles: same height, right-aligned, label takes the rest. */
+.settings-row select {
+  min-height: var(--touch);
+  font-size: var(--text-md);
+  border-radius: var(--radius-sm);
+}
+.settings-row:not(.stacked) > select { flex: 0 1 12rem; margin-left: auto; }
+@media (max-width: 999px) {
+  /* Phone: selects go full width under their label; toggles stay on the row. */
+  .settings-row:not(.stacked) > select { flex: 1 1 auto; margin-left: 0; }
+  .settings-panel .settings-row.checkbox { flex-direction: row; align-items: center; }
+  .settings-panel .settings-check-lead { flex-direction: row; align-items: flex-start; }
+}
+.settings-row.checkbox { flex-wrap: nowrap; min-height: var(--touch); box-sizing: border-box; }
+.settings-row.checkbox > span { flex: 1 1 auto; min-width: 0; }
+.settings-row.checkbox > input[type="checkbox"],
+.settings-check-lead > input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.settings-check-lead {
+  justify-content: flex-start;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  cursor: pointer;
+}
+.settings-check-lead > input[type="checkbox"] { margin-top: 1px; }
+.settings-panel .btn:focus-visible,
+.settings-panel .theme-opt:focus-visible,
+.settings-row input:focus-visible,
+.settings-row select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Signed-in devices: names and meta wrap instead of being cut off. */
+.device-row { gap: var(--space-1); padding: var(--space-3) var(--space-4); }
+.device-row-head { flex-wrap: wrap; gap: var(--space-2); }
+.device-row-name { font-size: var(--text-base); overflow-wrap: anywhere; flex: 1 1 10rem; }
+.device-current,
+.device-inactive,
+.device-pending { font-size: var(--text-xs); }
+.device-meta { font-size: var(--text-sm); overflow-wrap: anywhere; }
+.device-row-actions { gap: var(--space-2); margin-top: var(--space-2); }
+
+/* Secure Send: numbered steps and a visible status after creating a link. */
+.secure-send-steps {
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-3) calc(var(--space-4) + 1.25rem);
+  display: grid;
+  gap: var(--space-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  border-bottom: 1px solid var(--border);
+}
+.secure-send-steps li { padding-left: var(--space-1); overflow-wrap: anywhere; }
+.secure-send-steps li::marker { color: var(--accent); font-weight: 700; }
+.secure-send-status:not([hidden]) {
+  margin: 0 var(--space-4) var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+#secure-send-link-wrap { padding: 0 var(--space-4) var(--space-3); gap: var(--space-2); }
+#secure-send-link-wrap .settings-row { padding-left: 0; padding-right: 0; }
+.secure-send-link-row .secure-send-link-fragment-hint { font-size: var(--text-xs); opacity: 1; }

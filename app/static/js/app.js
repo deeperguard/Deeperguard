@@ -15573,9 +15573,9 @@
       }))) return;
     } else {
       const ok = await confirmAction(
-        `Deny “${item.device || 'this device'}”? That ends the session and deletes its local vault copy when it next connects.`,
+        `Deny the new sign-in on “${item.device || 'this device'}”? Its session ends now, and it will delete its local vault copy the next time it connects. This device stays signed in.`,
         {
-          title: 'Deny device?',
+          title: 'Deny new sign-in?',
           confirmLabel: 'Deny',
           cancelLabel: 'Cancel',
           danger: true,
@@ -15596,14 +15596,14 @@
     const current = !!item.current;
     if (current) {
       if (!(await confirmUserSignOut({
-        title: 'Sign out?',
+        title: 'Sign out of this device?',
         confirmLabel: 'Sign out',
       }))) return;
     } else {
       const ok = await confirmAction(
-        `Sign out “${item.device || 'this device'}”? That device will lose access immediately and will delete its local vault copy when it next connects.`,
+        `Sign out “${item.device || 'this device'}”? It loses access right away and will delete its local vault copy the next time it connects. This device stays signed in.`,
         {
-          title: 'Sign out device?',
+          title: 'Sign out other device?',
           confirmLabel: 'Sign out',
           cancelLabel: 'Cancel',
           danger: true,

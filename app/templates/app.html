@@ -1651,7 +1651,7 @@
   <aside id="settings-panel" class="settings-panel" hidden>
     <header class="settings-head">
       <h2>Settings</h2>
-      <button type="button" class="btn icon" id="settings-close" aria-label="Close settings">×</button>
+      <button type="button" class="btn icon" id="settings-close" aria-label="Close settings" title="Close settings">×</button>
     </header>
     <div class="settings-body">
       <section class="settings-group">
@@ -1704,7 +1704,7 @@
       <section class="settings-group" id="signed-in-devices-group">
         <h3>Signed-in devices</h3>
         <div class="settings-card">
-          <p class="settings-hint">Devices currently signed in to this account (Settings &gt; Devices). New sign-ins appear here until you approve them or deny to sign that device out. Sign-in never waits on approval — use Approve or Deny when you are ready.</p>
+          <p class="settings-hint">Every device signed in to this account. A new sign-in is marked here until you approve or deny it; signing in never waits for approval. <strong>Deny</strong> or <strong>Sign out</strong> ends that device's session after you confirm — Cancel is selected first, and Escape also cancels.</p>
           <div id="vault-freshness-panel" class="vault-freshness-panel" hidden>
             <p id="vault-freshness-chip" class="device-start-chip" hidden></p>
             <p class="settings-hint" id="vault-freshness-start-label" hidden>Unverified start</p>
@@ -2171,7 +2171,7 @@
   <aside id="secure-send-panel" class="settings-panel secure-send-panel" hidden aria-label="Secure Send">
     <header class="settings-head">
       <h2>Secure Send</h2>
-      <button type="button" class="btn icon" id="secure-send-close" aria-label="Close">×</button>
+      <button type="button" class="btn icon" id="secure-send-close" aria-label="Close Secure Send" title="Close Secure Send">×</button>
     </header>
     <div class="settings-body">
       <section class="settings-group" id="secure-send-compose">
@@ -2179,6 +2179,13 @@
         <div class="settings-card stack">
           <p class="settings-hint" id="secure-send-compose-hint">Send an encrypted note and optional file. The key is in the link itself and never reaches our server. The link stops working after the set number of opens or when it expires (24 hours by default, 7 days at most). The server never sees the key or the passphrase.</p>
           <p class="settings-hint" id="secure-send-plan-limit-hint" hidden></p>
+          <ol class="secure-send-steps" aria-label="How Secure Send works">
+            <li>Write a title and note. Adding a file is optional.</li>
+            <li>If you set a passphrase, share it separately from the link. Or tick &ldquo;Send without a passphrase&rdquo;.</li>
+            <li>Choose the number of opens and the days until the link expires.</li>
+            <li>Tick the confirmation &ldquo;I understand that sharing by link weakens end-to-end protection&rdquo;, then press <strong>Create link</strong>.</li>
+            <li>Copy or share the link that appears below. A short message confirms when the link is created and when it is copied.</li>
+          </ol>
           <label class="settings-row stacked" for="secure-send-title">Title
             <input id="secure-send-title" type="text" maxlength="500" autocomplete="off">
           </label>
@@ -2199,7 +2206,7 @@
               <input id="secure-send-file-add" type="file" multiple hidden>
             </div>
           </div>
-          <label class="settings-row" for="secure-send-no-passphrase">
+          <label class="settings-row settings-check-lead" for="secure-send-no-passphrase">
             <input id="secure-send-no-passphrase" type="checkbox">
             Send without a passphrase (anyone with the link can open it)
           </label>
@@ -2214,15 +2221,15 @@
             <input id="secure-send-days" type="number" min="1" max="7" value="1" step="1">
           </label>
           <div id="secure-send-warning" class="settings-hint" role="note"></div>
-          <label class="settings-row" for="secure-send-ack">
+          <label class="settings-row settings-check-lead" for="secure-send-ack">
             <input id="secure-send-ack" type="checkbox">
             I understand that sharing by link weakens end-to-end protection.
           </label>
           <div class="settings-actions">
             <button type="button" id="btn-secure-send-create" class="btn primary" disabled>Create link</button>
           </div>
-          <p id="secure-send-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
-          <div id="secure-send-link-wrap" class="secure-send-link-row" hidden>
+          <p id="secure-send-status" class="settings-hint secure-send-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+          <div id="secure-send-link-wrap" class="secure-send-link-row" role="group" aria-label="Your Secure Send link" hidden>
             <label class="settings-row stacked" for="secure-send-link">Copy or share
               <textarea id="secure-send-link" rows="3" readonly autocomplete="off" spellcheck="false"></textarea>
             </label>
@@ -2800,7 +2807,7 @@
       <p id="confirm-message"></p>
     </div>
     <div class="confirm-dialog-actions">
-      <button type="button" class="btn ghost" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn ghost" id="confirm-cancel" autofocus>Cancel</button>
       <button type="button" class="btn" id="confirm-extra" hidden>Attach anyway</button>
       <button type="button" class="btn primary" id="confirm-ok">Confirm</button>
     </div>
