@@ -5944,6 +5944,21 @@ body.scan-dialog-open {
 .preview p { margin: 0.35em 0; }
 .preview p:first-child { margin-top: 0; }
 .preview { overflow: auto; white-space: normal; }
+/* RTL per block: logical properties so lists and quotes mirror in dir="rtl"/auto blocks. */
+.preview p, .preview li, .preview h1, .preview h2, .preview h3,
+.preview h4, .preview h5, .preview h6, .preview blockquote,
+.preview td, .preview th { text-align: start; }
+/* Indent on the li (which carries dir="auto"), not the ul, so an Arabic item
+   under an English paragraph gets its marker and indent on the right. */
+.preview ul, .preview ol { padding-inline: 0; }
+.preview li { margin-inline-start: 1.5em; }
+.preview blockquote {
+  margin-block: 0.5em;
+  margin-inline: 0;
+  padding-inline-start: 12px;
+  border-inline-start: 3px solid var(--border);
+  color: var(--muted);
+}
 .note-body-links {
   position: absolute;
   inset: 0;
