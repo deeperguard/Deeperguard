@@ -11884,3 +11884,35 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   overflow-wrap: anywhere;
 }
 .toast .toast-undo { flex: 0 0 auto; color: var(--accent); font-weight: 600; }
+
+/* Agenda views, event dialog and subscriptions polish (docs/UI_POLISH.md 2.5).
+   Visual only: shared tokens, aligned form labels/fields, touch-sized colour
+   swatches, readable events on phones and consistent subscription rows. */
+.agenda-editor-heading { margin: 0 0 var(--space-3); font-size: var(--text-lg); font-weight: 650; line-height: 1.3; }
+#agenda-editor .settings-row.stacked { gap: var(--space-1); line-height: 1.3; }
+#agenda-editor .settings-row.checkbox { min-height: var(--touch, 44px); align-items: center; gap: var(--space-3); }
+#agenda-editor input[type="checkbox"] { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--accent); }
+#agenda-editor select,
+#agenda-subscribe-form input { width: 100%; min-height: var(--touch, 44px); border-radius: var(--radius-md); box-sizing: border-box; }
+#agenda-editor fieldset { border-radius: var(--radius-md); min-width: 0; }
+#agenda-editor legend { font-size: var(--text-sm); font-weight: 650; padding: 0 var(--space-1); }
+#agenda-editor .agenda-editor-field-hint { margin: var(--space-1) 0 0; font-size: var(--text-sm); line-height: 1.4; }
+#agenda-editor input:invalid:not(:placeholder-shown):not(:focus) { border-color: var(--danger); }
+#agenda-editor :is(input, select, textarea, button):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.agenda-color-swatches { gap: var(--space-2); }
+.agenda-color-swatch { position: relative; width: 32px; height: 32px; }
+.agenda-color-swatch::after { content: ''; position: absolute; inset: -6px; }
+.agenda-color-swatch:focus-visible { outline-color: var(--focus-ring); }
+.agenda-editor-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); }
+.agenda-editor-actions .btn { min-height: var(--touch, 44px); }
+.agenda-editor-actions #agenda-edit-delete { margin-right: auto; }
+.agenda-subscribe-form { display: grid; gap: var(--space-1); }
+.agenda-subscribe-form .btn { margin-top: var(--space-2); }
+.agenda-subscription-row { padding: var(--space-3) 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.agenda-subscription-row > .settings-hint { margin: var(--space-1) 0 0; }
+.agenda-subscription-error { color: color-mix(in srgb, var(--danger) 80%, var(--text)); font-weight: 600; }
+.agenda-subscribe-preview { margin-top: var(--space-2); overflow-wrap: anywhere; }
+@media (max-width: 599px) {
+  #agenda-editor .agenda-editor-datetime-row { grid-template-columns: 1fr; }
+  .agenda-editor-actions .btn.primary { flex: 1 1 auto; }
+}

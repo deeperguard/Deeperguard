@@ -1519,12 +1519,12 @@
             <p class="settings-hint muted agenda-cal-action-sub">Paste a calendar feed link (webcal:// or https://). Your browser fetches it straight from the provider; the link never passes through Deeperguard and is stored only in your encrypted vault. The provider sees your IP address and when you refresh. Feeds refresh at most every 30 minutes while your vault is open. Many providers block direct fetching from a browser; you will then see an error and can choose, per calendar, to fetch through the Deeperguard server instead: the server then sees the link and the calendar while fetching, but does not store or log them. The default is no.</p>
             <form id="agenda-subscribe-form" class="agenda-subscribe-form" autocomplete="off">
               <label class="settings-hint" for="agenda-subscribe-url">Feed link</label>
-              <input id="agenda-subscribe-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" required>
+              <input id="agenda-subscribe-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" required aria-describedby="agenda-subscribe-preview" placeholder="https:// or webcal://">
               <label class="settings-hint" for="agenda-subscribe-name">Name (optional)</label>
               <input id="agenda-subscribe-name" type="text" autocomplete="off" maxlength="120">
               <button type="submit" class="btn agenda-cal-action">Preview feed</button>
             </form>
-            <div id="agenda-subscribe-preview" class="agenda-subscribe-preview" aria-live="polite" hidden></div>
+            <div id="agenda-subscribe-preview" class="agenda-subscribe-preview" role="status" aria-live="polite" hidden></div>
             <div id="agenda-subscriptions-list" class="agenda-subscriptions-list"></div>
           </section>
           <p class="settings-hint muted agenda-cal-action-sub">Feed blocked by the provider? Open the link in a new browser tab, save the .ics file, then import it here. The download goes straight from the provider to your device; the link never passes through Deeperguard. On iOS, the system may offer to add the events to the Calendar app instead of saving a file.</p>
@@ -2679,10 +2679,11 @@
         </label>
         <label class="settings-row stacked agenda-editor-datetime-label" for="agenda-edit-end">Ends
           <span class="agenda-editor-datetime-field">
-            <input id="agenda-edit-end" type="datetime-local" step="60">
+            <input id="agenda-edit-end" type="datetime-local" step="60" aria-describedby="agenda-edit-datetime-hint">
           </span>
         </label>
       </div>
+      <p id="agenda-edit-datetime-hint" class="settings-hint agenda-editor-field-hint">The end must be after the start. If it is not, the event lasts one hour.</p>
       <fieldset class="agenda-editor-recurrence">
         <legend class="muted">Repeat</legend>
         <label class="settings-row stacked">Pattern
@@ -2740,8 +2741,9 @@
         <div id="agenda-edit-colors" class="agenda-color-swatches" aria-labelledby="agenda-edit-colors-legend"></div>
       </fieldset>
       <label class="settings-row stacked">Meeting link (https only)
-        <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://">
+        <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://" aria-describedby="agenda-edit-webcall-hint">
       </label>
+      <p id="agenda-edit-webcall-hint" class="settings-hint agenda-editor-field-hint">Only links starting with https:// are saved. Anything else is left out.</p>
       <p id="agenda-edit-join" class="settings-hint" hidden></p>
       <label class="settings-row stacked">Notes
         <textarea id="agenda-edit-notes" rows="2" maxlength="16000" autocomplete="off"></textarea>
