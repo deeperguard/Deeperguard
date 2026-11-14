@@ -1278,7 +1278,9 @@
     if (note.content.title_manual) return true;
     const stored = String(note.content.title || '').trim();
     if (!stored || stored === 'Untitled') return false;
-    return stored !== NotesSearch.derivedTitleFromBody(note.content.content || '');
+    // Auto-derived titles (current or legacy, un-stripped form) stay unlocked
+    // so the next save re-derives them.
+    return !NotesSearch.titleIsDerivedFromBody(stored, note.content.content || '');
   }
   let toastTimer = null;
   let tagPressTimer = null;
