@@ -24,7 +24,6 @@ For video calls and similar joins, Agenda uses ordinary HTTPS join links. You op
 
 A few calendar features sound convenient and quietly widen who can see your schedule. We are not claiming them yet:
 
-- Remote webcal subscription (pulling a live calendar URL from somewhere else)
 - Multi-user share of a calendar
 - Calendar sync with Google, Apple, or other cloud calendars
 
@@ -49,6 +48,8 @@ That matches the rest of Deeperguard: ciphertext on the server, readable text on
 - Using day, 3-day, week, or agenda views for planning? ✔
 - Local ICS import only when you meant to bring a file in? ✔
 - Join links are plain HTTPS you recognize? ✔
-- Not expecting remote webcal, multi-user share, or cloud calendar sync yet? ✔
+- Not expecting multi-user share or cloud calendar sync yet? ✔
 
 Agenda uses the same on-device AES-GCM and SRP design as notes — details on our [security page](/security) and [verify page](/verify).
+
+Updated 2026-11-14: Remote calendar subscriptions (feed links) are now available in Agenda, so they were removed from the out-of-scope list; see [calendar subscriptions in Agenda](/blog/agenda-calendar-subscriptions). Multi-user sharing and two-way cloud calendar sync are still not offered.
