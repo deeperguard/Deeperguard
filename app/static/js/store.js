@@ -1853,6 +1853,11 @@ const NotesStore = (() => {
       if (merged.deleted_events) delete merged.deleted_events[id];
       merged.events[id] = content.events[id];
     }
+    // Feed subscriptions (url, name) in the backup come back the same way.
+    for (const [id, sub] of Object.entries(content.subscriptions || {})) {
+      if (merged.deleted_subscriptions) delete merged.deleted_subscriptions[id];
+      merged.subscriptions = { ...(merged.subscriptions || {}), [id]: { ...sub, updated_at: new Date().toISOString() } };
+    }
     merged.updated_at = new Date().toISOString();
     upsert(AGENDA_PACK_UUID, merged);
     return { ok: true, count: Object.keys(merged.events || {}).length };
@@ -2529,6 +2534,79 @@ const NotesStore = (() => {
       if (nowMs - agendaStampMs(at) > AGENDA_TOMBSTONE_TTL_MS) delete deleted[id];
     }
     return { calendars, deleted_calendars: deleted };
+  }
+
+  // Old builds may have kept feed subscriptions in plain localStorage. After a completed
+  // pull they move once into the encrypted agenda pack; the plain copy is removed only
+  // after the server confirmed the pack (not dirty, has a rev). Nothing about the feed
+  // (url, name) is logged.
+  const LEGACY_SUBSCRIPTION_KEYS = ['deeperguard-agenda-subscriptions', 'agenda_subscriptions', 'notes_agenda_subscriptions'];
+
+  function readLegacySubscriptions(key) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(key) || 'null');
+      const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : []);
+      return list.filter((s) => s && typeof s.url === 'string' && s.url);
+    } catch (err) {
+      return [];
+    }
+  }
+
+  async function migrateLegacyAgendaSubscriptions({ push = pushDirty } = {}) {
+    if (typeof localStorage === 'undefined' || !state.cryptoKey) return { migrated: 0, cleared: 0 };
+    const found = LEGACY_SUBSCRIPTION_KEYS
+      .map((key) => ({ key, subs: readLegacySubscriptions(key) }))
+      .filter((x) => x.subs.length);
+    if (!found.length) return { migrated: 0, cleared: 0 };
+    ensureAgendaPack();
+    const pack = agendaPackRecord();
+    if (!pack) return { migrated: 0, cleared: 0 };
+    const nowIso = new Date().toISOString();
+    const subs = { ...(pack.content.subscriptions || {}) };
+    const tomb = pack.content.deleted_subscriptions || {};
+    const known = new Set(Object.values(subs).map((s) => s && s.url));
+    let migrated = 0;
+    for (const { subs: legacy } of found) {
+      for (const old of legacy) {
+        const url = String(old.url);
+        if (known.has(url)) continue;
+        const id = typeof old.id === 'string' && old.id && !subs[old.id] && !tomb[old.id] ? old.id : newUuid();
+        const sub = {
+          id,
+          name: String(old.name || '').trim().slice(0, 120) || `Calendar ${Object.keys(subs).length + 1}`,
+          url,
+          mode: 'direct',
+          relay_consent_at: null,
+          last_refresh: null,
+          last_error_code: null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        };
+        if (typeof old.color === 'string' && old.color) sub.color = old.color.slice(0, 32);
+        const every = Number(old.refresh_interval ?? old.refreshInterval);
+        if (Number.isFinite(every) && every > 0) sub.refresh_interval = every;
+        subs[id] = sub;
+        known.add(url);
+        migrated += 1;
+      }
+    }
+    if (migrated) {
+      writeAgendaPackContent({ ...pack.content, subscriptions: subs, updated_at: nowIso });
+      try { await push({ quiet: true }); } catch (err) { /* retried on the next sync */ }
+    }
+    const rec = agendaPackRecord();
+    const confirmed = rec && rec.rev && !state.dirty.has(AGENDA_PACK_UUID);
+    let cleared = 0;
+    if (confirmed) {
+      const stored = new Set(Object.values(rec.content.subscriptions || {}).map((s) => s && s.url));
+      for (const { key, subs: legacy } of found) {
+        if (legacy.every((s) => stored.has(String(s.url)))) {
+          try { localStorage.removeItem(key); cleared += 1; } catch (err) { /* ignore */ }
+        }
+      }
+    }
+    logSync('agenda-subscriptions-migrated', { migrated, cleared });
+    return { migrated, cleared };
   }
 
   async function runUnlockMaintenance() {
@@ -4768,6 +4846,7 @@ const NotesStore = (() => {
         emitSync('ok', notes ? `Synced · ${notes} notes` : 'Synced');
       }
       if (seedSearchIndexFromAttachments()) await pushDirty({ quiet: true });
+      await migrateLegacyAgendaSubscriptions();
       pull.liveCount = [...state.items.values()].filter((item) => !item.deleted).length;
       pull.noteCount = listNotes().filter((n) => !n.content?.trashed).length;
       state.lastSyncAt = Date.now();
@@ -7155,6 +7234,7 @@ const NotesStore = (() => {
     importAgendaFromIcs,
     removeAgendaEventsBySource,
     listAgendaSubscriptions,
+    migrateLegacyAgendaSubscriptions,
     getAgendaSubscription,
     addAgendaSubscription,
     updateAgendaSubscription,
