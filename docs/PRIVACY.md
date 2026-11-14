@@ -55,6 +55,7 @@ Even in strict zero-knowledge mode:
 - When you sync and how much data you store
 - Your IP address (for rate limiting and logs)
 - That a reminder was scheduled (not the note title)
+- For opt-in calendar email reminders (Pro, off by default): the 15-minute window in which each one is due and how many there are. Not the exact minute, the event time, title, location or notes. The mail itself says only "You have an event coming up soon." Our mail relay and your email provider see that a Deeperguard reminder reached you and when; email is not end-to-end encrypted.
 
 ## Configuration knobs
 

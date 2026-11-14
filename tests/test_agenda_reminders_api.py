@@ -160,6 +160,11 @@ class AgendaRemindersApiTest(unittest.TestCase):
             "local_time_label": label,
         }
 
+    @staticmethod
+    def _next_window(ts):
+        """A 15-minute boundary in the future: email rows are stored as windows (floored to 900 s)."""
+        return (int(ts) // 900 + 2) * 900
+
     def _pending(self, uid):
         import db
 
@@ -198,10 +203,44 @@ class AgendaRemindersApiTest(unittest.TestCase):
 
     def test_time_label_must_be_a_clock_time(self):
         uid = self._login_free_user()
-        res = self._sync([self._row(label="Dentist 3pm!!"), self._row(label="09:05")])
+        os.environ["NOTES_VAPID_PUBLIC_KEY"] = "test-public"
+        os.environ["NOTES_VAPID_PRIVATE_KEY"] = "test-private"
+        try:
+            res = self._sync([self._row("push", label="Dentist 3pm!!"), self._row("push", label="09:05")])
+        finally:
+            os.environ.pop("NOTES_VAPID_PUBLIC_KEY", None)
+            os.environ.pop("NOTES_VAPID_PRIVATE_KEY", None)
         self.assertEqual(res.status_code, 200, res.get_json())
         labels = sorted(r["local_time_label"] for r in self._pending(uid))
         self.assertEqual(labels, ["", "09:05"])
+
+    def test_email_rows_are_stored_as_a_window_without_time_label(self):
+        """Even an older client that sends the exact time and a label leaves only a 15-minute window."""
+        import time
+
+        import db
+
+        uid = self._login_free_user()
+        exact = self._next_window(time.time()) + 7 * 60 + 13
+        res = self._sync([{"id": str(uuid.uuid4()), "fire_at": exact, "channel": "email", "local_time_label": "09:07"}])
+        self.assertEqual(res.status_code, 200, res.get_json())
+        rows = db.connection().execute(
+            "SELECT fire_at, local_time_label FROM agenda_scheduled_reminders WHERE user_id = ?", (uid,)
+        ).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(float(rows[0]["fire_at"]), float(exact - 7 * 60 - 13))
+        self.assertEqual(rows[0]["fire_at"] % 900, 0)
+        self.assertEqual(rows[0]["local_time_label"], "")
+
+    def test_email_text_is_generic(self):
+        import agenda_reminder_cron as cron
+
+        body = cron.agenda_email_body("09:00")
+        self.assertIn("You have an event coming up soon.", body)
+        self.assertIn("up to 15 minutes early", body)
+        self.assertNotIn("09:00", body)
+        self.assertNotRegex(body, r"\d{1,2}:\d{2}")
+        self.assertNotIn(":", cron.EMAIL_SUBJECT.split(":", 1)[1])
 
     def test_cap_allows_updates_and_replace_in_one_request(self):
         import db
@@ -238,7 +277,7 @@ class AgendaRemindersApiTest(unittest.TestCase):
         normal = self._login_free_user()
         normal_email = self._last_email
         unverified = self._login_free_user(verified=False)
-        t0 = time.time()
+        t0 = self._next_window(time.time())
         # Rows as an older or hostile client could have left them: written straight to the table.
         db.sync_agenda_reminders(stuck, [
             {"id": str(uuid.uuid4()), "fire_at": t0 + 1 + i * 0.001, "channel": "push", "local_time_label": "09:00"}
@@ -261,7 +300,8 @@ class AgendaRemindersApiTest(unittest.TestCase):
             cron.send_plain_email = original
         self.assertEqual(delivered, 1)
         self.assertEqual([to for to, _ in sent], [normal_email])
-        self.assertIn("You have an event at 09:00.", sent[0][1])
+        self.assertIn("You have an event coming up soon.", sent[0][1])
+        self.assertNotIn("09:00", sent[0][1])
         left = db.connection().execute(
             "SELECT COUNT(*) AS n FROM agenda_scheduled_reminders WHERE sent_at = 0"
         ).fetchone()["n"]
@@ -276,7 +316,7 @@ class AgendaRemindersApiTest(unittest.TestCase):
         db.connection().execute("DELETE FROM agenda_scheduled_reminders")
         db.connection().commit()
         uid = self._login_free_user()
-        t0 = time.time()
+        t0 = self._next_window(time.time())
         db.sync_agenda_reminders(uid, [
             {"id": str(uuid.uuid4()), "fire_at": t0 + 5, "channel": "email", "local_time_label": "09:00"},
         ], [])
@@ -312,7 +352,7 @@ class AgendaRemindersApiTest(unittest.TestCase):
         db.connection().execute("DELETE FROM agenda_scheduled_reminders")
         db.connection().commit()
         lapsed = self._login_free_user()
-        t0 = time.time()
+        t0 = self._next_window(time.time())
         db.sync_agenda_reminders(lapsed, [
             {"id": str(uuid.uuid4()), "fire_at": t0 + 5, "channel": "email", "local_time_label": "09:00"},
             {"id": str(uuid.uuid4()), "fire_at": t0 + 86400, "channel": "email", "local_time_label": "10:00"},

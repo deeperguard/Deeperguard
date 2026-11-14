@@ -251,6 +251,8 @@ agenda, kleur, `tz`-naam.
 
 **Variant "generieke tekst en vaag tijdvenster"** (aanbevolen als de eigenaar server-herinneringen houdt):
 
+> **Stand (2026-11-14), e-mail:** gebouwd. E-mail gebruikt een venster van 15 minuten (naar beneden afgerond, UTC, zonder willekeurige verschuiving: elk apparaat moet hetzelfde venster uploaden voor dezelfde id, anders wordt `sent_at` gereset en kan een mail dubbel gaan), geen `local_time_label`, en de tekst "You have an event coming up soon." De server rondt zelf af en wist het label (oudere apps). Alle offsets blijven bruikbaar; ze komen tot 15 minuten te vroeg. Push via deze tabel is ongewijzigd (push gebruikt de vensterroute uit `docs/PUSH_REMINDERS_DESIGN.md`).
+
 - De client uploadt niet het exacte `fire_at` maar een **venster** (afgerond op het kwartier of uur, met een
   willekeurige verschuiving per herinnering) en laat `local_time_label` weg.
 - De melding zegt alleen "Je hebt binnenkort een afspraak. Open Deeperguard." zonder tijd.

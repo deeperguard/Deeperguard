@@ -1532,9 +1532,10 @@
           </fieldset>
           <fieldset class="agenda-reminder-channel-settings" data-plan-feature="agenda_reminders" data-plan-lock-hint="Event reminders are included with Pro.">
             <legend class="muted">Event reminders</legend>
-            <p class="settings-hint agenda-reminders-privacy-hint">Notifications never include event titles, locations or notes. Email reminders include only the event time.</p>
+            <p class="settings-hint agenda-reminders-privacy-hint">Notifications never include event titles, locations or notes. Email reminders say only that an event is coming up, without its time.</p>
             <div class="agenda-reminders-when-entitled">
             <label class="settings-row checkbox"><span>Email reminders</span><input type="checkbox" id="agenda-reminder-email" data-agenda-reminder-channel="email"></label>
+            <p class="settings-hint muted" id="agenda-reminder-email-explainer">Off by default. Our server learns only the 15-minute window in which an email reminder is due, so it can arrive up to 15 minutes early. Our mail relay and your email provider see that a Deeperguard reminder was sent to you and when, never which event. Email is not end-to-end encrypted.</p>
             <p id="agenda-reminder-email-status" class="settings-hint muted" hidden></p>
             <label class="settings-row checkbox"><span>Push reminders</span><input type="checkbox" id="agenda-reminder-push" data-agenda-reminder-channel="push"></label>
             <button type="button" class="btn primary sm" id="agenda-reminder-enable-push" hidden>Enable push on this device</button>

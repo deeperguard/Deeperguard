@@ -45,7 +45,10 @@ assert.ok(appHtml.includes(
   'Offsets stay in your vault. The server sees reminder times and channel, never event titles, locations or notes.',
 ));
 assert.ok(appHtml.includes(
-  'Notifications never include event titles, locations or notes. Email reminders include only the event time.',
+  'Notifications never include event titles, locations or notes. Email reminders say only that an event is coming up, without its time.',
+));
+assert.ok(appHtml.includes(
+  'Our server learns only the 15-minute window in which an email reminder is due, so it can arrive up to 15 minutes early.',
 ));
 assert.ok(plansPy.includes('Email before calendar events. The server sees reminder times and channel,'));
 assert.ok(plansPy.includes('never event titles, locations or notes.'));
@@ -97,7 +100,12 @@ const days = (rows) => fireTimes(rows).map((d) => `${d.getMonth() + 1}/${d.getDa
     assert.ok(row.fire_at > now / 1000);
     assert.ok(['email', 'push'].includes(row.channel));
     assert.ok(Object.keys(row).every((k) => R.ALLOWED_UPLOAD_KEYS.has(k)));
-    assert.match(row.local_time_label, /^\d{2}:\d{2}$/);
+    if (row.channel === 'push') assert.match(row.local_time_label, /^\d{2}:\d{2}$/);
+    else {
+      // Email: a 15-minute window and no time label (generic text, docs/design/calendar-multi.md §5.2).
+      assert.ok(!('local_time_label' in row), 'email rows carry no time label');
+      assert.strictEqual(row.fire_at % R.EMAIL_WINDOW_SEC, 0, 'email fire_at is a 15-minute window');
+    }
     assert.ok(!JSON.stringify(row).includes('Private'));
     assert.ok(!JSON.stringify(row).includes('ev-1'));
   });
@@ -132,7 +140,21 @@ const days = (rows) => fireTimes(rows).map((d) => `${d.getMonth() + 1}/${d.getDa
   });
   const editedPlan = R.computePlannedReminders(edited, ['email'], now);
   assert.deepStrictEqual(days(editedPlan).slice(0, 3), ['11/12 9:00', '11/27 15:00', '12/3 9:00']);
-  assert.strictEqual(editedPlan[1].local_time_label, '15:00');
+  assert.strictEqual(editedPlan[1].local_time_label, '');
+  assert.strictEqual(R.computePlannedReminders(edited, ['push'], now)[1].local_time_label, '15:00');
+
+  // Email windows round down (never late) and are the same on every call, so devices agree.
+  const odd = base({ start: at(12, 9).toISOString(), end: at(12, 10).toISOString(), reminders: [7] });
+  const oddEmail = R.computePlannedReminders(odd, ['email'], now);
+  const oddPush = R.computePlannedReminders(odd, ['push'], now);
+  assert.strictEqual(oddEmail.length, 1);
+  assert.strictEqual(oddEmail[0].fire_at % 900, 0);
+  assert.ok(oddEmail[0].fire_at <= oddPush[0].fire_at && oddPush[0].fire_at - oddEmail[0].fire_at < 900);
+  assert.deepStrictEqual(R.computePlannedReminders(odd, ['email'], now + 1000), oddEmail);
+  // A window that already started is not uploaded (the server would refuse it).
+  const soonMs = Math.floor(now / 900000) * 900000 + 5 * 60000;
+  const soon = base({ start: new Date(soonMs).toISOString(), end: new Date(soonMs + 3600000).toISOString(), reminders: ['at_start'] });
+  assert.deepStrictEqual(R.computePlannedReminders(soon, ['email'], soonMs - 60000), []);
   // The moved occurrence keeps the id of its slot, so the server row is updated, not duplicated.
   const plainPlan = await R.planReminders({ ...edited, ics_exdates: [], ics_occurrence_overrides: {} }, ['email'], now);
   const movedPlan = await R.planReminders(edited, ['email'], now);
@@ -250,6 +272,7 @@ const days = (rows) => fireTimes(rows).map((d) => `${d.getMonth() + 1}/${d.getDa
   assert.ok(appPy.includes('AGENDA_REMINDER_ALLOWED_KEYS'));
   assert.ok(appPy.includes('plaintext event fields forbidden'));
   assert.ok(cron.includes('You have an upcoming event'));
+assert.ok(cron.includes('You have an event coming up soon.'));
   assert.ok(cron.includes('Turn off agenda email reminders'));
   assert.ok(cron.includes('expire_overdue_agenda_reminders'));
   assert.ok(agendaJs.includes('syncRemindersAfterSave(state.selectedId);'), 'occurrence delete updates reminders');
