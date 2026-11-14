@@ -4508,10 +4508,10 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 }
 .note-section + .note-section-label { margin-top: 6px; }
 .note-list-empty {
-  margin: 12px 8px;
-  padding: 18px 16px;
+  margin: var(--space-3) var(--space-2);
+  padding: var(--space-4);
   border: 1px dashed var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
   display: grid;
   gap: 8px;
@@ -4525,8 +4525,8 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 .note-list-empty-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 4px;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 }
 .note-row {
   position: relative;
