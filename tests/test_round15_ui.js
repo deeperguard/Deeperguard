@@ -7,6 +7,8 @@ const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
 const storeJs = fs.readFileSync(path.join(root, 'app/static/js/store.js'), 'utf8');
 const authJs = fs.readFileSync(path.join(root, 'app/static/js/auth-pages.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'app/static/css/app.css'), 'utf8');
+// confirmAction() delegates to the shared dialog helper.
+const dialogJs = fs.readFileSync(path.join(root, 'app/static/js/dialog-a11y.js'), 'utf8');
 const html = fs.readFileSync(path.join(root, 'app/templates/app.html'), 'utf8');
 const login = fs.readFileSync(path.join(root, 'app/templates/login.html'), 'utf8');
 const appPy = fs.readFileSync(path.join(root, 'app/app.py'), 'utf8');
@@ -32,10 +34,11 @@ assert.ok(appJs.includes('startResendCooldown(buttonId, wait, { waiting: true })
 assert.ok(appJs.includes('status.textContent = \'\''));
 
 // 3. Unlock Sign out confirm is modal: backdrop, focus, Escape.
-assert.ok(appJs.includes("document.body.classList.add('confirm-open')"));
-assert.ok(appJs.includes('confirm-over-unlock'));
-assert.ok(appJs.includes("document.addEventListener('keydown', onKey, true)"));
-assert.ok(appJs.includes('cancelBtn.focus()'));
+assert.ok(appJs.includes('window.DialogA11y?.confirm(message, options)'));
+assert.ok(dialogJs.includes("d.body.classList.add('confirm-open')"));
+assert.ok(dialogJs.includes('confirm-over-unlock'));
+assert.ok(dialogJs.includes("d.addEventListener('keydown', onKey, true)"));
+assert.ok(dialogJs.includes('cancelBtn.focus()'));
 assert.ok(css.includes('body.confirm-open #confirm-backdrop'));
 assert.ok(css.includes('body.confirm-over-unlock #confirm-dialog'));
 

@@ -8,6 +8,7 @@ const vm = require('vm');
 
 const root = path.join(__dirname, '..');
 const appJs = fs.readFileSync(path.join(root, 'app/static/js/app.js'), 'utf8');
+const dialogJs = fs.readFileSync(path.join(root, 'app/static/js/dialog-a11y.js'), 'utf8');
 const appHtml = fs.readFileSync(path.join(root, 'app/templates/app.html'), 'utf8');
 const securityHtml = fs.readFileSync(path.join(root, 'app/templates/security.html'), 'utf8');
 const honestyJs = fs.readFileSync(
@@ -40,7 +41,7 @@ assert.ok(!singleConfirm.includes('Secure Send'));
 const sharedConfirm = H.permanentDeleteConfirmMessage({ count: 1, sharedLinks: 1 });
 assert.ok(sharedConfirm.includes('A Secure Send link made from this note'));
 assert.ok(H.permanentDeleteConfirmMessage({ count: 2, sharedLinks: 2 }).includes('2 Secure Send links'));
-assert.ok(appJs.includes("setAttribute('aria-describedby', 'confirm-message')"));
+assert.ok(dialogJs.includes("setAttribute('aria-describedby', 'confirm-message')"));
 assert.ok(appJs.includes('activeSecureSendLinkCount([id])'));
 assert.ok(singleConfirm.includes('encrypted marker'));
 assert.ok(!singleConfirm.match(/permanently erased|gone everywhere|no copies remain/i));
@@ -137,7 +138,8 @@ function runConfirm(message, opts) {
     window: { confirm: () => { throw new Error('fallback confirm used'); }, setTimeout: (fn) => timers.push(fn) },
     Promise,
   };
-  vm.runInNewContext(`${confirmSrc}; this.confirmAction = confirmAction;`, ctx);
+  ctx.window.document = doc;
+  vm.runInNewContext(`${dialogJs}\n${confirmSrc}; this.confirmAction = confirmAction;`, ctx);
   const result = ctx.confirmAction(message, opts);
   const settled = { done: false, value: undefined };
   result.then((v) => { settled.done = true; settled.value = v; });
