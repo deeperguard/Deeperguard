@@ -179,6 +179,54 @@ def run_agenda_reminders(now_ts: float | None = None) -> int:
     return delivered
 
 
+def run_push_windows(now_ts: float | None = None) -> int:
+    """Send an empty push for each due window, then delete the row (no sent flag is kept).
+
+    The push has no payload or topic: the service worker shows its own text. A window more
+    than max_late_sec() overdue is deleted unsent.
+    """
+    when = float(now_ts if now_ts is not None else time.time())
+    delivered = 0
+    for row in db.due_push_windows(when):
+        uid, rid, endpoint = int(row["user_id"]), str(row["id"]), str(row["endpoint"])
+        user = db.get_user_by_id(uid)
+        late = when - float(row["window_start"]) > max_late_sec()
+        if not user or late or not plan_has(db.user_plan(user), "agenda_reminders"):
+            db.delete_push_windows(uid, [rid])
+            continue
+        outcome = "drop"
+        try:
+            from pywebpush import webpush, WebPushException  # type: ignore
+
+            info = json.loads(row["subscription_json"])
+            if push_configured() and push_endpoint_allowed(endpoint) and info.get("endpoint") == endpoint:
+                try:
+                    webpush(
+                        subscription_info=info,
+                        data=None,
+                        vapid_private_key=os.environ.get("NOTES_VAPID_PRIVATE_KEY", "").strip(),
+                        vapid_claims={"sub": "mailto:notes@deeperguard.com"},
+                    )
+                    outcome = "sent"
+                except WebPushException as exc:
+                    status = getattr(getattr(exc, "response", None), "status_code", None)
+                    if status in (404, 410):
+                        db.delete_web_push_subscription(uid, endpoint)
+                    else:
+                        outcome = "retry"
+                    log.error("push window failed user=%s status=%s", uid, status)
+        except Exception as exc:
+            outcome = "retry"
+            log.error("push window error user=%s: %s", uid, type(exc).__name__)
+        if outcome == "retry":
+            continue  # transient: keep the row until it becomes overdue
+        db.delete_push_windows(uid, [rid])
+        if outcome == "sent":
+            delivered += 1
+    return delivered
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print(f"delivered {run_agenda_reminders()} agenda reminder(s)")
+    print(f"delivered {run_push_windows()} push window reminder(s)")

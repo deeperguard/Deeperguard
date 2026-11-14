@@ -2713,6 +2713,64 @@ def api_agenda_push_subscribe():
     return jsonify({"ok": True})
 
 
+PUSH_WINDOW_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+PUSH_WINDOW_KEYS = frozenset({"id", "window_start"})
+
+
+@app.post("/api/push-windows")
+def api_push_windows_put():
+    """Opt-in closed-app reminders: a random id and a 15-minute window per reminder, nothing else."""
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    user = db.get_user_by_id(uid)
+    blocked = _plan_block(user, "agenda_reminders") if user else None
+    if blocked:
+        return blocked
+    if not auth_rate_allow(f"push-windows-user:{uid}", limit=120, window=300.0):
+        return jsonify({"error": "rate limited"}), 429
+    body = request.get_json(silent=True) or {}
+    if set(body.keys()) - {"endpoint", "windows"}:
+        return jsonify({"error": "disallowed fields"}), 400
+    endpoint = str(body.get("endpoint") or "").strip()
+    raw = body.get("windows")
+    if not endpoint or not isinstance(raw, list) or not raw or len(raw) > db.PUSH_WINDOW_CAP:
+        return jsonify({"error": "invalid body"}), 400
+    cleaned: list[tuple[str, int]] = []
+    for w in raw:
+        if not isinstance(w, dict) or set(w.keys()) != PUSH_WINDOW_KEYS:
+            return jsonify({"error": "invalid window"}), 400
+        rid, start = w["id"], w["window_start"]
+        if not isinstance(rid, str) or not PUSH_WINDOW_ID_RE.match(rid):
+            return jsonify({"error": "invalid id"}), 400
+        if type(start) is not int or start <= 0 or start % db.PUSH_WINDOW_SEC:
+            return jsonify({"error": "window_start must be a multiple of 900"}), 400
+        cleaned.append((rid, start))
+    result = db.put_push_windows(uid, endpoint, cleaned)
+    if result == "no_device":
+        return jsonify({"error": "unknown device"}), 404
+    if result == "cap":
+        return jsonify({"error": "too many reminders"}), 400
+    return jsonify({"ok": True})
+
+
+@app.post("/api/push-windows/delete")
+def api_push_windows_delete():
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    body = request.get_json(silent=True) or {}
+    if set(body.keys()) - {"endpoint", "ids"}:
+        return jsonify({"error": "disallowed fields"}), 400
+    ids = body.get("ids") or []
+    endpoint = str(body.get("endpoint") or "").strip() or None
+    if not isinstance(ids, list) or len(ids) > db.PUSH_WINDOW_CAP or not all(
+        isinstance(i, str) and PUSH_WINDOW_ID_RE.match(i) for i in ids
+    ):
+        return jsonify({"error": "invalid body"}), 400
+    return jsonify({"ok": True, "deleted": db.delete_push_windows(uid, ids, endpoint)})
+
+
 @app.delete("/api/reminders/<item_uuid>")
 def api_reminders_delete(item_uuid: str):
     uid = auth.current_user_id()
