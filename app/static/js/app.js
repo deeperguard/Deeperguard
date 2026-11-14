@@ -1808,7 +1808,7 @@
 
   // --- Note links (spec section 3) ---
   function noteLinkCandidates() {
-    return listNotes().map((n) => ({
+    return NotesStore.listNotes().map((n) => ({
       uuid: n.uuid, title: n.content.title, updated_at: n.content.updated_at,
       trashed: !!n.content.trashed, is_template: !!n.content.is_template,
     }));
