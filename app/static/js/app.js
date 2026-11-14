@@ -4195,6 +4195,7 @@
   }
 
   async function lockVault(message, { skipSync = false, reason = '', detail = null } = {}) {
+    if (typeof stopTotpQrScan === 'function') stopTotpQrScan();
     if (unlockInFlight) {
       setTimeout(() => {
         lockVault(message, { skipSync, reason, detail }).catch(() => {});
@@ -4432,6 +4433,8 @@
     video: document.getElementById('totp-qr-video'),
     canvas: document.getElementById('totp-qr-canvas'),
     qrStatus: document.getElementById('totp-qr-status'),
+    cam: document.getElementById('totp-cam'),
+    camStatus: document.getElementById('totp-cam-status'),
     qrInput: document.getElementById('totp-qr-input'),
   };
   let appTab = 'notes';
@@ -4442,7 +4445,7 @@
   let totpDialogTrigger = null;
   let totpClock = 0;
   let totpQrTimer = 0;
-  let totpQrStream = null;
+  const totpCamera = NotesTotpCamera.create(navigator.mediaDevices);
   let totpRenderToken = 0;
 
   function normalizeAppTab(name) {
@@ -5007,21 +5010,24 @@
     totpUi.error.textContent = message || 'Enter a valid authenticator secret.';
   }
 
+  function setTotpCamStatus(text, isError) {
+    if (!totpUi.camStatus) return;
+    totpUi.camStatus.textContent = text;
+    totpUi.camStatus.classList.toggle('error', !!isError);
+  }
+
+  // Stops every camera track and hides the camera window.
   function stopTotpQrScan() {
     if (totpQrTimer) {
       clearTimeout(totpQrTimer);
       totpQrTimer = 0;
     }
-    if (totpQrStream) {
-      totpQrStream.getTracks().forEach((track) => track.stop());
-      totpQrStream = null;
-    }
+    totpCamera.stop();
     if (totpUi.video) {
       totpUi.video.pause();
       totpUi.video.srcObject = null;
-      totpUi.video.hidden = true;
     }
-    if (totpUi.qrStatus) totpUi.qrStatus.hidden = true;
+    if (totpUi.cam) totpUi.cam.hidden = true;
   }
 
   function syncTotpDialogMode() {
@@ -5119,30 +5125,36 @@
     return normalized;
   }
 
+  // Fills the add form from a decoded QR or pasted string. The user confirms with "Add".
   function applyTotpQrPayload(raw) {
     const text = String(raw || '').trim();
     if (!text) return false;
-    const entry = NotesTotp.entryFromFields({
+    if (/^otpauth-migration:\/\//i.test(text)) {
+      stopTotpQrScan();
+      setTotpAddError('This is a Google Authenticator export code. Importing it is not supported yet. Add each account with its own QR code, or use Import for Aegis and 2FAS files.');
+      return false;
+    }
+    const entry = /^otpauth:\/\//i.test(text) ? NotesTotp.entryFromFields({
       issuer: totpUi.issuer?.value || '',
       account: totpUi.account?.value || '',
       host: totpUi.host?.value || '',
       tags: readTotpDialogTags(),
       secret: text,
-    });
+    }) : null;
     if (!entry) {
-      setTotpAddError('That QR code is not a TOTP authenticator code.');
+      setTotpAddError('That QR code is not an authenticator code.');
       return false;
     }
+    stopTotpQrScan();
     if (totpUi.issuer && entry.issuer) totpUi.issuer.value = entry.issuer;
     if (totpUi.account && entry.account) totpUi.account.value = entry.account;
     if (totpUi.secret) totpUi.secret.value = entry.secret;
     setTotpAddError('');
     if (totpUi.qrStatus) {
       totpUi.qrStatus.hidden = false;
-      totpUi.qrStatus.textContent = 'QR scanned — add to save.';
+      totpUi.qrStatus.textContent = 'QR code read. Check the details and press Add to save.';
     }
-    stopTotpQrScan();
-    saveTotpAddDialog().catch((err) => setTotpAddError(err.message || 'Could not add account'));
+    totpUi.issuer?.focus();
     return true;
   }
 
@@ -5178,40 +5190,64 @@
   }
 
   async function tickTotpQrScan() {
-    if (!totpUi.video || totpUi.video.hidden || totpUi.video.readyState < 2) {
+    if (!totpCamera.active()) return;
+    if (!totpUi.video || totpUi.video.readyState < 2) {
       totpQrTimer = window.setTimeout(() => tickTotpQrScan().catch(() => {}), 250);
       return;
     }
     try {
       const value = await decodeQrFromSource(totpUi.video);
-      if (value && applyTotpQrPayload(value)) return;
+      if (value && totpCamera.active()) {
+        if (applyTotpQrPayload(value)) return;
+        if (totpUi.cam && totpUi.cam.hidden) return; // migration code already closed the camera
+        setTotpCamStatus('That QR code is not an authenticator code. Try another.', true);
+      }
     } catch (err) { /* keep scanning */ }
-    totpQrTimer = window.setTimeout(() => tickTotpQrScan().catch(() => {}), 250);
+    if (totpCamera.active()) totpQrTimer = window.setTimeout(() => tickTotpQrScan().catch(() => {}), 250);
   }
 
+  async function runTotpCamera(flip) {
+    if (totpQrTimer) { clearTimeout(totpQrTimer); totpQrTimer = 0; }
+    setTotpCamStatus('Starting camera...');
+    try {
+      const stream = flip ? await totpCamera.flip() : await totpCamera.start();
+      if (!totpUi.video) { totpCamera.stop(); return; }
+      totpUi.video.srcObject = stream;
+      await totpUi.video.play();
+      setTotpCamStatus('Point the camera at the QR code. Nothing is recorded or sent.');
+      tickTotpQrScan().catch(() => {});
+    } catch (err) {
+      if (err && err.cancelled) return;
+      totpCamera.stop();
+      if (totpUi.video) totpUi.video.srcObject = null;
+      setTotpCamStatus(err && err.message ? err.message : NotesTotpCamera.explain(err), true);
+    }
+  }
+
+  // Only called from a click: the camera never starts on its own.
   async function startTotpQrScan() {
     stopTotpQrScan();
     setTotpAddError('');
-    if (!navigator.mediaDevices?.getUserMedia) {
-      openHiddenFileInput(totpUi.qrInput);
-      return;
-    }
+    if (totpUi.qrStatus) totpUi.qrStatus.hidden = true;
+    if (totpUi.cam) totpUi.cam.hidden = false;
+    await runTotpCamera(false);
+  }
+
+  async function pasteTotpQr() {
+    setTotpAddError('');
     try {
-      totpQrStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false,
-      });
-      if (!totpUi.video) throw new Error('Missing camera preview');
-      totpUi.video.srcObject = totpQrStream;
-      totpUi.video.hidden = false;
-      await totpUi.video.play();
-      if (totpUi.qrStatus) {
-        totpUi.qrStatus.hidden = false;
-        totpUi.qrStatus.textContent = 'Point the camera at the QR code.';
+      if (navigator.clipboard && typeof navigator.clipboard.read === 'function') {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const imgType = item.types.find((t) => t.startsWith('image/'));
+          if (imgType) { await importTotpQrFile(await item.getType(imgType)); return; }
+        }
       }
-      tickTotpQrScan().catch(() => {});
+      const text = navigator.clipboard && navigator.clipboard.readText ? await navigator.clipboard.readText() : '';
+      if (!text.trim()) { setTotpAddError('The clipboard has no QR image or otpauth link.'); return; }
+      applyTotpQrPayload(text);
     } catch (err) {
-      openHiddenFileInput(totpUi.qrInput);
+      setTotpAddError('Could not read the clipboard. Allow clipboard access, or press Ctrl/Cmd+V in the Secret field.');
     }
   }
 
@@ -5231,9 +5267,8 @@
       }
       const value = await decodeQrFromSource(source);
       if (source.close) source.close();
-      if (!applyTotpQrPayload(value)) {
-        if (!value) setTotpAddError('No QR code found in that photo.');
-      }
+      if (!value) setTotpAddError('No QR code found in that image.');
+      else applyTotpQrPayload(value);
     } catch (err) {
       setTotpAddError(err.message || 'Could not read that photo.');
     }
@@ -22701,6 +22736,24 @@
     startTotpQrScan().catch((err) => setTotpAddError(err.message || 'Camera unavailable'));
   });
   document.getElementById('btn-totp-pick-qr')?.addEventListener('click', () => openHiddenFileInput(totpUi.qrInput));
+  document.getElementById('btn-totp-paste-qr')?.addEventListener('click', () => { pasteTotpQr(); });
+  document.getElementById('totp-cam-close')?.addEventListener('click', () => stopTotpQrScan());
+  document.getElementById('totp-cam-flip')?.addEventListener('click', () => { runTotpCamera(true); });
+  document.getElementById('totp-cam-image')?.addEventListener('click', () => {
+    stopTotpQrScan();
+    openHiddenFileInput(totpUi.qrInput);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && totpUi.cam && !totpUi.cam.hidden) stopTotpQrScan();
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopTotpQrScan(); });
+  window.addEventListener('pagehide', () => stopTotpQrScan());
+  totpUi.secret?.addEventListener('paste', (event) => {
+    const file = Array.from(event.clipboardData?.files || []).find((f) => f.type.startsWith('image/'));
+    if (!file) return;
+    event.preventDefault();
+    importTotpQrFile(file);
+  });
   totpUi.qrInput?.addEventListener('change', (event) => {
     const file = event.target.files && event.target.files[0];
     event.target.value = '';
