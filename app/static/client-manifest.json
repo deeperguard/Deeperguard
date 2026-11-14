@@ -1,5 +1,5 @@
 {
-  "asset_count": 84,
+  "asset_count": 85,
   "assets": {
     "css/app.css": {
       "bytes": 304661,
@@ -92,10 +92,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1013588,
-      "sha256": "00bb2a2ab1101d60a747797ae6d52d6e8c17dd74f4dda707502d8b34a2cf62fe",
-      "sri": "sha384-TAdyFcdJqtAkCcJWhzTOUpHOS12AOEk0egD7zk/M4ELIJK5QZCPMg684jWb9QMYi",
-      "url": "/static/js/app.00bb2a2ab1101d60.js"
+      "bytes": 1013765,
+      "sha256": "9800b23403633877e0558377e5afcd20a17148f056ccfc1ba1dd8a04035e6a0c",
+      "sri": "sha384-FdBmRNLF1g2khfOp6wfj9MqSxf/gRLGBc/znTXK9bb+0Yh+N3kWgm39cbzuGPl+l",
+      "url": "/static/js/app.9800b23403633877.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -108,6 +108,12 @@
       "sha256": "f7f58b08aeb2450764bc55d308dea639abdb0cd3b197b60ebf58e49a1b097938",
       "sri": "sha384-8x12LlJ2E8wq/tI32THFWZA3NlznENxKHvSAoCA3XtKZyO1uxj0xUYRRZVr4Yb5C",
       "url": "/static/js/backlinks.f7f58b08aeb24507.js"
+    },
+    "js/blob-urls.js": {
+      "bytes": 1067,
+      "sha256": "12f55c06c3d55b7c7df5022ea3b5912de2d38252986688f6529a747edcb5a81a",
+      "sri": "sha384-sh165Wi6XvL9alIv6uxGsVxh3BIV18mD5HFJxZmyWbGIR+sbbBoOWa0E4iFWlJqD",
+      "url": "/static/js/blob-urls.12f55c06c3d55b7c.js"
     },
     "js/checklist.js": {
       "bytes": 2734,
@@ -272,10 +278,10 @@
       "url": "/static/js/photo-ocr-preprocess.ed3aeeb103df06bc.js"
     },
     "js/preview.js": {
-      "bytes": 68179,
-      "sha256": "ad143cf6bba3b34178ef6b1cbb8373d0a302713060e890545112bef625a1d069",
-      "sri": "sha384-kGnEq/yge8RuEf3p73e2W3ttGWiSlzmdA0PrjAFRQbzW7/JVoB04fl1poVAgGDsM",
-      "url": "/static/js/preview.ad143cf6bba3b341.js"
+      "bytes": 68270,
+      "sha256": "d62e2372a9debd663bf1c2af3a5893909a3d3be097c380afb1cb77280b953762",
+      "sri": "sha384-ahOUkoIXMF1jB29jRHsx69NuxKWCyENXgdLC639FqmXWQSTRn3rs0W0iVZzOy6Qi",
+      "url": "/static/js/preview.d62e2372a9debd66.js"
     },
     "js/quick-capture.js": {
       "bytes": 4236,
@@ -507,6 +513,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "a78fa7ac1eacb42f9dcbbd74709773ac74ba1672715730e37c7a9b8a2b3b1e35",
+  "manifest_sha256": "9236c9cc7b9d5e272862f6b5bb35b4d77bdf80f11c6843a3fc66344ef3264d71",
   "version": 1
 }
