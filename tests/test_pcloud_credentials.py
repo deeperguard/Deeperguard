@@ -80,18 +80,15 @@ class PcloudCredentialSecurityTests(unittest.TestCase):
             )
         self.assertIn("no longer stored", str(ctx.exception))
 
-    def test_write_rclone_config_does_not_persist_token_file(self):
+    def test_rclone_remote_env_does_not_persist_token_file(self):
         token = '{"access_token":"rclone-token-value","token_type":"bearer"}'
         self.config.write_pcloud_token(9, token)
-        path = self.backup_pcloud.write_rclone_config(9, "eu")
-        try:
-            text = path.read_text(encoding="utf-8")
-            self.assertIn("type = pcloud", text)
-            self.assertIn("rclone-token-value", text)
-            persisted = self.config.pcloud_rclone_config_path(9)
-            self.assertFalse(persisted.is_file())
-        finally:
-            path.unlink(missing_ok=True)
+        before = sorted(p.name for p in self.config.KEYS_DIR.iterdir())
+        env = self.backup_pcloud.rclone_remote_env(9, "eu")
+        self.assertEqual(env["RCLONE_CONFIG_DEEPERGUARD_TYPE"], "pcloud")
+        self.assertIn("rclone-token-value", env["RCLONE_CONFIG_DEEPERGUARD_TOKEN"])
+        self.assertEqual(before, sorted(p.name for p in self.config.KEYS_DIR.iterdir()))
+        self.assertFalse(self.config.pcloud_rclone_config_path(9).is_file())
         stored = self.config.pcloud_token_path(9).read_text(encoding="utf-8")
         self.assertNotIn("rclone-token-value", stored)
 

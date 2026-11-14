@@ -6,7 +6,6 @@ import logging
 import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -99,30 +98,27 @@ def notify_pcloud_backup_failure(user: Any, detail: str) -> None:
         log.error("pcloud failure email not sent user=%s: %s", user["email"], exc)
 
 
-def write_rclone_config(user_id: int, region: str) -> Path:
-    """Write an ephemeral rclone config with the user's OAuth token (0600). Caller must unlink."""
+def rclone_remote_env(user_id: int, region: str) -> dict[str, str]:
+    """Environment for rclone with the remote defined in memory only.
+
+    No config file is written, so the OAuth token never touches disk in readable form.
+    """
     token = pcloud_token(user_id)
     if not token:
         raise RuntimeError("pCloud rclone OAuth token is not configured")
-    fd, name = tempfile.mkstemp(prefix=f"pcloud-rclone-{int(user_id)}-", suffix=".conf", dir=str(KEYS_DIR))
-    os.close(fd)
-    config_path = Path(name)
-    body = (
-        f"[{RCLONE_REMOTE}]\n"
-        "type = pcloud\n"
-        f"hostname = {pcloud_hostname(region)}\n"
-        f"token = {token}\n"
-    )
-    config_path.write_text(body, encoding="utf-8")
-    config_path.chmod(0o600)
-    return config_path
+    prefix = f"RCLONE_CONFIG_{RCLONE_REMOTE.upper()}_"
+    env = dict(os.environ)
+    env[prefix + "TYPE"] = "pcloud"
+    env[prefix + "HOSTNAME"] = pcloud_hostname(region)
+    env[prefix + "TOKEN"] = token
+    return env
 
 
-def _rclone_base_args(config_path: Path) -> list[str]:
+def _rclone_base_args() -> list[str]:
     return [
         rclone_bin(),
         "--config",
-        str(config_path),
+        os.devnull,
         "--retries",
         "2",
         "--low-level-retries",
@@ -132,7 +128,7 @@ def _rclone_base_args(config_path: Path) -> list[str]:
     ]
 
 
-def _run_rclone(cmd: list[str], *, timeout: int) -> subprocess.CompletedProcess[str]:
+def _run_rclone(cmd: list[str], *, timeout: int, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
             cmd,
@@ -140,6 +136,7 @@ def _run_rclone(cmd: list[str], *, timeout: int) -> subprocess.CompletedProcess[
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=env,
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(
@@ -167,13 +164,13 @@ def _format_rclone_error(proc: subprocess.CompletedProcess[str]) -> str:
     return detail or "pcloud sync failed"
 
 
-def prune_remote_backups(user_id: int, config_path: Path, remote_path: str) -> None:
+def prune_remote_backups(user_id: int, env: dict[str, str], remote_path: str) -> None:
     """Remove remote backups older than PCLOUD_RETENTION_DAYS (by file mtime on pCloud)."""
     if PCLOUD_RETENTION_DAYS <= 0:
         return
     include = backup_include_pattern(user_id)
     cmd = [
-        *_rclone_base_args(config_path),
+        *_rclone_base_args(),
         "delete",
         f"{RCLONE_REMOTE}:{remote_path}",
         "--include",
@@ -183,7 +180,7 @@ def prune_remote_backups(user_id: int, config_path: Path, remote_path: str) -> N
         "--multi-thread-streams",
         "0",
     ]
-    proc = _run_rclone(cmd, timeout=min(RCLONE_TIMEOUT_SECONDS, 1800))
+    proc = _run_rclone(cmd, timeout=min(RCLONE_TIMEOUT_SECONDS, 1800), env=env)
     if proc.returncode != 0:
         detail = _format_rclone_error(proc)
         raise RuntimeError(f"remote prune failed: {detail}")
@@ -191,12 +188,12 @@ def prune_remote_backups(user_id: int, config_path: Path, remote_path: str) -> N
 
 def upload_backup_file(
     local_path: Path,
-    config_path: Path,
+    env: dict[str, str],
     remote_path: str,
 ) -> None:
     """Upload a single gzip backup; avoids re-uploading every local daily copy."""
     cmd = [
-        *_rclone_base_args(config_path),
+        *_rclone_base_args(),
         "copy",
         str(local_path),
         f"{RCLONE_REMOTE}:{remote_path}",
@@ -207,7 +204,7 @@ def upload_backup_file(
         "--multi-thread-streams",
         "0",
     ]
-    proc = _run_rclone(cmd, timeout=RCLONE_TIMEOUT_SECONDS)
+    proc = _run_rclone(cmd, timeout=RCLONE_TIMEOUT_SECONDS, env=env)
     if proc.returncode != 0:
         raise RuntimeError(_format_rclone_error(proc))
 
@@ -224,38 +221,26 @@ def sync_user_backup(user_id: int) -> dict[str, Any]:
 
     remote_path = normalize_remote_path(str(user["pcloud_remote_path"] or ""))
     region = normalize_pcloud_region(str(user["pcloud_region"] or ""))
-    config_path = write_rclone_config(user_id, region)
+    env = rclone_remote_env(user_id, region)
 
     local_path, item_count, bytes_size = ensure_local_full_backup(user_id, max_age=PCLOUD_LOCAL_MAX_AGE)
     if item_count == 0 and local_path.is_file():
         item_count = sum(1 for _ in db.iter_backup_items(user_id))
 
     try:
-        upload_backup_file(local_path, config_path, remote_path)
+        upload_backup_file(local_path, env, remote_path)
     except RuntimeError as exc:
         detail = str(exc)
         db.update_pcloud_sync_status(user_id, "error", detail)
         db.log_backup(user_id, remote_path, item_count, bytes_size, "error", f"pcloud:{detail}")
         raise
-    finally:
-        try:
-            config_path.unlink(missing_ok=True)
-        except OSError:
-            pass
 
     prune_error = ""
-    config_path = write_rclone_config(user_id, region)
     try:
-        try:
-            prune_remote_backups(user_id, config_path, remote_path)
-        except RuntimeError as exc:
-            prune_error = str(exc)
-            log.warning("pcloud remote prune user=%s: %s", user_id, prune_error)
-    finally:
-        try:
-            config_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        prune_remote_backups(user_id, env, remote_path)
+    except RuntimeError as exc:
+        prune_error = str(exc)
+        log.warning("pcloud remote prune user=%s: %s", user_id, prune_error)
 
     detail = f"synced {local_path.name}"
     if prune_error:
