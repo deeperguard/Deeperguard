@@ -9812,14 +9812,14 @@
     if (vaultEmpty) {
       return `<div class="note-list-empty-actions">
                 <button type="button" class="btn primary sm" data-empty-new>New note</button>
-                <button type="button" class="btn sm" data-empty-scan>Scan document</button>
-                <button type="button" class="btn sm" data-empty-sync>Sync notes</button>
+                <button type="button" class="btn ghost sm" data-empty-scan>Scan document</button>
+                <button type="button" class="btn ghost sm" data-empty-sync>Sync notes</button>
               </div>`;
     }
     return `<div class="note-list-empty-actions">
                 <button type="button" class="btn primary sm" data-empty-sync>Sync notes</button>
-                <button type="button" class="btn sm" data-empty-new>New note</button>
-                <button type="button" class="btn sm" data-empty-scan>Scan document</button>
+                <button type="button" class="btn ghost sm" data-empty-new>New note</button>
+                <button type="button" class="btn ghost sm" data-empty-scan>Scan document</button>
               </div>`;
   }
 
@@ -11621,20 +11621,20 @@
     const attId = att?.uuid;
     if (attId && ocrWaitingServer.has(attId)) {
       return {
-        html: '<p class="ocr-text">Waiting to read text…</p>',
+        html: '<p class="ocr-text ocr-progress">Waiting to read text…</p>',
         retry: false,
       };
     }
     if (attId && (rescanOcrIds.has(attId) || ocrInFlight.has(attId) || ocrQueued.has(attId))) {
       return {
-        html: '<p class="ocr-text">Reading text on this device…</p>',
+        html: '<p class="ocr-text ocr-progress">Reading text on this device…</p>',
         retry: false,
       };
     }
     const method = att?.content?.ocr_method || '';
     if (method === 'pending' && !ocrPendingStale(att)) {
       return {
-        html: '<p class="ocr-text">Indexing…</p>',
+        html: '<p class="ocr-text ocr-progress">Indexing…</p>',
         retry: false,
       };
     }
@@ -11646,7 +11646,7 @@
         };
       }
       return {
-        html: '<p class="ocr-text">Reading text on this device…</p>',
+        html: '<p class="ocr-text ocr-progress">Reading text on this device…</p>',
         retry: false,
       };
     }

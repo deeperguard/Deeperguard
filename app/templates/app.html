@@ -2857,7 +2857,7 @@
     </button>
     <button type="button" id="doc-immersive-close" class="doc-immersive-close" hidden aria-label="Close preview">×</button>
   </div>
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
   {{ asset_script('js/vendor/noble-crypto.js') }}
   {{ asset_script('js/vendor/noble-argon2.js') }}
   {{ asset_script('js/crypto.js') }}
