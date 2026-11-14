@@ -2279,6 +2279,7 @@
       event.preventDefault();
       event.stopPropagation();
     });
+    window.NotesPreview?.bindCodeCopy?.(ui.preview, { onError: (message) => toast(message, true) });
   }
 
   function togglePreviewTaskAt(text, editor, index) {
@@ -14082,6 +14083,7 @@
         : '<p class="muted">OCR is still running, or no text was found. Stay on the document preview in the meantime.</p>';
       markAutoDir(ui.preview);
       highlightPreview();
+      window.NotesPreview?.decorateCodeBlocks?.(ui.preview);
       if (previewBtn) setEditorMenuLabel(previewBtn, 'Document');
       if (ocrBtn) setEditorMenuLabel(ocrBtn, 'Edit');
       previewOn = false;
@@ -14425,6 +14427,7 @@
     markAutoDir(ui.preview);
     highlightPreview();
     bindPreviewTaskToggles();
+    window.NotesPreview?.decorateCodeBlocks?.(ui.preview);
   }
 
   function openNote(id, { skipGate = false, skipFlush = false } = {}) {
@@ -19071,6 +19074,7 @@
       bindPreviewTaskToggles();
       if (needle) NotesSearch.applyHighlights(ui.preview, needle, findMatchOptions());
       else highlightPreview();
+      window.NotesPreview?.decorateCodeBlocks?.(ui.preview);
     }
     return [...ui.preview.querySelectorAll('mark.search-hit')];
   }

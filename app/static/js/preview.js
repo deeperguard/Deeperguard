@@ -1746,7 +1746,80 @@ const NotesPreview = (() => {
     return true;
   }
 
+  // Copy button for code blocks in the note preview. Added with DOM APIs after
+  // the markdown is rendered/sanitized, so the sanitizer never has to allow
+  // <button> from note content.
+  const CODE_COPY_LABEL = 'Kopieer';
+  const CODE_COPIED_LABEL = 'Gekopieerd';
+  const CODE_COPY_ARIA = 'Code kopiëren';
+  const CODE_COPY_FAILED = 'Kopiëren mislukt: geen toegang tot het klembord.';
+  const CODE_COPY_RESET_MS = 2000;
+
+  function codeBlockParts(pre) {
+    const kids = Array.from(pre?.children || []);
+    return {
+      code: kids.find((el) => el.tagName === 'CODE') || null,
+      button: kids.find((el) => el.classList?.contains('code-copy-btn')) || null,
+    };
+  }
+
+  function decorateCodeBlocks(root) {
+    if (!root?.querySelectorAll || typeof document === 'undefined') return 0;
+    let added = 0;
+    root.querySelectorAll('pre.code-preview').forEach((pre) => {
+      const { code, button } = codeBlockParts(pre);
+      if (!code || button) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'code-copy-btn';
+      btn.setAttribute('aria-label', CODE_COPY_ARIA);
+      btn.textContent = CODE_COPY_LABEL;
+      pre.appendChild(btn);
+      added += 1;
+    });
+    return added;
+  }
+
+  async function copyCodeBlock(btn, { clipboard, onError } = {}) {
+    const pre = btn?.closest?.('pre.code-preview');
+    const { code } = codeBlockParts(pre);
+    if (!code) return false;
+    const target = clipboard || (typeof navigator !== 'undefined' ? navigator.clipboard : null);
+    try {
+      if (!target || typeof target.writeText !== 'function') throw new Error('no clipboard');
+      await target.writeText(code.textContent || '');
+    } catch (_) {
+      if (typeof onError === 'function') onError(CODE_COPY_FAILED);
+      return false;
+    }
+    clearTimeout(btn._codeCopyTimer);
+    btn.textContent = CODE_COPIED_LABEL;
+    btn.classList.add('is-copied');
+    btn._codeCopyTimer = setTimeout(() => {
+      btn.textContent = CODE_COPY_LABEL;
+      btn.classList.remove('is-copied');
+    }, CODE_COPY_RESET_MS);
+    return true;
+  }
+
+  // One delegated listener per container; buttons are rebuilt on each render.
+  function bindCodeCopy(container, options = {}) {
+    if (!container || container._codeCopyBound) return false;
+    container._codeCopyBound = true;
+    container.addEventListener('click', (event) => {
+      const btn = event.target?.closest?.('.code-copy-btn');
+      if (!btn) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      copyCodeBlock(btn, options);
+    });
+    return true;
+  }
+
   return {
+    decorateCodeBlocks,
+    copyCodeBlock,
+    bindCodeCopy,
     MAX_PDF_PAGES,
     kindFromMeta,
     resolveKind,
