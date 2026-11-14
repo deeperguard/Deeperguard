@@ -5,8 +5,11 @@ import json
 import logging
 import os
 import re
+import gzip
 import shutil
 import subprocess
+import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -311,8 +314,11 @@ def run_pcloud_backups() -> int:
     synced = 0
     if config.pcloud_service_remote():
         managed_healthcheck()  # result only logged; legacy token users are unaffected
+    managed_ids = {int(u["id"]) for u in db.users_with_managed_backup_enabled()}
     for user in db.users_with_pcloud_enabled():
         uid = int(user["id"])
+        if uid in managed_ids:
+            continue  # managed flag wins; the legacy token flow is for non-managed users
         remote_path = normalize_remote_path(str(user["pcloud_remote_path"] or ""))
         if not pcloud_credentials_configured(uid):
             detail = "pCloud rclone OAuth token is not configured"
@@ -445,3 +451,122 @@ def user_backup_path(user: Any) -> str:
     if not isinstance(dir_id, str) or not _DIR_ID_RE.fullmatch(dir_id):
         raise ManagedBackupError(ERR_BAD_PATH)
     return f"{root}/{dir_id}"
+
+
+# --- Managed run: per-user upload of ciphertext only, retention per directory ---
+
+MANAGED_ARCHIVE_GLOB = "backup-*.enc.json.gz"
+ERR_PLAN = "plan"
+ERR_UPLOAD = "upload_failed"
+# Exactly what a managed archive may contain; tests assert this export list.
+MANAGED_TOP_LEVEL_KEYS = ("exported_at", "format", "item_count", "items", "kdf_salt")
+MANAGED_ITEM_KEYS = (
+    "blob_ciphertext", "ciphertext", "content_hash", "content_version",
+    "deleted", "item_uuid", "updated_at",
+)
+
+
+def write_managed_archive(user_id: int, directory: Path) -> tuple[Path, int, int]:
+    """Stream the user's stored ciphertext into a gzip file. No e-mail, no secrets."""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        raise ManagedBackupError(ERR_BAD_PATH)
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    path = directory / f"backup-{stamp}.enc.json.gz"
+    exported_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    count = 0
+    with gzip.open(path, "wt", encoding="utf-8", compresslevel=6) as gz:
+        gz.write('{"format":"deeperguard-backup-v1",')
+        gz.write(f'"kdf_salt":{json.dumps(user["kdf_salt"])},')
+        gz.write(f'"exported_at":{json.dumps(exported_at)},"items":[')
+        for item in db.iter_backup_items(user_id):
+            if count:
+                gz.write(",")
+            gz.write(json.dumps(item, separators=(",", ":"), sort_keys=True))
+            count += 1
+        gz.write(f'],"item_count":{count}}}')
+    return path, count, path.stat().st_size
+
+
+def _managed_prune_and_count(spec_dir: str, fallback: int) -> int:
+    """Apply the existing retention inside one user directory; return backups kept."""
+    if PCLOUD_RETENTION_DAYS > 0:
+        try:
+            _run_managed_rclone(
+                ["delete", spec_dir, "--include", MANAGED_ARCHIVE_GLOB,
+                 "--min-age", f"{PCLOUD_RETENTION_DAYS}d"],
+                timeout=min(RCLONE_TIMEOUT_SECONDS, 1800),
+            )
+        except ManagedBackupError as exc:
+            log.warning("managed prune failed: %s", exc.code)
+    try:
+        proc = _run_managed_rclone(
+            ["lsf", spec_dir, "--files-only", "--max-depth", "1"],
+            timeout=HEALTHCHECK_TIMEOUT_SECONDS,
+        )
+    except ManagedBackupError:
+        return fallback
+    names = [ln.strip() for ln in (proc.stdout or "").splitlines()]
+    return sum(1 for n in names if re.fullmatch(r"backup-[0-9-]+\.enc\.json\.gz", n))
+
+
+def sync_managed_user(user: Any) -> dict[str, Any]:
+    """Upload one user's ciphertext into that user's own directory. Raises ManagedBackupError."""
+    from plans import plan_has
+
+    uid = int(user["id"])
+    if not plan_has(db.user_plan(user), "pcloud_backup"):
+        raise ManagedBackupError(ERR_PLAN)
+    dir_path = user_backup_path(user)  # only the stored opaque id + configured root
+    spec_dir = f"{_managed_remote_name()}:{dir_path}"
+    with tempfile.TemporaryDirectory(dir=backups_dir(), prefix="managed-") as tmp:
+        path, items, size = write_managed_archive(uid, Path(tmp))
+        try:
+            _run_managed_rclone(
+                ["copyto", str(path), f"{spec_dir}/{path.name}", "--transfers", "1"],
+                timeout=RCLONE_TIMEOUT_SECONDS,
+            )
+        except ManagedBackupError as exc:
+            if exc.code == ERR_UNAVAILABLE:
+                raise ManagedBackupError(ERR_UPLOAD) from None
+            raise
+    kept = _managed_prune_and_count(spec_dir, int(user["pcloud_last_kept"] or 0))
+    return {"size": size, "kept": kept, "items": items}
+
+
+def run_managed_backups() -> list[dict[str, Any]]:
+    """Run managed backups for every enabled user; returns one result dict per user.
+
+    The result list (user_id, ok, code, size, kept, at) is the input for the mail task.
+    One user's failure never stops the others; it is retried on the next run.
+    """
+    results: list[dict[str, Any]] = []
+    users = db.users_with_managed_backup_enabled()
+    if not users:
+        return results
+    health = managed_healthcheck()
+    for user in users:
+        uid = int(user["id"])
+        code, size, kept = "", 0, 0
+        try:
+            if not health["available"]:
+                raise ManagedBackupError(health["reason_code"] or ERR_UNAVAILABLE)
+            out = sync_managed_user(user)
+            size, kept = out["size"], out["kept"]
+        except ManagedBackupError as exc:
+            code = exc.code
+        except Exception:
+            code = ERR_UNAVAILABLE
+        status = "ok" if not code else ("skipped" if code == ERR_PLAN else "error")
+        try:
+            db.update_managed_backup_status(uid, status, code, size, kept)
+            db.log_backup(uid, "managed", 0, size, status, code or "pcloud")
+        except Exception:
+            log.error("managed backup status not saved user_id=%s", uid)
+        if code:
+            log.warning("managed pcloud backup user_id=%s failed: %s", uid, code)
+        results.append({
+            "user_id": uid, "ok": not code, "code": code or "ok",
+            "size": size, "kept": kept, "at": time.time(),
+        })
+    return results

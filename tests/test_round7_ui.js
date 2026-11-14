@@ -17,7 +17,7 @@ assert.ok(appJs.includes('if (!attachmentIsPdfOrPhoto(att)) return false;'));
 assert.ok(appJs.includes('originalFilename: originalName'));
 assert.ok(appJs.includes('unlock-notice'));
 assert.ok(appJs.includes('is-indeterminate'));
-assert.ok(appJs.includes('Checking password…'));
+assert.ok(appJs.includes('Deriving key…'));
 
 assert.ok(html.includes('role="dialog" aria-modal="true" aria-labelledby="doc-title"'));
 assert.ok(html.includes('Each pause saves a version.'));

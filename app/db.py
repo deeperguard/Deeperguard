@@ -181,6 +181,10 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN managed_backup_enabled INTEGER NOT NULL DEFAULT 0")
     if "pcloud_dir_id" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN pcloud_dir_id TEXT NOT NULL DEFAULT ''")
+    if "pcloud_last_size" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN pcloud_last_size INTEGER NOT NULL DEFAULT 0")
+    if "pcloud_last_kept" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN pcloud_last_kept INTEGER NOT NULL DEFAULT 0")
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_pcloud_dir_id "
         "ON users(pcloud_dir_id) WHERE pcloud_dir_id != ''"
@@ -1754,6 +1758,31 @@ def disable_managed_backup(user_id: int) -> None:
         (time.time(), int(user_id)),
     )
     conn.commit()
+
+
+def users_with_managed_backup_enabled() -> list[sqlite3.Row]:
+    return list(
+        connection().execute(
+            "SELECT * FROM users WHERE managed_backup_enabled = 1 ORDER BY id"
+        ).fetchall()
+    )
+
+
+def update_managed_backup_status(
+    user_id: int, status: str, detail: str, size: int, kept: int
+) -> None:
+    """Store the last managed run: time, result (ok / error code), size, backups kept."""
+    with tx() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET pcloud_last_sync_at = ?, pcloud_last_sync_status = ?,
+                pcloud_last_sync_detail = ?, pcloud_last_size = ?, pcloud_last_kept = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (now(), status, detail[:100], int(size), int(kept), now(), int(user_id)),
+        )
 
 
 def update_pcloud_settings(
