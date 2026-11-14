@@ -164,7 +164,8 @@ const NotesPreview = (() => {
   }
 
   function blobUrl(bytes, mime) {
-    return URL.createObjectURL(blobFor(bytes, mime));
+    const blob = blobFor(bytes, mime);
+    return typeof NotesBlobUrls !== 'undefined' ? NotesBlobUrls.create(blob) : URL.createObjectURL(blob);
   }
 
   async function openPdf(bytes) {

@@ -11,7 +11,7 @@ from config import DATA_DIR
 
 # Defaults / hard caps (Dennis D2 decisions + fix-round correction).
 DEFAULT_MAX_VIEWS = 1
-DEFAULT_EXPIRES_SECONDS = 7 * 24 * 3600
+DEFAULT_EXPIRES_SECONDS = 24 * 3600
 MAX_EXPIRES_SECONDS = 7 * 24 * 3600
 MIN_EXPIRES_SECONDS = 5 * 60
 MAX_VIEWS_CAP = 10  # server-enforced; UI "Number of opens" defaults to 1

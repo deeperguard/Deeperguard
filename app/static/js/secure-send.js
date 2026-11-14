@@ -11,7 +11,7 @@
 
   const MAX_FILE_BYTES = 50 * 1024 * 1024;
   const MAX_EXPIRES_SECONDS = 7 * 24 * 3600;
-  const DEFAULT_EXPIRES_SECONDS = MAX_EXPIRES_SECONDS;
+  const DEFAULT_EXPIRES_SECONDS = 24 * 3600;
   const DEFAULT_MAX_VIEWS = 1;
   const MAX_VIEWS_CAP = 10;
   const LINK_STOPPED = 'This link has stopped working.';

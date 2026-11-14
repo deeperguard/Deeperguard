@@ -3219,7 +3219,7 @@
       // Only revoke URLs this cache owns; makeListThumbUrl can hand back the
       // full-size previewCache URL, which the inline viewer still needs.
       if (listThumbCache.get(attId) === img.src) {
-        try { URL.revokeObjectURL(img.src); } catch (err) { /* ignore */ }
+        try { NotesBlobUrls.revoke(img.src); } catch (err) { /* ignore */ }
         listThumbCache.delete(attId);
       }
       const note = NotesStore.get(noteId);
@@ -3492,7 +3492,7 @@
 
   function releaseDocEnhanceObjects(root) {
     root?.querySelectorAll?.('img[data-doc-enhance-url]').forEach((img) => {
-      try { URL.revokeObjectURL(img.dataset.docEnhanceUrl); } catch (err) { /* ignore */ }
+      try { NotesBlobUrls.revoke(img.dataset.docEnhanceUrl); } catch (err) { /* ignore */ }
     });
   }
 
@@ -3512,7 +3512,7 @@
     } else if (el.tagName === 'IMG') {
       if (el.dataset.docOriginalSrc) el.src = el.dataset.docOriginalSrc;
       if (el.dataset.docEnhanceUrl) {
-        try { URL.revokeObjectURL(el.dataset.docEnhanceUrl); } catch (err) { /* ignore */ }
+        try { NotesBlobUrls.revoke(el.dataset.docEnhanceUrl); } catch (err) { /* ignore */ }
         delete el.dataset.docEnhanceUrl;
       }
       delete el.dataset.docOriginalSrc;
@@ -3605,9 +3605,9 @@
     canvas.toBlob((blob) => {
       if (!blob || !docViewEnhance.whiteBorders || !img.isConnected) return;
       if (img.dataset.docEnhanceUrl) {
-        try { URL.revokeObjectURL(img.dataset.docEnhanceUrl); } catch (err) { /* ignore */ }
+        try { NotesBlobUrls.revoke(img.dataset.docEnhanceUrl); } catch (err) { /* ignore */ }
       }
-      const url = URL.createObjectURL(blob);
+      const url = NotesBlobUrls.create(blob);
       img.dataset.docEnhanceUrl = url;
       img.src = url;
     }, 'image/jpeg', 0.92);
@@ -4262,6 +4262,8 @@
     noteRedoStacks.clear();
     clearListThumbCache();
     clearPreviewCache();
+    clearScanPageUrls();
+    NotesBlobUrls.revokeAll();
     if (typeof NotesAiChat !== 'undefined') NotesAiChat.reset();
     prefs.aiChat = null;
     prefs.googleOauthClientId = '';
@@ -5321,7 +5323,7 @@
           const image = new Image();
           image.onload = () => resolve(image);
           image.onerror = () => reject(new Error('Could not read that photo'));
-          image.src = URL.createObjectURL(file);
+          image.src = NotesBlobUrls.create(file);
         });
       }
       const value = await decodeQrFromSource(source);
@@ -8716,6 +8718,10 @@
 
   async function signOutCompletely() {
     stopOnlineRecovery('sign-out');
+    clearListThumbCache();
+    clearPreviewCache();
+    clearScanPageUrls();
+    NotesBlobUrls.revokeAll();
     try {
       await NotesStore.flush();
     } catch (err) {
@@ -11931,7 +11937,7 @@
 
   function forgetPreview(id) {
     const entry = previewCache.get(id);
-    if (entry && typeof entry.then !== 'function' && entry.url) URL.revokeObjectURL(entry.url);
+    if (entry && typeof entry.then !== 'function' && entry.url) NotesBlobUrls.revoke(entry.url);
     previewCache.delete(id);
     if (previewingId === id) closeDocPreview();
   }
@@ -12039,7 +12045,7 @@
     const url = listThumbCache.get(id);
     if (!url) return '';
     if (listThumbPx.get(id) !== thumbOutputPx()) {
-      try { URL.revokeObjectURL(url); } catch (err) { /* ignore */ }
+      try { NotesBlobUrls.revoke(url); } catch (err) { /* ignore */ }
       listThumbCache.delete(id);
       listThumbPx.delete(id);
       return '';
@@ -12057,7 +12063,7 @@
     if (!bytes?.length) return false;
     let url = takeListThumb(id);
     if (!url) {
-      url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+      url = NotesBlobUrls.create(new Blob([bytes], { type: 'image/jpeg' }));
       putListThumb(id, url);
     }
     const img = document.createElement('img');
@@ -12079,7 +12085,7 @@
 
   function clearListThumbCache() {
     for (const url of listThumbCache.values()) {
-      try { URL.revokeObjectURL(url); } catch (err) { /* ignore */ }
+      try { NotesBlobUrls.revoke(url); } catch (err) { /* ignore */ }
     }
     listThumbCache.clear();
     listThumbPx.clear();
@@ -12261,7 +12267,7 @@
       if (scan) canvas.toBlob(resolve, 'image/png');
       else canvas.toBlob(resolve, 'image/jpeg', 0.92);
     });
-    const url = blob ? URL.createObjectURL(blob) : entry.url;
+    const url = blob ? NotesBlobUrls.create(blob) : entry.url;
     putListThumb(id, url);
     return url;
   }
@@ -17686,7 +17692,7 @@
 
   function clearScanPageUrls() {
     scanPageUrls.splice(0).forEach((url) => {
-      try { URL.revokeObjectURL(url); } catch (_) { /* ignore */ }
+      try { NotesBlobUrls.revoke(url); } catch (_) { /* ignore */ }
     });
   }
 
@@ -17873,7 +17879,7 @@
       const card = document.createElement('div');
       card.className = 'scan-page';
       const img = document.createElement('img');
-      const url = URL.createObjectURL(file);
+      const url = NotesBlobUrls.create(file);
       scanPageUrls.push(url);
       img.src = url;
       img.alt = `Page ${index + 1}`;
@@ -22370,7 +22376,9 @@
     if (viewsEl && window.NotesSecureSend) {
       viewsEl.value = String(NotesSecureSend.DEFAULT_MAX_VIEWS || 1);
     }
-    if (daysEl) daysEl.value = '7';
+    if (daysEl) daysEl.value = '1';
+    const noPassEl = document.getElementById('secure-send-no-passphrase');
+    if (noPassEl) noPassEl.checked = false;
     if (wrap) wrap.hidden = true;
     if (linkInput) linkInput.value = '';
     setSecureSendStatus('');
@@ -22542,13 +22550,17 @@
     const passphrase = document.getElementById('secure-send-passphrase')?.value || '';
     const maxViews = Number(NotesSecureSend.MAX_VIEWS_CAP) || 10;
     let views = Number(document.getElementById('secure-send-views')?.value || 1);
-    let days = Number(document.getElementById('secure-send-days')?.value || 7);
+    let days = Number(document.getElementById('secure-send-days')?.value || 1);
     if (!Number.isFinite(views) || views < 1) views = 1;
     if (views > maxViews) views = maxViews;
     if (!Number.isFinite(days) || days < 1) days = 1;
     if (days > 7) days = 7;
     if (!title.trim() && !body.trim() && !file) {
       setSecureSendStatus('Add a title, note, or file.');
+      return;
+    }
+    if (!passphrase && !document.getElementById('secure-send-no-passphrase')?.checked) {
+      setSecureSendStatus('Enter a passphrase, or tick "Send without a passphrase".');
       return;
     }
     const btn = document.getElementById('btn-secure-send-create');
