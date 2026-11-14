@@ -1729,11 +1729,19 @@
   }
 
   function renderNoteBodyPreview(text, editor) {
+    let html;
     if (window.NotesLinks && String(text || '').includes('](dg-note:')) {
       const prepared = NotesLinks.prepareRender(text, noteLinkLookup);
-      return prepared.restore(renderNoteBodyPreviewRaw(prepared.text, editor));
+      html = prepared.restore(renderNoteBodyPreviewRaw(prepared.text, editor));
+    } else {
+      html = renderNoteBodyPreviewRaw(text, editor);
     }
-    return renderNoteBodyPreviewRaw(text, editor);
+    // Markdown view: always through the DOMPurify allowlist as the very last step before the DOM.
+    if (editor === 'markdown' && !window.NotesSpreadsheet?.isPayload?.(text)) {
+      const clean = window.NotesSanitize?.sanitizeRichHtml?.(html);
+      if (typeof clean === 'string') return clean;
+    }
+    return html;
   }
 
   function renderNoteBodyPreviewRaw(text, editor) {
@@ -1743,7 +1751,7 @@
     } else if (editor === 'code') {
       html = `<pre class="code-preview"><code>${highlightCode(text)}</code></pre>`;
     } else if (editor === 'markdown' && window.NotesMarkdown) {
-      html = NotesMarkdown.render(text);
+      html = NotesMarkdown.renderRich ? NotesMarkdown.renderRich(text) : NotesMarkdown.render(text);
     } else if (window.NotesSuperscript && (editor === 'superscript' || editor === 'markdown' || editor === 'plain')) {
       html = NotesSuperscript.render(text);
     } else {
