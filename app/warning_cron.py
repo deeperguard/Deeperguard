@@ -75,7 +75,7 @@ def _run_claimed(now_ts: float) -> int:
         if db.item_is_deleted(uid, row["item_uuid"]):
             db.mark_reminder_sent(rid, now_ts)
             db.log_reminder(uid, row["item_uuid"], recipient, "skipped", "note deleted")
-            log.info("skip deleted note user=%s uuid=%s", user["email"], row["item_uuid"])
+            log.info("skip deleted note user=%s", uid)
             continue
         try:
             send_plain_email(
@@ -89,7 +89,7 @@ def _run_claimed(now_ts: float) -> int:
         except Exception as exc:
             db.release_reminder_claim(rid)
             db.log_reminder(uid, row["item_uuid"], recipient, "error", str(exc))
-            log.error("warning failed user=%s uuid=%s: %s", user["email"], row["item_uuid"], exc)
+            log.error("warning failed user=%s: %s", uid, type(exc).__name__)
     db.prune_reminder_log()
     return sent
 
@@ -109,7 +109,35 @@ def run_warnings(now_ts: float | None = None) -> int:
             fcntl.flock(lockf.fileno(), fcntl.LOCK_UN)
 
 
+def main() -> int:
+    """Run all cron steps in order; one failing step never stops the others.
+
+    Timing: cron runs every 5 minutes. Agenda email windows are rounded down to 15 minutes
+    (mail can arrive up to 15 minutes early, never late) and a reminder is only sent while
+    it is less than NOTES_AGENDA_REMINDER_MAX_LATE_SEC (default 30 min) overdue, so a cron
+    gap of 5 minutes (even a few missed runs) still delivers. The UI text stays correct.
+
+    Logs carry only the step name, exception type and counts: never addresses or content.
+    """
+    # Imported here so tests can patch the step functions on this module.
+    import agenda_reminder_cron
+
+    steps = (
+        ("warnings", run_warnings),
+        ("agenda_reminders", agenda_reminder_cron.run_agenda_reminders),
+        ("push_windows", agenda_reminder_cron.run_push_windows),
+    )
+    failed = 0
+    for name, step in steps:
+        try:
+            count = step()
+            log.info("step=%s ok count=%s", name, count)
+        except Exception as exc:
+            failed += 1
+            log.error("step=%s failed error=%s", name, type(exc).__name__)
+    return 1 if failed else 0
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    count = run_warnings()
-    print(f"sent {count} note warning(s)")
+    sys.exit(main())
