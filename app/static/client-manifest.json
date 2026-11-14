@@ -2,10 +2,10 @@
   "asset_count": 86,
   "assets": {
     "css/app.css": {
-      "bytes": 321482,
-      "sha256": "99eb653b6d4799e9e07984cb011b764f44eedfd829a07b7c251e7eaf137362a6",
-      "sri": "sha384-I2SB3vrxF/RBvJ37f3Ai7g4mURY8mPxR+qDRx8jvpIgUYAwgXBPhpNmx2zXkgtsA",
-      "url": "/static/css/app.99eb653b6d4799e9.css"
+      "bytes": 325749,
+      "sha256": "298e7a8e2b363ae84012a8b5781a8e6ae4ad5a0db9cd1fcb5e9316ef588a9606",
+      "sri": "sha384-BMvAlo0yMy3dIF5jICway7Pu0MTpPXk1uq+bpsW6JUDx7EyKXqtJ6kEKbkicXeQO",
+      "url": "/static/css/app.298e7a8e2b363ae8.css"
     },
     "css/marketing.css": {
       "bytes": 54715,
@@ -92,10 +92,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1012446,
-      "sha256": "17217072886da9184aba77c554053b6a236621687812dee106d77012b1ae3fab",
-      "sri": "sha384-Lr7wPN5jfVYlkecnIjkWUtCQPgU3DVk6I/stNFhFr7zjHRU6mv+4bCJMojtJobDV",
-      "url": "/static/js/app.17217072886da918.js"
+      "bytes": 1012550,
+      "sha256": "bb9d557d0d6efca7310f0fce8b864fb729fcaadcba8819d860dbf38dba30269f",
+      "sri": "sha384-qduvJ/OhCTetyiXgDsLxz7CfvALWgAhATz2CJGNQ+ArHWqXvwn3SJgY6vMH7ZsTn",
+      "url": "/static/js/app.bb9d557d0d6efca7.js"
     },
     "js/auth-pages.js": {
       "bytes": 41606,
@@ -519,6 +519,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "6a19e7a30a65bf9c5eb5889ee575669d6522132859f143adcc9b031faf01e068",
+  "manifest_sha256": "0532f9133bd4469c51c619e9809dc4667744d97eb2a2a2e929dae12cb77cc4e6",
   "version": 1
 }
