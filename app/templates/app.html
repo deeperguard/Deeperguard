@@ -2177,7 +2177,7 @@
       <section class="settings-group" id="secure-send-compose">
         <h3 class="sr-only">Compose</h3>
         <div class="settings-card stack">
-          <p class="settings-hint" id="secure-send-compose-hint">Send an encrypted note and optional file. The key is in the link itself and never reaches our server. The link stops working after the set number of opens or 7 days.</p>
+          <p class="settings-hint" id="secure-send-compose-hint">Send an encrypted note and optional file. The key is in the link itself and never reaches our server. The link stops working after the set number of opens or when it expires (24 hours by default, 7 days at most). The server never sees the key or the passphrase.</p>
           <p class="settings-hint" id="secure-send-plan-limit-hint" hidden></p>
           <label class="settings-row stacked" for="secure-send-title">Title
             <input id="secure-send-title" type="text" maxlength="500" autocomplete="off">
@@ -2199,15 +2199,19 @@
               <input id="secure-send-file-add" type="file" multiple hidden>
             </div>
           </div>
-          <label class="settings-row stacked" for="secure-send-passphrase">Optional passphrase (share separately from the link)
+          <label class="settings-row" for="secure-send-no-passphrase">
+            <input id="secure-send-no-passphrase" type="checkbox">
+            Send without a passphrase (anyone with the link can open it)
+          </label>
+          <label class="settings-row stacked" for="secure-send-passphrase">Passphrase (share separately from the link)
             <input id="secure-send-passphrase" type="password" autocomplete="new-password" spellcheck="false">
           </label>
           <label class="settings-row stacked" for="secure-send-views">Number of opens
             <input id="secure-send-views" type="number" min="1" max="10" value="1">
           </label>
-          <p class="settings-hint">Default 1. The link stops working after this many opens or 7 days.</p>
-          <label class="settings-row" for="secure-send-days">Expires (days, max 7)
-            <input id="secure-send-days" type="number" min="1" max="7" value="7" step="1">
+          <p class="settings-hint">Default 1. The link stops working after this many opens or when it expires.</p>
+          <label class="settings-row" for="secure-send-days">Expires (days, max 7; default 1)
+            <input id="secure-send-days" type="number" min="1" max="7" value="1" step="1">
           </label>
           <div id="secure-send-warning" class="settings-hint" role="note"></div>
           <label class="settings-row" for="secure-send-ack">

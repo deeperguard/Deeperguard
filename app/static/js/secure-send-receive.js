@@ -21,6 +21,10 @@
   );
   const alreadyStopped = !!boot.linkStoppedFlag;
   const fragment = String(location.hash || '').replace(/^#/, '');
+  // Keep the key in memory only; drop it from the address bar and history entry.
+  if (fragment && window.history && history.replaceState) {
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (err) { /* ignore */ }
+  }
 
   const gate = document.getElementById('receive-gate');
   const stopped = document.getElementById('receive-stopped');

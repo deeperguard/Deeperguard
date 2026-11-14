@@ -92,10 +92,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1013765,
-      "sha256": "9800b23403633877e0558377e5afcd20a17148f056ccfc1ba1dd8a04035e6a0c",
-      "sri": "sha384-FdBmRNLF1g2khfOp6wfj9MqSxf/gRLGBc/znTXK9bb+0Yh+N3kWgm39cbzuGPl+l",
-      "url": "/static/js/app.9800b23403633877.js"
+      "bytes": 1014080,
+      "sha256": "aae6416649218c3044c4cd87fe7ea551bd2ab80d7ba8731c41502f8402927089",
+      "sri": "sha384-tMsvdDteFFeRGvtuZjZbQ+kwy1sb76mcT+AO36CnBKy/EVwIaJYNkrZrJDsMyIvE",
+      "url": "/static/js/app.aae6416649218c30.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -314,16 +314,16 @@
       "url": "/static/js/secure-send-note-attachments.85b41acf56058d42.js"
     },
     "js/secure-send-receive.js": {
-      "bytes": 7084,
-      "sha256": "203c267260ebcaa1db0b0d336c46760a3d941b990938ae142c4e87aff1cba049",
-      "sri": "sha384-7jM7qSR5REiKCbsifR2Q3Jf8FkrF9b+4sLreTSe7157JRF2spfFdTHagQlAwf9SR",
-      "url": "/static/js/secure-send-receive.203c267260ebcaa1.js"
+      "bytes": 7340,
+      "sha256": "683359b704783b9ffc6ae16ff43336fbf372806c21822c2e0203f73e6efba881",
+      "sri": "sha384-ogaJpB86QuDUdZHx33mne9M/pyEGwIAUPEqyqqaE/tfTglh1izx1cfHMRWTZg2ud",
+      "url": "/static/js/secure-send-receive.683359b704783b9f.js"
     },
     "js/secure-send.js": {
-      "bytes": 9467,
-      "sha256": "9d48ca13a4ebf22df1a09f653ffa40563eceae0f2f581cc674d966eafb69944c",
-      "sri": "sha384-zBzrGGNpNCihsDpP3G5clRp+LRrNmxvb0mcMwRByBlyfO15n4WbiGS9fY7yNZ5ph",
-      "url": "/static/js/secure-send.9d48ca13a4ebf22d.js"
+      "bytes": 9457,
+      "sha256": "5dfa39b18d14613f7afb4e905cbffd3c6d7c4bb412f2b72dc8f555c510dd0bf1",
+      "sri": "sha384-4w96ORxlWR/D9gTCOgBDKJqk3hwYDtdcdJ0sbxp6ZUDgwjd4ftqZiLSyOhDs7t4R",
+      "url": "/static/js/secure-send.5dfa39b18d14613f.js"
     },
     "js/settings-sync.js": {
       "bytes": 8336,
@@ -513,6 +513,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "9236c9cc7b9d5e272862f6b5bb35b4d77bdf80f11c6843a3fc66344ef3264d71",
+  "manifest_sha256": "191fa10e0e34acac3053526956394742a2eee553ef47161dc7e4bedfd3c47d3c",
   "version": 1
 }
