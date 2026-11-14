@@ -6010,6 +6010,17 @@ body.scan-dialog-open {
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
+.preview .md-align-left { text-align: left; }
+.preview .md-align-center { text-align: center; }
+.preview .md-align-right { text-align: right; }
+.preview img { max-width: 100%; height: auto; }
+.preview blockquote {
+  margin: 0.75em 0;
+  padding: 0.1em 0 0.1em 1em;
+  border-left: 3px solid var(--border);
+  color: var(--muted, inherit);
+}
+.preview li.task { list-style: none; }
 .preview .md-table-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
