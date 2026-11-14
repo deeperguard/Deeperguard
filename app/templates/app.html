@@ -2340,6 +2340,21 @@
             <p class="note-warn-hint" id="note-warn-hint">Email a link to this note at the chosen time.</p>
           </dd>
         </div>
+        <div class="note-info-wide note-warn-row" id="note-reminder-row">
+          <dt>Reminder (this device only)</dt>
+          <dd>
+            <div class="note-warn-controls">
+              <input type="datetime-local" id="note-reminder-at" step="60" aria-label="Reminder date and time">
+              <span class="note-warn-buttons">
+                <button type="button" id="note-reminder-save" class="btn primary sm">Save</button>
+                <button type="button" id="note-reminder-clear" class="btn ghost sm">Clear</button>
+              </span>
+            </div>
+            <p class="note-warn-hint" id="note-reminder-hint">Local reminders are checked only while Deeperguard is open and your vault is unlocked. They are private: the time and text are encrypted and never sent to our server.</p>
+            <p class="note-warn-hint">If Deeperguard is closed, nothing can remind you. Open it and we will show what you missed. To be notified while it is closed, you can turn on email or push reminders, but then our server learns when the reminder is due (never what it is about).</p>
+            <p class="note-warn-hint" id="note-reminder-perm" hidden></p>
+          </dd>
+        </div>
       </dl>
       <div class="note-info-actions note-info-actions-bottom">
         <button type="button" id="note-info-share-bottom" class="btn ghost sm desktop-only">Copy note</button>
@@ -2873,6 +2888,7 @@
   {{ asset_script('js/agenda-scroll-core.js') }}
   {{ asset_script('js/agenda-reminders.js') }}
   {{ asset_script('js/agenda-local-reminders.js') }}
+  {{ asset_script('js/note-local-reminders.js') }}
   {{ asset_script('js/agenda-tasks.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}

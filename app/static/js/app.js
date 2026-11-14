@@ -17212,6 +17212,7 @@
         conflictRow.hidden = true;
       }
     }
+    syncNoteReminderPanel(note);
     const warnHint = document.getElementById('note-warn-hint');
     if (warnHint) {
       const warnMs = parseTimestampMs(note.content.warn_at);
@@ -17224,6 +17225,46 @@
       }
     }
     syncNoteInfoActions(note);
+  }
+
+  function syncNoteReminderPanel(note) {
+    const R = window.NotesNoteReminders;
+    const input = document.getElementById('note-reminder-at');
+    if (!R || !input) return;
+    input.value = R.toInputValue(note?.content?.reminder);
+    const perm = document.getElementById('note-reminder-perm');
+    if (perm) {
+      const text = R.permissionText();
+      perm.textContent = text;
+      perm.hidden = !text;
+    }
+  }
+
+  async function saveNoteReminder({ clear = false } = {}) {
+    const R = window.NotesNoteReminders;
+    if (!R || !currentId) return;
+    const note = NotesStore.get(currentId);
+    if (!note) return;
+    const input = document.getElementById('note-reminder-at');
+    let reminder = null;
+    if (!clear) {
+      reminder = R.buildReminder(input?.value || '', note.content.reminder);
+      if (!reminder) {
+        toast('Choose a date and time');
+        return;
+      }
+      // Permission is asked only now, after the click, behind our own explanation.
+      await R.requestNotificationPermission();
+    }
+    const live = NotesStore.get(currentId);
+    if (!live) return;
+    const content = { ...live.content };
+    if (reminder) content.reminder = reminder;
+    else delete content.reminder;
+    NotesStore.upsert(currentId, content);
+    toast(reminder ? 'Reminder saved' : 'Reminder cleared');
+    updateNoteInfoPanel(NotesStore.get(currentId));
+    renderNotes();
   }
 
   function syncWarnFieldState(input) {
@@ -21075,6 +21116,13 @@
   document.getElementById('note-warn-save')?.addEventListener('click', () => {
     saveNoteWarning().catch(() => {});
   });
+  document.getElementById('note-reminder-save')?.addEventListener('click', () => {
+    saveNoteReminder().catch(() => {});
+  });
+  document.getElementById('note-reminder-clear')?.addEventListener('click', () => {
+    saveNoteReminder({ clear: true }).catch(() => {});
+  });
+  window.NotesNoteReminderOpen = (uuid) => { try { openNote(uuid); } catch (e) { /* ignore */ } };
   document.getElementById('note-warn-clear')?.addEventListener('click', () => {
     saveNoteWarning({ clear: true }).catch(() => {});
   });

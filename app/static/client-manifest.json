@@ -1,5 +1,5 @@
 {
-  "asset_count": 84,
+  "asset_count": 85,
   "assets": {
     "css/app.css": {
       "bytes": 302445,
@@ -92,10 +92,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1011539,
-      "sha256": "c0b87944dc4bf10f3bcd9600f2994bc1821bc97a86665684c19d22e26cb4137c",
-      "sri": "sha384-Nqz73wEhyLbCS3XwyS+AnlLJMR4ysDi5zFhAQOJPKxfA6vDg9E4SmD9Tjd6BxXi/",
-      "url": "/static/js/app.c0b87944dc4bf10f.js"
+      "bytes": 1013346,
+      "sha256": "087833edc223f23329d09b819645288abb31faa8736a1d76f135ba13b12bf527",
+      "sri": "sha384-ub1rs4YOYL5QOVGOEHiWLQBxJgyjNyA2MNdwP6NXBP8fTTnyD61S8dAhqp5+jkUE",
+      "url": "/static/js/app.087833edc223f233.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -234,6 +234,12 @@
       "sha256": "c130d18227e2c783968ad3737b79ca8858d02365fc4b764351fa0b25d7a9a8b7",
       "sri": "sha384-xM47+X+gkrtz54EdSi4OpEqRU5F8H4XZD4rHQxDmkKmVJIym8QN4vlM4VOJ3VAt0",
       "url": "/static/js/note-history.c130d18227e2c783.js"
+    },
+    "js/note-local-reminders.js": {
+      "bytes": 10373,
+      "sha256": "9db3c63f2b57719130e46772299cd46366de6e64d12228bc100bed44d68a98c8",
+      "sri": "sha384-a97c3UNdhEOcIGUEJXLw890rsIFF1Ddz6OTdSp4epecJvACbUVOsOSvSMnHYU+TE",
+      "url": "/static/js/note-local-reminders.9db3c63f2b577191.js"
     },
     "js/notelinks.js": {
       "bytes": 10893,
@@ -507,6 +513,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "d768b7ac805855cc3a94a852bed1a5d05e72d15b8e961fc49bfebd3522f70cdd",
+  "manifest_sha256": "d4b9cc46279b618662cc473bee4edf9fbb14bb4fa8ef7d0f5d0f09fbb5db9c80",
   "version": 1
 }
