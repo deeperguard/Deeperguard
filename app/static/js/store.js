@@ -5544,7 +5544,7 @@ const NotesStore = (() => {
     }
   }
 
-  async function addAttachment(noteId, file, { displayName, sourceSha256, ocrPending = false, intentionalCopy = false, originalFilename = '', originalSize = 0 } = {}) {
+  async function addAttachment(noteId, file, { displayName, sourceSha256, ocrPending = false, intentionalCopy = false, originalFilename = '', originalSize = 0, extraContent = null, allowDuplicate = false } = {}) {
     if (!state.cryptoKey) throw new Error('Unlock the vault first');
     if (file.size > MAX_ATTACHMENT_BYTES) {
       throw new Error(`File too large (max ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB)`);
@@ -5558,7 +5558,7 @@ const NotesStore = (() => {
     });
     // A normal attach still refuses a second copy of the same bytes.
     // Duplicate note is explicit: it keeps a real second file that search can find.
-    if (duplicate && !intentionalCopy) {
+    if (duplicate && !intentionalCopy && !allowDuplicate) {
       throw new Error(duplicateAttachmentMessage(duplicate, file, noteId));
     }
     const fileEnc = await NotesCrypto.encryptBytes(state.cryptoKey, raw);
@@ -5571,6 +5571,7 @@ const NotesStore = (() => {
     }
     if (originalSize) content.size = Number(originalSize);
     if (intentionalCopy) content.intentional_copy = true;
+    if (extraContent) Object.assign(content, extraContent);
     if (ocrPending) {
       content.ocr_method = 'pending';
       content.ocr_owner = deviceId();
@@ -5601,6 +5602,74 @@ const NotesStore = (() => {
     const light = live && strippedAttachmentContent(live.content);
     if (light) live.content = light;
     return id;
+  }
+
+  // Freehand drawings (docs/DRAWING_SPEC.md): a PNG attachment plus a `drawing` field.
+  // Bytes go through the normal encrypted attachment path; no new item type or endpoint.
+  function drawingsOfNote(noteId) {
+    return listAttachments(noteId)
+      .filter((a) => a.content?.note_id === noteId && NotesDrawing.isDrawingMeta(a.content))
+      .map((a) => ({ uuid: a.uuid, size: a.content.size || 0 }));
+  }
+
+  async function checkedDrawingBytes(pngBlob, noteId, replaceUuid) {
+    if (!pngBlob || pngBlob.type !== 'image/png') throw new Error('Alleen PNG-tekeningen');
+    const raw = new Uint8Array(await pngBlob.arrayBuffer());
+    const v = NotesDrawing.validatePng(raw);
+    if (!v.ok) {
+      throw new Error(v.reason === 'too-large' ? NotesDrawing.TOO_BIG_MESSAGE : 'Ongeldige tekening');
+    }
+    const lim = NotesDrawing.checkNoteLimits(drawingsOfNote(noteId), raw.length, replaceUuid);
+    if (!lim.ok) throw new Error(lim.reason);
+    return v;
+  }
+
+  function drawingFilename() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return `tekening-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.png`;
+  }
+
+  async function addDrawing(noteId, pngBlob, { alt = '' } = {}) {
+    const v = await checkedDrawingBytes(pngBlob, noteId, '');
+    const name = drawingFilename();
+    return addAttachment(noteId, pngBlob, {
+      displayName: name,
+      originalFilename: name,
+      allowDuplicate: true,
+      extraContent: { mime: 'image/png', drawing: { v: 1, w: v.width, h: v.height, alt: String(alt || '').slice(0, 300) } },
+    });
+  }
+
+  async function replaceAttachmentBytes(uuid, pngBlob, { alt = '' } = {}) {
+    if (!state.cryptoKey) throw new Error('Unlock the vault first');
+    const item = get(uuid);
+    if (!item || item.content?.type !== 'attachment' || !NotesDrawing.canEditDrawing(item.content)) {
+      throw new Error('Geen tekening');
+    }
+    const noteId = item.content.note_id;
+    const v = await checkedDrawingBytes(pngBlob, noteId, uuid);
+    const raw = new Uint8Array(await pngBlob.arrayBuffer());
+    const fileEnc = await NotesCrypto.encryptBytes(state.cryptoKey, raw);
+    const previous = { ...item.content };
+    const content = {
+      ...item.content,
+      file_enc: fileEnc,
+      size: raw.length,
+      content_sha256: await attachmentContentHash(raw),
+      drawing: { v: 1, w: v.width, h: v.height, alt: String(alt || '').slice(0, 300) },
+    };
+    delete content.file_enc_stored;
+    upsert(uuid, content);
+    const stored = get(uuid);
+    if (!stored || !(await persistLocal(uuid, stored))) {
+      upsert(uuid, previous);
+      throw new Error('Could not save the file on this device. Storage may be full.');
+    }
+    const live = get(uuid);
+    const light = live && strippedAttachmentContent(live.content);
+    if (light) live.content = light;
+    return uuid;
   }
 
   async function fetchAttachmentBlobFromServer(uuid) {
@@ -7056,6 +7125,8 @@ const NotesStore = (() => {
     get,
     upsert,
     addAttachment,
+    addDrawing,
+    replaceAttachmentBytes,
     getAttachmentBytes,
     setAttachmentOcr,
     staleAttachmentOcr,

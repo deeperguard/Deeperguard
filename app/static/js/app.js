@@ -149,6 +149,7 @@
     accountEmail: document.getElementById('account-email'),
     attachmentList: document.getElementById('attachment-list'),
     attachmentInput: document.getElementById('attachment-input'),
+    drawingAdd: document.getElementById('btn-add-drawing'),
     docInline: document.getElementById('doc-inline'),
     docViewer: document.getElementById('doc-viewer'),
     docBackdrop: document.getElementById('doc-backdrop'),
@@ -11500,6 +11501,7 @@
         const note = NotesStore.get(noteId);
         const previousIds = Array.isArray(note?.content?.attachments) ? [...note.content.attachments] : [];
         forgetPreview(attId);
+        revokeDrawingUrl(attId);
         purgeServerOcr(attId);
         NotesStore.remove(attId);
         if (note) {
@@ -11553,9 +11555,101 @@
         ui.attachmentList.querySelector(`[data-att="${a.uuid}"] .attachment-thumb`),
       );
     });
+    decorateDrawings(noteId, items);
     renderDocInline(noteId);
     syncDownloadNoteButton();
     syncRescanOcrButton();
+  }
+
+  // Drawings (docs/DRAWING_SPEC.md): validated PNG shown as <img> via a blob URL,
+  // never through innerHTML. Invalid data gets a placeholder and no download/preview.
+  const drawingUrls = new Map();
+  function revokeDrawingUrl(attId) {
+    const url = drawingUrls.get(attId);
+    if (url) URL.revokeObjectURL(url);
+    drawingUrls.delete(attId);
+  }
+  function drawingReadOnly(noteId) {
+    return !!NotesStore.get(noteId)?.content?.prevent_edit;
+  }
+  async function loadValidDrawing(att) {
+    const c = att.content;
+    let bytes = null;
+    try { bytes = await NotesStore.getAttachmentBytes(att.uuid); } catch (_) { bytes = null; }
+    const v = NotesDrawing.validatePng(bytes, {
+      expectW: Number(c.drawing?.w) || 0,
+      expectH: Number(c.drawing?.h) || 0,
+    });
+    if (!v.ok) {
+      console.warn('drawing rejected', att.uuid, v.reason);
+      return null;
+    }
+    return bytes;
+  }
+  function decorateDrawings(noteId, items) {
+    items.filter((a) => NotesDrawing.isDrawingMeta(a.content)).forEach((a) => {
+      const row = ui.attachmentList.querySelector(`[data-att="${CSS.escape(a.uuid)}"]`);
+      const main = row?.querySelector('.attachment-main');
+      if (!row || !main) return;
+      void (async () => {
+        const bytes = await loadValidDrawing(a);
+        if (!ui.attachmentList.contains(row)) return;
+        revokeDrawingUrl(a.uuid);
+        if (!bytes) {
+          const ph = document.createElement('p');
+          ph.className = 'muted drawing-placeholder';
+          ph.textContent = 'Tekening kan niet worden getoond';
+          main.appendChild(ph);
+          row.querySelectorAll('[data-dl],[data-preview],[data-share]').forEach((b) => { b.disabled = true; });
+          return;
+        }
+        const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+        drawingUrls.set(a.uuid, url);
+        const img = document.createElement('img');
+        img.className = 'drawing-img';
+        img.alt = String(a.content.drawing?.alt || '') || 'Tekening';
+        img.src = url;
+        main.appendChild(img);
+        if (NotesDrawing.canEditDrawing(a.content)) {
+          const edit = document.createElement('button');
+          edit.type = 'button';
+          edit.className = 'btn ghost sm';
+          edit.textContent = 'Bewerken';
+          edit.disabled = drawingReadOnly(noteId);
+          edit.addEventListener('click', () => {
+            editDrawing(noteId, a.uuid, bytes, edit).catch((err) => toast(err.message || 'Tekening bewerken mislukt', true));
+          });
+          row.querySelector('.attachment-item-actions')?.prepend(edit);
+        }
+      })();
+    });
+  }
+  async function editDrawing(noteId, attId, bytes, trigger) {
+    const att = NotesStore.get(attId);
+    const d = att?.content?.drawing || {};
+    const out = await NotesDrawing.showDrawingDialog({
+      bytes, width: d.w, height: d.h, alt: d.alt, returnFocus: trigger,
+    });
+    if (!out) return;
+    await NotesStore.replaceAttachmentBytes(attId, out.blob, { alt: out.alt });
+    forgetPreview(attId);
+    renderAttachments(noteId);
+    toast('Tekening opgeslagen');
+  }
+  async function addDrawingToNote(trigger) {
+    const noteId = currentId;
+    if (!noteId) return;
+    const note = NotesStore.get(noteId);
+    if (note?.content?.locked && !unlockedNotes.has(noteId)) return;
+    if (drawingReadOnly(noteId)) {
+      toast('Notitie is alleen-lezen', true);
+      return;
+    }
+    const out = await NotesDrawing.showDrawingDialog({ returnFocus: trigger });
+    if (!out) return;
+    await NotesStore.addDrawing(noteId, out.blob, { alt: out.alt });
+    renderAttachments(noteId);
+    toast('Tekening opgeslagen');
   }
 
   function ocrSnippet(text, max = 48, meta = {}) {
@@ -18415,6 +18509,7 @@
   }
 
   function canOcrAttachment(item) {
+    if (NotesDrawing.isDrawingMeta(item?.content)) return false;
     const { mime, name } = attachmentFileMeta(item);
     return mime.startsWith('text/')
       || mime.startsWith('image/')
@@ -21686,6 +21781,10 @@
         toast(err.message || 'Could not attach file', true);
       }
     })();
+  });
+
+  ui.drawingAdd?.addEventListener('click', () => {
+    addDrawingToNote(ui.drawingAdd).catch((err) => toast(err.message || 'Tekening opslaan mislukt', true));
   });
 
   ui.attachmentInput.addEventListener('change', async (e) => {

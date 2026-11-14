@@ -1474,6 +1474,7 @@
           <label class="file-label btn sm" id="attachment-add-label">Add file
             <input id="attachment-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,.json,.csv,.zip,.xml,.yaml,.yml,.docx,application/pdf,text/plain,text/csv,application/json,application/zip,application/xml,application/yaml" multiple tabindex="-1" aria-hidden="true">
           </label>
+          <button type="button" class="btn sm" id="btn-add-drawing">Tekening toevoegen</button>
         </section>
         <section class="history">
           <h3 class="section-label">Version history</h3>
@@ -2864,6 +2865,7 @@
   {{ asset_script('js/freshness.js') }}
   {{ asset_script('js/release-integrity.js') }}
   {{ asset_script('js/snimport.js') }}
+  {{ asset_script('js/drawing.js') }}
   {{ asset_script('js/labels.js') }}
   {{ asset_script('js/labeltree.js') }}
   {{ asset_script('js/store.js') }}
