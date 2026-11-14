@@ -1867,6 +1867,144 @@ const NotesStore = (() => {
   }
 
   /**
+   * Calendars (docs/design/calendar-multi.md §2.1, option A): a `calendars` map inside the
+   * encrypted agenda_pack, merged per entry like subscriptions. An event without `calendarId`
+   * (or pointing at an unknown or deleted calendar) belongs to the default calendar. The
+   * default calendar has a fixed id, so two devices creating it write the same key.
+   */
+  const DEFAULT_CALENDAR_ID = 'a6da67da-67da-4000-8000-0000000000ca';
+
+  function defaultAgendaCalendar(nowIso) {
+    return {
+      type: 'agenda_calendar',
+      version: 1,
+      name: 'Agenda',
+      color: 'blue',
+      visible: true,
+      order: 0,
+      default_reminders: [],
+      is_default: true,
+      updated_at: nowIso || new Date().toISOString(),
+    };
+  }
+
+  function agendaPackCalendars(content) {
+    const raw = (content && content.calendars) || {};
+    const out = {};
+    for (const [id, cal] of Object.entries(raw)) {
+      if (cal && cal.type === 'agenda_calendar') out[id] = cal;
+    }
+    return out;
+  }
+
+  /** Read-only: a pack without `calendars` shows the default calendar in memory, nothing is written. */
+  function listAgendaCalendars() {
+    const pack = agendaPackRecord();
+    const cals = agendaPackCalendars(pack && pack.content);
+    if (!cals[DEFAULT_CALENDAR_ID]) cals[DEFAULT_CALENDAR_ID] = defaultAgendaCalendar('1970-01-01T00:00:00.000Z');
+    return Object.entries(cals)
+      .map(([id, cal]) => ({ ...cal, id }))
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }
+
+  /** Writes the default calendar only when its key is missing (idempotent). */
+  function ensureDefaultCalendar() {
+    ensureAgendaPack();
+    const pack = agendaPackRecord();
+    if (!pack) return false;
+    if (agendaPackCalendars(pack.content)[DEFAULT_CALENDAR_ID]) return false;
+    const now = new Date().toISOString();
+    upsert(AGENDA_PACK_UUID, {
+      ...pack.content,
+      calendars: { ...(pack.content.calendars || {}), [DEFAULT_CALENDAR_ID]: defaultAgendaCalendar(now) },
+      updated_at: now,
+    });
+    return true;
+  }
+
+  /** Calendar an event is shown in; never writes. */
+  function agendaEventCalendarId(ev, calendars) {
+    const id = String((ev && ev.calendarId) || '').trim();
+    if (!id) return DEFAULT_CALENDAR_ID;
+    const cals = calendars || agendaPackCalendars(agendaPackRecord()?.content);
+    return cals[id] ? id : DEFAULT_CALENDAR_ID;
+  }
+
+  /** Creates or edits a calendar; fields this app does not know are kept. Returns the id. */
+  function upsertAgendaCalendar(uuid, content) {
+    ensureDefaultCalendar();
+    const pack = agendaPackRecord();
+    if (!pack) return '';
+    const id = String(uuid || newUuid()).trim();
+    const now = new Date().toISOString();
+    const calendars = { ...(pack.content.calendars || {}) };
+    const prev = calendars[id] || {};
+    const next = { ...prev, ...(content || {}), type: 'agenda_calendar', version: prev.version || 1, updated_at: now };
+    delete next.id;
+    next.is_default = id === DEFAULT_CALENDAR_ID;
+    calendars[id] = next;
+    const deletedCalendars = { ...(pack.content.deleted_calendars || {}) };
+    delete deletedCalendars[id];
+    upsert(AGENDA_PACK_UUID, {
+      ...pack.content,
+      calendars,
+      deleted_calendars: deletedCalendars,
+      updated_at: now,
+    });
+    return id;
+  }
+
+  /**
+   * Deletes a calendar (§3). `mode` must be chosen by the user in a confirm dialog:
+   * 'move' gives its events `calendarId` = `targetId` (default: the default calendar);
+   * 'delete' removes them with tombstones. The default (and so the last) calendar cannot be
+   * deleted. Returns `{ ok, moved, deletedEventIds }`.
+   */
+  function removeAgendaCalendar(uuid, { mode, targetId } = {}) {
+    const id = String(uuid || '').trim();
+    const fail = { ok: false, moved: 0, deletedEventIds: [] };
+    if (!id || id === DEFAULT_CALENDAR_ID) return fail;
+    if (mode !== 'move' && mode !== 'delete') return fail;
+    const pack = agendaPackRecord();
+    if (!pack) return fail;
+    const cals = agendaPackCalendars(pack.content);
+    if (!cals[id]) return fail;
+    let target = DEFAULT_CALENDAR_ID;
+    if (mode === 'move' && targetId) {
+      target = String(targetId).trim();
+      if (target === id || (target !== DEFAULT_CALENDAR_ID && !cals[target])) return fail;
+    }
+    const now = new Date().toISOString();
+    const events = { ...(pack.content.events || {}) };
+    const deletedEvents = { ...(pack.content.deleted_events || {}) };
+    let moved = 0;
+    const deletedEventIds = [];
+    for (const [evId, ev] of Object.entries(events)) {
+      if (!ev || agendaEventCalendarId(ev, cals) !== id) continue;
+      if (mode === 'move') {
+        events[evId] = { ...ev, calendarId: target, updated_at: now };
+        moved += 1;
+      } else {
+        delete events[evId];
+        deletedEvents[evId] = now;
+        deletedEventIds.push(evId);
+      }
+    }
+    const calendars = { ...(pack.content.calendars || {}) };
+    delete calendars[id];
+    if (!calendars[DEFAULT_CALENDAR_ID]) calendars[DEFAULT_CALENDAR_ID] = defaultAgendaCalendar(now);
+    upsert(AGENDA_PACK_UUID, {
+      ...pack.content,
+      events,
+      deleted_events: deletedEvents,
+      calendars,
+      deleted_calendars: { ...(pack.content.deleted_calendars || {}), [id]: now },
+      updated_at: now,
+    });
+    return { ok: true, moved, deletedEventIds };
+  }
+
+  /**
    * Dated tasks (docs/REMINDERS_TASKS_SPEC.md §2.2): each task is its own encrypted
    * `agenda_task` item, so old clients sync it untouched and never list it as a note
    * or an event.
@@ -1946,6 +2084,7 @@ const NotesStore = (() => {
       ...remote,
       ...local,
       ...(mergeAgendaSubscriptions(local, remote, nowMs) || {}),
+      ...(mergeAgendaCalendars(local, remote, nowMs) || {}),
       type: 'agenda_pack',
       events,
       deleted_events: deleted,
@@ -2306,6 +2445,36 @@ const NotesStore = (() => {
       if (nowMs - agendaStampMs(at) > AGENDA_TOMBSTONE_TTL_MS) delete deleted[id];
     }
     return { subscriptions: subs, deleted_subscriptions: deleted };
+  }
+
+  /** Calendars merge per entry on `updated_at`; tombstones as for subscriptions. */
+  function mergeAgendaCalendars(local, remote, nowMs) {
+    const has = (p) => p.calendars || p.deleted_calendars;
+    if (!has(local) && !has(remote)) return null;
+    const deleted = {};
+    for (const src of [remote.deleted_calendars || {}, local.deleted_calendars || {}]) {
+      for (const [id, at] of Object.entries(src)) {
+        if (agendaStampMs(at) > agendaStampMs(deleted[id])) deleted[id] = at;
+      }
+    }
+    const lc = local.calendars || {};
+    const rc = remote.calendars || {};
+    const calendars = {};
+    for (const id of new Set([...Object.keys(rc), ...Object.keys(lc)])) {
+      const a = lc[id];
+      const b = rc[id];
+      let winner = a || b;
+      if (a && b) winner = agendaStampMs(b.updated_at) > agendaStampMs(a.updated_at) ? b : a;
+      if (!winner) continue;
+      const deletedAt = agendaStampMs(deleted[id]);
+      if (id !== DEFAULT_CALENDAR_ID && deletedAt && deletedAt >= agendaStampMs(winner.updated_at)) continue;
+      if (deletedAt) delete deleted[id];
+      calendars[id] = winner;
+    }
+    for (const [id, at] of Object.entries(deleted)) {
+      if (nowMs - agendaStampMs(at) > AGENDA_TOMBSTONE_TTL_MS) delete deleted[id];
+    }
+    return { calendars, deleted_calendars: deleted };
   }
 
   async function runUnlockMaintenance() {
@@ -6900,6 +7069,12 @@ const NotesStore = (() => {
     upsertAgendaEvent,
     removeAgendaEvent,
     mergeAgendaPacks,
+    DEFAULT_CALENDAR_ID,
+    listAgendaCalendars,
+    ensureDefaultCalendar,
+    upsertAgendaCalendar,
+    removeAgendaCalendar,
+    agendaEventCalendarId,
     importAgendaFromIcs,
     removeAgendaEventsBySource,
     listAgendaSubscriptions,
