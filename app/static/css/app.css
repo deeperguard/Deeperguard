@@ -11258,3 +11258,13 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .note-link-dead-panel { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; padding: 8px 10px; border: 1px solid var(--danger, #b3261e); border-radius: 8px; }
 .note-link-dead-panel p { margin: 0 8px 0 0; }
 .note-link-relink-results { flex-basis: 100%; margin: 0; padding: 0; list-style: none; }
+
+/* Backlinks panel "Linked from (N)" */
+.backlinks { margin: 12px 0; }
+.backlinks:empty { display: none; }
+.backlinks-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.backlink-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--border, #c8ccd4); border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.backlink-item:hover { background: rgba(128, 128, 128, 0.08); }
+.backlink-item:focus-visible { outline: 2px solid var(--accent, #2f6fed); outline-offset: 2px; }
+.backlink-title { font-weight: 600; }
+.backlink-snippet { font-size: .85em; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
