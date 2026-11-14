@@ -3264,6 +3264,31 @@ html[data-theme="light"] .zk-badge {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* Release label (RELEASE_TAG or "dev"). Own colours instead of --muted, which
+   is below WCAG AA in the light theme (#8e8e93 on #fff ≈ 3.3:1).
+   Dark #a3aeb9 ≥ 6.9:1 on #0f1419/#171d24/#1c2430; light #545458 ≥ 6.7:1 on
+   #fff/#f2f2f7/#f1f5f9. */
+.release-version {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #a3aeb9;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+html[data-theme="light"] .release-version,
+body[data-theme="light"] .release-version {
+  color: #545458;
+}
+.auth-card { position: relative; }
+.auth-card > .release-version {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+}
 .app-client-hash {
   font-size: 11px;
   font-weight: 500;

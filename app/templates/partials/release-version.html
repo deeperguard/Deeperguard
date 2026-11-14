@@ -1,0 +1,5 @@
+{#- Running release from RELEASE_TAG (client_assets.release_tag). VERSION is
+    deliberately not used as a fallback: it holds a git commit hash, not a
+    release number. No tag → "dev", never a made-up number. -#}
+{%- set _release_version = release_tag or "dev" -%}
+<span id="release-version" class="release-version" aria-label="Appversie {{ _release_version }}">{{ _release_version }}</span>
