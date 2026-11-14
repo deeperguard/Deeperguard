@@ -2438,6 +2438,7 @@
     <div class="totp-cam-actions">
       <button type="button" class="btn ghost" id="totp-cam-flip">Switch camera</button>
       <button type="button" class="btn ghost" id="totp-cam-image">Choose image</button>
+      <button type="button" class="btn" id="totp-cam-migration-import" hidden>Import what I have</button>
     </div>
   </div>
   <div id="totp-add-backdrop" class="scan-backdrop" hidden></div>
@@ -2449,6 +2450,11 @@
     <div class="scan-dialog-body">
       <p class="scan-dialog-lead muted">Scan a QR code or type the account and secret. Secrets stay in the vault and are never shown in the list.</p>
       <p id="totp-qr-status" class="scan-status muted" hidden></p>
+      <div id="totp-migration" class="scan-add-actions" hidden>
+        <p id="totp-migration-status" class="scan-status" role="status" aria-live="polite"></p>
+        <button type="button" class="btn scan-add-btn" id="totp-migration-import">Import what I have</button>
+        <button type="button" class="btn ghost scan-add-btn" id="totp-migration-cancel">Discard scanned codes</button>
+      </div>
       <div class="scan-add-actions">
         <button type="button" class="btn scan-add-btn" id="btn-totp-scan-qr">Scan QR</button>
         <button type="button" class="btn ghost scan-add-btn" id="btn-totp-pick-qr">Choose image</button>
@@ -2485,7 +2491,7 @@
       <h2 id="totp-import-title">Import 2FA accounts</h2>
     </header>
     <div class="scan-dialog-body">
-      <p class="scan-dialog-lead muted">Choose a file or paste text: a list of otpauth:// links (one per line), or an Aegis or 2FAS export (plain or password-protected). Everything stays in this browser and is saved encrypted in your vault.</p>
+      <p class="scan-dialog-lead muted">Choose a file or paste text: a list of otpauth:// links (one per line), Google Authenticator export links (otpauth-migration://, all codes of one export), or an Aegis or 2FAS export (plain or password-protected). Everything stays in this browser and is saved encrypted in your vault.</p>
       <div class="scan-add-actions">
         <button type="button" class="btn scan-add-btn" id="totp-import-pick">Choose file</button>
         <button type="button" class="btn ghost scan-add-btn" id="totp-import-authy">I'm coming from Authy</button>

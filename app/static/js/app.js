@@ -5053,6 +5053,7 @@
   function hideTotpAddDialog() {
     const returnTo = totpEditingId ? totpDialogTrigger : totpUi.add;
     stopTotpQrScan();
+    resetTotpMigration();
     totpEditingId = '';
     if (totpUi.dialog) totpUi.dialog.hidden = true;
     if (totpUi.backdrop) totpUi.backdrop.hidden = true;
@@ -5125,14 +5126,65 @@
     return normalized;
   }
 
+  // Google Authenticator export (spec 3.4): codes of one export are collected here, with
+  // progress, until all are in or the user imports what they have. Then the import preview opens.
+  const totpMigration = NotesTotpImport.createMigrationCollector();
+  function renderTotpMigration(note) {
+    const p = totpMigration.progress();
+    const box = document.getElementById('totp-migration');
+    const camBtn = document.getElementById('totp-cam-migration-import');
+    if (box) box.hidden = !p.have;
+    if (camBtn) camBtn.hidden = !p.have;
+    if (!p.have) return '';
+    const text = `Google Authenticator export: ${p.have} of ${p.size} scanned.${note ? ` ${note}` : ''}`;
+    const el = document.getElementById('totp-migration-status');
+    if (el) el.textContent = text;
+    return text;
+  }
+  function resetTotpMigration() {
+    totpMigration.reset();
+    renderTotpMigration();
+  }
+  // Returns true when the code was used. Keeps the camera running until every code is in.
+  function addTotpMigrationCode(text) {
+    const r = totpMigration.add(text);
+    let note = '';
+    if (r.status === 'invalid' || r.status === 'too_many') note = r.message;
+    else if (r.status === 'other_batch') note = 'That code is from a different export. Import or discard the codes scanned so far first.';
+    else if (r.status === 'duplicate') note = 'That code was already scanned. Show the next one.';
+    else if (!r.complete) note = 'Scan the next code.';
+    if (r.complete) {
+      finishTotpMigration();
+      return true;
+    }
+    const status = renderTotpMigration(note) || note;
+    const isError = r.status !== 'added' && r.status !== 'duplicate';
+    if (totpCamera.active()) setTotpCamStatus(status, isError);
+    // With codes collected the message is in the progress line; otherwise show it as an error.
+    setTotpAddError(isError && !r.have ? note : '');
+    return r.status === 'added' || r.status === 'duplicate';
+  }
+  function finishTotpMigration() {
+    const res = totpMigration.result();
+    resetTotpMigration();
+    hideTotpAddDialog();
+    showTotpImportDialog();
+    if (!res.ok) setTotpImportError(res.message);
+    else showTotpImportResult(res);
+  }
+
   // Fills the add form from a decoded QR or pasted string. The user confirms with "Add".
   function applyTotpQrPayload(raw) {
     const text = String(raw || '').trim();
     if (!text) return false;
-    if (/^otpauth-migration:\/\//i.test(text)) {
-      stopTotpQrScan();
-      setTotpAddError('This is a Google Authenticator export code. Importing it is not supported yet. Add each account with its own QR code, or use Import for Aegis and 2FAS files.');
-      return false;
+    if (NotesTotpImport.isMigration(text)) {
+      // Pasted text may hold several export links, one per line, all added to one collection.
+      let used = false;
+      for (const line of text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, NotesTotpImport.LIMITS.maxBatches)) {
+        used = addTotpMigrationCode(line) || used;
+        if (totpUi.dialog?.hidden) break; // export complete, preview opened
+      }
+      return used;
     }
     const entry = /^otpauth:\/\//i.test(text) ? NotesTotp.entryFromFields({
       issuer: totpUi.issuer?.value || '',
@@ -5197,7 +5249,9 @@
     }
     try {
       const value = await decodeQrFromSource(totpUi.video);
-      if (value && totpCamera.active()) {
+      if (value && NotesTotpImport.isMigration(value) && totpCamera.active()) {
+        addTotpMigrationCode(value); // keeps scanning; closes the camera when the export is complete
+      } else if (value && totpCamera.active()) {
         if (applyTotpQrPayload(value)) return;
         if (totpUi.cam && totpUi.cam.hidden) return; // migration code already closed the camera
         setTotpCamStatus('That QR code is not an authenticator code. Try another.', true);
@@ -5355,6 +5409,9 @@
       setTotpImportError(res.message);
       return;
     }
+    showTotpImportResult(res);
+  }
+  function showTotpImportResult(res) {
     totpImport.source = '';
     totpImportEl('totp-import-password-row').hidden = true;
     const existing = NotesStore.listTotpAccounts().map((item) => item.content.secret);
@@ -5369,7 +5426,10 @@
     });
     const fresh = totpImport.rows.filter((r) => !r.duplicate).length;
     const dupes = totpImport.rows.length - fresh;
-    totpImportEl('totp-import-summary').textContent = `${fresh} to import, ${dupes} already in vault, ${totpImport.skipped} skipped (invalid or unsupported). Secrets are not shown.`;
+    const missing = res.incomplete
+      ? ` Warning: only ${res.incomplete.have} of ${res.incomplete.size} export codes are included, so accounts in the missing codes will not be imported.`
+      : '';
+    totpImportEl('totp-import-summary').textContent = `${fresh} to import, ${dupes} already in vault, ${totpImport.skipped} skipped (invalid or unsupported). Secrets are not shown.${missing}`;
     totpImportEl('totp-import-preview').hidden = false;
     totpImportEl('totp-import-confirm').hidden = fresh === 0;
     totpImportEl('totp-import-confirm').textContent = `Import ${fresh}`;
@@ -22738,6 +22798,9 @@
   document.getElementById('btn-totp-pick-qr')?.addEventListener('click', () => openHiddenFileInput(totpUi.qrInput));
   document.getElementById('btn-totp-paste-qr')?.addEventListener('click', () => { pasteTotpQr(); });
   document.getElementById('totp-cam-close')?.addEventListener('click', () => stopTotpQrScan());
+  document.getElementById('totp-migration-import')?.addEventListener('click', () => finishTotpMigration());
+  document.getElementById('totp-cam-migration-import')?.addEventListener('click', () => finishTotpMigration());
+  document.getElementById('totp-migration-cancel')?.addEventListener('click', () => resetTotpMigration());
   document.getElementById('totp-cam-flip')?.addEventListener('click', () => { runTotpCamera(true); });
   document.getElementById('totp-cam-image')?.addEventListener('click', () => {
     stopTotpQrScan();
@@ -22749,6 +22812,12 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) stopTotpQrScan(); });
   window.addEventListener('pagehide', () => stopTotpQrScan());
   totpUi.secret?.addEventListener('paste', (event) => {
+    const pasted = event.clipboardData?.getData('text') || '';
+    if (NotesTotpImport.isMigration(pasted)) {
+      event.preventDefault();
+      applyTotpQrPayload(pasted);
+      return;
+    }
     const file = Array.from(event.clipboardData?.files || []).find((f) => f.type.startsWith('image/'));
     if (!file) return;
     event.preventDefault();
