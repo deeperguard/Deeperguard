@@ -50,6 +50,7 @@
   function attachmentThumbLabel(kind) {
     if (kind === 'pdf') return 'PDF';
     if (kind === 'image') return 'IMG';
+    if (kind === 'audio') return 'AUDIO';
     return 'FILE';
   }
   function attachmentBadgeHtml(label) {
@@ -4196,6 +4197,8 @@
 
   async function lockVault(message, { skipSync = false, reason = '', detail = null } = {}) {
     if (typeof stopTotpQrScan === 'function') stopTotpQrScan();
+    cancelVoiceMemo();
+    stopVoicePlayback();
     if (unlockInFlight) {
       setTimeout(() => {
         lockVault(message, { skipSync, reason, detail }).catch(() => {});
@@ -11380,6 +11383,7 @@
   }
 
   function renderAttachments(noteId) {
+    stopVoicePlayback();
     if (noteId == null || noteId === '') {
       if (ui.attachmentList) ui.attachmentList.innerHTML = '';
       if (ui.docInline) {
@@ -11463,7 +11467,7 @@
           </div>
           <div class="attachment-item-actions">
             ${retryBtn}${rerunBtn}
-            <button type="button" class="btn ghost sm" data-preview="${escapeAttr(a.uuid)}">Preview</button>
+            ${thumbKind === 'audio' ? `<button type="button" class="btn ghost sm" data-play-audio="${escapeAttr(a.uuid)}">Afspelen</button>` : `<button type="button" class="btn ghost sm" data-preview="${escapeAttr(a.uuid)}">Preview</button>`}
             ${shareBtn}
             <button type="button" class="btn ghost sm" data-dl="${escapeAttr(a.uuid)}">Download</button>
             <button type="button" class="btn ghost sm" data-rm="${escapeAttr(a.uuid)}">Remove</button>
@@ -11477,6 +11481,12 @@
           ? openDocPreviewFromSearch(btn.dataset.preview, { noteId })
           : openDocPreview(btn.dataset.preview, { noteId });
         open.catch((err) => toast(err.message || 'Preview failed', true));
+      });
+    });
+    ui.attachmentList.querySelectorAll('[data-play-audio]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        playVoiceAttachment(btn.dataset.playAudio, btn.closest('.attachment-item'))
+          .catch((err) => toast(err.message || 'Afspelen mislukt', true));
       });
     });
     document.getElementById('attachment-gallery-open')?.addEventListener('click', () => {
@@ -14428,6 +14438,7 @@
   }
 
   function openNote(id, { skipGate = false, skipFlush = false } = {}) {
+    cancelVoiceMemo();
     const note = NotesStore.get(id);
     if (!note) return;
     const previousId = currentId && currentId !== id ? currentId : null;
@@ -21597,6 +21608,119 @@
     const target = event.target instanceof Element ? event.target.closest('#btn-clear-checked-list') : null;
     if (target) clearCheckedChecklistItems();
   });
+
+  // ---- Voice memo (docs/VOICE_MEMO_SPEC.md, phase 1) ----
+  let voiceRecorder = null;
+  let voiceNoteId = null;
+  let voicePlayback = null;
+
+  function voiceEls() {
+    return {
+      btn: document.getElementById('btn-voice-memo'),
+      live: document.getElementById('voice-memo-live'),
+      timer: document.getElementById('voice-memo-timer'),
+      status: document.getElementById('voice-memo-status'),
+      hint: document.getElementById('voice-memo-note'),
+    };
+  }
+
+  function voiceSetStatus(text) {
+    const { status } = voiceEls();
+    if (status) status.textContent = text || '';
+  }
+
+  function voiceSetRecording(on) {
+    const { btn, live, timer } = voiceEls();
+    if (btn) btn.hidden = on;
+    if (live) live.hidden = !on;
+    if (timer && on) timer.textContent = '0:00';
+  }
+
+  function cancelVoiceMemo() {
+    if (voiceRecorder && voiceRecorder.isRecording()) voiceRecorder.cancel();
+  }
+
+  function stopVoicePlayback() {
+    if (!voicePlayback) return;
+    const { el, url } = voicePlayback;
+    voicePlayback = null;
+    try { el.pause(); } catch (_) { /* ignore */ }
+    el.removeAttribute('src');
+    try { el.load(); } catch (_) { /* ignore */ }
+    el.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function playVoiceAttachment(attId, row) {
+    stopVoicePlayback();
+    if (noteProtectionBlocks(attId)) {
+      toast('Unlock this protected note first', true);
+      return;
+    }
+    const item = NotesStore.get(attId);
+    if (!item || !row) return;
+    const bytes = await NotesStore.getAttachmentBytes(attId);
+    const mime = NotesPreview.mimeFromMeta(item.content.mime, item.content.filename);
+    const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+    const el = document.createElement('audio');
+    el.controls = true;
+    el.setAttribute('aria-label', item.content.filename || 'Spraakmemo');
+    el.addEventListener('ended', stopVoicePlayback);
+    el.src = url;
+    row.appendChild(el);
+    voicePlayback = { el, url };
+    el.play().catch(() => { /* user can press play */ });
+  }
+
+  function setupVoiceMemo() {
+    const { btn, live, timer, hint } = voiceEls();
+    if (!btn || !window.NotesVoiceMemo) return;
+    const env = { navigator, MediaRecorder: window.MediaRecorder, setInterval: (f, ms) => window.setInterval(f, ms), clearInterval: (t) => window.clearInterval(t), now: () => Date.now() };
+    const problem = NotesVoiceMemo.supportError(env);
+    btn.hidden = false;
+    if (hint) hint.hidden = false;
+    if (problem) {
+      // Keep the button usable so a click explains why recording is unavailable.
+      btn.setAttribute('aria-disabled', 'true');
+    }
+    const fmtTime = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    const stopOnHide = () => { if (voiceRecorder && voiceRecorder.isRecording()) voiceRecorder.stop(); };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') stopOnHide(); });
+    window.addEventListener('pagehide', stopOnHide);
+    btn.addEventListener('click', async () => {
+      if (!currentId) { toast('Open a note first', true); return; }
+      voiceSetStatus('');
+      voiceNoteId = currentId;
+      voiceRecorder = NotesVoiceMemo.createRecorder(env, {
+        onState: (st) => { voiceSetRecording(st === 'recording'); if (st === 'idle') voiceSetStatus(voiceEls().status?.textContent || ''); },
+        onTick: (sec) => { if (timer) timer.textContent = fmtTime(sec); },
+        onWarn: () => voiceSetStatus('Nog ongeveer 5 minuten of minder; de opname stopt vanzelf bij de limiet.'),
+        onError: (msg) => { voiceSetStatus(msg); toast(msg, true); },
+        onSave: async (file) => {
+          const noteId = voiceNoteId;
+          try {
+            await NotesStore.addAttachment(noteId, file, { displayName: file.name });
+            const added = NotesStore.listAttachments(noteId).find((a) => a.content?.filename === file.name);
+            if (added) NotesStore.setAttachmentOcr(added.uuid, '', 'unsupported', []);
+            if (currentId === noteId) renderAttachments(noteId);
+            renderNotes();
+            voiceSetStatus('Spraakmemo opgeslagen.');
+          } catch (err) {
+            voiceSetStatus(err.message || 'Opslaan mislukt');
+            toast(err.message || 'Opslaan mislukt', true);
+          }
+        },
+      });
+      await voiceRecorder.start();
+    });
+    document.getElementById('btn-voice-memo-stop')?.addEventListener('click', () => voiceRecorder && voiceRecorder.stop());
+    document.getElementById('btn-voice-memo-cancel')?.addEventListener('click', () => {
+      cancelVoiceMemo();
+      voiceSetStatus('Opname geannuleerd.');
+    });
+    if (live) live.hidden = true;
+  }
+  setupVoiceMemo();
 
   async function ingestAttachmentFiles(files) {
     const list = toFileArray(files);

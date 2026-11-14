@@ -1933,6 +1933,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_attachment_encryption(self):
         self._run_node_script("test_store_attachments.js")
 
+    def test_client_voice_memo(self):
+        self._run_node_script("test_voice_memo.js")
+
     def test_client_attachment_search_isolation(self):
         self._run_node_script("test_attachment_search_isolation.js")
         self._run_node_script("test_attachment_render_owner.js")
@@ -3567,6 +3570,19 @@ class NotesAppTests(unittest.TestCase):
                 reg = self._register_user(email, password)
         self.assertEqual(reg.status_code, 200)
         self.assertEqual(calls, [])
+
+    def test_permissions_policy_allows_only_own_microphone(self):
+        from config import app_entry_path
+
+        resp = self.client.get(app_entry_path())
+        policy = resp.headers.get("Permissions-Policy") or ""
+        self.assertIn("microphone=(self)", policy)
+        self.assertNotIn("microphone=*", policy)
+        self.assertNotIn("microphone=()", policy)
+        self.assertIn("camera=()", policy)
+        self.assertIn("geolocation=()", policy)
+        csp = resp.headers.get("Content-Security-Policy") or ""
+        self.assertIn("media-src 'self' blob:", csp)
 
     def test_content_security_policy_headers(self):
         import re

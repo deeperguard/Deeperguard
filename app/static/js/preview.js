@@ -79,6 +79,8 @@ const NotesPreview = (() => {
     if (/^image\/(png|jpe?g|webp|gif|bmp|svg\+xml)$/i.test(type) || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name)) {
       return 'image';
     }
+    if (type.startsWith('audio/')) return 'audio';
+    if (!type && /\.(m4a|mp3|wav|ogg|opus|webm)$/i.test(name)) return 'audio';
     return 'other';
   }
 

@@ -1469,8 +1469,17 @@
           <h3 class="section-label">Attachments</h3>
           <div id="attachment-list" class="attachment-list"></div>
           <label class="file-label btn sm" id="attachment-add-label">Add file
-            <input id="attachment-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,.json,.csv,.zip,.xml,.yaml,.yml,.docx,application/pdf,text/plain,text/csv,application/json,application/zip,application/xml,application/yaml" multiple tabindex="-1" aria-hidden="true">
+            <input id="attachment-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,.json,.csv,.zip,.xml,.yaml,.yml,.docx,application/pdf,text/plain,text/csv,application/json,application/zip,application/xml,application/yaml,audio/*,.m4a,.webm,.mp3,.wav,.ogg,.opus" multiple tabindex="-1" aria-hidden="true">
           </label>
+          <button type="button" id="btn-voice-memo" class="btn sm" hidden>Spraakmemo opnemen</button>
+          <div id="voice-memo-live" class="voice-memo-live" hidden>
+            <span class="voice-memo-dot" aria-hidden="true" style="display:inline-block;width:.7em;height:.7em;border-radius:50%;background:#d32f2f"></span>
+            <strong>Opname bezig</strong> <span id="voice-memo-timer" aria-hidden="true">0:00</span>
+            <button type="button" id="btn-voice-memo-stop" class="btn sm">Stoppen</button>
+            <button type="button" id="btn-voice-memo-cancel" class="btn ghost sm">Annuleren</button>
+          </div>
+          <p id="voice-memo-note" class="muted" hidden>Opname wordt versleuteld bewaard. Er is nog geen automatische uitschrift.</p>
+          <p id="voice-memo-status" class="muted" role="status" aria-live="polite"></p>
         </section>
         <section class="history">
           <h3 class="section-label">Version history</h3>
@@ -2871,6 +2880,7 @@
   {{ asset_script('js/checklist.js') }}
   {{ asset_script('js/tagsuggest.js') }}
   {{ asset_script('js/preview.js') }}
+  {{ asset_script('js/voicememo.js') }}
   {{ asset_script('js/photo-ocr-preprocess.js') }}
   {{ asset_script('js/client-ocr-engine.js') }}
   {{ asset_script('js/ocr.js') }}

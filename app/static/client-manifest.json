@@ -1,5 +1,5 @@
 {
-  "asset_count": 82,
+  "asset_count": 83,
   "assets": {
     "css/app.css": {
       "bytes": 301450,
@@ -80,10 +80,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1011539,
-      "sha256": "c0b87944dc4bf10f3bcd9600f2994bc1821bc97a86665684c19d22e26cb4137c",
-      "sri": "sha384-Nqz73wEhyLbCS3XwyS+AnlLJMR4ysDi5zFhAQOJPKxfA6vDg9E4SmD9Tjd6BxXi/",
-      "url": "/static/js/app.c0b87944dc4bf10f.js"
+      "bytes": 1016834,
+      "sha256": "858e852b8f6ff4c5350ff6b1c89b886f86984a2e85a8e4be02336323d089dc4e",
+      "sri": "sha384-qTDeB9B/G1HxfzIK49eDLBmHUlWnlvFb2Vyb5zqhh7HW7M+xCjjpxsIDrZ6VyKEJ",
+      "url": "/static/js/app.858e852b8f6ff4c5.js"
     },
     "js/auth-pages.js": {
       "bytes": 41555,
@@ -260,10 +260,10 @@
       "url": "/static/js/photo-ocr-preprocess.ed3aeeb103df06bc.js"
     },
     "js/preview.js": {
-      "bytes": 65516,
-      "sha256": "a635608a75d76f6bfd0f994bb2bc436587ccfe1a1f4a2c43dd4329c145d6d676",
-      "sri": "sha384-X1p3ICtxO/QaFA4FaOCiJ+Ojr31GomcxMlKkAv8iDLbg02fKCJzlsnO4pzFZY6+C",
-      "url": "/static/js/preview.a635608a75d76f6b.js"
+      "bytes": 65646,
+      "sha256": "dbcf4f72d1b0a0e8120e65cf8918bda0069594ffd5d6b717adec00ad4e0c8514",
+      "sri": "sha384-tZS8lUoHknwCjJU31dAklbC56f8/PzRa9XB0p8Yduah6YAZeMIir/ll4J0mUJPfN",
+      "url": "/static/js/preview.dbcf4f72d1b0a0e8.js"
     },
     "js/quick-capture.js": {
       "bytes": 4236,
@@ -487,6 +487,12 @@
       "sri": "sha384-F9n+UAza2eYV19S4yysv2cunWYIc226xlzdOYJ3u4MR4AGvZhdZ9IEGpXnkjb8EQ",
       "url": "/static/js/verify-ask-ai-provider.98e9aaa9032db56f.js"
     },
+    "js/voicememo.js": {
+      "bytes": 5282,
+      "sha256": "ca78fb8eaf85b3da46c5a9c6ba999f26d9a4cd3c15652f3279f0e65818f295ca",
+      "sri": "sha384-5WJJ7BuKkeY8ohz6rxhp99j9NhJEHSJMdHSXlY2FzFuTx4mAcaGKnuf1Xxke4v0X",
+      "url": "/static/js/voicememo.ca78fb8eaf85b3da.js"
+    },
     "js/webauthn-client.js": {
       "bytes": 3587,
       "sha256": "eabaca9a0a3681e4af92d2d870bd8ef7af70e3166d8cd86a9b82a06040642147",
@@ -495,6 +501,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "bdab4e02afbee62a3bc7846da33003af8336da6892bb113c04df19a41603e9a0",
+  "manifest_sha256": "452bfcf107d779e8ea628cb3302b6156978cd94830dccd26f7a479f0e1a0feb8",
   "version": 1
 }

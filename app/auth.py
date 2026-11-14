@@ -1137,7 +1137,7 @@ def security_headers() -> dict[str, str]:
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
         "Referrer-Policy": "same-origin",
-        "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+        "Permissions-Policy": "geolocation=(), microphone=(self), camera=()",
         # same-origin-allow-popups keeps Google GIS / Dropbox OAuth popups working
         # (strict same-origin COOP breaks window.closed / postMessage opener links).
         "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
