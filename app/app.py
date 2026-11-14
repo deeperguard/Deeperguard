@@ -4173,6 +4173,14 @@ from config import KEYS_DIR
 
 migrate_email_named_upload_dirs()
 pcloud_credentials_mod.migrate_all_pcloud_secrets(KEYS_DIR)
+import config as _config_mod
+
+if _config_mod.pcloud_service_remote():
+    import threading as _threading
+
+    from backup_pcloud import managed_healthcheck as _managed_healthcheck
+
+    _threading.Thread(target=_managed_healthcheck, name="pcloud-health", daemon=True).start()
 server_info_cache.start_refresh_loop()
 admin_api.register_admin_routes(app, NOTES_BUILD)
 if ocr_ephemeral():
