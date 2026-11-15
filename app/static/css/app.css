@@ -12438,7 +12438,8 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   display: flex;
   padding: var(--space-2) var(--space-3) 0;
 }
-.totp-head-actions .side-label:not(.side-label-always) { display: none; }
+.totp-side-foot { display: flex; align-items: center; gap: var(--space-2); }
+.totp-side-foot .side-label { display: none; }
 @media (min-width: 1000px) {
   /* Same top bar in every area (Agenda used to be slimmer). */
   #app[data-app-tab="agenda"] .app-tabs {
@@ -12455,7 +12456,7 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
     font-size: 13px;
   }
   .app-side,
-  .totp-head-actions {
+  .totp-side-foot {
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -12470,7 +12471,7 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   .side-icon,
   .side-glyph { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 16px; width: 16px; height: 16px; font-size: 18px; line-height: 1; opacity: 0.75; }
   .btn.side-item svg.ui-icon { margin: 0; width: 16px; height: 16px; flex: 0 0 16px; opacity: 0.75; }
-  .totp-head-actions .side-label:not(.side-label-always) { display: inline; }
+  .totp-side-foot .side-label { display: inline; }
   .btn.side-item {
     display: flex;
     align-items: center;
@@ -12491,8 +12492,7 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   }
   .btn.side-item:hover { background: color-mix(in srgb, var(--sn-nav-text) 8%, var(--sn-nav-bg)); }
   .side-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  body:not(.nav-pinned) .side-label,
-  body:not(.nav-pinned) .totp-head-actions .side-label:not(.side-label-always) { display: none; }
+  body:not(.nav-pinned) .side-label { display: none; }
   body:not(.nav-pinned) .btn.side-item { justify-content: center; padding: 7px 0; }
 
   /* 2FA: sidebar column left, the header, search and list in the content column. */
@@ -12503,7 +12503,8 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
     overflow: hidden;
   }
   .totp-head { display: contents; }
-  .totp-head-actions { grid-column: 1; grid-row: 1 / -1; }
+  .totp-side-foot { grid-column: 1; grid-row: 1 / -1; justify-content: flex-end; }
+  .totp-head-actions { grid-column: 2; grid-row: 1; justify-self: end; align-self: center; padding: var(--space-3) var(--space-4) var(--space-2); z-index: 1; }
   .totp-head-copy { grid-column: 2; grid-row: 1; padding: var(--space-3) var(--space-4) var(--space-2); }
   .totp-toolbar { grid-column: 2; grid-row: 2; }
   .totp-list-head { grid-column: 2; grid-row: 3; }

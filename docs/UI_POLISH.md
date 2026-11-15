@@ -913,9 +913,9 @@ editor. Target, shared by Notes, Agenda and 2FA:
 
 Status (task 1b, shell frame): Agenda and 2FA use the same left column as
 Notes at 1000px and wider (same `--sn-nav-width`, background and border). It
-holds `#agenda-calendar-settings-btn` (Agenda) and `#btn-totp-add`,
-`#btn-totp-import`, `#btn-totp-lock`, `#btn-totp-settings` (2FA) as icon +
-label rows; the labels collapse to icons while the sidebar is not pinned. The
+holds `#agenda-calendar-settings-btn` (Agenda) and, as a footer group,
+`#btn-totp-lock`, `#btn-totp-settings` (2FA) as icon + label rows;
+`#btn-totp-add` and `#btn-totp-import` sit right in the 2FA content header; the labels collapse to icons while the sidebar is not pinned. The
 active tab carries `aria-current="page"`. Below 1000px the controls stay where
 they were. `tests/e2e_app_frame.py` measures this.
 

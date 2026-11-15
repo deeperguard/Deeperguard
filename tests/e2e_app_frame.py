@@ -22,11 +22,11 @@ import e2e_layout_actions as base  # noqa: E402
 COLUMN = {
     "notes": ".sidebar-nav",
     "agenda": ".agenda-side",
-    "2fa": ".totp-head-actions",
+    "2fa": ".totp-side-foot",
 }
 ACTIONS = {
     "agenda": ["#agenda-calendar-settings-btn"],
-    "2fa": ["#btn-totp-add", "#btn-totp-import", "#btn-totp-lock", "#btn-totp-settings"],
+    "2fa": ["#btn-totp-lock", "#btn-totp-settings"],
 }
 
 FRAME_JS = """([colSel, actionSels]) => {
