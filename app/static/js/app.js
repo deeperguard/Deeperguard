@@ -11393,7 +11393,7 @@
       if (ui.attachmentList) ui.attachmentList.innerHTML = '';
       if (ui.docInline) {
         ui.docInline.hidden = true;
-        ui.docInline.innerHTML = '';
+        resetDocInline();
       }
       return;
     }
@@ -11404,7 +11404,7 @@
       if (ui.attachments) ui.attachments.hidden = true;
       if (ui.docInline) {
         ui.docInline.hidden = true;
-        ui.docInline.innerHTML = '';
+        resetDocInline();
       }
       return;
     }
@@ -11551,7 +11551,7 @@
     if (vaultPullActive) {
       if (ui.docInline) {
         ui.docInline.hidden = true;
-        ui.docInline.innerHTML = '';
+        resetDocInline();
       }
       return;
     }
@@ -13224,12 +13224,17 @@
     });
   }
 
+  function resetDocInline() {
+    if (ui.docInline?._docControls) ui.docInline._docControls.destroy();
+    if (ui.docInline) ui.docInline.innerHTML = '';
+  }
+
   function renderDocInline(noteId) {
     const listed = NotesStore.listAttachments(noteId);
     if (!ui.docInline) return;
     if (!listed.length) {
       ui.docInline.hidden = true;
-      ui.docInline.innerHTML = '';
+      resetDocInline();
       inlineNoteId = null;
       inlineAttIds = '';
       inlineSearch = '';
@@ -13984,7 +13989,7 @@
     }
     if (ui.docInline) {
       ui.docInline.hidden = true;
-      ui.docInline.innerHTML = '';
+      resetDocInline();
     }
     if (ui.attachmentList) ui.attachmentList.innerHTML = '';
     inlineNoteId = null;
@@ -14057,7 +14062,7 @@
       }
       if (ui.docInline) {
         ui.docInline.hidden = true;
-        ui.docInline.innerHTML = '';
+        resetDocInline();
       }
       ui.preview.hidden = true;
       syncEditorDocPreviewLayout();
@@ -14092,7 +14097,7 @@
       }
       if (ui.docInline) {
         ui.docInline.hidden = true;
-        ui.docInline.innerHTML = '';
+        resetDocInline();
       }
       const text = ocrMarkdown(currentId);
       ui.preview.innerHTML = text
@@ -14131,7 +14136,7 @@
     }
     if (ui.docInline) {
       ui.docInline.hidden = true;
-      if (!docSearchActive()) ui.docInline.innerHTML = '';
+      if (!docSearchActive()) resetDocInline();
     }
     if (toolbar) toolbar.hidden = checklistOn || (!markdownNote && !codeNote && type !== 'superscript') || (previewOn && !markdownNote && !codeNote);
     if (toolbar) {
@@ -14365,7 +14370,7 @@
       syncEditorBodyWrap();
       if (ui.docInline) {
         ui.docInline.hidden = true;
-        ui.docInline.innerHTML = '';
+        resetDocInline();
       }
       const ocrBtn = document.getElementById('btn-ocr-text');
       if (ocrBtn) ocrBtn.hidden = true;
@@ -19541,7 +19546,7 @@
     docPaintToken += 1;
     if (ui.docInline) {
       ui.docInline.hidden = true;
-      ui.docInline.innerHTML = '';
+      resetDocInline();
       inlineNoteId = null;
       inlineAttIds = '';
       inlineSearch = '';
