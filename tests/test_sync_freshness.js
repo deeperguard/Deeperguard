@@ -401,6 +401,50 @@ function reset() {
   assert.ok(appJs.includes('confirmIntentionalFreshnessReset'));
   assert.ok(appJs.includes('wireFreshnessWarnings'));
 
+  // --- password change: re-encrypted items carry a bumped __fv ---
+  reset();
+  const uuids = Array.from({ length: 5 }, (_, i) => `item-${i}`);
+  const oldCopies = {};
+  for (const id of uuids) {
+    const c = NotesFreshness.stampForUpsert(id, { type: 'note', title: id }, { bump: true });
+    const hash = await NotesCrypto.hashText(JSON.stringify(await NotesCrypto.encryptObject(key, c)));
+    NotesFreshness.noteAccepted(id, c, hash); // device B hwm
+    oldCopies[id] = c;
+  }
+  // Device A: password change re-encrypts every item (same logic as store.js)
+  for (const id of uuids) {
+    const bumped = NotesFreshness.stampForUpsert(id, oldCopies[id], { bump: true, existing: { content: oldCopies[id] } });
+    const wrapped = NotesFreshness.stampForWrap(id, bumped);
+    assert.strictEqual(wrapped.__fv, oldCopies[id].__fv + 1);
+    const ct = JSON.stringify(await NotesCrypto.encryptObject(key, wrapped));
+    const dec = await NotesCrypto.decryptObject(key, JSON.parse(ct));
+    assert.strictEqual(dec.__fv, wrapped.__fv, '__fv stays inside encrypted payload');
+    const res = NotesFreshness.checkIncoming(id, dec, await NotesCrypto.hashText(ct));
+    assert.strictEqual(res.reject, false, 'device B accepts re-encrypted item');
+    assert.strictEqual(res.warning, null);
+  }
+  assert.strictEqual(NotesFreshness.getPublicSnapshot().warningCount, 0, 'no fork warnings');
+  // Without the bump (old behaviour) the same flow is a fork
+  const noBump = NotesFreshness.stampForWrap('item-0', { ...oldCopies['item-0'], __fv: oldCopies['item-0'].__fv });
+  reset();
+  NotesFreshness.noteAccepted('item-0', oldCopies['item-0'], 'old-hash');
+  assert.strictEqual(NotesFreshness.checkIncoming('item-0', noBump, 'new-hash').reject, true);
+
+  // --- real fork (same __fv, different content) still reported ---
+  reset();
+  NotesFreshness.noteAccepted('item-x', { type: 'note', __fv: 4, __fid: 'item-x' }, 'hash-1');
+  const realFork = NotesFreshness.checkIncoming(
+    'item-x',
+    { type: 'note', __fv: 4, __fid: 'item-x', title: 'different' },
+    'hash-2',
+  );
+  assert.strictEqual(realFork.reject, true);
+  assert.strictEqual(realFork.warning.type, NotesFreshness.WARN_TYPES.fork);
+
+  const src = fs.readFileSync(path.join(jsRoot, 'store.js'), 'utf8');
+  assert.ok(/state\.items\.set\(uuid, item\);\s*state\.dirty\.add\(uuid\);/.test(src));
+  assert.ok(src.includes('stampForUpsert(uuid, item.content, { bump: true, existing: item })'));
+
   console.log('test_sync_freshness ok');
 })().catch((err) => {
   console.error(err);
