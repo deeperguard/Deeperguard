@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Scan and search cover</title>
+  <desc id="desc">Abstract gradient with a document page and a magnifying glass, no user data</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e3a5f"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="940" cy="130" r="180" fill="#38bdf8" opacity="0.12"/>
+  <circle cx="260" cy="520" r="220" fill="#22c55e" opacity="0.08"/>
+  <g fill="none" stroke="#e2e8f0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="360" y="110" width="320" height="410" rx="24" fill="#1e293b" stroke="#94a3b8"/>
+    <path d="M420 190 H620 M420 250 H620 M420 310 H560 M420 370 H600 M420 430 H520" stroke="#64748b"/>
+    <path d="M420 250 H540" stroke="#38bdf8" stroke-width="12" opacity="0.8"/>
+    <circle cx="760" cy="330" r="80" fill="#0f172a" fill-opacity="0.6" stroke="#38bdf8"/>
+    <path d="M818 388 L890 460" stroke="#38bdf8" stroke-width="14"/>
+  </g>
+</svg>
