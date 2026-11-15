@@ -411,6 +411,7 @@ python3 scripts/build-client-manifest.py --print-hash
     </section>
     {% include 'partials/mk-footer.html' %}
   </main>
+  {{ asset_script('js/marketing.js', defer=True) }}
   {{ asset_script('js/release-integrity.js') }}
   {{ asset_script('js/verify-ask-ai-provider.js') }}
 </body>
