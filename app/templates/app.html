@@ -719,7 +719,7 @@
   </script>
   <div id="app" class="app-root" data-csrf="{{ csrf_token }}" data-skip-login="{{ '1' if skip_login else '0' }}" data-self-host="{{ '1' if self_host else '0' }}" data-google-oauth-client-id="{{ google_oauth_client_id|default('', true) }}" data-dropbox-app-key="{{ dropbox_app_key|default('', true) }}" hidden aria-hidden="true">
     <nav class="app-tabs" role="tablist" aria-label="App sections">
-      <button type="button" class="app-tab active" id="app-tab-notes" data-app-tab="notes" role="tab" aria-selected="true" aria-controls="notes-shell">Notes</button>
+      <button type="button" class="app-tab active" id="app-tab-notes" data-app-tab="notes" role="tab" aria-selected="true" aria-current="page" aria-controls="notes-shell">Notes</button>
       <button type="button" class="app-tab" id="app-tab-agenda" data-app-tab="agenda" role="tab" aria-selected="false" aria-controls="agenda-pane">Agenda</button>
       <button type="button" class="app-tab" id="app-tab-2fa" data-app-tab="2fa" role="tab" aria-selected="false" aria-controls="totp-pane">2FA</button>
     </nav>
@@ -1576,18 +1576,20 @@
         <div class="totp-head-actions">
           <button type="button" id="btn-totp-add" class="btn icon" title="Add account" aria-label="Add account">+</button>
           <button type="button" id="btn-totp-import" class="btn ghost" title="Import accounts" aria-label="Import accounts">Import</button>
-          <button type="button" id="btn-totp-lock" class="btn icon" title="Lock vault" aria-label="Lock vault">
+        </div>
+        <div class="totp-side-foot">
+          <button type="button" id="btn-totp-lock" class="btn icon side-item" title="Lock vault" aria-label="Lock vault">
             <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
               <path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
-          </button>
-          <button type="button" id="btn-totp-settings" class="btn icon" title="Settings" aria-label="Settings">
+          <span class="side-label">Lock vault</span></button>
+          <button type="button" id="btn-totp-settings" class="btn icon side-item" title="Settings" aria-label="Settings">
             <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
-          </button>
+          <span class="side-label">Settings</span></button>
         </div>
       </header>
       <div class="totp-toolbar">
