@@ -4692,6 +4692,8 @@ const NotesStore = (() => {
       kdf: state.kdfVersion || 1,
     });
     if (!quiet) emitSync('syncing', 'Syncing…');
+    // One sync round ⇒ one bundled freshness warning per type (with item count).
+    if (typeof NotesFreshness !== 'undefined' && NotesFreshness.beginRound) NotesFreshness.beginRound();
     try {
       const dirtyAtStart = state.dirty.size;
       if (!state.cryptoKey) {
@@ -4889,6 +4891,9 @@ const NotesStore = (() => {
       }
       throw err;
     } finally {
+      if (typeof NotesFreshness !== 'undefined' && NotesFreshness.endRound) {
+        try { NotesFreshness.endRound(); } catch (err) { /* ignore */ }
+      }
       if (onVaultPullEnd) {
         try { onVaultPullEnd(); } catch (err) { /* ignore */ }
       }
