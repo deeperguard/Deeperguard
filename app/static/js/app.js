@@ -4625,6 +4625,7 @@
       algorithm: String(content.algorithm || 'SHA1').toUpperCase().replace('-', ''),
       // Schema 1 items read as tags: [] (lazy migration, nothing rewritten on read).
       tags: NotesTotp.accountFields ? NotesTotp.accountFields(content).tags : [],
+      icon_id: content.icon_id == null ? null : String(content.icon_id),
       note: typeof content.note === 'string' ? content.note : '',
       created_at: content.created_at || '',
       updated_at: content.updated_at || item.updated_at || '',
@@ -4834,6 +4835,57 @@
     }));
   }
 
+  // Icon choice in the add/edit dialog: null = automatic, 'letter', or a slug of the vendored set.
+  let totpDialogIconId = null;
+  function totpDialogIconEntry() {
+    return { issuer: totpUi.issuer?.value || '', label: totpUi.account?.value || '', host: totpUi.host?.value || '', icon_id: totpDialogIconId };
+  }
+  function renderTotpDialogIcon() {
+    const prev = document.getElementById('totp-icon-preview');
+    const name = document.getElementById('totp-icon-name');
+    if (prev) prev.innerHTML = NotesTotpIcons.iconHtml(totpDialogIconEntry(), { size: 36 });
+    if (name) {
+      name.textContent = totpDialogIconId === null ? 'Automatic'
+        : totpDialogIconId === 'letter' ? 'Letter' : (NotesTotpIcons.title(totpDialogIconId) || 'Automatic');
+    }
+  }
+  function renderTotpIconGrid() {
+    const grid = document.getElementById('totp-icon-grid');
+    if (!grid) return;
+    const slugs = NotesTotpIcons.search(document.getElementById('totp-icon-search')?.value || '');
+    grid.innerHTML = slugs.length ? slugs.map((slug) => `<button type="button" class="totp-icon-opt" role="option" data-icon-pick="${escapeAttr(slug)}" title="${escapeAttr(NotesTotpIcons.title(slug))}" aria-label="${escapeAttr(NotesTotpIcons.title(slug))}" aria-selected="${slug === totpDialogIconId}">${NotesTotpIcons.iconHtml({ icon_id: slug }, { size: 40 })}</button>`).join('')
+      : '<p class="muted">No icons match.</p>';
+  }
+  function setTotpDialogIcon(id) {
+    totpDialogIconId = id == null ? null : String(id);
+    const picker = document.getElementById('totp-icon-picker');
+    if (picker) picker.hidden = true;
+    document.getElementById('totp-icon-toggle')?.setAttribute('aria-expanded', 'false');
+    const search = document.getElementById('totp-icon-search');
+    if (search) search.value = '';
+    renderTotpDialogIcon();
+    NotesTotpIcons.load().then((ok) => { if (ok) { renderTotpDialogIcon(); renderTotpIconGrid(); } });
+  }
+  function bindTotpIconPicker() {
+    document.getElementById('totp-icon-toggle')?.addEventListener('click', () => {
+      const picker = document.getElementById('totp-icon-picker');
+      const open = picker.hidden;
+      picker.hidden = !open;
+      document.getElementById('totp-icon-toggle').setAttribute('aria-expanded', String(open));
+      if (open) { renderTotpIconGrid(); document.getElementById('totp-icon-search')?.focus(); }
+    });
+    document.getElementById('totp-icon-search')?.addEventListener('input', renderTotpIconGrid);
+    document.getElementById('totp-icon-picker')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-icon-pick]');
+      if (!btn) return;
+      totpDialogIconId = btn.getAttribute('data-icon-pick') || null;
+      renderTotpDialogIcon();
+      renderTotpIconGrid();
+    });
+    for (const el of [totpUi.issuer, totpUi.host, totpUi.account]) el?.addEventListener('input', renderTotpDialogIcon);
+  }
+  bindTotpIconPicker();
+
   function readTotpDialogTags() {
     return NotesTotp.normalizeTags(totpUi.tags?.value || '');
   }
@@ -4897,6 +4949,7 @@
       }
     }));
     if (token !== totpRenderToken) return;
+    if (!NotesTotpIcons.ready()) NotesTotpIcons.load().then((ok) => { if (ok && currentAppTab() === '2fa') renderTotpList(); });
     totpUi.list.innerHTML = rows.map((item, i) => {
       const totp = codes[i];
       const label = item.issuer && item.account && item.issuer !== item.account
@@ -4920,7 +4973,7 @@
       const usedLabel = totpVaultMetaLabel(usedMs, '—');
       return `<div class="totp-item" data-totp-id="${escapeAttr(item.id)}">
         <button type="button" class="totp-item-main" data-totp-copy title="Copy code" aria-label="Copy code for ${escapeAttr(label)}${boundHost ? ` (${boundHost})` : ' (no site set)'}">
-          <span class="note-kind-icon note-kind-icon--totp" aria-hidden="true">${kindIconSvg('totp')}</span>
+          <span class="note-kind-icon note-kind-icon--totp totp-item-icon" aria-hidden="true">${NotesTotpIcons.iconHtml({ ...item, label })}</span>
           <span class="totp-item-account">
             <span class="totp-item-body">
               <span class="note-title-row"><strong title="${escapeAttr(label)}">${escapeHtml(label)}</strong></span>
@@ -5126,6 +5179,7 @@
     if (totpUi.account) totpUi.account.value = '';
     if (totpUi.host) totpUi.host.value = '';
     resetTotpDialogTags();
+    setTotpDialogIcon(null);
     if (totpUi.secret) totpUi.secret.value = '';
     syncTotpDialogMode();
     setTotpAddError('');
@@ -5146,6 +5200,7 @@
     if (totpUi.account) totpUi.account.value = item.account || '';
     if (totpUi.host) totpUi.host.value = item.host || '';
     resetTotpDialogTags((item.tags || []).join(', '));
+    setTotpDialogIcon(item.icon_id);
     syncTotpDialogMode();
     setTotpAddError('');
     if (totpUi.backdrop) totpUi.backdrop.hidden = false;
@@ -5512,7 +5567,7 @@
       }
       const boundHost = readTotpDialogHost();
       if (boundHost === null) return;
-      const saved = NotesStore.updateTotpAccount(totpEditingId, { issuer, account, host: boundHost, tags: readTotpDialogTags() });
+      const saved = NotesStore.updateTotpAccount(totpEditingId, { issuer, account, host: boundHost, tags: readTotpDialogTags(), icon_id: totpDialogIconId });
       if (!saved) {
         setTotpAddError('That account is no longer in the vault.');
         return;
@@ -5531,6 +5586,7 @@
       tags: readTotpDialogTags(),
       secret: totpUi.secret?.value || '',
     });
+    if (entry) entry.icon_id = totpDialogIconId;
     if (!entry) {
       setTotpAddError('Enter a valid authenticator secret or otpauth URL. Use Base32 letters A–Z and digits 2–7. Spaces are OK.');
       totpUi.secret?.focus();

@@ -12306,3 +12306,44 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   background: color-mix(in srgb, var(--text) 5%, var(--bg));
 }
 .doc-inline-card:fullscreen .doc-inline-main { overflow-x: auto; }
+
+/* 2FA account icons (docs/2FA_IMPORT_SPEC.md section 6): one fixed 36px rounded tile everywhere.
+   Brand logos sit on a light tile in both themes so dark brand colours stay readable. */
+.totp-item-icon { width: 36px; height: 36px; margin-top: 0; }
+.totp-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+.totp-icon--brand { background: #fff; border: 1px solid rgba(128, 128, 128, 0.35); }
+.totp-icon svg { display: block; }
+.totp-item-icon .totp-icon { width: 36px !important; height: 36px !important; }
+.totp-item-icon .totp-icon--brand svg { width: 22px; height: 22px; }
+.totp-item-icon .totp-icon--letter svg { width: 36px; height: 36px; }
+.totp-icon-row { display: flex; align-items: center; gap: 10px; }
+.totp-icon-row .btn { margin-left: auto; }
+.totp-icon-picker { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.totp-icon-actions { display: flex; gap: 8px; }
+.totp-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.totp-icon-opt {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+}
+.totp-icon-opt:hover,
+.totp-icon-opt:focus-visible { background: var(--bg-hover); }
+.totp-icon-opt[aria-selected="true"] { border-color: var(--accent, currentColor); }

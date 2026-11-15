@@ -2530,6 +2530,22 @@
         <input id="totp-add-tags" type="text" maxlength="400" autocomplete="off" autocapitalize="none" spellcheck="false" list="totp-tag-suggestions" placeholder="Work, Personal">
       </label>
       <datalist id="totp-tag-suggestions"></datalist>
+      <div class="scan-name-field totp-icon-field">
+        <span>Icon <span class="muted">(optional)</span></span>
+        <div class="totp-icon-row">
+          <span id="totp-icon-preview" class="totp-icon-preview" aria-hidden="true"></span>
+          <span id="totp-icon-name" class="muted">Automatic</span>
+          <button type="button" class="btn ghost" id="totp-icon-toggle" aria-expanded="false" aria-controls="totp-icon-picker">Choose icon</button>
+        </div>
+        <div id="totp-icon-picker" class="totp-icon-picker" hidden>
+          <input id="totp-icon-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search icons" aria-label="Search icons">
+          <div class="totp-icon-actions">
+            <button type="button" class="btn ghost" data-icon-pick="">Automatic</button>
+            <button type="button" class="btn ghost" data-icon-pick="letter">Letter</button>
+          </div>
+          <div id="totp-icon-grid" class="totp-icon-grid" role="listbox" aria-label="Icons"></div>
+        </div>
+      </div>
       <label class="scan-name-field">Secret or otpauth URL
         <input id="totp-add-secret" type="text" maxlength="512" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="JBSW Y3DP EHPK 3PXP">
       </label>
@@ -2929,6 +2945,7 @@
   {{ asset_script('js/agenda-tasks.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}
+  {{ asset_script('js/totp-icons.js') }}
   {{ asset_script('js/totp-import.js') }}
   {{ asset_script('js/totp-qr-camera.js') }}
   {{ asset_script('js/search.js') }}
