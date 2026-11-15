@@ -1161,6 +1161,19 @@ library. Covered by `tests/test_note_list_grid.py`.
 - Full screen keeps `#doc-viewer` with `#doc-close`, gallery and enhance
   controls as today; Escape closes.
 
+**As built (inline viewer, `doc-inline-controls.js`).** The renderer is
+unchanged: pdf.js paints each page to a canvas at 100% of `.doc-inline-stage`,
+and decryption/OCR are untouched. That mechanism has no page-level zoom, so
+the safe variant is a CSS width on the stage: fit width = 100% (the default,
+never wider than the column), zoom steps x1.25 between 50% and 300% (canvases
+are rendered at 2x or more, so 300% is the sharpness limit). The page
+indicator is derived from the scroll position (`n / N`, `aria-live`). Full
+screen uses the Fullscreen API on `.doc-inline-card` (Esc exits; the button is
+omitted where the API is missing). Every button is a native `<button>` with
+`title` and `aria-label`. Object URLs still go through `NotesBlobUrls`
+(revoked on cache eviction, lock and logout); the PDF path uses bytes, not a
+URL. Test: `node tests/test_doc_inline_controls.js`.
+
 ### 7.7 Footer and backlinks
 
 - Status line (`#save-status` left, `#note-meta` right) uses the same left
