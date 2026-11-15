@@ -5231,7 +5231,7 @@ class NotesAppTests(unittest.TestCase):
         # 4. List rows mask protected note snippets
         self.assertIn("Protected note", app_js)
         self.assertIn("note-lock-badge", app_js)
-        self.assertIn("note-item-lock-row", app_js)
+        self.assertIn("noteLockBadgeHtml(note),", app_js)  # badge sits in the meta line
         self.assertIn(".note-item-lock-row", app_css)
 
         # 5. Editor chrome hides actions when gated

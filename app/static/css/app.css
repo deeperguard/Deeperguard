@@ -12155,3 +12155,37 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 #secure-send-link-wrap { padding: 0 var(--space-4) var(--space-3); gap: var(--space-2); }
 #secure-send-link-wrap .settings-row { padding-left: 0; padding-right: 0; }
 .secure-send-link-row .secure-send-link-fragment-hint { font-size: var(--text-xs); opacity: 1; }
+
+/* Note list rows: one grid (docs/UI_POLISH.md 7.3). Every row has the same
+   fixed icon column, so titles of plain, PDF and image rows start on the same
+   x; type label, lock badge and tags share one meta line. */
+.note-list { --note-row-icon-col: 44px; }
+.note-list .note-item > .note-kind-icon,
+.note-list .note-item > .note-kind-slot,
+.note-list .note-item > .note-list-thumb {
+  flex: 0 0 var(--note-row-icon-col);
+  width: var(--note-row-icon-col);
+  margin-top: 0;
+}
+.note-list .note-item > .note-kind-slot,
+.note-list .note-item > .note-list-thumb {
+  height: var(--note-row-icon-col);
+}
+.note-list .note-item-secondary {
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.note-list .note-item-secondary > * { flex: 0 0 auto; }
+.note-list .note-item-secondary .note-item-tags {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  margin-top: 0;
+}
+.note-list .note-modified { font-variant-numeric: tabular-nums; }
+/* The X of rows with a "…" menu lives in that menu (#note-row-menu-trash). */
+.note-row-delete[data-in-menu] { display: none !important; }

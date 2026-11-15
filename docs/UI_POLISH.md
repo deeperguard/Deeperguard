@@ -975,6 +975,7 @@ set up; the test then checks presence and accessible name only).
 | `.note-row-more` | More actions for <title> | List row, right | List row, menu column | notes | visible |
 | `.note-row-delete` | Trash note <title> | List row, extra X on the row | List row "…" menu (X no longer a separate column) | notes | visible |
 | `#note-row-menu-secure-send` | Share by link | Row "…" menu | Row "…" menu | notes | via `.note-row-more` |
+| `#note-row-menu-trash` | Trash note <title> | (new home of the row X) | Row "…" menu | notes | via `.note-row-more` |
 | `.note-swipe-delete` | Trash note <title> | List row swipe (phone) | Unchanged (phone) | notes | conditional: phone swipe |
 | `#fab-add` | New note | Floating button (phone) | Unchanged (phone) | notes | conditional: phone |
 | `#fab-scan` | Scan document | Floating button (phone) | Unchanged (phone) | notes | conditional: phone |
@@ -1103,28 +1104,34 @@ dialogs (section 4.3), not shell, and do not move.
 ### 7.3 Note list rows
 
 One grid for every row, regardless of note type:
-`grid-template-columns: 28px minmax(0, 1fr) auto 32px` =
 icon/thumbnail | title + meta line | date | "…" menu.
 
-- Column 1 is always 28px wide; a PDF/image thumbnail is cropped into it, so
-  titles of plain and PDF notes start on the same x.
+- Column 1 is always `--note-row-icon-col` (44px) wide; a PDF/image thumbnail
+  is sized into it, so titles of plain and PDF notes start on the same x.
 - Line 1: title (one line, ellipsis). Line 2 (meta line, `--text-sm`,
   `--text-muted`): type label (Note, PDF, IMG, Checklist, …), then the
-  lock/read-only state as a badge (not a loose emoji), then tag chips; all on
+  lock/read-only state as a badge (`.note-lock-badge`, text "Protected" /
+  "Read only" plus `aria-label`; not a loose emoji), then tag chips; all on
   one baseline, overflow clipped with "+n".
+- Compact density keeps its behaviour: the meta line (and so the badge) is
+  hidden, and the small lock glyph next to the date stays as the only lock
+  marker. The glyph is shown only in compact density.
 - Date column: right-aligned, tabular numbers, one notation (7.4).
-- Menu column: only `.note-row-more`. `.note-row-delete` stays in the DOM and
-  reachable but is not an extra column on the selected row.
+- Menu column: only `.note-row-more`. Its menu has "Trash"
+  (`#note-row-menu-trash`, same action as the X). On rows that have the menu
+  `.note-row-delete` stays in the DOM (`data-in-menu`) but is not shown;
+  rows without the menu (trashed, locked) keep the X on hover/focus.
 - Group headers (Today, Yesterday, This week, Older) are rendered only when
   the group has at least one row.
 
 ### 7.4 Date notation
 
-One rule everywhere in the list and footer: today `HH:mm`; yesterday
-"Yesterday"; within the last 7 days the short weekday ("Mon"); same year
-"d MMM" ("3 Nov"); older "d MMM yyyy". No mix of "3d ago" and `dd/mm/yyyy`.
-The full date and time is in the `title` attribute. Locale follows the
-existing date helpers; no new library.
+One rule for list row dates (`listTimeLabel`): relative for the last 7 days
+("just now", "5m ago", "3h ago", "2d ago"); older dates in one fixed notation,
+`toLocaleDateString(undefined, { day: 'numeric', month: 'short', year:
+'numeric' })` ("3 Nov 2026" in en-GB, "Nov 3, 2026" in en-US). No numeric
+`dd/mm/yyyy`. The full date and time is in the `title` attribute. No new
+library. Covered by `tests/test_note_list_grid.py`.
 
 ### 7.5 Note header and toolbar
 

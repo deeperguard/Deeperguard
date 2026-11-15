@@ -1484,9 +1484,13 @@
     });
   }
 
+  // One notation for list dates (docs/UI_POLISH.md 7.4): relative for the
+  // last 7 days, then the locale's "d MMM yyyy" date.
   function listTimeLabel(isoOrMs) {
-    const rel = relativeTime(isoOrMs);
-    return rel || formatModified(isoOrMs).replace(/^Modified\s+/, '') || '';
+    const at = typeof isoOrMs === 'number' ? isoOrMs : parseTimestampMs(isoOrMs);
+    if (!Number.isFinite(at) || at <= 0) return '';
+    if (Date.now() - at < 86400000 * 7) return relativeTime(at);
+    return new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
   function refreshRelativeTimes() {
@@ -10624,11 +10628,15 @@
     return `<button type="button" class="note-row-restore" data-id="${id}" data-action="restore" aria-label="Restore note ${title}" title="Restore">Restore</button>`;
   }
 
+  // Rows with a "…" menu offer Trash there (#note-row-menu-trash); the X stays
+  // in the DOM but is not shown as an extra column. Rows without the menu
+  // (trashed, locked) keep the X on hover/focus like before.
   function noteRowDeleteBtnHtml(note) {
     const label = noteRowDeleteLabel(note);
     const id = escapeAttr(note.uuid);
     const title = escapeAttr(noteRowActionTitle(note));
-    return `<button type="button" class="note-row-delete" data-id="${id}" aria-label="${label} note ${title}" title="${label}">×</button>`;
+    const inMenu = noteRowMoreBtnHtml(note) ? ' data-in-menu="1"' : '';
+    return `<button type="button" class="note-row-delete" data-id="${id}"${inMenu} aria-label="${label} note ${title}" title="${label}">×</button>`;
   }
 
   function noteRowMoreBtnHtml(note) {
@@ -10648,18 +10656,26 @@
     } else if (!hidePin && note.content.pinned) {
       parts.push('<span class="note-glyph note-glyph-pin" title="Pinned" aria-label="Pinned">📌</span>');
     }
-    if (note.content.locked) {
-      parts.push('<span class="note-glyph note-glyph-lock" title="Protected" aria-label="Protected">🔒</span>');
-    } else if (note.content.prevent_edit) {
-      parts.push('<span class="note-glyph note-glyph-lock" title="Read only" aria-label="Read only">🔒</span>');
+    // Comfortable rows show the lock state as a badge in the meta line; the
+    // compact density hides that line, so it keeps the small glyph here.
+    if (noteListDensity() === 'compact') {
+      if (note.content.locked) {
+        parts.push('<span class="note-glyph note-glyph-lock" title="Protected" aria-label="Protected">🔒</span>');
+      } else if (note.content.prevent_edit) {
+        parts.push('<span class="note-glyph note-glyph-lock" title="Read only" aria-label="Read only">🔒</span>');
+      }
     }
     return parts.join('');
   }
 
-  function noteRowSecondaryLine(note, query) {
-    const tags = noteTagChipsHtml(note);
-    const kind = noteKindMeta(note).label;
-    const bits = [tags, kind ? `<span class="note-kind-label">${escapeHtml(kind)}</span>` : ''].filter(Boolean);
+  // Meta line: type label, lock/read-only badge, tag chips on one baseline.
+  function noteRowSecondaryLine(note, query, kindLabel) {
+    const kind = kindLabel || noteKindMeta(note).label;
+    const bits = [
+      kind ? `<span class="note-kind-label">${escapeHtml(kind)}</span>` : '',
+      noteLockBadgeHtml(note),
+      noteTagChipsHtml(note),
+    ].filter(Boolean);
     if (!bits.length) return '';
     return `<span class="note-item-secondary">${bits.join('')}</span>`;
   }
@@ -10692,7 +10708,6 @@
     const { att, note } = file;
     const isProtected = !!note.content?.locked;
     const isLocked = isProtected && !unlockedNotes.has(note.uuid);
-    const lockBadgeHtml = noteLockBadgeHtml(note);
     const active = note.uuid === activeListNoteId() ? 'active' : '';
     const protectedClass = isProtected ? 'is-protected' : '';
     const name = att.content.filename || att.content.original_filename || 'Untitled file';
@@ -10729,7 +10744,6 @@
             <h3>${titleHtml}</h3>
             <span class="note-row-trailing">${noteRowStatusGlyphs(note)}<span class="note-modified" data-edited="${editedMs || ''}" title="${escapeAttr(timeTitle)}">${escapeHtml(timeLabel)}</span></span>
           </span>
-          ${lockBadgeHtml ? `<span class="note-item-lock-row">${lockBadgeHtml}</span>` : ''}
           ${compact ? '' : noteRowSecondaryLine(note, query)}
           ${(prefs.hidePreviews || compact) ? '' : `<p class="note-preview">${snippetHtml}</p>`}
         </span>
@@ -10740,7 +10754,6 @@
   function renderNoteRow(n, query) {
     const isProtected = !!n.content?.locked;
     const isLocked = isProtected && !unlockedNotes.has(n.uuid);
-    const lockBadgeHtml = noteLockBadgeHtml(n);
     const active = n.uuid === activeListNoteId() ? 'active' : '';
     const protectedClass = isProtected ? 'is-protected' : '';
     const atts = isLocked ? [] : NotesStore.listAttachments(n.uuid);
@@ -10806,7 +10819,6 @@
             <h3${titleAttr}>${titleHtml}</h3>${noteIndexingBadge(n.uuid)}
             ${trailing}
           </span>
-          ${lockBadgeHtml ? `<span class="note-item-lock-row">${lockBadgeHtml}</span>` : ''}
           ${secondary}
           ${previewHtml}
         </span>
@@ -10895,7 +10907,8 @@
     const virtualThreshold = NOTE_LIST_VIRTUAL_THRESHOLD;
     if (total <= virtualThreshold) {
       lastVirtualWindow = null;
-      return sections.map((section) => {
+      // No group header without rows (docs/UI_POLISH.md 7.3).
+      return sections.filter((section) => section.items.length).map((section) => {
         const heading = section.label
           ? `<h3 class="note-section-label">${escapeHtml(section.label)}</h3>`
           : '';
@@ -21374,6 +21387,12 @@
     backdrop.hidden = false;
     backdrop.setAttribute('aria-hidden', 'false');
     document.body.classList.add('note-row-menu-open');
+    const trashItem = document.getElementById('note-row-menu-trash');
+    if (trashItem) {
+      const label = noteRowDeleteLabel(NotesStore.get(id));
+      trashItem.textContent = label;
+      trashItem.setAttribute('aria-label', `${label} note ${noteRowActionTitle(NotesStore.get(id))}`);
+    }
     try { document.getElementById('note-row-menu-secure-send')?.focus(); } catch (err) { /* ignore */ }
   }
 
@@ -21554,6 +21573,11 @@
     if (id) {
       openSecureSendForNote(id).catch((err) => toast(err?.message || 'Secure Send failed', true));
     }
+  });
+  document.getElementById('note-row-menu-trash')?.addEventListener('click', () => {
+    const id = noteRowMenuNoteId;
+    closeNoteRowMenu();
+    if (id) deleteFromList(id);
   });
   ui.noteList?.addEventListener('scroll', closeNoteRowMenu, { passive: true });
   document.addEventListener('keydown', (event) => {
