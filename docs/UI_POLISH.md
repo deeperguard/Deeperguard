@@ -962,6 +962,7 @@ set up; the test then checks presence and accessible name only).
 | `#btn-new-list` | New note | List header | List header (primary) | notes | visible |
 | `#btn-list-menu` | Open sidebar | List header (phone) | Unchanged (phone) | notes | conditional: phone |
 | `#btn-list-sort` | Sort: … Tap to change. | List header (phone) | Unchanged (phone) | notes | conditional: phone |
+| `#btn-list-toggle` | Hide note list / Show note list | (new) | Divider between list and content: collapse/expand the list column | notes | conditional: desktop |
 | `#search` | Search notes and scanned documents | List header | List header, full width | notes | visible |
 | `#search-filter-toggle` | Search filters | In search field | In search field | notes | visible |
 | `#search-titles-only` | Titles only (label) | Search filter panel | Unchanged | notes | via `#search-filter-toggle` |
@@ -1202,6 +1203,14 @@ blob URLs; writes screenshots).
 - "Linked from" (`#backlinks`) aligns with the content; with zero backlinks
   it is collapsed to one muted line ("Linked from (0)") without the
   empty-state sentence; with one or more it is expandable and open.
+
+**Status (footer/width task):** `#note-meta` omits "0 words" when the note has
+attachments (the scanned-text count stays); `#backlinks[data-empty="true"]`
+shows only the muted heading; footer and backlinks use the body's 32px edge and
+`--content-max` (`--content-max-viewer` for the viewer). The `#pane-splitter`
+has a visible grip and keyboard support; `#btn-list-toggle` collapses the list.
+Width (`listPaneWidth`) and `listCollapsed` live in the local
+`deeperguard-prefs` only, never sent to the server.
 
 ### 7.8 Breakpoints
 

@@ -1,5 +1,7 @@
 /* Deeperguard — clean, iOS-friendly UI */
 :root {
+  --content-max: 860px;
+  --content-max-viewer: 1100px;
   --bg: #0f1419;
   --bg-elevated: #171d24;
   --bg-hover: #1f2730;
@@ -7046,6 +7048,7 @@ html[data-theme="light"] .doc-search-hit {
 }
 .editor-foot { display: flex; justify-content: space-between; gap: 12px; }
 #note-meta { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.list-toggle { display: none; }
 .note-meta-scan { display: block; }
 
 .settings-backdrop {
@@ -9190,6 +9193,45 @@ body.search-filters-open .fab-stack,
   .pane-splitter:focus-visible::before {
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
   }
+  /* Visible grip so the divider is discoverable. */
+  .pane-splitter::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 4px;
+    height: 36px;
+    transform: translate(-50%, -50%);
+    border-radius: 2px;
+    background: var(--text-muted, var(--sn-nav-muted));
+    opacity: .55;
+    pointer-events: none;
+  }
+  .pane-splitter:hover::after,
+  .pane-splitter:focus-visible::after { opacity: 1; background: var(--accent); }
+  .list-toggle {
+    position: absolute;
+    top: 10px;
+    left: calc(var(--sn-nav-width) + var(--sn-list-width) - 11px);
+    z-index: 7;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--sn-editor-bg, var(--bg-elevated));
+    color: inherit;
+    cursor: pointer;
+  }
+  .list-toggle:hover { border-color: var(--accent); }
+  .list-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  html.list-collapsed .list-toggle { left: calc(var(--sn-nav-width) + 4px); }
+  html.list-collapsed .list-toggle svg { transform: rotate(180deg); }
+  html.list-collapsed .list-pane,
+  html.list-collapsed .pane-splitter { display: none; }
   body.pane-resizing,
   body.pane-resizing * {
     cursor: col-resize !important;
@@ -9645,12 +9687,27 @@ body.search-filters-open .fab-stack,
   .editor-pane .editor:not(.doc-preview-active) .md-toolbar,
   .editor-pane .editor:not(.doc-preview-active) .checklist,
   .editor-pane .editor:not(.doc-preview-active) .editor-foot,
+  .editor-pane .editor:not(.doc-preview-active) .backlinks,
   .editor-pane .editor:not(.doc-preview-active) .attachments,
   .editor-pane .editor:not(.doc-preview-active) .history,
   .editor-pane .editor:not(.doc-preview-active) .editor-scroll > #preview:not([hidden]) {
     box-sizing: border-box;
     width: 100%;
-    max-width: min(920px, 100%);
+    max-width: min(var(--content-max), 100%);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* Status line and backlinks share the body's left edge (32px text padding). */
+  .editor-pane .editor .editor-foot,
+  .editor-pane .editor .backlinks {
+    box-sizing: border-box;
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  .editor-pane .editor.doc-preview-active .editor-foot,
+  .editor-pane .editor.doc-preview-active .backlinks {
+    width: 100%;
+    max-width: min(var(--content-max-viewer), 100%);
     margin-left: auto;
     margin-right: auto;
   }
@@ -11528,6 +11585,9 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 /* Backlinks panel "Linked from (N)" */
 .backlinks { margin: 12px 0; }
 .backlinks:empty { display: none; }
+.backlinks[data-empty="true"] { margin: 4px 0; }
+.backlinks[data-empty="true"] .backlinks-empty { display: none; }
+.backlinks[data-empty="true"] .section-label { margin: 0; opacity: .7; }
 .backlinks-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .backlink-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--border, #c8ccd4); border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .backlink-item:hover { background: rgba(128, 128, 128, 0.08); }

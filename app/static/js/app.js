@@ -445,7 +445,10 @@
 
   function applyListPaneWidth(px, { persist = false } = {}) {
     const width = clampListPaneWidth(px);
-    document.documentElement.style.setProperty('--sn-list-width', `${width}px`);
+    const collapsed = !!prefs.listCollapsed && splitLayoutActive();
+    document.documentElement.classList.toggle('list-collapsed', collapsed);
+    document.documentElement.style.setProperty('--sn-list-width', collapsed ? '0px' : `${width}px`);
+    syncListToggle(collapsed);
     const splitter = document.getElementById('pane-splitter');
     if (splitter) {
       const limits = listPaneLimits();
@@ -461,7 +464,27 @@
     return width;
   }
 
+  function syncListToggle(collapsed) {
+    const btn = document.getElementById('btn-list-toggle');
+    if (!btn) return;
+    const label = collapsed ? 'Show note list' : 'Hide note list';
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+  }
+
+  function setListCollapsed(collapsed) {
+    prefs.listCollapsed = !!collapsed;
+    try { localStorage.setItem('deeperguard-prefs', localPrefsJson()); } catch (err) { /* ignore quota */ }
+    applyListPaneWidth(readStoredListWidth(), { persist: false });
+  }
+
   function initPaneSplitter() {
+    const toggle = document.getElementById('btn-list-toggle');
+    if (toggle && toggle.dataset.toggleBound !== '1') {
+      toggle.dataset.toggleBound = '1';
+      toggle.addEventListener('click', () => setListCollapsed(!prefs.listCollapsed));
+    }
     const splitter = document.getElementById('pane-splitter');
     if (!splitter || splitter.dataset.splitBound === '1') {
       applyListPaneWidth(readStoredListWidth(), { persist: false });
@@ -14807,11 +14830,12 @@
     const updated = relativeTime(noteEditedAtMs(note));
     const primary = document.createElement('span');
     const wordLabel = `${words} ${words === 1 ? 'word' : 'words'}`;
+    const scannedWords = scannedTextWordCount(note);
+    // "0 words" is meaningless for a PDF/attachment note: it keeps the scanned-text count.
     primary.textContent = words
       ? (minutes ? `${wordLabel} · ${minutes} min read · ${updated}` : `${wordLabel} · ${updated}`)
-      : `0 words · ${updated}`;
+      : ((scannedWords > 0 || NotesStore.listAttachments(note.uuid).length > 0) ? updated : `0 words · ${updated}`);
     ui.noteMeta.replaceChildren(primary);
-    const scannedWords = scannedTextWordCount(note);
     if (scannedWords > 0) {
       const scan = document.createElement('span');
       scan.className = 'note-meta-scan';

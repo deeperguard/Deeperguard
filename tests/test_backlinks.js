@@ -121,6 +121,7 @@ const buttons = (el) => el.querySelectorAll('button');
   await ctl.flush();
   assert.deepStrictEqual(B.linksTo(A), []);
   assert.ok(texts(panel).includes('Linked from (0)') && texts(panel).includes('No notes link here yet'));
+  assert.strictEqual(panel.getAttribute('data-empty'), 'true', 'empty panel is collapsed/compact');
 
   // Trashed sources are flagged and hidden.
   store.upsert(S1, note(S1, 'Plan', `[T](dg-note:${A})`, { trashed: true }));
