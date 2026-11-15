@@ -1111,6 +1111,12 @@
           <div class="editor-head-main">
             <input id="note-title" class="title-input" placeholder="Title" aria-label="Title" dir="auto">
             <div class="editor-meta-row">
+            <label class="editor-folder-control" id="note-folder-control">
+              <span class="editor-menu-label">Folder</span>
+              <select id="note-folder-select" title="Folder" aria-label="Folder">
+                <option value="">No folder</option>
+              </select>
+            </label>
             <div id="tag-bar-shell" class="tag-bar-shell is-collapsed">
               <button type="button" id="tag-bar-toggle" class="tag-bar-toggle" aria-expanded="false" aria-controls="tag-bar">
                 <span class="tag-bar-toggle-label">Tags</span>
@@ -1119,12 +1125,6 @@
               </button>
               <div id="tag-bar" class="tag-bar"></div>
             </div>
-            <label class="editor-folder-control" id="note-folder-control">
-              <span class="editor-menu-label">Folder</span>
-              <select id="note-folder-select" aria-label="Folder">
-                <option value="">No folder</option>
-              </select>
-            </label>
             </div>
           </div>
           <div class="editor-actions">
@@ -1232,7 +1232,7 @@
                 </div>
               </div>
             </div>
-            <button type="button" id="btn-find-desktop" class="btn icon toolbar-primary find-btn editor-phone-toolbar-hide editor-toolbar-row-item" aria-label="Find in note">
+            <button type="button" id="btn-find-desktop" class="btn icon toolbar-primary find-btn editor-phone-toolbar-hide editor-toolbar-row-item" title="Find in note" aria-label="Find in note">
               <svg class="find-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <circle cx="10.5" cy="10.5" r="6.75" fill="none" stroke="currentColor" stroke-width="2.5"/>
                 <path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M16.2 16.2 21 21"/>

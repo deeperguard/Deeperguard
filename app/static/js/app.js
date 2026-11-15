@@ -11300,11 +11300,13 @@
     return isMobileLayout();
   }
 
-  function tagBarSummaryText(note) {
-    if (!note) return 'None';
-    const selected = note.content.tags || [];
-    const tags = NotesStore.listTags().filter((t) => selected.includes(t.uuid));
-    if (!tags.length) return 'None';
+  function noteAssignedTags(note) {
+    const selected = note?.content?.tags || [];
+    return NotesStore.listTags().filter((t) => selected.includes(t.uuid));
+  }
+
+  function tagBarSummaryText(tags) {
+    if (!tags.length) return 'Add tag';
     if (tags.length <= 2) return tags.map((t) => t.content.title).join(', ');
     return `${tags.slice(0, 2).map((t) => t.content.title).join(', ')} +${tags.length - 2}`;
   }
@@ -11314,7 +11316,9 @@
     const toggle = document.getElementById('tag-bar-toggle');
     const summary = document.getElementById('tag-bar-toggle-summary');
     if (!shell || !toggle) return;
-    if (summary) summary.textContent = tagBarSummaryText(note);
+    const tags = noteAssignedTags(note);
+    if (summary) summary.textContent = tagBarSummaryText(tags);
+    shell.classList.toggle('is-empty', !tags.length);
     const collapsed = !tagBarExpanded;
     shell.classList.toggle('is-collapsed', collapsed);
     toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');

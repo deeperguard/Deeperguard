@@ -991,7 +991,7 @@ openers and control that offer the action instead).
 | `#btn-back` | Back to notes | Editor head (phone) | Unchanged (phone) | notes | conditional: phone |
 | `#note-title` | Title | Editor head, shared row | Header: own line | notes | visible |
 | `#note-folder-select` | Folder | Editor head, large dropdown | Header: compact meta row | notes | visible |
-| `#tag-bar-toggle` | Tags … | Editor head | Header: compact meta row | notes | visible |
+| `#tag-bar-toggle` | Tags … / Add tag | Editor head | Header: compact meta row | notes | visible |
 | `#tag-bar-input` | New tag (placeholder) | Tag bar, expanded | Header meta row, expanded | notes | via `#tag-bar-toggle` |
 | `#tag-bar-add` | Add tag | Tag bar, expanded | Header meta row, expanded | notes | via `#tag-bar-toggle` |
 | `#tag-bar-show-all` | Show assigned only | Tag bar, expanded | Header meta row, expanded | notes | via `#tag-bar-toggle` |
@@ -1145,16 +1145,25 @@ library. Covered by `tests/test_note_list_grid.py`.
 
 - Title (`#note-title`) on its own line, `--text-xl`.
 - Under it one compact meta row: folder (`#note-folder-select`, max 220px,
-  `--text-sm`) and tags (`#tag-bar-toggle`), same height (32px) and baseline.
-- One toolbar: every button 36x36px (`--touch-min` on touch), same radius,
-  `aria-label` plus `title` tooltip; order: lock editing, note type, find,
-  Ask AI, star, download, "…".
+  `--text-sm`) and then tags (`#tag-bar-toggle`), same height (32px). A note
+  without tags shows the toggle as a quiet "+ Add tag" button instead of
+  "Tags None"; opening it puts the tag bar on its own line under the folder.
+  Below 1000px folder and tags keep their full-width rows.
+- One toolbar: every button 36x36px with `--radius-sm`, `aria-label` plus
+  `title` tooltip; DOM and tab order: lock editing, note type, find, Ask AI,
+  star, download, "…". The note type select is as high as the buttons and
+  shows its value as text.
 - Controls that do not apply to the current note type are hidden instead of
-  idle: `#note-editor-type`, `#btn-undo`, `#btn-redo` and the Markdown
-  toolbar for attachment-only notes; `#btn-preview`, `#btn-ocr-text`,
-  `#btn-rescan-ocr`, `#btn-desktop-doc-fullscreen` for notes without a file.
-  The action keeps its id and stays available where it applies (column
-  "Applies to" in 7.2).
+  idle: the note type control (`#note-editor-type`, on the phone
+  `#btn-note-type-menu`), `#btn-undo` and `#btn-redo` while an attachment note
+  shows its document view (`.editor.doc-preview-active`); they return when
+  the note text is edited ("Edit" in the "…" menu). `#btn-preview`,
+  `#btn-ocr-text`, `#btn-rescan-ocr` and `#btn-desktop-doc-fullscreen` are not
+  shown for notes without a file. The action keeps its id and stays available
+  where it applies (column "Applies to" in 7.2).
+- Test: `python tests/e2e_layout_actions.py` measures both note types (title
+  line, meta row, button size, tooltip, aria-label, tab order, hidden
+  controls) and changes the format of a plain note through the select.
 
 ### 7.6 Attachment / PDF viewer
 
