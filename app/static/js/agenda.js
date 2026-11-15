@@ -1335,6 +1335,16 @@
     });
   }
 
+  function renderDesktopSide() {
+    return (
+      '<aside class="app-side agenda-side" aria-label="Calendars">'
+      + '<button type="button" class="btn ghost side-item agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings" aria-label="Calendar menu" title="Calendar menu">'
+      + '<svg class="ui-icon side-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+      + '<span class="side-label side-label-always">Calendar menu</span></button>'
+      + '</aside>'
+    );
+  }
+
   function renderDesktopHeader(range) {
     return (
       '<header class="agenda-top agenda-top-desktop">'
@@ -1350,7 +1360,6 @@
       + '</div>'
       + '<div class="agenda-top-tools">'
       + renderSearchField()
-      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
       + '<button type="button" class="btn agenda-add agenda-add-task" id="agenda-add-task">+ Task</button>'
       + '<button type="button" class="btn primary agenda-add" id="agenda-add-event">+ Event</button>'
       + '</div></div></header>'
@@ -1732,7 +1741,7 @@
     const focused = document.activeElement;
     const searchHadFocus = !!(focused && focused.id === 'agenda-search' && rootEl.contains(focused));
     const searchCaret = searchHadFocus ? [focused.selectionStart, focused.selectionEnd] : null;
-    const header = phone ? renderPhoneHeader(range) : renderDesktopHeader(range);
+    const header = phone ? renderPhoneHeader(range) : renderDesktopSide() + renderDesktopHeader(range);
     rootEl.innerHTML = (
       header
       + `<div class="agenda-body agenda-view-${esc(state.view)}">${main}</div>`

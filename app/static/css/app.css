@@ -12425,3 +12425,101 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .totp-icon-opt:hover,
 .totp-icon-opt:focus-visible { background: var(--bg-hover); }
 .totp-icon-opt[aria-selected="true"] { border-color: var(--accent, currentColor); }
+
+/* App shell frame shared by Notes, Agenda and 2FA (docs/UI_POLISH.md 7.1).
+   The tab bar is the only area switch. Agenda and 2FA get the same left
+   column as the Notes sidebar (same width token, background and border) that
+   holds their section actions as icon + label rows; the labels collapse to
+   icons (names stay in aria-label and title) while the sidebar is not pinned.
+   Below 1000px the actions keep their previous place and look. */
+.side-icon,
+.side-glyph { display: none; }
+.agenda-side {
+  display: flex;
+  padding: var(--space-2) var(--space-3) 0;
+}
+.totp-head-actions .side-label:not(.side-label-always) { display: none; }
+@media (min-width: 1000px) {
+  /* Same top bar in every area (Agenda used to be slimmer). */
+  #app[data-app-tab="agenda"] .app-tabs {
+    padding: 6px 12px 8px;
+    padding-top: calc(6px + var(--safe-top));
+    padding-left: calc(12px + var(--safe-left));
+    padding-right: calc(12px + var(--safe-right));
+    gap: 2px;
+    border-bottom-color: color-mix(in srgb, var(--border) 80%, transparent);
+  }
+  #app[data-app-tab="agenda"] .app-tab {
+    padding: 6px 12px;
+    min-height: 32px;
+    font-size: 13px;
+  }
+  .app-side,
+  .totp-head-actions {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1px;
+    width: var(--sn-nav-width);
+    padding: var(--space-3) var(--space-2);
+    background: var(--sn-nav-bg);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .side-icon,
+  .side-glyph { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 16px; width: 16px; height: 16px; font-size: 18px; line-height: 1; opacity: 0.75; }
+  .btn.side-item svg.ui-icon { margin: 0; width: 16px; height: 16px; flex: 0 0 16px; opacity: 0.75; }
+  .totp-head-actions .side-label:not(.side-label-always) { display: inline; }
+  .btn.side-item {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--sn-nav-text);
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+  }
+  .btn.side-item:hover { background: color-mix(in srgb, var(--sn-nav-text) 8%, var(--sn-nav-bg)); }
+  .side-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body:not(.nav-pinned) .side-label,
+  body:not(.nav-pinned) .totp-head-actions .side-label:not(.side-label-always) { display: none; }
+  body:not(.nav-pinned) .btn.side-item { justify-content: center; padding: 7px 0; }
+
+  /* 2FA: sidebar column left, the header, search and list in the content column. */
+  .totp-pane {
+    display: grid;
+    grid-template-columns: var(--sn-nav-width) minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    overflow: hidden;
+  }
+  .totp-head { display: contents; }
+  .totp-head-actions { grid-column: 1; grid-row: 1 / -1; }
+  .totp-head-copy { grid-column: 2; grid-row: 1; padding: var(--space-3) var(--space-4) var(--space-2); }
+  .totp-toolbar { grid-column: 2; grid-row: 2; }
+  .totp-list-head { grid-column: 2; grid-row: 3; }
+  .totp-list,
+  .totp-empty { grid-column: 2; grid-row: 4; }
+  .totp-empty { align-self: start; }
+
+  /* Agenda: same column; toolbar and calendar in the content column. */
+  .agenda-root:not(.agenda-root--phone) {
+    display: grid;
+    grid-template-columns: var(--sn-nav-width) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .agenda-root:not(.agenda-root--phone) > .agenda-side { grid-column: 1; grid-row: 1 / -1; }
+  .agenda-root:not(.agenda-root--phone) > .agenda-top { grid-column: 2; grid-row: 1; }
+  .agenda-root:not(.agenda-root--phone) > .agenda-body { grid-column: 2; grid-row: 2; min-height: 0; }
+  .agenda-side { padding: var(--space-3) var(--space-2); }
+  .agenda-side .agenda-calendar-menu-btn { padding: 7px 10px; border-radius: 8px; min-height: 36px; border: 0; }
+}
