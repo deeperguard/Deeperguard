@@ -14,10 +14,10 @@
       "url": "/static/css/marketing.7091c52f885cc1af.css"
     },
     "js/admin.js": {
-      "bytes": 8122,
-      "sha256": "da5308df76c2a61e71598ac8d370bfbf42ef29501135e6b0a106fad5d03198f7",
-      "sri": "sha384-Eyq+ji9xL1quPthvCdKofGxmK3kjt+fU4oFhA1Ra9H6Y2sIC4/Ndgf69q1x8Fxm4",
-      "url": "/static/js/admin.da5308df76c2a61e.js"
+      "bytes": 11466,
+      "sha256": "087f5c3c46f3ccfc873e221c52cdfbae0bff9b42df1fd77f81e1a0d8cf98a791",
+      "sri": "sha384-RNCMKIuStmjl4gEfhJLJpzYy+QVTHCMOBWL4HMpzISUTqOlWgrjnv7OfZKur2OwH",
+      "url": "/static/js/admin.087f5c3c46f3ccfc.js"
     },
     "js/agenda-calendars.js": {
       "bytes": 18862,
@@ -519,6 +519,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "5328a7dce4007b4c612297deb6538a128cbbe5eefaea1c2904ea4c8289c12075",
+  "manifest_sha256": "ffa648d54bf110ab9b920c0789eaadd803683ddc611ebcdb95dde65b8035aa10",
   "version": 1
 }

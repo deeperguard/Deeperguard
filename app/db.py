@@ -139,7 +139,10 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             nonce BLOB NOT NULL,
             region TEXT NOT NULL,
             set_at REAL NOT NULL,
-            set_by TEXT NOT NULL DEFAULT ''
+            set_by TEXT NOT NULL DEFAULT '',
+            last_test_at REAL NOT NULL DEFAULT 0,
+            last_test_ok INTEGER NOT NULL DEFAULT 0,
+            last_test_category TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS reminder_log (
@@ -154,6 +157,15 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         );
         """
     )
+    pst_cols = {row[1] for row in conn.execute("PRAGMA table_info(pcloud_service_token)").fetchall()}
+    if "last_test_at" not in pst_cols:
+        conn.execute("ALTER TABLE pcloud_service_token ADD COLUMN last_test_at REAL NOT NULL DEFAULT 0")
+    if "last_test_ok" not in pst_cols:
+        conn.execute("ALTER TABLE pcloud_service_token ADD COLUMN last_test_ok INTEGER NOT NULL DEFAULT 0")
+    if "last_test_category" not in pst_cols:
+        conn.execute(
+            "ALTER TABLE pcloud_service_token ADD COLUMN last_test_category TEXT NOT NULL DEFAULT ''"
+        )
     cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     if "kdf_iterations" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN kdf_iterations INTEGER NOT NULL DEFAULT 10000")

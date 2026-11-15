@@ -49,6 +49,33 @@
       <p class="muted"><a href="/self-host">Self-host guide</a> · <a href="/api/health" target="_blank" rel="noopener">Health JSON</a></p>
     </section>
 
+    <section class="admin-ops" id="admin-pcloud" aria-label="pCloud backup connection">
+      <h2 class="admin-section-title">pCloud backup connection</h2>
+      <dl class="admin-ops-grid">
+        <dt>Configured</dt><dd id="pcloud-configured">—</dd>
+        <dt>Set</dt><dd id="pcloud-set">—</dd>
+        <dt>Region</dt><dd id="pcloud-region">—</dd>
+        <dt>Last test</dt><dd id="pcloud-last-test">—</dd>
+      </dl>
+      <p id="pcloud-env-note" class="muted" hidden>Set via server environment (read-only).</p>
+      <form id="pcloud-form" autocomplete="off">
+        <label for="pcloud-token">Token (output of <code>rclone authorize "pcloud"</code> or an access token)</label>
+        <textarea id="pcloud-token" name="pcloud-token" rows="3" maxlength="4096" autocomplete="off"
+          autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+        <label for="pcloud-region-select">Region</label>
+        <select id="pcloud-region-select">
+          <option value="eu">EU</option>
+          <option value="us">US</option>
+        </select>
+        <div class="admin-actions">
+          <button type="submit" class="btn" id="pcloud-save">Save</button>
+          <button type="button" class="btn subtle" id="pcloud-test">Test connection</button>
+          <button type="button" class="btn subtle" id="pcloud-remove">Remove</button>
+        </div>
+      </form>
+      <p id="pcloud-message" class="muted" hidden></p>
+    </section>
+
     <p id="admin-error" class="error" hidden></p>
 
     <div class="admin-table-wrap">

@@ -130,6 +130,86 @@
     }
   }
 
+  function renderPcloud(state) {
+    const st = state || {};
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    const readOnly = Boolean(st.read_only);
+    if (readOnly) {
+      set('pcloud-configured', 'Yes (server environment)');
+      set('pcloud-set', '—');
+      set('pcloud-region', '—');
+      set('pcloud-last-test', '—');
+    } else {
+      set('pcloud-configured', st.configured ? 'Yes' : 'No');
+      set('pcloud-set', st.configured ? `${formatDate(st.set_at)} by ${st.set_by || '—'}` : '—');
+      set('pcloud-region', st.configured ? String(st.region || '').toUpperCase() : '—');
+      const lastTest = Number(st.last_test_at) || 0;
+      set('pcloud-last-test', lastTest
+        ? `${st.last_test_ok ? 'OK' : `Failed (${st.last_test_category || 'error'})`} — ${formatDate(lastTest)}`
+        : '—');
+    }
+    const note = document.getElementById('pcloud-env-note');
+    if (note) note.hidden = !readOnly;
+    ['pcloud-token', 'pcloud-region-select', 'pcloud-save'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = readOnly;
+    });
+    const testBtn = document.getElementById('pcloud-test');
+    if (testBtn) testBtn.disabled = readOnly || !st.configured;
+    const removeBtn = document.getElementById('pcloud-remove');
+    if (removeBtn) removeBtn.disabled = readOnly || !st.configured;
+    const regionSel = document.getElementById('pcloud-region-select');
+    if (regionSel && st.region) regionSel.value = st.region;
+  }
+
+  function pcloudMessage(text, isError) {
+    const el = document.getElementById('pcloud-message');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = isError ? 'error' : 'muted';
+    el.hidden = !text;
+  }
+
+  async function loadPcloud() {
+    const data = await api('/api/admin/pcloud-service');
+    renderPcloud(data.pcloud);
+  }
+
+  async function runPcloud(action) {
+    pcloudMessage('', false);
+    const tokenEl = document.getElementById('pcloud-token');
+    try {
+      let data;
+      if (action === 'save') {
+        const token = tokenEl.value;
+        tokenEl.value = '';
+        data = await api('/api/admin/pcloud-service', {
+          method: 'PUT',
+          body: JSON.stringify({ token, region: document.getElementById('pcloud-region-select').value }),
+        });
+        pcloudMessage('Saved.', false);
+      } else if (action === 'test') {
+        data = await api('/api/admin/pcloud-service/test', { method: 'POST', body: '{}' });
+        pcloudMessage(data.test_ok ? 'Connection OK.' : 'Connection failed.', !data.test_ok);
+      } else {
+        if (!window.confirm('Remove the pCloud backup connection?')) return;
+        data = await api('/api/admin/pcloud-service', { method: 'DELETE' });
+        pcloudMessage('Removed.', false);
+      }
+      renderPcloud(data.pcloud);
+    } catch (e) {
+      tokenEl.value = '';
+      pcloudMessage(e.message || 'Request failed', true);
+    }
+  }
+
+  document.getElementById('pcloud-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    runPcloud('save');
+  });
+  document.getElementById('pcloud-test').addEventListener('click', () => runPcloud('test'));
+  document.getElementById('pcloud-remove').addEventListener('click', () => runPcloud('remove'));
+
   async function loadOverview() {
     const err = document.getElementById('admin-error');
     err.hidden = true;
@@ -140,6 +220,7 @@
     renderServerStats(data);
     renderOps(data);
     renderUsers(data.users || []);
+    await loadPcloud();
   }
 
   async function saveRow(row) {

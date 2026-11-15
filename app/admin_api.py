@@ -9,6 +9,7 @@ from flask import jsonify, render_template, request
 
 import auth
 import db
+from auth_rate_limit import allow as rate_allow
 import server_info_cache
 from config import (
     allow_register,
@@ -31,6 +32,38 @@ def admin_required_json():
     if not user or not user_is_admin(user):
         return None, (jsonify({"error": "forbidden"}), 403)
     return user, None
+
+
+PCLOUD_RATE_LIMIT = 5
+PCLOUD_RATE_WINDOW = 300.0
+
+
+def _pcloud_rate_ok(action: str, admin_user) -> bool:
+    return rate_allow(
+        f"admin-pcloud-{action}:{int(admin_user['id'])}",
+        limit=PCLOUD_RATE_LIMIT,
+        window=PCLOUD_RATE_WINDOW,
+    )
+
+
+def pcloud_service_payload() -> dict[str, Any]:
+    """State only: never the token, nor any part of it."""
+    import backup_pcloud
+    import pcloud_service_token as pst
+
+    st = pst.status()
+    env_set = backup_pcloud.service_source() == backup_pcloud.SOURCE_ENV
+    return {
+        "env_remote": env_set,
+        "read_only": env_set,
+        "configured": bool(st["configured"]),
+        "region": st["region"],
+        "set_at": float(st["set_at"] or 0),
+        "set_by": st["set_by"],
+        "last_test_at": float(st["last_test_at"] or 0),
+        "last_test_ok": bool(st["last_test_ok"]),
+        "last_test_category": st["last_test_category"],
+    }
 
 
 def user_admin_payload(user_row: dict[str, Any]) -> dict[str, Any]:
@@ -329,3 +362,77 @@ def register_admin_routes(app, build_id: str) -> None:
         server_info_cache.drop_user(user_id)
         log.info("admin delete user=%s target=%s by=%s", user_id, target_email, admin_user["email"])
         return jsonify({"ok": True, "deleted": user_id})
+
+    @app.get("/api/admin/pcloud-service")
+    def api_admin_pcloud_service():
+        _, err = admin_required_json()
+        if err:
+            return err
+        return jsonify({"ok": True, "pcloud": pcloud_service_payload()})
+
+    def _pcloud_env_locked():
+        import backup_pcloud
+
+        if backup_pcloud.service_source() == backup_pcloud.SOURCE_ENV:
+            return jsonify({"error": "set via server environment", "pcloud": pcloud_service_payload()}), 409
+        return None
+
+    @app.put("/api/admin/pcloud-service")
+    def api_admin_pcloud_service_set():
+        import pcloud_service_token as pst
+
+        admin_user, err = admin_required_json()
+        if err:
+            return err
+        locked = _pcloud_env_locked()
+        if locked:
+            return locked
+        if not _pcloud_rate_ok("set", admin_user):
+            return jsonify({"error": "too many attempts, try again later"}), 429
+        body = request.get_json(silent=True)
+        body = body if isinstance(body, dict) else {}
+        try:
+            pst.set_token(body.get("token"), body.get("region"), admin_user["email"])
+        except pst.TokenError as exc:
+            log.info("admin pcloud-service set rejected by=%s", admin_user["email"])
+            return jsonify({"error": str(exc)}), 400
+        finally:
+            body = None
+        log.info("admin pcloud-service set by=%s", admin_user["email"])
+        return jsonify({"ok": True, "pcloud": pcloud_service_payload()})
+
+    @app.post("/api/admin/pcloud-service/test")
+    def api_admin_pcloud_service_test():
+        import backup_pcloud
+        import pcloud_service_token as pst
+
+        admin_user, err = admin_required_json()
+        if err:
+            return err
+        locked = _pcloud_env_locked()
+        if locked:
+            return locked
+        if not _pcloud_rate_ok("test", admin_user):
+            return jsonify({"error": "too many attempts, try again later"}), 429
+        if not pst.status()["configured"]:
+            return jsonify({"error": "not configured"}), 400
+        result = backup_pcloud.test_connection()
+        ok = bool(result.get("ok"))
+        category = str(result.get("category") or "")
+        pst.record_test(ok, category)
+        log.info("admin pcloud-service test ok=%s result=%s by=%s", ok, category, admin_user["email"])
+        return jsonify({"ok": True, "test_ok": ok, "pcloud": pcloud_service_payload()})
+
+    @app.delete("/api/admin/pcloud-service")
+    def api_admin_pcloud_service_remove():
+        import pcloud_service_token as pst
+
+        admin_user, err = admin_required_json()
+        if err:
+            return err
+        locked = _pcloud_env_locked()
+        if locked:
+            return locked
+        pst.remove()
+        log.info("admin pcloud-service remove by=%s", admin_user["email"])
+        return jsonify({"ok": True, "pcloud": pcloud_service_payload()})
