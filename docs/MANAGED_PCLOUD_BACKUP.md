@@ -492,3 +492,17 @@ must update exactly these:
    and the marketing FAQ carry it today).
 
 Pricing and plan definitions are not changed.
+
+## Settings UI and API (task e)
+
+- `GET /api/backup/managed` returns only `available`, `reason_code` (fixed code),
+  `enabled`, `own_token`, `failures_only`, `last_at`, `last_status`, `last_size`,
+  `last_kept`. `POST /api/backup/managed` takes `enabled` and/or `failures_only`;
+  it is session-authenticated, CSRF-checked by the global request hook and
+  plan-gated. It never returns the remote name, root, config path, path or directory id.
+- Default is off. Without a working service remote the toggle is disabled with a plain
+  explanation (health result cached for 60 s).
+- Users with their own token (`own_token`) see a notice that their backup keeps
+  working, the old fields under "Own pCloud account (advanced)" and a switch button.
+  Switching sets the managed flag only; their own-token settings and old backups in
+  their own pCloud are not touched or deleted.
