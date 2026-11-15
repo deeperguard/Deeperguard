@@ -9420,7 +9420,12 @@
     }).join('');
     list.querySelectorAll('[data-manage-tag]').forEach((row) => {
       const uuid = row.dataset.manageTag;
-      row.querySelector('[data-manage-rename]')?.addEventListener('click', () => beginManageRename(row, uuid));
+      row.querySelector('[data-manage-rename]')?.addEventListener('click', () => {
+        // A rename in progress is committed by the button too (Safari does not blur the input on click).
+        const pending = row.querySelector('input.tag-manage-rename');
+        if (pending) pending.dispatchEvent(new Event('blur'));
+        else beginManageRename(row, uuid);
+      });
       row.querySelector('[data-manage-delete]')?.addEventListener('click', () => deleteCurrentTag(uuid));
       row.querySelector('[data-server-copy]')?.addEventListener('click', () => {
         openServerCopyView(uuid).catch((err) => toast(err.message || 'Could not load server copy', true));
@@ -9435,6 +9440,13 @@
       });
     });
   }
+
+  const TAG_RENAME_ERRORS = {
+    duplicate: 'A tag with that name already exists here',
+    slash: 'Only the last part of a tag name can be renamed here; use drag and drop in the sidebar to move it',
+    empty: 'Tag name parts cannot be empty',
+    too_long: 'Tag name is too long',
+  };
 
   function beginManageRename(row, uuid) {
     const tag = NotesStore.get(uuid);
@@ -9455,8 +9467,13 @@
       done = true;
       const title = input.value.trim();
       if (title && title !== tag.content.title) {
-        NotesStore.renameTag(uuid, title);
-        invalidateTagMap();
+        const result = NotesStore.renameTagPath(uuid, title);
+        if (result.ok) {
+          invalidateTagMap();
+          toast(`Tag renamed to ${result.title}`);
+        } else {
+          toast(TAG_RENAME_ERRORS[result.error] || 'Could not rename tag', true);
+        }
       }
       renderTags();
       renderNotes();
