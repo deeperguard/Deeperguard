@@ -223,7 +223,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   border: 0;
 }
 .mk-nav-toggle {
-  display: inline-flex;
+  display: none;
   align-items: center;
   justify-content: center;
   width: 44px;
@@ -243,9 +243,14 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   flex-shrink: 0;
 }
 .mk-nav {
-  display: none;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
   gap: 0.35rem;
-  margin-left: auto;
+  margin-left: 0;
 }
 .mk-nav a {
   color: var(--mk-muted);
@@ -380,7 +385,6 @@ body:has(.mk-nav-check:checked) {
 .mk-topbar,
 .mk-topbar-inner { overflow: visible; }
 @media (min-width: 820px) {
-  .mk-topbar-actions { margin-left: auto; }
   .mk-topbar-inner {
     padding-left: 1.25rem;
     padding-right: 1.25rem;
@@ -1749,41 +1753,20 @@ a.mk-badge-link:hover {
     padding-bottom: 10px;
   }
 }
-@media (min-width: 768px) {
-  .mk-nav-toggle { display: none; }
-  .mk-nav-backdrop { display: none !important; }
-  .mk-brand { flex-shrink: 0; }
-  .mk-brand small { white-space: nowrap; }
-  .mk-nav-check:checked ~ .mk-nav,
-  .mk-nav {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: center;
-    position: static;
-    left: auto;
-    right: auto;
-    top: auto;
-    width: auto;
-    max-width: none;
-    min-width: 0;
-    flex: 1 1 auto;
-    margin-left: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    overflow: hidden;
-  }
-  .mk-nav a { white-space: nowrap; }
-  .mk-topbar-actions { margin-left: auto; flex-shrink: 0; }
-}
+/* JS (site nav measuring) adds .nav-collapsed when the links do not fit on one line. */
+.mk-topbar.nav-collapsed .mk-nav-toggle { display: inline-flex; }
+.mk-topbar.nav-collapsed .mk-nav-check:not(:checked) ~ .mk-nav { display: none; }
+.mk-topbar:not(.nav-collapsed) .mk-nav-backdrop { display: none !important; }
+.mk-brand { flex-shrink: 0; }
+.mk-brand small { white-space: nowrap; }
+.mk-nav a { white-space: nowrap; }
+.mk-topbar-actions { flex-shrink: 0; }
+.mk-topbar.nav-collapsed .mk-topbar-actions { margin-left: auto; }
 @media (min-width: 768px) and (max-width: 1365px) {
   .mk-brand small { display: none; }
   .mk-topbar-inner { gap: 0.45rem; padding-left: 0.75rem; padding-right: 0.75rem; }
   .mk-nav { gap: 0; }
-  .mk-nav a { font-size: 0.8rem; padding: 0.4rem 0.32rem; }
+  .mk-nav a { font-size: 0.875rem; padding: 0.4rem 0.45rem; }
   .mk-topbar-actions { gap: 0.35rem; }
   .mk-topbar-actions .mk-btn { padding: 0 0.7rem; }
 }
