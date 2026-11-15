@@ -934,7 +934,7 @@ openers and control that offer the action instead).
 | `#app-tab-notes` | Notes | Top bar | Top nav | all | visible |
 | `#app-tab-agenda` | Agenda | Top bar | Top nav | all | visible |
 | `#app-tab-2fa` | 2FA | Top bar | Top nav | all | visible |
-| `#btn-drawer-close` | Close | Loose button under top bar | Sidebar header, shown only when sidebar is an overlay drawer | notes | visible |
+| `#btn-drawer-close` | Close | Loose button under top bar | Sidebar header, shown only when sidebar is an overlay drawer | notes | conditional: overlay drawer (tablet/phone) |
 | `.filter[data-filter="all"]` | Notes | Icon rail, top | Sidebar: Views, icon + label | notes | visible |
 | `.filter[data-filter="documents"]` | Files | Icon rail, top | Sidebar: Views | notes | visible |
 | `.filter[data-filter="pinned"]` | Starred | Icon rail, top | Sidebar: Views | notes | visible |
