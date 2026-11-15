@@ -60,7 +60,32 @@ const ctl = attach({ card: f.card, stage: f.stage, scroller: f.scroller, doc: do
 // Default: fit to width, no page wider than the container, "1 / 3".
 assert.strictEqual(ctl.getZoom(), 1);
 assert.strictEqual(f.stage.style.width, '100%');
-f.stage.querySelectorAll('.doc-page-wrap').forEach((w) => assert.ok(w.getBoundingClientRect().width <= CONTAINER_W));
+// Real CSS contract (the DOM stub has no layout): at zoom 1 the stage is 100% of
+// the column, pages are 100% / max-width 100% of the stage, the stage is centred
+// and the main area scrolls horizontally on a neutral token background.
+const fs0 = require('fs');
+const css = fs0.readFileSync(require('path').join(__dirname, '../app/static/css/app.css'), 'utf8');
+function ruleBody(selector) {
+  const out = [];
+  const re = new RegExp(`(^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`, 'g');
+  let m;
+  while ((m = re.exec(css))) out.push(m[2]);
+  return out.join('\n');
+}
+const pageRule = ruleBody('.doc-inline-stage .doc-page-wrap,\n.doc-stage .doc-page-wrap');
+assert.match(pageRule, /width:\s*100%/);
+assert.match(pageRule, /max-width:\s*100%/);
+const stageRule = ruleBody('.doc-inline-card .doc-inline-stage,\n.editor.doc-preview-active .doc-inline-card .doc-inline-stage:not(.is-loading)');
+assert.match(stageRule, /margin-inline:\s*auto/);
+const mainRule = ruleBody('.doc-inline-card .doc-inline-main,\n.editor.doc-preview-active .doc-inline-card .doc-inline-main');
+assert.match(mainRule, /background:\s*var\(--doc-surface\)/);
+assert.match(mainRule, /overflow-x:\s*auto/);
+assert.ok(!/border-left:\s*[1-9]/.test(ruleBody('.doc-inline-card .doc-inline-stage .doc-page-wrap')));
+assert.ok(/--doc-surface:\s*#/.test(css), 'neutral surface token exists');
+// Default zoom must be 1 and the stage must not carry any other width.
+assert.strictEqual(ctl.getZoom(), 1);
+assert.notStrictEqual(f.stage.style.width, '');
+assert.strictEqual(parseFloat(f.stage.style.width), 100);
 const btns = ctl.bar.querySelectorAll('button');
 assert.strictEqual(btns.length, 4);
 btns.forEach((b) => {

@@ -12217,10 +12217,23 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   color: var(--muted);
 }
 .doc-inline-page[hidden] { display: none; }
-.doc-inline-card[data-zoom] .doc-inline-main { overflow-x: auto; }
-.doc-inline-card[data-zoom] .doc-inline-stage {
-  margin-inline: auto;
+/* Root cause of the cut-off / off-centre page: the phone and desktop
+   `.editor.doc-preview-active` rules make the stage a transparent, left-aligned
+   block with overflow:visible, so a page wider than the column was clipped and
+   nothing centred it. Neutral token background on the viewer, horizontal
+   scroll on the main area, stage centred when narrower than the column. */
+.doc-inline-card .doc-inline-main,
+.editor.doc-preview-active .doc-inline-card .doc-inline-main {
+  background: var(--doc-surface);
+  overflow-x: auto;
+  overflow-y: clip;
+}
+.doc-inline-card .doc-inline-stage,
+.editor.doc-preview-active .doc-inline-card .doc-inline-stage:not(.is-loading) {
+  box-sizing: border-box;
+  max-width: none;
   min-width: 0;
+  margin-inline: auto;
 }
 .doc-inline-card .doc-inline-stage .doc-page-wrap {
   margin-inline: auto;

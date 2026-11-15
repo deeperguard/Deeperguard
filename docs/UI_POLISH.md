@@ -1170,9 +1170,28 @@ are rendered at 2x or more, so 300% is the sharpness limit). The page
 indicator is derived from the scroll position (`n / N`, `aria-live`). Full
 screen uses the Fullscreen API on `.doc-inline-card` (Esc exits; the button is
 omitted where the API is missing). Every button is a native `<button>` with
-`title` and `aria-label`. Object URLs still go through `NotesBlobUrls`
-(revoked on cache eviction, lock and logout); the PDF path uses bytes, not a
-URL. Test: `node tests/test_doc_inline_controls.js`.
+`title` and `aria-label`.
+
+Root cause of the cut-off, off-centre page: the phone and desktop
+`.editor.doc-preview-active .doc-inline-stage` rules made the stage a
+transparent, left-aligned block with `overflow: visible`, so nothing centred
+the page or scrolled a wider one. The viewer now has a neutral
+`var(--doc-surface)` background on `.doc-inline-main`, which scrolls
+horizontally (`overflow-x: auto`), and the stage is `margin-inline: auto`.
+
+Object URLs: the PDF path hands bytes to pdf.js (`openPdf(bytes)` in
+`preview.js`), so the viewer itself creates no blob URL (the e2e measures at most one live
+URL while open: the note-list thumbnail of page 1, and none after the viewer
+closes or switches). Image and thumbnail URLs go through `NotesBlobUrls`, which calls `URL.revokeObjectURL` on `revoke()`
+(cache eviction, viewer close/switch) and `revokeAll()` (lock, logout). The
+pdf.js worker blob URL is app-lifetime and holds no user data.
+
+Tests: `node tests/test_doc_inline_controls.js` (controls + CSS contract),
+`node tests/test_blob_urls.js` (revoke), and
+`python tests/e2e_doc_inline_viewer.py [dir]` (real Chromium, desktop and
+390px mobile: fit width, centring, no overflow, zoom, horizontal reach,
+toolbar click does not open the full viewer, full screen open/close, no live
+blob URLs; writes screenshots).
 
 ### 7.7 Footer and backlinks
 
