@@ -11,7 +11,7 @@ sys.path.insert(0, str(APP_DIR))
 import db  # noqa: E402
 import email_verify  # noqa: E402
 from backup_mail import send_user_backup  # noqa: E402
-from backup_pcloud import run_managed_backups, run_pcloud_backups  # noqa: E402
+from backup_pcloud import notify_managed_results, run_managed_backups, run_pcloud_backups  # noqa: E402
 from maintenance_lock import maintenance_lock  # noqa: E402
 
 log = logging.getLogger("deeperguard.backup")
@@ -38,6 +38,7 @@ def _run_backups_locked() -> tuple[int, int]:
         LAST_MANAGED_RESULTS[:] = run_managed_backups()
     except Exception as exc:
         log.error("managed pcloud run failed: %s", type(exc).__name__)
+    notify_managed_results(LAST_MANAGED_RESULTS)
     synced += sum(1 for r in LAST_MANAGED_RESULTS if r["ok"])
     sent = 0
     for user in db.users_with_backup_enabled():

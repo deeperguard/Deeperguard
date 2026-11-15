@@ -192,5 +192,70 @@ exit 0
         self.assertEqual(self.db.get_user_by_id(a)["pcloud_last_sync_status"], "error")
 
 
+class ManagedMailTests(ManagedRunTests):
+    def setUp(self):
+        super().setUp()
+        self.sent = []
+        self.bp.send_plain_email = lambda to, subj, body: self.sent.append((to, subj, body))
+
+    def _run(self):
+        self.cron.run_backups()
+
+    def test_one_mail_per_run_success_and_failure(self):
+        a, b = self._user("a@x.test"), self._user("b@x.test")
+        os.environ["FAKE_FAIL_DIR"] = self.db.get_user_by_id(b)["pcloud_dir_id"]
+        self._run()
+        by = {to: (s, body) for to, s, body in self.sent}
+        self.assertEqual(len(self.sent), 2)
+        self.assertIn("succeeded", by["a@x.test"][0])
+        self.assertIn("Backups kept: 1", by["a@x.test"][1])
+        self.assertIn("failed", by["b@x.test"][0])
+
+    def test_no_mail_to_unverified_address(self):
+        a = self._user("a@x.test")
+        conn = self.db.connection()
+        conn.execute("UPDATE users SET email_verified = 0 WHERE id = ?", (a,))
+        conn.commit()
+        self._run()
+        self.assertEqual(self.sent, [])
+
+    def test_failures_only_preference(self):
+        a, b = self._user("a@x.test"), self._user("b@x.test")
+        self.db.set_pcloud_mail_pref(a, True)
+        self.db.set_pcloud_mail_pref(b, True)
+        os.environ["FAKE_FAIL_DIR"] = self.db.get_user_by_id(b)["pcloud_dir_id"]
+        self._run()
+        self.assertEqual([m[0] for m in self.sent], ["b@x.test"])
+        self.assertEqual(self.db.get_user_by_id(a)["pcloud_mail_pref"], "failures")
+
+    def test_default_pref_is_both(self):
+        a = self._user("a@x.test")
+        self.assertEqual(self.db.get_user_by_id(a)["pcloud_mail_pref"], "both")
+
+    def test_mail_failure_does_not_break_run(self):
+        self._user("a@x.test")
+        def boom(*a):
+            raise OSError("smtp down")
+        self.bp.send_plain_email = boom
+        self.assertEqual(self._run(), None)
+        self.assertEqual(len(self.cron.LAST_MANAGED_RESULTS), 1)
+
+    def test_mail_has_no_forbidden_strings(self):
+        os.environ["NOTES_PCLOUD_SERVICE_REMOTE"] = "fakeremote"
+        a = self._user("a@x.test")
+        did = self.db.get_user_by_id(a)["pcloud_dir_id"]
+        os.environ["FAKE_FAIL_DIR"] = did
+        results = [
+            {"user_id": a, "ok": False, "code": c, "size": 0, "kept": 0, "at": 1.0}
+            for c in ("upload_failed", "quota", "timeout", "plan", "remote_unavailable")
+        ] + [{"user_id": a, "ok": True, "code": "ok", "size": 2048, "kept": 3, "at": 1.0}]
+        for r in results:
+            subj, body = self.bp.managed_result_mail(r)
+            text = subj + body
+            for bad in ("fakeremote", "Deeperguard/users", did, "/tmp", "Traceback",
+                        "secret stderr", "rclone", "401", "token", "/"):
+                self.assertNotIn(bad, text.replace("UTC", ""))
+
+
 if __name__ == "__main__":
     unittest.main()

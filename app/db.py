@@ -185,6 +185,8 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN pcloud_last_size INTEGER NOT NULL DEFAULT 0")
     if "pcloud_last_kept" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN pcloud_last_kept INTEGER NOT NULL DEFAULT 0")
+    if "pcloud_mail_pref" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN pcloud_mail_pref TEXT NOT NULL DEFAULT 'both'")
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_pcloud_dir_id "
         "ON users(pcloud_dir_id) WHERE pcloud_dir_id != ''"
@@ -1766,6 +1768,15 @@ def users_with_managed_backup_enabled() -> list[sqlite3.Row]:
             "SELECT * FROM users WHERE managed_backup_enabled = 1 ORDER BY id"
         ).fetchall()
     )
+
+
+def set_pcloud_mail_pref(user_id: int, failures_only: bool) -> None:
+    """'failures' = mail only when a managed backup run fails; 'both' (default) = every run."""
+    with tx() as conn:
+        conn.execute(
+            "UPDATE users SET pcloud_mail_pref = ?, updated_at = ? WHERE id = ?",
+            ("failures" if failures_only else "both", now(), int(user_id)),
+        )
 
 
 def update_managed_backup_status(
