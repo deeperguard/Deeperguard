@@ -2,13 +2,33 @@
   const navCheck = document.getElementById('mk-nav-check');
   const navToggle = document.querySelector('.mk-nav-toggle');
 
+  function syncNavToggle() {
+    if (navToggle && navCheck) navToggle.setAttribute('aria-expanded', navCheck.checked ? 'true' : 'false');
+  }
+
   function closePublicNav({ restoreFocus = false } = {}) {
     if (!navCheck || !navCheck.checked) return false;
     navCheck.checked = false;
+    syncNavToggle();
     if (restoreFocus && navToggle && typeof navToggle.focus === 'function') {
       try { navToggle.focus(); } catch (err) { /* ignore */ }
     }
     return true;
+  }
+
+  if (navToggle && navCheck) {
+    navToggle.addEventListener('click', () => {
+      navCheck.checked = !navCheck.checked;
+      syncNavToggle();
+    });
+    navCheck.addEventListener('change', syncNavToggle);
+    // The backdrop label can be confined to the header by backdrop-filter, so also close on any outside click.
+    document.addEventListener('click', (event) => {
+      if (!navCheck.checked) return;
+      const t = event.target;
+      if (t.closest && (t.closest('.mk-nav') || t.closest('.mk-nav-toggle') || t.closest('.mk-nav-backdrop'))) return;
+      closePublicNav();
+    });
   }
 
   document.addEventListener('keydown', (event) => {
