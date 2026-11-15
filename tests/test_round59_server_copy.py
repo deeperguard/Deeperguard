@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import re
 import secrets
 import sys
 import tempfile
@@ -100,10 +101,15 @@ class Round59ServerCopyTests(unittest.TestCase):
         # the end only. No early / inline scripts.
         head = body.lower().split("marketing.", 1)[0]
         self.assertNotIn("<script", head)
-        self.assertEqual(body.lower().count("<script"), 2)
+        self.assertEqual(body.lower().count("<script"), 3)
+        self.assertIn("marketing.", body.lower())
         self.assertIn("release-integrity", body.lower())
         self.assertIn("verify-ask-ai-provider", body.lower())
         self.assertIn("integrity=", body.lower())
+        script_tags = re.findall(r"<script\b[^>]*>", body, flags=re.I)
+        self.assertEqual(len(script_tags), 3)
+        for tag in script_tags:
+            self.assertIn("integrity=", tag.lower())
 
         home = self.client.get("/")
         self.assertEqual(home.status_code, 200)
