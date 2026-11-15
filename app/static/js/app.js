@@ -15493,11 +15493,14 @@
     NotesFreshness.__uiWired = true;
     NotesFreshness.onChange((snap) => {
       renderVaultFreshnessPanel();
-      const latest = snap?.warnings?.[0];
-      if (!latest || !latest.message) return;
-      if (latest.at && latest.at <= freshnessToastAt) return;
-      freshnessToastAt = latest.at || Date.now();
-      toast(latest.message, true);
+      // A sync round can finish with several bundled warnings (e.g. fork and
+      // rollback, each with its own count) — show every new one together.
+      const fresh = (snap?.warnings || [])
+        .filter((w) => w && w.message && !(w.at && w.at <= freshnessToastAt))
+        .slice(0, 3);
+      if (!fresh.length) return;
+      freshnessToastAt = Math.max(...fresh.map((w) => w.at || Date.now()));
+      toast(fresh.map((w) => w.message).join(' '), true);
     });
   }
   wireFreshnessWarnings();
