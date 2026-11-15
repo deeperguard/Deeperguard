@@ -386,8 +386,39 @@ path.
 
 ## 10. Operator text
 
-**The only step is: set `NOTES_PCLOUD_SERVICE_REMOTE`.** Until it is set, the feature
-is unavailable to users and nothing else changes.
+### 10a. Default: admin dashboard
+
+1. On a computer with a browser, run `rclone authorize "pcloud"` and log in to the
+   **dedicated** pCloud service account. Copy the printed JSON (or only its
+   `access_token`).
+2. In `/admin`, section **pCloud backup connection**: paste it into the token field,
+   choose EU (`eapi.pcloud.com`) or US (`api.pcloud.com`), **Save**, then **Test
+   connection** (a read-only `rclone lsd` with a timeout). **Remove** deletes the
+   stored ciphertext.
+3. The page only shows the state: configured yes/no, when and by which admin, region,
+   and result and time of the last test. The token is never sent back to the browser,
+   not even partly. Save and Test are rate limited; set/test/remove are written to the
+   log as audit lines (who, when, result category; never the value).
+
+The token is stored with AES-256-GCM under a 32-byte key in
+`KEYS_DIR/pcloud-service-token.key` (0600, created on first save), separate from the
+database, which holds only ciphertext, nonce and metadata. It is decrypted in memory
+just before an rclone call and handed to rclone only through `RCLONE_CONFIG_*`
+environment variables: no plaintext config file, never on a command line.
+
+**What this protects and what not.** Encryption at rest protects against a leaked
+database file or database backup: without the key file the ciphertext is useless.
+It does **not** protect against someone with root on the server (or access to both
+the database and `KEYS_DIR`), because the server must decrypt the token for unattended
+nightly runs. The token gives access to the **whole** pCloud account it belongs to, so
+use a dedicated pCloud account that holds nothing but these backups, with 2FA.
+
+### 10b. Alternative: server environment
+
+If `NOTES_PCLOUD_SERVICE_REMOTE` is set, it wins over a stored token and the admin
+section shows "Set via server environment" read-only (its write endpoints refuse).
+When neither source exists, the health check and status report `not_configured`.
+The steps for the environment route:
 
 Production on 2026-11-14 (checked read-only by the owner's assistant): rclone v1.68.2
 at `/usr/bin/rclone`, app service runs as root, **no rclone remote exists yet** (no

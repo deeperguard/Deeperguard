@@ -124,20 +124,38 @@ def set_token(raw: Any, region: Any, admin: Any) -> None:
 
 def _row():
     return db.connection().execute(
-        f"SELECT ciphertext, nonce, region, set_at, set_by FROM {TABLE} WHERE id = ?", (ROW_ID,)
+        f"SELECT ciphertext, nonce, region, set_at, set_by, last_test_at, last_test_ok, "
+        f"last_test_category FROM {TABLE} WHERE id = ?",
+        (ROW_ID,),
     ).fetchone()
 
 
 def status() -> dict[str, Any]:
     row = _row()
     if not row:
-        return {"configured": False, "region": "", "set_at": 0, "set_by": ""}
+        return {
+            "configured": False, "region": "", "set_at": 0, "set_by": "",
+            "last_test_at": 0, "last_test_ok": False, "last_test_category": "",
+        }
     return {
         "configured": True,
         "region": row["region"],
         "set_at": row["set_at"],
         "set_by": row["set_by"],
+        "last_test_at": row["last_test_at"],
+        "last_test_ok": bool(row["last_test_ok"]),
+        "last_test_category": row["last_test_category"],
     }
+
+
+def record_test(ok: bool, category: str) -> None:
+    """Store the outcome of the last connection test (fixed category only, never output)."""
+    conn = db.connection()
+    conn.execute(
+        f"UPDATE {TABLE} SET last_test_at = ?, last_test_ok = ?, last_test_category = ? WHERE id = ?",
+        (time.time(), 1 if ok else 0, str(category or "")[:40], ROW_ID),
+    )
+    conn.commit()
 
 
 def remove() -> None:
