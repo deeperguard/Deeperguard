@@ -6731,6 +6731,11 @@ const NotesStore = (() => {
           }
         }
         item.updated_at = Math.max(Number(item.updated_at) || 0, ts);
+        // New key → new IV → new content_hash: publish as a normal newer
+        // version so other devices holding a hwm do not see a false fork.
+        if (typeof NotesFreshness !== 'undefined' && item.content && typeof item.content === 'object') {
+          item.content = NotesFreshness.stampForUpsert(uuid, item.content, { bump: true, existing: item });
+        }
         state.items.set(uuid, item);
         state.dirty.add(uuid);
         await persistLocal(uuid, item);
