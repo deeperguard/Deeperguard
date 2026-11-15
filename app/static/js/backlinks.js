@@ -220,6 +220,7 @@ const NotesBacklinks = (() => {
     container.appendChild(heading);
     if (status !== 'ready') {
       container.setAttribute('aria-busy', 'true');
+      container.setAttribute('data-empty', 'true');
       heading.textContent = 'Linked from';
       const p = d.createElement('p');
       p.className = 'muted backlinks-empty';
@@ -235,6 +236,8 @@ const NotesBacklinks = (() => {
       .map((r) => ({ ...r, title: (titleOf ? titleOf(r.item) : r.item.content.title) || 'Untitled' }))
       .sort((a, b) => a.title.localeCompare(b.title));
     heading.textContent = `Linked from (${rows.length})`;
+    // Empty: compact, collapsed heading only (CSS hides the sentence).
+    container.setAttribute('data-empty', rows.length ? 'false' : 'true');
     if (!rows.length) {
       const p = d.createElement('p');
       p.className = 'muted backlinks-empty';
