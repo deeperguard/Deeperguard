@@ -31,6 +31,45 @@
     });
   }
 
+  // Collapse the desktop nav into the menu when its links do not fit on one line.
+  const topbar = document.querySelector('.mk-topbar');
+  const topbarInner = topbar && topbar.querySelector('.mk-topbar-inner');
+  const navEl = topbar && topbar.querySelector('.mk-nav');
+  const desktopNav = window.matchMedia ? window.matchMedia('(min-width: 768px)') : null;
+  let lastNavWidth = -1;
+
+  function measureNavFit() {
+    if (!topbar || !topbarInner || !navEl) return;
+    if (desktopNav && !desktopNav.matches) {
+      topbar.classList.remove('nav-collapsed');
+      return;
+    }
+    const wasCollapsed = topbar.classList.contains('nav-collapsed');
+    // Measure the expanded single-line state synchronously, then apply the result before paint.
+    topbar.classList.add('nav-measuring');
+    topbar.classList.remove('nav-collapsed');
+    const overflows = navEl.scrollWidth > navEl.clientWidth + 1
+      || topbarInner.scrollWidth > topbarInner.clientWidth + 1;
+    topbar.classList.remove('nav-measuring');
+    topbar.classList.toggle('nav-collapsed', overflows);
+    if (wasCollapsed && !overflows) closePublicNav();
+  }
+
+  if (topbar && topbarInner && navEl) {
+    measureNavFit();
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver((entries) => {
+        const width = Math.round(entries[entries.length - 1].contentRect.width);
+        if (width === lastNavWidth) return;
+        lastNavWidth = width;
+        measureNavFit();
+      }).observe(topbarInner);
+    } else {
+      window.addEventListener('resize', measureNavFit);
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(measureNavFit);
+  }
+
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (closePublicNav({ restoreFocus: true })) {
