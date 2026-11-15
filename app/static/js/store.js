@@ -1661,6 +1661,17 @@ const NotesStore = (() => {
     return row;
   }
 
+  // Content that is re-encrypted, merged or restored and then pushed again must
+  // be a newer freshness version (stampForUpsert): another device holding a hwm
+  // would otherwise see new ciphertext at its known __fv as a fork. `floor`
+  // (an item, e.g. the server copy) raises the base above what others accepted.
+  // See docs/FRESHNESS_REENCRYPT.md.
+  function bumpFreshness(uuid, content, floor = null) {
+    if (typeof NotesFreshness === 'undefined' || !content || typeof content !== 'object') return content;
+    if (!NotesFreshness.shouldTrackType(content.type)) return content;
+    return NotesFreshness.stampForUpsert(uuid, content, { bump: true, existing: floor });
+  }
+
   async function wrapItemForPush(uuid, content, item) {
     const cached = reuseCachedPushRow(item, content);
     if (cached) return cached;
@@ -3624,10 +3635,18 @@ const NotesStore = (() => {
     }
     const serverRev = Number(serverRow.rev ?? result?.rev) || 0;
     const serverUpdated = Number(serverRow.updated_at) || 0;
-    const winLocal = () => {
+    const winLocal = async (remoteItem = null) => {
       if (serverRev) local.rev = serverRev;
       // Legacy servers decide by clock; make the re-push the newest write.
       if ((Number(local.updated_at) || 0) <= serverUpdated) local.updated_at = serverUpdated + 0.001;
+      // Our copy goes out on top of the server's: make it newer than the
+      // server copy's __fv, or devices that accepted that copy see a fork.
+      if (!local.deleted && local.content && typeof NotesFreshness !== 'undefined'
+        && NotesFreshness.shouldTrackType(local.content.type)) {
+        local.content = bumpFreshness(uuid, local.content, remoteItem);
+        clearSyncPushWrap(local); // never re-send the cached pre-bump ciphertext
+        await persistLocal(uuid, local);
+      }
       return true;
     };
     if (serverRow.deleted) {
@@ -3659,20 +3678,18 @@ const NotesStore = (() => {
         logSync('conflict-rebase-local', { uuid, rev: serverRev });
       }
       const { changed, content } = mergeCrossDeviceProtection(local.content, remote.content);
-      if (changed) {
-        local.content = content;
-        await persistLocal(uuid, local);
-      }
-      return winLocal();
+      if (changed) local.content = content;
+      // winLocal bumps __fv above the server copy and persists.
+      return winLocal(remote);
     }
     if (type === 'agenda_pack' && remote.content?.type === 'agenda_pack') {
       // Both devices changed the calendar: keep every event change, not the newest pack.
       await backupAgendaPack('pre-merge');
       local.content = mergeAgendaPacks(local.content, remote.content);
-      clearSyncPushWrap(local); // merged content: never re-send the cached pre-merge ciphertext
-      await persistLocal(uuid, local);
       logSync('conflict-agenda-merge', { uuid, rev: serverRev });
-      return winLocal();
+      // winLocal bumps __fv above the server copy, drops the cached
+      // pre-merge ciphertext and persists.
+      return winLocal(remote);
     }
     if (type === 'search_index' && remote.content?.type === 'search_index') {
       const merged = mergeSearchEntries(local.content.entries, remote.content.entries);
@@ -3681,7 +3698,7 @@ const NotesStore = (() => {
       applySearchIndexEntries();
       return winLocal();
     }
-    if ((Number(local.updated_at) || 0) >= serverUpdated) return winLocal();
+    if ((Number(local.updated_at) || 0) >= serverUpdated) return winLocal(remote);
     await adoptServerItem(uuid, serverRow, remote);
     return false;
   }
@@ -4117,9 +4134,11 @@ const NotesStore = (() => {
               if (changed) {
                 const next = {
                   ...local,
-                  content,
+                  // Pushed again: newer than the server copy other devices hold.
+                  content: bumpFreshness(row.item_uuid, content, remote),
                   content_hash: row.content_hash || local.content_hash,
                 };
+                clearSyncPushWrap(next);
                 state.items.set(row.item_uuid, next);
                 state.dirty.add(row.item_uuid);
                 protectionPushNeeded = true;
@@ -4165,6 +4184,7 @@ const NotesStore = (() => {
           } else {
             const prevLocked = !!local?.content?.locked;
             const prevPrevent = !!local?.content?.prevent_edit;
+            let mergedRepush = false;
             previousContent = local?.content || null;
             if (
               remote.content?.type === 'agenda_pack'
@@ -4178,10 +4198,15 @@ const NotesStore = (() => {
                 .map((k) => Object.keys(c?.[k] || {}).sort().join(',')).join('|');
               if (keysOf(merged) !== keysOf(remote.content)) {
                 await backupAgendaPack('pre-merge');
+                // The merged pack is pushed again: publish it as newer than
+                // the server copy other devices already accepted.
+                remote.content = bumpFreshness(row.item_uuid, merged, remote);
+                mergedRepush = true;
                 state.dirty.add(row.item_uuid);
                 schedulePush();
+              } else {
+                remote.content = merged;
               }
-              remote.content = merged;
             }
             if (remote.content?.type === 'search_index') {
               const merged = mergeSearchEntries(local?.content?.entries, remote.content.entries);
@@ -4196,10 +4221,11 @@ const NotesStore = (() => {
             if (row.content_hash) remote.content_hash = row.content_hash;
             await persistLocal(row.item_uuid, remote);
             if (typeof NotesFreshness !== 'undefined') {
+              // A locally bumped merge has no server hash yet (set on push).
               NotesFreshness.noteAccepted(
                 row.item_uuid,
                 remote.content,
-                row.content_hash || remote.content_hash || '',
+                mergedRepush ? '' : (row.content_hash || remote.content_hash || ''),
               );
               if (remote.content?.type === 'vault_head') remoteVaultHead = remote.content;
             }
@@ -5632,6 +5658,9 @@ const NotesStore = (() => {
       if (item.deleted) continue;
       const changed = await sealAttachmentContent(item.content);
       if (!changed) continue;
+      // Sealed copy replaces the old ciphertext on the server: newer version.
+      item.content = bumpFreshness(uuid, item.content, item);
+      clearSyncPushWrap(item);
       state.dirty.add(uuid);
       await persistLocal(uuid, item);
       const light = strippedAttachmentContent(item.content);
@@ -6587,6 +6616,8 @@ const NotesStore = (() => {
           }
         }
         item.updated_at = Math.max(Number(item.updated_at) || 0, ts);
+        // New key → new ciphertext: newer __fv so other devices see no fork.
+        item.content = bumpFreshness(uuid, item.content, item);
         state.items.set(uuid, item);
         state.dirty.add(uuid);
       }
@@ -6856,6 +6887,9 @@ const NotesStore = (() => {
             // re-push is accepted, and make it the newest write.
             if (live?.rev != null) restored.rev = live.rev;
             restored.updated_at = Math.max(Number(restored.updated_at) || 0, now);
+            // Rows already went out at a bumped __fv: the old-key copy must be
+            // newer still, or other devices see a rollback / fork.
+            restored.content = bumpFreshness(uuid, restored.content, live);
             state.items.set(uuid, restored);
             state.dirty.add(uuid);
             await persistLocal(uuid, restored);
@@ -7074,6 +7108,9 @@ const NotesStore = (() => {
         }
       }
       if (incomingHash) item.content_hash = incomingHash;
+      // The backup copy is pushed again: newer than the copy other devices
+      // hold (the local item and this device's hwm are the floor).
+      item.content = bumpFreshness(row.item_uuid, item.content, existing);
       state.items.set(row.item_uuid, item);
       state.dirty.add(row.item_uuid);
       await persistLocal(row.item_uuid, item);
