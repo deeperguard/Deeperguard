@@ -1758,7 +1758,7 @@ a.mk-badge-link:hover {
   .mk-nav {
     display: flex;
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
     position: static;
     left: auto;
@@ -1774,7 +1774,6 @@ a.mk-badge-link:hover {
     border-radius: 0;
     background: transparent;
     box-shadow: none;
-    overflow: hidden;
   }
   .mk-nav a { white-space: nowrap; }
   .mk-topbar-actions { margin-left: auto; flex-shrink: 0; }
@@ -1783,7 +1782,7 @@ a.mk-badge-link:hover {
   .mk-brand small { display: none; }
   .mk-topbar-inner { gap: 0.45rem; padding-left: 0.75rem; padding-right: 0.75rem; }
   .mk-nav { gap: 0; }
-  .mk-nav a { font-size: 0.8rem; padding: 0.4rem 0.32rem; }
+  .mk-nav a { font-size: 0.875rem; padding: 0.4rem 0.4rem; }
   .mk-topbar-actions { gap: 0.35rem; }
   .mk-topbar-actions .mk-btn { padding: 0 0.7rem; }
 }
