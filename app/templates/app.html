@@ -2112,7 +2112,19 @@
       <section class="settings-group" data-plan-feature="pcloud_backup">
         <h3>pCloud backup</h3>
         <div class="settings-card settings-backup-card">
-          <p class="settings-hint">Optional encrypted vault sync via rclone to your pCloud account.</p>
+          <div id="pcloud-managed">
+            <label class="settings-row checkbox"><span>Automatic backup to pCloud</span><input id="managed-backup-enabled" type="checkbox" disabled></label>
+            <p id="managed-backup-unavailable" class="settings-hint" hidden>This backup option is not available on this server right now, so the switch is turned off.</p>
+            <p id="managed-backup-status" class="settings-hint" role="status" aria-live="polite"></p>
+            <label class="settings-row checkbox"><span>E-mail me only when a backup fails</span><input id="managed-backup-failures-only" type="checkbox"></label>
+            <p class="settings-hint">Off by default. When on, Deeperguard uploads your already encrypted vault data to the pCloud account of the Deeperguard service, into a folder that only belongs to you, once per day. Only encrypted data is stored. pCloud and the Deeperguard service cannot read its content, but they can see its size, the times of the backups and the number of files. After each run you get an e-mail with the result.</p>
+          </div>
+          <div id="pcloud-own-notice" hidden>
+            <p class="settings-hint">You back up with your own pCloud account. That backup keeps working unchanged until you switch. Switching does not delete your existing backups in your own pCloud.</p>
+            <div class="settings-actions"><button type="button" id="btn-managed-switch" class="btn">Switch to automatic backup</button></div>
+          </div>
+          <details id="pcloud-own" hidden>
+          <summary>Own pCloud account (advanced)</summary>
           <label class="settings-row stacked">pCloud email / username
             <input id="pcloud-username" type="email" autocomplete="username">
           </label>
@@ -2135,6 +2147,7 @@
             <button type="button" id="btn-pcloud-sync" class="btn">Sync to pCloud now</button>
           </div>
           <p class="settings-hint">Uploads encrypted vault backups via rclone using an OAuth token (your pCloud account password is never stored on this server). On your computer run <code>rclone authorize pcloud</code> (EU: add <code>--pcloud-hostname eapi.pcloud.com</code>) and paste the JSON token here.</p>
+          </details>
         </div>
       </section>
 

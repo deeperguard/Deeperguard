@@ -15639,6 +15639,7 @@
       document.getElementById('backup-email').value = account.backup_email || account.email || '';
       document.getElementById('backup-enabled').checked = !!account.backup_enabled;
     }
+    refreshManagedBackup().catch(() => {});
     if (account.pcloud_username !== undefined || account.pcloud_enabled !== undefined) {
       document.getElementById('pcloud-username').value = account.pcloud_username || '';
       const remotePath = String(account.pcloud_remote_path || '').trim();
@@ -21678,7 +21679,37 @@
     }
   }
 
-  async function showSettings() {
+  function formatManagedBytes(n) {
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  return Math.max(1, Math.round(n / 1024)) + ' KB';
+}
+
+async function refreshManagedBackup() {
+  const box = document.getElementById('managed-backup-enabled');
+  if (!box) return;
+  const m = await NotesStore.api('/api/backup/managed');
+  box.checked = !!m.enabled;
+  box.disabled = !m.available && !m.enabled;
+  document.getElementById('managed-backup-unavailable').hidden = !!m.available;
+  document.getElementById('managed-backup-failures-only').checked = !!m.failures_only;
+  const own = !!m.own_token;
+  document.getElementById('pcloud-own-notice').hidden = !own;
+  document.getElementById('btn-managed-switch').disabled = !m.available;
+  document.getElementById('pcloud-own').hidden = !own;
+  document.getElementById('pcloud-managed').hidden = own;
+  const el = document.getElementById('managed-backup-status');
+  if (!m.enabled) { el.textContent = ''; return; }
+  if (!(m.last_at > 0)) { el.textContent = 'No backup yet. The first one runs at the next scheduled backup.'; return; }
+  el.textContent = `Last backup: ${new Date(m.last_at * 1000).toLocaleString()} · ` +
+    `${m.last_status === 'ok' ? 'OK' : 'Failed'} · ${formatManagedBytes(m.last_size)} · ${m.last_kept} kept`;
+}
+
+async function setManagedBackup(body) {
+  await NotesStore.api('/api/backup/managed', { method: 'POST', body: JSON.stringify(body) });
+  await refreshManagedBackup();
+}
+
+async function showSettings() {
     openSettings();
     flushForSettings()
       .then(() => initSettings())
@@ -23508,6 +23539,30 @@
         return;
       }
       toast(err.message || 'Email backup failed', true);
+    }
+  });
+
+  document.getElementById('managed-backup-enabled').addEventListener('change', async (ev) => {
+    try {
+      await setManagedBackup({ enabled: ev.target.checked });
+    } catch (err) {
+      toast(err.message || 'Could not change backup setting', true);
+      refreshManagedBackup().catch(() => {});
+    }
+  });
+  document.getElementById('managed-backup-failures-only').addEventListener('change', async (ev) => {
+    try {
+      await setManagedBackup({ failures_only: ev.target.checked });
+    } catch (err) {
+      toast(err.message || 'Could not save preference', true);
+    }
+  });
+  document.getElementById('btn-managed-switch').addEventListener('click', async () => {
+    if (!window.confirm('New backups will go to the Deeperguard service pCloud (encrypted data only). Your existing backups in your own pCloud stay where they are and are not deleted. Switch now?')) return;
+    try {
+      await setManagedBackup({ enabled: true });
+    } catch (err) {
+      toast(err.message || 'Could not switch', true);
     }
   });
 

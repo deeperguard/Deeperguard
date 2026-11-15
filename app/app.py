@@ -2925,6 +2925,80 @@ def api_backup_pcloud_settings():
     )
 
 
+_MANAGED_HEALTH_TTL = 60.0
+_managed_health_cache: dict = {"at": 0.0, "value": None}
+
+
+def _managed_availability() -> dict:
+    """Cached health of the managed service remote. Only available + fixed reason code."""
+    import backup_pcloud as _bp
+
+    now = time.time()
+    cached = _managed_health_cache["value"]
+    if cached is None or now - float(_managed_health_cache["at"]) > _MANAGED_HEALTH_TTL:
+        if not _bp.service_source():
+            cached = {"available": False, "reason_code": "not_configured"}
+        else:
+            cached = _bp.managed_healthcheck()
+        _managed_health_cache.update(at=now, value=cached)
+    return {"available": bool(cached["available"]), "reason_code": str(cached["reason_code"] or "")}
+
+
+def _managed_status_payload(user) -> dict:
+    """Never contains remote name, root, config path, directory id or any path."""
+    avail = _managed_availability()
+    enabled = bool(user["managed_backup_enabled"])
+    own = (
+        not enabled
+        and bool(user["pcloud_enabled"])
+        and bool(user["pcloud_username"])
+        and pcloud_token_set(int(user["id"]))
+    )
+    return {
+        "available": avail["available"],
+        "reason_code": avail["reason_code"],
+        "enabled": enabled,
+        "own_token": own,
+        "failures_only": (user["pcloud_mail_pref"] or "both") == "failures",
+        "last_at": float(user["pcloud_last_sync_at"] or 0) if enabled else 0.0,
+        "last_status": (user["pcloud_last_sync_status"] or "") if enabled else "",
+        "last_size": int(user["pcloud_last_size"] or 0) if enabled else 0,
+        "last_kept": int(user["pcloud_last_kept"] or 0) if enabled else 0,
+    }
+
+
+@app.get("/api/backup/managed")
+def api_backup_managed_status():
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(_managed_status_payload(user))
+
+
+@app.post("/api/backup/managed")
+def api_backup_managed_update():
+    """Toggle managed backup and/or the failures-only mail preference (CSRF checked globally)."""
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return jsonify({"error": "not found"}), 404
+    body = request.get_json(silent=True) or {}
+    if "failures_only" in body:
+        db.set_pcloud_mail_pref(uid, bool(body["failures_only"]))
+    if "enabled" in body:
+        if bool(body["enabled"]):
+            blocked = _plan_block(user, "pcloud_backup")
+            if blocked:
+                return blocked
+            if not _managed_availability()["available"]:
+                return jsonify({"error": "managed backup is not available"}), 409
+            db.enable_managed_backup(uid)
+        else:
+            db.disable_managed_backup(uid)
+    return jsonify(_managed_status_payload(db.get_user_by_id(uid)))
+
+
 @app.post("/api/backup/pcloud/sync")
 def api_backup_pcloud_sync():
     uid = auth.current_user_id()
