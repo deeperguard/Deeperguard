@@ -5116,6 +5116,30 @@ const NotesStore = (() => {
     return true;
   }
 
+  // Rename from the full path as shown in Manage tags ("boodschappen/winkel" or
+  // "Work / Projects"). The parent path prefix is stripped so only the leaf changes;
+  // a legacy flat label whose name already contains '/' keeps the flat shape.
+  // Returns {ok:true, title} or {ok:false, error} ('slash', 'duplicate', 'empty', ...).
+  function renameTagPath(uuid, input) {
+    const tag = get(uuid);
+    if (!tag || tag.content?.type !== 'tag' || tag.deleted) return { ok: false, error: 'unknown_label' };
+    const byId = tagIndex();
+    const cur = byId.get(uuid);
+    const segs = (s) => String(s || '').split('/').map((p) => p.trim());
+    const wanted = segs(input);
+    if (wanted.some((p) => !p)) return { ok: false, error: 'empty' };
+    const parentId = NotesLabels.parentOf(cur);
+    const parentSegs = parentId && byId.has(parentId) ? segs(NotesLabels.pathOf(parentId, byId)) : [];
+    const underParent = parentSegs.length < wanted.length
+      && parentSegs.every((p, i) => p.toLowerCase() === wanted[i].toLowerCase());
+    const leaf = (underParent ? wanted.slice(parentSegs.length) : wanted).join('/');
+    const legacySlash = NotesLabels.nameOf(cur).includes('/');
+    const plan = NotesLabels.planUpdate(uuid, { name: leaf }, byId, { allowSlash: legacySlash });
+    if (!plan.ok) return { ok: false, error: plan.error };
+    applyLabelUpdates(plan.updates);
+    return { ok: true, title: get(uuid).content.title };
+  }
+
   // Create a label, optionally under a parent. Returns the uuid or null when rejected.
   function createTag(name, parentId) {
     const byId = tagIndex();
@@ -7203,6 +7227,7 @@ const NotesStore = (() => {
     listTags,
     noteCountForTag,
     renameTag,
+    renameTagPath,
     createTag,
     moveTag,
     migrateLabels,
