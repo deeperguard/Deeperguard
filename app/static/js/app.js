@@ -13265,6 +13265,15 @@
         <div class="doc-thumb-stage" data-stage="${escapeAttr(a.uuid)}"></div>
         <div class="doc-thumb-meta">${thumbMeta(a)}</div>
       </button>`).join('')}</div>` : ''}`;
+    if (ui.docInline._docControls) ui.docInline._docControls.destroy();
+    if (typeof NotesDocControls !== 'undefined' && attachmentKind(first) === 'pdf') {
+      NotesDocControls.attach({
+        card: ui.docInline.querySelector('.doc-inline-card'),
+        stage: ui.docInline.querySelector('.doc-inline-stage'),
+        scroller: ui.docInline,
+        doc: document,
+      });
+    }
     ui.docInline.querySelectorAll('[data-doc-gallery-open]').forEach((btn) => {
       btn.addEventListener('click', (event) => {
         event.preventDefault();
