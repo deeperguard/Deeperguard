@@ -113,6 +113,8 @@ def check_widths(browser, base, failures, js_enabled, pages):
                     page.keyboard.press("Escape")
                     if btn.get_attribute("aria-expanded") != "false":
                         failures.append(f"{path} {w}px: Escape did not close the collapsed menu")
+                    if not page.evaluate("document.activeElement && document.activeElement.classList.contains('mk-nav-toggle')"):
+                        failures.append(f"{path} {w}px: Escape did not focus the menu button")
             ctx.close()
     return collapsed_seen
 

@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { render, toggleTaskAt } = require('../app/static/js/markdown.js');
+const { render, renderLegacy, renderRichUnsafe, toggleTaskAt } = require('../app/static/js/markdown.js');
 
 const html = render('- [ ] Buy milk\n- [x] Done\n\n**bold** and `code`\n\n```\n*not italic*\n```');
 assert.match(html, /task-toggle/);
@@ -75,5 +75,21 @@ assert.doesNotMatch(table, /\| Col A \|/);
 const fenceXss = render('```x"onmouseover="alert(1)\ncode\n```');
 assert.match(fenceXss, /data-lang="x&quot;onmouseover=&quot;alert\(1\)"/);
 assert.doesNotMatch(fenceXss, /data-lang="x"onmouseover=/);
+
+// Without a DOM sanitizer (node) render() uses the old renderer; the old renderer stays exported.
+assert.strictEqual(render('**x**'), renderLegacy('**x**'));
+
+// markdown-it stage: raw HTML is text, Markdown structure comes from markdown-it.
+const mdit = renderRichUnsafe('# T\n\n> q\n\n1. a\n2. b\n\n<b onclick=x>y</b>');
+assert.match(mdit, /<h1>T<\/h1>/);
+assert.match(mdit, /<blockquote>/);
+assert.match(mdit, /<ol>/);
+assert.match(mdit, /&lt;b onclick=x&gt;y&lt;\/b&gt;/);
+assert.doesNotMatch(mdit, /<b /);
+const gap = renderRichUnsafe('a\n\n\nb');
+assert.match(gap, /<p>a<\/p>\n<p><br><\/p>\n<p>b<\/p>/);
+assert.doesNotMatch(renderRichUnsafe('a\n\nb'), /<br>/);
+const rtlTask = renderRichUnsafe('- [x] done');
+assert.match(rtlTask, /<li class="task done"><button type="button" class="task-toggle" data-checked="1" aria-checked="true">/);
 
 console.log('ok');
