@@ -5026,7 +5026,10 @@ const NotesStore = (() => {
     };
     // Schema 2 (docs/2FA_IMPORT_SPEC.md section 2): label mirrors account, tags live inside the
     // encrypted item content and travel with it through sync.
-    upsert(id, upgradeTotpContent(content, { tags: (entry && entry.tags) || [] }));
+    upsert(id, upgradeTotpContent(content, {
+      tags: (entry && entry.tags) || [],
+      icon_id: entry && entry.icon_id != null ? String(entry.icon_id).slice(0, 64) : null,
+    }));
     return { uuid: id, created: true, item: get(id) };
   }
 
@@ -5035,7 +5038,7 @@ const NotesStore = (() => {
     return { ...content, ...patch };
   }
 
-  function updateTotpAccount(uuid, { issuer = '', account = '', host, tags } = {}) {
+  function updateTotpAccount(uuid, { issuer = '', account = '', host, tags, icon_id } = {}) {
     const item = get(uuid);
     if (!item || item.content?.type !== 'totp') return false;
     const nextIssuer = String(issuer || '').trim();
@@ -5043,6 +5046,8 @@ const NotesStore = (() => {
     const patch = { issuer: nextIssuer, account: nextAccount, label: nextAccount };
     if (host !== undefined) patch.host = normalizeTotpBoundHost(host);
     if (tags !== undefined) patch.tags = tags;
+    // icon_id: null = automatic, 'letter' = avatar, else a slug of the vendored set (stored encrypted in the item).
+    if (icon_id !== undefined) patch.icon_id = icon_id == null ? null : String(icon_id).slice(0, 64);
     upsert(uuid, upgradeTotpContent(item.content, patch));
     return true;
   }
