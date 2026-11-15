@@ -917,9 +917,16 @@ Columns: selector (current id or stable selector, unchanged), accessible name
 today (`aria-label`, else visible text), current place, new place, the screen
 or note type it applies to (`all` = Notes, Agenda and 2FA; `notes` = plain and
 PDF note; `plain`; `pdf`; `agenda`; `2fa`), and how it is reached today:
-`visible`, `via` one or more visible openers clicked in order, or
+`visible`, `via` one or more visible openers clicked in order,
 `conditional` (only shown in a state or viewport the desktop test does not
-set up; the test then checks presence and accessible name only).
+set up; the test then checks presence and accessible name only),
+`phone-only` (the control is in the DOM but not shown on desktop: `phone via`
+lists the openers at phone width, `desktop action via` lists the openers and,
+last, the control that offers the same action on desktop; the test checks the
+control at phone width and the action at both widths by clicking it and
+looking at the note), or `by row kind` (per kind of list row, `normal`,
+`trashed` and `locked`: `visible` on hover or focus, or `hidden` with the
+openers and control that offer the action instead).
 
 <!-- layout-actions:start -->
 | Selector | Accessible name | Current place | New place | Applies to | Reach |
@@ -974,7 +981,7 @@ set up; the test then checks presence and accessible name only).
 | `#search-filter-close` | Close filters | Search filter panel | Unchanged | notes | via `#search-filter-toggle` |
 | `.note-item` | note title (text) | List row | List row: icon, title + meta line, date | notes | visible |
 | `.note-row-more` | More actions for <title> | List row, right | List row, menu column | notes | visible |
-| `.note-row-delete` | Trash note <title> | List row, extra X on the row | List row "…" menu (X no longer a separate column) | notes | visible |
+| `.note-row-delete` | Trash note <title> / Delete note <title> | List row, extra X on the row | Normal rows: List row "…" menu (X no longer a separate column, stays in the DOM with `data-in-menu`); trashed and locked rows have no "…" menu and keep the X | notes | by row kind: normal hidden, action via `.note-row-more` `#note-row-menu-trash`; trashed visible on hover or focus; locked visible on hover or focus |
 | `#note-row-menu-secure-send` | Share by link | Row "…" menu | Row "…" menu | notes | via `.note-row-more` |
 | `#note-row-menu-trash` | Trash note <title> | (new home of the row X) | Row "…" menu | notes | via `.note-row-more` |
 | `.note-swipe-delete` | Trash note <title> | List row swipe (phone) | Unchanged (phone) | notes | conditional: phone swipe |
@@ -1029,12 +1036,12 @@ set up; the test then checks presence and accessible name only).
 | `#btn-md-mode` | Preview | Markdown toolbar | Toolbar, second row for Markdown | plain | conditional: Markdown notes |
 | `#note-body` | Note text (placeholder) | Editor body | Content column, max reading width | plain | visible |
 | `#note-options-close` | Done | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-star` | Star | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-pin` | Pin | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-share` | Copy note | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-archive` | Archive | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-duplicate` | Duplicate | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-trash` | Move to trash | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
+| `#note-info-star` | Star | Note info panel, quick row (phone only; not shown on desktop) | Unchanged (phone only); desktop keeps the action in the toolbar "…" menu (`#btn-star`) | notes | phone-only: phone via `#btn-editor-overflow-mobile` `#btn-note-info`; desktop action via `#btn-editor-overflow-desktop` `#btn-star` |
+| `#note-info-pin` | Pin | Note info panel, quick row (phone only; not shown on desktop) | Unchanged (phone only); desktop keeps the action in the toolbar "…" menu (`#btn-pin`) | notes | phone-only: phone via `#btn-editor-overflow-mobile` `#btn-note-info`; desktop action via `#btn-editor-overflow-desktop` `#btn-pin` |
+| `#note-info-share` | Copy note | Note info panel, quick row (phone only; not shown on desktop) | Unchanged (phone only); desktop keeps the action in the toolbar "…" menu (`#btn-share`) | notes | phone-only: phone via `#btn-editor-overflow-mobile` `#btn-note-info`; desktop action via `#btn-editor-overflow-desktop` `#btn-share` |
+| `#note-info-archive` | Archive | Note info panel, quick row (phone only; not shown on desktop) | Unchanged (phone only); desktop keeps the action in the toolbar "…" menu (`#btn-archive`) | notes | phone-only: phone via `#btn-editor-overflow-mobile` `#btn-note-info`; desktop action via `#btn-editor-overflow-desktop` `#btn-archive` |
+| `#note-info-duplicate` | Duplicate | Note info panel, quick row (phone only; not shown on desktop) | Unchanged (phone only); desktop keeps the action in the toolbar "…" menu (`#btn-duplicate`) | notes | phone-only: phone via `#btn-editor-overflow-mobile` `#btn-note-info`; desktop action via `#btn-editor-overflow-desktop` `#btn-duplicate` |
+| `#note-info-trash` | Move to trash | Note info panel, quick row (phone only; not shown on desktop) | Unchanged (phone only); desktop keeps the action in the toolbar "…" menu (`#btn-trash`) | notes | phone-only: phone via `#btn-editor-overflow-mobile` `#btn-note-info`; desktop action via `#btn-editor-overflow-desktop` `#btn-trash` |
 | `#note-info-copy` | Copy | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
 | `#note-warn-at` | Warning date and time | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
 | `#note-warn-save` | Save | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
