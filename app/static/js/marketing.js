@@ -2,13 +2,66 @@
   const navCheck = document.getElementById('mk-nav-check');
   const navToggle = document.querySelector('.mk-nav-toggle');
 
+  const topbar = document.querySelector('.mk-topbar');
+  const nav = document.getElementById('mk-nav');
+
+  function setNavOpen(open) {
+    if (!navCheck) return;
+    navCheck.checked = open;
+    if (navToggle) navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
   function closePublicNav({ restoreFocus = false } = {}) {
     if (!navCheck || !navCheck.checked) return false;
-    navCheck.checked = false;
+    setNavOpen(false);
     if (restoreFocus && navToggle && typeof navToggle.focus === 'function') {
       try { navToggle.focus(); } catch (err) { /* ignore */ }
     }
     return true;
+  }
+
+  if (navToggle) {
+    navToggle.addEventListener('click', () => setNavOpen(!(navCheck && navCheck.checked)));
+  }
+  const backdrop = document.querySelector('.mk-nav-backdrop');
+  if (backdrop) backdrop.addEventListener('click', () => setNavOpen(false));
+  if (nav) {
+    nav.addEventListener('click', (event) => {
+      if (event.target.closest && event.target.closest('a')) setNavOpen(false);
+    });
+  }
+
+  // Collapse the links into the menu only when they do not fit on one line.
+  // Measure in the expanded state, then set the final class in one go (no paint in between).
+  function measureNav() {
+    if (!topbar || !nav) return;
+    const wasCollapsed = topbar.classList.contains('nav-collapsed');
+    const wasOpen = !!(navCheck && navCheck.checked);
+    if (navCheck) navCheck.checked = false;
+    topbar.classList.remove('nav-collapsed');
+    const links = Array.from(nav.children);
+    const gap = parseFloat(getComputedStyle(nav).columnGap) || 0;
+    let need = gap * Math.max(0, links.length - 1);
+    links.forEach((el) => { need += el.getBoundingClientRect().width; });
+    const fits = need <= nav.clientWidth + 0.5;
+    topbar.classList.toggle('nav-collapsed', !fits);
+    if (fits) setNavOpen(false);
+    else setNavOpen(wasOpen && wasCollapsed);
+  }
+  if (topbar && nav) {
+    measureNav();
+    if (typeof ResizeObserver === 'function') {
+      let last = -1;
+      new ResizeObserver(() => {
+        const w = topbar.clientWidth;
+        if (w === last) return;
+        last = w;
+        measureNav();
+      }).observe(topbar);
+    } else {
+      window.addEventListener('resize', measureNav);
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(measureNav);
   }
 
   document.addEventListener('keydown', (event) => {
