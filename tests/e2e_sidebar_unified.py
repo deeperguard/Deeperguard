@@ -33,11 +33,16 @@ DESKTOP_JS = """(foot) => {
       x: Math.round(el.getBoundingClientRect().left), w: Math.round(el.getBoundingClientRect().width),
     };
   });
-  const headings = [...document.querySelectorAll('h1,h2,h3,[role=heading]')]
-    .filter((h) => vis(h) && h.textContent.trim() === 'Notes').length;
+  // Every visible element carrying the text "Notes" outside the filter rows (headings,
+  // brand <strong>, titles) counts; exactly one may exist and it must be a real heading.
+  const titles = [...document.querySelectorAll('body *')].filter((e) => vis(e)
+    && !e.closest('#filters') && !e.closest('[hidden]') && e.getAttribute('role') !== 'tab'
+    && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() === 'Notes'));
+  const headings = titles.length;
+  const nonHeading = titles.filter((e) => !/^H[1-6]$/.test(e.tagName) && e.getAttribute('role') !== 'heading').length;
   const current = [...document.querySelectorAll('#filters [aria-current]')].map((e) => e.dataset.filter);
   const close = document.getElementById('btn-drawer-close');
-  return { info, headings, current, closeShown: vis(close) };
+  return { info, headings, nonHeading, current, closeShown: vis(close) };
 }"""
 
 
@@ -61,7 +66,8 @@ def main() -> int:
             report.check("rows share one left edge and width",
                          len({(r["x"], r["w"]) for r in data["info"]}) == 1, str(data["info"]))
             report.check("active view has aria-current", data["current"] == ["all"], str(data["current"]))
-            report.check("one visible Notes heading", data["headings"] == 1, str(data["headings"]))
+            report.check("one visible Notes title, and it is a real heading",
+                         data["headings"] == 1 and data["nonHeading"] == 0, str(data))
             report.check("Close hidden on desktop", not data["closeShown"])
             page.click('.filter[data-filter="pinned"]')
             page.wait_for_timeout(200)
