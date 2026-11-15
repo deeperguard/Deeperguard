@@ -134,3 +134,206 @@ def stop_server(proc) -> None:
         proc.wait(timeout=8)
     except Exception:
         proc.kill()
+
+
+DOC = Path(__file__).resolve().parent.parent / "docs" / "UI_POLISH.md"
+CONTEXTS = {"all": ("plain",), "notes": ("plain", "pdf"), "plain": ("plain",),
+            "pdf": ("pdf",), "agenda": ("agenda",), "2fa": ("2fa",)}
+# Disclosure toggles: clicking them again would close what the row needs open.
+TOGGLES = ("#btn-nav-pin",)
+
+TOTP_JS = """() => NotesStore.addTotpAccount({ issuer: 'Example', account: 'layout@example.test',
+  secret: 'JBSWY3DPEHPK3PXP' })"""
+
+NAME_JS = """(el) => {
+  const txt = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+  const by = el.getAttribute('aria-labelledby');
+  if (by) {
+    const t = by.split(/\\s+/).map((id) => document.getElementById(id)?.textContent || '').join(' ');
+    if (txt(t)) return txt(t);
+  }
+  if (txt(el.getAttribute('aria-label'))) return txt(el.getAttribute('aria-label'));
+  if (el.labels && el.labels.length) {
+    const t = Array.from(el.labels).map((l) => l.textContent).join(' ');
+    if (txt(t)) return txt(t);
+  }
+  return txt(el.textContent) || txt(el.getAttribute('title')) || txt(el.getAttribute('placeholder'));
+}"""
+
+
+def load_actions():
+    """Rows of the control table between the layout-actions markers."""
+    text = DOC.read_text(encoding="utf-8")
+    body = text.split("<!-- layout-actions:start -->", 1)[1].split("<!-- layout-actions:end -->", 1)[0]
+    rows = []
+    for line in body.splitlines():
+        if not line.startswith("| `"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        reach = cells[5]
+        openers = reach.split("`")[1::2] if reach.startswith("via") else []
+        rows.append({"selector": cells[0].strip("`"), "name": cells[1], "applies": cells[4],
+                     "reach": reach.split(":")[0].split(" ")[0], "openers": openers})
+    if len(rows) < 100:
+        raise SystemExit(f"control table looks truncated: {len(rows)} rows")
+    return rows
+
+
+def enter(page, ctx: str) -> None:
+    for _ in range(3):
+        page.keyboard.press("Escape")
+    # Escape with no note open also folds the Views section; undo that test side effect.
+    page.evaluate("() => { const s = document.getElementById('filter-section'); if (s) s.open = true; }")
+    if ctx == "plain":
+        open_note(page, "Layout plain note")
+    elif ctx == "pdf":
+        open_note(page, "Layout PDF note")
+    elif ctx == "agenda":
+        page.click("#app-tab-agenda", timeout=10000)
+        page.wait_for_selector("#agenda-pane:not([hidden])", timeout=10000)
+        page.wait_for_timeout(400)
+    elif ctx == "2fa":
+        page.click("#app-tab-2fa", timeout=10000)
+        page.wait_for_selector("[data-totp-copy]", timeout=15000)
+
+
+def check_row(page, row):
+    if page.locator(row["selector"]).count() == 0:
+        return "missing"
+    loc = page.locator(row["selector"]).first
+    if not loc.evaluate(NAME_JS):
+        return "no accessible name"
+    if row["reach"] == "conditional":
+        return None
+    for opener in row["openers"]:
+        op = page.locator(opener).first
+        if opener in TOGGLES and op.get_attribute("aria-expanded") == "true":
+            continue
+        if not op.is_visible():
+            return f"opener {opener} not visible"
+        op.click(timeout=5000)
+        page.wait_for_timeout(350)
+    if not loc.is_visible():
+        return "not visible"
+    return None
+
+
+def check_all(page, actions) -> list:
+    failures = []
+    for ctx in ("plain", "pdf", "agenda", "2fa"):
+        rows = sorted((r for r in actions if ctx in CONTEXTS.get(r["applies"], ())),
+                      key=lambda r: r["reach"] == "via")
+        enter(page, ctx)
+        for row in rows:
+            if row["reach"] == "via":
+                enter(page, ctx)
+            problem = check_row(page, row)
+            if problem:
+                failures.append(f"[{ctx}] {row['selector']} ({row['name']}): {problem}")
+    return failures
+
+
+def settle(page) -> None:
+    """Move pointer and focus out of the sidebar so hover/focus-expansion is off."""
+    page.mouse.move(WIDTH - 5, HEIGHT - 5)
+    page.locator("#note-title").focus()
+    page.wait_for_timeout(300)
+
+
+def check_sidebar_toggle(page) -> list:
+    """Collapse/expand: aria-expanded, labels, tooltips, state kept after reload."""
+    failures = []
+    enter(page, "plain")
+    pin = page.locator("#btn-nav-pin")
+    if pin.get_attribute("aria-expanded") != "true":
+        pin.click()
+    settle(page)
+    if not page.locator("#btn-settings-nav .nav-label").is_visible():
+        failures.append("expanded sidebar: footer label not visible")
+    if not page.locator('.filter[data-filter="all"] > span').is_visible():
+        failures.append("expanded sidebar: view label not visible")
+    if page.locator(".filter.active").first.get_attribute("aria-current") != "page":
+        failures.append("active view lacks aria-current=page")
+    if page.locator("#btn-drawer-close").is_visible():
+        failures.append("desktop: loose Close button still visible")
+    pin.click()
+    settle(page)
+    if pin.get_attribute("aria-expanded") != "false":
+        failures.append("collapse: aria-expanded not false")
+    for sel in ("#sidebar .filter", ".sidebar-foot-actions .btn.icon"):
+        for el in page.locator(sel).all():
+            if not el.is_visible():
+                continue
+            if not (el.get_attribute("title") and el.evaluate(NAME_JS)):
+                failures.append(f"collapsed: {sel} without tooltip or accessible name")
+            label = el.locator(":scope > span")
+            if label.count() and label.first.is_visible():
+                failures.append(f"collapsed: {sel} still shows its label")
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("#btn-nav-pin", state="attached")
+    stored = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('deeperguard-prefs') || '{}').navPinned")
+    if stored is not False or page.evaluate("() => document.body.classList.contains('nav-pinned')"):
+        failures.append("collapsed state not kept after reload")
+    return failures
+
+
+def screenshots(page, out: Path) -> None:
+    """Desktop (1440) and phone (390) shots of plain note, PDF note, Agenda, 2FA."""
+    out.mkdir(parents=True, exist_ok=True)
+    for width, height, tag in ((1440, 900, "desktop"), (390, 844, "phone")):
+        page.set_viewport_size({"width": width, "height": height})
+        page.wait_for_timeout(400)
+        for ctx, title in (("plain", "Layout plain note"), ("pdf", "Layout PDF note"),
+                           ("agenda", None), ("2fa", None)):
+            if title:
+                page.click("#app-tab-notes")
+                page.wait_for_timeout(300)
+                if page.locator("#btn-back").is_visible():
+                    page.click("#btn-back")
+                    page.wait_for_timeout(300)
+                page.locator(".note-item", has_text=title).first.click()
+                page.wait_for_timeout(1200)
+            else:
+                enter(page, ctx)
+            page.screenshot(path=str(out / f"{ctx}-{tag}.png"))
+    page.set_viewport_size({"width": WIDTH, "height": HEIGHT})
+
+
+def main() -> int:
+    import os
+
+    from playwright.sync_api import sync_playwright
+
+    actions = load_actions()
+    proc, base = run_server()
+    try:
+        with sync_playwright() as pw:
+            browser, page, _ids = boot(pw, base)
+            try:
+                page.evaluate(TOTP_JS)
+                page.wait_for_function(
+                    "() => document.querySelectorAll('.note-item').length >= 2", timeout=15000)
+                # Optional proof shots: --screenshots DIR (or LAYOUT_SCREENSHOTS=DIR).
+                shots = os.environ.get("LAYOUT_SCREENSHOTS")
+                if "--screenshots" in sys.argv:
+                    shots = sys.argv[sys.argv.index("--screenshots") + 1]
+                if shots:
+                    screenshots(page, Path(shots))
+                failures = check_all(page, actions)
+                failures += check_sidebar_toggle(page)
+            finally:
+                browser.close()
+    finally:
+        stop_server(proc)
+    if failures:
+        print("FAIL: layout actions")
+        for line in failures:
+            print("  -", line)
+        return 1
+    print(f"OK: {len(actions)} layout actions present, named and reachable")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

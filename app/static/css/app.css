@@ -11953,6 +11953,9 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 @media (max-width: 999px) {
   .totp-item-code .totp-code { margin-right: auto; }
 }
+/* App shell (UI_POLISH 7.1): one sidebar style, icon + label, collapsible to
+   icons. Footer labels are desktop-only; the desktop rules are in the block below. */
+.sidebar-foot-actions .nav-label { display: none; }
 /* Wide rows: code, timer and copy icon in one column wide enough for them;
    Edit / On server / remove stay on the same line, and the column header
    lines up with the row columns. */
@@ -11973,6 +11976,81 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   .totp-item-server-copy,
   .totp-item-remove { margin: var(--space-2) 0; }
   .totp-item-remove { margin-right: var(--space-3); min-width: 44px; width: 44px; }
+  /* App shell (UI_POLISH 7.1), desktop part. */
+  /* "Close" only belongs to the overlay drawer (tablet/phone), not the desktop frame. */
+  #btn-drawer-close { display: none; }
+  /* Default view: the list heading repeats the top tab and the active sidebar row. */
+  .note-list-head.is-default-view .note-list-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .sidebar-foot-actions {
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 2px;
+    width: 100%;
+  }
+  .sidebar-foot-actions .btn.icon {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    box-shadow: none;
+    color: var(--sn-nav-text);
+    font-size: 14px;
+    text-align: left;
+  }
+  .sidebar-foot-actions .btn.icon .ui-icon {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    color: var(--sn-nav-muted);
+  }
+  .sidebar-foot-actions .btn.icon:hover {
+    background: color-mix(in srgb, var(--sn-nav-text) 8%, var(--sn-nav-bg));
+  }
+  .sidebar-foot-actions .btn.icon:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .sidebar-foot-actions .nav-label {
+    display: inline;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body:not(.nav-pinned) .sidebar-foot-actions .nav-label { display: none; }
+  body:not(.nav-pinned) .sidebar-foot-actions .btn.icon {
+    justify-content: center;
+    padding: 7px 0;
+  }
+  body:not(.nav-pinned):has(.sidebar-nav:hover) .sidebar-foot-actions,
+  body:not(.nav-pinned):has(.sidebar-nav:focus-within) .sidebar-foot-actions {
+    flex-direction: column;
+  }
+  body:not(.nav-pinned):has(.sidebar-nav:hover) .sidebar-foot-actions .nav-label,
+  body:not(.nav-pinned):has(.sidebar-nav:focus-within) .sidebar-foot-actions .nav-label {
+    display: inline;
+  }
+  body:not(.nav-pinned):has(.sidebar-nav:hover) .sidebar-foot-actions .btn.icon,
+  body:not(.nav-pinned):has(.sidebar-nav:focus-within) .sidebar-foot-actions .btn.icon {
+    justify-content: flex-start;
+    padding: 7px 10px;
+  }
+  #btn-nav-pin[aria-expanded="true"] .ui-icon { color: var(--accent); }
 }
 
 /* Add / import sheets: dialog parts aligned with the shared pattern (4.3). */

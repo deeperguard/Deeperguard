@@ -645,8 +645,12 @@
     document.body.classList.toggle('nav-pinned', !!prefs.navPinned);
     const pin = document.getElementById('btn-nav-pin');
     if (pin) {
-      pin.setAttribute('aria-pressed', prefs.navPinned ? 'true' : 'false');
-      pin.title = prefs.navPinned ? 'Collapse sidebar' : 'Pin sidebar';
+      // Collapse/expand toggle: expanded = icon + label, collapsed = icons with tooltips.
+      // navPinned stays a device-local pref (not in GLOBAL_PREF_KEYS, never in the vault).
+      const label = prefs.navPinned ? 'Collapse sidebar' : 'Expand sidebar';
+      pin.setAttribute('aria-expanded', prefs.navPinned ? 'true' : 'false');
+      pin.setAttribute('aria-label', label);
+      pin.title = label;
     }
     if (prefs.navPinned) setNavViewsOpen(false);
   }
@@ -9945,6 +9949,8 @@
       const name = btn.dataset.filter;
       const on = name === currentFilter && !(name === 'all' && (currentTag || currentFolder));
       btn.classList.toggle('active', on);
+      if (on) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
     });
   }
 
@@ -10994,6 +11000,9 @@
       listTitle.textContent = folder
         ? (folder.content.title || 'Folder')
         : (tag ? tag.content.title || 'Tag' : (FILTER_TITLES[currentFilter] || 'Notes'));
+      // The default "Notes" view repeats the top nav tab and the active sidebar row;
+      // desktop CSS hides that duplicate heading (folders, tags and other views keep it).
+      listHead.classList.toggle('is-default-view', !folder && !tag && currentFilter === 'all');
       // Note-list count only. PDF highlight totals stay on the document banner.
       listCount.textContent = countLabel;
       listCount.title = countLabel;

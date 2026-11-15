@@ -820,7 +820,7 @@
         <details class="filter-section" id="filter-section" open>
           <summary class="section-label sn-nav-label">Views<span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
           <nav id="filters" class="filters" aria-label="Note filters">
-            <button type="button" class="filter active" data-filter="all" title="Notes"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M14 3v5h5"/></svg><span>Notes</span></button>
+            <button type="button" class="filter active" data-filter="all" title="Notes" aria-current="page"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M14 3v5h5"/></svg><span>Notes</span></button>
             <button type="button" class="filter" data-filter="documents" title="Files"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
             <button type="button" class="filter" data-filter="pinned" title="Starred"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 3 15 9 21 10 16.5 14.5 18 21 12 17.5 6 21 7.5 14.5 3 10 9 9"/></svg><span>Starred</span></button>
             <button type="button" class="filter" data-filter="archived" title="Archived"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Archived</span></button>
@@ -896,12 +896,14 @@
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
           </svg>
+          <span class="nav-label">Secure Send</span>
         </button>
         <button type="button" id="btn-settings-nav" class="btn icon" title="Settings" aria-label="Settings">
           <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
+          <span class="nav-label">Settings</span>
         </button>
         <button type="button" id="btn-lock-nav" class="btn icon vault-lock-btn is-locked" title="Vault locked" aria-label="Vault locked">
           <svg class="ui-icon lock-closed" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -912,12 +914,14 @@
             <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
             <path d="M8 11V7a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
+          <span class="nav-label">Lock</span>
         </button>
-        <button type="button" id="btn-nav-pin" class="btn icon desktop-only" title="Pin sidebar" aria-label="Pin sidebar" aria-pressed="false">
+        <button type="button" id="btn-nav-pin" class="btn icon desktop-only" title="Expand sidebar" aria-label="Expand sidebar" aria-expanded="false" aria-controls="sidebar">
           <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 2l1.2 4.8L18 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.8-1.2L12 2z"/>
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 14v8"/>
           </svg>
+          <span class="nav-label">Collapse sidebar</span>
         </button>
         <button type="button" id="btn-account-info-nav" class="btn icon" title="Account info" aria-label="Account info">
           <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -925,6 +929,7 @@
             <line x1="12" y1="8" x2="12.01" y2="8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
             <path d="M11 12h1v4h1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
+          <span class="nav-label">Account info</span>
         </button>
         </div>
         <div class="brand-sync-row desktop-only">

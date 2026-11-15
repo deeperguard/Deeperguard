@@ -927,7 +927,7 @@ set up; the test then checks presence and accessible name only).
 | `#app-tab-notes` | Notes | Top bar | Top nav | all | visible |
 | `#app-tab-agenda` | Agenda | Top bar | Top nav | all | visible |
 | `#app-tab-2fa` | 2FA | Top bar | Top nav | all | visible |
-| `#btn-drawer-close` | Close | Loose button under top bar | Sidebar header, shown only when sidebar is an overlay drawer | notes | visible |
+| `#btn-drawer-close` | Close | Loose button under top bar | Sidebar header, shown only when sidebar is an overlay drawer | notes | conditional: overlay drawer (tablet/phone) |
 | `.filter[data-filter="all"]` | Notes | Icon rail, top | Sidebar: Views, icon + label | notes | visible |
 | `.filter[data-filter="documents"]` | Files | Icon rail, top | Sidebar: Views | notes | visible |
 | `.filter[data-filter="pinned"]` | Starred | Icon rail, top | Sidebar: Views | notes | visible |
@@ -946,7 +946,7 @@ set up; the test then checks presence and accessible name only).
 | `#btn-secure-send-nav` | Secure Send | Icon rail, bottom (boxed) | Sidebar: footer group, icon + label | notes | visible |
 | `#btn-settings-nav` | Settings | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible |
 | `#btn-lock-nav` | Vault unlocked. Tap to lock. | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible |
-| `#btn-nav-pin` | Pin sidebar | Icon rail, bottom (boxed) | Sidebar: collapse/expand toggle | notes | visible |
+| `#btn-nav-pin` | Expand sidebar / Collapse sidebar | Icon rail, bottom (boxed) | Sidebar: collapse/expand toggle | notes | visible |
 | `#btn-account-info-nav` | Account info | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible |
 | `#btn-secure-send-head` | Secure Send | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone |
 | `#btn-lock-head` | Vault unlocked. Tap to lock. | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone |
@@ -1027,12 +1027,12 @@ set up; the test then checks presence and accessible name only).
 | `#btn-md-mode` | Preview | Markdown toolbar | Toolbar, second row for Markdown | plain | conditional: Markdown notes |
 | `#note-body` | Note text (placeholder) | Editor body | Content column, max reading width | plain | visible |
 | `#note-options-close` | Done | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-star` | Star | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-pin` | Pin | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-share` | Copy note | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-archive` | Archive | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-duplicate` | Duplicate | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
-| `#note-info-trash` | Move to trash | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
+| `#note-info-star` | Star | Note info panel | Unchanged (phone quick row) | notes | conditional: phone |
+| `#note-info-pin` | Pin | Note info panel | Unchanged (phone quick row) | notes | conditional: phone |
+| `#note-info-share` | Copy note | Note info panel | Unchanged (phone quick row) | notes | conditional: phone |
+| `#note-info-archive` | Archive | Note info panel | Unchanged (phone quick row) | notes | conditional: phone |
+| `#note-info-duplicate` | Duplicate | Note info panel | Unchanged (phone quick row) | notes | conditional: phone |
+| `#note-info-trash` | Move to trash | Note info panel | Unchanged (phone quick row) | notes | conditional: phone |
 | `#note-info-copy` | Copy | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
 | `#note-warn-at` | Warning date and time | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
 | `#note-warn-save` | Save | Note info panel | Unchanged | notes | via `#btn-editor-overflow-desktop` `#btn-note-info` |
