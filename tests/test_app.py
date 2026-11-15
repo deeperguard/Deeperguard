@@ -1887,6 +1887,7 @@ class NotesAppTests(unittest.TestCase):
 
     def test_client_search_terms_and_index(self):
         self._run_node_script("test_search_terms.js")
+        self._run_node_script("test_find_in_note.js")
         self._run_node_script("test_search_sync_state.js")
         self._run_node_script("test_search_privacy_scale.js")
         app_js = (APP_DIR / "static" / "js" / "app.js").read_text(encoding="utf-8")
