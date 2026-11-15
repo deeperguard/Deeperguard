@@ -10147,6 +10147,79 @@ body.search-filters-open .fab-stack,
   .note-item-meta {
     color: var(--muted);
   }
+  /* One sidebar style: every entry is icon + label (same as .filter). The
+     close button belongs to the overlay drawer only (tablet/phone). */
+  .sidebar-scroll-head,
+  #btn-drawer-close { display: none; }
+  .sidebar-foot-actions {
+    padding-inline: 6px;
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 1px;
+  }
+  .sidebar-foot .sn-item {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--sn-nav-text);
+    font-size: 14px;
+    text-align: left;
+  }
+  .sidebar-foot .sn-item svg.ui-icon {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    margin: 0;
+    color: var(--sn-nav-muted);
+  }
+  .sidebar-foot .sn-item:hover {
+    background: color-mix(in srgb, var(--sn-nav-text) 8%, var(--sn-nav-bg));
+  }
+  .sidebar-foot .sn-item.vault-lock-btn.is-locked,
+  .sidebar-foot .sn-item.vault-lock-btn.is-unlocked {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+  .sidebar-foot .sn-item.vault-lock-btn.is-locked svg.ui-icon { color: var(--danger); }
+  .sidebar-foot .sn-item.vault-lock-btn.is-unlocked svg.ui-icon { color: var(--success); }
+  .sidebar-foot .sn-item[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--accent) 16%, var(--sn-nav-bg));
+    color: var(--accent);
+  }
+  .sn-item-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Collapsed rail: icons only (names stay in aria-label and title). */
+  body:not(.nav-pinned) .sn-item-label { display: none; }
+  body:not(.nav-pinned) .sidebar-foot .sn-item {
+    justify-content: center;
+    padding: 7px 0;
+  }
+  body:not(.nav-pinned):has(.sidebar-nav:hover) .sn-item-label,
+  body:not(.nav-pinned):has(.sidebar-nav:focus-within) .sn-item-label { display: inline; }
+  body:not(.nav-pinned):has(.sidebar-nav:hover) .sidebar-foot .sn-item,
+  body:not(.nav-pinned):has(.sidebar-nav:focus-within) .sidebar-foot .sn-item {
+    justify-content: flex-start;
+    padding: 7px 10px;
+  }
+  body:not(.nav-pinned):has(.sidebar-nav:hover) .sidebar-foot-actions,
+  body:not(.nav-pinned):has(.sidebar-nav:focus-within) .sidebar-foot-actions {
+    flex-direction: column;
+  }
 }
 
 @media (min-width: 1000px) {
@@ -11233,10 +11306,15 @@ body.editor-toolbar-tip-suppress .find-btn.btn.icon[aria-label]:focus-visible::a
     pointer-events: none;
   }
   #btn-drawer-close { display: none; }
+  .sidebar-scroll-head {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+  }
   body.drawer-over-menu #btn-drawer-close {
     display: inline-flex;
-    align-self: flex-start;
-    margin: 8px 12px 0;
+    margin: 8px 0 0;
     min-height: 44px;
   }
   .sidebar .tag-section,

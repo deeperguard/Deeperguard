@@ -84,7 +84,7 @@
       const name = L().nameOf(c);
       const count = ctx.count(id);
       return `<li role="none" class="label-node"><div role="treeitem" class="label-item${sel ? ' active' : ''}" data-label="${esc(id)}"`
-        + ` aria-level="${level}" aria-posinset="${pos}" aria-setsize="${size}" aria-selected="${sel ? 'true' : 'false'}"`
+        + ` aria-level="${level}" aria-posinset="${pos}" aria-setsize="${size}" aria-selected="${sel ? 'true' : 'false'}"${sel ? ' aria-current="true"' : ''}`
         + (sub.length ? ` aria-expanded="${expanded ? 'true' : 'false'}"` : '')
         + ` aria-label="${esc(name)}, ${count}" tabindex="${id === tabbable ? '0' : '-1'}" draggable="true" style="--tag-color:${ctx.color(id)};--label-level:${level - 1}">`
         + `<span class="label-twisty" data-label-toggle="${esc(id)}" aria-hidden="true">${sub.length ? (expanded ? '▾' : '▸') : ''}</span>`
