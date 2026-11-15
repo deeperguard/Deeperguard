@@ -1,6 +1,7 @@
 """Send encrypted backup attachments via LAN SMTP relay."""
 from __future__ import annotations
 
+import os
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -8,17 +9,29 @@ from email.message import EmailMessage
 from config import SMTP_FROM, SMTP_HOST, SMTP_PORT, SMTP_TLS, SMTP_USER, smtp_password
 
 
+def smtp_timeout_sec() -> float:
+    """Socket timeout for every SMTP step (NOTES_SMTP_TIMEOUT_SEC, default 20 s).
+
+    Kept short so a hanging mail server cannot hold the cron flock for long.
+    """
+    try:
+        value = float(os.environ.get("NOTES_SMTP_TIMEOUT_SEC", "20"))
+    except (TypeError, ValueError):
+        return 20.0
+    return value if value > 0 else 20.0
+
+
 def _send_message(msg: EmailMessage) -> None:
     if SMTP_TLS:
         context = ssl.create_default_context()
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=120) as smtp:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=smtp_timeout_sec()) as smtp:
             smtp.starttls(context=context)
             if SMTP_USER:
                 smtp.login(SMTP_USER, smtp_password())
             smtp.send_message(msg)
         return
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=120) as smtp:
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=smtp_timeout_sec()) as smtp:
         if SMTP_USER:
             smtp.login(SMTP_USER, smtp_password())
         smtp.send_message(msg)

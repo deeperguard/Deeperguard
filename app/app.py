@@ -4175,7 +4175,9 @@ migrate_email_named_upload_dirs()
 pcloud_credentials_mod.migrate_all_pcloud_secrets(KEYS_DIR)
 import config as _config_mod
 
-if _config_mod.pcloud_service_remote():
+from backup_pcloud import service_source as _pcloud_service_source
+
+if _pcloud_service_source():
     import threading as _threading
 
     from backup_pcloud import managed_healthcheck as _managed_healthcheck

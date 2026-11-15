@@ -11884,3 +11884,274 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   overflow-wrap: anywhere;
 }
 .toast .toast-undo { flex: 0 0 auto; color: var(--accent); font-weight: 600; }
+
+/* 2FA list, add, import and QR scan polish (docs/UI_POLISH.md 2.6).
+   Visual only: shared tokens, aligned rows with a readable code and timer,
+   a visible copy affordance, steps and clear errors in the add/import sheets
+   (shared dialog parts from 4.3) and a readable camera error. */
+.totp-head {
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  padding-left: calc(var(--space-4) + var(--safe-left));
+  padding-right: calc(var(--space-4) + var(--safe-right));
+}
+.totp-head-actions { gap: var(--space-2); }
+.totp-list { padding-inline: var(--space-2); box-sizing: border-box; }
+.totp-item {
+  margin-top: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  align-items: center;
+  overflow: hidden;
+}
+.totp-item-main { align-items: center; padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4); }
+.totp-item-main:hover { background: var(--bg-hover); }
+.totp-item-main:focus-visible,
+.totp-item-edit:focus-visible,
+.totp-item-server-copy:focus-visible,
+.totp-item-remove:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.totp-item-edit:hover,
+.totp-item-server-copy:hover,
+.totp-item-remove:hover { background: var(--bg-hover); }
+.totp-item-code { gap: var(--space-2); }
+.totp-code {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.totp-ring { width: 24px; height: 24px; }
+.totp-item-body .totp-expires { color: var(--muted); font-variant-numeric: tabular-nums; }
+.totp-copy-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.totp-item-main:hover .totp-copy-icon,
+.totp-item-main:focus-visible .totp-copy-icon { background: var(--accent); color: #fff; }
+.totp-empty {
+  margin: var(--space-6) var(--space-4);
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+/* Empty list: show the message right under the search, not at the bottom. */
+.totp-pane:has(#totp-empty:not([hidden])) .totp-list { flex: 0 0 auto; padding-bottom: 0; }
+/* Empty vault without a search: the + button is the one primary action. */
+.totp-pane:has(#totp-empty:not([hidden])):has(#totp-search:placeholder-shown) #btn-totp-add {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+@media (max-width: 999px) {
+  .totp-item-code .totp-code { margin-right: auto; }
+}
+/* Wide rows: code, timer and copy icon in one column wide enough for them;
+   Edit / On server / remove stay on the same line, and the column header
+   lines up with the row columns. */
+@media (min-width: 1000px) {
+  .totp-list-head:not([hidden]) {
+    box-sizing: border-box;
+    width: min(880px, 100%);
+    padding: var(--space-1) calc(var(--space-2) + 1px + 196px) 2px calc(var(--space-2) + 1px + var(--space-4));
+    grid-template-columns: 28px minmax(0, 1fr) 5.5rem 5.5rem 10.5rem;
+  }
+  .totp-list { width: min(880px, 100%); }
+  .totp-item {
+    grid-template-columns: minmax(0, 1fr) 56px 84px 56px;
+  }
+  .totp-item-main { grid-template-columns: 28px minmax(0, 1fr) 5.5rem 5.5rem 10.5rem; }
+  .totp-item-code { justify-content: flex-end; }
+  .totp-item-edit,
+  .totp-item-server-copy,
+  .totp-item-remove { margin: var(--space-2) 0; }
+  .totp-item-remove { margin-right: var(--space-3); min-width: 44px; width: 44px; }
+}
+
+/* Add / import sheets: dialog parts aligned with the shared pattern (4.3). */
+.totp-add-dialog .scan-dialog-head { padding: var(--space-3) var(--space-4) var(--space-2); }
+.totp-add-dialog .scan-dialog-head h2 { font-size: var(--text-lg); font-weight: 600; }
+.totp-add-dialog .scan-dialog-body { gap: var(--space-3); padding: 0 var(--space-4) var(--space-3); overscroll-behavior: contain; }
+.totp-add-dialog .scan-dialog-foot { gap: var(--space-2); padding: var(--space-3) var(--space-4); flex-wrap: wrap; }
+@media (min-width: 600px) {
+  .totp-add-dialog .scan-dialog-foot { justify-content: flex-end; }
+  .totp-add-dialog .scan-dialog-foot .btn { flex: 0 0 auto; min-width: 96px; }
+}
+.totp-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: totp-step;
+  display: grid;
+  gap: var(--space-2);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.totp-steps li {
+  counter-increment: totp-step;
+  position: relative;
+  min-height: 22px;
+  padding-left: 30px;
+}
+.totp-steps li::before {
+  content: counter(totp-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-round);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+.totp-dialog-error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: color-mix(in srgb, var(--danger) 80%, var(--text));
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.totp-dialog-error[hidden] { display: none; }
+.totp-add-dialog .scan-status { font-size: 14px; line-height: 1.45; }
+
+/* QR camera: readable status and a clear message when access is denied. */
+.totp-cam { background: #0b0b0b; }
+.totp-cam-head h2 { font-weight: 600; }
+.totp-cam-actions .btn,
+.totp-cam-head .btn { background: transparent; }
+.totp-cam-actions .btn:hover,
+.totp-cam-head .btn:hover { background: rgba(255, 255, 255, .12); }
+.totp-cam-status { line-height: 1.45; max-width: 36rem; margin-inline: auto; }
+.totp-cam-status.error {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid rgba(255, 180, 180, .7);
+  border-radius: var(--radius-sm);
+  background: rgba(220, 38, 38, .35);
+  color: #fff;
+  font-weight: 600;
+}
+.totp-cam-actions .btn:focus-visible,
+.totp-cam-head .btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* Settings, session/device panels and Secure Send (UI polish task 112).
+   Shared tokens only; layout and behaviour unchanged. */
+.settings-head { padding: var(--space-4) var(--space-5); gap: var(--space-3); }
+.settings-head h2 { font-size: var(--text-lg); line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+.settings-body { padding: var(--space-5) var(--space-4) var(--space-7); }
+.settings-group { margin: 0 0 var(--space-6); }
+.settings-group > h3 {
+  margin: 0 var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+.settings-card {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.settings-row {
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  line-height: 1.4;
+}
+.settings-hint {
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  font-size: var(--text-sm);
+}
+.settings-actions { gap: var(--space-2); padding: var(--space-3) var(--space-4); }
+.settings-nested { padding: 0 var(--space-4) var(--space-4); }
+.settings-subtitle { padding: var(--space-3) var(--space-4) 0; font-size: var(--text-md); }
+.settings-account { padding: var(--space-3) var(--space-4) 0; }
+/* Selects and toggles: same height, right-aligned, label takes the rest. */
+.settings-row select {
+  min-height: var(--touch);
+  font-size: var(--text-md);
+  border-radius: var(--radius-sm);
+}
+.settings-row:not(.stacked) > select { flex: 0 1 12rem; margin-left: auto; }
+@media (max-width: 999px) {
+  /* Phone: selects go full width under their label; toggles stay on the row. */
+  .settings-row:not(.stacked) > select { flex: 1 1 auto; margin-left: 0; }
+  .settings-panel .settings-row.checkbox { flex-direction: row; align-items: center; }
+  .settings-panel .settings-check-lead { flex-direction: row; align-items: flex-start; }
+}
+.settings-row.checkbox { flex-wrap: nowrap; min-height: var(--touch); box-sizing: border-box; }
+.settings-row.checkbox > span { flex: 1 1 auto; min-width: 0; }
+.settings-row.checkbox > input[type="checkbox"],
+.settings-check-lead > input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.settings-check-lead {
+  justify-content: flex-start;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  cursor: pointer;
+}
+.settings-check-lead > input[type="checkbox"] { margin-top: 1px; }
+.settings-panel .btn:focus-visible,
+.settings-panel .theme-opt:focus-visible,
+.settings-row input:focus-visible,
+.settings-row select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Signed-in devices: names and meta wrap instead of being cut off. */
+.device-row { gap: var(--space-1); padding: var(--space-3) var(--space-4); }
+.device-row-head { flex-wrap: wrap; gap: var(--space-2); }
+.device-row-name { font-size: var(--text-base); overflow-wrap: anywhere; flex: 1 1 10rem; }
+.device-current,
+.device-inactive,
+.device-pending { font-size: var(--text-xs); }
+.device-meta { font-size: var(--text-sm); overflow-wrap: anywhere; }
+.device-row-actions { gap: var(--space-2); margin-top: var(--space-2); }
+
+/* Secure Send: numbered steps and a visible status after creating a link. */
+.secure-send-steps {
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-3) calc(var(--space-4) + 1.25rem);
+  display: grid;
+  gap: var(--space-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  border-bottom: 1px solid var(--border);
+}
+.secure-send-steps li { padding-left: var(--space-1); overflow-wrap: anywhere; }
+.secure-send-steps li::marker { color: var(--accent); font-weight: 700; }
+.secure-send-status:not([hidden]) {
+  margin: 0 var(--space-4) var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+#secure-send-link-wrap { padding: 0 var(--space-4) var(--space-3); gap: var(--space-2); }
+#secure-send-link-wrap .settings-row { padding-left: 0; padding-right: 0; }
+.secure-send-link-row .secure-send-link-fragment-hint { font-size: var(--text-xs); opacity: 1; }

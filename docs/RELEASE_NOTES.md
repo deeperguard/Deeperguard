@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Agenda email reminders and push windows now run automatically.** The existing warning cron (every 5 minutes, under `flock`) now also processes agenda email reminders and push windows after the note time warnings; no manual ops step is needed. Each step runs on its own, so a failure in one does not stop the others (the run still exits non-zero). The server sees only the reminder time and the recipient address, never event titles or contents; the email text is generic. The SMTP connection now has a timeout (`NOTES_SMTP_TIMEOUT_SEC`, default 20 s) so a hanging mail server cannot hold up the cron.
 - **Calendar email reminders are now generic.** An email reminder says only "You have an event coming up soon.", without the event time. The app uploads only the 15-minute window it is due in (rounded down, so it can arrive up to 15 minutes early, never late) and no `HH:MM` label; the server also rounds and drops the label for older app versions. Push and local reminders are unchanged. Email reminders stay opt-in (off by default) and Pro-only; the setting now says who sees what.
 - **Agenda: the "now" line keeps moving.** The red line in Day/Week view moves every minute while the Agenda is open, and "today" switches at midnight (the view re-renders unless the event editor is open). Nothing runs while the tab is hidden; coming back catches up at once.
 - **Agenda: no more silently lost edits.** Closing the event editor with Cancel, a click outside it, or Escape now asks "You have unsaved changes. Discard them?" when something was changed; an untouched editor closes straight away.
@@ -20,7 +21,7 @@
 - **Agenda reminders (#349 plus review fixes):** per-event email reminders (push when enabled later). The server stores only an opaque id, the fire time, the channel and an optional `HH:MM` label.
   - Reminders follow the calendar exactly (interval, end date, deleted and moved occurrences) and are planned 60 days ahead, topped up when the app opens; failed updates are retried.
   - Delivery: reminders more than 30 minutes late are closed unsent (`NOTES_AGENDA_REMINDER_MAX_LATE_SEC`); undeliverable ones never block the queue; email needs a verified address; push endpoints are limited to browser push services.
-  - **Ops:** schedule `app/agenda_reminder_cron.py` (every minute) for email delivery. Do not add VAPID keys until push is enabled.
+  - Do not add VAPID keys until push is enabled.
   - Reminders are Pro-only: moving an account to a plan without reminders deletes its scheduled reminders, and the cron never sends for such an account. Back on Pro, the app schedules them again the next time the Agenda opens.
 ## v0.65.52 (Vienna)
 

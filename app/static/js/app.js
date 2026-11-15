@@ -4819,7 +4819,7 @@
   function totpEmptyCopy() {
     if (totpParseError) return 'The 2FA tab hit an error while reading accounts.';
     if (totpEntries.length) return 'No matching accounts.';
-    return 'No authenticator accounts yet.\nTap + to scan a QR code or enter a secret.';
+    return 'No authenticator accounts yet.\nUse the + button (Add account) at the top to scan a QR code or enter a secret.';
   }
 
   // Local only: filters the decrypted in-memory list. The query never leaves the page.
@@ -4892,7 +4892,7 @@
       const changedLabel = totpVaultMetaLabel(changedMs, '—');
       const usedLabel = totpVaultMetaLabel(usedMs, '—');
       return `<div class="totp-item" data-totp-id="${escapeAttr(item.id)}">
-        <button type="button" class="totp-item-main" data-totp-copy aria-label="Copy code for ${escapeAttr(label)}${boundHost ? ` (${boundHost})` : ' (no site set)'}">
+        <button type="button" class="totp-item-main" data-totp-copy title="Copy code" aria-label="Copy code for ${escapeAttr(label)}${boundHost ? ` (${boundHost})` : ' (no site set)'}">
           <span class="note-kind-icon note-kind-icon--totp" aria-hidden="true">${kindIconSvg('totp')}</span>
           <span class="totp-item-account">
             <span class="totp-item-body">
@@ -4910,6 +4910,7 @@
           <span class="totp-item-code">
             <span class="totp-code">${escapeHtml(pretty)}</span>
             ${totpRingSvg(totp.progress, totp.remaining <= 5)}
+            <span class="totp-copy-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
           </span>
         </button>
         <button type="button" class="totp-item-edit" data-totp-edit aria-label="Edit ${escapeAttr(label)}">Edit</button>
@@ -15572,9 +15573,9 @@
       }))) return;
     } else {
       const ok = await confirmAction(
-        `Deny “${item.device || 'this device'}”? That ends the session and deletes its local vault copy when it next connects.`,
+        `Deny the new sign-in on “${item.device || 'this device'}”? Its session ends now, and it will delete its local vault copy the next time it connects. This device stays signed in.`,
         {
-          title: 'Deny device?',
+          title: 'Deny new sign-in?',
           confirmLabel: 'Deny',
           cancelLabel: 'Cancel',
           danger: true,
@@ -15595,14 +15596,14 @@
     const current = !!item.current;
     if (current) {
       if (!(await confirmUserSignOut({
-        title: 'Sign out?',
+        title: 'Sign out of this device?',
         confirmLabel: 'Sign out',
       }))) return;
     } else {
       const ok = await confirmAction(
-        `Sign out “${item.device || 'this device'}”? That device will lose access immediately and will delete its local vault copy when it next connects.`,
+        `Sign out “${item.device || 'this device'}”? It loses access right away and will delete its local vault copy the next time it connects. This device stays signed in.`,
         {
-          title: 'Sign out device?',
+          title: 'Sign out other device?',
           confirmLabel: 'Sign out',
           cancelLabel: 'Cancel',
           danger: true,

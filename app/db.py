@@ -133,6 +133,15 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         CREATE INDEX IF NOT EXISTS idx_note_reminders_due
             ON note_reminders(sent_at, sending_at, warn_at);
 
+        CREATE TABLE IF NOT EXISTS pcloud_service_token (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            ciphertext BLOB NOT NULL,
+            nonce BLOB NOT NULL,
+            region TEXT NOT NULL,
+            set_at REAL NOT NULL,
+            set_by TEXT NOT NULL DEFAULT ''
+        );
+
         CREATE TABLE IF NOT EXISTS reminder_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,

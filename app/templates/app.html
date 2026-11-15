@@ -1564,7 +1564,7 @@
         </div>
         <div class="totp-head-actions">
           <button type="button" id="btn-totp-add" class="btn icon" title="Add account" aria-label="Add account">+</button>
-          <button type="button" id="btn-totp-import" class="btn ghost" title="Import accounts">Import</button>
+          <button type="button" id="btn-totp-import" class="btn ghost" title="Import accounts" aria-label="Import accounts">Import</button>
           <button type="button" id="btn-totp-lock" class="btn icon" title="Lock vault" aria-label="Lock vault">
             <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -1601,7 +1601,7 @@
         <span class="totp-list-head-code">Code</span>
       </div>
       <div id="totp-list" class="totp-list"></div>
-      <p id="totp-empty" class="totp-empty muted" hidden></p>
+      <p id="totp-empty" class="totp-empty muted" role="status" hidden></p>
     </section>
     <div class="fab-stack mobile-only">
       <button type="button" id="fab-scan" class="fab fab-secondary" title="Scan document" aria-label="Scan document">
@@ -1651,7 +1651,7 @@
   <aside id="settings-panel" class="settings-panel" hidden>
     <header class="settings-head">
       <h2>Settings</h2>
-      <button type="button" class="btn icon" id="settings-close" aria-label="Close settings">×</button>
+      <button type="button" class="btn icon" id="settings-close" aria-label="Close settings" title="Close settings">×</button>
     </header>
     <div class="settings-body">
       <section class="settings-group">
@@ -1704,7 +1704,7 @@
       <section class="settings-group" id="signed-in-devices-group">
         <h3>Signed-in devices</h3>
         <div class="settings-card">
-          <p class="settings-hint">Devices currently signed in to this account (Settings &gt; Devices). New sign-ins appear here until you approve them or deny to sign that device out. Sign-in never waits on approval — use Approve or Deny when you are ready.</p>
+          <p class="settings-hint">Every device signed in to this account. A new sign-in is marked here until you approve or deny it; signing in never waits for approval. <strong>Deny</strong> or <strong>Sign out</strong> ends that device's session after you confirm — Cancel is selected first, and Escape also cancels.</p>
           <div id="vault-freshness-panel" class="vault-freshness-panel" hidden>
             <p id="vault-freshness-chip" class="device-start-chip" hidden></p>
             <p class="settings-hint" id="vault-freshness-start-label" hidden>Unverified start</p>
@@ -2171,7 +2171,7 @@
   <aside id="secure-send-panel" class="settings-panel secure-send-panel" hidden aria-label="Secure Send">
     <header class="settings-head">
       <h2>Secure Send</h2>
-      <button type="button" class="btn icon" id="secure-send-close" aria-label="Close">×</button>
+      <button type="button" class="btn icon" id="secure-send-close" aria-label="Close Secure Send" title="Close Secure Send">×</button>
     </header>
     <div class="settings-body">
       <section class="settings-group" id="secure-send-compose">
@@ -2179,6 +2179,13 @@
         <div class="settings-card stack">
           <p class="settings-hint" id="secure-send-compose-hint">Send an encrypted note and optional file. The key is in the link itself and never reaches our server. The link stops working after the set number of opens or when it expires (24 hours by default, 7 days at most). The server never sees the key or the passphrase.</p>
           <p class="settings-hint" id="secure-send-plan-limit-hint" hidden></p>
+          <ol class="secure-send-steps" aria-label="How Secure Send works">
+            <li>Write a title and note. Adding a file is optional.</li>
+            <li>If you set a passphrase, share it separately from the link. Or tick &ldquo;Send without a passphrase&rdquo;.</li>
+            <li>Choose the number of opens and the days until the link expires.</li>
+            <li>Tick the confirmation &ldquo;I understand that sharing by link weakens end-to-end protection&rdquo;, then press <strong>Create link</strong>.</li>
+            <li>Copy or share the link that appears below. A short message confirms when the link is created and when it is copied.</li>
+          </ol>
           <label class="settings-row stacked" for="secure-send-title">Title
             <input id="secure-send-title" type="text" maxlength="500" autocomplete="off">
           </label>
@@ -2199,7 +2206,7 @@
               <input id="secure-send-file-add" type="file" multiple hidden>
             </div>
           </div>
-          <label class="settings-row" for="secure-send-no-passphrase">
+          <label class="settings-row settings-check-lead" for="secure-send-no-passphrase">
             <input id="secure-send-no-passphrase" type="checkbox">
             Send without a passphrase (anyone with the link can open it)
           </label>
@@ -2214,15 +2221,15 @@
             <input id="secure-send-days" type="number" min="1" max="7" value="1" step="1">
           </label>
           <div id="secure-send-warning" class="settings-hint" role="note"></div>
-          <label class="settings-row" for="secure-send-ack">
+          <label class="settings-row settings-check-lead" for="secure-send-ack">
             <input id="secure-send-ack" type="checkbox">
             I understand that sharing by link weakens end-to-end protection.
           </label>
           <div class="settings-actions">
             <button type="button" id="btn-secure-send-create" class="btn primary" disabled>Create link</button>
           </div>
-          <p id="secure-send-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
-          <div id="secure-send-link-wrap" class="secure-send-link-row" hidden>
+          <p id="secure-send-status" class="settings-hint secure-send-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+          <div id="secure-send-link-wrap" class="secure-send-link-row" role="group" aria-label="Your Secure Send link" hidden>
             <label class="settings-row stacked" for="secure-send-link">Copy or share
               <textarea id="secure-send-link" rows="3" readonly autocomplete="off" spellcheck="false"></textarea>
             </label>
@@ -2454,7 +2461,7 @@
   <div id="totp-cam" class="totp-cam" hidden role="dialog" aria-modal="true" aria-labelledby="totp-cam-title">
     <header class="totp-cam-head">
       <h2 id="totp-cam-title">Scan QR code</h2>
-      <button type="button" class="btn icon" id="totp-cam-close" aria-label="Close camera">&times;</button>
+      <button type="button" class="btn icon" id="totp-cam-close" aria-label="Close camera" title="Close camera">&times;</button>
     </header>
     <div class="totp-cam-stage">
       <video id="totp-qr-video" class="totp-qr-video" playsinline muted></video>
@@ -2475,8 +2482,13 @@
       <h2 id="totp-add-title">Add 2FA account</h2>
     </header>
     <div class="scan-dialog-body">
-      <p class="scan-dialog-lead muted">Scan a QR code or type the account and secret. Secrets stay in the vault and are never shown in the list.</p>
-      <p id="totp-qr-status" class="scan-status muted" hidden></p>
+      <ol class="totp-steps" aria-label="Steps">
+        <li>Scan the QR code, choose an image or paste it.</li>
+        <li>Or type the account and the secret.</li>
+        <li>Check the details and press <strong>Add</strong>.</li>
+      </ol>
+      <p class="scan-dialog-lead muted">Secrets stay in the vault and are never shown in the list.</p>
+      <p id="totp-qr-status" class="scan-status muted" role="status" aria-live="polite" hidden></p>
       <div id="totp-migration" class="scan-add-actions" hidden>
         <p id="totp-migration-status" class="scan-status" role="status" aria-live="polite"></p>
         <button type="button" class="btn scan-add-btn" id="totp-migration-import">Import what I have</button>
@@ -2504,7 +2516,7 @@
       <label class="scan-name-field">Secret or otpauth URL
         <input id="totp-add-secret" type="text" maxlength="512" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="JBSW Y3DP EHPK 3PXP">
       </label>
-      <p id="totp-add-error" class="error" hidden>Enter a valid authenticator secret or otpauth URL. Use Base32 letters A–Z and digits 2–7. Spaces are OK.</p>
+      <p id="totp-add-error" class="error totp-dialog-error" role="alert" hidden>Enter a valid authenticator secret or otpauth URL. Use Base32 letters A–Z and digits 2–7. Spaces are OK.</p>
     </div>
     <footer class="scan-dialog-foot">
       <button type="button" class="btn ghost" id="totp-add-cancel">Cancel</button>
@@ -2518,7 +2530,12 @@
       <h2 id="totp-import-title">Import 2FA accounts</h2>
     </header>
     <div class="scan-dialog-body">
-      <p class="scan-dialog-lead muted">Choose a file or paste text: a list of otpauth:// links (one per line), Google Authenticator export links (otpauth-migration://, all codes of one export), or an Aegis or 2FAS export (plain or password-protected). Everything stays in this browser and is saved encrypted in your vault.</p>
+      <ol class="totp-steps" aria-label="Steps">
+        <li>Choose a file or paste the exported text.</li>
+        <li>Press <strong>Preview</strong> to check which accounts will be added.</li>
+        <li>Press <strong>Import</strong> to save them in your vault.</li>
+      </ol>
+      <p class="scan-dialog-lead muted">Supported: a list of otpauth:// links (one per line), Google Authenticator export links (otpauth-migration://, all codes of one export), or an Aegis or 2FAS export (plain or password-protected). Everything stays in this browser and is saved encrypted in your vault.</p>
       <div class="scan-add-actions">
         <button type="button" class="btn scan-add-btn" id="totp-import-pick">Choose file</button>
         <button type="button" class="btn ghost scan-add-btn" id="totp-import-authy">I'm coming from Authy</button>
@@ -2529,9 +2546,9 @@
       <label id="totp-import-password-row" class="scan-name-field" hidden>Export password
         <input id="totp-import-password" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="1024">
       </label>
-      <p id="totp-import-error" class="error" hidden></p>
+      <p id="totp-import-error" class="error totp-dialog-error" role="alert" hidden></p>
       <div id="totp-import-preview" hidden>
-        <p id="totp-import-summary" class="scan-status"></p>
+        <p id="totp-import-summary" class="scan-status" role="status" aria-live="polite"></p>
         <ul id="totp-import-list" class="totp-import-list"></ul>
       </div>
       <p id="totp-import-advice" class="scan-dialog-lead muted" hidden>Import finished. The export file contains your secrets in plain text: delete it from your device, including any downloads folder and cloud copies.</p>
@@ -2790,7 +2807,7 @@
       <p id="confirm-message"></p>
     </div>
     <div class="confirm-dialog-actions">
-      <button type="button" class="btn ghost" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn ghost" id="confirm-cancel" autofocus>Cancel</button>
       <button type="button" class="btn" id="confirm-extra" hidden>Attach anyway</button>
       <button type="button" class="btn primary" id="confirm-ok">Confirm</button>
     </div>
