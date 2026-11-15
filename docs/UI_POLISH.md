@@ -1192,7 +1192,10 @@ Tests: `node tests/test_doc_inline_controls.js` (controls + CSS contract),
 `python tests/e2e_doc_inline_viewer.py [dir]` (real Chromium, desktop and
 390px mobile: fit width, centring, no overflow, zoom, horizontal reach,
 toolbar click does not open the full viewer, full screen open/close, no live
-blob URLs; writes screenshots).
+blob URLs; writes screenshots). The e2e script needs Chromium and is not part
+of the Node test run (`tests/test_*.js`); it is run manually, and it holds the
+only real layout check (page not wider than its container). The Node test only
+covers the CSS contract and a DOM stub.
 
 ### 7.7 Footer and backlinks
 
