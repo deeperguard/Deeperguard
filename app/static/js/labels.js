@@ -22,11 +22,12 @@
     return map;
   }
 
-  function validateName(name) {
+  // allowSlash: only for legacy flat names that already contain '/' (never split, see migrate).
+  function validateName(name, { allowSlash = false } = {}) {
     const n = String(name == null ? '' : name).trim();
     if (!n) return { ok: false, error: 'empty' };
     if (n.length > MAX_NAME) return { ok: false, error: 'too_long' };
-    if (n.includes('/')) return { ok: false, error: 'slash' };
+    if (!allowSlash && n.includes('/')) return { ok: false, error: 'slash' };
     return { ok: true, name: n };
   }
 
@@ -184,10 +185,10 @@
 
   // Content for `uuid` after a rename or move, plus new compat titles for its subtree.
   // Pure; the caller upserts the returned records. Returns {ok:false,error} on rejection.
-  function planUpdate(uuid, patch, byId) {
+  function planUpdate(uuid, patch, byId, opts = {}) {
     const cur = byId.get(uuid);
     if (!cur) return { ok: false, error: 'unknown_label' };
-    const name = patch.name !== undefined ? validateName(patch.name) : { ok: true, name: nameOf(cur) };
+    const name = patch.name !== undefined ? validateName(patch.name, opts) : { ok: true, name: nameOf(cur) };
     if (!name.ok) return name;
     const parentId = patch.parent_id !== undefined ? patch.parent_id || '' : parentOf(cur);
     const pv = validateParent(uuid, parentId, byId);

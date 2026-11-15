@@ -88,6 +88,77 @@
     emit();
   }
 
+  // Per-item warnings that are bundled into one message per type while a
+  // sync/download round is open (beginRound/endRound). Each type keeps its own
+  // count; item ids stay in detail.uuids for diagnosis (never content/keys).
+  const AGGREGATE_TEXT = {
+    rollback: 'the server returned an older version.',
+    fork: 'the server returned a different copy at the same version (possible fork).',
+  };
+  const AGGREGATE_MAX_IDS = 5000;
+  let round = null; // { depth, entries: { [type]: entry } }
+
+  function aggregateMessage(type, count) {
+    return `${count} ${count === 1 ? 'item' : 'items'}: ${AGGREGATE_TEXT[type]}`;
+  }
+
+  function beginRound() {
+    if (round) {
+      round.depth += 1;
+      return;
+    }
+    round = { depth: 1, entries: Object.create(null) };
+  }
+
+  function endRound() {
+    if (!round) return;
+    round.depth -= 1;
+    if (round.depth > 0) return;
+    const entries = Object.values(round.entries);
+    round = null;
+    if (!entries.length) return;
+    const now = Date.now();
+    entries.forEach((entry) => {
+      entry.at = now;
+      try {
+        if (global.console && typeof global.console.warn === 'function') {
+          global.console.warn(`[freshness] ${entry.type}: ${entry.detail.count} item(s)`, entry.detail.uuids.slice());
+        }
+      } catch (err) { /* ignore */ }
+    });
+    // Surface the round's bundled warnings on top (re-add if trimmed out).
+    state.warnings = [...entries, ...state.warnings.filter((w) => !entries.includes(w))].slice(0, 20);
+    emit();
+  }
+
+  function pushAggregateWarning(type, detail) {
+    const uuid = String((detail && detail.uuid) || '');
+    const existing = round ? round.entries[type] : null;
+    if (existing) {
+      existing.detail.count += 1;
+      if (existing.detail.uuids.length < AGGREGATE_MAX_IDS) existing.detail.uuids.push(uuid);
+      existing.message = aggregateMessage(type, existing.detail.count);
+      if (!state.warnings.includes(existing)) {
+        state.warnings = [existing, ...state.warnings].slice(0, 20);
+      }
+      return existing;
+    }
+    const entry = {
+      type,
+      message: aggregateMessage(type, 1),
+      detail: { ...(detail || {}), count: 1, uuids: [uuid] },
+      at: Date.now(),
+    };
+    state.warnings = [entry, ...state.warnings].slice(0, 20);
+    if (round) {
+      // Emitted once with the final count when the round ends.
+      round.entries[type] = entry;
+    } else {
+      emit();
+    }
+    return entry;
+  }
+
   async function sha256Hex(text) {
     const enc = new TextEncoder().encode(String(text || ''));
     if (global.NotesCrypto && typeof global.NotesCrypto.hashBytes === 'function') {
@@ -209,9 +280,8 @@
         return {
           ok: false,
           reject: true,
-          warning: pushWarning(
+          warning: pushAggregateWarning(
             WARN_TYPES.rollback,
-            'The server returned an older version of this item.',
             { uuid: id, incoming: ver, held: hwm.v },
           ),
         };
@@ -220,9 +290,8 @@
         return {
           ok: false,
           reject: true,
-          warning: pushWarning(
+          warning: pushAggregateWarning(
             WARN_TYPES.fork,
-            'The server returned a different copy of this item at the same version (possible fork).',
             { uuid: id, version: ver },
           ),
         };
@@ -933,6 +1002,8 @@
 
   function clearMemory() {
     state = emptyState();
+    // Locked mid-round: do not resurface the old vault's warnings at endRound.
+    if (round) round.entries = Object.create(null);
     cryptoKeyRef = null;
     emit();
   }
@@ -981,6 +1052,8 @@
     getPublicSnapshot,
     clearWarnings,
     pushWarning,
+    beginRound,
+    endRound,
     fingerprintShort,
     computeTip,
     versionsMapFromItems,

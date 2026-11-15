@@ -95,7 +95,7 @@ assert.ok(onlineBlock.includes("sync({ quiet: true })"));
 assert.ok(!/then\(\(ok\) => \(ok \? sync\(\)/.test(onlineBlock), 'must not skip pull when pushDirty fails');
 
 // --- MUST NOT REGRESS Feature A/C strings ---
-assert.ok(freshnessJs.includes('The server returned an older version of this item.'));
+assert.ok(freshnessJs.includes('the server returned an older version.'));
 assert.ok(freshnessJs.includes('The server gave this device an older version of your vault than your other device has'));
 assert.ok(freshnessJs.includes('encodeAnchorPayload'));
 assert.ok(freshnessJs.includes('verifyAnchor'));

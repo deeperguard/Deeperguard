@@ -135,6 +135,112 @@ function reset() {
   assert.strictEqual(itemFork.reject, true);
   assert.ok(/fork/i.test(itemFork.warning.message));
 
+  // --- aggregation: 1000 forks in one round → exactly one fork warning (count 1000) ---
+  reset();
+  const origWarn = sandbox.console;
+  const consoleLines = [];
+  sandbox.console = { ...console, warn: (...args) => consoleLines.push(args) };
+  let emits = 0;
+  const offEmit = NotesFreshness.onChange(() => { emits += 1; });
+  for (let i = 0; i < 1000; i += 1) {
+    NotesFreshness.noteAccepted(`f-${i}`, { type: 'note', __fv: 2, __fid: `f-${i}` }, `hash-a-${i}`);
+  }
+  emits = 0;
+  NotesFreshness.beginRound();
+  for (let i = 0; i < 1000; i += 1) {
+    const r = NotesFreshness.checkIncoming(`f-${i}`, { type: 'note', __fv: 2, __fid: `f-${i}` }, `hash-b-${i}`);
+    assert.strictEqual(r.reject, true, 'every fork item is still rejected');
+    assert.strictEqual(r.ok, false);
+  }
+  NotesFreshness.endRound();
+  offEmit();
+  sandbox.console = origWarn;
+  let snap = NotesFreshness.getPublicSnapshot();
+  let forks = NotesFreshness.state.warnings.filter((w) => w.type === NotesFreshness.WARN_TYPES.fork);
+  assert.strictEqual(forks.length, 1, 'one fork warning per round');
+  assert.strictEqual(forks[0].detail.count, 1000);
+  assert.strictEqual(forks[0].message, '1000 items: the server returned a different copy at the same version (possible fork).');
+  assert.strictEqual(forks[0].detail.uuids.length, 1000, 'item ids kept for diagnosis');
+  assert.strictEqual(forks[0].detail.uuids[999], 'f-999');
+  assert.strictEqual(snap.warnings[0], forks[0], 'bundled warning surfaces on top');
+  assert.strictEqual(emits, 1, 'UI notified once, at the end of the round');
+  assert.strictEqual(consoleLines.length, 1, 'ids logged once to console');
+  assert.ok(/fork: 1000 item/.test(consoleLines[0][0]));
+  assert.ok(!JSON.stringify(forks[0]).includes('hash-b'), 'no content hashes or content in the warning');
+
+  // --- a single real fork in a round still gives a visible warning with count 1 ---
+  reset();
+  NotesFreshness.noteAccepted('solo', { type: 'note', __fv: 4, __fid: 'solo' }, 'hash-a');
+  NotesFreshness.beginRound();
+  const solo = NotesFreshness.checkIncoming('solo', { type: 'note', __fv: 4, __fid: 'solo' }, 'hash-b');
+  NotesFreshness.endRound();
+  assert.strictEqual(solo.reject, true);
+  snap = NotesFreshness.getPublicSnapshot();
+  assert.strictEqual(snap.warningCount, 1);
+  assert.strictEqual(snap.warnings[0].type, 'fork');
+  assert.strictEqual(snap.warnings[0].detail.count, 1);
+  assert.strictEqual(snap.warnings[0].message, '1 item: the server returned a different copy at the same version (possible fork).');
+
+  // --- interleaved forks and rollbacks: counted and shown separately ---
+  reset();
+  for (let i = 0; i < 10; i += 1) {
+    NotesFreshness.noteAccepted(`m-${i}`, { type: 'note', __fv: 5, __fid: `m-${i}` }, `hash-a-${i}`);
+  }
+  NotesFreshness.beginRound();
+  for (let i = 0; i < 10; i += 1) {
+    // even → fork (same version, other hash), odd → rollback (older version)
+    const content = { type: 'note', __fv: i % 2 === 0 ? 5 : 3, __fid: `m-${i}` };
+    const r = NotesFreshness.checkIncoming(`m-${i}`, content, `hash-b-${i}`);
+    assert.strictEqual(r.reject, true);
+    if (i === 4) {
+      // Unrelated warning in the middle of the round must not split the bundles.
+      NotesFreshness.pushWarning(NotesFreshness.WARN_TYPES.integrity, 'corrupted', { uuid: 'x' });
+    }
+  }
+  NotesFreshness.endRound();
+  let all = NotesFreshness.state.warnings;
+  forks = all.filter((w) => w.type === 'fork');
+  let rollbacks = all.filter((w) => w.type === 'rollback');
+  assert.strictEqual(forks.length, 1, 'one fork warning despite interleaving');
+  assert.strictEqual(rollbacks.length, 1, 'one rollback warning despite interleaving');
+  assert.strictEqual(forks[0].detail.count, 5);
+  assert.strictEqual(rollbacks[0].detail.count, 5);
+  assert.deepStrictEqual([...forks[0].detail.uuids], ['m-0', 'm-2', 'm-4', 'm-6', 'm-8']);
+  assert.deepStrictEqual([...rollbacks[0].detail.uuids], ['m-1', 'm-3', 'm-5', 'm-7', 'm-9']);
+  assert.strictEqual(rollbacks[0].message, '5 items: the server returned an older version.');
+  assert.strictEqual(all.length, 3);
+
+  // --- two rounds are not merged; nested begin/end stays one round ---
+  NotesFreshness.beginRound();
+  NotesFreshness.beginRound(); // nested (e.g. sync → pull retry)
+  NotesFreshness.checkIncoming('m-0', { type: 'note', __fv: 5, __fid: 'm-0' }, 'hash-c');
+  NotesFreshness.endRound();
+  NotesFreshness.checkIncoming('m-2', { type: 'note', __fv: 5, __fid: 'm-2' }, 'hash-c');
+  NotesFreshness.endRound();
+  all = NotesFreshness.state.warnings;
+  forks = all.filter((w) => w.type === 'fork');
+  assert.strictEqual(forks.length, 2, 'second round gets its own fork warning');
+  assert.strictEqual(forks[0].detail.count, 2, 'nested round counted as one round');
+  assert.strictEqual(forks[1].detail.count, 5, 'previous round count unchanged');
+  rollbacks = all.filter((w) => w.type === 'rollback');
+  assert.strictEqual(rollbacks.length, 1);
+
+  // --- clearWarnings mid-round does not lose the fork ---
+  reset();
+  NotesFreshness.noteAccepted('c-1', { type: 'note', __fv: 1, __fid: 'c-1' }, 'hash-a');
+  NotesFreshness.beginRound();
+  NotesFreshness.checkIncoming('c-1', { type: 'note', __fv: 1, __fid: 'c-1' }, 'hash-b');
+  NotesFreshness.clearWarnings();
+  NotesFreshness.endRound();
+  assert.strictEqual(NotesFreshness.state.warnings.filter((w) => w.type === 'fork').length, 1);
+
+  // --- outside a round each fork stays its own visible warning ---
+  reset();
+  NotesFreshness.noteAccepted('o-1', { type: 'note', __fv: 1, __fid: 'o-1' }, 'hash-a');
+  const loose = NotesFreshness.checkIncoming('o-1', { type: 'note', __fv: 1, __fid: 'o-1' }, 'hash-b');
+  assert.strictEqual(loose.reject, true);
+  assert.strictEqual(NotesFreshness.getPublicSnapshot().warnings[0].detail.count, 1);
+
   // --- bind mismatch ---
   reset();
   const bind = NotesFreshness.checkIncoming(
@@ -294,6 +400,50 @@ function reset() {
   const appJs = fs.readFileSync(path.join(jsRoot, 'app.js'), 'utf8');
   assert.ok(appJs.includes('confirmIntentionalFreshnessReset'));
   assert.ok(appJs.includes('wireFreshnessWarnings'));
+
+  // --- password change: re-encrypted items carry a bumped __fv ---
+  reset();
+  const uuids = Array.from({ length: 5 }, (_, i) => `item-${i}`);
+  const oldCopies = {};
+  for (const id of uuids) {
+    const c = NotesFreshness.stampForUpsert(id, { type: 'note', title: id }, { bump: true });
+    const hash = await NotesCrypto.hashText(JSON.stringify(await NotesCrypto.encryptObject(key, c)));
+    NotesFreshness.noteAccepted(id, c, hash); // device B hwm
+    oldCopies[id] = c;
+  }
+  // Device A: password change re-encrypts every item (same logic as store.js)
+  for (const id of uuids) {
+    const bumped = NotesFreshness.stampForUpsert(id, oldCopies[id], { bump: true, existing: { content: oldCopies[id] } });
+    const wrapped = NotesFreshness.stampForWrap(id, bumped);
+    assert.strictEqual(wrapped.__fv, oldCopies[id].__fv + 1);
+    const ct = JSON.stringify(await NotesCrypto.encryptObject(key, wrapped));
+    const dec = await NotesCrypto.decryptObject(key, JSON.parse(ct));
+    assert.strictEqual(dec.__fv, wrapped.__fv, '__fv stays inside encrypted payload');
+    const res = NotesFreshness.checkIncoming(id, dec, await NotesCrypto.hashText(ct));
+    assert.strictEqual(res.reject, false, 'device B accepts re-encrypted item');
+    assert.strictEqual(res.warning, null);
+  }
+  assert.strictEqual(NotesFreshness.getPublicSnapshot().warningCount, 0, 'no fork warnings');
+  // Without the bump (old behaviour) the same flow is a fork
+  const noBump = NotesFreshness.stampForWrap('item-0', { ...oldCopies['item-0'], __fv: oldCopies['item-0'].__fv });
+  reset();
+  NotesFreshness.noteAccepted('item-0', oldCopies['item-0'], 'old-hash');
+  assert.strictEqual(NotesFreshness.checkIncoming('item-0', noBump, 'new-hash').reject, true);
+
+  // --- real fork (same __fv, different content) still reported ---
+  reset();
+  NotesFreshness.noteAccepted('item-x', { type: 'note', __fv: 4, __fid: 'item-x' }, 'hash-1');
+  const realFork = NotesFreshness.checkIncoming(
+    'item-x',
+    { type: 'note', __fv: 4, __fid: 'item-x', title: 'different' },
+    'hash-2',
+  );
+  assert.strictEqual(realFork.reject, true);
+  assert.strictEqual(realFork.warning.type, NotesFreshness.WARN_TYPES.fork);
+
+  const src = fs.readFileSync(path.join(jsRoot, 'store.js'), 'utf8');
+  assert.ok(/state\.items\.set\(uuid, item\);\s*state\.dirty\.add\(uuid\);/.test(src));
+  assert.ok(src.includes('stampForUpsert(uuid, item.content, { bump: true, existing: item })'));
 
   console.log('test_sync_freshness ok');
 })().catch((err) => {
