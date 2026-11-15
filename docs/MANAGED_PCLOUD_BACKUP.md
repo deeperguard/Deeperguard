@@ -413,6 +413,29 @@ the database and `KEYS_DIR`), because the server must decrypt the token for unat
 nightly runs. The token gives access to the **whole** pCloud account it belongs to, so
 use a dedicated pCloud account that holds nothing but these backups, with 2FA.
 
+There is **no protection** against:
+
+- root (or any process running as the app user) on the server, which can read the key
+  file and the database and decrypt the token itself;
+- an XSS bug in the admin pages, or a hijacked admin session. Anyone acting as the
+  admin can replace or remove the connection, and can trigger a test, which makes the
+  server use the token. The token is never sent back to the browser, so it cannot be
+  read through the page, but the server will still use it on request.
+
+This connection makes no audit or zero-knowledge claims. The audit log only records
+who set, tested or removed the connection and when, not what the token was.
+
+**Revoking the token.** Two steps, both needed:
+
+1. In `/admin`, click **Remove**. This deletes the stored ciphertext from the database,
+   so the server can no longer use the token.
+2. In pCloud (logged in to the service account), revoke the app access: *Settings →
+   Security → Connected apps* (the rclone entry), then remove it. Removing it in the
+   dashboard alone does not invalidate the token, because pCloud tokens are long-lived.
+   If the server or the database may have been compromised, do step 2 first, then
+   create a new token with `rclone authorize "pcloud"`. Also consider changing the
+   pCloud password.
+
 ### 10b. Alternative: server environment
 
 If `NOTES_PCLOUD_SERVICE_REMOTE` is set, it wins over a stored token and the admin
