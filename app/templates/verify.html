@@ -235,7 +235,7 @@
         <p>AES-GCM detects byte flips of ciphertext, but a server that only stores blobs could still serve an older valid ciphertext (rollback), withhold updates (freeze), or show different devices different histories (fork). Deeperguard clients detect those cases locally:</p>
         <ul>
           <li><strong>Per-item version</strong> — a monotonic <code>__fv</code> and the item’s UUID (<code>__fid</code>) sit inside the encrypted payload. Every real edit increments the version. The server cannot change them without breaking decryption.</li>
-          <li><strong>High-water mark</strong> — each device stores (encrypted at rest) the highest version seen per item. A pull that offers a lower version is refused with: “The server returned an older version of this item.”</li>
+          <li><strong>High-water mark</strong> — each device stores (encrypted at rest) the highest version seen per item. A pull that offers a lower version is refused. Refusals in one sync round are bundled into one message per kind with the number of items, e.g. “3 items: the server returned an older version.” or “12 items: the server returned a different copy at the same version (possible fork).” The affected item ids are listed in the browser console.</li>
           <li><strong>Vault head chain</strong> — an encrypted <code>vault_head</code> item holds a counter and a tip hash over sorted <code>item_uuid:version</code> pairs, chained to the previous tip. Settings → Signed-in devices shows this device’s counter and a short fingerprint for optional comparison.</li>
           <li><strong>Concurrent edits</strong> — two devices that advance from the same parent tip rebase to a merged tip without a fork alarm. A fork warning fires only when the same counter appears with tips that do not share a parent / chain link.</li>
           <li><strong>Device approval (out-of-band)</strong> — a trusted device can show an “Approve a new device” QR / short code / fingerprint built only from its local verified vault head (counter, tip hash, time). The new device records its first tip as <em>Unverified start</em> until that anchor matches (or the user skips). The server never supplies, signs, relays, or stores the anchor.</li>
@@ -252,7 +252,7 @@
           <pre class="mk-code" tabindex="0">localStorage.setItem('notes_freshness_test', '1');
 const uuid = '…'; // note UUID
 await NotesStore.testDemoRollbackWarning(uuid, 9);
-// → toast: "The server returned an older version of this item."
+// → toast: "1 item: the server returned an older version."
 // → rejected: true; local note body unchanged</pre>
         </figure>
         <ol start="3">

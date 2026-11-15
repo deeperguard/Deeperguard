@@ -343,7 +343,7 @@ function tipHex(n) {
   NotesFreshness.noteAccepted('n', { type: 'note', __fv: 5, __fid: 'n' }, 'h5');
   const rb = NotesFreshness.checkIncoming('n', { type: 'note', __fv: 2, __fid: 'n' }, 'h2');
   assert.strictEqual(rb.reject, true);
-  assert.strictEqual(rb.warning.message, 'The server returned an older version of this item.');
+  assert.strictEqual(rb.warning.message, '1 item: the server returned an older version.');
 
   // --- locally authored first head is verified (first device of an account) ---
   reset();
@@ -376,7 +376,7 @@ function tipHex(n) {
   // MUST NOT REGRESS Feature A demo string
   assert.ok(appJs.includes('confirmIntentionalFreshnessReset') || storeJs.includes('resetFreshness'));
   assert.ok(fs.readFileSync(path.join(jsRoot, 'freshness.js'), 'utf8')
-    .includes('The server returned an older version of this item.'));
+    .includes('the server returned an older version.'));
 
   console.log('test_round68_device_approval ok');
 })().catch((err) => {
