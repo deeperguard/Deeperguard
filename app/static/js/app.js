@@ -10028,6 +10028,8 @@
       const name = btn.dataset.filter;
       const on = name === currentFilter && !(name === 'all' && (currentTag || currentFolder));
       btn.classList.toggle('active', on);
+      if (on) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
     });
   }
 
