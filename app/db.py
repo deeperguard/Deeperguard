@@ -415,6 +415,12 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         CREATE INDEX IF NOT EXISTS idx_srp_challenges_expires
             ON srp_challenges(expires_at);
 
+        CREATE TABLE IF NOT EXISTS pcloud_cleanup (
+            dir_id TEXT PRIMARY KEY,
+            created_at REAL NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0
+        );
+
         CREATE TABLE IF NOT EXISTS email_send_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -1748,9 +1754,58 @@ def enable_managed_backup(user_id: int) -> str:
         "UPDATE users SET managed_backup_enabled = 1, updated_at = ? WHERE id = ?",
         (time.time(), int(user_id)),
     )
+    # Switching back on cancels a pending removal of the same directory, so a
+    # later cron retry can never purge backups made after re-enabling.
+    conn.execute(
+        "DELETE FROM pcloud_cleanup WHERE dir_id = (SELECT pcloud_dir_id FROM users WHERE id = ?)",
+        (int(user_id),),
+    )
     conn.commit()
     row = conn.execute("SELECT pcloud_dir_id FROM users WHERE id = ?", (int(user_id),)).fetchone()
     return str(row[0]) if row else ""
+
+
+def queue_pcloud_cleanup(dir_id: str) -> None:
+    """Remember an opaque directory id whose remote copy must still be purged."""
+    if not dir_id:
+        return
+    with tx() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO pcloud_cleanup (dir_id, created_at, attempts) VALUES (?, ?, 0)",
+            (str(dir_id), time.time()),
+        )
+
+
+def pending_pcloud_cleanups(max_attempts: int) -> list[str]:
+    rows = connection().execute(
+        "SELECT dir_id FROM pcloud_cleanup WHERE attempts < ? ORDER BY created_at",
+        (int(max_attempts),),
+    ).fetchall()
+    return [str(r[0]) for r in rows]
+
+
+def pcloud_cleanup_is_pending(dir_id: str) -> bool:
+    row = connection().execute(
+        "SELECT 1 FROM pcloud_cleanup WHERE dir_id = ?", (str(dir_id),)
+    ).fetchone()
+    return row is not None
+
+
+def bump_pcloud_cleanup_attempt(dir_id: str) -> None:
+    with tx() as conn:
+        conn.execute(
+            "UPDATE pcloud_cleanup SET attempts = attempts + 1 WHERE dir_id = ?", (str(dir_id),)
+        )
+
+
+def finish_pcloud_cleanup(dir_id: str) -> None:
+    """Purge confirmed: drop the queue row, then (only now) forget the id on the user row."""
+    with tx() as conn:
+        conn.execute("DELETE FROM pcloud_cleanup WHERE dir_id = ?", (str(dir_id),))
+        conn.execute(
+            "UPDATE users SET pcloud_dir_id = '' WHERE pcloud_dir_id = ? AND managed_backup_enabled = 0",
+            (str(dir_id),),
+        )
 
 
 def disable_managed_backup(user_id: int) -> None:
@@ -2461,6 +2516,11 @@ def purge_user_data(user_id: int) -> bool:
     if not user:
         return False
     email = str(user["email"] or "")
+    try:
+        dir_id = str(user["pcloud_dir_id"] or "")
+    except (KeyError, IndexError):
+        dir_id = ""
+    queue_pcloud_cleanup(dir_id)  # queued first: the remote purge never blocks deletion
     if not delete_user(uid):
         return False
     ocr_dir = DATA_DIR / "ocr" / str(uid)

@@ -2947,6 +2947,92 @@ def api_backup_pcloud_sync():
     return jsonify(meta)
 
 
+def _managed_user_or_error():
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return None, (jsonify({"error": "not found"}), 404)
+    return user, None
+
+
+@app.get("/api/backup/managed")
+def api_backup_managed_list():
+    """The logged-in user's own latest managed backups (date + size only)."""
+    import backup_pcloud as bp
+
+    user, err = _managed_user_or_error()
+    if err:
+        return err
+    out = {
+        "available": bool(bp.service_source()),
+        "enabled": bool(user["managed_backup_enabled"]),
+        "cleanup_pending": bool(
+            user["pcloud_dir_id"] and db.pcloud_cleanup_is_pending(str(user["pcloud_dir_id"]))
+        ),
+        "backups": [],
+    }
+    if out["available"] and str(user["pcloud_dir_id"] or ""):
+        try:
+            out["backups"] = [
+                {"id": b["id"], "at": b["at"], "size": b["size"]}
+                for b in bp.list_managed_backups(user)
+            ]
+        except bp.ManagedBackupError as exc:
+            out["error"] = exc.code
+    return jsonify(out)
+
+
+@app.post("/api/backup/managed")
+def api_backup_managed_toggle():
+    import backup_pcloud as bp
+
+    user, err = _managed_user_or_error()
+    if err:
+        return err
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    body = request.get_json(silent=True) or {}
+    uid = int(user["id"])
+    if body.get("enabled") is True:
+        blocked = _plan_block(user, "pcloud_backup")
+        if blocked:
+            return blocked
+        if not bp.service_source():
+            return jsonify({"error": "managed backup is not available"}), 503
+        db.enable_managed_backup(uid)
+        return jsonify({"ok": True, "enabled": True})
+    if body.get("confirm") is not True:  # removal of the pCloud copies needs a confirmed dialog
+        return jsonify({"error": "confirmation required"}), 400
+    result = bp.disable_managed_and_cleanup(uid)
+    return jsonify({"ok": True, "enabled": False, "removal": result})
+
+
+@app.post("/api/backup/managed/restore")
+def api_backup_managed_restore():
+    import backup_pcloud as bp
+
+    user, err = _managed_user_or_error()
+    if err:
+        return err
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    blocked = _plan_block(user, "pcloud_backup")
+    if blocked:
+        return blocked
+    body = request.get_json(silent=True) or {}
+    if body.get("confirm") is not True:
+        return jsonify({"error": "confirmation required"}), 400
+    if _auth_rate_limited("managed-restore", str(user["email"] or "").strip().lower()):
+        return jsonify({"error": "too many attempts"}), 429
+    try:
+        result = bp.restore_managed_backup(user, body.get("backup_id"))
+    except bp.ManagedBackupError as exc:
+        if exc.code == bp.ERR_BAD_ID:
+            return jsonify({"error": "backup not found"}), 404
+        return jsonify({"error": "restore failed", "code": exc.code}), 502
+    return jsonify({"ok": True, **result})
+
+
 @app.post("/api/ocr")
 def api_ocr():
     if not server_ocr_enabled():

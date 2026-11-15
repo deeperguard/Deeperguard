@@ -11,7 +11,7 @@ sys.path.insert(0, str(APP_DIR))
 import db  # noqa: E402
 import email_verify  # noqa: E402
 from backup_mail import send_user_backup  # noqa: E402
-from backup_pcloud import notify_managed_results, run_managed_backups, run_pcloud_backups  # noqa: E402
+from backup_pcloud import notify_managed_results, run_managed_backups, run_pcloud_backups, run_pending_cleanups  # noqa: E402
 from maintenance_lock import maintenance_lock  # noqa: E402
 
 log = logging.getLogger("deeperguard.backup")
@@ -34,6 +34,10 @@ def _run_backups_locked() -> tuple[int, int]:
     # pCloud first: it streams the full vault. Email used to load the vault into
     # RAM and OOM-kill this process before pCloud ran.
     synced = run_pcloud_backups()
+    try:
+        run_pending_cleanups()
+    except Exception as exc:
+        log.error("pcloud cleanup run failed: %s", type(exc).__name__)
     try:
         LAST_MANAGED_RESULTS[:] = run_managed_backups()
     except Exception as exc:

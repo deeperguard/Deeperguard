@@ -2135,6 +2135,16 @@
             <button type="button" id="btn-pcloud-sync" class="btn">Sync to pCloud now</button>
           </div>
           <p class="settings-hint">Uploads encrypted vault backups via rclone using an OAuth token (your pCloud account password is never stored on this server). On your computer run <code>rclone authorize pcloud</code> (EU: add <code>--pcloud-hostname eapi.pcloud.com</code>) and paste the JSON token here.</p>
+          <div id="managed-backup-block">
+            <h4>Backups on the Deeperguard pCloud</h4>
+            <p id="managed-backup-status" class="settings-hint"></p>
+            <div class="settings-actions">
+              <button type="button" id="btn-managed-off" class="btn danger" hidden>Switch off and remove pCloud copies</button>
+              <button type="button" id="btn-managed-list" class="btn">Show my latest backups</button>
+            </div>
+            <ul id="managed-backup-list" class="settings-hint"></ul>
+            <p class="settings-hint">Only encrypted data is stored; visible to the service are sizes, times and the number of backups. Restoring puts the encrypted items of a chosen backup back on the server and your devices pick them up on the next sync.</p>
+          </div>
         </div>
       </section>
 

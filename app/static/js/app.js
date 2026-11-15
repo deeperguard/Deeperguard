@@ -23553,6 +23553,67 @@
     }
   });
 
+  async function loadManagedBackups() {
+    const list = document.getElementById('managed-backup-list');
+    const status = document.getElementById('managed-backup-status');
+    const offBtn = document.getElementById('btn-managed-off');
+    const data = await NotesStore.api('/api/backup/managed');
+    offBtn.hidden = !data.enabled;
+    status.textContent = !data.available
+      ? 'Managed pCloud backup is not available on this server.'
+      : (data.cleanup_pending ? 'Removal of your pCloud copies is pending and will be retried.' : (data.enabled ? 'Managed backup is on.' : 'Managed backup is off.'));
+    list.textContent = '';
+    for (const b of data.backups || []) {
+      const li = document.createElement('li');
+      li.textContent = `${new Date(b.at * 1000).toLocaleString()} · ${Math.max(1, Math.round(b.size / 1024))} KB `;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn sm';
+      btn.textContent = 'Restore';
+      btn.addEventListener('click', async () => {
+        const ok = await confirmAction(
+          'This puts the encrypted items of this backup back on the server. Newer changes to the same notes are replaced.',
+          { title: 'Restore this backup?', confirmLabel: 'Restore', cancelLabel: 'Cancel', danger: true },
+        );
+        if (ok !== true) return;
+        try {
+          await NotesStore.flush();
+          const res = await NotesStore.api('/api/backup/managed/restore', {
+            method: 'POST',
+            body: JSON.stringify({ backup_id: b.id, confirm: true }),
+            timeoutMs: 600000,
+          });
+          toast(`Restored ${res.restored || 0} items`);
+          NotesStore.sync({ quiet: true, full: true }).catch(() => {});
+        } catch (err) {
+          toast(err.message || 'Restore failed', true);
+        }
+      });
+      li.appendChild(btn);
+      list.appendChild(li);
+    }
+  }
+  document.getElementById('btn-managed-list').addEventListener('click', () => {
+    loadManagedBackups().catch((err) => toast(err.message || 'Could not load backups', true));
+  });
+  document.getElementById('btn-managed-off').addEventListener('click', async () => {
+    const ok = await confirmAction(
+      'Automatic backup to the Deeperguard pCloud stops and your pCloud backup copies are removed.',
+      { title: 'Switch off and remove copies?', confirmLabel: 'Remove', cancelLabel: 'Cancel', danger: true },
+    );
+    if (ok !== true) return;
+    try {
+      const res = await NotesStore.api('/api/backup/managed', {
+        method: 'POST',
+        body: JSON.stringify({ enabled: false, confirm: true }),
+      });
+      toast(res.removal === 'pending' ? 'Switched off; removal will be retried' : 'Switched off; copies removed');
+      await loadManagedBackups();
+    } catch (err) {
+      toast(err.message || 'Could not switch off', true);
+    }
+  });
+
   async function prepareEncryptedBackupBlob(report) {
     await NotesStore.flush();
     const backup = await buildLocalBackup(report);

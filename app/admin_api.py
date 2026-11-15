@@ -327,5 +327,13 @@ def register_admin_routes(app, build_id: str) -> None:
         if not db.purge_user_data(user_id):
             return jsonify({"error": "delete failed"}), 500
         server_info_cache.drop_user(user_id)
+        try:
+            import threading
+
+            from backup_pcloud import run_pending_cleanups
+
+            threading.Thread(target=run_pending_cleanups, name="pcloud-cleanup", daemon=True).start()
+        except Exception:
+            log.warning("pcloud cleanup not started; the next cron run retries it")
         log.info("admin delete user=%s target=%s by=%s", user_id, target_email, admin_user["email"])
         return jsonify({"ok": True, "deleted": user_id})

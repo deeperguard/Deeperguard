@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import calendar
 import gzip
 import shutil
 import subprocess
@@ -350,6 +351,10 @@ ERR_TIMEOUT = "timeout"
 ERR_QUOTA = "quota"
 ERR_AUTH = "auth"
 ERR_BAD_PATH = "bad_path"
+ERR_NOT_FOUND = "not_found"
+ERR_BAD_ID = "bad_backup_id"
+ERR_TOO_BIG = "too_big"
+ERR_BAD_ARCHIVE = "bad_archive"
 
 
 class ManagedBackupError(RuntimeError):
@@ -365,6 +370,8 @@ def _classify_rclone_failure(stderr: str) -> str:
     low = (stderr or "").lower()
     if "quota" in low or "insufficient storage" in low or "over quota" in low:
         return ERR_QUOTA
+    if "not found" in low:
+        return ERR_NOT_FOUND
     if "401" in low or "unauthorized" in low or "empty token" in low:
         return ERR_AUTH
     return ERR_UNAVAILABLE
@@ -717,3 +724,172 @@ def notify_managed_results(results: list[dict[str, Any]]) -> int:
         except Exception as exc:
             log.error("managed pcloud mail not sent user_id=%s: %s", uid, type(exc).__name__)
     return sent
+
+
+# --- Restore from the user's own directory, purge on switch-off / account delete ---
+
+_BACKUP_ID_RE = re.compile(r"^[0-9]{8}-[0-9]{6}$")
+_BACKUP_NAME_RE = re.compile(r"^backup-([0-9]{8}-[0-9]{6})\.enc\.json\.gz$")
+RESTORE_LIST_LIMIT = 10
+RESTORE_MAX_BYTES = 256 * 1024 * 1024
+CLEANUP_MAX_ATTEMPTS = 50
+PURGE_TIMEOUT_SECONDS = 300
+
+
+def list_managed_backups(user: Any) -> list[dict[str, Any]]:
+    """Latest backups of this user only: [{id, at, size}], newest first. No paths."""
+    spec_dir = f"{_managed_remote_name()}:{user_backup_path(user)}"
+    try:
+        proc = _run_managed_rclone(
+            ["lsjson", spec_dir, "--files-only", "--max-depth", "1"],
+            timeout=HEALTHCHECK_TIMEOUT_SECONDS,
+        )
+    except ManagedBackupError as exc:
+        if exc.code == ERR_NOT_FOUND:  # no backup made yet
+            return []
+        raise
+    try:
+        entries = json.loads(proc.stdout or "[]")
+    except ValueError:
+        raise ManagedBackupError(ERR_UNAVAILABLE) from None
+    found: dict[str, dict[str, Any]] = {}
+    for entry in entries if isinstance(entries, list) else []:
+        name = str(entry.get("Name") or "") if isinstance(entry, dict) else ""
+        m = _BACKUP_NAME_RE.fullmatch(name)
+        if not m:
+            continue
+        try:
+            size = max(0, int(entry.get("Size") or 0))
+        except (TypeError, ValueError):
+            continue
+        found[m.group(1)] = {"id": m.group(1), "size": size}
+    out = [found[k] for k in sorted(found, reverse=True)[:RESTORE_LIST_LIMIT]]
+    for item in out:
+        item["at"] = calendar.timegm(time.strptime(item["id"], "%Y%m%d-%H%M%S"))
+    return out
+
+
+def restore_managed_backup(user: Any, backup_id: Any) -> dict[str, Any]:
+    """Put the ciphertext of one of the user's own backups back. Ciphertext only."""
+    if not isinstance(backup_id, str) or not _BACKUP_ID_RE.fullmatch(backup_id):
+        raise ManagedBackupError(ERR_BAD_ID)
+    listed = {e["id"]: e for e in list_managed_backups(user)}  # membership check
+    entry = listed.get(backup_id)
+    if entry is None:
+        raise ManagedBackupError(ERR_BAD_ID)
+    if entry["size"] > RESTORE_MAX_BYTES:
+        raise ManagedBackupError(ERR_TOO_BIG)
+    uid = int(user["id"])
+    spec_dir = f"{_managed_remote_name()}:{user_backup_path(user)}"
+    with tempfile.TemporaryDirectory(dir=backups_dir(), prefix="restore-") as tmp:
+        dest = Path(tmp) / "restore.enc.json.gz"
+        _run_managed_rclone(
+            ["copyto", f"{spec_dir}/backup-{backup_id}.enc.json.gz", str(dest)],
+            timeout=RCLONE_TIMEOUT_SECONDS,
+        )
+        try:
+            with gzip.open(dest, "rb") as gz:
+                raw = gz.read(RESTORE_MAX_BYTES + 1)
+            if len(raw) > RESTORE_MAX_BYTES:
+                raise ManagedBackupError(ERR_TOO_BIG)
+            doc = json.loads(raw.decode("utf-8"))
+        except ManagedBackupError:
+            raise
+        except (OSError, ValueError, EOFError):
+            raise ManagedBackupError(ERR_BAD_ARCHIVE) from None
+    if (
+        not isinstance(doc, dict)
+        or doc.get("format") != "deeperguard-backup-v1"
+        or doc.get("kdf_salt") != user["kdf_salt"]
+        or not isinstance(doc.get("items"), list)
+    ):
+        raise ManagedBackupError(ERR_BAD_ARCHIVE)
+    rows = []
+    for it in doc["items"]:
+        if not isinstance(it, dict) or set(it) - set(MANAGED_ITEM_KEYS):
+            raise ManagedBackupError(ERR_BAD_ARCHIVE)
+        uuid_ = it.get("item_uuid")
+        if not isinstance(uuid_, str) or not uuid_ or not isinstance(it.get("ciphertext"), str):
+            raise ManagedBackupError(ERR_BAD_ARCHIVE)
+        rows.append(it)
+    conn = db.connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        synced = db.next_synced_at(uid, conn)
+        for i, it in enumerate(rows):
+            db.upsert_item(
+                uid,
+                it["item_uuid"],
+                it["ciphertext"],
+                int(it.get("content_version") or 1),
+                str(it.get("content_hash") or ""),
+                bool(it.get("deleted")),
+                float(it.get("updated_at") or 0),
+                str(it.get("blob_ciphertext") or ""),
+                conn=conn,
+                synced_at=synced + i * 0.000001,
+                force=True,
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return {"restored": len(rows)}
+
+
+def purge_remote_dir(dir_id: Any) -> None:
+    """rclone purge of exactly <root>/<dir_id>. Never the root, never an empty/odd id."""
+    if not isinstance(dir_id, str) or not _DIR_ID_RE.fullmatch(dir_id):
+        raise ManagedBackupError(ERR_BAD_PATH)
+    root = config.pcloud_service_root()
+    if not root:
+        raise ManagedBackupError(ERR_NOT_CONFIGURED)
+    try:
+        _run_managed_rclone(
+            ["purge", f"{_managed_remote_name()}:{root}/{dir_id}"],
+            timeout=PURGE_TIMEOUT_SECONDS,
+        )
+    except ManagedBackupError as exc:
+        if exc.code != ERR_NOT_FOUND:  # already gone counts as purged
+            raise
+
+
+def attempt_cleanup(dir_id: str) -> str:
+    """Try one queued purge. Returns 'purged', 'pending' or 'invalid'. Never raises."""
+    try:
+        purge_remote_dir(dir_id)
+    except ManagedBackupError as exc:
+        if exc.code == ERR_BAD_PATH:
+            db.finish_pcloud_cleanup(dir_id)  # unusable id: nothing safe to retry
+            return "invalid"
+        db.bump_pcloud_cleanup_attempt(dir_id)
+        log.warning("pcloud directory removal postponed: %s", exc.code)
+        return "pending"
+    except Exception:
+        db.bump_pcloud_cleanup_attempt(dir_id)
+        return "pending"
+    db.finish_pcloud_cleanup(dir_id)  # id is forgotten only after the purge succeeded
+    return "purged"
+
+
+def disable_managed_and_cleanup(user_id: int) -> str:
+    """Switch off and remove the remote directory. 'purged', 'pending' or 'none'."""
+    user = db.get_user_by_id(int(user_id))
+    if not user:
+        return "none"
+    db.disable_managed_backup(int(user_id))
+    dir_id = str(user["pcloud_dir_id"] or "")
+    if not dir_id:
+        return "none"
+    db.queue_pcloud_cleanup(dir_id)
+    result = attempt_cleanup(dir_id)
+    return "none" if result == "invalid" else result
+
+
+def run_pending_cleanups() -> int:
+    """Retry queued removals (cron / after account delete). Returns how many were purged."""
+    done = 0
+    for dir_id in db.pending_pcloud_cleanups(CLEANUP_MAX_ATTEMPTS):
+        if attempt_cleanup(dir_id) == "purged":
+            done += 1
+    return done
