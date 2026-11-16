@@ -1007,9 +1007,9 @@ const NotesSearch = (() => {
       .replace(/>/g, '&gt;');
   }
 
-  function highlightPlain(text, query, { caseSensitive = false, literal = false } = {}) {
+  function highlightPlain(text, query, { caseSensitive = false, literal = false, foldAccents = false } = {}) {
     const source = String(text ?? '');
-    const ranges = findMatches(source, query, { caseSensitive, literal });
+    const ranges = findMatches(source, query, { caseSensitive, literal, foldAccents });
     if (!ranges.length) return escapeHtml(source);
     let html = '';
     let last = 0;
@@ -1021,7 +1021,7 @@ const NotesSearch = (() => {
     return html + escapeHtml(source.slice(last));
   }
 
-  function applyHighlights(root, query, { caseSensitive = false, literal = false } = {}) {
+  function applyHighlights(root, query, { caseSensitive = false, literal = false, foldAccents = false } = {}) {
     if (!root || !String(query || '').trim()) return 0;
     const doc = root.ownerDocument;
     if (!doc || typeof doc.createTreeWalker !== 'function') return 0;
@@ -1032,7 +1032,7 @@ const NotesSearch = (() => {
     for (const node of nodes) {
       if (node.parentElement && node.parentElement.closest('mark.search-hit')) continue;
       const text = node.nodeValue || '';
-      const ranges = findMatches(text, query, { caseSensitive, literal });
+      const ranges = findMatches(text, query, { caseSensitive, literal, foldAccents });
       if (!ranges.length) continue;
       const parts = [];
       let last = 0;
@@ -1057,9 +1057,9 @@ const NotesSearch = (() => {
   // term, short numbers as whole tokens, phrases across whitespace), so the
   // marks in a row, a preview, or a PDF agree with why the note is listed.
   // The editor's find/replace passes literal: true for exact substrings.
-  function findMatches(text, query, { caseSensitive = false, literal = false } = {}) {
+  function findMatches(text, query, { caseSensitive = false, literal = false, foldAccents = false } = {}) {
     const source = String(text || '');
-    if (literal || caseSensitive) return literalMatches(source, String(query || ''), caseSensitive);
+    if (literal || caseSensitive) return literalMatches(source, String(query || ''), caseSensitive, foldAccents);
     const terms = parseQueryTerms(query);
     if (!terms.length || !source) return [];
     const hay = foldText(source);
@@ -1083,10 +1083,12 @@ const NotesSearch = (() => {
     return merged;
   }
 
-  function literalMatches(source, needle, caseSensitive) {
+  function literalMatches(source, needle, caseSensitive, foldAccents = false) {
     if (!needle) return [];
-    const hay = caseSensitive ? source : source.toLowerCase();
-    const find = caseSensitive ? needle : needle.toLowerCase();
+    // foldText maps one character to one character, so offsets stay valid.
+    const fold = foldAccents && !caseSensitive ? foldText : (text) => text.toLowerCase();
+    const hay = caseSensitive ? source : fold(source);
+    const find = caseSensitive ? needle : fold(needle);
     const out = [];
     let from = 0;
     while (from <= hay.length - find.length) {
