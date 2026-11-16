@@ -25,9 +25,14 @@ STYLE = """(sel) => [...document.querySelectorAll(sel)].map(el => {
 FOCUS = """(sel) => [...document.querySelectorAll(sel)].map(el => {
   el.focus({ focusVisible: true });
   const c = getComputedStyle(el);
-  return { id: el.id || el.name, ow: c.outlineWidth, os: c.outlineStyle,
+  return { id: el.id || el.name, ow: c.outlineWidth, os: c.outlineStyle, oc: c.outlineColor,
            active: document.activeElement === el };
 })"""
+
+# The colour the --focus-ring token resolves to, as the browser computes it.
+FOCUS_TOKEN = """() => { const p = document.createElement('span');
+  p.style.color = 'var(--focus-ring)'; document.body.appendChild(p);
+  const c = getComputedStyle(p).color; p.remove(); return c; }"""
 
 
 @pytest.fixture(scope="module")
@@ -100,8 +105,10 @@ def test_empty_list_save_delete_and_controls(page, width, theme):
     for s in sel:
         assert s["h"] == "44px" and s["bw"] == "1px" and s["bs"] == "solid", s
         assert s["br"] == sel[0]["br"] and s["bc"] == sel[0]["bc"]
+    token = page.evaluate(FOCUS_TOKEN)
     for f in page.evaluate(FOCUS, "#agenda-editor select"):
         assert f["active"] and f["ow"] == "2px" and f["os"] == "solid", f
+        assert f["oc"] == token, f
     chk = page.evaluate(STYLE, "#agenda-editor input[type=checkbox]")
     assert chk and all(c["h"] == "20px" and c["bw"] == chk[0]["bw"] for c in chk)
 
@@ -138,8 +145,10 @@ def test_empty_list_save_delete_and_controls(page, width, theme):
     assert len(chk) >= 3
     for c in chk:
         assert c["h"] == "20px" and c["bw"] == chk[0]["bw"] and c["bs"] == chk[0]["bs"], c
+    token = page.evaluate(FOCUS_TOKEN)
     for f in page.evaluate(FOCUS, "#agenda-calendar-settings input[type=checkbox]"):
         if f["active"]:
             assert f["ow"] == "2px" and f["os"] == "solid", f
+            assert f["oc"] == token, f
     page.click("#agenda-calendar-settings-close")
     page.wait_for_selector("#agenda-calendar-settings", state="hidden", timeout=5000)
