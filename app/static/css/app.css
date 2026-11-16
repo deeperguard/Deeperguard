@@ -1020,9 +1020,12 @@ body.agenda-phone-menu-open .agenda-phone-menu {
 .agenda-event-chip {
   position: absolute;
   box-sizing: border-box;
-  margin: 0 3px;
+  /* Gutter between neighbours is a transparent border, so left% + width% never exceeds the column. */
+  margin: 0;
   padding: 4px 6px 4px 10px;
-  border: 0;
+  border: 0 solid transparent;
+  border-width: 0 3px;
+  background-clip: padding-box;
   border-radius: 8px;
   text-align: left;
   cursor: pointer;
@@ -1445,7 +1448,7 @@ body.agenda-editor-open {
   .agenda-event-chip {
     font-size: 11px;
     padding: 3px 4px 3px 8px;
-    margin: 0 1px;
+    border-width: 0 1px;
   }
   .agenda-list-view { padding: 10px 12px; }
   .agenda-calendar-settings {
