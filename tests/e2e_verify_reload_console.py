@@ -63,7 +63,8 @@ def run_scenario(base: str, browser, mutate=None, wait_status=True) -> tuple[lis
 
     def on_console(m):
         url = m.location.get("url", "")
-        if m.type == "error" and (not url or own(url)):
+        # An empty url counts as own origin, except for the blocked github call.
+        if m.type == "error" and (own(url) if url else "api.github.com" not in m.text):
             problems.append(f"[{step['n']}] console.error: {m.text} ({url})")
 
     page.on("requestfailed", on_failed)
