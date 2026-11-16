@@ -1,7 +1,8 @@
 # Third-party code shipped to the browser
 
 Every file is vendored, pinned and served from our own origin (no CDN). Files are byte-identical to the
-upstream npm artefact; the SHA-256 below is checked by `tests/test_vendor_hashes.py` and the file is also
+upstream npm artefact (the one exception is the CodeMirror bundle, which is built from pinned upstream
+tarballs, see its section); the SHA-256 below is checked by `tests/test_vendor_hashes.py` and the file is also
 listed (SHA-256 + SRI) in `client-manifest.json` by `scripts/build-client-manifest.py`. Updates only via a
 deliberate PR with the upstream changelog and new hashes. See `docs/design/rich-editor.md` section 4.2.
 
@@ -10,6 +11,7 @@ deliberate PR with the upstream changelog and new hashes. See `docs/design/rich-
 | markdown-it | 14.1.0 | MIT | Markdown parser for the note view (`html: false`) |
 | DOMPurify | 3.2.6 | Apache-2.0 (dual MPL-2.0 OR Apache-2.0; used under Apache-2.0) | Allowlist HTML sanitizer, last step before the note view enters the DOM |
 | highlight.js | 11.11.1 | BSD-3-Clause | Syntax colouring of fenced code blocks in the note view (the official "common" bundle: 36 languages; output still goes through DOMPurify) |
+| CodeMirror 6 | state 6.5.2, view 6.36.8, commands 6.8.1, language 6.11.0 | MIT | Editor core of the formatted Markdown editing mode (`js/rich-editor.js`); the note text stays the Markdown string |
 | Mermaid | 11.4.1 | MIT | Diagrams from ```` ```mermaid ```` blocks; runs only inside a sandboxed iframe (`/static/mermaid-sandbox.html`), never in the app page |
 
 ## markdown-it 14.1.0
@@ -66,3 +68,23 @@ without `'unsafe-inline'` in `script-src`.
 
 Older vendored libraries (noble, pdf.js, jsPDF, tesseract, jsQR, heic2any, qrcode-generator) predate this
 file and are not yet listed here.
+
+## CodeMirror 6 (formatted Markdown editor)
+
+- Not byte-identical to one upstream file: CodeMirror ships as many ESM packages, so `codemirror.min.js` is a
+  single IIFE bundle (global `DGCodeMirror`) that esbuild 0.25.5 builds from the pinned npm tarballs listed below,
+  with the entry point `scripts/vendor/codemirror/entry.js`. Rebuild: `python3 scripts/vendor/codemirror/build.py <folder with the tarballs>`
+  (verifies every tarball against `scripts/vendor/codemirror/SHA256SUMS`, runs no package script, no npm). The
+  output is identical on every run. It contains no `eval` / `new Function` (checked in `tests/test_vendor_hashes.py`),
+  so the CSP keeps no `unsafe-eval` for scripts. The editor runs from our own origin only.
+- Source of the packages: https://registry.npmjs.org/ (tarball sha256 in `scripts/vendor/codemirror/SHA256SUMS`; npm `integrity` verified when fetched):
+  @codemirror/state 6.5.2, @codemirror/view 6.36.8, @codemirror/commands 6.8.1, @codemirror/language 6.11.0 (https://github.com/codemirror),
+  @lezer/common 1.2.3, @lezer/highlight 1.2.1, @lezer/lr 1.4.2 (https://github.com/lezer-parser), style-mod 4.1.2, w3c-keyname 2.2.8, crelt 1.0.6, @marijn/find-cluster-break 1.0.2.
+  Build tool only (not shipped): esbuild 0.25.5 and @esbuild/linux-x64 0.25.5 (MIT).
+- Licences: all MIT; the notices are collected in `app/static/js/vendor/codemirror/LICENSE`.
+- Last checked: 2026-11-16
+
+| File | Upstream path | sha256 |
+|---|---|---|
+| `app/static/js/vendor/codemirror/codemirror.min.js` | build output of `scripts/vendor/codemirror/build.py` | `cde3e4d905ece6ccd5262097befb1b6d5be32544200c13f64351cc54408e5c36` |
+| `app/static/js/vendor/codemirror/LICENSE` | combined notices of the packages above | `a174ec9acc631033bf25cb5a1267679029d64f884dd1205ae1a25b2580235040` |

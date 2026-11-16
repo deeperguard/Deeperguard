@@ -164,6 +164,7 @@
     theme: 'light',
     fontSize: 16,
     monospace: false,
+    richEditor: false,
     spellcheck: true,
     hidePreviews: false,
     compactList: true,
@@ -253,7 +254,7 @@
   // Preferences that follow the account: stored as one encrypted vault item and
   // synced like notes, so "hide previews" on the phone also applies on the Mac.
   const GLOBAL_PREF_KEYS = [
-    'theme', 'fontSize', 'monospace', 'spellcheck', 'hidePreviews', 'compactList',
+    'theme', 'fontSize', 'monospace', 'richEditor', 'spellcheck', 'hidePreviews', 'compactList',
     'sort', 'autoPreview', 'autoOpenPdfOnly', 'autoLockMin', 'lockOnUnfocus', 'aiChat',
     'googleOauthClientId', 'dropboxAppKey',
     'dropboxRefreshToken', 'dropboxAccessToken', 'dropboxTokenExpiresAt', 'dropboxConnected',
@@ -2025,6 +2026,7 @@
 
   function undoEdit() {
     if (!currentId || noteEditingLocked()) return;
+    if (richActive()) { richCtl.undo(); return; }
     const stack = noteUndoStacks.get(currentId) || [];
     if (!stack.length) return;
     const prev = stack.pop();
@@ -2037,6 +2039,7 @@
 
   function redoEdit() {
     if (!currentId || noteEditingLocked()) return;
+    if (richActive()) { richCtl.redo(); return; }
     const redo = noteRedoStacks.get(currentId) || [];
     if (!redo.length) return;
     const next = redo.pop();
@@ -2053,8 +2056,9 @@
     const stack = currentId ? (noteUndoStacks.get(currentId) || []) : [];
     const redo = currentId ? (noteRedoStacks.get(currentId) || []) : [];
     const locked = noteEditingLocked();
-    if (undoBtn) undoBtn.disabled = locked || !stack.length;
-    if (redoBtn) redoBtn.disabled = locked || !redo.length;
+    const rich = richActive();
+    if (undoBtn) undoBtn.disabled = locked || !(rich ? richCtl.canUndo() : stack.length);
+    if (redoBtn) redoBtn.disabled = locked || !(rich ? richCtl.canRedo() : redo.length);
     if (undoBtn) undoBtn.hidden = locked;
     if (redoBtn) redoBtn.hidden = locked;
   }
@@ -14096,6 +14100,81 @@
     return true;
   }
 
+  // Formatted (live-preview) editing of Markdown notes: the hidden textarea stays the source of truth
+  // (autosave, title, search, history all read ui.body.value); the editor mirrors it both ways.
+  let richCtl = null;
+  let richNoteId = null;
+  let richToolbar = null;
+
+  function richAvailable() {
+    return !!window.NotesRichEditor?.available();
+  }
+
+  function richActive() {
+    const host = document.getElementById('note-rich');
+    return !!richCtl && !!host && !host.hidden;
+  }
+
+  function syncRichEditor(eligible) {
+    const host = document.getElementById('note-rich');
+    if (!host) return false;
+    const want = eligible && prefs.richEditor && richAvailable() && !NotesRichEditor.tooLarge(ui.body.value);
+    if (!want) {
+      host.hidden = true;
+      return false;
+    }
+    if (!richCtl) {
+      richCtl = NotesRichEditor.create(host, {
+        doc: ui.body.value,
+        spellcheck: !!prefs.spellcheck,
+        onChange: (text) => {
+          ui.body.value = text;
+          ui.body.dispatchEvent(new Event('input', { bubbles: true }));
+        },
+        onUpdate: () => syncUndoButtons(),
+        onToggleMode: () => toggleRichMode(),
+      });
+      richNoteId = currentId;
+    } else if (richNoteId !== currentId) {
+      richCtl.setValue(ui.body.value, { reset: true });
+      richNoteId = currentId;
+    } else {
+      richCtl.setValue(ui.body.value);
+    }
+    richCtl.setSpellcheck(!!prefs.spellcheck);
+    host.hidden = false;
+    ui.body.hidden = true;
+    return true;
+  }
+
+  function toggleRichMode() {
+    if (!currentId || !richAvailable()) return;
+    if (noteEditingLocked()) {
+      toast('Editing is locked — tap the lock icon to unlock', true);
+      return;
+    }
+    const leaving = richActive();
+    let sel = null;
+    if (leaving) {
+      const main = richCtl.view.state.selection.main;
+      sel = [main.from, main.to];
+    }
+    prefs.richEditor = !prefs.richEditor;
+    savePrefs();
+    applyEditorMode();
+    if (leaving) {
+      ui.body.focus();
+      try { ui.body.setSelectionRange(sel[0], sel[1]); } catch (err) { /* ignore */ }
+    } else if (richActive()) {
+      const max = richCtl.view.state.doc.length;
+      const from = Math.min(ui.body.selectionStart || 0, max);
+      richCtl.view.dispatch({ selection: { anchor: from, head: Math.min(ui.body.selectionEnd || from, max) } });
+      richCtl.focus();
+    } else {
+      toast('This note is too large for formatted editing — showing the Markdown source', true);
+    }
+  }
+
   function applyEditorMode() {
     if (editorMode !== 'edit' || tableEditorController()?.noteId() !== currentId) closeTableEditor();
     syncRescanOcrButton();
@@ -14190,6 +14269,7 @@
     previewOn = editingLocked || editorMode !== 'edit';
     ui.preview.hidden = !previewOn || checklistOn;
     ui.body.hidden = previewOn || checklistOn;
+    const richWanted = syncRichEditor(markdownNote && !previewOn && !checklistOn);
     if (previewOn && !checklistOn) refreshPreview();
     syncEditorBodyWrap();
     syncEditLinkOverlay();
@@ -14205,8 +14285,16 @@
     if (toolbar) {
       toolbar.querySelectorAll('[data-md]').forEach((btn) => {
         btn.hidden = codeNote || (btn.dataset.md === 'sup' && type !== 'superscript')
-          || (btn.dataset.md === 'table' && !markdownNote);
+          || (btn.dataset.md === 'table' && !markdownNote)
+          || (btn.hasAttribute('data-rich-only') && !richWanted);
       });
+      const richBtn = document.getElementById('btn-rich-mode');
+      if (richBtn) {
+        richBtn.hidden = !markdownNote || !richAvailable() || previewOn;
+        richBtn.textContent = richWanted ? 'Formatted' : 'Source';
+        richBtn.setAttribute('aria-pressed', richWanted ? 'true' : 'false');
+      }
+      richToolbar?.refresh();
       toolbar.querySelectorAll('[data-code]').forEach((btn) => {
         btn.hidden = !codeNote;
       });
@@ -14250,6 +14338,7 @@
     }
     ui.title.readOnly = !!on;
     ui.body.readOnly = !!on;
+    richCtl?.setReadOnly(!!on);
     ui.editorType.disabled = !!on;
     const toolbar = document.getElementById('md-toolbar');
     if (toolbar) {
@@ -20903,6 +20992,23 @@
     closeEditorToolbarMenu();
   });
 
+  richToolbar = window.NotesRichEditor?.attachToolbar(document.getElementById('md-toolbar'), 'Formatting') || null;
+  document.getElementById('btn-rich-mode')?.addEventListener('click', toggleRichMode);
+  // Shortcuts in the Markdown source of a Markdown note (the formatted editor has its own set).
+  ui.body.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || !currentId) return;
+    if (NotesStore.get(currentId)?.content?.editor !== 'markdown' || noteEditingLocked()) return;
+    const key = event.key.toLowerCase();
+    if (key === '/' && richAvailable()) toggleRichMode();
+    else if (key === 'b') wrapSelection('**', '**');
+    else if (key === 'i') wrapSelection('*', '*');
+    else if (key === 'k') wrapSelection('[', '](https://)', 'link text');
+    else return;
+    event.preventDefault();
+  });
+  ui.body.addEventListener('input', () => {
+    if (richActive()) richCtl.setValue(ui.body.value);
+  });
   document.getElementById('btn-md-mode')?.addEventListener('click', () => {
     if (!currentId) return;
     if (noteEditingLocked()) {
@@ -20935,6 +21041,15 @@
       editorMode = 'edit';
       applyEditorMode();
     }
+    if (richActive()) {
+      richCtl.exec(action);
+      return;
+    }
+    if (action === 'strike') wrapSelection('~~', '~~');
+    if (action === 'ul') prefixLine('- ');
+    if (action === 'ol') prefixLine('1. ');
+    if (action === 'quote') prefixLine('> ');
+    if (action === 'codeblock') wrapSelection('```\n', '\n```', 'code');
     if (action === 'bold') wrapSelection('**', '**');
     if (action === 'italic') wrapSelection('*', '*');
     if (action === 'code') wrapSelection('`', '`', 'code');

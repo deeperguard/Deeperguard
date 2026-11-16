@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 THIRD_PARTY = ROOT / "docs" / "THIRD_PARTY.md"
-VENDOR_DIRS = ["markdown-it", "dompurify", "highlightjs", "mermaid"]
+VENDOR_DIRS = ["markdown-it", "dompurify", "highlightjs", "mermaid", "codemirror"]
 
 
 def _listed() -> dict[str, str]:
@@ -42,9 +42,10 @@ class VendorHashTests(unittest.TestCase):
         head = (ROOT / "app/static/js/vendor/highlightjs/highlight.min.js").read_text(encoding="utf-8")[:120]
         self.assertIn("Highlight.js v11.11.1", head)
         self.assertRegex(text, r"\| Mermaid \| 11\.4\.1 \| MIT \|")
+        self.assertRegex(text, r"\| CodeMirror 6 \| state 6\.5\.2, view 6\.36\.8, commands 6\.8\.1, language 6\.11\.0 \| MIT \|")
 
     def test_no_eval_in_vendored_rich_libraries(self):
-        for rel in ("markdown-it/markdown-it.min.js", "dompurify/purify.min.js", "highlightjs/highlight.min.js", "mermaid/mermaid.min.js"):
+        for rel in ("markdown-it/markdown-it.min.js", "dompurify/purify.min.js", "highlightjs/highlight.min.js", "mermaid/mermaid.min.js", "codemirror/codemirror.min.js"):
             body = (ROOT / "app/static/js/vendor" / rel).read_text(encoding="utf-8")
             self.assertNotIn("new Function", body, rel)
             self.assertNotRegex(body, r"\beval\(", rel)
