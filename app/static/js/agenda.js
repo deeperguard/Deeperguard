@@ -1744,8 +1744,18 @@
     const header = phone ? renderPhoneHeader(range) : renderDesktopSide() + renderDesktopHeader(range);
     rootEl.innerHTML = (
       header
+      + (global.NotesAgendaCalendars ? global.NotesAgendaCalendars.legendHtml() : '')
       + `<div class="agenda-body agenda-view-${esc(state.view)}">${main}</div>`
     );
+    rootEl.querySelectorAll('[data-agenda-legend]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const id = cb.getAttribute('data-agenda-legend');
+        if (global.NotesAgendaCalendars.setCalendarVisible(id, cb.checked)) {
+          render();
+          rootEl.querySelector(`[data-agenda-legend="${id.replace(/["\\]/g, '\\$&')}"]`)?.focus();
+        }
+      });
+    });
 
     const prev = rootEl.querySelector('#agenda-prev');
     const next = rootEl.querySelector('#agenda-next');
@@ -2157,6 +2167,13 @@
       const orig = Tz && !allDay && start ? Tz.originalTimeLabel(start.getTime(), ev.tz) : '';
       when.textContent = detailWhenText(start, end, allDay) + (orig ? ` (${orig})` : '');
     }
+    const calEl = document.getElementById('agenda-detail-calendar');
+    if (calEl) {
+      const Cals = global.NotesAgendaCalendars;
+      calEl.innerHTML = Cals
+        ? `Calendar: ${Cals.labelHtml(Cals.calendarForEvent(ev, state.calendarMap || undefined))}`
+        : '';
+    }
     const repeatText = repeatSummary(ev, occ);
     if (repeat) {
       repeat.hidden = !repeatText;
@@ -2425,7 +2442,7 @@
     const options = opts && typeof opts === 'object' ? opts : {};
     const content = existing && existing.content?.type === 'agenda_event'
       ? existing.content
-      : defaultEvent();
+      : { ...defaultEvent(), calendarId: newEventCalendarId() };
     state.selectedId = existing ? existing.uuid : id || '';
     editorBaseTz = String(content.tz || '');
     const scope = options.scope === 'occurrence' ? 'occurrence' : 'series';
@@ -2637,6 +2654,12 @@
   function fromDatetimeLocal(s) {
     const t = Date.parse(s);
     return Number.isFinite(t) ? new Date(t) : new Date();
+  }
+
+  /** New events start in the last used calendar; without one, fillCalendarSelect picks the default. */
+  function newEventCalendarId() {
+    const Cals = global.NotesAgendaCalendars;
+    return Cals ? Cals.lastUsedCalendarId(listAgendaEvents()) : '';
   }
 
   function defaultEvent() {

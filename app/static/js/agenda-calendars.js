@@ -86,6 +86,43 @@
     );
   }
 
+  /**
+   * Calendar of the most recently saved event, or '' when there is none. Derived from the
+   * encrypted events themselves, so nothing extra is stored on the device.
+   */
+  function lastUsedCalendarId(events, map) {
+    const cals = map || calendarMap();
+    let bestId = '';
+    let bestAt = '';
+    (events || []).forEach((ev) => {
+      const id = String((ev && ev.calendarId) || '');
+      const at = String((ev && ev.updated_at) || '');
+      if (id && cals.has(id) && at >= bestAt) {
+        bestId = id;
+        bestAt = at;
+      }
+    });
+    return bestId;
+  }
+
+  /** Legend + filter bar: one native checkbox per calendar, same visibility flag as the settings. */
+  function legendHtml() {
+    const cals = listCalendars();
+    if (!cals.length) return '';
+    const items = cals.map((c) => {
+      const p = paletteEntry(c.color);
+      return (
+        `<li><label class="agenda-legend-item${c.visible === false ? ' is-hidden' : ''}">`
+        + `<input type="checkbox" data-agenda-legend="${esc(c.id)}"${c.visible === false ? '' : ' checked'}>`
+        + `<span class="agenda-legend-swatch" data-agenda-cal-color="${esc(p.key)}" style="background:${p.bg}" aria-hidden="true"></span>`
+        + `<span class="agenda-legend-name">${esc(c.name || 'Agenda')}</span>`
+        + `${c.visible === false ? '<span class="sr-only">, hidden</span>' : ''}`
+        + '</label></li>'
+      );
+    }).join('');
+    return `<ul class="agenda-legend" aria-label="Calendars shown">${items}</ul>`;
+  }
+
   function eventCounts() {
     const S = getStore();
     const counts = new Map();
@@ -437,6 +474,8 @@
     calendarMap,
     isEventVisible,
     labelHtml,
+    lastUsedCalendarId,
+    legendHtml,
     createCalendar,
     renameCalendar,
     setCalendarColor,
