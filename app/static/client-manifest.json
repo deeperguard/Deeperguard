@@ -1,11 +1,11 @@
 {
-  "asset_count": 90,
+  "asset_count": 91,
   "assets": {
     "css/app.css": {
-      "bytes": 339001,
-      "sha256": "75db7eec64a48fb0bbdb7047b98f58186ea6e989181a0bd6ee639975be660915",
-      "sri": "sha384-fmOZJzjCGHmqh2ZW8q2spd/cW9cViZEbOQfL9r6oqqkCZf7rqLQs1yYPYItR3RSD",
-      "url": "/static/css/app.75db7eec64a48fb0.css"
+      "bytes": 341890,
+      "sha256": "f933aa78ccd775f6790052fd1ff084e0036aaba743870a5dedff691ef19f2d09",
+      "sri": "sha384-VY2dJM+/BWx0Bd5G51+pQ+cZzcFlBQjjeMR4v2Xh0GPFRnfXushJXanw2dzOzCkR",
+      "url": "/static/css/app.f933aa78ccd775f6.css"
     },
     "css/marketing.css": {
       "bytes": 55848,
@@ -236,10 +236,10 @@
       "url": "/static/js/link-overlay.d91bd181fd718f60.js"
     },
     "js/markdown.js": {
-      "bytes": 19395,
-      "sha256": "33766986d0dd4ace49aabe9c7ae8c606732149033d3d659bbcc331b622eb4b9f",
-      "sri": "sha384-4gbCrLGf6XrzKQgBvvplQytbkk8IiEfHX0o3QXRRp4Q6quKPx3E0oo5jS3CZmry9",
-      "url": "/static/js/markdown.33766986d0dd4ace.js"
+      "bytes": 20107,
+      "sha256": "d74aa63c2f298392f6d8efae72e98bac77504bbf8229be3a2bc7d39a01ec10a6",
+      "sri": "sha384-z2s/Z/3VaBDSX5Nm1fR++FWYa5745bRSWP7PQwaARE6okHhjDsTVgX5JKqeBh/XP",
+      "url": "/static/js/markdown.d74aa63c2f298392.js"
     },
     "js/marketing.js": {
       "bytes": 7390,
@@ -290,10 +290,10 @@
       "url": "/static/js/photo-ocr-preprocess.ed3aeeb103df06bc.js"
     },
     "js/preview.js": {
-      "bytes": 68270,
-      "sha256": "d62e2372a9debd663bf1c2af3a5893909a3d3be097c380afb1cb77280b953762",
-      "sri": "sha384-ahOUkoIXMF1jB29jRHsx69NuxKWCyENXgdLC639FqmXWQSTRn3rs0W0iVZzOy6Qi",
-      "url": "/static/js/preview.d62e2372a9debd66.js"
+      "bytes": 68940,
+      "sha256": "4541df2e040381ab9818bdc9101425b0cc4ccca3228b3852a142e5b5c086c37c",
+      "sri": "sha384-OZK4bPo8c8skb2YbhhkUu3TQUBpXlRhb9kCwfCkvyQzsUgr4abzSAylbKhzlIEnc",
+      "url": "/static/js/preview.4541df2e040381ab.js"
     },
     "js/quick-capture.js": {
       "bytes": 4236,
@@ -457,6 +457,12 @@
       "sri": "sha384-OTofQ0MEeiSgh62havBcemCIK0gqj809wX6UA0uPISNMRnR6NZyCdGzX3SbLrgwL",
       "url": "/static/js/vendor/heic2any/heic2any.min.0963cfa50e9e1e7e.js"
     },
+    "js/vendor/highlightjs/highlight.min.js": {
+      "bytes": 127496,
+      "sha256": "c4a399dd6f488bc97a3546e3476747b3e714c99c57b9473154c6fb8d259b9381",
+      "sri": "sha384-RH2xi4eIQ/gjtbs9fUXM68sLSi99C7ZWBRX1vDrVv6GQXRibxXLbwO2NGZB74MbU",
+      "url": "/static/js/vendor/highlightjs/highlight.min.c4a399dd6f488bc9.js"
+    },
     "js/vendor/jsQR.js": {
       "bytes": 256885,
       "sha256": "bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859",
@@ -543,6 +549,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "516c3f55a785769a3c83a0b0cf1a955d6a4bd90d6ef1c6c01000388d3bb032bd",
+  "manifest_sha256": "4ecd6f9e0992182c6fd19d3e222d45fc35ebcd6252602c093e23448371190944",
   "version": 1
 }

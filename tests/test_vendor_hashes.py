@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 THIRD_PARTY = ROOT / "docs" / "THIRD_PARTY.md"
-VENDOR_DIRS = ["markdown-it", "dompurify"]
+VENDOR_DIRS = ["markdown-it", "dompurify", "highlightjs"]
 
 
 def _listed() -> dict[str, str]:
@@ -38,9 +38,12 @@ class VendorHashTests(unittest.TestCase):
         self.assertIn("markdown-it 14.1.0", head)
         head = (ROOT / "app/static/js/vendor/dompurify/purify.min.js").read_text(encoding="utf-8")[:120]
         self.assertIn("DOMPurify 3.2.6", head)
+        self.assertRegex(text, r"\| highlight\.js \| 11\.11\.1 \| BSD-3-Clause \|")
+        head = (ROOT / "app/static/js/vendor/highlightjs/highlight.min.js").read_text(encoding="utf-8")[:120]
+        self.assertIn("Highlight.js v11.11.1", head)
 
     def test_no_eval_in_vendored_rich_libraries(self):
-        for rel in ("markdown-it/markdown-it.min.js", "dompurify/purify.min.js"):
+        for rel in ("markdown-it/markdown-it.min.js", "dompurify/purify.min.js", "highlightjs/highlight.min.js"):
             body = (ROOT / "app/static/js/vendor" / rel).read_text(encoding="utf-8")
             self.assertNotIn("new Function", body, rel)
             self.assertNotRegex(body, r"\beval\(", rel)

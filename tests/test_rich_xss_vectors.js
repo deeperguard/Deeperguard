@@ -96,7 +96,10 @@ assert.doesNotMatch(byId(31.1), /href/);
 assert.doesNotMatch(byId(31.2), /href/, '#31: bidi override in href is refused');
 for (const id of [6, 6.1, 6.2, 6.3, 6.4, 7, 7.1]) assert.doesNotMatch(byId(id), /href/, `#${id}: no href`);
 // #17: code is shown as text; the raw source is what the copy button copies (textContent of <code>).
-assert.match(byId(17), /<code class="language-html">&lt;script&gt;window\.__xss=1&lt;\/script&gt;\n?<\/code>/);
+// The colouring may wrap tokens in <span class="hljs-*">; the text content is still the exact source.
+assert.match(byId(17), /<code class="language-html">/);
+assert.doesNotMatch(byId(17), /<script/i);
+assert.strictEqual(decode(byId(17).replace(/<[^>]+>/g, '')).trim(), '<script>window.__xss=1</script>');
 // #12: the quote is not a break-out; no extra attribute is created.
 for (const id of [12, 12.1]) {
   const attrNames = tagsOf(byId(id)).flatMap((tag) => tag.attrs.map(([name]) => name));
