@@ -74,6 +74,31 @@ const cal = (name, color, at) => ({
   assert.strictEqual(m4.calendars[DEF].name, 'Mijn');
   assert.strictEqual(m4.events.q.calendarId, DEF);
 
+  // A device with the extra default calendar syncs against the server: the merged pack that
+  // leaves the device is folded, and the server receives only ciphertext.
+  const remotePack = {
+    type: 'agenda_pack', version: 1, created_at: iso(T), updated_at: iso(T),
+    events: { z: ev('Z') }, calendars: { [DEF]: cal('Agenda', 'blue', T + 1000) },
+  };
+  const remoteRow = await h.encryptedRow(PACK, remotePack, T + 1000, T + 1000, { rev: 4 });
+  h.resetServer();
+  let finalPush = null;
+  h.server.pushResponder = (items) => items.map((row) => {
+    if (row.item_uuid !== PACK) return { item_uuid: row.item_uuid, status: 'ok', rev: 1 };
+    if (row.base_rev === 3) return { item_uuid: PACK, status: 'conflict', rev: 4, server_item: remoteRow };
+    finalPush = row;
+    return { item_uuid: PACK, status: 'ok', rev: 5 };
+  });
+  NotesStore.upsert(PACK, { ...devA, type: 'agenda_pack', created_at: iso(T), updated_at: iso(T) });
+  h.stopPushTimer();
+  assert.strictEqual(await NotesStore.pushDirty({ quiet: true }), true);
+  assert.ok(finalPush, 'merged pack was pushed');
+  assert.ok(!finalPush.ciphertext.includes('Hoofdagenda'), 'calendar name is not sent in clear');
+  assert.ok(!finalPush.ciphertext.includes('"red"'), 'calendar colour is not sent in clear');
+  const sentPack = await h.decryptRow(finalPush);
+  assert.strictEqual(sentPack.calendars[DEF].name, 'Hoofdagenda', 'the pushed ciphertext carries the folded default');
+  assert.ok(!sentPack.calendars[other], 'the extra default is not pushed');
+
   h.stopPushTimer();
   console.log('default calendar fold ok');
   process.exit(0);
