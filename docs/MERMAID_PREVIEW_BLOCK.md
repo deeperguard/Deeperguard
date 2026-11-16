@@ -1,6 +1,6 @@
 # Mermaid-preview: geblokkeerde resource in de iframe
 
-Idee #191, gemeten op code `58daf3f`. Er is voor deze analyse geen app-code gewijzigd.
+Diagnose van taak 218, gemeten op code `58daf3f`. Er is voor deze analyse geen app-code gewijzigd.
 
 ## Uitkomst in het kort
 
@@ -21,8 +21,9 @@ Playwright/Chromium op die origin. Alleen `/` is vervangen door een lege hostpag
 Daarna zijn de echte `/static/js/*`-bestanden geladen (`markdown.js`, `mermaid-view.js`, `preview.js`, ...) en
 is `NotesMarkdown.render` + `NotesPreview.decorateCodeBlocks` aangeroepen met een ` ```mermaid `-blok
 (`graph TD` / `A[Start] --> B[Einde]`), twee keer achter elkaar (Preview, leegmaken = Edit, opnieuw Preview).
-De volledige UI-flow (inloggen, "New note", type Markdown) is dus niet doorlopen; de code die het diagram
-opbouwt is wel dezelfde als in de app.
+De volledige UI-flow (inloggen, "New note", type Markdown, Preview, Edit, Preview) is dus niet doorlopen; de code die het diagram
+opbouwt is wel dezelfde als in de app. Open vervolgpunt: de run via de echte UI, en uitzoeken waarom
+`tests/test_mermaid_sandbox_browser.py` de fout mist (nog niet gedaan).
 
 Console en netwerk, bij beide rondes (de log bevat dezelfde twee fouten twee keer):
 
@@ -60,7 +61,7 @@ oorzaak. De sandbox-CSP (`script-src 'self'`) staat de scripts juist toe; de blo
 
 **Iframe-instellingen** (`app/static/js/mermaid-view.js`): `sandbox="allow-scripts"` (zonder
 `allow-same-origin`), `src=/static/mermaid-sandbox.html`, titel "Mermaid-diagram". De `frame-ancestors`-regel
-uit de console van de tester is in mijn run niet opgedoken en niet de oorzaak: het sandbox-document zelf werd
+uit de bugmelding is in mijn run niet opgedoken en is niet de oorzaak: het sandbox-document zelf werd
 geladen (`frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN` staan het framen door de app toe); alleen
 de scripts erin werden geblokkeerd.
 
@@ -83,7 +84,8 @@ het andere op `same-origin`:
 
 Alternatief dat de load weghaalt (meer werk): het sandbox-document bij het serveren zelf met inline script
 (CSP-hash) uitleveren zodat er geen subresource-request meer uit de opake origin komt. Dit vraagt een
-hash-gebaseerde `script-src` en een 2,5 MB groot inline-document; daarom is de per-asset CORP de kleinste fix.
+hash-gebaseerde `script-src` en het sandbox-document inline in de pagina; daarom is de per-asset CORP de kleinste fix.
+Niet gemeten: de grootte van dat inline-document.
 
 ## Test die dit moet afvangen
 
