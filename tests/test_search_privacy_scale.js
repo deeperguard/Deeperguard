@@ -9,7 +9,8 @@ const h = require('./sync_harness');
 const { NotesStore } = h;
 const { NotesSearch } = global;
 const SECRET = 'zebrafish7731';
-const BUDGET_MS = 1500;
+const FIRST_SEARCH_BUDGET_MS = 250;
+const AVG_SEARCH_BUDGET_MS = 100;
 
 function tagMapNow() {
   return new Map(NotesStore.listTags().map((tag) => [tag.uuid, tag]));
@@ -66,6 +67,9 @@ function everythingStored() {
   assert.strictEqual(NotesStore.listNotes().length, N);
 
   // A word only in a scan's OCR text finds that note and says it is a scan hit.
+  // Sync requests were checked by the network assertions below; from here on
+  // only requests sent by searching count.
+  const syncRequests = h.fetchCalls.splice(0);
   const tagMap = tagMapNow();
   const t0 = performance.now();
   const first = search(SECRET);
@@ -82,12 +86,13 @@ function everythingStored() {
   for (const q of queries) search(q);
   const perQuery = (performance.now() - t1) / queries.length;
   console.log(`search 1000 notes: first ${firstMs.toFixed(1)} ms, avg ${perQuery.toFixed(1)} ms per query`);
-  assert.ok(firstMs < BUDGET_MS, `first search ${firstMs} ms`);
-  assert.ok(perQuery < BUDGET_MS / 4, `average search ${perQuery} ms`);
+  assert.ok(firstMs < FIRST_SEARCH_BUDGET_MS, `first search ${firstMs} ms`);
+  assert.ok(perQuery < AVG_SEARCH_BUDGET_MS, `average search ${perQuery} ms`);
   assert.strictEqual(search('nothing-matches-this').length, 0);
+  assert.strictEqual(h.fetchCalls.length, 0, 'searching sends no request');
 
   // No search term, index or OCR text on the network, and nothing readable stored.
-  const sent = JSON.stringify(h.fetchCalls.map((c) => [c.url, c.method, c.body])).toLowerCase();
+  const sent = JSON.stringify([...syncRequests, ...h.fetchCalls].map((c) => [c.url, c.method, c.body])).toLowerCase();
   assert.ok(!sent.includes(SECRET), 'search term / OCR text never goes to the server');
   assert.ok(!sent.includes('vergadering 4'), 'typed queries never go to the server');
   const stored = everythingStored();
