@@ -64,6 +64,10 @@ const cal = (name, color, at) => ({
     assert.deepStrictEqual(Object.keys(m.events).sort(), ['x', 'y', 'z'], 'no event lost');
     assert.ok(m.deleted_calendars[other], 'extra id is tombstoned');
   }
+  const later = NotesStore.mergeAgendaPacks(devA, devB, T + 500000);
+  const bytes = (m) => JSON.stringify([m.calendars, m.events, m.deleted_calendars]);
+  assert.strictEqual(bytes(later), bytes(m1), 'same packs fold to the same bytes on any device clock');
+  assert.strictEqual(m1.deleted_calendars[other], iso(T + 5000), 'tombstone uses the newest default stamp');
   const m3 = NotesStore.mergeAgendaPacks(m1, devA, T + 10000);
   assert.deepStrictEqual(Object.keys(m3.calendars), [DEF]);
   assert.strictEqual(NotesStore.mergeAgendaPacks(m1, m1, T + 10000).calendars[DEF].name, 'Hoofdagenda', 'folded pack is stable');
