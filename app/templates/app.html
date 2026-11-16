@@ -1532,7 +1532,8 @@
             <p class="settings-hint muted agenda-cal-action-sub">Paste a calendar feed link (webcal:// or https://). Your browser fetches it straight from the provider; the link never passes through Deeperguard and is stored only in your encrypted vault. The provider sees your IP address and when you refresh. Feeds refresh at most every 30 minutes while your vault is open. Many providers block direct fetching from a browser; you will then see an error and can choose, per calendar, to fetch through the Deeperguard server instead: the server then sees the link and the calendar while fetching, but does not store or log them. The default is no.</p>
             <form id="agenda-subscribe-form" class="agenda-subscribe-form" autocomplete="off">
               <label class="settings-hint" for="agenda-subscribe-url">Feed link</label>
-              <input id="agenda-subscribe-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" required>
+              <input id="agenda-subscribe-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" required aria-describedby="agenda-subscribe-url-error">
+              <p class="field-error agenda-field-error" id="agenda-subscribe-url-error">Enter the full feed link, starting with https:// or webcal://.</p>
               <label class="settings-hint" for="agenda-subscribe-name">Name (optional)</label>
               <input id="agenda-subscribe-name" type="text" autocomplete="off" maxlength="120">
               <button type="submit" class="btn agenda-cal-action">Preview feed</button>
@@ -2726,28 +2727,30 @@
       <p id="agenda-edit-series-notice" class="agenda-editor-series-notice" hidden>
         Changes apply to the <strong>entire recurring series</strong> (not a single occurrence).
       </p>
-      <label class="settings-row stacked">Title
+      <label class="settings-row stacked" for="agenda-edit-title">Title
         <input id="agenda-edit-title" type="text" maxlength="500" autocomplete="off" placeholder="Add title">
       </label>
-      <label class="settings-row checkbox agenda-editor-allday">
+      <label class="settings-row checkbox agenda-editor-allday" for="agenda-edit-allday">
         <span>All day</span>
         <input id="agenda-edit-allday" type="checkbox">
       </label>
       <div class="agenda-editor-datetime-row">
         <label class="settings-row stacked agenda-editor-datetime-label" for="agenda-edit-start">Starts
           <span class="agenda-editor-datetime-field">
-            <input id="agenda-edit-start" type="datetime-local" step="60">
+            <input id="agenda-edit-start" type="datetime-local" step="60" aria-describedby="agenda-edit-start-error">
           </span>
         </label>
+        <p class="field-error agenda-field-error" id="agenda-edit-start-error">Enter a complete date and time.</p>
         <label class="settings-row stacked agenda-editor-datetime-label" for="agenda-edit-end">Ends
           <span class="agenda-editor-datetime-field">
-            <input id="agenda-edit-end" type="datetime-local" step="60">
+            <input id="agenda-edit-end" type="datetime-local" step="60" aria-describedby="agenda-edit-end-error">
           </span>
         </label>
+        <p class="field-error agenda-field-error" id="agenda-edit-end-error">Enter a complete date and time.</p>
       </div>
       <fieldset class="agenda-editor-recurrence">
         <legend class="muted">Repeat</legend>
-        <label class="settings-row stacked">Pattern
+        <label class="settings-row stacked" for="agenda-edit-repeat">Pattern
           <select id="agenda-edit-repeat">
             <option value="none">Does not repeat</option>
             <option value="daily">Daily</option>
@@ -2763,9 +2766,10 @@
         <p id="agenda-edit-rrule-advanced" class="agenda-editor-rrule-advanced" hidden>
           Custom rule: <code id="agenda-edit-rrule-raw"></code>
         </p>
-        <label class="settings-row stacked" id="agenda-edit-until-wrap">Repeat until (optional)
-          <input id="agenda-edit-until" type="date" autocomplete="off">
+        <label class="settings-row stacked" id="agenda-edit-until-wrap" for="agenda-edit-until">Repeat until (optional)
+          <input id="agenda-edit-until" type="date" autocomplete="off" aria-describedby="agenda-edit-until-error">
         </label>
+        <p class="field-error agenda-field-error" id="agenda-edit-until-error">Enter a complete date, or clear the field.</p>
       </fieldset>
       <fieldset class="agenda-editor-reminders" id="agenda-edit-reminders-wrap">
         <legend class="muted">Reminders</legend>
@@ -2778,37 +2782,39 @@
           <label class="settings-row checkbox"><span>1 hour before</span><input type="checkbox" data-agenda-reminder-offset="60"></label>
           <label class="settings-row checkbox"><span>1 day before</span><input type="checkbox" data-agenda-reminder-offset="1440"></label>
         </div>
-        <label class="settings-row stacked">Custom (minutes before, e.g. 20 or 20, 120)
-          <input id="agenda-edit-reminders-custom" type="text" inputmode="numeric" maxlength="60" autocomplete="off" spellcheck="false">
+        <label class="settings-row stacked" for="agenda-edit-reminders-custom">Custom (minutes before, e.g. 20 or 20, 120)
+          <input id="agenda-edit-reminders-custom" type="text" inputmode="numeric" maxlength="60" autocomplete="off" spellcheck="false" pattern="\s*\d+(?:[\s,;]+\d+)*[\s,;]*" aria-describedby="agenda-edit-reminders-custom-error">
         </label>
+        <p class="field-error agenda-field-error" id="agenda-edit-reminders-custom-error">Use whole numbers of minutes, separated by commas, for example 20, 120.</p>
         <p class="settings-hint agenda-local-reminders-hint">Reminders only work while Deeperguard is open in your browser. They show in the app and, if you allowed it, as a browser notification. These reminders send no email and no push message.</p>
         <div class="agenda-editor-server-reminders" data-plan-feature="agenda_reminders" data-plan-lock-hint="Email and push reminders, which also work when Deeperguard is closed, are a separate Pro option.">
           <p class="settings-hint agenda-reminders-privacy-hint">Email and push reminders (Pro, optional). Offsets stay in your vault. The server sees reminder times and channel, never event titles, locations or notes.</p>
           <p id="agenda-edit-reminders-hint" class="settings-hint agenda-reminders-hint" role="status" hidden></p>
         </div>
       </fieldset>
-      <label class="settings-row stacked">Location
+      <label class="settings-row stacked" for="agenda-edit-location">Location
         <input id="agenda-edit-location" type="text" maxlength="500" autocomplete="off">
       </label>
-      <label class="settings-row stacked" id="agenda-edit-tz-row">Time zone
+      <label class="settings-row stacked" id="agenda-edit-tz-row" for="agenda-edit-tz">Time zone
         <input id="agenda-edit-tz" type="text" list="agenda-tz-list" maxlength="64" autocomplete="off" spellcheck="false">
         <datalist id="agenda-tz-list"></datalist>
       </label>
-      <label class="settings-row stacked" id="agenda-edit-calendar-row">Calendar
+      <label class="settings-row stacked" id="agenda-edit-calendar-row" for="agenda-edit-calendar">Calendar
         <select id="agenda-edit-calendar"></select>
       </label>
       <fieldset class="agenda-editor-colors">
         <legend class="muted" id="agenda-edit-colors-legend">Color</legend>
         <div id="agenda-edit-colors" class="agenda-color-swatches" aria-labelledby="agenda-edit-colors-legend"></div>
       </fieldset>
-      <label class="settings-row stacked">Meeting link (https only)
-        <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://">
+      <label class="settings-row stacked" for="agenda-edit-webcall">Meeting link (https only)
+        <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://" pattern="https://.+" aria-describedby="agenda-edit-webcall-error">
       </label>
+      <p class="field-error agenda-field-error" id="agenda-edit-webcall-error">Enter a full link starting with https://. Other links are not saved.</p>
       <p id="agenda-edit-join" class="settings-hint" hidden></p>
-      <label class="settings-row stacked">Notes
+      <label class="settings-row stacked" for="agenda-edit-notes">Notes
         <textarea id="agenda-edit-notes" rows="2" maxlength="16000" autocomplete="off"></textarea>
       </label>
-      <label class="settings-row stacked">Guests (comma-separated)
+      <label class="settings-row stacked" for="agenda-edit-attendees">Guests (comma-separated)
         <input id="agenda-edit-attendees" type="text" maxlength="2000" autocomplete="off">
       </label>
     </div>
