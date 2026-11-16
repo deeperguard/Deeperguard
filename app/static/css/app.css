@@ -307,7 +307,13 @@ body.agenda-editor-open #confirm-dialog { z-index: 220; }
   max-width: 100%;
   box-sizing: border-box;
 }
-.agenda-editor-heading { margin: 0 0 10px; font-size: 17px; font-weight: 680; }
+.agenda-editor-heading { margin: 0 0 10px; font-size: var(--text-lg); font-weight: 700; }
+/* Field error texts stay hidden until the field above is invalid after user input. */
+.agenda-field-error { display: none; margin: 0 0 6px; }
+label:has(:user-invalid) + .agenda-field-error,
+:user-invalid + .agenda-field-error { display: block; }
+#agenda-editor input:user-invalid,
+#agenda-subscribe-form input:user-invalid { border-color: var(--danger); }
 .agenda-reminder-offset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
