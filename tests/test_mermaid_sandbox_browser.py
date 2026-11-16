@@ -76,7 +76,7 @@ def browser():
         pytest.skip(f"Playwright not usable: {exc}")
 
 
-def _open(browser, flask_app, requests=None):
+def _open(browser, flask_app, requests=None, app_csp=False):
     ctx = browser.new_context(viewport={"width": 800, "height": 600})
     page = ctx.new_page()
 
@@ -90,8 +90,13 @@ def _open(browser, flask_app, requests=None):
             headers = {k: v for k, v in resp.headers.items() if k.lower() != "content-length"}
             route.fulfill(status=resp.status_code, headers=headers, body=resp.data)
             return
+        headers = {}
+        if app_csp:
+            shell = flask_app.get("/app", environ_overrides={"REMOTE_ADDR": "127.0.0.1"})
+            headers["Content-Security-Policy"] = shell.headers["Content-Security-Policy"]
         route.fulfill(
             status=200,
+            headers=headers,
             content_type="text/html",
             body='<!doctype html><html data-theme="light"><head><meta charset="utf-8"></head>'
                  '<body><div id="preview"></div></body></html>',
@@ -102,7 +107,10 @@ def _open(browser, flask_app, requests=None):
     page.add_style_tag(content=CSS)
     page.evaluate("localStorage.setItem('vault-key', 'SECRET-KEY'); document.cookie = 'session=SECRET-COOKIE'")
     for script in SCRIPTS:
-        page.add_script_tag(content=script.read_text(encoding="utf-8"))
+        if app_csp:  # the app CSP forbids inline scripts, so load them as the app does: from 'self'
+            page.add_script_tag(url="/" + script.relative_to(ROOT / "app").as_posix())
+        else:
+            page.add_script_tag(content=script.read_text(encoding="utf-8"))
     return page
 
 
@@ -138,6 +146,28 @@ def test_mermaid_block_renders_as_diagram(browser, flask_app):
     frame = page.query_selector("#preview .md-mermaid-frame").content_frame()
     assert frame.locator("svg").count() == 1
     assert "Start" in frame.locator("svg").text_content()
+
+
+def test_diagram_renders_under_the_real_app_csp(browser, flask_app):
+    """The page carries the CSP of the real app shell (frame-src 'self'), so the iframe must still load."""
+    page = _open(browser, flask_app, app_csp=True)
+    csp = page.evaluate("fetch(location.href).then(r => r.headers.get('content-security-policy'))")
+    assert "frame-src 'self'" in csp and "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]
+    _show(page, f"{FENCE}mermaid\n{GOOD}\n{FENCE}")
+    _settled(page)
+    assert page.locator("#preview .md-mermaid.is-rendered").count() == 1
+    frame = page.query_selector("#preview .md-mermaid-frame").content_frame()
+    assert "Start" in frame.locator("svg").text_content()
+
+
+def test_aria_label_of_a_large_diagram_is_truncated(browser, flask_app):
+    page = _open(browser, flask_app)
+    big = GOOD + "".join(f"\n  N{i} --> N{i + 1}" for i in range(300))
+    _show(page, f"{FENCE}mermaid\n{big}\n{FENCE}")
+    _settled(page)
+    label = page.get_attribute("#preview .md-mermaid-box", "aria-label")
+    assert len(big) > 1000 and len(label) < 400 and label.endswith("…")
+    assert "A[Start] --> B[Einde]" in label
 
 
 def test_sandbox_response_has_strict_headers(flask_app):

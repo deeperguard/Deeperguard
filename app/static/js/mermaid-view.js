@@ -6,7 +6,9 @@
 // The iframe (and with it the 2.5 MB Mermaid bundle) is created only when a note has a mermaid block.
 const NotesMermaid = (() => {
   const SANDBOX_URL = '/static/mermaid-sandbox.html';
+  // Keep equal to MAX_SOURCE in mermaid-sandbox.js: the sandbox rejects longer sources.
   const MAX_SOURCE = 20000;
+  const MAX_LABEL = 300;
   const MAX_HEIGHT = 4000;
   const TIMEOUT_MS = 10000;
   const ERROR_TEXT = 'Dit diagram kan niet worden getoond. De bron staat hieronder.';
@@ -70,7 +72,7 @@ const NotesMermaid = (() => {
     const box = document.createElement('div');
     box.className = 'md-mermaid-box';
     box.setAttribute('role', 'img');
-    box.setAttribute('aria-label', `${ARIA_PREFIX}${source}`);
+    box.setAttribute('aria-label', `${ARIA_PREFIX}${source.length > MAX_LABEL ? `${source.slice(0, MAX_LABEL)}…` : source}`);
     const iframe = document.createElement('iframe');
     iframe.className = 'md-mermaid-frame';
     iframe.title = 'Mermaid-diagram';
