@@ -1,11 +1,11 @@
 {
-  "asset_count": 95,
+  "asset_count": 97,
   "assets": {
     "css/app.css": {
-      "bytes": 346600,
-      "sha256": "81979894e6aa2c72c871038e185281b15ad13c1657045b868b5d484c3368f41a",
-      "sri": "sha384-zI7mVtYr4YyALcGNG4+kKS1TKm+ZVbiUY+z5WqDYCZSLlBu1kjQHHASC8HbXslnk",
-      "url": "/static/css/app.81979894e6aa2c72.css"
+      "bytes": 349363,
+      "sha256": "de80eb3158b5fc5e3de99226c9947521ff94211a141a49223907b6b12e8472c3",
+      "sri": "sha384-+AcBJ1Hx5ej0dCWDBNrg5MdeilyNReMAob8FW5eZlGR55/W/tbzPqiCKyAXHrNTw",
+      "url": "/static/css/app.de80eb3158b5fc5e.css"
     },
     "css/marketing.css": {
       "bytes": 55848,
@@ -92,10 +92,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1024770,
-      "sha256": "5199db52ee1d3e794ba63e891b0d236a740e5f9ec21857e91e9c85aefe247e4a",
-      "sri": "sha384-uk/sxeUXOSKP7IqIRwQC829SKLmqUt7IAQaG8qcVWs1y0FC6BsjIj8W/hoN3ujqf",
-      "url": "/static/js/app.5199db52ee1d3e79.js"
+      "bytes": 1029321,
+      "sha256": "16365cddfdd58e53e6464e0f539bb0d95daae0877750625c37f0316d584b06b4",
+      "sri": "sha384-YZNfVAx/fVowxU2NhUYIgVJU7+Rmr3xRTpIaQJ7scdnRcLv5xjZCgcUOOlW51OJW",
+      "url": "/static/js/app.16365cddfdd58e53.js"
     },
     "js/auth-pages.js": {
       "bytes": 41606,
@@ -319,6 +319,12 @@
       "sri": "sha384-08A0M3X9zns79QAIYKtkFhNPfdNkQmDYJdsXDTVDAMudKSxjRHcDjyHrKHs+44WN",
       "url": "/static/js/release-integrity.230e0f73a5a8c72f.js"
     },
+    "js/rich-editor.js": {
+      "bytes": 31313,
+      "sha256": "0c5998820d8c8cfd745aa23c38d715d9807eaa8da135a96c38c7dacb3a979455",
+      "sri": "sha384-TQHfkjw7v+k5jWKWgD3pwIBw7cbYGjU1I1B9ZRzHYA6H8f+oegH1rCbZ3dlEUosg",
+      "url": "/static/js/rich-editor.0c5998820d8c8cfd.js"
+    },
     "js/sanitize.js": {
       "bytes": 8494,
       "sha256": "54ed73bd29efe9ab7578142b8c0793c0b4f38ad453ed489e6c832769ff7ce5e8",
@@ -350,10 +356,10 @@
       "url": "/static/js/secure-send.5dfa39b18d14613f.js"
     },
     "js/settings-sync.js": {
-      "bytes": 8336,
-      "sha256": "85e096098024cb2edbfb5f47a29034b7262d6f518f33f96767f7a86a6c4900ff",
-      "sri": "sha384-cJtg2LcHKOxq+rOaAUu6J6Ep/anKqGqBJ+TQt+t9/pPubhm3Kzp9c3dRsnNFpgPk",
-      "url": "/static/js/settings-sync.85e096098024cb2e.js"
+      "bytes": 8381,
+      "sha256": "2517ba8f9b3782526963df2366419a1646679aacf09ff7b062646282c64947c3",
+      "sri": "sha384-Z2rVRNPEziigaVGLFMxypAqD67lX7uqkXK9gAMo7HiuOwEm6e1UMF3m9qIrDrZcY",
+      "url": "/static/js/settings-sync.2517ba8f9b378252.js"
     },
     "js/snimport.js": {
       "bytes": 26926,
@@ -462,6 +468,12 @@
       "sha256": "c0409fdafbfd4f441ac21147a158e1323802c326454330730b1fbd64a03736da",
       "sri": "sha384-YnnW357DC1fkiYTEnBkUSBK+fmZlOe4y1WDmrf9vu9AnU01l9Y/b1Sje0uvtgHpL",
       "url": "/static/js/vaultlock.c0409fdafbfd4f44.js"
+    },
+    "js/vendor/codemirror/codemirror.min.js": {
+      "bytes": 261898,
+      "sha256": "cde3e4d905ece6ccd5262097befb1b6d5be32544200c13f64351cc54408e5c36",
+      "sri": "sha384-t/QRjBxhBN6ooIf6lFlOz86pkx5e2M077BgGx8ohZdBLxDRYBZeIZLhqGDDZN7Xh",
+      "url": "/static/js/vendor/codemirror/codemirror.min.cde3e4d905ece6cc.js"
     },
     "js/vendor/dompurify/purify.min.js": {
       "bytes": 22305,
@@ -573,6 +585,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "6538083bc0ba1b386f6dc6ac4d03377749713e41dd9649dabc1cc22cf3f7c796",
+  "manifest_sha256": "d187a090fcb7a0d10272ea81610aafaede97de32720202244790c86a904b8d32",
   "version": 1
 }

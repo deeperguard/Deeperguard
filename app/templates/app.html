@@ -1432,18 +1432,24 @@
             <button type="button" class="btn ghost sm" id="tag-suggest-dismiss">Dismiss</button>
           </span>
         </div>
-        <div id="md-toolbar" class="md-toolbar">
-          <button type="button" class="btn ghost sm" data-md="bold" title="Bold">B</button>
-          <button type="button" class="btn ghost sm" data-md="italic" title="Italic">I</button>
-          <button type="button" class="btn ghost sm" data-md="heading" title="Heading">H</button>
-          <button type="button" class="btn ghost sm" data-md="check" title="Checklist">☑</button>
-          <button type="button" class="btn ghost sm" data-md="link" title="Link">Link</button>
-          <button type="button" class="btn ghost sm" data-md="sup" title="Superscript" hidden>x²</button>
-          <button type="button" class="btn ghost sm" data-md="code" title="Inline code">`</button>
+        <div id="md-toolbar" class="md-toolbar" role="toolbar" aria-label="Formatting" aria-orientation="horizontal">
+          <button type="button" class="btn ghost sm" data-md="bold" title="Bold (Ctrl+B)" aria-label="Bold">B</button>
+          <button type="button" class="btn ghost sm" data-md="italic" title="Italic (Ctrl+I)" aria-label="Italic">I</button>
+          <button type="button" class="btn ghost sm" data-md="strike" title="Strikethrough (Ctrl+Shift+X)" aria-label="Strikethrough" data-rich-only hidden>S</button>
+          <button type="button" class="btn ghost sm" data-md="heading" title="Heading" aria-label="Heading">H</button>
+          <button type="button" class="btn ghost sm" data-md="ul" title="Bulleted list (Ctrl+Shift+8)" aria-label="Bulleted list" data-rich-only hidden>•</button>
+          <button type="button" class="btn ghost sm" data-md="ol" title="Numbered list (Ctrl+Shift+7)" aria-label="Numbered list" data-rich-only hidden>1.</button>
+          <button type="button" class="btn ghost sm" data-md="check" title="Checklist (Ctrl+Shift+9)" aria-label="Checklist">☑</button>
+          <button type="button" class="btn ghost sm" data-md="quote" title="Quote" aria-label="Quote" data-rich-only hidden>❝</button>
+          <button type="button" class="btn ghost sm" data-md="link" title="Link (Ctrl+K)" aria-label="Link">Link</button>
+          <button type="button" class="btn ghost sm" data-md="sup" title="Superscript" aria-label="Superscript" hidden>x²</button>
+          <button type="button" class="btn ghost sm" data-md="code" title="Inline code (Ctrl+E)" aria-label="Inline code">`</button>
+          <button type="button" class="btn ghost sm" data-md="codeblock" title="Code block" aria-label="Code block" data-rich-only hidden>{ }</button>
           <button type="button" class="btn ghost sm" data-md="table" title="Insert or edit table" aria-label="Insert or edit table" aria-controls="table-editor">Table</button>
-          <button type="button" class="btn ghost sm" data-code="comment" title="Comment" hidden>//</button>
-          <button type="button" class="btn ghost sm" data-code="indent" title="Indent" hidden>Indent</button>
-          <button type="button" class="btn ghost sm" data-code="outdent" title="Outdent" hidden>Outdent</button>
+          <button type="button" class="btn ghost sm" data-code="comment" title="Comment" aria-label="Comment" hidden>//</button>
+          <button type="button" class="btn ghost sm" data-code="indent" title="Indent" aria-label="Indent" hidden>Indent</button>
+          <button type="button" class="btn ghost sm" data-code="outdent" title="Outdent" aria-label="Outdent" hidden>Outdent</button>
+          <button type="button" class="btn ghost sm" id="btn-rich-mode" title="Switch between formatted text and Markdown source (Ctrl+/)" aria-pressed="false" hidden>Formatted</button>
           <button type="button" class="btn ghost sm" id="btn-md-mode" title="Preview markdown" hidden>Preview</button>
         </div>
         <div id="table-editor" class="table-editor" role="group" aria-label="Table editor" hidden></div>
@@ -1464,6 +1470,7 @@
           <pre id="note-body-links" class="note-body-links" aria-hidden="true"></pre>
           <pre id="note-body-highlights" class="note-body-highlights" aria-hidden="true"></pre>
           <textarea id="note-body" class="note-body" placeholder="Write…" dir="auto"></textarea>
+          <div id="note-rich" class="note-rich" hidden></div>
         </div>
         <div id="preview" class="preview" hidden tabindex="-1" dir="auto"></div>
         <div id="note-lock-gate" class="note-lock-gate" hidden>
@@ -2974,6 +2981,8 @@
   {{ asset_script('js/vendor/highlightjs/highlight.min.js') }}
   {{ asset_script('js/markdown.js') }}
   {{ asset_script('js/table-editor.js') }}
+  {{ asset_script('js/vendor/codemirror/codemirror.min.js', defer=True) }}
+  {{ asset_script('js/rich-editor.js') }}
   {{ asset_script('js/in-doc-nav.js') }}
   {{ asset_script('js/superscript.js') }}
   {{ asset_script('js/notelinks.js') }}

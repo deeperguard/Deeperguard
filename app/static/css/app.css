@@ -5140,6 +5140,57 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   background: var(--border);
   flex-shrink: 0;
 }
+.md-toolbar .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.md-toolbar .btn[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+/* Formatted editing (rich-editor.js): the Markdown text with formatting layered on top. */
+.note-rich { min-height: 8rem; }
+.note-rich[hidden] { display: none; }
+.note-rich .cm-editor {
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  line-height: var(--note-body-line);
+}
+.note-rich .cm-editor.cm-focused { outline: 2px solid var(--accent); outline-offset: -2px; }
+.note-rich .cm-scroller { font: inherit; line-height: inherit; overflow: visible; }
+.note-rich .cm-content { padding: 6px 16px 4px; min-height: 8rem; caret-color: var(--text); }
+.note-rich .cm-line { padding: 0; }
+.note-rich .cm-cursor { border-left-color: var(--text); }
+.note-rich .cm-selectionBackground, .note-rich .cm-editor.cm-focused .cm-selectionBackground { background: var(--accent-soft); }
+.note-rich .dg-b { font-weight: 700; }
+.note-rich .dg-i { font-style: italic; }
+.note-rich .dg-s { text-decoration: line-through; }
+.note-rich .dg-c { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; background: var(--bg-hover); border-radius: 4px; padding: 0 3px; }
+.note-rich .dg-a { color: var(--accent); text-decoration: underline; }
+.note-rich .dg-syn, .note-rich .dg-li-mark { color: var(--muted); }
+.note-rich .dg-li-mark { font-weight: 600; }
+.note-rich .dg-h1 { font-size: 1.6em; font-weight: 700; line-height: 1.3; }
+.note-rich .dg-h2 { font-size: 1.35em; font-weight: 700; line-height: 1.3; }
+.note-rich .dg-h3 { font-size: 1.18em; font-weight: 650; }
+.note-rich .dg-h4, .note-rich .dg-h5, .note-rich .dg-h6 { font-weight: 650; }
+.note-rich .dg-quote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--muted); }
+.note-rich .dg-code, .note-rich .dg-fence, .note-rich .dg-table {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  background: var(--bg-hover);
+}
+.note-rich .dg-fence { color: var(--muted); }
+.note-rich .dg-hr { color: var(--muted); border-bottom: 1px solid var(--border); }
+.note-rich .dg-done { color: var(--muted); }
+.note-rich .dg-task {
+  display: inline-block;
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: 0.15em;
+  vertical-align: -0.15em;
+  border: 2px solid var(--muted);
+  border-radius: 4px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.note-rich .dg-task-on { background: var(--accent); border-color: var(--accent); }
+.note-rich .dg-task-on::after { content: "✓"; display: block; color: #fff; font-size: 0.8em; line-height: 0.85; text-align: center; }
+@media (pointer: coarse) { .note-rich .dg-task { width: 1.3em; height: 1.3em; } }
 .find-bar {
   display: flex;
   flex-direction: column;
