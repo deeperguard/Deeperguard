@@ -166,7 +166,7 @@ def main() -> int:
                 failures.append("no published blog post found; blog post page not checked")
             pages = [post if p == "BLOG_POST" else p for p in PAGES if p != "BLOG_POST" or post]
             if not check_widths(browser, base, failures, True, pages):
-                print("note: nav fitted on one line at every width; collapsed menu not exercised")
+                failures.append("nav fitted on one line at every width; collapsed menu was not exercised")
             check_widths(browser, base, failures, False, pages)
             check_menu(browser, base, failures)
             browser.close()
