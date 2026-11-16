@@ -109,6 +109,7 @@ def test_empty_list_save_delete_and_controls(page, width, theme):
     for s in sel:
         assert s["h"] == "44px" and s["bw"] == "1px" and s["bs"] == "solid", s
         assert s["br"] == sel[0]["br"] and s["bc"] == sel[0]["bc"]
+    editor_ref = sel[0]
     token = page.evaluate(FOCUS_TOKEN)
     for f in page.evaluate(FOCUS, "#agenda-editor select"):
         assert f["active"] and f["ow"] == "2px" and f["os"] == "solid", f
@@ -163,5 +164,26 @@ def test_empty_list_save_delete_and_controls(page, width, theme):
     for f in focus:
         assert f["active"] and f["ow"] == "2px" and f["os"] == "solid", f
         assert f["oc"] == token, f
+
+    # The calendar-settings select only exists in the delete-calendar form, and the
+    # default calendar cannot be deleted. Create a calendar if none exists, then open its delete form.
+    delete_btn = '#agenda-calendar-settings [data-agenda-cal-action="delete"]'
+    if not page.locator(delete_btn).count():
+        page.click('#agenda-calendar-settings [data-agenda-cal-action="new"]')
+        page.fill('[data-agenda-cal-form="new"] input[name="name"]', f"Controls {width} {theme}")
+        page.click('[data-agenda-cal-form="new"] button[type="submit"]')
+        page.wait_for_selector(delete_btn, timeout=5000)
+    page.locator(delete_btn).first.click()
+    page.wait_for_selector("#agenda-calendar-settings [data-agenda-cal-delete] select", timeout=5000)
+    cal_sel = page.evaluate(STYLE, "#agenda-calendar-settings select")
+    assert cal_sel
+    for s in cal_sel:
+        assert s["h"] == "44px" and s["bw"] == "1px" and s["bs"] == "solid", s
+        assert s["br"] == editor_ref["br"] and s["bc"] == editor_ref["bc"], s
+    for f in page.evaluate(FOCUS, "#agenda-calendar-settings select"):
+        assert f["active"] and f["ow"] == "2px" and f["os"] == "solid", f
+        assert f["oc"] == token, f
+    page.click('#agenda-calendar-settings [data-agenda-cal-delete] [data-agenda-cal-action="cancel"]')
+
     page.click("#agenda-calendar-settings-close")
     page.wait_for_selector("#agenda-calendar-settings", state="hidden", timeout=5000)
