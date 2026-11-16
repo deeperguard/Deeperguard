@@ -2,10 +2,10 @@
 
 Register (lands unlocked), click "Not now" on the device-phrase card (it only
 appears once, not after a later unlock), lock the vault, unlock with the
-password, click the 2FA tab: the 2FA pane must be
-visible, the Notes pane (list and editor area) hidden and the 2FA tab
-aria-selected. Checked again after a second click on 2FA. Waits use Playwright
-auto-waiting assertions only. See docs/bugs/2fa-tab-after-unlock.md.
+password, click the 2FA tab. The 2FA pane must be visible, the Notes pane
+(#notes-shell, the list and the editor) must be hidden, and the 2FA tab must
+be aria-selected. This is checked again after a second click on 2FA. Waits use
+Playwright auto-waiting assertions only. See docs/bugs/2fa-tab-after-unlock.md.
 
     python tests/e2e_totp_tab_lock_unlock_not_now.py
 """
@@ -104,6 +104,7 @@ def main() -> int:
                 page.click("#app-tab-2fa", timeout=10000)
                 try:
                     expect(page.locator("#totp-pane")).to_be_visible(timeout=10000)
+                    expect(page.locator("#notes-shell")).to_be_hidden(timeout=10000)
                     expect(page.locator("#notes-list")).to_be_hidden(timeout=10000)
                     expect(page.locator("#editor-pane")).to_be_hidden(timeout=10000)
                     expect(page.locator("#app-tab-2fa")).to_have_attribute("aria-selected", "true", timeout=10000)
