@@ -34,8 +34,24 @@
       .join('\n');
   }
 
+  // Vendored highlight.js (common languages only). Its output is escaped HTML with <span class="hljs-*">;
+  // render() still runs the whole result through the DOMPurify allowlist.
+  function highlighter() {
+    if (typeof window !== 'undefined' && window.hljs) return window.hljs;
+    if (typeof require === 'function') {
+      try { return require('./vendor/highlightjs/highlight.min.js'); } catch (_) { /* browser */ }
+    }
+    return null;
+  }
+
   function highlightFence(code, lang) {
     const source = String(code || '').replace(/\n$/, '');
+    const hljs = lang ? highlighter() : null;
+    if (hljs && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(source, { language: lang, ignoreIllegals: true }).value;
+      } catch (_) { /* fall through to the generic highlighter */ }
+    }
     if (typeof window !== 'undefined' && window.NotesMarkdownHighlight) {
       return window.NotesMarkdownHighlight(source, lang);
     }

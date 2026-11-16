@@ -9,6 +9,7 @@ deliberate PR with the upstream changelog and new hashes. See `docs/design/rich-
 |---|---|---|---|
 | markdown-it | 14.1.0 | MIT | Markdown parser for the note view (`html: false`) |
 | DOMPurify | 3.2.6 | Apache-2.0 (dual MPL-2.0 OR Apache-2.0; used under Apache-2.0) | Allowlist HTML sanitizer, last step before the note view enters the DOM |
+| highlight.js | 11.11.1 | BSD-3-Clause | Syntax colouring of fenced code blocks in the note view (the official "common" bundle: 36 languages; output still goes through DOMPurify) |
 
 ## markdown-it 14.1.0
 
@@ -32,10 +33,22 @@ deliberate PR with the upstream changelog and new hashes. See `docs/design/rich-
 | `app/static/js/vendor/dompurify/purify.min.js` | `package/dist/purify.min.js` | `89e1fa7647cb495370d3a997ace4387f5d15d9f4c5af12352c53daa400956287` |
 | `app/static/js/vendor/dompurify/LICENSE` | `package/LICENSE` | `1b02e03c3fb4f87d476c128f0eb9def1f5a1709d28b180465228bd41574623b7` |
 
+## highlight.js 11.11.1
+
+- Source: https://registry.npmjs.org/@highlightjs/cdn-assets/-/cdn-assets-11.11.1.tgz (npm package `@highlightjs/cdn-assets`, the official prebuilt browser bundle; https://github.com/highlightjs/highlight.js, git `08cb242e7d`)
+- Tarball sha256: `28a06bf6ebcc2218c6e842bdb4f1c8353508a8cada59e85110f91892f5726195` (npm `integrity` verified)
+- Last checked: 2026-11-16
+- Languages in the bundle: bash, c, cpp, csharp, css, diff, go, graphql, ini, java, javascript, json, kotlin, less, lua, makefile, markdown, objectivec, perl, php, php-template, plaintext, python, python-repl, r, ruby, rust, scss, shell, sql, swift, typescript, vbnet, wasm, xml, yaml (plus their aliases such as `js`, `ts`, `py`, `html`, `sh`).
+
+| File | Upstream path | sha256 |
+|---|---|---|
+| `app/static/js/vendor/highlightjs/highlight.min.js` | `package/highlight.min.js` | `c4a399dd6f488bc97a3546e3476747b3e714c99c57b9473154c6fb8d259b9381` |
+| `app/static/js/vendor/highlightjs/LICENSE` | `package/LICENSE` | `6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490` |
+
 ## Reproducing
 
 Download the tarball above, check its sha256 against this file, and extract the listed upstream paths
-unchanged. Neither file uses `eval` or `new Function`, so the app CSP stays without `'unsafe-eval'` and
+unchanged. None of these files uses `eval` or `new Function`, so the app CSP stays without `'unsafe-eval'` and
 without `'unsafe-inline'` in `script-src`.
 
 Older vendored libraries (noble, pdf.js, jsPDF, tesseract, jsQR, heic2any, qrcode-generator) predate this

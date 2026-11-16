@@ -10705,6 +10705,66 @@ body.vault-pulling .sync-progress {
 html[data-theme="light"] .tok-kw { color: #0369a1; }
 html[data-theme="light"] .tok-str { color: #166534; }
 html[data-theme="light"] .tok-comment { color: #64748b; }
+/* highlight.js token colours for fenced code in the Markdown view; every pair is >= 4.5:1 (WCAG AA)
+   on the code-block background in the dark and the light theme. */
+.code-preview .hljs-keyword,
+.code-preview .hljs-doctag,
+.code-preview .hljs-selector-tag { color: #ff7b72; }
+.code-preview .hljs-string,
+.code-preview .hljs-regexp,
+.code-preview .hljs-meta .hljs-string { color: #a5d6ff; }
+.code-preview .hljs-number,
+.code-preview .hljs-literal,
+.code-preview .hljs-attr,
+.code-preview .hljs-attribute,
+.code-preview .hljs-variable,
+.code-preview .hljs-selector-class,
+.code-preview .hljs-selector-id { color: #79c0ff; }
+.code-preview .hljs-title,
+.code-preview .hljs-section,
+.code-preview .hljs-type,
+.code-preview .hljs-class .hljs-title { color: #d2a8ff; }
+.code-preview .hljs-built_in,
+.code-preview .hljs-symbol,
+.code-preview .hljs-bullet,
+.code-preview .hljs-meta { color: #ffa657; }
+.code-preview .hljs-name,
+.code-preview .hljs-tag,
+.code-preview .hljs-addition { color: #7ee787; }
+.code-preview .hljs-comment,
+.code-preview .hljs-quote,
+.code-preview .hljs-deletion { color: #8b98a5; }
+.code-preview .hljs-comment,
+.code-preview .hljs-quote { font-style: italic; }
+.code-preview .hljs-strong { font-weight: 700; }
+.code-preview .hljs-emphasis { font-style: italic; }
+html[data-theme="light"] .code-preview .hljs-keyword,
+html[data-theme="light"] .code-preview .hljs-doctag,
+html[data-theme="light"] .code-preview .hljs-selector-tag { color: #cf222e; }
+html[data-theme="light"] .code-preview .hljs-string,
+html[data-theme="light"] .code-preview .hljs-regexp,
+html[data-theme="light"] .code-preview .hljs-meta .hljs-string { color: #0a3069; }
+html[data-theme="light"] .code-preview .hljs-number,
+html[data-theme="light"] .code-preview .hljs-literal,
+html[data-theme="light"] .code-preview .hljs-attr,
+html[data-theme="light"] .code-preview .hljs-attribute,
+html[data-theme="light"] .code-preview .hljs-variable,
+html[data-theme="light"] .code-preview .hljs-selector-class,
+html[data-theme="light"] .code-preview .hljs-selector-id { color: #0550ae; }
+html[data-theme="light"] .code-preview .hljs-title,
+html[data-theme="light"] .code-preview .hljs-section,
+html[data-theme="light"] .code-preview .hljs-type,
+html[data-theme="light"] .code-preview .hljs-class .hljs-title { color: #6639ba; }
+html[data-theme="light"] .code-preview .hljs-built_in,
+html[data-theme="light"] .code-preview .hljs-symbol,
+html[data-theme="light"] .code-preview .hljs-bullet,
+html[data-theme="light"] .code-preview .hljs-meta { color: #953800; }
+html[data-theme="light"] .code-preview .hljs-name,
+html[data-theme="light"] .code-preview .hljs-tag,
+html[data-theme="light"] .code-preview .hljs-addition { color: #116329; }
+html[data-theme="light"] .code-preview .hljs-comment,
+html[data-theme="light"] .code-preview .hljs-quote,
+html[data-theme="light"] .code-preview .hljs-deletion { color: #57606a; }
 .btn.icon[aria-label] { position: relative; }
 /* Touch devices stick in :hover after a tap. Only pointer devices get tooltips. */
 @media (hover: hover) and (pointer: fine) {
