@@ -5985,11 +5985,16 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
 
         handler = _Collect(level=logging.WARNING)
         logger = logging.getLogger("deeperguard")
+        # Like assertNoLogs: force WARNING so a higher configured level cannot
+        # hide startup warnings, and restore the previous level afterwards.
+        old_level = logger.level
+        logger.setLevel(logging.WARNING)
         logger.addHandler(handler)
         try:
             yield
         finally:
             logger.removeHandler(handler)
+            logger.setLevel(old_level)
         self.assertEqual([r.getMessage() for r in records], [])
 
     def test_server_ocr_startup_warning_when_enabled(self):
