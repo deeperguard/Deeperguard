@@ -1,10 +1,13 @@
 """Tests for Deeperguard."""
+import contextlib
 import importlib
+import logging
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from io import BytesIO
@@ -5966,6 +5969,29 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
     def _import_app(self):
         return importlib.import_module("app")
 
+    @contextlib.contextmanager
+    def _assert_no_startup_warnings(self):
+        # assertNoLogs sees records from every thread, so a daemon thread left
+        # over from an earlier test can log a warning while this import runs
+        # (seen on a loaded build server). Startup warnings are emitted by the
+        # importing thread, so only that thread's records count.
+        records = []
+        me = threading.get_ident()
+
+        class _Collect(logging.Handler):
+            def emit(self, record):
+                if record.thread == me:
+                    records.append(record)
+
+        handler = _Collect(level=logging.WARNING)
+        logger = logging.getLogger("deeperguard")
+        logger.addHandler(handler)
+        try:
+            yield
+        finally:
+            logger.removeHandler(handler)
+        self.assertEqual([r.getMessage() for r in records], [])
+
     def test_server_ocr_startup_warning_when_enabled(self):
         os.environ["NOTES_SERVER_OCR"] = "1"
         with self.assertLogs("deeperguard", level="WARNING") as cm:
@@ -5986,7 +6012,7 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
         self.assertIn("NOTES_OCR_EPHEMERAL is off", joined)
 
     def test_server_ocr_startup_silent_when_disabled(self):
-        with self.assertNoLogs("deeperguard", level="WARNING"):
+        with self._assert_no_startup_warnings():
             self._import_app()
 
     def test_wan_without_secure_cookies_startup_warning(self):
@@ -6002,12 +6028,12 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
     def test_wan_with_secure_cookies_startup_silent(self):
         os.environ["NOTES_DISABLE_CIDR_GATE"] = "1"
         os.environ["NOTES_SECURE_COOKIES"] = "1"
-        with self.assertNoLogs("deeperguard", level="WARNING"):
+        with self._assert_no_startup_warnings():
             self._import_app()
 
     def test_cidr_gate_on_without_secure_cookies_startup_silent(self):
         os.environ["NOTES_SECURE_COOKIES"] = "0"
-        with self.assertNoLogs("deeperguard", level="WARNING"):
+        with self._assert_no_startup_warnings():
             self._import_app()
 
 
