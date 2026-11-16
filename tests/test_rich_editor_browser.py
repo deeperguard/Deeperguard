@@ -332,6 +332,31 @@ def test_paste_without_html_inserts_the_plain_text_verbatim(page):
     assert _value(page) == "**plain** <b>text</b>\n- item"
 
 
+def _paste_plain(page, text):
+    page.evaluate(
+        """(text) => {
+          const dt = new DataTransfer();
+          dt.setData('text/plain', text);
+          ctl.view.contentDOM.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+        }""",
+        text,
+    )
+
+
+def test_paste_into_a_crlf_note_uses_crlf(page):
+    _set(page, "a\r\nb\r\n")
+    page.evaluate("() => ctl.view.dispatch({ selection: { anchor: ctl.view.state.doc.length } })")
+    _paste_plain(page, "x\ny\r\nz")
+    assert _value(page) == "a\r\nb\r\nx\r\ny\r\nz"
+
+
+def test_paste_into_an_lf_note_uses_lf(page):
+    _set(page, "a\nb\n")
+    page.evaluate("() => ctl.view.dispatch({ selection: { anchor: ctl.view.state.doc.length } })")
+    _paste_plain(page, "x\r\ny\nz")
+    assert _value(page) == "a\nb\nx\ny\nz"
+
+
 def test_toolbar_roles_and_keyboard(page):
     page.evaluate("() => NotesRichEditor.attachToolbar(document.getElementById('tb'), 'Formatting')")
     assert page.get_attribute("#tb", "role") == "toolbar"

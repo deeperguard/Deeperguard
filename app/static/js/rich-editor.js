@@ -69,6 +69,12 @@
     return ch.repeat(Math.max(3, longest + 1));
   }
 
+  // Pasted text follows the line endings of the document: a CRLF note gets CRLF, anything else LF.
+  function matchLineEndings(text, doc) {
+    const lf = text.replace(/\r\n?/g, '\n');
+    return doc.includes('\r\n') ? lf.replace(/\n/g, '\r\n') : lf;
+  }
+
   // Allowlist for pasted HTML (everything else is removed, its text kept, script/style content dropped).
   const PASTE_CONFIG = {
     ALLOWED_TAGS: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'br', 'hr', 'b', 'strong', 'i', 'em', 's',
@@ -598,12 +604,14 @@
       paste(event, view) {
         const data = event.clipboardData;
         const html = data?.getData('text/html');
-        if (!html) return false;
-        const md = htmlToMarkdown(html);
-        const text = md === null || md === '' ? data.getData('text/plain') : md;
+        const plain = data?.getData('text/plain') || '';
+        const md = html ? htmlToMarkdown(html) : null;
+        const text = md === null || md === '' ? plain : md;
         if (!text) return false;
+        // Plain text only goes through here when it needs its line endings changed; otherwise CodeMirror pastes it.
+        if (!html && matchLineEndings(text, view.state.doc.toString()) === text) return false;
         event.preventDefault();
-        view.dispatch(view.state.replaceSelection(text), { userEvent: 'input.paste', scrollIntoView: true });
+        view.dispatch(view.state.replaceSelection(matchLineEndings(text, view.state.doc.toString())), { userEvent: 'input.paste', scrollIntoView: true });
         return true;
       },
     });
