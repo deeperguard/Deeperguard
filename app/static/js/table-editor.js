@@ -129,9 +129,11 @@
     const cols = header.length;
     const aligns = splitRow(lines[1]).map(alignOf);
     const rows = lines.slice(2).map((raw) => {
-      const cells = splitRow(raw).map(unescapeCell).slice(0, cols);
+      const all = splitRow(raw);
+      const cells = all.slice(0, cols).map(unescapeCell);
       while (cells.length < cols) cells.push('');
-      return { cells, raw, dirty: false };
+      // Cells past the header's column count are not shown, but they stay in the source as written.
+      return { cells, extra: all.slice(cols), raw, dirty: false };
     });
     // Column-aligned: every line has its "|" at the same places and some cell is padded with spaces.
     const pipes = (line) => [...line.matchAll(/(?<!\\)\|/g)].map((hit) => hit.index).join(',');
@@ -178,9 +180,9 @@
     const widths = model.aligns.map((align, c) => (
       realign ? Math.max(minWidth(align), ...escaped.map((cells) => cells[c].length)) : 0
     ));
-    const line = (cells) => `${model.indent}|${cells.map((cell, c) => (
+    const line = (cells, extra = []) => `${model.indent}|${[...cells.map((cell, c) => (
       cell || widths[c] ? ` ${cell.padEnd(widths[c])} ` : ' '
-    )).join('|')}|`;
+    )), ...extra.map((cell) => (cell ? ` ${cell} ` : ' '))].join('|')}|`;
     const regenerateAll = realign || model.columnsChanged;
     const out = [];
     out.push(regenerateAll || model.header.dirty ? line(escaped[0]) : model.header.raw);
@@ -188,7 +190,7 @@
       ? line(model.aligns.map((align, c) => delimCell(align, widths[c])))
       : model.delimRaw);
     model.rows.forEach((row, idx) => {
-      out.push(regenerateAll || row.dirty ? line(escaped[idx + 1]) : row.raw);
+      out.push(regenerateAll || row.dirty ? line(escaped[idx + 1], row.extra) : row.raw);
     });
     return out.join(model.eol);
   }
