@@ -1600,7 +1600,7 @@
     if (!dayOcc.length && dayTasks.length) {
       // Tasks only: no "No events" line under them.
     } else if (!dayOcc.length) {
-      html += '<p class="muted agenda-month-daylist-empty">No events this day. Use + to add one.</p>';
+      html += '<p class="muted agenda-month-daylist-empty">No events this day.</p>';
     } else {
       html += '<ul class="agenda-list">';
       dayOcc.forEach((o) => {
