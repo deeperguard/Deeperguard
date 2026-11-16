@@ -127,12 +127,20 @@ def test_editor_escape_focus_labels_and_overflow(session, width, theme):
     }""")
     assert ov["page"] <= 0 and ov["dialog"] <= 0 and ov["inView"], ov
 
-    # Heading matches the shared dialog heading; action order matches #confirm-dialog.
-    heading, order = page.evaluate("""() => [
-      getComputedStyle(document.getElementById('agenda-edit-visible-title')).fontSize,
-      Array.from(document.querySelectorAll('#agenda-editor .agenda-editor-actions .btn')).map(b => b.id)]""")
-    assert heading == "18px"
+    # Heading matches the shared dialog heading. Delete leads as the destructive action; Cancel comes
+    # before the primary action, the same relative order as the buttons in #confirm-dialog.
+    heading, order, confirm_order = page.evaluate("""() => {
+      const h = document.getElementById('agenda-edit-visible-title'), c = document.getElementById('confirm-title');
+      const btns = (sel) => Array.from(document.querySelectorAll(sel)).filter(b => !b.hidden).map(b => b.id);
+      return [
+        [getComputedStyle(h).fontSize, getComputedStyle(h).fontWeight],
+        btns('#agenda-editor .agenda-editor-actions .btn'),
+        btns('#confirm-dialog .confirm-dialog-actions .btn')];
+    }""")
+    assert heading[0] == "18px"
+    assert heading[1] == page.evaluate("() => getComputedStyle(document.getElementById('confirm-title')).fontWeight")
     assert order == ["agenda-edit-delete", "agenda-edit-cancel", "agenda-edit-save"]
+    assert confirm_order == ["confirm-cancel", "confirm-ok"]
 
     page.keyboard.press("Escape")
     page.wait_for_selector("#agenda-editor", state="hidden", timeout=5000)
@@ -186,3 +194,79 @@ def test_subscribe_form_labels_error_and_overflow(session, width, theme):
     assert ov["page"] <= 0 and ov["panel"] <= 0, ov
     page.click("#agenda-calendar-settings-close")
     page.wait_for_selector("#agenda-calendar-settings", state="hidden", timeout=5000)
+
+
+REMINDER_SAMPLES = [
+    "20", "20, 120", " 20 ; 30 ", "00020", "0", "40320", "40321", "99999", "1234567", "20,,30", " , ", "20 abc", "abc",
+]
+WEBCALL_SAMPLES = [
+    "HTTPS://example.com/meet", "https://example.com", "Https://example.com/x", "http://example.com",
+    "https:/example.com", "https://", "https://a b",
+]
+
+
+@pytest.mark.parametrize("width", [390, 1280])
+def test_reminder_and_meeting_link_patterns_match_parser(session, width):
+    page = session
+    _setup(page, width, "light")
+    _open_editor(page)
+    # Each field's own pattern (or type=url) must accept exactly what agenda.js accepts when it saves.
+    result = page.evaluate("""([reminderSamples, webcallSamples]) => {
+      const R = window.NotesAgendaReminders, I = window.NotesAgendaIcs;
+      const custom = document.getElementById('agenda-edit-reminders-custom');
+      const webcall = document.getElementById('agenda-edit-webcall');
+      const reminderMismatch = [], webcallMismatch = [];
+      for (const s of reminderSamples) {
+        custom.value = s;
+        const tokens = s.split(/[\\s,;]+/).filter(Boolean);
+        const parsed = tokens.length > 0 && tokens.every(t => R.offsetMinutes([t]).length === 1);
+        if (custom.validity.patternMismatch === parsed) reminderMismatch.push(s);
+      }
+      for (const s of webcallSamples) {
+        webcall.value = s;
+        const parsed = I.sanitizeHttpsUrl(s) !== '';
+        if (webcall.validity.valid !== parsed) webcallMismatch.push(s);
+      }
+      return { reminderMismatch, webcallMismatch };
+    }""", [REMINDER_SAMPLES, WEBCALL_SAMPLES])
+    assert result == {"reminderMismatch": [], "webcallMismatch": []}, result
+    _close_editor_discarding(page)
+
+
+def test_invalid_editor_fields_set_aria_invalid(session):
+    page = session
+    _setup(page, 1280, "light")
+    _open_editor(page)
+    field = page.locator("#agenda-edit-webcall")
+    field.fill("http://example.com")
+    field.blur()
+    assert page.locator("#agenda-edit-webcall-error").is_visible()
+    assert field.get_attribute("aria-invalid") == "true"
+    field.fill("https://example.com")
+    field.blur()
+    assert field.get_attribute("aria-invalid") == "false"
+    _close_editor_discarding(page)
+
+
+@pytest.mark.parametrize("width", [390, 1280])
+def test_editor_stacked_labels_share_one_column(session, width):
+    page = session
+    _setup(page, width, "light")
+    _open_editor(page)
+    # Top-level fields sit in one single-column grid: same left edge and width, label above field.
+    grid = page.evaluate("""() => Array.from(document.querySelectorAll('#agenda-editor .agenda-editor-scroll > .settings-row.stacked'))
+      .filter(l => l.getClientRects().length > 0)
+      .map(l => { const cs = getComputedStyle(l), r = l.getBoundingClientRect();
+        return { left: Math.round(r.left), width: Math.round(r.width), dir: cs.flexDirection, gap: cs.rowGap }; })""")
+    assert len(grid) == 7, grid
+    assert len({g["left"] for g in grid}) == 1, grid
+    assert len({g["width"] for g in grid}) == 1, grid
+    assert {(g["dir"], g["gap"]) for g in grid} == {("column", "8px")}, grid
+    _close_editor_discarding(page)
+
+
+def _close_editor_discarding(page):
+    page.keyboard.press("Escape")
+    if page.locator("#confirm-dialog:not([hidden])").count():
+        page.click("#confirm-ok")
+    page.wait_for_selector("#agenda-editor", state="hidden", timeout=5000)

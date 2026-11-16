@@ -315,6 +315,16 @@ body.agenda-editor-open #confirm-dialog { z-index: 220; }
   box-sizing: border-box;
 }
 .agenda-editor-heading { margin: 0 0 10px; font-size: var(--text-lg); font-weight: 700; }
+/* Top-level fields of the editor form one single-column grid: label text above its field, same gap and left edge.
+   Grouped fields (repeat, date/time) keep their tighter spacing inside their own containers. */
+#agenda-editor .agenda-editor-scroll > .settings-row.stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  text-align: start;
+}
 /* Field error texts stay hidden until the field above is invalid after user input. */
 .agenda-field-error { display: none; margin: 0 0 6px; }
 label:has(:user-invalid) + .agenda-field-error,
