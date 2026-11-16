@@ -20,10 +20,10 @@
       "url": "/static/js/admin.087f5c3c46f3ccfc.js"
     },
     "js/agenda-calendars.js": {
-      "bytes": 20408,
-      "sha256": "9ad4411411e0c4d9e7f0b31b8980f884db71fdc24bc057162640cc36c2e5063e",
-      "sri": "sha384-USRfdUWsiEf0l7RLUzEFLmZxxi4T0Hm3J9PFar/v/nJ7ZtP63SCTmhV0WxLFcJw2",
-      "url": "/static/js/agenda-calendars.9ad4411411e0c4d9.js"
+      "bytes": 20463,
+      "sha256": "05358d7f24d7b2cb29b7294631266dd4054a30e51d3cfec89b333437be2ea478",
+      "sri": "sha384-DNEEweTR2WjW8u55WrlvswCP4jTPgMrTxssZ/bQjmZqkI35XsRMkTQDkb1WJSnUP",
+      "url": "/static/js/agenda-calendars.05358d7f24d7b2cb.js"
     },
     "js/agenda-ics.js": {
       "bytes": 30015,
@@ -585,6 +585,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "823c3f67574f4d02a2a68a22686951d42da1eb7d25df2df7b53c1b13b6b87797",
+  "manifest_sha256": "d64a7bd4b5e1d54f8f27810ab704fce3b561821d1b0612fb6d9501331266cbf3",
   "version": 1
 }

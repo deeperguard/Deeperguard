@@ -275,7 +275,9 @@
       + '<fieldset class="agenda-cal-delete-choice"><legend class="sr-only">Events in this calendar</legend>'
       + '<label class="settings-hint"><input type="radio" name="mode" value="move" checked> Move them to '
       + `<select name="target" aria-label="Calendar to move the events to">`
-      + others.map((c) => `<option value="${esc(c.id)}"${c.id === defId ? ' selected' : ''}>${esc(c.name)}</option>`).join('')
+      + others.map((c) => (
+        `<option value="${esc(c.id)}"${c.id === defId ? ' selected' : ''}>${esc(c.name)}${c.id === defId ? ' (default)' : ''}</option>`
+      )).join('')
       + '</select></label>'
       + '<label class="settings-hint"><input type="radio" name="mode" value="delete"> Delete them too</label>'
       + '</fieldset>'
