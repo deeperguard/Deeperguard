@@ -19172,6 +19172,12 @@
     if (ui.docViewer) ui.docViewer.style.paddingTop = '';
   }
 
+  function closeFindBarToNote() {
+    hideFindBar();
+    if (!ui.body.hidden) ui.body.focus();
+    else if (!ui.preview.hidden) ui.preview.focus();
+  }
+
   function syncFindBarChrome(open = findBarOpen()) {
     ui.editor?.classList.toggle('find-open', !!open);
     document.body.classList.toggle('find-bar-open', !!open);
@@ -21084,9 +21090,7 @@
     }
     if (event.key === 'Escape') {
       event.stopPropagation();
-      hideFindBar();
-      if (!ui.body.hidden) ui.body.focus();
-      else if (!ui.preview.hidden) ui.preview.focus();
+      closeFindBarToNote();
     }
   });
   document.getElementById('find-next').addEventListener('click', () => advanceFind(1));
@@ -26255,7 +26259,7 @@ async function showSettings() {
       }
       const findBar = document.getElementById('find-bar');
       if (findBar && !findBar.hidden) {
-        hideFindBar();
+        closeFindBarToNote();
         stop();
         return;
       }

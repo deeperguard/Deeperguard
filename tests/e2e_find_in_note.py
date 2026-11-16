@@ -119,7 +119,9 @@ def main() -> int:
             page.focus("#find-input")
             page.keyboard.press("Escape")
             page.wait_for_function("() => document.getElementById('find-bar').hidden", timeout=5000)
-            assert focused_id(page) != "INPUT#find-input", "Esc left focus in the closed find box"
+            # Esc must hand focus to the note itself, not leave it on the hidden
+            # find box (the browser drops that focus later, at its own pace).
+            assert focused_id(page) == "TEXTAREA#note-body", focused_id(page)
 
             # Chromium logs this on every page load because the CSP is delivered
             # via <meta>; it is unrelated to find.
