@@ -58,7 +58,7 @@ Weergave van GFM-tabellen met uitlijning (`:---`, `:---:`, `---:`) en horizontaa
 schermen. Tabeleditor: cursor in een tabel toont een werkbalk om rij/kolom boven/onder/links/rechts toe te
 voegen, te verwijderen, te verplaatsen, en kolomuitlijning te zetten; Tab/Shift+Tab loopt door de cellen.
 De editor schrijft altijd terug als nette GFM-pipetabel (kolombreedtes uitgelijnd alleen als de oorspronkelijke
-tabel dat al was, zie round-trip, sectie 2.2). Typen in de Markdown-bron zelf sluit het paneel stil (bewust: de
+tabel dat al was, zie round-trip, sectie 2.2). Typen in de Markdown-bron zelf sluit het paneel met een korte melding (bewust: de
 bron is dan de enige plek waar je bewerkt); de editor zelf houdt het paneel open bij zijn eigen schrijfacties.
 
 ### 1.4 Ctrl+F binnen een notitie
