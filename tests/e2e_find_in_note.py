@@ -4,7 +4,8 @@ Checks in the real page: Ctrl+F with focus outside the note leaves the find bar
 closed; Ctrl+F with focus in the note opens it and focuses the find box; the
 counter (#find-count, aria-live) reads "n/m" and follows Enter (next), Shift+Enter
 (previous, wrapping at both ends) and a query with no hits reads "0/0"; Esc closes
-the bar. Any page error fails the run.
+the bar and leaves focus in the note, both from the find box and from another
+control in the bar (the global Escape path). Any page error fails the run.
 
 Missing Playwright is a failure, not a skip.
 
@@ -121,6 +122,16 @@ def main() -> int:
             page.wait_for_function("() => document.getElementById('find-bar').hidden", timeout=5000)
             # Esc must hand focus to the note itself, not leave it on the hidden
             # find box (the browser drops that focus later, at its own pace).
+            assert focused_id(page) == "TEXTAREA#note-body", focused_id(page)
+
+            # Esc from another control in the bar (not the find box) takes the
+            # global Escape path, which must also hand focus back to the note.
+            page.click("#note-body")
+            page.keyboard.press("Control+f")
+            page.wait_for_function("() => !document.getElementById('find-bar').hidden", timeout=5000)
+            page.focus("#find-next")
+            page.keyboard.press("Escape")
+            page.wait_for_function("() => document.getElementById('find-bar').hidden", timeout=5000)
             assert focused_id(page) == "TEXTAREA#note-body", focused_id(page)
 
             # Chromium logs this on every page load because the CSP is delivered
