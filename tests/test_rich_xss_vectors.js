@@ -165,7 +165,8 @@ assert.strictEqual(NotesSanitize.safeRichImageSrc('blob:https://app.example/123'
 const runner = path.join(__dirname, 'rich_xss_vectors_browser.py');
 const browser = spawnSync('python3', [runner], { encoding: 'utf8' });
 if (browser.status === 77) {
-  // The DOMPurify layer is only exercised here, so CI sets REQUIRE_BROWSER_TESTS=1 to make a skip fatal.
+  // The DOMPurify layer is only exercised here. Nothing in the repo sets REQUIRE_BROWSER_TESTS yet:
+  // set REQUIRE_BROWSER_TESTS=1 manually (or in the CI job) to make a skip fatal.
   assert.notStrictEqual(process.env.REQUIRE_BROWSER_TESTS, '1', 'REQUIRE_BROWSER_TESTS=1 but the real-DOM run was skipped: ' + browser.stdout.trim());
   console.warn('WARNING: real-DOM (DOMPurify) run SKIPPED, not tested: ' + browser.stdout.trim());
 } else {
