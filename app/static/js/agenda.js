@@ -273,10 +273,10 @@
   }
 
   function listEmptyMessage() {
-    if (state.view === 'day') return 'No events this day.';
-    if (state.view === '3day') return 'No events in this range.';
-    if (state.view === 'week') return 'No events this week.';
-    return 'No events in this period.';
+    if (state.view === 'day') return 'No events this day. Use + to add one.';
+    if (state.view === '3day') return 'No events in this range. Use + to add one.';
+    if (state.view === 'week') return 'No events this week. Use + to add one.';
+    return 'No events in this period. Use + to add one.';
   }
 
   function layoutAllDayLanes(allDayOcc, days) {
@@ -1600,7 +1600,7 @@
     if (!dayOcc.length && dayTasks.length) {
       // Tasks only: no "No events" line under them.
     } else if (!dayOcc.length) {
-      html += '<p class="muted agenda-month-daylist-empty">No events</p>';
+      html += '<p class="muted agenda-month-daylist-empty">No events this day. Use + to add one.</p>';
     } else {
       html += '<ul class="agenda-list">';
       dayOcc.forEach((o) => {
@@ -2930,6 +2930,7 @@
       syncRemindersAfterSave(id);
       closeEditor();
       render();
+      toastMsg('Occurrence saved');
       return;
     }
 
@@ -2989,6 +2990,7 @@
     syncRemindersAfterSave(id);
     closeEditor();
     render();
+    toastMsg('Event saved');
   }
 
   /** Calendar picker in the editor; the option text is the name, so no color-only cue. */
