@@ -18,6 +18,14 @@ All three checks pass, so the test is a normal passing regression test (not xfai
 No failing step was observed, so the step where it goes wrong for the tester is unknown.
 The test did not exercise the Web Push prompt (out of scope here).
 
+## Status: geen fix nodig, waarschijnlijk testartefact
+
+The failure was not reproduced (see above), so no app code was changed. The
+regression test has no skip/xfail and already runs as a normal test. The
+report most likely comes from the tester's environment (for example a non-Pro
+plan, see the hypothesis below, where the click only shows a toast), not from a
+defect in the tab switch or the pane display.
+
 ## How tabs switch
 
 `setAppTab()` in `app/static/js/app.js:4513` sets `#app[data-app-tab]`, hides
