@@ -3288,6 +3288,14 @@
         }
       });
     }
+    // Mirror the visible error state (:user-invalid) into aria-invalid so assistive tech announces it.
+    ['agenda-edit-start', 'agenda-edit-end', 'agenda-edit-until', 'agenda-edit-reminders-custom', 'agenda-edit-webcall'].forEach((id) => {
+      const field = document.getElementById(id);
+      if (!field) return;
+      ['change', 'blur'].forEach((type) => field.addEventListener(type, () => {
+        field.setAttribute('aria-invalid', field.matches(':user-invalid') ? 'true' : 'false');
+      }));
+    });
     const webcallEl = document.getElementById('agenda-edit-webcall');
     if (webcallEl) {
       webcallEl.addEventListener('input', () => {

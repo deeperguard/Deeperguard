@@ -2790,9 +2790,9 @@
           <label class="settings-row checkbox"><span>1 day before</span><input type="checkbox" data-agenda-reminder-offset="1440"></label>
         </div>
         <label class="settings-row stacked" for="agenda-edit-reminders-custom">Custom (minutes before, e.g. 20 or 20, 120)
-          <input id="agenda-edit-reminders-custom" type="text" inputmode="numeric" maxlength="60" autocomplete="off" spellcheck="false" pattern="\s*\d+(?:[\s,;]+\d+)*[\s,;]*" aria-describedby="agenda-edit-reminders-custom-error">
+          <input id="agenda-edit-reminders-custom" type="text" inputmode="numeric" maxlength="60" autocomplete="off" spellcheck="false" pattern="\s*(?=\d{1,6}(?!\d))0*(?:\d{1,4}|[1-3]\d{4}|40[0-2]\d{2}|403[01]\d|40320)(?:[\s,;]+(?=\d{1,6}(?!\d))0*(?:\d{1,4}|[1-3]\d{4}|40[0-2]\d{2}|403[01]\d|40320))*[\s,;]*" aria-describedby="agenda-edit-reminders-custom-error">
         </label>
-        <p class="field-error agenda-field-error" id="agenda-edit-reminders-custom-error">Use whole numbers of minutes, separated by commas, for example 20, 120.</p>
+        <p class="field-error agenda-field-error" id="agenda-edit-reminders-custom-error">Use whole numbers of minutes from 0 to 40320 (28 days), separated by commas, for example 20, 120.</p>
         <p class="settings-hint agenda-local-reminders-hint">Reminders only work while Deeperguard is open in your browser. They show in the app and, if you allowed it, as a browser notification. These reminders send no email and no push message.</p>
         <div class="agenda-editor-server-reminders" data-plan-feature="agenda_reminders" data-plan-lock-hint="Email and push reminders, which also work when Deeperguard is closed, are a separate Pro option.">
           <p class="settings-hint agenda-reminders-privacy-hint">Email and push reminders (Pro, optional). Offsets stay in your vault. The server sees reminder times and channel, never event titles, locations or notes.</p>
@@ -2814,7 +2814,7 @@
         <div id="agenda-edit-colors" class="agenda-color-swatches" aria-labelledby="agenda-edit-colors-legend"></div>
       </fieldset>
       <label class="settings-row stacked" for="agenda-edit-webcall">Meeting link (https only)
-        <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://" pattern="https://.+" aria-describedby="agenda-edit-webcall-error">
+        <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://" pattern="[Hh][Tt][Tt][Pp][Ss]://.+" aria-describedby="agenda-edit-webcall-error">
       </label>
       <p class="field-error agenda-field-error" id="agenda-edit-webcall-error">Enter a full link starting with https://. Other links are not saved.</p>
       <p id="agenda-edit-join" class="settings-hint" hidden></p>
