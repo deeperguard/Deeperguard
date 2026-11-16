@@ -10,6 +10,7 @@ deliberate PR with the upstream changelog and new hashes. See `docs/design/rich-
 | markdown-it | 14.1.0 | MIT | Markdown parser for the note view (`html: false`) |
 | DOMPurify | 3.2.6 | Apache-2.0 (dual MPL-2.0 OR Apache-2.0; used under Apache-2.0) | Allowlist HTML sanitizer, last step before the note view enters the DOM |
 | highlight.js | 11.11.1 | BSD-3-Clause | Syntax colouring of fenced code blocks in the note view (the official "common" bundle: 36 languages; output still goes through DOMPurify) |
+| Mermaid | 11.4.1 | MIT | Diagrams from ```` ```mermaid ```` blocks; runs only inside a sandboxed iframe (`/static/mermaid-sandbox.html`), never in the app page |
 
 ## markdown-it 14.1.0
 
@@ -44,6 +45,18 @@ deliberate PR with the upstream changelog and new hashes. See `docs/design/rich-
 |---|---|---|
 | `app/static/js/vendor/highlightjs/highlight.min.js` | `package/highlight.min.js` | `c4a399dd6f488bc97a3546e3476747b3e714c99c57b9473154c6fb8d259b9381` |
 | `app/static/js/vendor/highlightjs/LICENSE` | `package/LICENSE` | `6c081431591d9df696c82dc598fe1423765b8a299b200ed00b281afd0f64c490` |
+
+## Mermaid 11.4.1
+
+- Source: https://registry.npmjs.org/mermaid/-/mermaid-11.4.1.tgz (https://github.com/mermaid-js/mermaid)
+- Tarball sha256: `ec7b61b391aaa24bf666fd20e48d0a626eeb4a95b95bc6b3016a122d7f0bc2af` (npm `integrity` verified)
+- Last checked: 2026-11-16
+- Loaded only by `app/static/mermaid-sandbox.html`, which is shown in an `<iframe sandbox="allow-scripts">` (no `allow-same-origin`) and only when a note contains a `mermaid` block.
+
+| File | Upstream path | sha256 |
+|---|---|---|
+| `app/static/js/vendor/mermaid/mermaid.min.js` | `package/dist/mermaid.min.js` | `a43bc1afd446f9c4cc66ac5dd45d02e8d65e26fc5344ec0ef787f88d6ddb6f9e` |
+| `app/static/js/vendor/mermaid/LICENSE` | `package/LICENSE` | `ec9fb67dcb25eccc416ed56e1aab819222c805a2a4bfe4cb19e7556bf2ffde80` |
 
 ## Reproducing
 

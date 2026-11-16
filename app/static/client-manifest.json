@@ -1,11 +1,11 @@
 {
-  "asset_count": 91,
+  "asset_count": 94,
   "assets": {
     "css/app.css": {
-      "bytes": 341890,
-      "sha256": "f933aa78ccd775f6790052fd1ff084e0036aaba743870a5dedff691ef19f2d09",
-      "sri": "sha384-VY2dJM+/BWx0Bd5G51+pQ+cZzcFlBQjjeMR4v2Xh0GPFRnfXushJXanw2dzOzCkR",
-      "url": "/static/css/app.f933aa78ccd775f6.css"
+      "bytes": 342660,
+      "sha256": "050baf077c8f337bfb65269245a6f4497aaa5530b219b67b4ee25ba0f2ff4940",
+      "sri": "sha384-uyCrrsRUk5UjBAWeuWAzH7JZjvAfV3N0Gcx8D+7KsS/G76ya5kxlOibExXdj4Jti",
+      "url": "/static/css/app.050baf077c8f337b.css"
     },
     "css/marketing.css": {
       "bytes": 55848,
@@ -247,6 +247,18 @@
       "sri": "sha384-yQMpT9izc4KqGuAPNZ6YzpT0wuN9LJknfyCANJPzsHSqOMltOLJ1YO739J/F3HZS",
       "url": "/static/js/marketing.de66654aca477c3d.js"
     },
+    "js/mermaid-sandbox.js": {
+      "bytes": 2062,
+      "sha256": "6c5bfc99c64d5e909b40f95685b91c4c49e4c47bf86404b55c0fd86514ab9ba8",
+      "sri": "sha384-ISsk5wwvLOXUyvNXwxfnxqSnma2sMpzjuDlHHMJINkjIRWW1FFDIZjTEMbCvb7x3",
+      "url": "/static/js/mermaid-sandbox.6c5bfc99c64d5e90.js"
+    },
+    "js/mermaid-view.js": {
+      "bytes": 5206,
+      "sha256": "561423a0a37eb28bb26cb1417df822c1d803f4d2c7536416d4b2f3564bb28198",
+      "sri": "sha384-jIPWekepW5LdVbKPII0fTIJjbCL4YeylOum7gvTYvRyLEF0DeQNoDynUy1WV/raD",
+      "url": "/static/js/mermaid-view.561423a0a37eb28b.js"
+    },
     "js/note-history.js": {
       "bytes": 1674,
       "sha256": "c130d18227e2c783968ad3737b79ca8858d02365fc4b764351fa0b25d7a9a8b7",
@@ -290,10 +302,10 @@
       "url": "/static/js/photo-ocr-preprocess.ed3aeeb103df06bc.js"
     },
     "js/preview.js": {
-      "bytes": 68940,
-      "sha256": "4541df2e040381ab9818bdc9101425b0cc4ccca3228b3852a142e5b5c086c37c",
-      "sri": "sha384-OZK4bPo8c8skb2YbhhkUu3TQUBpXlRhb9kCwfCkvyQzsUgr4abzSAylbKhzlIEnc",
-      "url": "/static/js/preview.4541df2e040381ab.js"
+      "bytes": 69126,
+      "sha256": "8ee83e9cf3d046f0f1b9e5b4a003b66251879091f22ba185da0d7275f255bbbb",
+      "sri": "sha384-H0RmHb8o/N007RfZHIl+yq6NmyyWwlEKrcH0PJKHo8x8qVxm3ibHV/012jVFXca6",
+      "url": "/static/js/preview.8ee83e9cf3d046f0.js"
     },
     "js/quick-capture.js": {
       "bytes": 4236,
@@ -481,6 +493,12 @@
       "sri": "sha384-wLhprpjsmjc/XYIcF+LpMxd8yS1gss6jhevOp6F6zhiIoFK6AmHtm4bGKtehTani",
       "url": "/static/js/vendor/markdown-it/markdown-it.min.38c70a1e7ca91ab4.js"
     },
+    "js/vendor/mermaid/mermaid.min.js": {
+      "bytes": 2571900,
+      "sha256": "a43bc1afd446f9c4cc66ac5dd45d02e8d65e26fc5344ec0ef787f88d6ddb6f9e",
+      "sri": "sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I",
+      "url": "/static/js/vendor/mermaid/mermaid.min.a43bc1afd446f9c4.js"
+    },
     "js/vendor/noble-argon2.js": {
       "bytes": 13818,
       "sha256": "fe556cac420e8b65d8fed4280ae328ef3483804d8836521e6638bb19c21ae961",
@@ -549,6 +567,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "57487e9c0975c676dca929777a7c5411702cb519ed5f71a5cb20075762aceb26",
+  "manifest_sha256": "f9b498025d550514add7908607a03ddef764b34ef4bd2a9a918c7fc171d0358f",
   "version": 1
 }

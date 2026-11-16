@@ -80,7 +80,7 @@ scrollpositie zo goed mogelijk. Beide modi bewerken dezelfde `body`-string.
 
 ### 1.7 Mermaid-diagrammen
 Een blok ```` ```mermaid ```` wordt als diagram getoond, gerenderd in een geïsoleerd iframe (sectie 4.4). Bij
-een fout of als Mermaid uit staat blijft de bron als codeblok zichtbaar met een korte melding.
+een fout blijft de bron als codeblok zichtbaar met een korte melding. Een aan/uit-instelling (open vraag 3) is er nog niet; Mermaid staat nu altijd aan.
 
 ### 1.8 Hoe anderen het doen, en waar wij beter willen zijn
 *Uit algemene kennis, niet opnieuw geverifieerd; details verschillen per versie en per plugin. Controleer
@@ -236,22 +236,24 @@ geen metadata toe.
   **zonder `allow-same-origin`**, dus met een opaque origin: geen toegang tot cookies, IndexedDB, de
   kluissleutel, het DOM van de app of `window.parent` buiten `postMessage`. Geen `allow-forms`,
   `allow-popups`, `allow-top-navigation`, `allow-modals`.
-- Het iframe laadt een eigen statisch document (`/static/mermaid-sandbox.html`) met een **eigen strikte CSP**
-  (`default-src 'none'; script-src 'self'; style-src 'self'; img-src data:`; connect geblokkeerd), geleverd
-  met een header op die route (zoals nu al voor de workers in `app.py:573`). Als Mermaid `unsafe-eval` zou
-  vereisen, geldt die uitzondering alleen voor dit document, niet voor de app.
-  *Vóór mijlpaal 6 moet dit met de gekozen Mermaid-versie worden aangetoond; zo niet, dan valt Mermaid af
-  of wordt een eval-vrij alternatief gekozen.*
-- Communicatie alleen via `postMessage` met strikte schema's: ouder → iframe `{id, source, theme}`; iframe →
-  ouder `{id, svg | error}`. De ouder controleert `event.source` (de eigen iframe-referentie) en `id`;
-  `origin` is `"null"` bij een sandbox, dus geen vertrouwen op origin-strings.
-- **SVG-uitvoer wordt in de ouder opnieuw gesaneerd** (SVG-allowlist: geen `script`, `foreignObject`,
-  `on*`, `href` buiten `#`, geen `style` met `url()`) en daarna als `<img src="blob:…">`/geïsoleerd
-  getoond, niet inline met `innerHTML` in de app-DOM. Aanbevolen: tonen als `<img>` van een `blob:`-SVG
-  (scripts in een SVG-in-`img` draaien niet).
+- Het iframe laadt een eigen statisch document (`/static/mermaid-sandbox.html`, met `js/mermaid-sandbox.js`) met een
+  **eigen strikte CSP**, geleverd met een header op die route (`MERMAID_SANDBOX_CSP` in `app/app.py`, naast de
+  workers): `default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:` (dus geen
+  `connect-src`, geen netwerk, geen `unsafe-eval`; Mermaid 11.4.1 draait zonder eval, aangetoond in
+  `tests/test_mermaid_sandbox_browser.py`). `style-src 'unsafe-inline'` geldt alleen voor dit document, omdat Mermaid
+  zijn SVG met stijlen opmaakt. De route krijgt `X-Frame-Options: SAMEORIGIN` en `frame-ancestors 'self'` zodat
+  alleen de app het kan inbedden; de rest van de app houdt `DENY`/`'none'`.
+- Communicatie alleen via `postMessage`: ouder → iframe `{type, id, source, theme}`; iframe → ouder
+  `{type, id, height | error}`. Het iframe toont het diagram zelf; **er gaat nooit HTML of SVG terug naar de
+  app**, alleen een hoogte (getal, begrensd) of een foutmelding (tekst, via `textContent`). De ouder controleert
+  `event.source` (de eigen iframe-referentie), `type` en `id`; het iframe controleert `event.source ===
+  window.parent`, het formaat en de bronlengte (max 20.000 tekens). `origin` is `"null"` bij een sandbox, dus er
+  wordt niet op origin-strings vertrouwd. De ouder wacht op een `ready`-bericht en verstuurt de bron pas daarna.
+- Eén render tegelijk, time-out van 10 s (daarna wordt het iframe verwijderd en blijft de bron staan).
+- Het iframe (en dus de Mermaid-bundel) wordt pas aangemaakt als een notitie een mermaid-blok bevat.
 - Mermaid-instellingen: `securityLevel: 'strict'`, `htmlLabels` uit, `click`-handlers en `javascript:`/
-  `callback`-interacties uitgeschakeld; `%%{init}%%`-directives in de bron worden genegeerd of gefilterd
-  (vector in de testdocument). Links in diagrammen zijn uit.
+  `callback`-interacties uitgeschakeld; `%%{init}%%`-directives in de bron worden verwijderd
+  (vector in het testdocument). Links in diagrammen zijn uit.
 - Geen netwerk: iframe-CSP blokkeert `connect-src`; lettertypen lokaal.
 
 ### 4.5 Toegankelijkheid

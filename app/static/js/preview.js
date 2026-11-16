@@ -1767,6 +1767,8 @@ const NotesPreview = (() => {
 
   function decorateCodeBlocks(root) {
     if (!root?.querySelectorAll || typeof document === 'undefined') return 0;
+    // ```mermaid blocks become sandboxed diagrams first; their source <pre> then gets the copy button too.
+    if (typeof window !== 'undefined') window.NotesMermaid?.decorate?.(root);
     let added = 0;
     root.querySelectorAll('pre.code-preview').forEach((pre) => {
       const { code, button } = codeBlockParts(pre);
