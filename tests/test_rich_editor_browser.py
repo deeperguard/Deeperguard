@@ -317,7 +317,7 @@ def test_pasted_malicious_html_yields_clean_markdown(page, html):
 def test_paste_keeps_readable_text_of_unsafe_markup(page):
     _set(page, "")
     _paste(page, '<p>safe</p><a href="javascript:alert(1)">js link</a><img src=x onerror=alert(1)>')
-    assert _value(page) == "safe\n\njs link" or _value(page) == "safe js link"
+    assert _value(page) == "safe\n\njs link"
 
 
 def test_paste_without_html_inserts_the_plain_text_verbatim(page):
