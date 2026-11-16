@@ -5,7 +5,8 @@ note find bar makes) for hostile search terms and checks: the term is matched
 literally, only text nodes are wrapped in <mark>, no element or script comes
 from the term, and no network request is made.
 
-Called by tests/test_find_in_note.js. Exit 0 = pass, 1 = failures, 77 = prerequisite missing.
+Called by tests/test_find_in_note.js. Exit 0 = pass, 1 = failures or a missing
+prerequisite (Playwright or Chromium). A missing prerequisite is never a skip.
 """
 from __future__ import annotations
 
@@ -52,14 +53,14 @@ def main() -> int:
         from playwright.sync_api import sync_playwright
     except ImportError:
         print("playwright is not installed")
-        return 77
+        return 1
     requests: list[str] = []
     with sync_playwright() as p:
         try:
             browser = p.chromium.launch()
         except Exception as exc:
             print(f"chromium cannot start: {exc}")
-            return 77
+            return 1
         try:
             page = browser.new_page()
             page.on("request", lambda req: requests.append(req.url))
