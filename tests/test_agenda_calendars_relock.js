@@ -36,9 +36,10 @@ const DEF = NotesStore.DEFAULT_CALENDAR_ID;
 
   assert.ok(!Cals.deleteCalendar(DEF, 'move').ok, 'default calendar cannot be deleted');
   assert.ok(Cals.deleteCalendar(id, 'move').ok);
-  const found = NotesStore.listAgendaEvents().find((e) => e.id === 'e1' || e.uuid === 'e1');
+  const found = NotesStore.listAgendaEvents().find((e) => e.id === 'e1');
   assert.ok(found, 'event kept');
-  assert.strictEqual(NotesStore.agendaEventCalendarId(found.content || found), DEF);
+  assert.strictEqual(found.title, 'Overleg');
+  assert.strictEqual(NotesStore.agendaEventCalendarId(found), DEF);
   assert.ok(!Cals.listCalendars().some((c) => c.id === id));
 
   console.log('agenda calendars relock ok');
