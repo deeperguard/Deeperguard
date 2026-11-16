@@ -4,6 +4,12 @@ Register (lands unlocked), click 2FA, dismiss the "Not now" prompt, click 2FA
 again; then reload, unlock again and click 2FA once more. Every time the 2FA
 pane must be visible and the notes list hidden. See docs/bugs/2fa-tab-switch.md.
 
+Limits: the "Not now" prompt is the in-app device-phrase card
+(#device-phrase-prompt), which the app shows by itself after unlock. The real
+Web Push (browser notification permission) prompt is not reproduced here. The
+test runs on the Pro plan only; the Free-plan variant (toast "Included with
+Pro") is not covered.
+
     python tests/e2e_totp_tab_reload_unlock.py
 """
 from __future__ import annotations
@@ -21,20 +27,6 @@ UNLOCKED_JS = """() => location.pathname === '/app'
   && window.NotesStore && NotesStore.isUnlocked && NotesStore.isUnlocked()
   && document.body.classList.contains('unlocked')"""
 
-DISMISS_JS = """() => {
-  const visible = (el) => !!el && !el.disabled && el.getClientRects().length > 0
-    && getComputedStyle(el).visibility !== 'hidden';
-  const hits = [];
-  document.querySelectorAll('button').forEach((btn) => {
-    const label = (btn.textContent || '').trim();
-    if (label === 'Not now' && visible(btn)) {
-      hits.push(btn.id || label);
-      btn.click();
-    }
-  });
-  return hits;
-}"""
-
 STATE_JS = """() => {
   const shown = (el) => !!el && !el.hidden && el.getClientRects().length > 0
     && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden';
@@ -50,16 +42,17 @@ STATE_JS = """() => {
 def check(page, label: str) -> list[str]:
     """Real pointer click on the 2FA tab, then assert the visible panes."""
     page.click("#app-tab-2fa", timeout=10000)
+    timed_out = False
     try:
         page.wait_for_function(
             "() => document.getElementById('app')?.dataset.appTab === '2fa'", timeout=5000
         )
-    except Exception:
-        pass
+    except Exception:  # Playwright TimeoutError; reported as a failure below
+        timed_out = True
     state = page.evaluate(STATE_JS)
-    print(f"{label}:", state)
-    if not state["paneShown"] or state["listShown"]:
-        return [f"{label}: 2FA pane not shown or notes list still visible {state}"]
+    print(f"{label}:", state, "(tab did not switch in time)" if timed_out else "")
+    if timed_out or not state["paneShown"] or state["listShown"]:
+        return [f"{label}: 2FA pane not shown or notes list still visible {state} timed_out={timed_out}"]
     return []
 
 
@@ -103,13 +96,13 @@ def main() -> int:
             page.click("#register-submit")
             page.wait_for_function(UNLOCKED_JS, timeout=120000)
 
-            # Make sure a real "Not now" prompt exists on the notes view.
-            page.evaluate("() => { document.getElementById('device-phrase-prompt').hidden = false; }")
+            # The "Not now" card appears by itself after unlock (no phrase set, not dismissed).
+            page.wait_for_selector("#device-phrase-prompt:not([hidden])", timeout=10000)
             failures += check(page, "after unlock")
             # The prompt lives in the notes view: return there if the 2FA pane hid it.
-            if not page.evaluate(DISMISS_JS):
+            if not page.is_visible("#btn-device-phrase-prompt-dismiss"):
                 page.click("#app-tab-notes", timeout=10000)
-                page.click("#btn-device-phrase-prompt-dismiss", timeout=10000)
+            page.click("#btn-device-phrase-prompt-dismiss", timeout=10000)
             page.wait_for_timeout(300)
             failures += check(page, "after Not now")
 
