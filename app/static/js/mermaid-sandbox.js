@@ -2,6 +2,7 @@
 // network). It only accepts {type, id, source, theme} from its parent and only answers with a height
 // or an error text; it never sends markup back (docs/design/rich-editor.md, 4.4).
 (() => {
+  // Keep equal to MAX_SOURCE in mermaid-view.js (the parent does not send longer sources).
   const MAX_SOURCE = 20000;
   const out = document.getElementById('out');
   let busy = false;
