@@ -2,10 +2,10 @@
   "asset_count": 94,
   "assets": {
     "css/app.css": {
-      "bytes": 343027,
-      "sha256": "fac6c896add8856e518b5a1d410701cdf8bcf9eb437637c5020e4711bbb7a3d2",
-      "sri": "sha384-VSBq8ZdsJnJxM4b4TfJXG2T8Y6MeX6VrDSDaV5NuW5Azx2X95N8g/dSlXHpvQCZ+",
-      "url": "/static/css/app.fac6c896add8856e.css"
+      "bytes": 343616,
+      "sha256": "13b1ba15ed6f5192b330ccceddfe5c116385adc62f5dd9255c0ba0fcb6c84fe5",
+      "sri": "sha384-SX/Jgt1uPc6+nYjMU3wmlo6qvUSQ/XMtJb3RH3nVBm4odMwrEO5l1oBuiWoLdno7",
+      "url": "/static/css/app.13b1ba15ed6f5192.css"
     },
     "css/marketing.css": {
       "bytes": 55848,
@@ -20,10 +20,10 @@
       "url": "/static/js/admin.087f5c3c46f3ccfc.js"
     },
     "js/agenda-calendars.js": {
-      "bytes": 18862,
-      "sha256": "92579c82ccc66ff169c35733cc19b4ebd27da5718f3db33d2854b993d93590a3",
-      "sri": "sha384-Pyd+v67G88q3wggObR58DWH9xMPuGbXGOA1S4GUNN9vKegmmWR1R7kYSZpQE3EZs",
-      "url": "/static/js/agenda-calendars.92579c82ccc66ff1.js"
+      "bytes": 20408,
+      "sha256": "9ad4411411e0c4d9e7f0b31b8980f884db71fdc24bc057162640cc36c2e5063e",
+      "sri": "sha384-USRfdUWsiEf0l7RLUzEFLmZxxi4T0Hm3J9PFar/v/nJ7ZtP63SCTmhV0WxLFcJw2",
+      "url": "/static/js/agenda-calendars.9ad4411411e0c4d9.js"
     },
     "js/agenda-ics.js": {
       "bytes": 30015,
@@ -80,10 +80,10 @@
       "url": "/static/js/agenda-tz.57449e80ad590b0f.js"
     },
     "js/agenda.js": {
-      "bytes": 142512,
-      "sha256": "e3bd9233c0b8f5aadc79edcfa4183f4a30c997df658798f0f065129fb2079c6a",
-      "sri": "sha384-ZNV6c4zWEtXluPGXv9ADli9pGsAW0nWkwMM+4Ih6mhfOrbY5XkTc3oBoqQFEqfcC",
-      "url": "/static/js/agenda.e3bd9233c0b8f5aa.js"
+      "bytes": 143575,
+      "sha256": "f699888df5bff2c1d7dfb43a1c0c3140d31d744e1d53608a4d9cc34862db73cd",
+      "sri": "sha384-wJDGp8+2WX24DOQO1B+TgJCFKkKG12Io9rfaHhlZexVG/RQSevW1lTYTkdrVNH6y",
+      "url": "/static/js/agenda.f699888df5bff2c1.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -567,6 +567,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "017588b7f227677acb52de3a3a23ee78f29e61155aa25dcd2209983302b22c22",
+  "manifest_sha256": "f7ca52002fa564bc2f80d682e802b3cbcc2fc929b43438163bc2ae107afdc8ba",
   "version": 1
 }
