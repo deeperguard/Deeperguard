@@ -19111,7 +19111,7 @@
   function findMatchOptions() {
     // The editor's find/replace matches the typed text exactly; only the
     // search box uses word and phrase rules.
-    return { caseSensitive: !!findCaseSensitive, literal: true };
+    return { caseSensitive: !!findCaseSensitive, literal: true, foldAccents: true };
   }
 
   function normalizeFindIndex() {
@@ -26166,9 +26166,12 @@ async function showSettings() {
         createNote();
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        if (currentId) showFindBar();
-        else ui.search.focus();
+        // Only take over Ctrl/Cmd+F while focus is inside the open note;
+        // everywhere else the browser's own find keeps working.
+        if (currentId && ui.editor && !ui.editor.hidden && ui.editor.contains(e.target)) {
+          e.preventDefault();
+          showFindBar();
+        }
       }
       if (!typing(e.target) && (e.key === 'j' || e.key === 'k')) {
         e.preventDefault();
