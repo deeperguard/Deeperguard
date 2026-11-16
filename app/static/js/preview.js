@@ -1803,12 +1803,13 @@ const NotesPreview = (() => {
       return false;
     }
     clearTimeout(btn._codeCopyTimer);
+    clearTimeout(btn._codeCopyStatusTimer);
     btn.textContent = CODE_COPIED_LABEL;
     btn.classList.add('is-copied');
     // Clear first so a second copy of the same block is announced again.
     if (status) {
       status.textContent = '';
-      setTimeout(() => { status.textContent = CODE_COPIED_LABEL; }, 50);
+      btn._codeCopyStatusTimer = setTimeout(() => { status.textContent = CODE_COPIED_LABEL; }, 50);
     }
     btn._codeCopyTimer = setTimeout(() => {
       btn.textContent = CODE_COPY_LABEL;
