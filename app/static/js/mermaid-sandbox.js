@@ -7,6 +7,9 @@
   const out = document.getElementById('out');
   let busy = false;
 
+  // targetOrigin '*' is needed: this frame's origin is opaque (no allow-same-origin), so no origin can be named.
+  // That is harmless here: the message goes only to window.parent and holds a height or an error text, never
+  // markup or note data, and the parent checks event.source before it uses the reply.
   function reply(message) {
     window.parent.postMessage(message, '*');
   }
