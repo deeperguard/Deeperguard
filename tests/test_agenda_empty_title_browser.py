@@ -80,48 +80,71 @@ def test_new_event_blank_title_is_blocked(page, blank):
     page.keyboard.type("x")
     assert page.locator("#agenda-edit-title-error").is_hidden()
     assert page.locator("#agenda-edit-title").get_attribute("aria-invalid") is None
-    page.click("#agenda-edit-cancel")
-    if page.locator("#confirm-ok:visible").count():
-        page.click("#confirm-ok")
-    page.wait_for_selector("#agenda-editor", state="hidden", timeout=5000)
+    _cancel_editor(page)
 
 
-def test_valid_title_saves_then_edit_blank_blocked_and_untitled_renamable(page):
-    _add_event(page)
-    page.fill("#agenda-edit-title", "Planning")
-    page.click("#agenda-edit-save")
-    page.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
-    titles = page.evaluate("() => NotesStore.listAgendaEvents().map(e => e.title)")
-    assert "Planning" in titles
+def _cancel_editor(pg):
+    pg.click("#agenda-edit-cancel")
+    if pg.locator("#confirm-ok:visible").count():
+        pg.click("#confirm-ok")
+    pg.wait_for_selector("#agenda-editor", state="hidden", timeout=5000)
 
-    # Edit: blank title does not save.
-    page.locator("#agenda-root [data-agenda-id]").first.click()
-    page.wait_for_timeout(200)
-    if page.locator("#agenda-detail-card:not([hidden])").count():
-        page.click("#agenda-detail-edit")
-    if page.locator("#agenda-scope-chooser:not([hidden])").count():
-        page.click('[data-agenda-edit-scope="series"]')
-    page.wait_for_selector("#agenda-editor:not([hidden])", timeout=10_000)
+
+def _save_new_event(pg, title):
+    """Create an event with `title` through the editor and return its id."""
+    before = set(_event_ids(pg))
+    _add_event(pg)
+    pg.fill("#agenda-edit-title", title)
+    pg.click("#agenda-edit-save")
+    pg.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
+    return next(i for i in _event_ids(pg) if i not in before)
+
+
+def _event_ids(pg):
+    return pg.evaluate("() => NotesStore.listAgendaEvents().map(e => e.id)")
+
+
+def _titles(pg):
+    return pg.evaluate("() => NotesStore.listAgendaEvents().map(e => e.title)")
+
+
+def _open_event_editor(pg, event_id):
+    pg.locator(f'#agenda-root [data-agenda-id="{event_id}"]').first.click()
+    pg.wait_for_selector(
+        "#agenda-detail-card:not([hidden]), #agenda-scope-chooser:not([hidden]), #agenda-editor:not([hidden])",
+        timeout=10_000,
+    )
+    if pg.locator("#agenda-detail-card:not([hidden])").count():
+        pg.click("#agenda-detail-edit")
+    if pg.locator("#agenda-scope-chooser:not([hidden])").count():
+        pg.click('[data-agenda-edit-scope="series"]')
+    pg.wait_for_selector("#agenda-editor:not([hidden])", timeout=10_000)
+
+
+def test_valid_title_saves(page):
+    _save_new_event(page, "Planning")
+    assert "Planning" in _titles(page)
+
+
+def test_edit_blank_title_is_blocked_and_nothing_is_saved(page):
+    event_id = _save_new_event(page, "Planning")
+    titles_before = _titles(page)
+    _open_event_editor(page, event_id)
     page.fill("#agenda-edit-title", "  ")
     page.click("#agenda-edit-save")
     _assert_blocked(page, "")
-    titles = page.evaluate("() => NotesStore.listAgendaEvents().map(e => e.title)")
-    assert titles == ["Planning"]
+    assert _titles(page) == titles_before
+    assert "Untitled" not in _titles(page)
+    _cancel_editor(page)
 
-    # An existing event titled 'Untitled' opens and can get a new title.
-    page.fill("#agenda-edit-title", "Untitled")
-    page.click("#agenda-edit-save")
-    page.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
-    page.locator("#agenda-root [data-agenda-id]").first.click()
-    page.wait_for_timeout(200)
-    if page.locator("#agenda-detail-card:not([hidden])").count():
-        page.click("#agenda-detail-edit")
-    if page.locator("#agenda-scope-chooser:not([hidden])").count():
-        page.click('[data-agenda-edit-scope="series"]')
-    page.wait_for_selector("#agenda-editor:not([hidden])", timeout=10_000)
+
+def test_untitled_event_can_be_renamed(page):
+    event_id = _save_new_event(page, "Untitled")
+    _open_event_editor(page, event_id)
     assert page.input_value("#agenda-edit-title") == "Untitled"
     page.fill("#agenda-edit-title", "Renamed")
     page.click("#agenda-edit-save")
     page.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
-    titles = page.evaluate("() => NotesStore.listAgendaEvents().map(e => e.title)")
-    assert titles == ["Renamed"]
+    title = page.evaluate(
+        "(id) => NotesStore.listAgendaEvents().find(e => e.id === id)?.title", event_id)
+    assert title == "Renamed"

@@ -205,7 +205,9 @@ const hostileTable = editTable('| h |\n|---|\n| c |', (t) => {
   TE.setCell(t, 1, 0, hostile.join(' '));
 });
 assert.deepStrictEqual(cellTexts(hostileTable)[0], cellTexts(hostileTable)[1]);
-// renderLegacy is the DOM-less fallback: this check runs in plain Node even without Playwright.
+// Plain Node has no DOM, so render() falls back to renderLegacy and DOMPurify does not run here.
+// This block only checks the escaped output of markdown-it and of the fallback. DOMPurify on the
+// table view is checked in real Chromium by tests/test_table_editor_browser.py.
 for (const html of [render(hostileTable), renderRichUnsafe(hostileTable), renderLegacy(hostileTable)]) {
   assert.match(html, /<table>/);
   // Only the table's own elements are markup; the hostile text is all escaped character data.

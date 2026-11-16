@@ -2933,7 +2933,7 @@
         exdates.push(rid);
       }
       overrides[rid] = {
-        title: String(titleEl && titleEl.value || '').trim() || 'Untitled',
+        title: String(titleEl && titleEl.value || '').trim(),
         location: String(locEl && locEl.value || ''),
         notes: String(notesEl && notesEl.value || ''),
         start: start.toISOString(),
@@ -2958,7 +2958,7 @@
     const icalUid = Occ ? Occ.ensureIcalUid(base, id) : (base.ical_uid || '');
     const nextStart = start.toISOString();
     const nextEnd = end.toISOString();
-    const nextTitle = String(titleEl && titleEl.value || '').trim() || 'Untitled';
+    const nextTitle = String(titleEl && titleEl.value || '').trim();
     const nextLocation = String(locEl && locEl.value || '');
     const nextNotes = String(notesEl && notesEl.value || '');
     const nextPatch = {

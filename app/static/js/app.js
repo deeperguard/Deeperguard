@@ -20880,6 +20880,8 @@
     }
     scheduleSave();
     autosizeNoteBody();
+    // Typing in the Markdown source closes an open table editor on purpose: the source is then the
+    // only thing being edited. Only the editor's own writes (setSource sets writing) keep it open.
     if (!tableEditorController.writing) closeTableEditor();
     syncEditLinkOverlay();
     syncSuperscriptFormatMirror();
