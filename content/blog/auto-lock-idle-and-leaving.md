@@ -18,7 +18,7 @@ There are two separate settings in Settings, next to the vault password options.
 
 Some details that are easy to get wrong:
 
-- **What counts as activity.** The timer restarts on a mouse or finger press, a key press, or a touch. Scrolling, or moving the pointer on its own, does not restart it. If you read a long note without clicking or typing, the vault can lock after the chosen time.
+- **What counts as activity.** The timer restarts on a mouse or finger press, a key press, or a touch. If you read a long note without clicking or typing, the vault can lock after the chosen time.
 - **It won't interrupt an unlock.** If an unlock is in progress, the unlock screen is showing, or (on iOS) you are typing in a text field, the timer waits and starts again instead of locking.
 - **Off means off.** With Off, the vault key stays in memory until you lock manually or close the tab. The settings screen says so next to the option. Choose Off only on a device that is yours alone.
 
@@ -30,7 +30,7 @@ Some details that are easy to get wrong:
 - **Immediately**
 - **After 1 minute**
 
-New setups start on **After 1 minute**. If you come back within a minute, you carry on where you were. If you were away a minute or longer, the vault is locked when you return. If the page is reloaded in the meantime, it opens on the lock screen instead.
+New setups start on **After 1 minute**. If you come back within a minute, you carry on where you were. If you were away a minute or longer, the vault is locked when you return. If the page is reloaded in the meantime and you were away for the time you set, the app opens on the lock screen.
 
 A few situations are treated as part of your work rather than as leaving. While the document scanner is open, while a file picker is open, or while the app is installing an update, leaving the page does not start the lock. Otherwise, choosing a file from another app could lock you out of your own note.
 
