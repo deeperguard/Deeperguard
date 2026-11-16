@@ -17,8 +17,14 @@ only. No app code was changed.
 The same-origin assets are not the cause. `marketing.js` with its `integrity`
 attribute, the same-origin `/static/client-manifest.json`, the CSS and the
 service worker produced no failed request in any run. The service worker does
-not handle `/verify` at all, because `isMarketingPage()` makes it return early
-in `app/static/sw.js` (fetch handler).
+handle the `/verify` navigation (`/verify` is not in `isMarketingPage()`), as a
+network-first navigation through `networkFirstNavigate()` in `app/static/sw.js`.
+It does not intercept the GitHub request, though: the fetch handler returns
+early for cross-origin URLs (`!sameOrigin(url)`, `sw.js:522`), so
+`api.github.com` never passes through `respondWith()`. The failing request
+therefore comes straight from the page to the network, and the service worker
+cannot be the cause. The same-origin `/verify` navigation itself never failed
+in any run.
 
 ## Reproduce
 
