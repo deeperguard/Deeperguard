@@ -196,6 +196,20 @@ def test_outside_change_closes_without_writing(browser):
     assert page.is_hidden("#table-editor")
 
 
+def test_typing_in_one_cell_is_one_undo_step(browser):
+    page = _page(browser)
+    page.fill("#body", "| a |\n|---|\n| 1 |")
+    page.evaluate("ctl.openAt(0, 'n')")
+    page.focus('[data-row="1"][data-col="0"]')
+    page.keyboard.press("End")
+    page.keyboard.type("two words")
+    assert page.evaluate("window.__undo") == 1, "one snapshot for the whole cell edit, not one per key"
+    assert _body(page) == "| a |\n|---|\n| 1two words |"
+    page.focus('[data-row="0"][data-col="0"]')
+    page.keyboard.type("x")
+    assert page.evaluate("window.__undo") == 2, "a different cell starts a new undo step"
+
+
 def test_typed_html_is_inert_in_editor_and_view(browser):
     page = _page(browser)
     page.fill("#body", "| h |\n|---|\n| c |")

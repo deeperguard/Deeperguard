@@ -2,7 +2,7 @@
 // cell content safety. The keyboard grid in a real Chromium DOM: tests/test_table_editor_browser.py.
 const assert = require('assert');
 const TE = require('../app/static/js/table-editor.js');
-const { render, renderRichUnsafe } = require('../app/static/js/markdown.js');
+const { render, renderLegacy, renderRichUnsafe } = require('../app/static/js/markdown.js');
 const markdownit = require('../app/static/js/vendor/markdown-it/markdown-it.min.js');
 
 const md = markdownit({ html: false });
@@ -169,6 +169,19 @@ assert.match(renderRichUnsafe(alignedOut), /<td class="md-align-right">4<\/td>/)
 TE.setAlign(m, 1, '');
 assert.strictEqual(TE.serializeTable(m).split('\n')[1], '| --- | --- | :---: | ---: |');
 
+// --- Cells past the header's column count stay in the source -------------------------------------
+m = TE.parseTable('| a | b |\n|---|---|\n| 1 | 2 | extra \\| x |\n| 3 | 4 | |');
+TE.setCell(m, 1, 0, 'one');
+assert.strictEqual(TE.serializeTable(m), '| a | b |\n|---|---|\n| one | 2 | extra \\| x |\n| 3 | 4 | |');
+m = TE.parseTable('| a | b |\n|---|---|\n| 1 | 2 | extra |');
+TE.insertColumn(m, 0);
+TE.setCell(m, 1, 1, 'x');
+assert.strictEqual(TE.serializeTable(m), '| | a | b |\n| --- | --- | --- |\n| | x | 2 | extra |');
+m = TE.parseTable('| a | b |\n|---|---|\n| 1 | 2 | extra |');
+TE.deleteRow(m, 0);
+TE.insertRow(m, 0);
+assert.strictEqual(TE.serializeTable(m), '| a | b |\n|---|---|\n| | |');
+
 // --- Inserting a new table ---------------------------------------------------------------------
 assert.strictEqual(TE.newTableMarkdown(2, 1), '| Column 1 | Column 2 |\n| --- | --- |\n| | |');
 let ins = TE.insertNewTable('', 0);
@@ -192,7 +205,8 @@ const hostileTable = editTable('| h |\n|---|\n| c |', (t) => {
   TE.setCell(t, 1, 0, hostile.join(' '));
 });
 assert.deepStrictEqual(cellTexts(hostileTable)[0], cellTexts(hostileTable)[1]);
-for (const html of [render(hostileTable), renderRichUnsafe(hostileTable)]) {
+// renderLegacy is the DOM-less fallback: this check runs in plain Node even without Playwright.
+for (const html of [render(hostileTable), renderRichUnsafe(hostileTable), renderLegacy(hostileTable)]) {
   assert.match(html, /<table>/);
   // Only the table's own elements are markup; the hostile text is all escaped character data.
   const tags = [...html.matchAll(/<([a-z][a-z0-9]*)([^>]*)>/gi)];

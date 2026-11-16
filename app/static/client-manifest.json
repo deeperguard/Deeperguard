@@ -398,10 +398,10 @@
       "url": "/static/js/swipe.64b098ebadc1295d.js"
     },
     "js/table-editor.js": {
-      "bytes": 21223,
-      "sha256": "5d958efc9aa9fa3d4d5f9e82b1837ba143f9edb5a487a8489aa7ed061e09c5d1",
-      "sri": "sha384-DoqTsPspmH8L2RsqHnSySRKHi/I8+GiO3wNcQVEWgAXfi2igUiWPLzRrUICwQl17",
-      "url": "/static/js/table-editor.5d958efc9aa9fa3d.js"
+      "bytes": 21451,
+      "sha256": "c2653c505419e6e7ef14b5d2998b207d5c0cd3e8c976056b888215116dac6166",
+      "sri": "sha384-pgN4Oz7UldvSsXOS2nviUwFmA0Q6Yv4m4Ac6gZynOe7sDrL0jfewNvcCtEnl5WM+",
+      "url": "/static/js/table-editor.c2653c505419e6e7.js"
     },
     "js/tagsuggest.js": {
       "bytes": 3152,
@@ -585,6 +585,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "6dd6ad53abc499b134544abaa62a03a23accf7a862b57be448089fb72f411256",
+  "manifest_sha256": "dc6a2d4c9bb72860ac9649cff0b176ae17c5e8d83bb04c91890fb2eed4417471",
   "version": 1
 }
