@@ -2524,6 +2524,9 @@ const NotesStore = (() => {
    * another id leaves a second `is_default` calendar. Fold it into DEFAULT_CALENDAR_ID: the
    * newest default supplies name and colour, its events move over, and the extra id gets a
    * tombstone. Mutates `merged` and `events`; a pack with one default is left untouched.
+   * The tombstone and moved events are stamped with the newest default's `updated_at` (an
+   * event keeps its own stamp if that is later), not with `nowMs`, so every device folding
+   * the same packs writes the same bytes.
    */
   function foldDuplicateDefaultCalendars(merged, events, nowMs) {
     const cals = merged.calendars;
@@ -2533,23 +2536,24 @@ const NotesStore = (() => {
     for (const id of [...dupIds].sort()) {
       if (!newest || agendaStampMs(cals[id].updated_at) > agendaStampMs(newest.updated_at)) newest = cals[id];
     }
+    const foldAt = newest.updated_at || new Date(nowMs).toISOString();
     const base = cals[DEFAULT_CALENDAR_ID] || newest;
     cals[DEFAULT_CALENDAR_ID] = {
       ...base,
       name: newest.name,
       color: newest.color,
       is_default: true,
-      updated_at: newest.updated_at,
+      updated_at: foldAt,
     };
-    const stamp = new Date(nowMs).toISOString();
     for (const [evId, ev] of Object.entries(events)) {
       if (ev && dupIds.includes(String(ev.calendarId || ''))) {
-        events[evId] = { ...ev, calendarId: DEFAULT_CALENDAR_ID, updated_at: stamp };
+        const keep = agendaStampMs(ev.updated_at) > agendaStampMs(foldAt);
+        events[evId] = { ...ev, calendarId: DEFAULT_CALENDAR_ID, updated_at: keep ? ev.updated_at : foldAt };
       }
     }
     for (const id of dupIds) {
       delete cals[id];
-      merged.deleted_calendars[id] = stamp;
+      merged.deleted_calendars[id] = foldAt;
     }
   }
 
