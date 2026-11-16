@@ -1,9 +1,10 @@
 """Real-app Chromium test: agenda month/week/day/list views.
 
 Seeds overlapping and long-titled events, renders each view at 390px and
-1280px in light and dark theme and checks: event boxes in one column do not
-overlap, nothing overflows horizontally, header cells line up with the grid
-columns, truncated titles keep a title/aria-label and text keeps its contrast.
+1280px in light and dark theme and checks: event boxes in one column, in one
+month cell and in one list day do not overlap, nothing overflows horizontally,
+header cells line up with the grid columns, truncated titles keep a
+title/aria-label and text keeps its contrast.
 Skips without Chromium.
 """
 from __future__ import annotations
@@ -71,6 +72,26 @@ COLUMN_OVERLAP = """() => {
     }
   }
   return out;
+}"""
+
+GROUP_OVERLAP = """() => {
+  const groups = [
+    ...[...document.querySelectorAll('.agenda-month-cell')].map(c => [...c.querySelectorAll('.agenda-month-ev, .agenda-month-dot')]),
+    ...[...document.querySelectorAll('.agenda-list-day')].map(d => [...d.querySelectorAll('.agenda-list-item')]),
+  ];
+  const out = [];
+  let measured = 0;
+  for (const group of groups) {
+    const items = group.filter(el => el.getBoundingClientRect().width);
+    measured += items.length;
+    for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+      const a = items[i].getBoundingClientRect(), b = items[j].getBoundingClientRect();
+      const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (ox > 1 && oy > 1) out.push(items[i].textContent.trim().slice(0, 20) + ' x ' + items[j].textContent.trim().slice(0, 20));
+    }
+  }
+  return { overlaps: out, measured };
 }"""
 
 HEADER_ALIGN = """() => {
@@ -155,13 +176,19 @@ def session():
 
 def _show(page, view, width, theme):
     page.set_viewport_size({"width": width, "height": 800 if width > 500 else 844})
+    # Crossing the 768px breakpoint re-renders the agenda; wait until the header shows the new layout.
+    page.wait_for_function(
+        "(phone) => { const b = document.getElementById('agenda-phone-more');"
+        " return (!!b && b.getClientRects().length > 0) === phone; }",
+        arg=width <= 768,
+    )
     page.evaluate("(t) => { document.documentElement.dataset.theme = t; document.body.dataset.theme = t; }", theme)
     toggle = page.locator(f'[data-agenda-view="{VIEW_BTN[view]}"]').locator("visible=true")
     if not toggle.count():  # phone layout keeps the view switch inside the "⋯" menu
         page.click("#agenda-phone-more")
-        page.wait_for_timeout(200)
+        page.wait_for_selector("#agenda-phone-menu", state="visible")
     toggle.first.click()
-    page.wait_for_timeout(600)
+    page.wait_for_selector(f"#agenda-root .agenda-body.agenda-view-{VIEW_BTN[view]} [data-agenda-id]")
     assert page.locator("#agenda-root [data-agenda-id]").count() > 0, "events must render"
 
 
@@ -173,6 +200,10 @@ def test_view_layout(session, view, width, theme):
     _show(page, view, width, theme)
     assert page.evaluate(OVERFLOW) == []
     assert page.evaluate(COLUMN_OVERLAP) == []
+    grouped = page.evaluate(GROUP_OVERLAP)
+    assert grouped["overlaps"] == []
+    if view in ("month", "list"):
+        assert grouped["measured"] > 0, f"no month-cell or list items measured in {view}"
     assert page.evaluate(HEADER_ALIGN) == []
     for t in page.evaluate(TITLES):
         if t["truncated"]:
