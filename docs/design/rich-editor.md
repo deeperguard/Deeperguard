@@ -1,6 +1,6 @@
 # Ontwerp: opgemaakte Markdown-editor, weergave en zoeken in de app
 
-Status: voorstel; mijlpaal 5 (opgemaakte bewerkmodus) is gebouwd, zie de noot in sectie 7. Dit document hoort bij idee #52 en is de
+Status: voorstel; mijlpaal 3 (tabeleditor) en 5 (opgemaakte bewerkmodus) zijn gebouwd, zie de noot in sectie 7. Dit document hoort bij idee #52 en is de
 eerste taak; de bouwtaken (sectie 6) volgen pas na de keuzes van de eigenaar (sectie 7). De XSS-testvectoren
 waaraan elke bouwtaak moet voldoen staan in [rich-editor-tests.md](rich-editor-tests.md).
 
@@ -362,6 +362,10 @@ zoekindex (alleen na keuze, 7.3).
 ## 7. Open keuzes voor de eigenaar
 
 Per keuze een aanbeveling; de bouwtaken wachten hierop.
+
+**Mijlpaal 3 (tabellen en tabeleditor) is gebouwd:** `app/static/js/table-editor.js` met de rasterbewerker in
+de Bron-modus. Esc en de knop Done (Klaar) sluiten de editor zonder bevestiging; dat kan omdat elke wijziging
+direct in de bron wordt geschreven.
 
 **Mijlpaal 5 (WYSIWYG) is gebouwd met de aanbevelingen bij keuze 1, 2, 5 (voor zover hieronder vermeld) en 8:**
 CodeMirror 6 als gevendorde bundel (`scripts/vendor/codemirror/build.py`, registratie in `THIRD_PARTY.md`),
