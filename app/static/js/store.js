@@ -2150,11 +2150,13 @@ const NotesStore = (() => {
     const updated = agendaStampMs(local.updated_at) >= agendaStampMs(remote.updated_at)
       ? local.updated_at
       : remote.updated_at;
+    const mergedCalendars = mergeAgendaCalendars(local, remote, nowMs);
+    if (mergedCalendars) foldDuplicateDefaultCalendars(mergedCalendars, events, nowMs);
     return {
       ...remote,
       ...local,
       ...(mergeAgendaSubscriptions(local, remote, nowMs) || {}),
-      ...(mergeAgendaCalendars(local, remote, nowMs) || {}),
+      ...(mergedCalendars || {}),
       type: 'agenda_pack',
       events,
       deleted_events: deleted,
@@ -2518,6 +2520,40 @@ const NotesStore = (() => {
   }
 
   /** Calendars merge per entry on `updated_at`; tombstones as for subscriptions. */
+  /**
+   * Safety net (docs/CALENDARS_SPEC.md §3): a client that created its default calendar under
+   * another id leaves a second `is_default` calendar. Fold it into DEFAULT_CALENDAR_ID: the
+   * newest default supplies name and colour, its events move over, and the extra id gets a
+   * tombstone. Mutates `merged` and `events`; a pack with one default is left untouched.
+   */
+  function foldDuplicateDefaultCalendars(merged, events, nowMs) {
+    const cals = merged.calendars;
+    const dupIds = Object.keys(cals).filter((id) => id !== DEFAULT_CALENDAR_ID && cals[id] && cals[id].is_default === true);
+    if (!dupIds.length) return;
+    let newest = cals[DEFAULT_CALENDAR_ID];
+    for (const id of [...dupIds].sort()) {
+      if (!newest || agendaStampMs(cals[id].updated_at) > agendaStampMs(newest.updated_at)) newest = cals[id];
+    }
+    const base = cals[DEFAULT_CALENDAR_ID] || newest;
+    cals[DEFAULT_CALENDAR_ID] = {
+      ...base,
+      name: newest.name,
+      color: newest.color,
+      is_default: true,
+      updated_at: newest.updated_at,
+    };
+    const stamp = new Date(nowMs).toISOString();
+    for (const [evId, ev] of Object.entries(events)) {
+      if (ev && dupIds.includes(String(ev.calendarId || ''))) {
+        events[evId] = { ...ev, calendarId: DEFAULT_CALENDAR_ID, updated_at: stamp };
+      }
+    }
+    for (const id of dupIds) {
+      delete cals[id];
+      merged.deleted_calendars[id] = stamp;
+    }
+  }
+
   function mergeAgendaCalendars(local, remote, nowMs) {
     const has = (p) => p.calendars || p.deleted_calendars;
     if (!has(local) && !has(remote)) return null;
