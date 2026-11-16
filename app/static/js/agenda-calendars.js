@@ -87,8 +87,9 @@
   }
 
   /**
-   * Calendar of the most recently saved event, or '' when there is none. Derived from the
-   * encrypted events themselves, so nothing extra is stored on the device.
+   * Calendar of the most recently saved event in a visible calendar, or '' when there is none.
+   * Hidden calendars are skipped so a new event is never created where it cannot be seen.
+   * Derived from the encrypted events themselves, so nothing extra is stored on the device.
    */
   function lastUsedCalendarId(events, map) {
     const cals = map || calendarMap();
@@ -97,7 +98,7 @@
     (events || []).forEach((ev) => {
       const id = String((ev && ev.calendarId) || '');
       const at = String((ev && ev.updated_at) || '');
-      if (id && cals.has(id) && at >= bestAt) {
+      if (id && cals.has(id) && cals.get(id).visible !== false && at >= bestAt) {
         bestId = id;
         bestAt = at;
       }

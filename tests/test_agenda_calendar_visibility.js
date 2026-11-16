@@ -34,6 +34,12 @@ const ev = (id) => NotesStore.listAgendaEvents().find((e) => e.id === id);
   const before = JSON.stringify(ev('e-work'));
   assert.ok(Cals.legendHtml().includes(`data-agenda-legend="${work}" checked`));
   assert.ok(Cals.setCalendarVisible(work, false));
+  assert.strictEqual(Cals.lastUsedCalendarId(NotesStore.listAgendaEvents()), '',
+    'a hidden calendar is not the default for a new event');
+  assert.strictEqual(Cals.lastUsedCalendarId([
+    { id: 'a', calendarId: DEF, updated_at: '2999-01-01' },
+    { id: 'b', calendarId: work, updated_at: '2999-06-01' },
+  ]), DEF, 'the last saved visible calendar is used instead of a hidden one');
   const map = Cals.calendarMap();
   const shown = NotesStore.listAgendaEvents().filter((e) => Cals.isEventVisible(e, map)).map((e) => e.id);
   assert.deepStrictEqual(shown, ['e-def'], 'events of the hidden calendar are not drawn');
@@ -44,6 +50,7 @@ const ev = (id) => NotesStore.listAgendaEvents().find((e) => e.id === id);
   Cals.setCalendarVisible(work, false);
   assert.strictEqual(Cals.calendarMap().get(work).visible, false, 'hiding twice stays hidden');
   assert.ok(Cals.setCalendarVisible(work, true));
+  assert.strictEqual(Cals.lastUsedCalendarId(NotesStore.listAgendaEvents()), work, 'shown again: it is the default again');
   const map2 = Cals.calendarMap();
   assert.deepStrictEqual(
     NotesStore.listAgendaEvents().filter((e) => Cals.isEventVisible(e, map2)).map((e) => e.id).sort(),
