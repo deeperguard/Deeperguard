@@ -1,6 +1,7 @@
 # Notitie-organisatie: mappen, geneste labels, notitielinks, teruglinks en sjablonen
 
-Status: ontwerp. Geen code gewijzigd. Datum: 2026-11-16. Basis: branch
+Status: ontwerp, **niet af**. De controle in de draaiende app (§1.1) is geblokkeerd
+en staat op escalatie. Geen code gewijzigd. Datum: 2026-11-16. Basis: branch
 `bot/task-153-write-design-doc-for-folders-nested-labe` op `03df5ec`.
 
 Dit document beschrijft (1) wat er nu in de code staat, (2) wat de gebruiker
@@ -28,12 +29,19 @@ gecontroleerd met `grep`, en de node-tests die erbij horen zijn uitgevoerd (§1.
 
 Het opdrachtpunt "controleer in de draaiende app (lokale server) wat labels
 kunnen: aanmaken, hernoemen, filteren, verwijderen" is in deze sessie **niet
-gehaald**. Het starten van de Flask-server (`python3 -m flask run`, zoals
-`tests/e2e_offline_vault.py` dat doet, met een tijdelijke `NOTES_ROOT` buiten de
-repo) werd meerdere keren door de rechtenregels geweigerd. Er is daarom geen
-browsercontrole gedaan. Daarmee is ook het acceptatiecriterium "gecontroleerd
-tegen de draaiende app" **niet gehaald**. De inventaris hieronder is alleen uit de
-code en uit de node-tests opgemaakt.
+gehaald**. Stand van de poging, per stap:
+
+| Stap | Resultaat |
+| --- | --- |
+| Start Flask (`python3 -m flask run --port 5071` vanuit `app/`, `NOTES_ROOT=/tmp/notes-task153-wegwerp`, zoals `tests/e2e_offline_vault.py`) | **Geblokkeerd.** Het commando werd door de goedkeuringsregel van de omgeving tegengehouden, ook in de achtergrond en via een los startscript. Daarom is het server-log niet verkregen. |
+| In-process controle (`import app`, Flask test client) | **Geblokkeerd** door dezelfde regel. |
+| Stap 1 t/m 5 uit de lijst hieronder | **Niet uitgevoerd.** Geen waarneming, dus geen bevestiging of correctie van de inventaris. |
+
+Het escaleren van de sandbox is bewust niet gedaan. De omgeving moet de start
+van de lokale server toestaan. Daarna kan dezelfde controle worden herhaald. De
+inventaris hieronder is alleen uit de code en uit de node-tests opgemaakt. De
+regelnummers in §1.2 en §1.3 zijn in deze sessie tegen de broncode gecontroleerd
+(functies staan op de vermelde regels, of op de aanroep in de UI).
 
 Controle die de eigenaar of een vervolgtaak nog moet doen (één Playwright-run
 met een wegwerpinstantie):
