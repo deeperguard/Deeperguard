@@ -5602,12 +5602,12 @@
       tags: readTotpDialogTags(),
       secret: totpUi.secret?.value || '',
     });
-    if (entry) entry.icon_id = totpDialogIconId;
     if (!entry) {
       setTotpAddError('Enter a valid authenticator secret or otpauth URL. Use Base32 letters A–Z and digits 2–7. Spaces are OK.');
       totpUi.secret?.focus();
       return;
     }
+    entry.icon_id = totpDialogIconId;
     try {
       await NotesTotp.generate(entry);
     } catch (err) {

@@ -21,7 +21,7 @@ from e2e_signup_autounlock import free_port, start_server  # noqa: E402
 WIDTHS = (900, 1000, 1100, 1280, 1440)
 PAGES = ("/", "/#features", "/security", "/pricing", "/#faq", "/download", "/blog", "BLOG_POST", "/contact")
 
-CLIPPED_JS = """() => {
+CLIPPED_JS = """(jsOn) => {
   const bad = [];
   const vw = document.documentElement.clientWidth;
   const els = [...document.querySelectorAll('.mk-topbar .mk-nav a, .mk-topbar-actions a')];
@@ -49,7 +49,7 @@ CLIPPED_JS = """() => {
   const topbar = document.querySelector('.mk-topbar');
   if (nav && topbar && !topbar.classList.contains('nav-collapsed')) {
     const tops = new Set([...nav.querySelectorAll('a')].map((a) => Math.round(a.getBoundingClientRect().top)));
-    if (tops.size > 1 && document.documentElement.dataset.jsProbe !== 'off') bad.push('nav wraps onto ' + tops.size + ' lines');
+    if (tops.size > 1 && jsOn) bad.push('nav wraps onto ' + tops.size + ' lines');
   }
   for (const sel of ['.mk-topbar-signin', '.mk-topbar-cta']) {
     const b = document.querySelector(sel);
@@ -95,9 +95,7 @@ def check_widths(browser, base, failures, js_enabled, pages):
             if js_enabled:
                 page.evaluate("() => document.fonts.ready")
                 page.wait_for_timeout(50)
-            else:
-                page.evaluate("() => { document.documentElement.dataset.jsProbe = 'off'; }")
-            for msg in page.evaluate(CLIPPED_JS):
+            for msg in page.evaluate(CLIPPED_JS, js_enabled):
                 failures.append(f"{path} {w}px js={js_enabled}: {msg}")
             if js_enabled and page.evaluate("() => document.querySelector('.mk-topbar').classList.contains('nav-collapsed')"):
                 collapsed_seen = True
@@ -164,9 +162,9 @@ def main() -> int:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             post = blog_post_path(browser, base)
-            pages = [post if p == "BLOG_POST" else p for p in PAGES if p != "BLOG_POST" or post]
             if not post:
-                print("note: no published blog post found; skipping blog post page")
+                failures.append("no published blog post found; blog post page not checked")
+            pages = [post if p == "BLOG_POST" else p for p in PAGES if p != "BLOG_POST" or post]
             if not check_widths(browser, base, failures, True, pages):
                 print("note: nav fitted on one line at every width; collapsed menu not exercised")
             check_widths(browser, base, failures, False, pages)
