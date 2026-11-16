@@ -23,8 +23,17 @@ const NotesSearch = (() => {
     return out;
   }
 
+  // toLowerCase can make a string longer ('İ' becomes 'i' plus a combining dot).
+  // Offsets into the lowered text must match the original, so such characters
+  // are lowered one at a time and keep only the first unit of their lowercase form.
+  function lowerKeepingLength(text) {
+    const lower = text.toLowerCase();
+    if (lower.length === text.length) return lower;
+    return [...text].map((ch) => ch.toLowerCase().slice(0, ch.length)).join('');
+  }
+
   function foldText(text) {
-    const lower = String(text || '').toLowerCase();
+    const lower = lowerKeepingLength(String(text || ''));
     // Latin-1 Supplement and Latin Extended-A/B cover Dutch, German, French,
     // Spanish and Scandinavian letters without touching the rest of the string.
     return /[\u00c0-\u024f]/.test(lower) ? lower.replace(/[\u00c0-\u024f]/g, foldChar) : lower;
@@ -1086,7 +1095,7 @@ const NotesSearch = (() => {
   function literalMatches(source, needle, caseSensitive, foldAccents = false) {
     if (!needle) return [];
     // foldText maps one character to one character, so offsets stay valid.
-    const fold = foldAccents && !caseSensitive ? foldText : (text) => text.toLowerCase();
+    const fold = foldAccents && !caseSensitive ? foldText : lowerKeepingLength;
     const hay = caseSensitive ? source : fold(source);
     const find = caseSensitive ? needle : fold(needle);
     const out = [];

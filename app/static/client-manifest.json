@@ -332,10 +332,10 @@
       "url": "/static/js/sanitize.54ed73bd29efe9ab.js"
     },
     "js/search.js": {
-      "bytes": 43757,
-      "sha256": "1f5396690096a0355ddc8df92721318bc83cb25130320797d9ae09c5db04ce7b",
-      "sri": "sha384-HH96J+w8N6IMmIC6iyEmgkGR6OKBQF74HqRyUlsz0gGuZUZ38QB+beRQxx46QXDD",
-      "url": "/static/js/search.1f5396690096a035.js"
+      "bytes": 44214,
+      "sha256": "46a5abb7873eab7cf169077c83f9b220d773c453bdd320800b607dc669fc1dc2",
+      "sri": "sha384-ni3ZBoMtp6eiNkhZ1Ux2/mk0q0DQpM3gWz6TPhAMj+wmH9Rh0ISuqWgPu1EvJcXQ",
+      "url": "/static/js/search.46a5abb7873eab7c.js"
     },
     "js/secure-send-note-attachments.js": {
       "bytes": 5257,
@@ -585,6 +585,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "604d592fe9efd9f22658f21ce20bf3151ebea254fc241c55eb6c404f22e08ad1",
+  "manifest_sha256": "2c6ae047ff19ff6bf837487bbac55121c6821fb6d84b71922f71d5fb63e011ed",
   "version": 1
 }
