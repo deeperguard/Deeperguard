@@ -401,3 +401,16 @@ opgemaakte modus als uitgelijnde bronregels getoond en met de knop Table ingevoe
 8. **Drempel grote notities** (terugval naar Bron). **Aanbeveling: 500 kB of 20.000 regels**, instelbaar.
 9. **Aanscherpen `style-src`** (weg met `'unsafe-inline'`). **Aanbeveling: apart traject**, buiten dit punt,
    maar nieuwe code mag er niet van afhangen.
+
+## 8. Bekende beperkingen
+
+- **Undo-geschiedenis bij de wissel Bron ↔ Opgemaakt.** De belofte in sectie 1 dat de undo-geschiedenis de
+  wissel overleeft, is in de eerste versie niet gehaald. De editor wordt bij het wisselen vernietigd en
+  opnieuw aangemaakt, waardoor de CodeMirror-history verdwijnt; het bronveld houdt alleen de eigen
+  browser-undo. Bewaren van de history per notitie is een mogelijke vervolgstap.
+- **De modus is een voorkeur, geen eigenschap van de notitie.** `prefs.richEditor` (Opgemaakt of Bron) geldt
+  voor alle notities. Wie één notitie naar Bron wisselt, ziet daarna ook andere en nieuwe notities in Bron,
+  tot de gebruiker weer wisselt. Dit wijkt af van de aanbeveling bij open keuze 5.
+- **Regeleinden bij plakken.** De editor werkt intern met `\n`; de `\r` van een CRLF-notitie blijft in de
+  tekst staan. Geplakte tekst wordt aangepast aan de regeleinden van het document (CRLF als het document
+  CRLF bevat), zodat er geen gemengde regeleinden ontstaan.
