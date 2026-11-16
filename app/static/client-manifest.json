@@ -80,10 +80,10 @@
       "url": "/static/js/agenda-tz.57449e80ad590b0f.js"
     },
     "js/agenda.js": {
-      "bytes": 144990,
-      "sha256": "b9645b7b661de00df14d27f13b174376260d949ff94732667fbf5a49442682ce",
-      "sri": "sha384-03H9tOL4KZr7QP9QLeoXHVQJpzllkLo/x8zqZNyTHRtOxosmlDwJbg4Oa+jzUt2V",
-      "url": "/static/js/agenda.b9645b7b661de00d.js"
+      "bytes": 144962,
+      "sha256": "2781b0849da270b947401370d28c56e2977158371c95995ad1effb4117b0fc09",
+      "sri": "sha384-rKd7P6rCi4NY4Xbbfrz/kmS+kWfUezA67N8hL93tqIJaVgRt9KxcTXlp9/8odNHN",
+      "url": "/static/js/agenda.2781b0849da270b9.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -585,6 +585,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "f465aff76414151f8c8435c6851b356b761bd5dbdb0e16d961ea41de979e6742",
+  "manifest_sha256": "773669b080b42a18ecb50eb94f67da57907e0047aec851a17c48d8ac346bf40d",
   "version": 1
 }
