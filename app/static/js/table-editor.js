@@ -7,6 +7,9 @@
 // back in front of every "|"; every other backslash (\*, \_, \\, ...) is left as it is. The two are
 // exact inverses, so an edited cell keeps its meaning.
 //
+// Limitation (GFM itself, not this editor): a literal backslash directly before a "|" cannot be
+// written in a cell. Typing `\|` is stored as `\\|` and is shown as just `|`. Nothing else is affected.
+//
 // Round-trip: a table that was not changed is written back as its original text, byte for byte.
 // After a change only the changed lines are rewritten, unless the table was column-aligned (then the
 // whole table is re-aligned) or columns changed (then every line changes anyway).
