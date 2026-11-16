@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from e2e_signup_autounlock import free_port, start_server  # noqa: E402
 
 STATUS_JS = """() => {
-  const el = document.querySelector('[data-release-status], .release-status, #release-status, [id*="release"][id*="status"]');
+  const el = document.querySelector('#verify-release-hash-status');
   return el ? el.textContent.trim() : null;
 }"""
 

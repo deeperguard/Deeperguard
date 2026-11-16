@@ -1,7 +1,7 @@
 # /verify: `Failed to load resource: net::ERR_FAILED` on reload
 
-Idea #192, found by the beta tester at commit `08f7d5b`. This is diagnosis
-only. No app code was changed.
+Idea #192 (task #223), found by the beta tester at commit `08f7d5b`. This is
+diagnosis only. No app code was changed.
 
 ## Summary
 
