@@ -302,10 +302,10 @@
       "url": "/static/js/photo-ocr-preprocess.ed3aeeb103df06bc.js"
     },
     "js/preview.js": {
-      "bytes": 69126,
-      "sha256": "8ee83e9cf3d046f0f1b9e5b4a003b66251879091f22ba185da0d7275f255bbbb",
-      "sri": "sha384-H0RmHb8o/N007RfZHIl+yq6NmyyWwlEKrcH0PJKHo8x8qVxm3ibHV/012jVFXca6",
-      "url": "/static/js/preview.8ee83e9cf3d046f0.js"
+      "bytes": 69197,
+      "sha256": "39d722608d59a295ae83f10ea873effe4b6dbcd63de54beb20230c6883cb1c66",
+      "sri": "sha384-1RQ7NHIJrDzyGL1ww4Gwn4OOLgD0Frc6OqHthsXrma7jIIV06hfdjK58pAFdGZdh",
+      "url": "/static/js/preview.39d722608d59a295.js"
     },
     "js/quick-capture.js": {
       "bytes": 4236,
@@ -585,6 +585,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "f571d92866560de6408699084ed40c9ffa783ce7bff7cbf281f2b69efb39c4f2",
+  "manifest_sha256": "f69045cd135779c2bd5e8e4c7f38aff8e3f17c47d68ade0d07d9d90aa934bf5e",
   "version": 1
 }
