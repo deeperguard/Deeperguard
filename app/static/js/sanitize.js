@@ -110,7 +110,7 @@
   ];
   const RICH_ALLOWED_ATTR = [
     'href', 'src', 'title', 'alt', 'class', 'dir', 'colspan', 'rowspan', 'start', 'type', 'rel',
-    'target', 'aria-checked', 'data-checked', 'data-lang',
+    'target', 'aria-checked', 'data-checked', 'data-lang', 'scope',
   ];
   const RICH_SANITIZE_CONFIG = {
     ALLOWED_TAGS: RICH_ALLOWED_TAGS,
@@ -119,7 +119,7 @@
     ALLOW_ARIA_ATTR: false,
     ALLOW_UNKNOWN_PROTOCOLS: false,
     // Plain-value attributes: DOMPurify would otherwise test their value against the URL regexp.
-    ADD_URI_SAFE_ATTR: ['data-checked', 'aria-checked', 'data-lang', 'colspan', 'rowspan', 'start'],
+    ADD_URI_SAFE_ATTR: ['data-checked', 'aria-checked', 'data-lang', 'colspan', 'rowspan', 'start', 'scope'],
     ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|#|blob:|data:image\/(?:png|jpeg|gif|webp)[;,])/i,
     KEEP_CONTENT: true,
   };
@@ -156,6 +156,9 @@
       const align = /(?:^|\s)md-align-(left|center|right)(?:\s|$)/.exec(node.getAttribute('class') || '');
       if (align) node.setAttribute('style', `text-align:${align[1]}`);
     }
+    // Header cells label their column for screen readers; the value is fixed, never from input.
+    if (name === 'TH') node.setAttribute('scope', 'col');
+    else if (node.hasAttribute?.('scope')) node.removeAttribute('scope');
   }
 
   const purifiers = new WeakMap();
