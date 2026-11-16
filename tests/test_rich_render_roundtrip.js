@@ -13,7 +13,9 @@ const NotesSanitize = require(path.join(jsRoot, 'sanitize.js'));
 const { RENDER_VECTORS } = require('./rich_xss_vectors.js');
 
 let JSDOM = null;
-try { ({ JSDOM } = require('jsdom')); } catch (_) { /* sanitizer step covered by the browser test */ }
+try { ({ JSDOM } = require('jsdom')); } catch (_) {
+  console.warn('warning: jsdom is not installed, so the sanitizer step is SKIPPED; only render() and the ciphertext are checked');
+}
 const win = JSDOM ? new JSDOM('<!doctype html><body></body>').window : null;
 
 // Deterministic IV so two encryptions of the same object can be compared byte for byte.
@@ -57,5 +59,5 @@ function withFixedIv(fn) {
     assert.strictEqual(back.editor, 'markdown', 'note format changed');
     assert.strictEqual(back.updated_at, note.updated_at);
   }
-  console.log(`ok (${bodies.length} bodies, ciphertext unchanged${win ? ', sanitizer ran' : ''})`);
+  console.log(`ok (${bodies.length} bodies, ciphertext unchanged${win ? ', sanitizer ran' : ', sanitizer SKIPPED: no jsdom'})`);
 })().catch((err) => { console.error(err); process.exit(1); });
