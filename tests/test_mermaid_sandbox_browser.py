@@ -367,6 +367,13 @@ def test_sandbox_assets_are_the_only_cross_origin_readable_files(flask_app):
         assert resp.status_code == 200
         assert resp.headers["Cross-Origin-Resource-Policy"] == "cross-origin"
         assert "Cross-Origin-Embedder-Policy" not in resp.headers
+    for logical in ("js/vendor/mermaid/mermaid.min.js", "js/mermaid-sandbox.js"):
+        hashed = sys.modules["client_assets"].asset_url(logical)  # the content-hashed name from the manifest
+        assert hashed.startswith("/static/") and hashed != "/static/" + logical
+        resp = get(hashed)
+        assert resp.status_code == 200
+        assert resp.headers["Cross-Origin-Resource-Policy"] == "cross-origin"
+        assert "Cross-Origin-Embedder-Policy" not in resp.headers
     for path in ("/static/js/mermaid-view.js", "/static/mermaid-sandbox.html", "/app"):
         assert get(path).headers["Cross-Origin-Resource-Policy"] == "same-origin", path
     sandbox = get("/static/mermaid-sandbox.html")

@@ -588,8 +588,8 @@ MERMAID_SANDBOX_ASSETS = frozenset({"js/vendor/mermaid/mermaid.min.js", "js/merm
 
 
 def _is_mermaid_sandbox_asset(path: str) -> bool:
-    plain = path[len("/static/"):] if path.startswith("/static/") else None
-    return plain in MERMAID_SANDBOX_ASSETS or client_assets.resolve_hashed_static(path) in MERMAID_SANDBOX_ASSETS
+    rel = path.removeprefix("/static/")
+    return rel in MERMAID_SANDBOX_ASSETS or client_assets.resolve_hashed_static(path) in MERMAID_SANDBOX_ASSETS
 
 
 def _is_ics_fetch_worker_path(path: str) -> bool:
