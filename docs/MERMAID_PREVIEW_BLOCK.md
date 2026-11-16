@@ -60,8 +60,8 @@ same-origin`) en `app/app.py:576-604` (sandbox-CSP). COEP komt nergens in de app
 oorzaak. De sandbox-CSP (`script-src 'self'`) staat de scripts juist toe; de blokkade komt van CORP, niet van CSP.
 
 **Iframe-instellingen** (`app/static/js/mermaid-view.js`): `sandbox="allow-scripts"` (zonder
-`allow-same-origin`), `src=/static/mermaid-sandbox.html`, titel "Mermaid-diagram". De `frame-ancestors`-regel
-uit de bugmelding is in mijn run niet opgedoken en is niet de oorzaak: het sandbox-document zelf werd
+`allow-same-origin`), `src=/static/mermaid-sandbox.html`, titel "Mermaid-diagram". Een `frame-ancestors`-fout
+is in mijn run niet opgedoken en is niet de oorzaak: het sandbox-document zelf werd
 geladen (`frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN` staan het framen door de app toe); alleen
 de scripts erin werden geblokkeerd.
 
