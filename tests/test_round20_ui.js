@@ -21,9 +21,8 @@ assert.ok(toastFn.includes('isBackgroundSyncToast'));
 assert.ok(toastFn.includes("currentAppTab() === '2fa'"));
 assert.ok(toastFn.includes("document.documentElement.classList.remove('totp-toast-open')"));
 assert.ok(css.includes('html.totp-toast-open .totp-pane'));
-assert.ok(css.includes('html.totp-toast-open #toast'));
-const totpToast = css.split('html.totp-toast-open #toast')[1].split('}')[0];
-assert.ok(totpToast.includes('transform: none'));
+// The toast itself keeps the one shared style on 2FA (measured in Chromium by
+// tests/test_ui_contrast_browser.py::test_toast_has_one_style_and_live_role).
 
 // 3. Hover tooltips stay off touch screens and inside the viewport.
 assert.ok(css.includes('@media (hover: hover) and (pointer: fine)'));

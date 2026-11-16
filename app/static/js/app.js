@@ -4379,10 +4379,17 @@
     document.documentElement.classList.toggle('toast-above-dialog', lift);
   }
 
+  /** Errors are announced at once (alert); other toasts politely (status). */
+  function setToastRole(el, isError) {
+    el.setAttribute('role', isError ? 'alert' : 'status');
+    el.setAttribute('aria-live', isError ? 'assertive' : 'polite');
+  }
+
   function toastWithUndo(message, onUndo) {
     const el = document.getElementById('toast');
     if (!el) return;
     el.classList.remove('error');
+    setToastRole(el, false);
     el.replaceChildren();
     const label = document.createElement('span');
     label.textContent = message;
@@ -4434,6 +4441,7 @@
     el.replaceChildren();
     el.textContent = message;
     el.classList.toggle('error', !!isError);
+    setToastRole(el, !!isError);
     el.hidden = false;
     document.documentElement.classList.toggle('totp-toast-open', on2fa);
     syncToastDialogLift();

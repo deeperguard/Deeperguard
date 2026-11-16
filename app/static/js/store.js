@@ -2519,7 +2519,6 @@ const NotesStore = (() => {
     return { subscriptions: subs, deleted_subscriptions: deleted };
   }
 
-  /** Calendars merge per entry on `updated_at`; tombstones as for subscriptions. */
   /**
    * Safety net (docs/CALENDARS_SPEC.md §3): a client that created its default calendar under
    * another id leaves a second `is_default` calendar. Fold it into DEFAULT_CALENDAR_ID: the
@@ -2558,6 +2557,7 @@ const NotesStore = (() => {
     }
   }
 
+  /** Calendars merge per entry on `updated_at`; tombstones as for subscriptions. */
   function mergeAgendaCalendars(local, remote, nowMs) {
     const has = (p) => p.calendars || p.deleted_calendars;
     if (!has(local) && !has(remote)) return null;
