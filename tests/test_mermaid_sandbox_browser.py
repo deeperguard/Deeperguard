@@ -5,6 +5,7 @@ import importlib
 import os
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 import pytest
@@ -58,6 +59,22 @@ def flask_app():
             else:
                 os.environ[key] = value
         tmp.cleanup()
+
+
+@pytest.fixture(scope="module")
+def live_origin(flask_app):
+    """The same Flask app on a real HTTP socket: the sandbox's opaque origin is only enforced on real responses."""
+    from werkzeug.serving import make_server
+
+    module = sys.modules["app"]
+    server = make_server("127.0.0.1", 0, module.app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
 
 
 @pytest.fixture(scope="module")
@@ -302,3 +319,66 @@ def test_forged_messages_are_ignored(browser, flask_app):
     assert page.locator("#preview .md-mermaid.is-rendered").count() == 1
     height = page.evaluate("document.querySelector('#preview .md-mermaid-frame').getBoundingClientRect().height")
     assert height > 20
+
+
+def test_preview_edit_preview_over_real_http_has_no_blocked_resource(browser, live_origin):
+    """Preview, back to Edit, Preview again: no blocked request or console error, and a drawn SVG each time."""
+    ctx = browser.new_context(viewport={"width": 800, "height": 600})
+    page = ctx.new_page()
+    problems = []
+    page.on("console", lambda m: problems.append(m.text) if m.type == "error" else None)
+    page.on("pageerror", lambda e: problems.append(str(e)))
+    page.on("requestfailed", lambda r: problems.append(f"{r.url} {r.failure}"))
+    requested = []
+    page.on("request", lambda r: requested.append(r.url))
+
+    def handle(route):
+        if route.request.url.rstrip("/") == live_origin:
+            route.fulfill(status=200, content_type="text/html",
+                          body='<!doctype html><html data-theme="light"><head><meta charset="utf-8"></head>'
+                               '<body><div id="preview"></div></body></html>')
+        else:
+            route.continue_()
+
+    page.route("**/*", handle)
+    page.goto(live_origin + "/")
+    page.add_style_tag(content=CSS)
+    for script in SCRIPTS:
+        page.add_script_tag(url="/" + script.relative_to(ROOT / "app").as_posix())
+    for _round in range(2):
+        _show(page, f"{FENCE}mermaid\n{GOOD}\n{FENCE}")  # Preview
+        _settled(page)
+        assert page.locator("#preview .md-mermaid.is-rendered").count() == 1
+        frame = page.query_selector("#preview .md-mermaid-frame").content_frame()
+        frame.wait_for_selector("svg")
+        text = frame.locator("svg").text_content()
+        assert "Start" in text and "Einde" in text
+        page.evaluate("document.getElementById('preview').innerHTML = ''")  # Edit
+    assert problems == []
+    assert all(u.startswith(live_origin) for u in requested), requested
+    ctx.close()
+
+
+def test_sandbox_assets_are_the_only_cross_origin_readable_files(flask_app):
+    """CSP, COEP, frame rules and CORP stay strict; only the two public sandbox scripts may be embedded."""
+    get = lambda path: flask_app.get(path, environ_overrides={"REMOTE_ADDR": "127.0.0.1"})
+    for path in ("/static/js/vendor/mermaid/mermaid.min.js", "/static/js/mermaid-sandbox.js"):
+        resp = get(path)
+        assert resp.status_code == 200
+        assert resp.headers["Cross-Origin-Resource-Policy"] == "cross-origin"
+        assert "Cross-Origin-Embedder-Policy" not in resp.headers
+    for path in ("/static/js/mermaid-view.js", "/static/mermaid-sandbox.html", "/app"):
+        assert get(path).headers["Cross-Origin-Resource-Policy"] == "same-origin", path
+    sandbox = get("/static/mermaid-sandbox.html")
+    assert sandbox.headers["Content-Security-Policy"] == (
+        "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; "
+        "base-uri 'none'; form-action 'none'; frame-ancestors 'self'")
+    assert sandbox.headers["X-Frame-Options"] == "SAMEORIGIN"
+    assert "Cross-Origin-Embedder-Policy" not in sandbox.headers
+    shell = get("/app")
+    csp = shell.headers["Content-Security-Policy"]
+    assert "frame-ancestors 'none'" in csp and "frame-src 'self'" in csp
+    assert "'unsafe-eval'" not in csp
+    assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]
+    assert shell.headers["X-Frame-Options"] == "DENY"
+    assert "Cross-Origin-Embedder-Policy" not in shell.headers
