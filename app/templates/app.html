@@ -1440,11 +1440,13 @@
           <button type="button" class="btn ghost sm" data-md="link" title="Link">Link</button>
           <button type="button" class="btn ghost sm" data-md="sup" title="Superscript" hidden>x²</button>
           <button type="button" class="btn ghost sm" data-md="code" title="Inline code">`</button>
+          <button type="button" class="btn ghost sm" data-md="table" title="Insert or edit table" aria-label="Insert or edit table" aria-controls="table-editor">Table</button>
           <button type="button" class="btn ghost sm" data-code="comment" title="Comment" hidden>//</button>
           <button type="button" class="btn ghost sm" data-code="indent" title="Indent" hidden>Indent</button>
           <button type="button" class="btn ghost sm" data-code="outdent" title="Outdent" hidden>Outdent</button>
           <button type="button" class="btn ghost sm" id="btn-md-mode" title="Preview markdown" hidden>Preview</button>
         </div>
+        <div id="table-editor" class="table-editor" role="group" aria-label="Table editor" hidden></div>
         <div id="find-bar" class="find-bar" hidden>
           <div class="find-bar-row find-bar-search">
             <input id="find-input" type="text" placeholder="Find in note…" autocomplete="off" enterkeyhint="search" role="searchbox" aria-label="Find in note">
@@ -2965,6 +2967,7 @@
   {{ asset_script('js/vendor/markdown-it/markdown-it.min.js') }}
   {{ asset_script('js/vendor/highlightjs/highlight.min.js') }}
   {{ asset_script('js/markdown.js') }}
+  {{ asset_script('js/table-editor.js') }}
   {{ asset_script('js/in-doc-nav.js') }}
   {{ asset_script('js/superscript.js') }}
   {{ asset_script('js/notelinks.js') }}

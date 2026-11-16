@@ -66,10 +66,32 @@ assert.match(safe, /<a href="https:\/\/example.com"/);
 
 const table = render('# Table test\n\n| Col A | Col B |\n| --- | ---: |\n| **x** | y |\n| a | b |\n');
 assert.match(table, /<div class="md-table-wrap"><table>/);
-assert.match(table, /<th dir="auto">Col A<\/th>/);
+assert.match(table, /<th scope="col" dir="auto">Col A<\/th>/);
 assert.match(table, /text-align:right/);
 assert.match(table, /<strong>x<\/strong>/);
 assert.doesNotMatch(table, /\| Col A \|/);
+const richTable = renderRichUnsafe('| Col A | Col B |\n| --- | ---: |\n| x | y |');
+assert.match(richTable, /<div class="md-table-wrap"><table>/);
+assert.match(richTable, /<th scope="col">Col A<\/th>/);
+assert.match(richTable, /<th class="md-align-right" scope="col">Col B<\/th>/);
+assert.doesNotMatch(richTable, /<td[^>]*scope=/);
+
+// HTML, script and javascript: links in table header and body cells stay text in both renderers.
+const hostileCells = [
+  '<script>alert(1)</script>',
+  '<img src=x onerror=alert(1)>',
+  '[x](javascript:alert(1))',
+  '<iframe src="javascript:alert(1)"></iframe>',
+];
+for (const cell of hostileCells) {
+  const source = `| ${cell} | h |\n| --- | --- |\n| ${cell} | c |`;
+  for (const out of [render(source), renderRichUnsafe(source)]) {
+    assert.match(out, /<table>/, cell);
+    const tags = [...out.matchAll(/<([a-z][a-z0-9]*)([^>]*)>/gi)];
+    assert.ok(tags.every(([, name]) => ['div', 'table', 'thead', 'tbody', 'tr', 'th', 'td'].includes(name)), `${cell}: ${out}`);
+    assert.ok(tags.every(([, , attrs]) => !/\bon\w+=|src=|href=/i.test(attrs)), `${cell}: ${out}`);
+  }
+}
 
 // L2: fence language / sheet name must be attribute-escaped.
 const fenceXss = render('```x"onmouseover="alert(1)\ncode\n```');

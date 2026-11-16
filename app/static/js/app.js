@@ -4240,6 +4240,8 @@
       ? NotesVaultLock.isAppUpdating(document.body, window.__notesUpdateInFlight)
       : !!(document.body.classList.contains('app-updating') || window.__notesUpdateInFlight);
     if (window.NotesVaultLock?.mayLockVault && !NotesVaultLock.mayLockVault({ updating })) return;
+    // The table editor holds decrypted cell text in its inputs.
+    closeTableEditor();
     // Spec 9 rule 4: locking an open vault drops any unsaved capture/share text.
     if (NotesStore.isUnlocked()) discardQuickCapture();
     // Round 72: never leave empty-device reachability probes running after lock.
@@ -14095,6 +14097,7 @@
   }
 
   function applyEditorMode() {
+    if (editorMode !== 'edit' || tableEditorController()?.noteId() !== currentId) closeTableEditor();
     syncRescanOcrButton();
     const ocrBtn = document.getElementById('btn-ocr-text');
     const previewBtn = document.getElementById('btn-preview');
@@ -14201,7 +14204,8 @@
     if (toolbar) toolbar.hidden = checklistOn || (!markdownNote && !codeNote && type !== 'superscript') || (previewOn && !markdownNote && !codeNote);
     if (toolbar) {
       toolbar.querySelectorAll('[data-md]').forEach((btn) => {
-        btn.hidden = codeNote || (btn.dataset.md === 'sup' && type !== 'superscript');
+        btn.hidden = codeNote || (btn.dataset.md === 'sup' && type !== 'superscript')
+          || (btn.dataset.md === 'table' && !markdownNote);
       });
       toolbar.querySelectorAll('[data-code]').forEach((btn) => {
         btn.hidden = !codeNote;
@@ -14255,7 +14259,10 @@
     }
     if (ui.checklist) ui.checklist.classList.toggle('readonly', !!on);
     document.body.classList.toggle('note-readonly', !!on);
-    if (on) editorMode = 'preview';
+    if (on) {
+      editorMode = 'preview';
+      closeTableEditor();
+    }
   }
 
   function noteEditingLocked() {
@@ -19514,6 +19521,48 @@
     layoutFindBarOverDocViewer();
   }
 
+  // GFM table editor (docs/design/rich-editor.md 1.3): a grid panel above the note text that
+  // writes the edited table straight back into the Markdown. Created on first use.
+  function tableEditorController(create = false) {
+    if (!tableEditorController.instance && create && window.NotesTableEditor) {
+      const container = document.getElementById('table-editor');
+      if (!container) return null;
+      tableEditorController.instance = NotesTableEditor.createController({
+        container,
+        getSource: () => ui.body.value,
+        setSource: (next) => {
+          ui.body.value = next;
+          // Same follow-up as typing (save, derived title, overlays); not a reason to close the panel.
+          tableEditorController.writing = true;
+          try {
+            ui.body.dispatchEvent(new Event('input'));
+          } finally {
+            tableEditorController.writing = false;
+          }
+        },
+        beforeChange: () => pushUndoSnapshot(),
+        onClose: ({ focusSource, offset }) => {
+          if (!focusSource || ui.body.hidden) return;
+          ui.body.focus();
+          ui.body.setSelectionRange(offset, offset);
+        },
+      });
+    }
+    return tableEditorController.instance || null;
+  }
+
+  function closeTableEditor() {
+    tableEditorController()?.close();
+  }
+
+  // Caret inside a table: edit that table. Otherwise insert a new one at the caret.
+  function openTableEditor() {
+    const ctl = tableEditorController(true);
+    if (!ctl) return;
+    const caret = ui.body.selectionStart;
+    if (!ctl.openAt(caret, currentId)) ctl.insertAt(caret, currentId);
+  }
+
   function wrapSelection(before, after = before, placeholder = 'text') {
     pushUndoSnapshot();
     const ta = ui.body;
@@ -20734,6 +20783,7 @@
     }
     scheduleSave();
     autosizeNoteBody();
+    if (!tableEditorController.writing) closeTableEditor();
     syncEditLinkOverlay();
     syncSuperscriptFormatMirror();
     syncCodeHighlight();
@@ -20892,6 +20942,7 @@
     if (action === 'sup') wrapSelection('^', '^', 'text');
     if (action === 'heading') prefixLine('## ');
     if (action === 'check') prefixLine('- [ ] ');
+    if (action === 'table') openTableEditor();
   });
 
   document.getElementById('find-input').addEventListener('input', () => {
