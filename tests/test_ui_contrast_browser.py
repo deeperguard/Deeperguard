@@ -12,10 +12,14 @@ live-region role in its normal and error state.
 
 Run as a script to print every failing element:
     python3 tests/test_ui_contrast_browser.py
-Skips without Playwright/Chromium.
+Skips without Playwright/Chromium locally. When the CI environment variable is
+set (as on GitHub Actions) a missing Playwright/Chromium fails the test instead,
+so the contrast check cannot drop out unnoticed.
 """
 from __future__ import annotations
 
+import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -177,21 +181,31 @@ def _launch(pw):
     return pw.chromium.launch()
 
 
+def _no_browser(reason: str):
+    # On CI a missing Playwright or Chromium is a failure, not a silent skip.
+    if os.environ.get("CI"):
+        pytest.fail(reason, pytrace=False)
+    pytest.skip(reason)
+
+
 @pytest.fixture(scope="module")
 def browser():
-    sync_api = pytest.importorskip("playwright.sync_api")
+    try:
+        sync_api = importlib.import_module("playwright.sync_api")
+    except ImportError as exc:
+        _no_browser(f"Playwright not installed: {exc}")
     try:
         with sync_api.sync_playwright() as pw:
             try:
                 b = _launch(pw)
             except Exception as exc:  # Chromium not installed
-                pytest.skip(f"Chromium not available: {exc}")
+                _no_browser(f"Chromium not available: {exc}")
             yield b
             b.close()
     except Exception as exc:
         if isinstance(exc, pytest.skip.Exception):
             raise
-        pytest.skip(f"Playwright not usable: {exc}")
+        _no_browser(f"Playwright not usable: {exc}")
 
 
 @pytest.mark.parametrize("width", WIDTHS)
