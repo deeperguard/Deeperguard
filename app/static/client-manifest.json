@@ -248,16 +248,16 @@
       "url": "/static/js/marketing.de66654aca477c3d.js"
     },
     "js/mermaid-sandbox.js": {
-      "bytes": 2154,
-      "sha256": "5e4afbff09309fa4f2b2c72191d37c4daf07e55bf36ba03ec760d1ab563b0c85",
-      "sri": "sha384-F8lCQGEPo10bAVsm4K1cCjjiiVqQGCv1yLCyiFfltQ4aaAGcKezUpssBXE1CtGqw",
-      "url": "/static/js/mermaid-sandbox.5e4afbff09309fa4.js"
+      "bytes": 2465,
+      "sha256": "4e48ea01f78b7845b27cc54fe508a3945410c436ac8007fabcd7e8c7b13bbc1e",
+      "sri": "sha384-KnzNRaxY4t8LE+kVaVT5nydHxxi327veAR2IHx9YRmLDCxH/P/OY0Ox+PY4zItxh",
+      "url": "/static/js/mermaid-sandbox.4e48ea01f78b7845.js"
     },
     "js/mermaid-view.js": {
-      "bytes": 5385,
-      "sha256": "8a052df54d808b3754f50eef14fd045d655290b02d64f3a4022b97cac6299294",
-      "sri": "sha384-kx3aAqQLJbFccbT9hzGuj58Hs7kdw00d6fBX5OcUyRDY/EaHClYh4S/mEPVtwFoo",
-      "url": "/static/js/mermaid-view.8a052df54d808b37.js"
+      "bytes": 5804,
+      "sha256": "8ab8ded4f1d2d44495f57d0ea5b7c19709ac19c1f0dba009cc69dca9a49d7850",
+      "sri": "sha384-j0/mFWQVnlk04Ov6kAqqJy3ibTmNpQ5FeTDuykedqJrNl09GX5InxS8FTLDThRgH",
+      "url": "/static/js/mermaid-view.8ab8ded4f1d2d444.js"
     },
     "js/note-history.js": {
       "bytes": 1674,
@@ -585,6 +585,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "86f19e805065dad7ad9b567796c07fe955452ade0c8334fed98241bca379d172",
+  "manifest_sha256": "9a2610dec64c3853a1fdf886be49e7e42393d751a8f2f17f1eb4adde74e1e39a",
   "version": 1
 }

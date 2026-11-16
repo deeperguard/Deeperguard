@@ -192,6 +192,39 @@ def test_invalid_diagram_shows_source_and_message(browser, flask_app):
     assert page.locator("#preview .md-mermaid.is-rendered").count() == 1
 
 
+def test_error_note_does_not_expose_technical_details(browser, flask_app):
+    page = _open(browser, flask_app)
+    _show(page, f"{FENCE}mermaid\nthis is not a diagram ((\n{FENCE}")
+    _settled(page)
+    assert page.locator("#preview .md-mermaid.is-error").count() == 1
+    assert page.get_attribute("#preview .md-mermaid-error", "title") is None
+
+
+def test_replaced_figure_ends_its_render_at_once(browser, flask_app):
+    """A new preview that replaces a diagram in flight must drop its message listener now, not at the time-out."""
+    page = _open(browser, flask_app)
+    page.evaluate(
+        """() => {
+          window.__live = 0;
+          const add = window.addEventListener.bind(window), rem = window.removeEventListener.bind(window);
+          window.addEventListener = (t, f, o) => { if (t === 'message') window.__live += 1; add(t, f, o); };
+          window.removeEventListener = (t, f, o) => { if (t === 'message') window.__live -= 1; rem(t, f, o); };
+        }""")
+    _show(page, f"{FENCE}mermaid\n{GOOD}\n{FENCE}")
+    assert page.evaluate("window.__live") == 1
+    page.evaluate(
+        """() => {
+          const p = document.getElementById('preview');
+          p.innerHTML = '<pre class="code-preview"><code>plain</code></pre>';
+          NotesPreview.decorateCodeBlocks(p);
+        }""")
+    assert page.evaluate("window.__live") == 0
+    _show(page, f"{FENCE}mermaid\n{GOOD}\n{FENCE}")
+    _settled(page)
+    assert page.locator("#preview .md-mermaid.is-rendered").count() == 1
+    assert page.evaluate("window.__live") == 0
+
+
 def test_mermaid_loads_only_when_note_has_a_mermaid_block(browser, flask_app):
     requests = []
     page = _open(browser, flask_app, requests)
