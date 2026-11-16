@@ -2497,6 +2497,7 @@
       s = options.draftStart;
       e = options.draftEnd instanceof Date ? options.draftEnd : new Date(s.getTime() + 3600000);
     }
+    setTitleError(false);
     if (titleEl) {
       titleEl.value = (scope === 'occurrence' && overlay && overlay.title)
         ? overlay.title
@@ -2839,11 +2840,30 @@
     return false;
   }
 
+  function setTitleError(show) {
+    const titleEl = document.getElementById('agenda-edit-title');
+    const errEl = document.getElementById('agenda-edit-title-error');
+    if (errEl) errEl.hidden = !show;
+    if (!titleEl) return;
+    if (show) {
+      titleEl.setAttribute('aria-invalid', 'true');
+      titleEl.setAttribute('aria-describedby', 'agenda-edit-title-error');
+    } else {
+      titleEl.removeAttribute('aria-invalid');
+      titleEl.removeAttribute('aria-describedby');
+    }
+  }
+
   function saveEditor() {
     const S = getStore();
     if (!S || typeof S.upsertAgendaEvent !== 'function') return;
 
     const titleEl = document.getElementById('agenda-edit-title');
+    if (titleEl && !String(titleEl.value || '').trim()) {
+      setTitleError(true);
+      titleEl.focus();
+      return;
+    }
     const locEl = document.getElementById('agenda-edit-location');
     const startEl = document.getElementById('agenda-edit-start');
     const endEl = document.getElementById('agenda-edit-end');
@@ -3242,6 +3262,7 @@
     wireScopeChooser();
     document.getElementById('agenda-edit-cancel')?.addEventListener('click', requestCloseEditor);
     document.getElementById('agenda-edit-save')?.addEventListener('click', saveEditor);
+    document.getElementById('agenda-edit-title')?.addEventListener('input', () => setTitleError(false));
     document.getElementById('agenda-edit-delete')?.addEventListener('click', deleteEditor);
     document.getElementById('agenda-detail-close')?.addEventListener('click', () => closeDetailCard());
     document.getElementById('agenda-detail-card')?.addEventListener('keydown', (ev) => {
