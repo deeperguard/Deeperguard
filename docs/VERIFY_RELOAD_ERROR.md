@@ -120,25 +120,26 @@ DevTools (Network, filter on `api.github.com`) and read
   lacks CORS headers shows up as `ERR_FAILED` rather than the 403/429 branch.
   So it is a minor product wart, not a break in the integrity check.
 
-## Proposed fix (SRI and CSP unchanged)
+## Chosen solution (SRI and CSP unchanged)
 
-The browser always logs a failed `fetch`, and page script cannot silence it.
-So the fix is to avoid repeating the request, not to hide the log:
+The cause is a test artefact plus a harmless browser log line, so no app code,
+`integrity` attribute or CSP header was changed. The page already handles the
+failed GitHub request: no uncaught error, and the status line honestly says
+`Could not check (offline / rate-limited)`.
 
-1. Cache an `unavailable` result for a short time, for example 5 to 10
-   minutes, in `localStorage`, with a `retryAt` timestamp. Reloads inside that
-   window should show the cached "Could not check (offline / rate-limited)"
-   line and make no GitHub request. A manual "Check again" action (or expiry)
-   would retry. `cacheLooksFresh()` currently refuses to cache `unavailable`
-   so that About can retry. That would need a separate, short TTL for the
-   /verify page.
-2. Skip the GitHub call when `navigator.onLine === false` and show the same
-   status line.
-3. Add an e2e test that routes `https://api.github.com/**` to abort, reloads
-   `/verify` 4 times and asserts that the number of GitHub requests is
-   smaller than the number of loads. A second test should assert that the
-   status line shows the offline text. `tests/repro_verify_reload.py` is a
-   starting point.
+What changed is the test side:
 
-No change to the `integrity` attributes, the signed manifest or the CSP is
-needed.
+- `tests/e2e_verify_reload_console.py` opens `/verify`, reloads it 3 times
+  with all foreign requests blocked (sandbox without network) and fails on any
+  `requestfailed`, console error or page error that comes from the app's own
+  origin. Console errors are attributed by the URL of the failing resource, so
+  the browser's `ERR_FAILED` line for the blocked `api.github.com` request is
+  judged separately: it is tolerated only because the same run must show the
+  status line `Could not check`.
+- The test proves it can fail: it runs the same checker with a wrong
+  `integrity` hash on the `marketing.js` script tag and with `marketing.js`
+  aborted, and fails if either goes unnoticed.
+
+Not done: caching an `unavailable` result for a few minutes to avoid repeated
+GitHub requests. It would only reduce the log noise and changes the retry
+behaviour of About, so it was left out.
