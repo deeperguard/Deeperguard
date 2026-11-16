@@ -1914,6 +1914,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_markdown(self):
         self._run_node_script("test_markdown.js")
 
+    def test_client_table_editor(self):
+        self._run_node_script("test_table_editor.js")
+
     def test_client_superscript(self):
         self._run_node_script("test_superscript.js")
 
