@@ -1401,7 +1401,9 @@ items and `.check-text`; `.btn.danger` border; 44px note-warn buttons.
 `app.html`: `role="alert"` on `#password-change-error`, `#note-lock-error`,
 `#device-start-code-error`, `#attachment-repair-error`, `#scan-name-error`,
 `#account-info-error`; "Close" on `#account-info-close`. `app.js`:
-`setToastRole()` sets only `role`/`aria-live` on `#toast`.
+`setToastRole()` sets only `role`/`aria-live` on `#toast`. This is the only
+JavaScript change in this audit, not a CSS, markup or text change: `role="alert"`
+for error toasts needs it, and it changes no other behaviour.
 
 ### 8.11 How it is checked
 
