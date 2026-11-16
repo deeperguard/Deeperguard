@@ -12753,3 +12753,47 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   .agenda-side { padding: var(--space-3) var(--space-2); }
   .agenda-side .agenda-calendar-menu-btn { padding: 7px 10px; border-radius: 8px; min-height: 36px; border: 0; }
 }
+
+/* Agenda: one look for every select and toggle (toolbar menus, calendar
+   settings, event editor) and for the empty states. */
+:is(#agenda-pane, #agenda-editor) select {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  height: var(--touch);
+  min-height: var(--touch);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-elevated);
+  color: var(--text);
+  line-height: 1.2;
+}
+:is(#agenda-pane, #agenda-editor) input[type="checkbox"] {
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  margin: 0;
+  border: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+:is(#agenda-pane, #agenda-editor) :is(select, input[type="checkbox"]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+.agenda-list-empty,
+.agenda-month-daylist-empty {
+  margin: 0;
+  padding: var(--space-4) var(--space-3);
+  text-align: center;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--muted);
+}
+.agenda-list-empty {
+  padding-block: 48px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  margin: var(--space-4);
+}
