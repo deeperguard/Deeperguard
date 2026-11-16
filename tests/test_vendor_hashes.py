@@ -52,12 +52,16 @@ class VendorHashTests(unittest.TestCase):
 
     def test_client_manifest_lists_vendored_files(self):
         manifest = json.loads((ROOT / "app" / "static" / "client-manifest.json").read_text(encoding="utf-8"))
-        blob = json.dumps(manifest)
+        assets = manifest["assets"]
         listed = _listed()
         for rel, digest in listed.items():
-            if rel.endswith(".js"):
-                self.assertIn(rel.split("app/static/", 1)[1], blob, rel)
-                self.assertIn(digest, blob, rel)
+            # The manifest covers scripts and styles only (scripts/build-client-manifest.py INCLUDE_SUFFIXES);
+            # LICENSE files are documented in THIRD_PARTY.md but not shipped as assets.
+            if not rel.endswith((".js", ".mjs", ".css")):
+                continue
+            key = rel.split("app/static/", 1)[1]
+            self.assertIn(key, assets, rel)
+            self.assertEqual(assets[key]["sha256"], digest, rel)
 
 
 if __name__ == "__main__":
