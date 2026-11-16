@@ -1478,7 +1478,7 @@
           <label>Account password
             <input id="note-lock-password" type="password" autocomplete="current-password">
           </label>
-          <p id="note-lock-error" class="error" hidden>Wrong password.</p>
+          <p id="note-lock-error" class="error" role="alert" hidden>Wrong password.</p>
           <button type="button" id="note-lock-unlock" class="btn primary">Unlock note</button>
         </div>
         <div id="doc-inline" class="doc-inline" hidden></div>
@@ -1767,7 +1767,7 @@
               <div id="device-start-code-form" class="device-start-code-form" hidden>
                 <label class="settings-hint" for="device-start-code-input">Approval code</label>
                 <input id="device-start-code-input" class="device-start-code-input" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX">
-                <p id="device-start-code-error" class="device-start-code-error" hidden></p>
+                <p id="device-start-code-error" class="device-start-code-error" role="alert" hidden></p>
                 <div class="settings-actions">
                   <button type="button" id="btn-device-start-code-submit" class="btn primary">Check code</button>
                 </div>
@@ -1940,7 +1940,7 @@
                 <button type="button" class="password-toggle btn ghost sm" data-target="password-change-confirm" aria-label="Show password">Show</button>
               </span>
             </label>
-            <p id="password-change-error" class="settings-hint error" hidden></p>
+            <p id="password-change-error" class="settings-hint error" role="alert" hidden></p>
             <button type="button" id="btn-change-password" class="btn primary">Change vault password</button>
             <p class="settings-hint">Re-encrypts every note on this device. Other devices need the new password to sync.</p>
           </div>
@@ -1984,7 +1984,7 @@
                     <button type="button" class="password-toggle btn ghost sm" data-target="attachment-repair-password" aria-label="Show password">Show</button>
                   </span>
                 </label>
-                <p id="attachment-repair-error" class="settings-hint error" hidden></p>
+                <p id="attachment-repair-error" class="settings-hint error" role="alert" hidden></p>
                 <button type="button" id="btn-repair-attachments" class="btn">Repair documents</button>
               </div>
               <p class="settings-hint">Re-OCR documents on this device (zero-knowledge). Regenerates PDF list thumbnails on iPhone.</p>
@@ -2486,7 +2486,7 @@
         <span id="scan-name-label">Document name</span>
         <input id="scan-name" type="text" maxlength="120" required autocomplete="off" autocapitalize="words" enterkeyhint="done" placeholder="e.g. Passport, June invoice">
       </label>
-      <p id="scan-name-error" class="error" hidden>Enter a name for this document.</p>
+      <p id="scan-name-error" class="error" role="alert" hidden>Enter a name for this document.</p>
     </div>
     <footer class="scan-dialog-foot">
       <button type="button" class="btn ghost" id="scan-cancel">Cancel</button>
@@ -2657,9 +2657,9 @@
       <div class="account-info-row"><dt>Two-factor</dt><dd id="account-info-2fa">—</dd></div>
       <div class="account-info-row"><dt>Passkeys</dt><dd id="account-info-passkeys">—</dd></div>
     </dl>
-    <p id="account-info-error" class="error account-info-error" hidden></p>
+    <p id="account-info-error" class="error account-info-error" role="alert" hidden></p>
     <div class="confirm-dialog-actions">
-      <button type="button" class="btn primary" id="account-info-close">OK</button>
+      <button type="button" class="btn primary" id="account-info-close">Close</button>
     </div>
   </div>
   <div id="agenda-scope-backdrop" class="settings-backdrop agenda-scope-backdrop" hidden></div>
