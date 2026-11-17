@@ -5921,9 +5921,6 @@ _APP_RELOAD_MODULES = {
 }
 
 
-_APP_BACKGROUND_THREADS = {"pcloud-health", "signin-alert", "server-info-initial"}
-
-
 class ServerOcrStartupWarningTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -5940,6 +5937,9 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
         os.environ.pop("NOTES_DISABLE_CIDR_GATE", None)
         os.environ.pop("NOTES_OCR_EPHEMERAL", None)
         os.environ.pop("NOTES_SECURE_COOKIES", None)
+        # A configured managed pCloud remote makes the import start the
+        # "pcloud-health" thread, which logs "managed pcloud backup unavailable".
+        os.environ.pop("NOTES_PCLOUD_SERVICE_REMOTE", None)
         (root / "keys").mkdir(parents=True)
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
         self._purge_app_modules()
@@ -5960,12 +5960,18 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
             "NOTES_DISABLE_CIDR_GATE",
             "NOTES_OCR_EPHEMERAL",
             "NOTES_SECURE_COOKIES",
+            "NOTES_PCLOUD_SERVICE_REMOTE",
         ):
             os.environ.pop(key, None)
 
     def _purge_app_modules(self):
-        for name in list(sys.modules):
-            if name in _APP_RELOAD_MODULES or name.startswith("app."):
+        # Also purge every other module loaded from APP_DIR (e.g.
+        # pcloud_service_token): they keep the config/db of an earlier test and
+        # would report its stored pCloud token as configured.
+        app_dir = str(APP_DIR)
+        for name, mod in list(sys.modules.items()):
+            path = getattr(mod, "__file__", None) or ""
+            if name in _APP_RELOAD_MODULES or name.startswith("app.") or path.startswith(app_dir):
                 sys.modules.pop(name, None)
 
     def _import_app(self):
@@ -5973,15 +5979,8 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
 
     @contextlib.contextmanager
     def _assert_no_startup_warnings(self):
-        # Earlier test classes import the app too, and the import starts daemon
-        # threads (pcloud-health, signin-alert, server-info-*) that log warnings
-        # such as "managed pcloud backup unavailable: not_configured" from their
-        # own thread. assertNoLogs sees every thread, so wait until those
-        # threads are done before measuring, instead of filtering their records.
-        deadline = time.monotonic() + 60
-        for t in threading.enumerate():
-            if t.daemon and t.name in _APP_BACKGROUND_THREADS:
-                t.join(max(0.0, deadline - time.monotonic()))
+        # setUp removes the sources of background-thread warnings (see there),
+        # so nothing but the importing thread can log inside this window.
         with self.assertNoLogs("deeperguard", level="WARNING"):
             yield
 
