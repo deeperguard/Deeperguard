@@ -10883,12 +10883,16 @@
     return Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : '';
   }
 
+  const NOTE_REMINDER_BELL_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2a3.8 3.8 0 0 0-3.8 3.8c0 3-1.3 4-1.3 4h10.2s-1.3-1-1.3-4A3.8 3.8 0 0 0 8 2.2zM6.7 12.4a1.4 1.4 0 0 0 2.6 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
   function noteReminderChipHtml(note) {
     const at = noteReminderAt(note);
     if (!at) return '';
     const ms = parseTimestampMs(at);
-    const label = `Reminder ${formatDateTime(ms)}`;
-    return `<span class="note-tag note-tag-warn note-tag-reminder" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2a3.8 3.8 0 0 0-3.8 3.8c0 3-1.3 4-1.3 4h10.2s-1.3-1-1.3-4A3.8 3.8 0 0 0 8 2.2zM6.7 12.4a1.4 1.4 0 0 0 2.6 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="note-tag-warn-text">${escapeHtml(formatWarnChipTime(ms))}</span></span>`;
+    const past = ms <= Date.now();
+    const label = `${past ? 'Reminder passed' : 'Reminder'} ${formatDateTime(ms)}`;
+    const cls = past ? 'note-tag note-tag-reminder note-tag-reminder-past' : 'note-tag note-tag-reminder';
+    return `<span class="${cls}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${NOTE_REMINDER_BELL_SVG}<span class="note-tag-reminder-text">${escapeHtml(formatWarnChipTime(ms))}</span></span>`;
   }
 
   function noteWarnChipHtml(note) {
@@ -11006,8 +11010,9 @@
     if (noteListDensity() === 'compact') {
       const reminderAt = noteReminderAt(note);
       if (reminderAt) {
-        const label = `Reminder ${formatDateTime(parseTimestampMs(reminderAt))}`;
-        parts.push(`<span class="note-glyph note-glyph-reminder" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">🔔</span>`);
+        const reminderMs = parseTimestampMs(reminderAt);
+        const label = `${reminderMs <= Date.now() ? 'Reminder passed' : 'Reminder'} ${formatDateTime(reminderMs)}`;
+        parts.push(`<span class="note-glyph note-glyph-reminder" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${NOTE_REMINDER_BELL_SVG}</span>`);
       }
       if (note.content.locked) {
         parts.push('<span class="note-glyph note-glyph-lock" title="Protected" aria-label="Protected">🔒</span>');
