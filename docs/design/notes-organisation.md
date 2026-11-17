@@ -142,9 +142,10 @@ verwijderd. `.folder-head` en `.folder-block` blijven in gebruik.
 map staan. De filter is een exacte vergelijking op `folder_id` op drie plekken:
 `app.js:10849` (`listStoredFiles`), `search.js:962` en de telling `notesInFolder`
 (`store.js:5129`), die ook op de maprij staat. Een labelfilter neemt de subtakken
-wel mee (§1.2). De UI en `NESTED_FOLDERS_SPEC.md` (regel 619, "Folder filter
-includes descendants") zeggen niets over submappen. Dit blijft zo tot de eigenaar
-kiest (§9-6).
+wel mee (§1.2). De UI zegt niets over submappen. `docs/NESTED_FOLDERS_SPEC.md`
+beschrijft wel dat een mapfilter de submappen meeneemt (regel 383 en regel 619,
+"Folder filter includes descendants"), en de huidige code wijkt daar dus van af.
+Dit blijft zo tot de eigenaar kiest (§9-6).
 
 **Koppeling met de labelboom:** de mapboom hergebruikt `labeltree.js`.
 `renderFolders` gebruikt `NotesLabelTree.childMap` (`app.js:10033`), `folderTreeRows`
