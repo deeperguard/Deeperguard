@@ -641,8 +641,9 @@ async function handleReminderPush(data, nowMs) {
   const tags = await locallyShownTags(payload, nowMs).catch(() => null);
   if (tags) return showAlreadyShown(tags);
   if (!payload) {
-    // Opt-in window reminder: the push is empty on purpose. Always show something (iOS drops
-    // subscriptions after silent pushes). Per-reminder local text is a later milestone (M3).
+    // Opt-in window reminder: the push is empty on purpose, so the text of the reminder comes from
+    // the open tab's local notification (agenda-local-reminders.js). This generic text is the
+    // fallback. Always show something (iOS drops subscriptions after silent pushes).
     await self.registration.showNotification('Deeperguard', {
       body: 'You have a reminder',
       icon: '/static/icons/icon-192.png',
