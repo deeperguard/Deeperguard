@@ -28,6 +28,12 @@ few bytes.
   `upsert(id, defaultFolder(name))`. No parent, no order. It does not check for
   duplicate names; `renameFolder` does (`store.js:4905-4917`, global, case-insensitive
   duplicate check at `4910-4914`).
+  - Update (task 154 review follow-up): the uniqueness rule is now **sibling-only**.
+    `renameFolder` and `moveFolder` refuse a name that another folder with the same
+    `parent_id` already has (case-insensitive, trimmed; `NotesLabels.siblingNameTaken`,
+    `store.js:5150-5172`). Same-named folders in different branches are allowed, and a
+    rename or move no longer fails because of a folder elsewhere in the tree.
+    `createFolder` (`store.js:5140-5148`) does not check names at all; it only checks the parent.
 - `listFolders()` (`store.js:4886-4890`) sorts by `title` with `localeCompare`.
   `notesInFolder()` (`4892-4896`) also sorts by title.
 - `deleteFolder()` (`store.js:4919-4928`): every note with `folder_id === uuid` gets

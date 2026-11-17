@@ -42,13 +42,20 @@ const { NotesStore } = h;
   assert.strictEqual(NotesStore.get(acme).content.parent_id, other);
   assert.strictEqual(NotesStore.moveFolder(acme, ''), true, 'back to the root');
   assert.strictEqual(NotesStore.moveFolder(acme, other), true);
+  // a moved folder gets the last place among its new siblings
+  const orderIn = (parent, except) => NotesStore.listFolders()
+    .filter((f) => f.content.parent_id === parent && f.uuid !== except)
+    .map((f) => f.content.order);
+  assert.ok(NotesStore.get(acme).content.order > Math.max(...orderIn(other, acme)), 'moved folder is last among its siblings');
 
   // --- delete: notes go to the root, subfolders move up ---
   const note = NotesStore.newUuid();
   NotesStore.upsert(note, { ...NotesStore.defaultNote(), title: 'N', folder_id: clients });
+  const bOrder = NotesStore.get(b).content.order;
   assert.strictEqual(NotesStore.deleteFolder(clients), true);
   assert.ok(!NotesStore.listFolders().some((f) => f.uuid === clients));
   assert.strictEqual(NotesStore.get(b).content.parent_id, work, 'subfolder moved to the parent');
+  assert.strictEqual(NotesStore.get(b).content.order, bOrder, 'subfolder keeps its order value');
   assert.strictEqual(NotesStore.get(note).content.folder_id, '');
   assert.ok(!NotesStore.get(note).deleted, 'note is kept');
   assert.strictEqual(NotesStore.deleteFolder(clients), false, 'second delete does nothing');
