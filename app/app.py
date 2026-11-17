@@ -2649,6 +2649,14 @@ def api_agenda_reminders_list():
     return jsonify({"ok": True, "reminders": rows})
 
 
+def _reminder_window_sec(body: dict, default: int) -> int | None:
+    """Window size for this request: the default (900 s) unless the client opts in with "window_sec": 300."""
+    if "window_sec" not in body:
+        return default
+    sec = body["window_sec"]
+    return sec if type(sec) is int and sec in db.REMINDER_WINDOW_CHOICES else None
+
+
 @app.post("/api/agenda-reminders/sync")
 def api_agenda_reminders_sync():
     uid = auth.current_user_id()
@@ -2672,6 +2680,9 @@ def api_agenda_reminders_sync():
         return jsonify({"error": "invalid body"}), 400
     if len(raw_reminders) > 200 or len(delete_ids) > 200:
         return jsonify({"error": "batch too large"}), 400
+    window_sec = _reminder_window_sec(body, db.AGENDA_EMAIL_WINDOW_SEC)
+    if window_sec is None:
+        return jsonify({"error": "invalid window_sec"}), 400
     cleaned: list[dict] = []
     for item in raw_reminders:
         valid, err = _validate_agenda_reminder_payload(item)
@@ -2684,6 +2695,7 @@ def api_agenda_reminders_sync():
         delete_ids,
         allow_push=_agenda_push_configured(),
         allow_email=email_verify.account_verified(user),
+        email_window_sec=window_sec,
     )
     return jsonify({"ok": True, **result})
 
@@ -2756,7 +2768,10 @@ PUSH_WINDOW_KEYS = frozenset({"id", "window_start"})
 
 @app.post("/api/push-windows")
 def api_push_windows_put():
-    """Opt-in closed-app reminders: a random id and a 15-minute window per reminder, nothing else."""
+    """Opt-in closed-app reminders: a random id and a window start per reminder, nothing else.
+
+    The window is 15 minutes; a request that carries "window_sec": 300 may use 5-minute windows.
+    """
     uid = auth.current_user_id()
     if not uid:
         return jsonify({"error": "not found"}), 404
@@ -2767,8 +2782,11 @@ def api_push_windows_put():
     if not auth_rate_allow(f"push-windows-user:{uid}", limit=120, window=300.0):
         return jsonify({"error": "rate limited"}), 429
     body = request.get_json(silent=True) or {}
-    if set(body.keys()) - {"endpoint", "windows"}:
+    if set(body.keys()) - {"endpoint", "windows", "window_sec"}:
         return jsonify({"error": "disallowed fields"}), 400
+    window_sec = _reminder_window_sec(body, db.PUSH_WINDOW_SEC)
+    if window_sec is None:
+        return jsonify({"error": "invalid window_sec"}), 400
     endpoint = str(body.get("endpoint") or "").strip()
     raw = body.get("windows")
     if not endpoint or not isinstance(raw, list) or not raw or len(raw) > db.PUSH_WINDOW_CAP:
@@ -2784,8 +2802,8 @@ def api_push_windows_put():
         rid, start = w["id"], w["window_start"]
         if not isinstance(rid, str) or not PUSH_WINDOW_ID_RE.match(rid):
             return jsonify({"error": "invalid id"}), 400
-        if type(start) is not int or start <= 0 or start % db.PUSH_WINDOW_SEC:
-            return jsonify({"error": "window_start must be a multiple of 900"}), 400
+        if type(start) is not int or start <= 0 or start % window_sec:
+            return jsonify({"error": f"window_start must be a multiple of {window_sec}"}), 400
         if start > latest:
             return jsonify({"error": "window_start too far ahead"}), 400
         cleaned.append((rid, start))

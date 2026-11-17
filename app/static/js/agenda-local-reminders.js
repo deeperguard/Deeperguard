@@ -32,6 +32,7 @@
   const LOCK_NAME = 'deeperguard-agenda-local-reminders';
   const MAX_BANNERS = 6;
   const WINDOW_SEC = 900;
+  const FINE_WINDOW_SEC = 300;
   const DEFAULT_TASK_TIME = '09:00'; // same default as agenda-task-reminders.js
   const WINDOW_ID_RE = /^[0-9a-f]{32}$/;
   const DEDUP_DB = 'deeperguard-reminder-dedup';
@@ -98,8 +99,9 @@
     return out.sort((a, b) => a.fireAt - b.fireAt);
   }
 
-  function windowStartOf(ms) {
-    return Math.floor(ms / 1000 / WINDOW_SEC) * WINDOW_SEC;
+  /** Whether `start` is the 15-minute window of `ms`, or its 5-minute window (the opt-in finer size). */
+  function inWindow(ms, start) {
+    return [WINDOW_SEC, FINE_WINDOW_SEC].some((size) => Math.floor(ms / 1000 / size) * size === start);
   }
 
   /** Due moment of a task in local time ({ ms, timed }), or null without a valid date. */
@@ -204,7 +206,7 @@
       for (const w of stored) {
         if (!w || !WINDOW_ID_RE.test(String(w.id)) || !inRange(w.window_start)) continue;
         const keys = due
-          ? taskOffsets(task).filter((m) => windowStartOf(due.ms - m * MS_MIN) === w.window_start)
+          ? taskOffsets(task).filter((m) => inWindow(due.ms - m * MS_MIN, w.window_start))
             .map((m) => taskKey(task, due.ms, m))
           : [];
         out.push({ rid: w.id, start: w.window_start, keys });
@@ -213,7 +215,7 @@
     for (const note of notes || []) {
       const n = note && note.uuid ? noteEntry(note) : null;
       if (!n || !WINDOW_ID_RE.test(String(n.entry.rid)) || !inRange(n.entry.window_start)) continue;
-      const keys = windowStartOf(n.at) === n.entry.window_start ? [noteKey(note, n.at)] : [];
+      const keys = inWindow(n.at, n.entry.window_start) ? [noteKey(note, n.at)] : [];
       out.push({ rid: n.entry.rid, start: n.entry.window_start, keys });
     }
     return out;

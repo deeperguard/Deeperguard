@@ -277,6 +277,17 @@ const visible = () => registration.tray.map((n) => n.title);
     assert.strictEqual(await sw.push(undefined), 'replaced');
   }
 
+  // --- a task planned with the opt-in 5-minute window (14:35 for 14:37) is deduplicated the same way
+  reset();
+  tasks = [task({ reminder_windows: [{ id: rid('e'), window_start: Math.floor(at(14, 37) / 1000 / 300) * 300 }] })];
+  {
+    await run(planner(), at(14, 36), at(14, 38));
+    assert.deepStrictEqual(visible(), ['Pay rent']);
+    clock.now = at(14, 40);
+    assert.strictEqual(await sw.push(undefined), 'replaced', 'the 5-minute window counts as shown locally');
+    assert.deepStrictEqual(visible(), ['Pay rent']);
+  }
+
   // --- two windows: the newer one shown, the older one not: the push shows ----------------------
   reset();
   tasks = [

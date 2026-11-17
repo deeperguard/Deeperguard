@@ -3333,6 +3333,10 @@ AGENDA_REMINDER_SENT_RETENTION_SEC = 7 * 86400.0
 # Email reminders are stored as a 15-minute window without a time label (docs/design/calendar-multi.md
 # §5.2): the server, the mail relay and the inbox provider never learn the exact minute or the event time.
 AGENDA_EMAIL_WINDOW_SEC = 900
+# Opt-in per request ("window_sec"): a 5-minute window instead of 15. Not finer than that: the
+# sender (warning_cron.py) runs every 5 minutes.
+REMINDER_FINE_WINDOW_SEC = 300
+REMINDER_WINDOW_CHOICES = (AGENDA_EMAIL_WINDOW_SEC, REMINDER_FINE_WINDOW_SEC)
 WEB_PUSH_SUBSCRIPTION_CAP = 10
 
 
@@ -3343,8 +3347,12 @@ def sync_agenda_reminders(
     *,
     allow_push: bool = True,
     allow_email: bool = True,
+    email_window_sec: int = AGENDA_EMAIL_WINDOW_SEC,
 ) -> dict[str, Any]:
     """Apply deletes, then upserts.
+
+    Email times are rounded down to email_window_sec (15 minutes unless the client opted in
+    to 5) before they are stored.
 
     Only rows that are new count against the pending cap, and deletes in the same
     request free capacity first, so a client at the cap can still replace its rows.
@@ -3398,7 +3406,7 @@ def sync_agenda_reminders(
                 continue
             if channel == "email":
                 # Older clients still send the exact time and a label: coarsen before storing.
-                fire_at = float(int(fire_at // AGENDA_EMAIL_WINDOW_SEC) * AGENDA_EMAIL_WINDOW_SEC)
+                fire_at = float(int(fire_at // email_window_sec) * email_window_sec)
             if fire_at <= when:
                 continue
             label = str(item.get("local_time_label") or "").strip()

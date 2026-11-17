@@ -5,6 +5,8 @@
  *   down to a 15-minute UTC window and no local time label is sent, so the server and the mail providers
  *   learn only "around this quarter hour", and the mail says nothing about the event. Rounding is
  *   deterministic (no random jitter), so every device uploads the same window for the same reminder.
+ *   A device that opted in to the 5-minute window (docs/design/finer-reminder-window.md) rounds to
+ *   5 minutes instead and says so in the request (`window_sec: 300`).
  * - Occurrences come from the same expander the calendar draws with (interval, until, count,
  *   deleted and moved occurrences), so a reminder never fires for a date that is not shown.
  * - Reminder ids are derived from (event id, occurrence slot, offset, channel). The event id is a
@@ -38,6 +40,12 @@
 
   /** Email reminders go out at the start of this window (seconds); up to 15 minutes early, never late. */
   const EMAIL_WINDOW_SEC = 900;
+  /**
+   * Opt-in on this device (Calendar settings): 5-minute server windows for email reminders and for the
+   * window pushes of tasks and notes. The server and the delivery services then learn each of those
+   * times to within 5 minutes instead of 15. Not finer: the server sends once every 5 minutes.
+   */
+  const FINE_WINDOW_SEC = 300;
 
   const ALLOWED_UPLOAD_KEYS = new Set(['id', 'fire_at', 'channel', 'local_time_label']);
 
@@ -163,6 +171,7 @@
     const rangeEnd = new Date(nowMs + (PLAN_HORIZON_DAYS + 1) * MS_DAY);
     const horizonMs = nowMs + PLAN_HORIZON_DAYS * MS_DAY;
     const occ = expandOccurrences(ev, rangeStart, rangeEnd).slice(0, MAX_OCCURRENCES_PER_EVENT);
+    const windowSec = serverWindowSec();
     const out = [];
     for (const o of occ) {
       for (const minutes of offsets) {
@@ -174,7 +183,7 @@
           if (out.length >= MAX_ROWS_PER_EVENT) return out;
           const email = channel === 'email';
           const fireSec = email
-            ? Math.floor(fireAt / 1000 / EMAIL_WINDOW_SEC) * EMAIL_WINDOW_SEC
+            ? Math.floor(fireAt / 1000 / windowSec) * windowSec
             : Math.floor(fireAt / 1000);
           // The window already started: the server would refuse it. The local reminder still fires.
           if (fireSec * 1000 <= nowMs) continue;
@@ -239,6 +248,37 @@
   }
 
   /** Channels the user switched on, on this device. */
+  /** Size (seconds) of the window that reminder times are rounded down to before upload: 900, or 300 after opt-in. */
+  function serverWindowSec() {
+    return readPrefs().reminder_window_min === 5 ? FINE_WINDOW_SEC : EMAIL_WINDOW_SEC;
+  }
+
+  /**
+   * `{ window_sec: 300 }` when any of these window starts needs the 5-minute opt-in, else `{}`.
+   * The server refuses (push) or coarsens (email) such a start unless the request carries this field.
+   */
+  function windowSecField(starts) {
+    return starts.some((sec) => sec % EMAIL_WINDOW_SEC) ? { window_sec: FINE_WINDOW_SEC } : {};
+  }
+
+  /** Reminder copy that names the 15-minute window, adjusted to the window chosen on this device. */
+  function windowCopy(text) {
+    return serverWindowSec() === FINE_WINDOW_SEC ? String(text).replace(/\b15([- ])minute/g, '5$1minute') : String(text);
+  }
+
+  const WINDOW_COPY_IDS = ['agenda-reminder-visibility', 'agenda-reminder-email-explainer', 'note-reminder-hint'];
+  const windowCopyDefaults = new Map();
+
+  /** Keep the on-page texts that name the window in line with the choice. */
+  function applyWindowCopy() {
+    for (const id of WINDOW_COPY_IDS) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      if (!windowCopyDefaults.has(id)) windowCopyDefaults.set(id, el.textContent);
+      el.textContent = windowCopy(windowCopyDefaults.get(id));
+    }
+  }
+
   function channelPrefs() {
     const prefs = readPrefs();
     const channels = [];
@@ -315,11 +355,13 @@
     const rows = reminders.slice();
     const dels = deleteIds.slice();
     do {
+      const batch = rows.splice(0, SYNC_BATCH);
       await S.api('/api/agenda-reminders/sync', {
         method: 'POST',
         body: JSON.stringify({
-          reminders: rows.splice(0, SYNC_BATCH),
+          reminders: batch,
           delete_ids: dels.splice(0, SYNC_BATCH),
+          ...windowSecField(batch.filter((r) => r.channel === 'email').map((r) => r.fire_at)),
         }),
       });
     } while (rows.length || dels.length);
@@ -452,6 +494,9 @@
     const pushEl = document.getElementById('agenda-reminder-push');
     if (emailEl instanceof HTMLInputElement) emailEl.checked = !!prefs.agenda_reminder_email;
     if (pushEl instanceof HTMLInputElement) pushEl.checked = !!prefs.agenda_reminder_push;
+    const windowEl = document.getElementById('agenda-reminder-window');
+    if (windowEl instanceof HTMLSelectElement) windowEl.value = prefs.reminder_window_min === 5 ? '5' : '15';
+    applyWindowCopy();
   }
 
   function saveChannelPrefs() {
@@ -471,6 +516,18 @@
   }
 
   /** Text for the editor when ticking an offset would do nothing. Empty when reminders can be sent. */
+  function onWindowChange(ev) {
+    const prefs = readPrefs();
+    if (ev.currentTarget.value === '5') prefs.reminder_window_min = 5;
+    else delete prefs.reminder_window_min;
+    try { localStorage.setItem('deeperguard-prefs', JSON.stringify(prefs)); } catch (e) { /* ignore */ }
+    applyWindowCopy();
+    if (!hasAgendaRemindersEntitlement()) return;
+    // Events and tasks that are already planned move to the new window.
+    topUp(true).catch(() => {});
+    global.NotesAgendaTaskReminders?.onAgendaShown?.()?.catch(() => {});
+  }
+
   function editorHint() {
     if (!hasAgendaRemindersEntitlement()) return '';
     if (!channelPrefs().length) {
@@ -595,6 +652,7 @@
     settingsWired = true;
     document.getElementById('agenda-reminder-email')?.addEventListener('change', onChannelChange);
     document.getElementById('agenda-reminder-push')?.addEventListener('change', onChannelChange);
+    document.getElementById('agenda-reminder-window')?.addEventListener('change', onWindowChange);
     document.getElementById('agenda-reminder-enable-push')?.addEventListener('click', (ev) => {
       const subscribed = ev.currentTarget.dataset.subscribed === '1';
       const run = subscribed ? disablePushFromGesture() : enablePushFromGesture();
@@ -607,6 +665,11 @@
     }
   }
 
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyWindowCopy);
+    else applyWindowCopy();
+  }
+
   global.NotesAgendaReminders = {
     OFFSET_PRESETS,
     PLAN_HORIZON_DAYS,
@@ -616,6 +679,10 @@
     GENERIC_PUSH_TITLE,
     genericBody,
     EMAIL_WINDOW_SEC,
+    FINE_WINDOW_SEC,
+    serverWindowSec,
+    windowSecField,
+    windowCopy,
     normalizeOffsets,
     offsetMinutes,
     offsetLabel,
