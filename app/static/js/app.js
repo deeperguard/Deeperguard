@@ -9900,7 +9900,7 @@
       renderNotes();
       syncFilterSelect();
       if (currentId) syncNoteFolderControl(NotesStore.get(currentId));
-      toastWithUndo('Folder deleted', () => {
+      toastWithUndo('Folder removed', () => {
         NotesStore.upsert(snapshot.uuid, { ...snapshot.content });
         snapshot.childIds.forEach((childId) => {
           const child = NotesStore.get(childId);
