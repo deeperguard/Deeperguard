@@ -338,9 +338,15 @@ niet nodig.
 `backlinks.js` bouwt de index uit ontsleutelde notities. Hij wordt nooit
 opgeslagen, en `store.js:866` wist hem bij vergrendelen.
 
-### 3.5 Sjablonen: eigen versleuteld type (aanbevolen, nog te bouwen)
+### 3.5 Sjablonen: eigen versleuteld type (gebouwd in M3)
 
-Nu is een sjabloon een notitie met `is_template: true` (`templates.js:43`, `:68-89`).
+*Stand M3:* sjablonen zijn nu items met `type: 'template'` (`templates.js`,
+`store.js` `listTemplateItems`). "Manage templates" toont, hernoemt (met
+tekst), verwijdert en gebruikt ze. Oude `is_template`-notities worden bij
+ontgrendelen omgezet, behalve beschermde, verwijderde (prullenbak) en die met
+bijlagen; die blijven als notitie en worden nog gelezen.
+
+Vóór M3 was een sjabloon een notitie met `is_template: true` (`templates.js:43`, `:68-89`).
 De opdracht vraagt een eigen type. Aanbeveling:
 
 ```
@@ -445,7 +451,8 @@ gebeurt dan alleen in het beeld, niet op de schijf.
    (`NOTES_ORGANIZATION_SPEC.md` §8, eerste vraag).
 4. Sjablonen: `is_template: true`-notities worden bij M3 omgezet naar `type:
    'template'`. Per notitie, idempotent, zonder de tekst te wijzigen. Oude clients
-   zien de notitie dan als gewone notitie. Dat is acceptabel, want ze kunnen niets
+   tonen een omgezet sjabloon niet meer (ze lezen alleen `type: 'note'`); het
+   item blijft bewaard en synchroniseert gewoon. Dat is acceptabel, want ze kunnen niets
    aanmaken dat de nieuwe client niet kan lezen.
 5. Oude clients die labels of mappen lezen: zie §7.
 
