@@ -802,8 +802,10 @@ def main() -> int:
     for row in ACTIONS:
         report.check(f"{row['selector']} applies to a known screen", row["applies"] in known, row["applies"])
         phone = row["phone_reach"]
-        report.check(f"{row['selector']} has a parsed Phone reach", bool(phone["text"]) and bool(phone["kind"]),
-                     phone["text"])
+        # A `via` reach without an opener would probe the control without opening anything.
+        report.check(f"{row['selector']} names its openers in Reach and Phone reach",
+                     all(spec["kind"] != "via" or spec["via"] for spec in (row, phone)),
+                     f"{row['reach']} | {phone['text']}")
 
     proc, url = run_server()
     try:

@@ -969,6 +969,13 @@ point is an open note, opened by tapping its row in the list. On a phone the
 open note covers the list, so controls of the list screen and its drawer are
 reached `via` `#btn-back` first.
 
+The Phone reach of the Tags and Folders buttons differs on purpose. The
+Folders section is closed when the drawer opens, so its header
+`#folder-section summary` opens it and is an opener of `#btn-new-folder`. The
+Tags section is already open when the drawer opens at 390px, so `#btn-new-tag`
+and `#btn-manage-tags` are reached `via` the drawer alone; a click on the Tags
+header would close the section again.
+
 <!-- layout-actions:start -->
 | Selector | Accessible name | Current place | New place | Applies to | Reach | Phone reach |
 |---|---|---|---|---|---|---|
