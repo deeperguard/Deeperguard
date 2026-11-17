@@ -39,11 +39,21 @@ class PushToggleNoticeTest(unittest.TestCase):
         target = toggle["aria-describedby"]
         self.assertIn(target, c.attrs)
         notice = " ".join(c.text[target].split())
-        for needed in ("Off by default", "push address", "random ID", "15-minute window",
-                       "up to 15 minutes early",
+        for needed in ("Off by default", "push address", "random ID", "exact time it is due",
+                       "start time",
                        "never learns event titles", "Google, Apple or Mozilla",
                        "removes its push address", "backups and logs"):
             self.assertIn(needed, notice)
+        self.assertNotIn("15-minute window", notice)
+
+    def test_visibility_notice_states_window_for_email_and_exact_time_for_push(self):
+        c = _Collect()
+        c.feed(TEMPLATE.read_text(encoding="utf-8"))
+        notice = " ".join(c.text["agenda-reminder-visibility"].split())
+        self.assertIn("never its title, location or notes", notice)
+        self.assertIn("Email reminders show only a 15-minute window", notice)
+        self.assertIn("Push reminders show the exact time", notice)
+        self.assertIn("only work while Deeperguard is open", notice)
 
 
 if __name__ == "__main__":
