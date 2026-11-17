@@ -200,7 +200,12 @@ logic) before pushing anything.
   plus a check group of 2 characters:
   `ABCD-EFGH-JKMN-PQRS-TVWX-YZ01-2345-6789-QR`.
   Check group = first 10 bits of `SHA-256("deeperguard/recovery/check/v1" || key bytes)`
-  as 2 base32 characters. Input is upper-cased, spaces and hyphens removed,
+  as 2 base32 characters. This is a hash-based check, not an error-correcting
+  code: **any** typo, swap or transposition (in the key or in the check group)
+  is caught with probability 1 - 2^-10 (about 99.9 %); roughly 1 in 1024 random
+  mutations goes unnoticed. No guarantee is made for specific error classes.
+  The check only saves a round trip; a wrong key that passes it still fails
+  safely at the AES-GCM tag (and the server proof). Input is upper-cased, spaces and hyphens removed,
   `O`->`0`, `I`/`L`->`1`; a wrong check group is rejected **locally, before any
   request and without counting as an attempt**. A word list is deliberately not
   used (no shipped list to audit, fewer transcription ambiguities in code form).
@@ -260,7 +265,7 @@ claims would be false.
 
 | Column | Type | Meaning |
 | --- | --- | --- |
-| `vault_key_id` | TEXT NOT NULL DEFAULT `''` | `key_id` of the current `VK` once any wrap exists; `''` = no wraps ever stored |
+| `vault_key_id` | TEXT NOT NULL DEFAULT `''` | `key_id` of the current `VK` while at least one wrap exists; `''` = no wraps. Freely overwritable whenever no wrap exists (2.2), whatever `vault_key_rev` is |
 | `vault_key_rev` | INTEGER NOT NULL DEFAULT 0 | compare-and-set counter for all wrap changes |
 | `prf_salt` | TEXT NOT NULL DEFAULT `''` | per-account PRF salt (1.4) |
 | `vault_keys_invalidated_at` | REAL NOT NULL DEFAULT 0 | set when wraps were dropped because of a legacy password change (6.2); cleared on next enrollment |
@@ -288,9 +293,19 @@ bump `vault_key_rev` in the same transaction.)
   in the same transaction as the table change (`db.tx()`); zero rows updated =
   **409** `{"error":"key_rev_mismatch","key_rev":<current>,"key_id":"<current>"}`
   and nothing is changed. The client refetches status and decides again.
-* Writes of a wrap also carry `key_id`; it must equal `users.vault_key_id`, or
-  `vault_key_id == ''` and `expected_key_rev == 0` (first enrollment sets it).
-  Otherwise **409** `{"error":"key_id_mismatch", ...}`: the device holds a `VK`
+* Writes of a wrap also carry `key_id`. It must equal `users.vault_key_id`, **or**
+  no wrap exists for the user (no recovery row and no PRF rows). In the second
+  case the write overwrites `vault_key_id` with the request's `key_id`,
+  independent of `vault_key_rev` (only the normal `expected_key_rev` CAS
+  applies). So enrolling again after revoking all wraps, after the late
+  fallback of 6.2, or after a password change without wraps always works.
+  Every password change, with or without `vault_keys`, also writes
+  `vault_key_id`: the new `to_key_id` when wraps are sent, `''` when none
+  remain (`VK` is derived from the password, so the old id is stale either
+  way). Residual: a stale device enrolling while no wrap exists can store a
+  wrap of an old `VK`; it is never served as current because recovery checks
+  the unwrapped `key_id` and decrypts a sample of items (3.2) and the device
+  gets the remote-password-change prompt on its next poll. Otherwise **409** `{"error":"key_id_mismatch", ...}`: the device holds a `VK`
   that is no longer the account's (another device changed the password) and must
   go through the remote-password-change flow instead of uploading a stale wrap.
 * Idempotence: repeating an identical request after a lost response returns 200
@@ -413,7 +428,8 @@ afterwards. Order mirrors `changePassword`: data first, credentials last.
   confirms before overwriting and shows the new key like a new account does.
 * **Revoke** = `DELETE recovery`.
 * **Passkey delete** (`/api/auth/webauthn/remove`): the credential row goes, the
-  FK removes its wrap, `vault_key_rev` bumps.
+  FK removes its wrap, `vault_key_rev` bumps; if it was the last wrap,
+  `vault_key_id` becomes `''`.
 * **Passkey re-enroll** after a password change/recovery: the settings list shows
   `current:false` for passkeys whose wrap was dropped; one PRF ceremony re-creates it.
 
@@ -546,7 +562,7 @@ request header `X-DG-Vault-Schema: 1` on all `/api/account/*` calls.
    succeed or the account lands in the "rows under new key, old verifier" state of
    0.4. `POST /api/account/password` without `vault_keys` and with existing wraps
    therefore **accepts** the change and, in the same transaction, deletes the
-   recovery and PRF wraps, sets `vault_key_id=''`, bumps `vault_key_rev`, sets
+   recovery and PRF wraps, sets `vault_key_id=''` (free for re-enrollment, 2.2), bumps `vault_key_rev`, sets
    `vault_keys_invalidated_at`, and sends the invalidation mail (3.6). The
    settings page then shows "Your recovery key was removed because the password
    was changed with an older app version. Create a new one."
@@ -616,7 +632,7 @@ Chromium's virtual authenticator with `hasPrf:true` for PRF). Each test asserts 
 behaviour (DB rows, ciphertext bytes, HTTP status, visible UI), not on source text.
 
 ### 9.1 New account
-- [ ] N1 `recovery key` generator: 160 bits, 8x4+2 format, check group detects every single-character change and swapped adjacent groups; normalisation of `o/O/i/l`, spaces, hyphens.
+- [ ] N1 `recovery key` generator: 160 bits, 8x4+2 format, check group rejects wrong keys with a measured miss rate of about 1/1024 (over e.g. 200 000 random single-character mutations, assert a miss rate between 0.05 % and 0.2 %; the check is hash-based, so no error class is guaranteed); normalisation of `o/O/i/l`, spaces, hyphens.
 - [ ] N2 Wrap/unwrap round trip with the AAD of 1.2; fails when `account_id`, `type`, `key_id` or `binding` differ by one character; fails on `wrap_version != 1`.
 - [ ] N3 HKDF vectors for `deeperguard/recovery/v1`, `/recovery-proof/v1`, `/prf/v1`, `/keyid/v1` (fixed inputs, fixed outputs) so other implementations agree.
 - [ ] E1 Register: recovery key screen blocks continuing until the confirm box is ticked; server row exists with `key_id` equal to the client's; no request body contained the key or `VK` (capture all requests, search for the raw/base64/hex key bytes).
@@ -656,6 +672,7 @@ behaviour (DB rows, ciphertext bytes, HTTP status, visible UI), not on source te
 - [ ] E11 Device A enrols a recovery key while device B (same session account) enrols too: one wins, the other gets 409, refetches and sees `active`.
 - [ ] E12 Device A changes the password; device B (unlocked with the old key) tries to upload a wrap: 409 `key_id_mismatch`; B then shows the existing remote-password-change prompt (`remotePasswordChanged`).
 - [ ] P12 Concurrent `PUT recovery` and `POST /api/account/password` with `vault_keys`: exactly one `key_rev` outcome, no wrap with a `key_id` that differs from `users.vault_key_id`.
+- [ ] E14 Revoke all wraps, change the password (wraps absent, current or old client), enrol a recovery key again with the new `key_id`: 200, `users.vault_key_id` equals the new id, `vault_key_rev` strictly increased. Same after the 6.2 late fallback.
 - [ ] E13 Password change by a current client with wraps: new recovery key shown and confirmed, commit atomic, other passkeys marked `current:false`.
 
 ### 9.8 Old client
