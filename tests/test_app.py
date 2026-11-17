@@ -6110,9 +6110,6 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
     def _import_app(self):
         return importlib.import_module("app")
 
-    def _assert_no_startup_warnings(self):
-        return self.assertNoLogs("deeperguard", level="WARNING")
-
     def test_server_ocr_startup_warning_when_enabled(self):
         os.environ["NOTES_SERVER_OCR"] = "1"
         with self.assertLogs("deeperguard", level="WARNING") as cm:
@@ -6133,7 +6130,7 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
         self.assertIn("NOTES_OCR_EPHEMERAL is off", joined)
 
     def test_server_ocr_startup_silent_when_disabled(self):
-        with self._assert_no_startup_warnings():
+        with self.assertNoLogs("deeperguard", level="WARNING"):
             self._import_app()
 
     def test_wan_without_secure_cookies_startup_warning(self):
@@ -6149,12 +6146,12 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
     def test_wan_with_secure_cookies_startup_silent(self):
         os.environ["NOTES_DISABLE_CIDR_GATE"] = "1"
         os.environ["NOTES_SECURE_COOKIES"] = "1"
-        with self._assert_no_startup_warnings():
+        with self.assertNoLogs("deeperguard", level="WARNING"):
             self._import_app()
 
     def test_cidr_gate_on_without_secure_cookies_startup_silent(self):
         os.environ["NOTES_SECURE_COOKIES"] = "0"
-        with self._assert_no_startup_warnings():
+        with self.assertNoLogs("deeperguard", level="WARNING"):
             self._import_app()
 
 
