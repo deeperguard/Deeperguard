@@ -416,7 +416,7 @@ def check_rows(page, report: Report, where: str, rows: list[dict], reset, reach:
             report.check(label + " has an accessible name", bool(info["name"]), info)
     reset()
     for row in rows:
-        if spec(row)["kind"] != "conditional":
+        if spec(row)["kind"] not in ("conditional", "replaced"):
             continue
         info = probe(page, row["selector"])
         label = label_of(row)
