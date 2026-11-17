@@ -219,11 +219,14 @@ def load_actions() -> list[dict]:
         if not line.startswith("| `"):
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) != 6:
-            raise ValueError(f"table row needs 6 cells: {line}")
-        selector, name, _old, _new, applies, reach = cells
+        if len(cells) != 7:
+            raise ValueError(f"table row needs 7 cells: {line}")
+        selector, name, _old, _new, applies, reach, phone_reach = cells
+        if not phone_reach:
+            raise ValueError(f"Phone reach is empty for {selector}")
         rows.append({"selector": selector.strip("`"), "name": name, "applies": applies,
-                     "reach": reach, **parse_reach(reach)})
+                     "reach": reach, **parse_reach(reach),
+                     "phone_reach": {"text": phone_reach, **parse_reach(phone_reach)}})
     return rows
 
 
@@ -765,6 +768,9 @@ def main() -> int:
     known = {"all", "notes", "plain", "pdf", "agenda", "2fa"}
     for row in ACTIONS:
         report.check(f"{row['selector']} applies to a known screen", row["applies"] in known, row["applies"])
+        phone = row["phone_reach"]
+        report.check(f"{row['selector']} has a parsed Phone reach", bool(phone["text"]) and bool(phone["kind"]),
+                     phone["text"])
 
     proc, url = run_server()
     try:
