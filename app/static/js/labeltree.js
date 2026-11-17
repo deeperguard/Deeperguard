@@ -150,7 +150,7 @@
     try { storage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch (err) { /* ignore */ }
   }
 
-  const api = { OPEN_KEY, visibleRows, html, navigate, scope, moveTargets, loadOpen, saveOpen };
+  const api = { OPEN_KEY, childMap, visibleRows, html, navigate, scope, moveTargets, loadOpen, saveOpen };
   if (typeof window !== 'undefined') window.NotesLabelTree = api;
   if (typeof globalThis !== 'undefined') globalThis.NotesLabelTree = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
