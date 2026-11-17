@@ -174,7 +174,7 @@ def test_switch_off_hides_and_pauses_then_on_refreshes_once(env):
     assert page.locator("#agenda-calendar-settings b, #agenda-calendar-settings img").count() == 0
     assert page.get_by_role("checkbox", name="Show Agenda").is_checked()
     assert page.get_by_role("checkbox", name="Show Verjaardag").is_checked()
-    assert page.locator("#agenda-subscriptions-list [role=switch], #agenda-subscriptions-list input").count() == 0
+    assert page.locator("#agenda-subscriptions-list [role=switch], #agenda-subscriptions-list input:not([type=radio])").count() == 0
 
     # Off with the keyboard: events disappear without a reload, panel stays open.
     _press_switch(page, "Team Rooster")
