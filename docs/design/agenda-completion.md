@@ -11,39 +11,45 @@ laat zien dat dat voor meerdere agenda's en tijdzones niet meer klopt.
 
 ## 1. Inventaris van wat er nu is
 
-**Hoe dit gecontroleerd is.** Twee keer is de code gelezen (paden onder `app/`) én de draaiende app
-gebruikt: een lokale server met een lege tijdelijke datamap en een wegwerpaccount (Free-plan),
+**Hoe dit gecontroleerd is.** Er zijn twee bronnen gebruikt: de code (paden onder `app/`) en de
+draaiende app. Een lokale server met een lege tijdelijke datamap en een wegwerpaccount (Free-plan),
 bestuurd met Playwright/Chromium op 2026-11-17, apparaat-tijdzone Europe/Amsterdam. In de app zijn een
 tweede agenda "Werk" aangemaakt, twee afspraken opgeslagen (één met tijdzone America/New_York en
 herinneringen "20, 120", één hele-dag-afspraak), de instellingen en de editor bekeken, een
 webcal://-link in het abonnementsformulier ingevoerd en de .ics-export gedownload. De opgeslagen
 afspraken zijn uitgelezen via `NotesStore.listAgendaEvents()`. Wat niet kon: bezorging van echte push of
 e-mail (geen VAPID-sleutels, Free-plan, geen mailrelay) en echte OS-meldingen (in de testbrowser
-staat meldingstoestemming op "geblokkeerd"). Die rijen zijn alleen uit code gelezen en zo gemarkeerd.
+staat meldingstoestemming op "geblokkeerd"). Per rij zegt de kolom **Bron** wat er in de app is gezien en wat alleen uit
+code komt.
 
-Status: **werkt** = in de app gezien; **half** = werkt maar mist iets wat de taak vraagt; **ontbreekt**.
+Kolom **Bron**: **app** = in de draaiende app gezien; **app + code** = een deel in de app gezien, het
+rest alleen uit code; **code** = alleen uit de code gelezen, niet in de app gezien.
 
-| Onderdeel | Status | Bevinding | Bestand:regel |
-|---|---|---|---|
-| Opslag van afspraken | werkt | Alle afspraken in één versleuteld item `agenda_pack` (vaste uuid); server ziet alleen ciphertext. | `app/static/js/store.js:1807`, `:1901` |
-| Meerdere agenda's: model | werkt | `calendars` in de versleutelde pack met `type`, `name`, `color` (sleutel), `visible`, `order`, `default_reminders`, `is_default`. Standaardagenda met vaste id. Gezien in de app: "Agenda" (blauw) en "Werk" (teal). | `store.js:1950-1976`, `:2009`, `:2038`, `:2566` (samenvoegen) |
-| Meerdere agenda's: UI | werkt | Paneel "My calendars": nieuw, hernoemen, kleur (9 vaste tinten, radio-knoppen), aan/uit, verwijderen. Native knoppen en labels. In de editor een keuzelijst "Calendar". | `app/static/js/agenda-calendars.js:15-26`, `:281-357`; `app/templates/app.html:1537-1540`, `:2841` |
-| Kleuren | werkt | Kleur per agenda uit een vaste palet-lijst (contrasttest bestaat). Oude per-afspraak-kleur (`EVENT_COLORS`) bestaat nog naast de agendakleur. | `agenda-calendars.js:15`; `app/static/js/agenda.js:6` |
-| Agenda-id op afspraak | werkt | `calendarId` op de afspraak; zonder id geldt de standaardagenda (alleen in het geheugen, niets herschreven). Gezien: nieuwe afspraak kreeg de id van "Werk". | `store.js:2001`; `agenda.js:3001`, `:3034-3044` |
-| Tijdzone per afspraak | werkt | Optioneel veld `tz` (IANA) naast een UTC-instant; invoerveld met 419 zones in een datalist, standaard de apparaatzone; een hele-dag-afspraak heeft geen zone (rij verborgen, `tz: null` opgeslagen). Gezien: `tz: "America/New_York"`. | `app/static/js/agenda-tz.js:1-9`; `agenda.js:2535-2551`, `:3011`; `app.html:2837` |
-| Tijdzone: tijd in andere zone tonen | werkt | Detailweergave toont de originele tijd naast jouw tijd. | `agenda-tz.js:134`; `agenda.js:2172` |
-| Zwevende afspraken (floating) | ontbreekt | Er is geen "zonder zone"-modus voor afspraken met tijd. Een afspraak zonder `tz` is een vaste UTC-instant en volgt de apparaatzone alleen bij het tonen. Alleen import leest zwevende ICS-tijden, en maakt er direct een instant van. | `agenda-ics.js:139-170` |
-| Hele-dag-afspraken | half | Opgeslagen als lokale middernacht van het apparaat als instant (`start: 2026-11-16T23:00Z`, `end: 2026-11-17T23:00Z` op een Amsterdamse apparaatzone). Wisselt het apparaat van zone, dan schuift de dag. | `agenda.js:2884-2893`; gezien in de app |
-| Herinneringen instellen | werkt | `reminders` is een lijst minuten vooraf (gezien: `[20, 120]`), presets (op tijd, 5, 10, 15, 30 min, 1 uur, 1 dag) plus eigen waarden 0-40320, en een standaardlijst per agenda (`default_reminders`). | `app.html:2813-2831`; `agenda.js:2556`, `:2727`; `store.js:1960` |
-| Herinneringen lokaal | werkt (code + UI) | Planner leest de ontsleutelde afspraken, vuurt elke herinnering één keer (Web Lock tussen tabs), toont een banner in de app en een `Notification` als de gebruiker toestemming geeft. Gemiste herinneringen (tot 24 uur) komen eenmalig als "Missed", zonder OS-melding. Gezien in de app: uitleg en de status "Browser notifications are blocked"; het afgaan zelf is niet in de app uitgelokt. | `app/static/js/agenda-local-reminders.js:52-80`, `:105`, `:231-240`; `app.html:1566-1571` |
-| Herinneringen lokaal via service worker | ontbreekt | De lokale melding gebruikt `new Notification(...)`, niet `registration.showNotification`; sommige mobiele browsers staan dat alleen via de service worker toe (de code vangt de fout op en toont dan alleen de banner). | `agenda-local-reminders.js:231-240` |
-| E-mailherinneringen | half | Server-route, tabel en cron bestaan; alleen Pro (`agenda_reminders`). Gezien: op Free staan de vinkvakken uitgeschakeld met "Event reminders are included with Pro". Bezorging niet gezien. De server krijgt per herinnering `id`, `fire_at` (exacte seconde), `channel`, `local_time_label`; de mailtekst is generiek. | `app/app.py:2616`, `:2639-2690`; `app/db.py:372-386`; `app/agenda_reminder_cron.py:80-92`, `:144`; `app/plans.py:129`; `app.html:1578-1583` |
-| Push (per herinnering) | half | Pro-kanaal: client schrijft in via `pushManager.subscribe`, server bewaart het endpoint en stuurt via pywebpush; alleen als VAPID is ingesteld. Payload bevat een generieke titel/tekst en `reminder_id`. Niet gezien in de draaiende app (geen VAPID). | `app/static/js/agenda-reminders.js:525-547`; `app.py:2691-2737`; `agenda_reminder_cron.py:100-130` |
-| Push (venster-opt-in uit #75) | half | Server-kant bestaat: tabel `push_reminder_windows` (id + 15-minutenvenster), routes `/api/push-windows`, cron `run_push_windows` met lege push, service worker toont vaste tekst. Er is **geen client** die die routes aanroept (geen verwijzing in `app/static/js`). | `db.py:398-411`; `app.py:2739-2794`; `agenda_reminder_cron.py:192-200`; `app/static/sw.js:540-552` |
-| ICS-import | werkt | Bestand kiezen of laten vallen, voorbeeldweergave vóór opslaan; leest TZID en bewaart `source_tz`; VALARM en VTIMEZONE worden overgeslagen. | `app/static/js/agenda-ics.js:3`, `:566`, `:659`; `app.html:1547` |
-| ICS-export | half | Eén bestand met alle afspraken van alle agenda's (gezien); geen onderscheid per agenda, geen agendanaam of -kleur. Afspraken met tijdzone worden bij herhaling met TZID + VTIMEZONE geschreven, maar een enkele afspraak met `tz` ging als UTC-instant (gezien); herinneringen worden niet als VALARM geschreven. Bestand is onversleuteld, en dat staat in de UI. | `agenda-ics.js:385-516`, `:480-490`; `agenda.js:406`, `:1051-1060`; `app.html:1564` |
-| Abonneren op een webcal-/https-feed | werkt | Abonnementen in de versleutelde pack; `webcal://` wordt naar `https://` omgezet; de browser haalt de feed zelf op; bij een CORS-blokkade keuze "Fetch via server" via een relay die niets opslaat. Gezien: een onbereikbare feed gaf de relay-keuze. Het ophalen van een echte feed is niet geprobeerd (geen netwerk). | `app/static/js/agenda-subscriptions.js:40-43`; `app/ics_relay.py:1-25`; `app.py:1038`; `app.html:1550-1561` |
-| Eigen agenda als webcal-feed aanbieden | ontbreekt | Er is geen route die een agenda als leesbare feed publiceert. Alleen de eenmalige .ics-export. | n.v.t. (gezocht in `app.py`, `agenda-ics.js`) |
+Kolom **Status** beoordeelt de code: **werkt** = functie is aanwezig en werkt volgens de code;
+**half** = werkt maar mist iets wat de taak vraagt; **ontbreekt** = niet aanwezig. Een status
+**werkt** of **half** zegt dus niet dat bezorging, afgaan of ophalen is gezien; dat staat in Bron.
+
+| Onderdeel | Status | Bron | Bevinding | Bestand:regel |
+|---|---|---|---|---|
+| Opslag van afspraken | werkt | app | Alle afspraken in één versleuteld item `agenda_pack` (vaste uuid); server ziet alleen ciphertext. | `app/static/js/store.js:1807`, `:1901` |
+| Meerdere agenda's: model | werkt | app | `calendars` in de versleutelde pack met `type`, `name`, `color` (sleutel), `visible`, `order`, `default_reminders`, `is_default`. Standaardagenda met vaste id. Gezien in de app: "Agenda" (blauw) en "Werk" (teal). | `store.js:1950-1976`, `:2009`, `:2038`, `:2566` (samenvoegen) |
+| Meerdere agenda's: UI | werkt | app | Paneel "My calendars": nieuw, hernoemen, kleur (9 vaste tinten, radio-knoppen), aan/uit, verwijderen. Native knoppen en labels. In de editor een keuzelijst "Calendar". | `app/static/js/agenda-calendars.js:15-26`, `:281-357`; `app/templates/app.html:1537-1540`, `:2841` |
+| Kleuren | werkt | app + code | Kleur per agenda uit een vaste palet-lijst (contrasttest bestaat). Oude per-afspraak-kleur (`EVENT_COLORS`) bestaat nog naast de agendakleur. | `agenda-calendars.js:15`; `app/static/js/agenda.js:6` |
+| Agenda-id op afspraak | werkt | app | `calendarId` op de afspraak; zonder id geldt de standaardagenda (alleen in het geheugen, niets herschreven). Gezien: nieuwe afspraak kreeg de id van "Werk". | `store.js:2001`; `agenda.js:3001`, `:3034-3044` |
+| Tijdzone per afspraak | werkt | app | Optioneel veld `tz` (IANA) naast een UTC-instant; invoerveld met 419 zones in een datalist, standaard de apparaatzone; een hele-dag-afspraak heeft geen zone (rij verborgen, `tz: null` opgeslagen). Gezien: `tz: "America/New_York"`. | `app/static/js/agenda-tz.js:1-9`; `agenda.js:2535-2551`, `:3011`; `app.html:2837` |
+| Tijdzone: tijd in andere zone tonen | werkt | code | Detailweergave toont de originele tijd naast jouw tijd. | `agenda-tz.js:134`; `agenda.js:2172` |
+| Zwevende afspraken (floating) | ontbreekt | code | Er is geen "zonder zone"-modus voor afspraken met tijd. Een afspraak zonder `tz` is een vaste UTC-instant en volgt de apparaatzone alleen bij het tonen. Alleen import leest zwevende ICS-tijden, en maakt er direct een instant van. | `agenda-ics.js:139-170` |
+| Hele-dag-afspraken | half | app | Opgeslagen als lokale middernacht van het apparaat als instant (`start: 2026-11-16T23:00Z`, `end: 2026-11-17T23:00Z` op een Amsterdamse apparaatzone). Wisselt het apparaat van zone, dan schuift de dag. | `agenda.js:2884-2893`; gezien in de app |
+| Herinneringen instellen | werkt | app | `reminders` is een lijst minuten vooraf (gezien: `[20, 120]`), presets (op tijd, 5, 10, 15, 30 min, 1 uur, 1 dag) plus eigen waarden 0-40320, en een standaardlijst per agenda (`default_reminders`). | `app.html:2813-2831`; `agenda.js:2556`, `:2727`; `store.js:1960` |
+| Herinneringen lokaal | werkt (code + UI) | app + code | Planner leest de ontsleutelde afspraken, vuurt elke herinnering één keer (Web Lock tussen tabs), toont een banner in de app en een `Notification` als de gebruiker toestemming geeft. Gemiste herinneringen (tot 24 uur) komen eenmalig als "Missed", zonder OS-melding. Gezien in de app: uitleg en de status "Browser notifications are blocked"; het afgaan zelf is niet in de app uitgelokt. | `app/static/js/agenda-local-reminders.js:52-80`, `:105`, `:231-240`; `app.html:1566-1571` |
+| Herinneringen lokaal via service worker | ontbreekt | code | De lokale melding gebruikt `new Notification(...)`, niet `registration.showNotification`; sommige mobiele browsers staan dat alleen via de service worker toe (de code vangt de fout op en toont dan alleen de banner). | `agenda-local-reminders.js:231-240` |
+| E-mailherinneringen | half | app + code | Server-route, tabel en cron bestaan; alleen Pro (`agenda_reminders`). Gezien: op Free staan de vinkvakken uitgeschakeld met "Event reminders are included with Pro". Bezorging niet gezien. De server krijgt per herinnering `id`, `fire_at` (exacte seconde), `channel`, `local_time_label`; de mailtekst is generiek. | `app/app.py:2616`, `:2639-2690`; `app/db.py:372-386`; `app/agenda_reminder_cron.py:80-92`, `:144`; `app/plans.py:129`; `app.html:1578-1583` |
+| Push (per herinnering) | half | code | Pro-kanaal: client schrijft in via `pushManager.subscribe`, server bewaart het endpoint en stuurt via pywebpush; alleen als VAPID is ingesteld. Payload bevat een generieke titel/tekst en `reminder_id`. Niet gezien in de draaiende app (geen VAPID). | `app/static/js/agenda-reminders.js:525-547`; `app.py:2691-2737`; `agenda_reminder_cron.py:100-130` |
+| Push (venster-opt-in uit #75) | half | code | Server-kant bestaat: tabel `push_reminder_windows` (id + 15-minutenvenster), routes `/api/push-windows`, cron `run_push_windows` met lege push, service worker toont vaste tekst. Er is **geen client** die die routes aanroept (geen verwijzing in `app/static/js`). | `db.py:398-411`; `app.py:2739-2794`; `agenda_reminder_cron.py:192-200`; `app/static/sw.js:540-552` |
+| ICS-import | werkt | code | Bestand kiezen of laten vallen, voorbeeldweergave vóór opslaan; leest TZID en bewaart `source_tz`; VALARM en VTIMEZONE worden overgeslagen. | `app/static/js/agenda-ics.js:3`, `:566`, `:659`; `app.html:1547` |
+| ICS-export | half | app + code | Eén bestand met alle afspraken van alle agenda's (gezien); geen onderscheid per agenda, geen agendanaam of -kleur. Afspraken met tijdzone worden bij herhaling met TZID + VTIMEZONE geschreven, maar een enkele afspraak met `tz` ging als UTC-instant (gezien); herinneringen worden niet als VALARM geschreven. Bestand is onversleuteld, en dat staat in de UI. | `agenda-ics.js:385-516`, `:480-490`; `agenda.js:406`, `:1051-1060`; `app.html:1564` |
+| Abonneren op een webcal-/https-feed | werkt | app + code | Abonnementen in de versleutelde pack; `webcal://` wordt naar `https://` omgezet; de browser haalt de feed zelf op; bij een CORS-blokkade keuze "Fetch via server" via een relay die niets opslaat. Gezien: een onbereikbare feed gaf de relay-keuze. Het ophalen van een echte feed is niet geprobeerd (geen netwerk). | `app/static/js/agenda-subscriptions.js:40-43`; `app/ics_relay.py:1-25`; `app.py:1038`; `app.html:1550-1561` |
+| Eigen agenda als webcal-feed aanbieden | ontbreekt | code | Er is geen route die een agenda als leesbare feed publiceert. Alleen de eenmalige .ics-export. | n.v.t. (gezocht in `app.py`, `agenda-ics.js`) |
 
 Samengevat: de rest van "meerdere agenda's met kleuren" en "tijdzone per afspraak" is af en blijft staan.
 Open zijn: zwevende en hele-dag-afspraken, meldingen via de service worker, een client voor de
@@ -122,7 +128,7 @@ alle browsers) niet zelf op een tijdstip wakker worden. Een PWA op de achtergron
 besturingssysteem bevroren worden; op iOS werken meldingen alleen voor een aan het beginscherm
 toegevoegde app. Een tabblad op de achtergrond vertraagt timers, daarom telt een herinnering die meer
 dan 5 minuten te laat komt als "gemist" (`agenda-local-reminders.js:21`). De UI zegt dit al
-("Reminders only work while Deeperguard is open", `app.html:1568`) en moet dat blijven zeggen. Dit
+("Reminders only work while Deeperguard is open", `app/templates/app.html:1575`) en moet dat blijven zeggen. Dit
 platformgedrag komt uit algemene kennis van de standaarden en is op echte apparaten niet nagelopen: **verify**.
 
 ## 4. Wat ziet de server? (de drie opties die op de eigenaar wachten)
