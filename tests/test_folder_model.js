@@ -60,6 +60,16 @@ const { NotesStore } = h;
   assert.ok(!NotesStore.get(note).deleted, 'note is kept');
   assert.strictEqual(NotesStore.deleteFolder(clients), false, 'second delete does nothing');
 
+  // --- a folder's count is its direct notes only; notes in subfolders are not counted ---
+  const countParent = NotesStore.createFolder('Teller');
+  const countChild = NotesStore.createFolder('Kind', countParent);
+  const directNote = NotesStore.newUuid();
+  NotesStore.upsert(directNote, { ...NotesStore.defaultNote(), title: 'Direct', folder_id: countParent });
+  const nestedNote = NotesStore.newUuid();
+  NotesStore.upsert(nestedNote, { ...NotesStore.defaultNote(), title: 'In submap', folder_id: countChild });
+  assert.deepStrictEqual(NotesStore.notesInFolder(countParent).map((n) => n.uuid), [directNote]);
+  assert.deepStrictEqual(NotesStore.notesInFolder(countChild).map((n) => n.uuid), [nestedNote]);
+
   // --- legacy items load as before ---
   const legacyFolder = NotesStore.newUuid();
   NotesStore.upsert(legacyFolder, { type: 'folder', title: 'Oud', created_at: 'c', updated_at: 'u' });

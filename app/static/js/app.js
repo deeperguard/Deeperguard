@@ -9716,12 +9716,11 @@
       let renamedTo = null;
       if (!title) {
         toast('Enter a folder name', true);
-      } else if (title.toLowerCase() !== currentName.toLowerCase()) {
-        const taken = NotesLabels.siblingNameTaken(title, NotesLabels.parentOf(folder.content), folderIndex(), uuid);
-        if (taken) toast('A folder with that name already exists', true);
-        else if (NotesStore.renameFolder(uuid, title)) renamedTo = title;
+      } else if (title.toLowerCase() !== currentName.toLowerCase() && NotesLabels.siblingNameTaken(title, NotesLabels.parentOf(folder.content), folderIndex(), uuid)) {
+        toast('A folder with that name already exists', true);
       } else if (title !== currentName) {
         if (NotesStore.renameFolder(uuid, title)) renamedTo = title;
+        else toast('Folder could not be renamed', true);
       }
       // Phone list header must update immediately — don't wait on rAF renderNotes.
       if (renamedTo && currentFolder === uuid) {
