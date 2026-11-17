@@ -187,6 +187,170 @@ const NotesCrypto = (() => {
     return Array.from(hash, (b) => b.toString(16).padStart(2, '0')).join('');
   }
 
+  // ---- Recovery key and vault key wrapping (docs/VAULT_RECOVERY.md 1.2, 1.3) ----
+  const WRAP_VERSION = 1;
+  const RECOVERY_KEY_BYTES = 20; // 160 bits
+  const RECOVERY_SALT_BYTES = 16;
+  const B32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  const WRAP_TYPES = ['recovery', 'prf', 'pending-rekey'];
+
+  function randomBytes(n) {
+    if (!globalThis.crypto || typeof globalThis.crypto.getRandomValues !== 'function') {
+      throw new Error('Secure random is unavailable in this browser');
+    }
+    const out = new Uint8Array(n);
+    globalThis.crypto.getRandomValues(out);
+    return out;
+  }
+
+  function generateRecoveryKey() {
+    return randomBytes(RECOVERY_KEY_BYTES);
+  }
+
+  function generateRecoverySalt() {
+    return randomBytes(RECOVERY_SALT_BYTES);
+  }
+
+  // RFC 5869 HKDF-SHA256. An empty salt means 32 zero bytes (same HMAC key).
+  function hkdfSha256(ikm, salt, info, length) {
+    const hashLen = 32;
+    if (!(length > 0) || length > 255 * hashLen) throw new Error('Invalid HKDF length');
+    const infoBytes = info instanceof Uint8Array ? info : new TextEncoder().encode(String(info || ''));
+    const prk = hmacSha256(salt && salt.length ? salt : new Uint8Array(hashLen), alignBytes(ikm));
+    const out = new Uint8Array(length);
+    let prev = new Uint8Array(0);
+    for (let i = 1, pos = 0; pos < length; i += 1) {
+      const msg = new Uint8Array(prev.length + infoBytes.length + 1);
+      msg.set(prev, 0);
+      msg.set(infoBytes, prev.length);
+      msg[msg.length - 1] = i;
+      prev = hmacSha256(prk, msg);
+      const take = Math.min(hashLen, length - pos);
+      out.set(prev.subarray(0, take), pos);
+      pos += take;
+    }
+    return out;
+  }
+
+  function base32Encode(bytes) {
+    let bits = 0;
+    let acc = 0;
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 1) {
+      acc = (acc << 8) | bytes[i];
+      bits += 8;
+      while (bits >= 5) {
+        out += B32[(acc >>> (bits - 5)) & 31];
+        bits -= 5;
+      }
+      acc &= (1 << bits) - 1;
+    }
+    if (bits > 0) out += B32[(acc << (5 - bits)) & 31];
+    return out;
+  }
+
+  function recoveryCheck(bytes) {
+    const label = new TextEncoder().encode('deeperguard/recovery/check/v1');
+    const msg = new Uint8Array(label.length + bytes.length);
+    msg.set(label, 0);
+    msg.set(bytes, label.length);
+    const h = noble().sha256(msg);
+    return B32[h[0] >> 3] + B32[((h[0] & 7) << 2) | (h[1] >> 6)];
+  }
+
+  // 32 Crockford base32 characters in 8 groups of 4, plus a 2-character check group.
+  function encodeRecoveryKey(bytes) {
+    if (!(bytes instanceof Uint8Array) || bytes.length !== RECOVERY_KEY_BYTES) {
+      throw new Error('Invalid recovery key');
+    }
+    const text = base32Encode(bytes);
+    const groups = [];
+    for (let i = 0; i < text.length; i += 4) groups.push(text.slice(i, i + 4));
+    groups.push(recoveryCheck(bytes));
+    return groups.join('-');
+  }
+
+  // Throws on a wrong length, a character outside the alphabet or a failed check.
+  function decodeRecoveryKey(text) {
+    const clean = String(text || '').toUpperCase().replace(/[\s-]+/g, '')
+      .replace(/O/g, '0').replace(/[IL]/g, '1');
+    if (clean.length !== 34) throw new Error('Recovery key has the wrong length');
+    const bytes = new Uint8Array(RECOVERY_KEY_BYTES);
+    let bits = 0;
+    let acc = 0;
+    let pos = 0;
+    for (let i = 0; i < 32; i += 1) {
+      const v = B32.indexOf(clean[i]);
+      if (v < 0) throw new Error('Recovery key contains an invalid character');
+      acc = (acc << 5) | v;
+      bits += 5;
+      if (bits >= 8) {
+        bytes[pos] = (acc >>> (bits - 8)) & 255;
+        pos += 1;
+        bits -= 8;
+        acc &= (1 << bits) - 1;
+      }
+    }
+    if (recoveryCheck(bytes) !== clean.slice(32)) throw new Error('Recovery key check failed');
+    return bytes;
+  }
+
+  function deriveRecoveryWrapKey(recoveryKey, recoverySalt) {
+    if (!(recoveryKey instanceof Uint8Array) || recoveryKey.length < 16) {
+      throw new Error('Invalid recovery key');
+    }
+    if (!(recoverySalt instanceof Uint8Array) || !recoverySalt.length) {
+      throw new Error('Missing recovery salt');
+    }
+    return { raw: hkdfSha256(recoveryKey, recoverySalt, 'deeperguard/recovery/v1', 32) };
+  }
+
+  function vaultKeyId(vaultKey) {
+    const raw = isRawKey(vaultKey) ? vaultKey.raw : null;
+    if (!raw) throw new Error('Missing encryption key');
+    const id = hkdfSha256(raw, null, 'deeperguard/keyid/v1', 16);
+    return Array.from(id, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function wrapAad({ accountId, type, keyId, binding }) {
+    if (!WRAP_TYPES.includes(type)) throw new Error('Unknown wrap type');
+    const fields = [String(accountId == null ? '' : accountId), type, String(keyId || ''), String(binding || '')];
+    if (!fields[0] || !fields[2]) throw new Error('Missing wrap context');
+    if (fields.some((f) => f.includes('|'))) throw new Error('Invalid wrap context');
+    return new TextEncoder().encode(`deeperguard|vault-wrap|v1|${fields.join('|')}`);
+  }
+
+  function sameBytes(a, b) {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i += 1) diff |= a[i] ^ b[i];
+    return diff === 0;
+  }
+
+  async function unwrapVaultKey(wrapKey, wrap, { accountId, type, binding } = {}) {
+    if (!wrap || Number(wrap.wrap_version) !== WRAP_VERSION) throw new Error('Unsupported wrap version');
+    const aad = wrapAad({ accountId, type, keyId: wrap.key_id, binding });
+    const raw = alignBytes(await decryptBytes(wrapKey, wrap.blob, { aad }));
+    if (raw.length !== 32) throw new Error('Unwrapped key has the wrong length');
+    const key = { raw };
+    if (vaultKeyId(key) !== wrap.key_id) throw new Error('Wrap belongs to a different vault key');
+    return key;
+  }
+
+  // Wraps the vault key and immediately unwraps the result to compare it with the
+  // original; a wrap that does not round-trip is never returned.
+  async function wrapVaultKey(vaultKey, wrapKey, { accountId, type, binding } = {}) {
+    const raw = isRawKey(vaultKey) ? vaultKey.raw : null;
+    if (!raw || raw.length !== 32) throw new Error('Missing encryption key');
+    const keyId = vaultKeyId(vaultKey);
+    const aad = wrapAad({ accountId, type, keyId, binding });
+    const blob = await encryptBytes(wrapKey, raw, { aad });
+    const wrap = { wrap_version: WRAP_VERSION, key_id: keyId, blob };
+    const check = await unwrapVaultKey(wrapKey, wrap, { accountId, type, binding });
+    if (!sameBytes(check.raw, raw)) throw new Error('Wrap verification failed');
+    return wrap;
+  }
+
   const WORKER_TIMEOUT_MS = 90000;
   let workerTimeoutMs = WORKER_TIMEOUT_MS;
   let workerRef = null;
@@ -312,6 +476,17 @@ const NotesCrypto = (() => {
     hashText,
     hashBytes,
     hmacSha256,
+    hkdfSha256,
+    generateRecoveryKey,
+    generateRecoverySalt,
+    encodeRecoveryKey,
+    decodeRecoveryKey,
+    deriveRecoveryWrapKey,
+    vaultKeyId,
+    wrapVaultKey,
+    unwrapVaultKey,
+    RECOVERY_KEY_BYTES,
+    WRAP_VERSION,
     VAULT_KDF_V1,
     VAULT_KDF_V2,
     ARGON2_PARAMS,

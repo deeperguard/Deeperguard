@@ -158,10 +158,10 @@
       "url": "/static/js/crypto-worker.0f28b964f018c3fb.js"
     },
     "js/crypto.js": {
-      "bytes": 10353,
-      "sha256": "56d28877a9f397658639277856b5de8dc5257cc569e41971fd1de7791c665c51",
-      "sri": "sha384-7GPrH77/B6C8vYau8btqFp/fkgGt6/WpSQ+vrB2o9m8WKGkeGH4iYLbpnl0Yr6hp",
-      "url": "/static/js/crypto.56d28877a9f39765.js"
+      "bytes": 17128,
+      "sha256": "8e3578d2fca08a5c0847a66c81a9e95eee72a6541fee5b7dec971ba88511ef63",
+      "sri": "sha384-NcTGlGfJCzKl2nZghZYz1ptyY1CHTcC6X0E1YMXyw7QC0urKd970pdnBomzBbU/0",
+      "url": "/static/js/crypto.8e3578d2fca08a5c.js"
     },
     "js/deletion-sync-honesty.js": {
       "bytes": 2823,
@@ -597,6 +597,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "b82654192fa3f24559a5bc4c33e5283d022f7e8e92514441ca80f85adef84175",
+  "manifest_sha256": "c79e8465a5c398e2869773b4e120fcbc1f0d07626b6d8b9384ab1b3a37fd3bb3",
   "version": 1
 }
