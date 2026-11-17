@@ -1,7 +1,8 @@
 # UI polish: inventory and design token spec
 
-Status: spec only (idea #92, task 106). **No code changed by this document.**
-Follow-up tasks implement it area by area (tokens/buttons/dialogs first, then
+Status: written as a spec (idea #92, task 106); the per-area tasks have since
+implemented it. **Section 8 marks every inventory point of section 2 as
+resolved or as a deliberate exception.** Follow-up tasks implement it area by area (tokens/buttons/dialogs first, then
 notes, agenda, 2FA, sign-in, settings). Every follow-up is visual/wording only:
 no change to behaviour, crypto, sync, storage or protected paths, and no new
 libraries, fonts or network requests. The look stays recognisable: refinement,
@@ -898,10 +899,15 @@ editor. Target, shared by Notes, Agenda and 2FA:
 2. **One sidebar.** Sections as rows of icon + label in one visual style
    (`.btn ghost`, `--touch-min` high): views (`#filters`), Folders, Tags, then
    a footer group (Secure Send, Settings, Lock, Account info, Sync). It
-   collapses to icons only; `#btn-nav-pin` becomes the collapse/expand toggle
-   (`aria-expanded`). Collapsed icons keep `aria-label` and get a `title`
-   tooltip; the active view has `aria-current="page"` plus the accent
-   background. Agenda and 2FA use the same sidebar frame for their own
+   collapses to icons only; `#btn-nav-pin` becomes the collapse/expand toggle.
+   The toggle is a disclosure button: its accessible name and `title` are the
+   fixed text "Expand/Collapse sidebar" (on Notes, Agenda and 2FA alike), and
+   `aria-expanded` carries the state. `aria-expanded="true"` means the sidebar
+   is pinned open (`body.nav-pinned`, stored as `navPinned`). It does not
+   reflect the temporary hover or focus expansion of a collapsed sidebar, so
+   while the pointer or focus opens it, `aria-expanded` stays `"false"`.
+   Collapsed icons keep `aria-label` and get a `title` tooltip; the active
+   view has `aria-current="page"` plus the accent background. Agenda and 2FA use the same sidebar frame for their own
    section actions (calendar menu; 2FA add/import/settings) so the frame does
    not jump between areas.
 3. **List column** (Notes): 320px default, `min 260px`, `max 420px`,
@@ -910,6 +916,19 @@ editor. Target, shared by Notes, Agenda and 2FA:
    footer, backlinks) shares one left edge and is capped at
    `--content-max: 860px` for text notes and `1100px` for the viewer, centred
    when the column is wider.
+
+Status (task 1b, shell frame): Agenda and 2FA use the same left column as
+Notes at 1000px and wider (same `--sn-nav-width`, background and border). It
+holds `#agenda-calendar-settings-btn` (Agenda) and, as a footer group,
+`#btn-totp-lock`, `#btn-totp-settings` (2FA) as icon + label rows;
+`#btn-totp-add` and `#btn-totp-import` sit right in the 2FA content header;
+the labels collapse to icons while the sidebar is not pinned. The active tab
+carries `aria-current="page"`. Below 1000px the Notes and 2FA controls stay
+where they were. Agenda between 769px and 999px is the exception: the phone
+layout ends at 768px (`isAgendaPhoneLayout()`), so the calendar menu button is
+drawn as its own row above the agenda header, because the sidebar grid
+(`.agenda-root:not(.agenda-root--phone)`) only applies from 1000px.
+`tests/e2e_app_frame.py` measures this.
 
 ### 7.2 Every existing control and where it goes
 
@@ -953,7 +972,7 @@ openers and control that offer the action instead).
 | `#btn-secure-send-nav` | Secure Send | Icon rail, bottom (boxed) | Sidebar: footer group, icon + label | notes | visible |
 | `#btn-settings-nav` | Settings | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible |
 | `#btn-lock-nav` | Vault unlocked. Tap to lock. | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible |
-| `#btn-nav-pin` | Pin sidebar | Icon rail, bottom (boxed) | Sidebar: collapse/expand toggle | notes | visible |
+| `#btn-nav-pin` | Expand/Collapse sidebar | Icon rail, bottom (boxed) | Sidebar: collapse/expand toggle | notes | visible |
 | `#btn-account-info-nav` | Account info | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible |
 | `#btn-secure-send-head` | Secure Send | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone |
 | `#btn-lock-head` | Vault unlocked. Tap to lock. | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone |
@@ -1093,7 +1112,7 @@ openers and control that offer the action instead).
 | `#agenda-reminder-enable-push` | Enable push on this device | Calendar menu | Unchanged | agenda | conditional: push not enabled yet |
 | `#btn-totp-add` | Add account | 2FA header | Content header, right (primary) | 2fa | visible |
 | `#btn-totp-import` | Import accounts | 2FA header | Content header, right | 2fa | visible |
-| `#btn-totp-lock` | Lock vault | 2FA header | Sidebar: footer group (same Lock as Notes) | 2fa | visible |
+| `#btn-totp-lock` | Lock vault | 2FA header | Sidebar: footer group (own button, same lockVault action as Notes `#btn-lock-nav`) | 2fa | visible |
 | `#btn-totp-settings` | Settings | 2FA header | Sidebar: footer group (same Settings as Notes) | 2fa | visible |
 | `#totp-search` | Search accounts (…) | 2FA header | Content header, full width | 2fa | visible |
 | `[data-totp-copy]` | Copy code for <account> | 2FA account row | Unchanged | 2fa | visible |
@@ -1258,3 +1277,161 @@ desktop and phone; synthetic data only).
 4. **Viewer**: fit width, centred, zoom, page indicator, full screen (7.6).
 5. **Footer/width**: status line, backlinks, maximum reading width (7.7).
 6. **Responsive check**: 1280, 1440, 1920+, tablet, phone (7.8).
+
+---------------------------------------------------------------------------
+
+## 8. Inventory status (audit task 113)
+
+Every point of section 2, marked **Resolved** or **Exception** (deliberately
+left as it is, with the reason). Resolved points were fixed by the per-area
+tasks of section 6 or by this audit (8.10). Contrast is measured, see 8.11.
+
+### 8.1 Cross-cutting (2.1)
+
+| Point | Status |
+|---|---|
+| Radius literals (`border-radius: Npx`) | Exception: polished rules use `--radius-*`; other literals stay so unpolished corners keep their shape. |
+| `.settings-row select` 14px/8px | Resolved: `--text-md`, `min-height: var(--touch)`, `--radius-sm`. |
+| `.btn` without min-height; `.note-warn-buttons .btn` 40px | Resolved: `.btn { min-height: var(--touch) }`; note-warn buttons `var(--touch)` (8.10). |
+| `ghost`/`subtle` variants | Resolved: one state set for primary, secondary, danger, icon-only (4.1). |
+| `.btn.danger` hard-coded red border | Resolved: `color-mix` of `--danger` (8.10). |
+| Hover only on some variants, no `:active` | Resolved: shared hover and pressed states. |
+| Disabled / `aria-disabled` | Resolved: shared disabled rule. |
+| One-off button classes | Exception: kept for their layout; they get the ring of the shared `:where(button, ...)` rule and pass 8.11. |
+| Swatches 28px, check boxes 36px | Exception: above the 24px minimum of WCAG 2.5.8 (AA). |
+| Input focus ring (`--accent-soft`) | Resolved: 2px `--focus-ring` outline (8.10). |
+| Focus removed without replacement | Resolved for `.label-menu` items, `.check-text`, search pill (8.10). Exception: agenda date fields and `.note-warn-field` (ring via `:focus-within` on the container), `.pane-splitter` (`::after`), sidebar sort/filter selects (accent border plus halo), `mark.search-hit-current` (not focusable). |
+| Ring colours; `#4f8cff` fallback | Resolved: `--focus-ring` (8.10). |
+| Four label looks | Exception: each family is consistent within itself; merging is a markup restructure. |
+| Error text without `role=alert` | Resolved: six error paragraphs now have `role="alert"` (8.10). |
+| No visible required marker | Exception: not added; `required`/`aria-required` stay. |
+| Select chevron, date wrappers | Exception: native controls; `color-scheme` follows the theme. |
+| Three checkbox implementations | Exception: kept. |
+| Heading weights 650/680 | Exception: kept so headings do not visibly change; dialog titles use `--text-lg`. |
+| Font sizes below 13px | Exception: 12px (`--text-xs`) for timestamps, badges, short hints; all pass 8.11. |
+| Contrast table | Resolved: 8.11. |
+| `#toast` without role | Resolved: 8.9. |
+| Password toggle label | Resolved: switches between "Show password" and "Hide password" (`app.js`, `auth-pages.js`). |
+| `#agenda-import-preview` `aria-label`; empty `#doc-viewer` body; `role="searchbox"` | Exception: valid names; the viewer is filled on open; redundant role is harmless. |
+
+### 8.2 Sign-in, registration, recovery, unlock (2.2)
+
+| Point | Status |
+|---|---|
+| Slate hard-codes on auth pages | Exception: auth pages set `data-theme` on `<html>` only and use the slate layer consistently; pass 8.11. |
+| `.auth-card` radius/padding | Exception: kept recognisable. |
+| Secondary actions on sign-in and unlock | Exception: one primary per form; recovery paths stay visible (section 5). |
+| Long hints | Exception: protected recovery wording. |
+| Register error spacing, `.consent-row` | Exception: protected form (section 5). |
+| Password toggle height | Resolved: shared 44px `.btn`. |
+| `totp.html` code input name | Exception: named by its wrapping `<label>`. |
+| `p.error` contrast | Resolved: 8.11. |
+
+### 8.3 Notes list and editor (2.3)
+
+| Point | Status |
+|---|---|
+| Padding and gap differences | Exception: kept per component; list, attachments and empty state use `--space-*`. |
+| Icon button sizes, label menu | Resolved: 44px on touch; label menu ring (8.10). |
+| Three lock implementations | Exception: separate buttons with own ids. |
+| Syntax token colours | Exception: syntax palette per theme. |
+| Empty state | Resolved: one primary action. |
+
+### 8.4 Attachments and OCR (2.4)
+
+| Point | Status |
+|---|---|
+| Scan-sheet handle | Exception: `aria-hidden`, visual only. |
+| Sheet paddings and shadows | Resolved: shared dialog parts and `--shadow-*`. |
+| `.doc-viewer-tools` hidden scrollbar | Exception: every tool is a button reachable with Tab. |
+| `.doc-viewer .btn.ghost` | Exception: dark viewer surface. |
+| Progress dialogs | Exception: non-cancellable by design (4.3). |
+| Feedback via toast | Resolved: OCR progress/error inline; toast 8.9. |
+
+### 8.5 Agenda (2.5)
+
+| Point | Status |
+|---|---|
+| Dialog builds, z-index patches | Exception: own stacking rules; focus trap and Escape come from `dialog-a11y.js`. |
+| Editor heading | Resolved by the agenda editor task. |
+| Scope chooser action order | Exception: stacked, primary on top (phone rule of 4.3). |
+| Swatches | Exception: 8.1. |
+| Date input `outline: none` | Exception: `:focus-within` on the container. |
+| "Esc" shortcut | Resolved: Escape closes dialogs. |
+| Editor rhythm, subscriptions | Resolved by the agenda editor task. |
+| Reduced motion | Resolved: transitions off under `prefers-reduced-motion`. |
+
+### 8.6 2FA (2.6)
+
+| Point | Status |
+|---|---|
+| Sheets vs full-screen camera | Exception: the camera needs the screen. |
+| 2FA-only toast style | Resolved: shared style; the pane only reserves room under the list (8.9). |
+| Code and copy affordance | Resolved by the 2FA polish task. |
+| Import password without toggle | Exception: a toggle needs new behaviour. |
+| Implicit labels | Exception: valid names. |
+| Empty state | Resolved: `#totp-empty` with `#btn-totp-add` as primary. |
+
+### 8.7 Secure send (2.7)
+
+| Point | Status |
+|---|---|
+| Rules inside the `.btn` block | Exception: source order only. |
+| "×" remove glyph | Exception: named by `aria-label="Remove <file>"`. |
+| Detail sheet vs panel | Exception: different purpose. |
+| 12px hints with opacity | Resolved: opacity removed; passes 8.11. |
+| `receive.html` | Resolved: one primary action; passes 8.11. |
+
+### 8.8 Settings, sessions, devices (2.8)
+
+| Point | Status |
+|---|---|
+| `.settings-group > h3` muted | Resolved: `--text`. |
+| Rows at 360px | Resolved by the settings polish task (390px browser test). |
+| `.settings-row select` | Resolved: 8.1. |
+| Mixed button forms | Exception: primary marks each group's main action. |
+| `#password-change-error` role | Resolved (8.10). |
+| Danger zone outline | Exception: the confirm that follows uses the filled danger button. |
+| `.settings-hint` roles | Exception: modifier classes kept. |
+| Drawer close location | Exception: drawers keep their header close. |
+
+### 8.9 Dialogs, toasts, confirmations (2.9)
+
+| Point | Status |
+|---|---|
+| Escape, focus trap, focus restore | Resolved: `dialog-a11y.js` (4.3). |
+| Header close X | Exception: only `#confirm-dialog` uses `.dialog-pattern`; others close via Escape, backdrop and Cancel/Done. |
+| Action order | Exception: 8.5. |
+| Transitions, reduced motion | Resolved (4.3). |
+| `.confirm-dialog` max-height | Resolved for `#confirm-dialog` (`.confirm-dialog.dialog-pattern` has a max-height and a scrolling body). Exception: the other `.confirm-dialog` users keep their layout. |
+| Backdrop colours | Exception: kept per family. |
+| **Toast** | Resolved: one `.toast` rule set (`--radius-md`, `--shadow-lg`, `--text-base`, spacing tokens), fixed bottom-centre. `#toast` is `role="status"` `aria-live="polite"`; `toast(message, true)` switches it to `role="alert"` `aria-live="assertive"` and shows a "!" mark, so errors do not rely on colour. 2FA no longer restyles it. It still moves up, same style, to clear a dialog footer or the settings sheet, and is hidden while the agenda editor is open (behaviour of earlier tasks). |
+| Confirm wording, bare "OK" | Resolved: `#account-info-close` reads "Close"; destructive callers pass a verb. The default "Confirm" stays for callers that pass none. |
+
+### 8.10 Changed by this audit
+
+`app.css`: filled buttons use fill tokens (`--accent-fill` `#2f6fe4` in dark,
+`--danger-fill`, `--success-fill`) so white labels pass 4.5:1, while
+`--accent`/`--danger`/`--success` keep their values for text and icons; light
+`--muted` and `--sn-nav-muted` become `#6b6b73`; plan badges, the read-only
+banner and the light `.zk-badge` get readable text colours; one toast rule
+set with an error mark; focus ring on inputs, the search pill, `.label-menu`
+items and `.check-text`; `.btn.danger` border; 44px note-warn buttons.
+`app.html`: `role="alert"` on `#password-change-error`, `#note-lock-error`,
+`#device-start-code-error`, `#attachment-repair-error`, `#scan-name-error`,
+`#account-info-error`; "Close" on `#account-info-close`. `app.js`:
+`setToastRole()` sets only `role`/`aria-live` on `#toast`. This is the only
+JavaScript change in this audit, not a CSS, markup or text change: `role="alert"`
+for error toasts needs it, and it changes no other behaviour.
+
+### 8.11 How it is checked
+
+`tests/test_ui_contrast_browser.py` renders the real templates (`app.html`
+locked and unlocked with every `hidden` region shown, `login.html`,
+`register.html`, `totp.html`, `receive.html`) with the real `app.css` in
+Chromium at 390px and 1280px, light and dark, plus every `.btn` variant that
+`app.js` adds at runtime. It fails on visible text or form controls below
+4.5:1 (3:1 for large text and `aria-hidden` glyphs; disabled controls are
+exempt), checks the toast (role, position, style; normal and error; Notes
+and 2FA) and the focus ring of text fields. `python3
+tests/test_ui_contrast_browser.py` lists every failing element.

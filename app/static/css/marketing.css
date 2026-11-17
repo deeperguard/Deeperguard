@@ -1786,6 +1786,41 @@ a.mk-badge-link:hover {
   .mk-topbar-actions { gap: 0.35rem; }
   .mk-topbar-actions .mk-btn { padding: 0 0.7rem; }
 }
+/* Measured by marketing.js: nav-measuring forces one line, nav-collapsed moves links into the menu. */
+@media (min-width: 768px) {
+  .mk-topbar.nav-measuring .mk-nav { flex-wrap: nowrap; }
+  .mk-topbar.nav-measuring * { transition: none !important; }
+  .mk-topbar.nav-collapsed .mk-nav-toggle { display: inline-flex; }
+  .mk-topbar.nav-collapsed .mk-nav { display: none; }
+  .mk-topbar.nav-collapsed .mk-nav-check:checked ~ .mk-nav-backdrop { display: block !important; }
+  .mk-topbar.nav-collapsed .mk-nav-check:checked ~ .mk-nav {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: 100%;
+    box-sizing: border-box;
+    z-index: 50;
+    margin: 0;
+    padding: 0.35rem;
+    background: var(--mk-panel);
+    border: 1px solid var(--mk-border);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  }
+  .mk-topbar.nav-collapsed .mk-nav-check:checked ~ .mk-nav a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: 0.9rem;
+    padding: 0.5rem 0.8rem;
+  }
+}
 .mk-footer nav a:hover {
   color: var(--mk-text);
 }

@@ -1,6 +1,6 @@
 # Ontwerp: opgemaakte Markdown-editor, weergave en zoeken in de app
 
-Status: voorstel, nog niet gebouwd. Er is geen code gewijzigd. Dit document hoort bij idee #52 en is de
+Status: voorstel; mijlpaal 3 (tabeleditor) en 5 (opgemaakte bewerkmodus) zijn gebouwd, zie de noot in sectie 7. Dit document hoort bij idee #52 en is de
 eerste taak; de bouwtaken (sectie 6) volgen pas na de keuzes van de eigenaar (sectie 7). De XSS-testvectoren
 waaraan elke bouwtaak moet voldoen staan in [rich-editor-tests.md](rich-editor-tests.md).
 
@@ -58,7 +58,8 @@ Weergave van GFM-tabellen met uitlijning (`:---`, `:---:`, `---:`) en horizontaa
 schermen. Tabeleditor: cursor in een tabel toont een werkbalk om rij/kolom boven/onder/links/rechts toe te
 voegen, te verwijderen, te verplaatsen, en kolomuitlijning te zetten; Tab/Shift+Tab loopt door de cellen.
 De editor schrijft altijd terug als nette GFM-pipetabel (kolombreedtes uitgelijnd alleen als de oorspronkelijke
-tabel dat al was, zie round-trip, sectie 2.2).
+tabel dat al was, zie round-trip, sectie 2.2). Typen in de Markdown-bron zelf sluit het paneel met een korte melding (bewust: de
+bron is dan de enige plek waar je bewerkt); de editor zelf houdt het paneel open bij zijn eigen schrijfacties.
 
 ### 1.4 Ctrl+F binnen een notitie
 Ctrl/Cmd+F opent de bestaande zoekbalk, nu ook in de weergave en WYSIWYG-modus: alle treffers gemarkeerd
@@ -80,7 +81,7 @@ scrollpositie zo goed mogelijk. Beide modi bewerken dezelfde `body`-string.
 
 ### 1.7 Mermaid-diagrammen
 Een blok ```` ```mermaid ```` wordt als diagram getoond, gerenderd in een geïsoleerd iframe (sectie 4.4). Bij
-een fout of als Mermaid uit staat blijft de bron als codeblok zichtbaar met een korte melding.
+een fout blijft de bron als codeblok zichtbaar met een korte melding. Een aan/uit-instelling (open vraag 3) is er nog niet; Mermaid staat nu altijd aan.
 
 ### 1.8 Hoe anderen het doen, en waar wij beter willen zijn
 *Uit algemene kennis, niet opnieuw geverifieerd; details verschillen per versie en per plugin. Controleer
@@ -236,22 +237,24 @@ geen metadata toe.
   **zonder `allow-same-origin`**, dus met een opaque origin: geen toegang tot cookies, IndexedDB, de
   kluissleutel, het DOM van de app of `window.parent` buiten `postMessage`. Geen `allow-forms`,
   `allow-popups`, `allow-top-navigation`, `allow-modals`.
-- Het iframe laadt een eigen statisch document (`/static/mermaid-sandbox.html`) met een **eigen strikte CSP**
-  (`default-src 'none'; script-src 'self'; style-src 'self'; img-src data:`; connect geblokkeerd), geleverd
-  met een header op die route (zoals nu al voor de workers in `app.py:573`). Als Mermaid `unsafe-eval` zou
-  vereisen, geldt die uitzondering alleen voor dit document, niet voor de app.
-  *Vóór mijlpaal 6 moet dit met de gekozen Mermaid-versie worden aangetoond; zo niet, dan valt Mermaid af
-  of wordt een eval-vrij alternatief gekozen.*
-- Communicatie alleen via `postMessage` met strikte schema's: ouder → iframe `{id, source, theme}`; iframe →
-  ouder `{id, svg | error}`. De ouder controleert `event.source` (de eigen iframe-referentie) en `id`;
-  `origin` is `"null"` bij een sandbox, dus geen vertrouwen op origin-strings.
-- **SVG-uitvoer wordt in de ouder opnieuw gesaneerd** (SVG-allowlist: geen `script`, `foreignObject`,
-  `on*`, `href` buiten `#`, geen `style` met `url()`) en daarna als `<img src="blob:…">`/geïsoleerd
-  getoond, niet inline met `innerHTML` in de app-DOM. Aanbevolen: tonen als `<img>` van een `blob:`-SVG
-  (scripts in een SVG-in-`img` draaien niet).
+- Het iframe laadt een eigen statisch document (`/static/mermaid-sandbox.html`, met `js/mermaid-sandbox.js`) met een
+  **eigen strikte CSP**, geleverd met een header op die route (`MERMAID_SANDBOX_CSP` in `app/app.py`, naast de
+  workers): `default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:` (dus geen
+  `connect-src`, geen netwerk, geen `unsafe-eval`; Mermaid 11.4.1 draait zonder eval, aangetoond in
+  `tests/test_mermaid_sandbox_browser.py`). `style-src 'unsafe-inline'` geldt alleen voor dit document, omdat Mermaid
+  zijn SVG met stijlen opmaakt. De route krijgt `X-Frame-Options: SAMEORIGIN` en `frame-ancestors 'self'` zodat
+  alleen de app het kan inbedden; de rest van de app houdt `DENY`/`'none'`.
+- Communicatie alleen via `postMessage`: ouder → iframe `{type, id, source, theme}`; iframe → ouder
+  `{type, id, height | error}`. Het iframe toont het diagram zelf; **er gaat nooit HTML of SVG terug naar de
+  app**, alleen een hoogte (getal, begrensd) of een foutmelding (tekst, via `textContent`). De ouder controleert
+  `event.source` (de eigen iframe-referentie), `type` en `id`; het iframe controleert `event.source ===
+  window.parent`, het formaat en de bronlengte (max 20.000 tekens). `origin` is `"null"` bij een sandbox, dus er
+  wordt niet op origin-strings vertrouwd. De ouder wacht op een `ready`-bericht en verstuurt de bron pas daarna.
+- Eén render tegelijk, time-out van 10 s (daarna wordt het iframe verwijderd en blijft de bron staan).
+- Het iframe (en dus de Mermaid-bundel) wordt pas aangemaakt als een notitie een mermaid-blok bevat.
 - Mermaid-instellingen: `securityLevel: 'strict'`, `htmlLabels` uit, `click`-handlers en `javascript:`/
-  `callback`-interacties uitgeschakeld; `%%{init}%%`-directives in de bron worden genegeerd of gefilterd
-  (vector in de testdocument). Links in diagrammen zijn uit.
+  `callback`-interacties uitgeschakeld; `%%{init}%%`-directives in de bron worden verwijderd
+  (vector in het testdocument). Links in diagrammen zijn uit.
 - Geen netwerk: iframe-CSP blokkeert `connect-src`; lettertypen lokaal.
 
 ### 4.5 Toegankelijkheid
@@ -361,6 +364,20 @@ zoekindex (alleen na keuze, 7.3).
 
 Per keuze een aanbeveling; de bouwtaken wachten hierop.
 
+**Mijlpaal 3 (tabellen en tabeleditor) is gebouwd:** `app/static/js/table-editor.js` met de rasterbewerker in
+de Bron-modus. Esc en de knop Done (Klaar) sluiten de editor zonder bevestiging; dat kan omdat elke wijziging
+direct in de bron wordt geschreven.
+
+**Mijlpaal 5 (WYSIWYG) is gebouwd met de aanbevelingen bij keuze 1, 2, 5 (voor zover hieronder vermeld) en 8:**
+CodeMirror 6 als gevendorde bundel (`scripts/vendor/codemirror/build.py`, registratie in `THIRD_PARTY.md`),
+`app/static/js/rich-editor.js`, wissel Opgemaakt/Bron met de knop in de werkbalk of Ctrl+/. Afwijkingen van
+het ontwerp, zoals gebouwd: (a) de standaardmodus is **Bron** voor alle notities; de keuze wordt per account
+onthouden (`richEditor` in de versleutelde instellingen), "Opgemaakt voor nieuwe notities" is niet gebouwd;
+(b) de drempel is vast 500.000 tekens of 20.000 regels (niet instelbaar); (c) tabellen worden in de
+opgemaakte modus als uitgelijnde bronregels getoond en met de knop Table ingevoegd; de rasterbewerker
+(`table-editor.js`) werkt in Bron; (d) Ctrl+F binnen de opgemaakte modus (1.4) is nog niet aangesloten;
+(e) het bundelbestand wordt met `defer` bij het laden van de pagina opgehaald, niet pas bij de eerste bewerking.
+
 1. **Editorbibliotheek.** Opties: CodeMirror 6 (live preview, document = Markdown), ProseMirror/Tiptap
    (boomdocument), eigen lichte laag. **Aanbeveling: CodeMirror 6**, vanwege de structurele round-trip en
    undo/zoeken ingebouwd; accepteert een gedocumenteerde vendor-build-stap (5.4).
@@ -384,3 +401,16 @@ Per keuze een aanbeveling; de bouwtaken wachten hierop.
 8. **Drempel grote notities** (terugval naar Bron). **Aanbeveling: 500 kB of 20.000 regels**, instelbaar.
 9. **Aanscherpen `style-src`** (weg met `'unsafe-inline'`). **Aanbeveling: apart traject**, buiten dit punt,
    maar nieuwe code mag er niet van afhangen.
+
+## 8. Bekende beperkingen
+
+- **Undo-geschiedenis bij de wissel Bron ↔ Opgemaakt.** De belofte in sectie 1 dat de undo-geschiedenis de
+  wissel overleeft, is in de eerste versie niet gehaald. De editor wordt bij het wisselen vernietigd en
+  opnieuw aangemaakt, waardoor de CodeMirror-history verdwijnt; het bronveld houdt alleen de eigen
+  browser-undo. Bewaren van de history per notitie is een mogelijke vervolgstap.
+- **De modus is een voorkeur, geen eigenschap van de notitie.** `prefs.richEditor` (Opgemaakt of Bron) geldt
+  voor alle notities. Wie één notitie naar Bron wisselt, ziet daarna ook andere en nieuwe notities in Bron,
+  tot de gebruiker weer wisselt. Dit wijkt af van de aanbeveling bij open keuze 5.
+- **Regeleinden bij plakken.** De editor werkt intern met `\n`; de `\r` van een CRLF-notitie blijft in de
+  tekst staan. Geplakte tekst wordt aangepast aan de regeleinden van het document (CRLF als het document
+  CRLF bevat), zodat er geen gemengde regeleinden ontstaan.

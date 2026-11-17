@@ -164,6 +164,7 @@
     theme: 'light',
     fontSize: 16,
     monospace: false,
+    richEditor: false,
     spellcheck: true,
     hidePreviews: false,
     compactList: true,
@@ -253,7 +254,7 @@
   // Preferences that follow the account: stored as one encrypted vault item and
   // synced like notes, so "hide previews" on the phone also applies on the Mac.
   const GLOBAL_PREF_KEYS = [
-    'theme', 'fontSize', 'monospace', 'spellcheck', 'hidePreviews', 'compactList',
+    'theme', 'fontSize', 'monospace', 'richEditor', 'spellcheck', 'hidePreviews', 'compactList',
     'sort', 'autoPreview', 'autoOpenPdfOnly', 'autoLockMin', 'lockOnUnfocus', 'aiChat',
     'googleOauthClientId', 'dropboxAppKey',
     'dropboxRefreshToken', 'dropboxAccessToken', 'dropboxTokenExpiresAt', 'dropboxConnected',
@@ -666,11 +667,14 @@
 
   function applyNavRail() {
     document.body.classList.toggle('nav-pinned', !!prefs.navPinned);
-    const pin = document.getElementById('btn-nav-pin');
-    if (pin) {
-      pin.setAttribute('aria-pressed', prefs.navPinned ? 'true' : 'false');
-      pin.title = prefs.navPinned ? 'Collapse sidebar' : 'Pin sidebar';
-    }
+    const text = prefs.navPinned ? 'Collapse sidebar' : 'Expand sidebar';
+    document.querySelectorAll('[data-nav-toggle]').forEach((btn) => {
+      btn.setAttribute('aria-expanded', prefs.navPinned ? 'true' : 'false');
+      btn.setAttribute('aria-label', 'Expand/Collapse sidebar');
+      btn.title = 'Expand/Collapse sidebar';
+      const label = btn.querySelector('[data-nav-toggle-label]');
+      if (label) label.textContent = text;
+    });
     if (prefs.navPinned) setNavViewsOpen(false);
   }
   applyTheme();
@@ -2025,6 +2029,7 @@
 
   function undoEdit() {
     if (!currentId || noteEditingLocked()) return;
+    if (richActive()) { richCtl.undo(); return; }
     const stack = noteUndoStacks.get(currentId) || [];
     if (!stack.length) return;
     const prev = stack.pop();
@@ -2037,6 +2042,7 @@
 
   function redoEdit() {
     if (!currentId || noteEditingLocked()) return;
+    if (richActive()) { richCtl.redo(); return; }
     const redo = noteRedoStacks.get(currentId) || [];
     if (!redo.length) return;
     const next = redo.pop();
@@ -2053,8 +2059,9 @@
     const stack = currentId ? (noteUndoStacks.get(currentId) || []) : [];
     const redo = currentId ? (noteRedoStacks.get(currentId) || []) : [];
     const locked = noteEditingLocked();
-    if (undoBtn) undoBtn.disabled = locked || !stack.length;
-    if (redoBtn) redoBtn.disabled = locked || !redo.length;
+    const rich = richActive();
+    if (undoBtn) undoBtn.disabled = locked || !(rich ? richCtl.canUndo() : stack.length);
+    if (redoBtn) redoBtn.disabled = locked || !(rich ? richCtl.canRedo() : redo.length);
     if (undoBtn) undoBtn.hidden = locked;
     if (redoBtn) redoBtn.hidden = locked;
   }
@@ -4240,6 +4247,8 @@
       ? NotesVaultLock.isAppUpdating(document.body, window.__notesUpdateInFlight)
       : !!(document.body.classList.contains('app-updating') || window.__notesUpdateInFlight);
     if (window.NotesVaultLock?.mayLockVault && !NotesVaultLock.mayLockVault({ updating })) return;
+    // The table editor holds decrypted cell text in its inputs.
+    closeTableEditor();
     // Spec 9 rule 4: locking an open vault drops any unsaved capture/share text.
     if (NotesStore.isUnlocked()) discardQuickCapture();
     // Round 72: never leave empty-device reachability probes running after lock.
@@ -4373,10 +4382,17 @@
     document.documentElement.classList.toggle('toast-above-dialog', lift);
   }
 
+  /** Errors are announced at once (alert); other toasts politely (status). */
+  function setToastRole(el, isError) {
+    el.setAttribute('role', isError ? 'alert' : 'status');
+    el.setAttribute('aria-live', isError ? 'assertive' : 'polite');
+  }
+
   function toastWithUndo(message, onUndo) {
     const el = document.getElementById('toast');
     if (!el) return;
     el.classList.remove('error');
+    setToastRole(el, false);
     el.replaceChildren();
     const label = document.createElement('span');
     label.textContent = message;
@@ -4428,6 +4444,7 @@
     el.replaceChildren();
     el.textContent = message;
     el.classList.toggle('error', !!isError);
+    setToastRole(el, !!isError);
     el.hidden = false;
     document.documentElement.classList.toggle('totp-toast-open', on2fa);
     syncToastDialogLift();
@@ -4503,6 +4520,8 @@
       const on = btn.dataset.appTab === shown;
       btn.classList.toggle('active', on);
       btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      if (on) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
     });
   }
 
@@ -5586,12 +5605,12 @@
       tags: readTotpDialogTags(),
       secret: totpUi.secret?.value || '',
     });
-    if (entry) entry.icon_id = totpDialogIconId;
     if (!entry) {
       setTotpAddError('Enter a valid authenticator secret or otpauth URL. Use Base32 letters A–Z and digits 2–7. Spaces are OK.');
       totpUi.secret?.focus();
       return;
     }
+    entry.icon_id = totpDialogIconId;
     try {
       await NotesTotp.generate(entry);
     } catch (err) {
@@ -14096,7 +14115,83 @@
     return true;
   }
 
+  // Formatted (live-preview) editing of Markdown notes: the hidden textarea stays the source of truth
+  // (autosave, title, search, history all read ui.body.value); the editor mirrors it both ways.
+  let richCtl = null;
+  let richNoteId = null;
+  let richToolbar = null;
+
+  function richAvailable() {
+    return !!window.NotesRichEditor?.available();
+  }
+
+  function richActive() {
+    const host = document.getElementById('note-rich');
+    return !!richCtl && !!host && !host.hidden;
+  }
+
+  function syncRichEditor(eligible) {
+    const host = document.getElementById('note-rich');
+    if (!host) return false;
+    const want = eligible && prefs.richEditor && richAvailable() && !NotesRichEditor.tooLarge(ui.body.value);
+    if (!want) {
+      host.hidden = true;
+      return false;
+    }
+    if (!richCtl) {
+      richCtl = NotesRichEditor.create(host, {
+        doc: ui.body.value,
+        spellcheck: !!prefs.spellcheck,
+        onChange: (text) => {
+          ui.body.value = text;
+          ui.body.dispatchEvent(new Event('input', { bubbles: true }));
+        },
+        onUpdate: () => syncUndoButtons(),
+        onToggleMode: () => toggleRichMode(),
+      });
+      richNoteId = currentId;
+    } else if (richNoteId !== currentId) {
+      richCtl.setValue(ui.body.value, { reset: true });
+      richNoteId = currentId;
+    } else {
+      richCtl.setValue(ui.body.value);
+    }
+    richCtl.setSpellcheck(!!prefs.spellcheck);
+    host.hidden = false;
+    ui.body.hidden = true;
+    return true;
+  }
+
+  function toggleRichMode() {
+    if (!currentId || !richAvailable()) return;
+    if (noteEditingLocked()) {
+      toast('Editing is locked — tap the lock icon to unlock', true);
+      return;
+    }
+    const leaving = richActive();
+    let sel = null;
+    if (leaving) {
+      const main = richCtl.view.state.selection.main;
+      sel = [main.from, main.to];
+    }
+    prefs.richEditor = !prefs.richEditor;
+    savePrefs();
+    applyEditorMode();
+    if (leaving) {
+      ui.body.focus();
+      try { ui.body.setSelectionRange(sel[0], sel[1]); } catch (err) { /* ignore */ }
+    } else if (richActive()) {
+      const max = richCtl.view.state.doc.length;
+      const from = Math.min(ui.body.selectionStart || 0, max);
+      richCtl.view.dispatch({ selection: { anchor: from, head: Math.min(ui.body.selectionEnd || from, max) } });
+      richCtl.focus();
+    } else {
+      toast('This note is too large for formatted editing — showing the Markdown source', true);
+    }
+  }
+
   function applyEditorMode() {
+    if (editorMode !== 'edit' || tableEditorController()?.noteId() !== currentId) closeTableEditor();
     syncRescanOcrButton();
     const ocrBtn = document.getElementById('btn-ocr-text');
     const previewBtn = document.getElementById('btn-preview');
@@ -14189,6 +14284,7 @@
     previewOn = editingLocked || editorMode !== 'edit';
     ui.preview.hidden = !previewOn || checklistOn;
     ui.body.hidden = previewOn || checklistOn;
+    const richWanted = syncRichEditor(markdownNote && !previewOn && !checklistOn);
     if (previewOn && !checklistOn) refreshPreview();
     syncEditorBodyWrap();
     syncEditLinkOverlay();
@@ -14203,8 +14299,17 @@
     if (toolbar) toolbar.hidden = checklistOn || (!markdownNote && !codeNote && type !== 'superscript') || (previewOn && !markdownNote && !codeNote);
     if (toolbar) {
       toolbar.querySelectorAll('[data-md]').forEach((btn) => {
-        btn.hidden = codeNote || (btn.dataset.md === 'sup' && type !== 'superscript');
+        btn.hidden = codeNote || (btn.dataset.md === 'sup' && type !== 'superscript')
+          || (btn.dataset.md === 'table' && !markdownNote)
+          || (btn.hasAttribute('data-rich-only') && !richWanted);
       });
+      const richBtn = document.getElementById('btn-rich-mode');
+      if (richBtn) {
+        richBtn.hidden = !markdownNote || !richAvailable() || previewOn;
+        richBtn.textContent = richWanted ? 'Formatted' : 'Source';
+        richBtn.setAttribute('aria-pressed', richWanted ? 'true' : 'false');
+      }
+      richToolbar?.refresh();
       toolbar.querySelectorAll('[data-code]').forEach((btn) => {
         btn.hidden = !codeNote;
       });
@@ -14248,6 +14353,7 @@
     }
     ui.title.readOnly = !!on;
     ui.body.readOnly = !!on;
+    richCtl?.setReadOnly(!!on);
     ui.editorType.disabled = !!on;
     const toolbar = document.getElementById('md-toolbar');
     if (toolbar) {
@@ -14257,7 +14363,10 @@
     }
     if (ui.checklist) ui.checklist.classList.toggle('readonly', !!on);
     document.body.classList.toggle('note-readonly', !!on);
-    if (on) editorMode = 'preview';
+    if (on) {
+      editorMode = 'preview';
+      closeTableEditor();
+    }
   }
 
   function noteEditingLocked() {
@@ -19070,6 +19179,12 @@
     if (ui.docViewer) ui.docViewer.style.paddingTop = '';
   }
 
+  function closeFindBarToNote() {
+    hideFindBar();
+    if (!ui.body.hidden) ui.body.focus();
+    else if (!ui.preview.hidden) ui.preview.focus();
+  }
+
   function syncFindBarChrome(open = findBarOpen()) {
     ui.editor?.classList.toggle('find-open', !!open);
     document.body.classList.toggle('find-bar-open', !!open);
@@ -19113,7 +19228,7 @@
   function findMatchOptions() {
     // The editor's find/replace matches the typed text exactly; only the
     // search box uses word and phrase rules.
-    return { caseSensitive: !!findCaseSensitive, literal: true };
+    return { caseSensitive: !!findCaseSensitive, literal: true, foldAccents: true };
   }
 
   function normalizeFindIndex() {
@@ -19514,6 +19629,48 @@
     findIndex = docSearchHitIndex || 0;
     if (!deferRunFind) runFind();
     layoutFindBarOverDocViewer();
+  }
+
+  // GFM table editor (docs/design/rich-editor.md 1.3): a grid panel above the note text that
+  // writes the edited table straight back into the Markdown. Created on first use.
+  function tableEditorController(create = false) {
+    if (!tableEditorController.instance && create && window.NotesTableEditor) {
+      const container = document.getElementById('table-editor');
+      if (!container) return null;
+      tableEditorController.instance = NotesTableEditor.createController({
+        container,
+        getSource: () => ui.body.value,
+        setSource: (next) => {
+          ui.body.value = next;
+          // Same follow-up as typing (save, derived title, overlays); not a reason to close the panel.
+          tableEditorController.writing = true;
+          try {
+            ui.body.dispatchEvent(new Event('input'));
+          } finally {
+            tableEditorController.writing = false;
+          }
+        },
+        beforeChange: () => pushUndoSnapshot(),
+        onClose: ({ focusSource, offset }) => {
+          if (!focusSource || ui.body.hidden) return;
+          ui.body.focus();
+          ui.body.setSelectionRange(offset, offset);
+        },
+      });
+    }
+    return tableEditorController.instance || null;
+  }
+
+  function closeTableEditor() {
+    tableEditorController()?.close();
+  }
+
+  // Caret inside a table: edit that table. Otherwise insert a new one at the caret.
+  function openTableEditor() {
+    const ctl = tableEditorController(true);
+    if (!ctl) return;
+    const caret = ui.body.selectionStart;
+    if (!ctl.openAt(caret, currentId)) ctl.insertAt(caret, currentId);
   }
 
   function wrapSelection(before, after = before, placeholder = 'text') {
@@ -20736,6 +20893,12 @@
     }
     scheduleSave();
     autosizeNoteBody();
+    // Typing in the Markdown source closes an open table editor on purpose: the source is then the
+    // only thing being edited. Only the editor's own writes (setSource sets writing) keep it open.
+    if (!tableEditorController.writing && tableEditorController()?.isOpen()) {
+      closeTableEditor();
+      toast('Table editor closed: the note text was changed outside it');
+    }
     syncEditLinkOverlay();
     syncSuperscriptFormatMirror();
     syncCodeHighlight();
@@ -20855,6 +21018,23 @@
     closeEditorToolbarMenu();
   });
 
+  richToolbar = window.NotesRichEditor?.attachToolbar(document.getElementById('md-toolbar'), 'Formatting') || null;
+  document.getElementById('btn-rich-mode')?.addEventListener('click', toggleRichMode);
+  // Shortcuts in the Markdown source of a Markdown note (the formatted editor has its own set).
+  ui.body.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || !currentId) return;
+    if (NotesStore.get(currentId)?.content?.editor !== 'markdown' || noteEditingLocked()) return;
+    const key = event.key.toLowerCase();
+    if (key === '/' && richAvailable()) toggleRichMode();
+    else if (key === 'b') wrapSelection('**', '**');
+    else if (key === 'i') wrapSelection('*', '*');
+    else if (key === 'k') wrapSelection('[', '](https://)', 'link text');
+    else return;
+    event.preventDefault();
+  });
+  ui.body.addEventListener('input', () => {
+    if (richActive()) richCtl.setValue(ui.body.value);
+  });
   document.getElementById('btn-md-mode')?.addEventListener('click', () => {
     if (!currentId) return;
     if (noteEditingLocked()) {
@@ -20887,6 +21067,15 @@
       editorMode = 'edit';
       applyEditorMode();
     }
+    if (richActive()) {
+      richCtl.exec(action);
+      return;
+    }
+    if (action === 'strike') wrapSelection('~~', '~~');
+    if (action === 'ul') prefixLine('- ');
+    if (action === 'ol') prefixLine('1. ');
+    if (action === 'quote') prefixLine('> ');
+    if (action === 'codeblock') wrapSelection('```\n', '\n```', 'code');
     if (action === 'bold') wrapSelection('**', '**');
     if (action === 'italic') wrapSelection('*', '*');
     if (action === 'code') wrapSelection('`', '`', 'code');
@@ -20894,6 +21083,7 @@
     if (action === 'sup') wrapSelection('^', '^', 'text');
     if (action === 'heading') prefixLine('## ');
     if (action === 'check') prefixLine('- [ ] ');
+    if (action === 'table') openTableEditor();
   });
 
   document.getElementById('find-input').addEventListener('input', () => {
@@ -20907,9 +21097,7 @@
     }
     if (event.key === 'Escape') {
       event.stopPropagation();
-      hideFindBar();
-      if (!ui.body.hidden) ui.body.focus();
-      else if (!ui.preview.hidden) ui.preview.focus();
+      closeFindBarToNote();
     }
   });
   document.getElementById('find-next').addEventListener('click', () => advanceFind(1));
@@ -21979,7 +22167,8 @@ async function showSettings() {
       setNavViewsOpen(false);
     }
   });
-  document.getElementById('btn-nav-pin')?.addEventListener('click', () => {
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest?.('[data-nav-toggle]')) return;
     prefs.navPinned = !prefs.navPinned;
     savePrefs();
     applyNavRail();
@@ -26078,7 +26267,7 @@ async function showSettings() {
       }
       const findBar = document.getElementById('find-bar');
       if (findBar && !findBar.hidden) {
-        hideFindBar();
+        closeFindBarToNote();
         stop();
         return;
       }
@@ -26168,9 +26357,12 @@ async function showSettings() {
         createNote();
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        if (currentId) showFindBar();
-        else ui.search.focus();
+        // Only take over Ctrl/Cmd+F while focus is inside the open note;
+        // everywhere else the browser's own find keeps working.
+        if (currentId && ui.editor && !ui.editor.hidden && ui.editor.contains(e.target)) {
+          e.preventDefault();
+          showFindBar();
+        }
       }
       if (!typing(e.target) && (e.key === 'j' || e.key === 'k')) {
         e.preventDefault();

@@ -23,8 +23,17 @@ const NotesSearch = (() => {
     return out;
   }
 
+  // toLowerCase can make a string longer ('İ' becomes 'i' plus a combining dot).
+  // Offsets into the lowered text must match the original, so such characters
+  // are lowered one at a time and keep only the first unit of their lowercase form.
+  function lowerKeepingLength(text) {
+    const lower = text.toLowerCase();
+    if (lower.length === text.length) return lower;
+    return [...text].map((ch) => ch.toLowerCase().slice(0, ch.length)).join('');
+  }
+
   function foldText(text) {
-    const lower = String(text || '').toLowerCase();
+    const lower = lowerKeepingLength(String(text || ''));
     // Latin-1 Supplement and Latin Extended-A/B cover Dutch, German, French,
     // Spanish and Scandinavian letters without touching the rest of the string.
     return /[\u00c0-\u024f]/.test(lower) ? lower.replace(/[\u00c0-\u024f]/g, foldChar) : lower;
@@ -1007,9 +1016,9 @@ const NotesSearch = (() => {
       .replace(/>/g, '&gt;');
   }
 
-  function highlightPlain(text, query, { caseSensitive = false, literal = false } = {}) {
+  function highlightPlain(text, query, { caseSensitive = false, literal = false, foldAccents = false } = {}) {
     const source = String(text ?? '');
-    const ranges = findMatches(source, query, { caseSensitive, literal });
+    const ranges = findMatches(source, query, { caseSensitive, literal, foldAccents });
     if (!ranges.length) return escapeHtml(source);
     let html = '';
     let last = 0;
@@ -1021,7 +1030,7 @@ const NotesSearch = (() => {
     return html + escapeHtml(source.slice(last));
   }
 
-  function applyHighlights(root, query, { caseSensitive = false, literal = false } = {}) {
+  function applyHighlights(root, query, { caseSensitive = false, literal = false, foldAccents = false } = {}) {
     if (!root || !String(query || '').trim()) return 0;
     const doc = root.ownerDocument;
     if (!doc || typeof doc.createTreeWalker !== 'function') return 0;
@@ -1032,7 +1041,7 @@ const NotesSearch = (() => {
     for (const node of nodes) {
       if (node.parentElement && node.parentElement.closest('mark.search-hit')) continue;
       const text = node.nodeValue || '';
-      const ranges = findMatches(text, query, { caseSensitive, literal });
+      const ranges = findMatches(text, query, { caseSensitive, literal, foldAccents });
       if (!ranges.length) continue;
       const parts = [];
       let last = 0;
@@ -1057,9 +1066,9 @@ const NotesSearch = (() => {
   // term, short numbers as whole tokens, phrases across whitespace), so the
   // marks in a row, a preview, or a PDF agree with why the note is listed.
   // The editor's find/replace passes literal: true for exact substrings.
-  function findMatches(text, query, { caseSensitive = false, literal = false } = {}) {
+  function findMatches(text, query, { caseSensitive = false, literal = false, foldAccents = false } = {}) {
     const source = String(text || '');
-    if (literal || caseSensitive) return literalMatches(source, String(query || ''), caseSensitive);
+    if (literal || caseSensitive) return literalMatches(source, String(query || ''), caseSensitive, foldAccents);
     const terms = parseQueryTerms(query);
     if (!terms.length || !source) return [];
     const hay = foldText(source);
@@ -1083,10 +1092,12 @@ const NotesSearch = (() => {
     return merged;
   }
 
-  function literalMatches(source, needle, caseSensitive) {
+  function literalMatches(source, needle, caseSensitive, foldAccents = false) {
     if (!needle) return [];
-    const hay = caseSensitive ? source : source.toLowerCase();
-    const find = caseSensitive ? needle : needle.toLowerCase();
+    // foldText maps one character to one character, so offsets stay valid.
+    const fold = foldAccents && !caseSensitive ? foldText : lowerKeepingLength;
+    const hay = caseSensitive ? source : fold(source);
+    const find = caseSensitive ? needle : fold(needle);
     const out = [];
     let from = 0;
     while (from <= hay.length - find.length) {

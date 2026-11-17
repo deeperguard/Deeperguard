@@ -34,8 +34,24 @@
       .join('\n');
   }
 
+  // Vendored highlight.js (common languages only). Its output is escaped HTML with <span class="hljs-*">;
+  // render() still runs the whole result through the DOMPurify allowlist.
+  function highlighter() {
+    if (typeof window !== 'undefined' && window.hljs) return window.hljs;
+    if (typeof require === 'function') {
+      try { return require('./vendor/highlightjs/highlight.min.js'); } catch (_) { /* browser */ }
+    }
+    return null;
+  }
+
   function highlightFence(code, lang) {
     const source = String(code || '').replace(/\n$/, '');
+    const hljs = lang ? highlighter() : null;
+    if (hljs && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(source, { language: lang, ignoreIllegals: true }).value;
+      } catch (_) { /* fall through to the generic highlighter */ }
+    }
     if (typeof window !== 'undefined' && window.NotesMarkdownHighlight) {
       return window.NotesMarkdownHighlight(source, lang);
     }
@@ -144,7 +160,7 @@
       return align ? ` style="text-align:${align}"` : '';
     };
     const head = table.header.map((cell, idx) => (
-      `<th dir="auto"${alignAttr(idx)}>${renderInlineCell(cell)}</th>`
+      `<th scope="col" dir="auto"${alignAttr(idx)}>${renderInlineCell(cell)}</th>`
     )).join('');
     const body = table.rows.map((row) => (
       `<tr>${row.map((cell, idx) => `<td dir="auto"${alignAttr(idx)}>${renderInlineCell(cell)}</td>`).join('')}</tr>`
@@ -152,7 +168,9 @@
     return `<div class="md-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
 
-  function render(md) {
+  // Hand-written renderer: only the fallback for when markdown-it or DOMPurify is not available
+  // (docs/design/rich-editor.md, 5.1).
+  function renderLegacy(md) {
     const fences = [];
     let text = String(md || '').replace(/```([^\n`]*)\n?([\s\S]*?)```/g, (_, info, code) => {
       fences.push({ lang: String(info || '').trim().split(/\s+/)[0] || '', code });
@@ -281,7 +299,193 @@
     return parts.join('');
   }
 
-  const api = { render, toggleTaskAt };
+  // --- Safe rich rendering (docs/design/rich-editor.md, milestone 1) -------------------------
+  // markdown-it (vendored, html:false) turns Markdown into HTML; raw HTML in the note is shown as
+  // text. Links/images go through the scheme allowlist of NotesSanitize, and render() always runs
+  // the result through NotesSanitize.sanitizeRichHtml (DOMPurify) before returning it.
+  const RICH_MAX_CHARS = 500000;
+  const RICH_MAX_LINES = 20000;
+
+  function sanitizer() {
+    if (typeof window !== 'undefined' && window.NotesSanitize) return window.NotesSanitize;
+    if (typeof require === 'function') {
+      try { return require('./sanitize.js'); } catch (_) { /* browser */ }
+    }
+    return null;
+  }
+
+  function markdownItFactory() {
+    if (typeof window !== 'undefined' && typeof window.markdownit === 'function') return window.markdownit;
+    if (typeof require === 'function') {
+      try { return require('./vendor/markdown-it/markdown-it.min.js'); } catch (_) { /* browser */ }
+    }
+    return null;
+  }
+
+  function taskLineIndexes(source) {
+    const byLine = new Map();
+    let seen = 0;
+    String(source || '').split('\n').forEach((line, idx) => {
+      if (TASK_RE.test(line)) {
+        byLine.set(idx, seen);
+        seen += 1;
+      }
+    });
+    return byLine;
+  }
+
+  // "- [ ] item" / "- [x] item" become the same toggle button the old renderer produced.
+  function richTaskRule(state) {
+    const taskLines = taskLineIndexes(state.src);
+    const tokens = state.tokens;
+    for (let i = 0; i < tokens.length; i += 1) {
+      const item = tokens[i];
+      if (item.type !== 'list_item_open' || !item.map || !taskLines.has(item.map[0])) continue;
+      const inline = tokens[i + 2];
+      if (!inline || inline.type !== 'inline' || !inline.children?.length) continue;
+      const first = inline.children[0];
+      const match = first.type === 'text' && /^\[([ xX])\]\s?/.exec(first.content);
+      if (!match) continue;
+      const on = match[1] !== ' ';
+      first.content = first.content.slice(match[0].length);
+      const toggle = new state.Token('dg_task_toggle', '', 0);
+      toggle.meta = { on };
+      inline.children.unshift(toggle);
+      item.attrJoin('class', on ? 'task done' : 'task');
+    }
+  }
+
+  // Extra blank lines between top-level blocks stay visible in the view, like the old renderer.
+  function richBlankLinesRule(state) {
+    const out = [];
+    let prevEnd = null;
+    for (const token of state.tokens) {
+      if (token.level === 0 && token.map && token.nesting >= 0) {
+        if (prevEnd !== null) {
+          for (let n = token.map[0] - prevEnd - 1; n > 0; n -= 1) {
+            out.push(new state.Token('dg_blank', '', 0));
+          }
+        }
+        prevEnd = token.map[1];
+      }
+      out.push(token);
+    }
+    state.tokens = out;
+  }
+
+  let richEngine = null;
+  function richMarkdown() {
+    if (richEngine) return richEngine;
+    const factory = markdownItFactory();
+    const policy = sanitizer();
+    if (!factory || !policy?.safeRichHref) return null;
+    const md = factory('default', {
+      html: false,
+      linkify: true,
+      breaks: true,
+      typographer: false,
+      maxNesting: 50,
+    });
+    md.validateLink = (url) => !!(policy.safeRichHref(url) || policy.safeRichImageSrc(url));
+    md.core.ruler.push('dg_tasks', richTaskRule);
+    md.core.ruler.push('dg_blank_lines', richBlankLinesRule);
+    md.renderer.rules.dg_blank = () => '<p><br></p>\n';
+    md.renderer.rules.dg_task_toggle = (tokens, idx) => {
+      const on = !!tokens[idx].meta?.on;
+      return `<button type="button" class="task-toggle" data-checked="${on ? '1' : '0'}" aria-checked="${on}">${on ? '☑' : '☐'}</button> `;
+    };
+    const defaultLinkOpen = md.renderer.rules.link_open
+      || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
+    md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+      const token = tokens[idx];
+      const href = policy.safeRichHref(token.attrGet('href') || '');
+      token.attrs = (token.attrs || []).filter(([name]) => name === 'title');
+      if (href) {
+        token.attrSet('href', href);
+        if (!href.startsWith('#')) {
+          token.attrSet('rel', 'noopener noreferrer');
+          token.attrSet('target', '_blank');
+        }
+      }
+      return defaultLinkOpen(tokens, idx, options, env, self);
+    };
+    md.renderer.rules.image = (tokens, idx, options, env, self) => {
+      const token = tokens[idx];
+      const alt = self.renderInlineAsText(token.children || [], options, env);
+      const rawSrc = token.attrGet('src') || '';
+      const src = policy.safeRichImageSrc(rawSrc);
+      if (src) {
+        const title = token.attrGet('title');
+        return `<img src="${md.utils.escapeHtml(src)}" alt="${md.utils.escapeHtml(alt)}"${title ? ` title="${md.utils.escapeHtml(title)}"` : ''}>`;
+      }
+      // Never fetch external images (no tracking pixels): show a plain link or the alt text.
+      const href = policy.safeRichHref(rawSrc);
+      const label = md.utils.escapeHtml(alt || rawSrc);
+      if (href && !href.startsWith('#')) {
+        return `<a href="${md.utils.escapeHtml(href)}" class="md-ext-image" rel="noopener noreferrer" target="_blank">${label}</a>`;
+      }
+      return label;
+    };
+    const alignCell = (tokens, idx, options, env, self) => {
+      const token = tokens[idx];
+      const style = token.attrGet('style') || '';
+      token.attrs = (token.attrs || []).filter(([name]) => name !== 'style');
+      const align = /text-align:(left|center|right)/.exec(style);
+      if (align) token.attrJoin('class', `md-align-${align[1]}`);
+      if (token.type === 'th_open') token.attrSet('scope', 'col');
+      return self.renderToken(tokens, idx, options);
+    };
+    md.renderer.rules.th_open = alignCell;
+    md.renderer.rules.td_open = alignCell;
+    // The language name only becomes a class/badge when it is [a-z0-9+#-]; otherwise it is ignored.
+    md.renderer.rules.fence = (tokens, idx) => {
+      const token = tokens[idx];
+      const lang = String(token.info || '').trim().split(/\s+/)[0].toLowerCase();
+      const safeLang = /^[a-z0-9+#-]{1,32}$/.test(lang) ? lang : '';
+      return `<pre class="code-preview"${safeLang ? ` data-lang="${safeLang}"` : ''}><code${safeLang ? ` class="language-${safeLang}"` : ''}>${highlightFence(token.content, safeLang)}</code></pre>\n`;
+    };
+    md.renderer.rules.code_block = (tokens, idx) => (
+      `<pre class="code-preview"><code>${highlightFence(tokens[idx].content, '')}</code></pre>\n`
+    );
+    const defaultTableOpen = md.renderer.rules.table_open
+      || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
+    const defaultTableClose = md.renderer.rules.table_close
+      || ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
+    md.renderer.rules.table_open = (...args) => `<div class="md-table-wrap">${defaultTableOpen(...args)}`;
+    md.renderer.rules.table_close = (...args) => `${defaultTableClose(...args)}</div>`;
+    richEngine = md;
+    return md;
+  }
+
+  function plainTextHtml(md) {
+    return `<p class="md-plain-fallback" dir="auto">${escapeHtml(md).replace(/\n/g, '<br>')}</p>`;
+  }
+
+  // markdown-it output that has NOT been sanitized yet; render() is the safe entry point.
+  function renderRichUnsafe(md) {
+    const source = String(md || '');
+    const engine = richMarkdown();
+    if (!engine) return null;
+    if (source.length > RICH_MAX_CHARS || source.split('\n', RICH_MAX_LINES + 1).length > RICH_MAX_LINES) {
+      return plainTextHtml(source);
+    }
+    try {
+      return engine.render(source);
+    } catch (_) {
+      return plainTextHtml(source);
+    }
+  }
+
+  // Public entry: markdown-it -> DOMPurify. Falls back to the old renderer only when markdown-it
+  // or a DOM sanitizer is missing (no vendored script loaded, or node without a DOM).
+  function render(md) {
+    const raw = renderRichUnsafe(md);
+    const policy = sanitizer();
+    const clean = raw !== null && policy?.sanitizeRichHtml ? policy.sanitizeRichHtml(raw) : null;
+    return typeof clean === 'string' ? clean : renderLegacy(md);
+  }
+
+  const api = { render, renderLegacy, renderRichUnsafe, toggleTaskAt };
   if (typeof window !== 'undefined') window.NotesMarkdown = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

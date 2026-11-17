@@ -120,6 +120,49 @@ class Round59ServerCopyTests(unittest.TestCase):
         footer = (REPO / "app/templates/partials/mk-footer.html").read_text(encoding="utf-8")
         self.assertIn('href="/verify"', footer)
 
+    def test_marketing_js_sri_on_every_mk_topbar_page(self):
+        from client_assets import asset_sri
+        import blog
+
+        sri = asset_sri("js/marketing.js")
+        self.assertTrue(sri)
+        slugs = [post.slug for post in blog.published_posts()]
+        self.assertTrue(slugs)
+        paths = [
+            "/",
+            "/download",
+            "/contact",
+            "/security",
+            "/verify",
+            "/privacy",
+            "/terms",
+            "/self-host",
+            "/help/recovery",
+            "/blog",
+            f"/blog/{slugs[0]}",
+            "/evernote-alternative",
+            "/compare/standard-notes",
+            "/compare/notesnook",
+            "/compare/joplin",
+            "/for/freelancers",
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                res = self.client.get(path)
+                self.assertEqual(res.status_code, 200)
+                body = res.get_data(as_text=True)
+                tags = re.findall(r"<script\b[^>]*\bsrc=\"[^\"]*js/marketing\.[^\"]*\"[^>]*>", body)
+                self.assertEqual(len(tags), 1)
+                self.assertIn(f'integrity="{sri}"', tags[0])
+                self.assertIn('crossorigin="anonymous"', tags[0])
+
+        missing = self.client.get("/no-such-page-for-sri")
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(
+            len(re.findall(r"<script\b[^>]*\bsrc=\"[^\"]*js/marketing\.", missing.get_data(as_text=True))),
+            1,
+        )
+
     def test_sync_item_get_owner_scoped(self):
         email = f"r59-{secrets.token_hex(4)}@example.com"
         password = "round59-server-copy"

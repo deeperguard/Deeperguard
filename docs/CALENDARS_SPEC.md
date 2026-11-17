@@ -144,11 +144,13 @@ Rest-risico: een oudere of afwijkende client die de standaardagenda met een
 constante) zou een duplicaat opleveren. Voor dat geval geldt als vangnet de
 samenvoegregel: bij het samenvoegen, voor elke agenda met `is_default === true`
 en een id ongelijk aan `DEFAULT_CALENDAR_ID`: (1) zet de afspraken met dat
-`calendarId` om naar `DEFAULT_CALENDAR_ID` met een nieuwe `updated_at`;
-(2) neem naam en kleur over van de agenda met het nieuwste
-`updated_at` naar `DEFAULT_CALENDAR_ID`; (3) zet een tombstone voor het
-overbodige id. Het resultaat is voor alle apparaten gelijk, ongeacht
-de volgorde. Deze vangnetregel is nog niet gebouwd (§8).
+`calendarId` om naar `DEFAULT_CALENDAR_ID` met de `updated_at` van de nieuwste
+standaardagenda (of hun eigen stempel als die later is); (2) neem naam en kleur
+over van de agenda met het nieuwste `updated_at` naar `DEFAULT_CALENDAR_ID`;
+(3) zet een tombstone voor het overbodige id met diezelfde stempel. Het resultaat
+is voor alle apparaten gelijk, ongeacht de volgorde en de klokstand van het
+apparaat. Deze vangnetregel is gebouwd (`foldDuplicateDefaultCalendars()` in
+`app/static/js/store.js`, getest in `tests/test_agenda_default_calendar_fold.js`).
 
 Een gewone (niet-standaard) agenda die op twee apparaten met hetzelfde id
 bestaat, wordt per entry op `updated_at` samengevoegd; de nieuwste volledige
@@ -266,7 +268,7 @@ aanmaken, verbergen, hernoemen en verwijderen; controleren op een telefoonscherm
 ## 8. Gaten en open punten
 
 1. De vangnetregel voor een duplicaat-standaardagenda met afwijkend id (§3) is
-   niet gebouwd; met het vaste id is het risico klein.
+   gebouwd (`foldDuplicateDefaultCalendars()`); met het vaste id is het risico klein.
 2. `mergeAgendaCalendars()` voegt per hele entry samen: gelijktijdig hernoemen
    op het ene en omkleuren of verbergen op het andere apparaat verliest een van de
    twee. Per-veld-samenvoegen (met een `updated_at` per veld) is mogelijk, maar

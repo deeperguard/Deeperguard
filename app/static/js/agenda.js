@@ -273,10 +273,10 @@
   }
 
   function listEmptyMessage() {
-    if (state.view === 'day') return 'No events this day.';
-    if (state.view === '3day') return 'No events in this range.';
-    if (state.view === 'week') return 'No events this week.';
-    return 'No events in this period.';
+    if (state.view === 'day') return 'No events this day. Use + to add one.';
+    if (state.view === '3day') return 'No events in this range. Use + to add one.';
+    if (state.view === 'week') return 'No events this week. Use + to add one.';
+    return 'No events in this period. Use + to add one.';
   }
 
   function layoutAllDayLanes(allDayOcc, days) {
@@ -1335,6 +1335,21 @@
     });
   }
 
+  function renderDesktopSide() {
+    const NAVX = document.body.classList.contains('nav-pinned') ? 'true' : 'false';
+    const NAVT = NAVX === 'true' ? 'Collapse sidebar' : 'Expand sidebar';
+    return (
+      '<aside class="app-side agenda-side" aria-label="Calendars">'
+      + '<button type="button" class="btn ghost side-item agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings" aria-label="Calendar menu" title="Calendar menu">'
+      + '<svg class="ui-icon side-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+      + '<span class="side-label side-label-always">Calendar menu</span></button>'
+      + '<button type="button" id="btn-agenda-nav-toggle" data-nav-toggle class="btn ghost side-item" title="Expand/Collapse sidebar" aria-label="Expand/Collapse sidebar" aria-expanded="' + NAVX + '">'
+      + '<svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 4v16" fill="none" stroke="currentColor" stroke-width="2"/></svg>'
+      + '<span class="side-label" data-nav-toggle-label>' + NAVT + '</span></button>'
+      + '</aside>'
+    );
+  }
+
   function renderDesktopHeader(range) {
     return (
       '<header class="agenda-top agenda-top-desktop">'
@@ -1350,7 +1365,6 @@
       + '</div>'
       + '<div class="agenda-top-tools">'
       + renderSearchField()
-      + '<button type="button" class="btn sm ghost agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings">Calendar menu</button>'
       + '<button type="button" class="btn agenda-add agenda-add-task" id="agenda-add-task">+ Task</button>'
       + '<button type="button" class="btn primary agenda-add" id="agenda-add-event">+ Event</button>'
       + '</div></div></header>'
@@ -1591,7 +1605,7 @@
     if (!dayOcc.length && dayTasks.length) {
       // Tasks only: no "No events" line under them.
     } else if (!dayOcc.length) {
-      html += '<p class="muted agenda-month-daylist-empty">No events</p>';
+      html += '<p class="muted agenda-month-daylist-empty">No events this day.</p>';
     } else {
       html += '<ul class="agenda-list">';
       dayOcc.forEach((o) => {
@@ -1732,11 +1746,21 @@
     const focused = document.activeElement;
     const searchHadFocus = !!(focused && focused.id === 'agenda-search' && rootEl.contains(focused));
     const searchCaret = searchHadFocus ? [focused.selectionStart, focused.selectionEnd] : null;
-    const header = phone ? renderPhoneHeader(range) : renderDesktopHeader(range);
+    const header = phone ? renderPhoneHeader(range) : renderDesktopSide() + renderDesktopHeader(range);
     rootEl.innerHTML = (
       header
+      + (global.NotesAgendaCalendars ? global.NotesAgendaCalendars.legendHtml() : '')
       + `<div class="agenda-body agenda-view-${esc(state.view)}">${main}</div>`
     );
+    rootEl.querySelectorAll('[data-agenda-legend]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const id = cb.getAttribute('data-agenda-legend');
+        if (global.NotesAgendaCalendars.setCalendarVisible(id, cb.checked)) {
+          render();
+          rootEl.querySelector(`[data-agenda-legend="${id.replace(/["\\]/g, '\\$&')}"]`)?.focus();
+        }
+      });
+    });
 
     const prev = rootEl.querySelector('#agenda-prev');
     const next = rootEl.querySelector('#agenda-next');
@@ -2148,6 +2172,13 @@
       const orig = Tz && !allDay && start ? Tz.originalTimeLabel(start.getTime(), ev.tz) : '';
       when.textContent = detailWhenText(start, end, allDay) + (orig ? ` (${orig})` : '');
     }
+    const calEl = document.getElementById('agenda-detail-calendar');
+    if (calEl) {
+      const Cals = global.NotesAgendaCalendars;
+      calEl.innerHTML = Cals
+        ? `Calendar: ${Cals.labelHtml(Cals.calendarForEvent(ev, state.calendarMap || undefined))}`
+        : '';
+    }
     const repeatText = repeatSummary(ev, occ);
     if (repeat) {
       repeat.hidden = !repeatText;
@@ -2416,7 +2447,7 @@
     const options = opts && typeof opts === 'object' ? opts : {};
     const content = existing && existing.content?.type === 'agenda_event'
       ? existing.content
-      : defaultEvent();
+      : { ...defaultEvent(), calendarId: newEventCalendarId() };
     state.selectedId = existing ? existing.uuid : id || '';
     editorBaseTz = String(content.tz || '');
     const scope = options.scope === 'occurrence' ? 'occurrence' : 'series';
@@ -2471,6 +2502,7 @@
       s = options.draftStart;
       e = options.draftEnd instanceof Date ? options.draftEnd : new Date(s.getTime() + 3600000);
     }
+    setTitleError(false);
     if (titleEl) {
       titleEl.value = (scope === 'occurrence' && overlay && overlay.title)
         ? overlay.title
@@ -2628,6 +2660,12 @@
   function fromDatetimeLocal(s) {
     const t = Date.parse(s);
     return Number.isFinite(t) ? new Date(t) : new Date();
+  }
+
+  /** New events start in the last used calendar; without one, fillCalendarSelect picks the default. */
+  function newEventCalendarId() {
+    const Cals = global.NotesAgendaCalendars;
+    return Cals ? Cals.lastUsedCalendarId(listAgendaEvents()) : '';
   }
 
   function defaultEvent() {
@@ -2807,11 +2845,30 @@
     return false;
   }
 
+  function setTitleError(show) {
+    const titleEl = document.getElementById('agenda-edit-title');
+    const errEl = document.getElementById('agenda-edit-title-error');
+    if (errEl) errEl.hidden = !show;
+    if (!titleEl) return;
+    if (show) {
+      titleEl.setAttribute('aria-invalid', 'true');
+      titleEl.setAttribute('aria-describedby', 'agenda-edit-title-error');
+    } else {
+      titleEl.removeAttribute('aria-invalid');
+      titleEl.removeAttribute('aria-describedby');
+    }
+  }
+
   function saveEditor() {
     const S = getStore();
     if (!S || typeof S.upsertAgendaEvent !== 'function') return;
 
     const titleEl = document.getElementById('agenda-edit-title');
+    if (titleEl && !String(titleEl.value || '').trim()) {
+      setTitleError(true);
+      titleEl.focus();
+      return;
+    }
     const locEl = document.getElementById('agenda-edit-location');
     const startEl = document.getElementById('agenda-edit-start');
     const endEl = document.getElementById('agenda-edit-end');
@@ -2881,7 +2938,7 @@
         exdates.push(rid);
       }
       overrides[rid] = {
-        title: String(titleEl && titleEl.value || '').trim() || 'Untitled',
+        title: String(titleEl && titleEl.value || '').trim(),
         location: String(locEl && locEl.value || ''),
         notes: String(notesEl && notesEl.value || ''),
         start: start.toISOString(),
@@ -2898,6 +2955,7 @@
       syncRemindersAfterSave(id);
       closeEditor();
       render();
+      toastMsg('Occurrence saved');
       return;
     }
 
@@ -2905,7 +2963,7 @@
     const icalUid = Occ ? Occ.ensureIcalUid(base, id) : (base.ical_uid || '');
     const nextStart = start.toISOString();
     const nextEnd = end.toISOString();
-    const nextTitle = String(titleEl && titleEl.value || '').trim() || 'Untitled';
+    const nextTitle = String(titleEl && titleEl.value || '').trim();
     const nextLocation = String(locEl && locEl.value || '');
     const nextNotes = String(notesEl && notesEl.value || '');
     const nextPatch = {
@@ -2957,6 +3015,7 @@
     syncRemindersAfterSave(id);
     closeEditor();
     render();
+    toastMsg('Event saved');
   }
 
   /** Calendar picker in the editor; the option text is the name, so no color-only cue. */
@@ -3208,6 +3267,7 @@
     wireScopeChooser();
     document.getElementById('agenda-edit-cancel')?.addEventListener('click', requestCloseEditor);
     document.getElementById('agenda-edit-save')?.addEventListener('click', saveEditor);
+    document.getElementById('agenda-edit-title')?.addEventListener('input', () => setTitleError(false));
     document.getElementById('agenda-edit-delete')?.addEventListener('click', deleteEditor);
     document.getElementById('agenda-detail-close')?.addEventListener('click', () => closeDetailCard());
     document.getElementById('agenda-detail-card')?.addEventListener('keydown', (ev) => {
@@ -3254,6 +3314,14 @@
         }
       });
     }
+    // Mirror the visible error state (:user-invalid) into aria-invalid so assistive tech announces it.
+    ['agenda-edit-start', 'agenda-edit-end', 'agenda-edit-until', 'agenda-edit-reminders-custom', 'agenda-edit-webcall'].forEach((id) => {
+      const field = document.getElementById(id);
+      if (!field) return;
+      ['change', 'blur'].forEach((type) => field.addEventListener(type, () => {
+        field.setAttribute('aria-invalid', field.matches(':user-invalid') ? 'true' : 'false');
+      }));
+    });
     const webcallEl = document.getElementById('agenda-edit-webcall');
     if (webcallEl) {
       webcallEl.addEventListener('input', () => {

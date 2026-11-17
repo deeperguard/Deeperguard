@@ -2150,11 +2150,13 @@ const NotesStore = (() => {
     const updated = agendaStampMs(local.updated_at) >= agendaStampMs(remote.updated_at)
       ? local.updated_at
       : remote.updated_at;
+    const mergedCalendars = mergeAgendaCalendars(local, remote, nowMs);
+    if (mergedCalendars) foldDuplicateDefaultCalendars(mergedCalendars, events, nowMs);
     return {
       ...remote,
       ...local,
       ...(mergeAgendaSubscriptions(local, remote, nowMs) || {}),
-      ...(mergeAgendaCalendars(local, remote, nowMs) || {}),
+      ...(mergedCalendars || {}),
       type: 'agenda_pack',
       events,
       deleted_events: deleted,
@@ -2515,6 +2517,44 @@ const NotesStore = (() => {
       if (nowMs - agendaStampMs(at) > AGENDA_TOMBSTONE_TTL_MS) delete deleted[id];
     }
     return { subscriptions: subs, deleted_subscriptions: deleted };
+  }
+
+  /**
+   * Safety net (docs/CALENDARS_SPEC.md §3): a client that created its default calendar under
+   * another id leaves a second `is_default` calendar. Fold it into DEFAULT_CALENDAR_ID: the
+   * newest default supplies name and colour, its events move over, and the extra id gets a
+   * tombstone. Mutates `merged` and `events`; a pack with one default is left untouched.
+   * The tombstone and moved events are stamped with the newest default's `updated_at` (an
+   * event keeps its own stamp if that is later), not with `nowMs`, so every device folding
+   * the same packs writes the same bytes.
+   */
+  function foldDuplicateDefaultCalendars(merged, events, nowMs) {
+    const cals = merged.calendars;
+    const dupIds = Object.keys(cals).filter((id) => id !== DEFAULT_CALENDAR_ID && cals[id] && cals[id].is_default === true);
+    if (!dupIds.length) return;
+    let newest = cals[DEFAULT_CALENDAR_ID];
+    for (const id of [...dupIds].sort()) {
+      if (!newest || agendaStampMs(cals[id].updated_at) > agendaStampMs(newest.updated_at)) newest = cals[id];
+    }
+    const foldAt = newest.updated_at || new Date(nowMs).toISOString();
+    const base = cals[DEFAULT_CALENDAR_ID] || newest;
+    cals[DEFAULT_CALENDAR_ID] = {
+      ...base,
+      name: newest.name,
+      color: newest.color,
+      is_default: true,
+      updated_at: foldAt,
+    };
+    for (const [evId, ev] of Object.entries(events)) {
+      if (ev && dupIds.includes(String(ev.calendarId || ''))) {
+        const keep = agendaStampMs(ev.updated_at) > agendaStampMs(foldAt);
+        events[evId] = { ...ev, calendarId: DEFAULT_CALENDAR_ID, updated_at: keep ? ev.updated_at : foldAt };
+      }
+    }
+    for (const id of dupIds) {
+      delete cals[id];
+      merged.deleted_calendars[id] = foldAt;
+    }
   }
 
   /** Calendars merge per entry on `updated_at`; tombstones as for subscriptions. */

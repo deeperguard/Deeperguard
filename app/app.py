@@ -573,6 +573,23 @@ def _drop_set_cookie(response):
 ICS_FETCH_WORKER_CSP = "default-src 'none'; connect-src https:"
 # The 2FA import KDF worker needs no network at all.
 KDF_WORKER_CSP = "default-src 'none'"
+# The Mermaid sandbox document (loaded in <iframe sandbox="allow-scripts">, opaque origin): own scripts only,
+# no network (default-src 'none' also blocks connect/fetch/frames/forms), inline styles because Mermaid
+# styles its SVG, and it may be framed by the app only.
+MERMAID_SANDBOX_CSP = (
+    "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; "
+    "base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+)
+
+
+# The two scripts the sandbox document loads. The iframe has an opaque origin, so for it every request to
+# this server is cross-origin and the app-wide CORP `same-origin` would abort them. Both are public code.
+MERMAID_SANDBOX_ASSETS = frozenset({"js/vendor/mermaid/mermaid.min.js", "js/mermaid-sandbox.js"})
+
+
+def _is_mermaid_sandbox_asset(path: str) -> bool:
+    rel = path.removeprefix("/static/")
+    return rel in MERMAID_SANDBOX_ASSETS or client_assets.resolve_hashed_static(path) in MERMAID_SANDBOX_ASSETS
 
 
 def _is_ics_fetch_worker_path(path: str) -> bool:
@@ -591,6 +608,12 @@ def _headers(response):
     if request.path == "/static/js/kdf-worker.js" or client_assets.resolve_hashed_static(request.path) == "js/kdf-worker.js":
         response.headers["Content-Security-Policy"] = KDF_WORKER_CSP
         response.headers.pop("Content-Security-Policy-Report-Only", None)
+    if request.path == "/static/mermaid-sandbox.html":
+        response.headers["Content-Security-Policy"] = MERMAID_SANDBOX_CSP
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers.pop("Content-Security-Policy-Report-Only", None)
+    if _is_mermaid_sandbox_asset(request.path):
+        response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
     for key, value in auth.security_headers().items():
         response.headers.setdefault(key, value)
     if request.path.startswith("/api/"):

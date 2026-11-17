@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { render, toggleTaskAt } = require('../app/static/js/markdown.js');
+const { render, renderLegacy, renderRichUnsafe, toggleTaskAt } = require('../app/static/js/markdown.js');
 
 const html = render('- [ ] Buy milk\n- [x] Done\n\n**bold** and `code`\n\n```\n*not italic*\n```');
 assert.match(html, /task-toggle/);
@@ -66,14 +66,52 @@ assert.match(safe, /<a href="https:\/\/example.com"/);
 
 const table = render('# Table test\n\n| Col A | Col B |\n| --- | ---: |\n| **x** | y |\n| a | b |\n');
 assert.match(table, /<div class="md-table-wrap"><table>/);
-assert.match(table, /<th dir="auto">Col A<\/th>/);
+assert.match(table, /<th scope="col" dir="auto">Col A<\/th>/);
 assert.match(table, /text-align:right/);
 assert.match(table, /<strong>x<\/strong>/);
 assert.doesNotMatch(table, /\| Col A \|/);
+const richTable = renderRichUnsafe('| Col A | Col B |\n| --- | ---: |\n| x | y |');
+assert.match(richTable, /<div class="md-table-wrap"><table>/);
+assert.match(richTable, /<th scope="col">Col A<\/th>/);
+assert.match(richTable, /<th class="md-align-right" scope="col">Col B<\/th>/);
+assert.doesNotMatch(richTable, /<td[^>]*scope=/);
+
+// HTML, script and javascript: links in table header and body cells stay text in both renderers.
+const hostileCells = [
+  '<script>alert(1)</script>',
+  '<img src=x onerror=alert(1)>',
+  '[x](javascript:alert(1))',
+  '<iframe src="javascript:alert(1)"></iframe>',
+];
+for (const cell of hostileCells) {
+  const source = `| ${cell} | h |\n| --- | --- |\n| ${cell} | c |`;
+  for (const out of [render(source), renderRichUnsafe(source)]) {
+    assert.match(out, /<table>/, cell);
+    const tags = [...out.matchAll(/<([a-z][a-z0-9]*)([^>]*)>/gi)];
+    assert.ok(tags.every(([, name]) => ['div', 'table', 'thead', 'tbody', 'tr', 'th', 'td'].includes(name)), `${cell}: ${out}`);
+    assert.ok(tags.every(([, , attrs]) => !/\bon\w+=|src=|href=/i.test(attrs)), `${cell}: ${out}`);
+  }
+}
 
 // L2: fence language / sheet name must be attribute-escaped.
 const fenceXss = render('```x"onmouseover="alert(1)\ncode\n```');
 assert.match(fenceXss, /data-lang="x&quot;onmouseover=&quot;alert\(1\)"/);
 assert.doesNotMatch(fenceXss, /data-lang="x"onmouseover=/);
+
+// Without a DOM sanitizer (node) render() uses the old renderer; the old renderer stays exported.
+assert.strictEqual(render('**x**'), renderLegacy('**x**'));
+
+// markdown-it stage: raw HTML is text, Markdown structure comes from markdown-it.
+const mdit = renderRichUnsafe('# T\n\n> q\n\n1. a\n2. b\n\n<b onclick=x>y</b>');
+assert.match(mdit, /<h1>T<\/h1>/);
+assert.match(mdit, /<blockquote>/);
+assert.match(mdit, /<ol>/);
+assert.match(mdit, /&lt;b onclick=x&gt;y&lt;\/b&gt;/);
+assert.doesNotMatch(mdit, /<b /);
+const gap = renderRichUnsafe('a\n\n\nb');
+assert.match(gap, /<p>a<\/p>\n<p><br><\/p>\n<p>b<\/p>/);
+assert.doesNotMatch(renderRichUnsafe('a\n\nb'), /<br>/);
+const rtlTask = renderRichUnsafe('- [x] done');
+assert.match(rtlTask, /<li class="task done"><button type="button" class="task-toggle" data-checked="1" aria-checked="true">/);
 
 console.log('ok');

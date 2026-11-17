@@ -719,7 +719,7 @@
   </script>
   <div id="app" class="app-root" data-csrf="{{ csrf_token }}" data-skip-login="{{ '1' if skip_login else '0' }}" data-self-host="{{ '1' if self_host else '0' }}" data-google-oauth-client-id="{{ google_oauth_client_id|default('', true) }}" data-dropbox-app-key="{{ dropbox_app_key|default('', true) }}" hidden aria-hidden="true">
     <nav class="app-tabs" role="tablist" aria-label="App sections">
-      <button type="button" class="app-tab active" id="app-tab-notes" data-app-tab="notes" role="tab" aria-selected="true" aria-controls="notes-shell">Notes</button>
+      <button type="button" class="app-tab active" id="app-tab-notes" data-app-tab="notes" role="tab" aria-selected="true" aria-current="page" aria-controls="notes-shell">Notes</button>
       <button type="button" class="app-tab" id="app-tab-agenda" data-app-tab="agenda" role="tab" aria-selected="false" aria-controls="agenda-pane">Agenda</button>
       <button type="button" class="app-tab" id="app-tab-2fa" data-app-tab="2fa" role="tab" aria-selected="false" aria-controls="totp-pane">2FA</button>
     </nav>
@@ -822,13 +822,13 @@
         <details class="filter-section" id="filter-section" open>
           <summary class="section-label sn-nav-label">Views<span class="section-chevron section-chevron-open" aria-hidden="true">▾</span><span class="section-chevron section-chevron-closed" aria-hidden="true">▸</span></summary>
           <nav id="filters" class="filters" aria-label="Note filters">
-            <button type="button" class="filter active" data-filter="all" title="Notes"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M14 3v5h5"/></svg><span>Notes</span></button>
-            <button type="button" class="filter" data-filter="documents" title="Files"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
-            <button type="button" class="filter" data-filter="pinned" title="Starred"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 3 15 9 21 10 16.5 14.5 18 21 12 17.5 6 21 7.5 14.5 3 10 9 9"/></svg><span>Starred</span></button>
-            <button type="button" class="filter" data-filter="archived" title="Archived"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Archived</span></button>
-            <button type="button" class="filter" data-filter="trash" title="Trash"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13"/></svg><span>Trash</span></button>
-            <button type="button" class="filter" data-filter="templates" title="Templates"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2"/></svg><span>Templates</span></button>
-            <button type="button" class="filter" data-filter="untagged" title="Untagged"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12l8-8h7v7l-8 8z"/><circle cx="16" cy="8" r="1" fill="currentColor"/></svg><span>Untagged</span></button>
+            <button type="button" class="filter active" data-filter="all" title="Notes" aria-label="Notes"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M14 3v5h5"/></svg><span>Notes</span></button>
+            <button type="button" class="filter" data-filter="documents" title="Files" aria-label="Files"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Files</span></button>
+            <button type="button" class="filter" data-filter="pinned" title="Starred" aria-label="Starred"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 3 15 9 21 10 16.5 14.5 18 21 12 17.5 6 21 7.5 14.5 3 10 9 9"/></svg><span>Starred</span></button>
+            <button type="button" class="filter" data-filter="archived" title="Archived" aria-label="Archived"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Archived</span></button>
+            <button type="button" class="filter" data-filter="trash" title="Trash" aria-label="Trash"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13"/></svg><span>Trash</span></button>
+            <button type="button" class="filter" data-filter="templates" title="Templates" aria-label="Templates"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2"/></svg><span>Templates</span></button>
+            <button type="button" class="filter" data-filter="untagged" title="Untagged" aria-label="Untagged"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12l8-8h7v7l-8 8z"/><circle cx="16" cy="8" r="1" fill="currentColor"/></svg><span>Untagged</span></button>
           </nav>
         </details>
         <label class="filter-select-wrap">
@@ -918,12 +918,12 @@
           </svg>
           <span class="sn-item-label">Lock</span>
         </button>
-        <button type="button" id="btn-nav-pin" class="btn icon desktop-only sn-item" title="Pin sidebar" aria-label="Pin sidebar" aria-pressed="false">
+        <button type="button" id="btn-nav-pin" data-nav-toggle class="btn icon desktop-only sn-item" title="Expand/Collapse sidebar" aria-label="Expand/Collapse sidebar" aria-expanded="false">
           <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 2l1.2 4.8L18 8l-4.8 1.2L12 14l-1.2-4.8L6 8l4.8-1.2L12 2z"/>
             <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 14v8"/>
           </svg>
-          <span class="sn-item-label">Pin sidebar</span>
+          <span class="sn-item-label" data-nav-toggle-label>Expand sidebar</span>
         </button>
         <button type="button" id="btn-account-info-nav" class="btn icon sn-item" title="Account info" aria-label="Account info">
           <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -1432,25 +1432,33 @@
             <button type="button" class="btn ghost sm" id="tag-suggest-dismiss">Dismiss</button>
           </span>
         </div>
-        <div id="md-toolbar" class="md-toolbar">
-          <button type="button" class="btn ghost sm" data-md="bold" title="Bold">B</button>
-          <button type="button" class="btn ghost sm" data-md="italic" title="Italic">I</button>
-          <button type="button" class="btn ghost sm" data-md="heading" title="Heading">H</button>
-          <button type="button" class="btn ghost sm" data-md="check" title="Checklist">☑</button>
-          <button type="button" class="btn ghost sm" data-md="link" title="Link">Link</button>
-          <button type="button" class="btn ghost sm" data-md="sup" title="Superscript" hidden>x²</button>
-          <button type="button" class="btn ghost sm" data-md="code" title="Inline code">`</button>
-          <button type="button" class="btn ghost sm" data-code="comment" title="Comment" hidden>//</button>
-          <button type="button" class="btn ghost sm" data-code="indent" title="Indent" hidden>Indent</button>
-          <button type="button" class="btn ghost sm" data-code="outdent" title="Outdent" hidden>Outdent</button>
+        <div id="md-toolbar" class="md-toolbar" role="toolbar" aria-label="Formatting" aria-orientation="horizontal">
+          <button type="button" class="btn ghost sm" data-md="bold" title="Bold (Ctrl+B)" aria-label="Bold">B</button>
+          <button type="button" class="btn ghost sm" data-md="italic" title="Italic (Ctrl+I)" aria-label="Italic">I</button>
+          <button type="button" class="btn ghost sm" data-md="strike" title="Strikethrough (Ctrl+Shift+X)" aria-label="Strikethrough" data-rich-only hidden>S</button>
+          <button type="button" class="btn ghost sm" data-md="heading" title="Heading" aria-label="Heading">H</button>
+          <button type="button" class="btn ghost sm" data-md="ul" title="Bulleted list (Ctrl+Shift+8)" aria-label="Bulleted list" data-rich-only hidden>•</button>
+          <button type="button" class="btn ghost sm" data-md="ol" title="Numbered list (Ctrl+Shift+7)" aria-label="Numbered list" data-rich-only hidden>1.</button>
+          <button type="button" class="btn ghost sm" data-md="check" title="Checklist (Ctrl+Shift+9)" aria-label="Checklist">☑</button>
+          <button type="button" class="btn ghost sm" data-md="quote" title="Quote" aria-label="Quote" data-rich-only hidden>❝</button>
+          <button type="button" class="btn ghost sm" data-md="link" title="Link (Ctrl+K)" aria-label="Link">Link</button>
+          <button type="button" class="btn ghost sm" data-md="sup" title="Superscript" aria-label="Superscript" hidden>x²</button>
+          <button type="button" class="btn ghost sm" data-md="code" title="Inline code (Ctrl+E)" aria-label="Inline code">`</button>
+          <button type="button" class="btn ghost sm" data-md="codeblock" title="Code block" aria-label="Code block" data-rich-only hidden>{ }</button>
+          <button type="button" class="btn ghost sm" data-md="table" title="Insert or edit table" aria-label="Insert or edit table" aria-controls="table-editor">Table</button>
+          <button type="button" class="btn ghost sm" data-code="comment" title="Comment" aria-label="Comment" hidden>//</button>
+          <button type="button" class="btn ghost sm" data-code="indent" title="Indent" aria-label="Indent" hidden>Indent</button>
+          <button type="button" class="btn ghost sm" data-code="outdent" title="Outdent" aria-label="Outdent" hidden>Outdent</button>
+          <button type="button" class="btn ghost sm" id="btn-rich-mode" title="Switch between formatted text and Markdown source (Ctrl+/)" aria-pressed="false" hidden>Formatted</button>
           <button type="button" class="btn ghost sm" id="btn-md-mode" title="Preview markdown" hidden>Preview</button>
         </div>
+        <div id="table-editor" class="table-editor" role="group" aria-label="Table editor" hidden></div>
         <div id="find-bar" class="find-bar" hidden>
           <div class="find-bar-row find-bar-search">
             <input id="find-input" type="text" placeholder="Find in note…" autocomplete="off" enterkeyhint="search" role="searchbox" aria-label="Find in note">
             <div class="find-bar-nav">
               <button type="button" class="btn ghost sm find-case-toggle" id="find-case-toggle" title="Match case" aria-label="Match case" aria-pressed="false">Aa</button>
-              <span id="find-count" class="find-count muted">0/0</span>
+              <span id="find-count" class="find-count muted" role="status" aria-live="polite" aria-atomic="true">0/0</span>
               <button type="button" class="btn ghost sm" id="find-prev" aria-label="Previous match">↑</button>
               <button type="button" class="btn ghost sm" id="find-next" aria-label="Next match">↓</button>
             </div>
@@ -1462,6 +1470,7 @@
           <pre id="note-body-links" class="note-body-links" aria-hidden="true"></pre>
           <pre id="note-body-highlights" class="note-body-highlights" aria-hidden="true"></pre>
           <textarea id="note-body" class="note-body" placeholder="Write…" dir="auto"></textarea>
+          <div id="note-rich" class="note-rich" hidden></div>
         </div>
         <div id="preview" class="preview" hidden tabindex="-1" dir="auto"></div>
         <div id="note-lock-gate" class="note-lock-gate" hidden>
@@ -1469,7 +1478,7 @@
           <label>Account password
             <input id="note-lock-password" type="password" autocomplete="current-password">
           </label>
-          <p id="note-lock-error" class="error" hidden>Wrong password.</p>
+          <p id="note-lock-error" class="error" role="alert" hidden>Wrong password.</p>
           <button type="button" id="note-lock-unlock" class="btn primary">Unlock note</button>
         </div>
         <div id="doc-inline" class="doc-inline" hidden></div>
@@ -1530,7 +1539,8 @@
             <p class="settings-hint muted agenda-cal-action-sub">Paste a calendar feed link (webcal:// or https://). Your browser fetches it straight from the provider; the link never passes through Deeperguard and is stored only in your encrypted vault. The provider sees your IP address and when you refresh. Feeds refresh at most every 30 minutes while your vault is open. Many providers block direct fetching from a browser; you will then see an error and can choose, per calendar, to fetch through the Deeperguard server instead: the server then sees the link and the calendar while fetching, but does not store or log them. The default is no.</p>
             <form id="agenda-subscribe-form" class="agenda-subscribe-form" autocomplete="off">
               <label class="settings-hint" for="agenda-subscribe-url">Feed link</label>
-              <input id="agenda-subscribe-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" required>
+              <input id="agenda-subscribe-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" required aria-describedby="agenda-subscribe-url-error">
+              <p class="field-error agenda-field-error" id="agenda-subscribe-url-error">Enter the full feed link, starting with https:// or webcal://.</p>
               <label class="settings-hint" for="agenda-subscribe-name">Name (optional)</label>
               <input id="agenda-subscribe-name" type="text" autocomplete="off" maxlength="120">
               <button type="submit" class="btn agenda-cal-action">Preview feed</button>
@@ -1576,18 +1586,23 @@
         <div class="totp-head-actions">
           <button type="button" id="btn-totp-add" class="btn icon" title="Add account" aria-label="Add account">+</button>
           <button type="button" id="btn-totp-import" class="btn ghost" title="Import accounts" aria-label="Import accounts">Import</button>
-          <button type="button" id="btn-totp-lock" class="btn icon" title="Lock vault" aria-label="Lock vault">
+        </div>
+        <div class="totp-side-foot">
+          <button type="button" id="btn-totp-lock" class="btn icon side-item" title="Lock vault" aria-label="Lock vault">
             <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
               <path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
-          </button>
-          <button type="button" id="btn-totp-settings" class="btn icon" title="Settings" aria-label="Settings">
+          <span class="side-label">Lock vault</span></button>
+          <button type="button" id="btn-totp-settings" class="btn icon side-item" title="Settings" aria-label="Settings">
             <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/>
               <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
-          </button>
+          <span class="side-label">Settings</span></button>
+          <button type="button" id="btn-totp-nav-toggle" data-nav-toggle class="btn icon side-item" title="Expand/Collapse sidebar" aria-label="Expand/Collapse sidebar" aria-expanded="false">
+            <svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 4v16" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          <span class="side-label" data-nav-toggle-label>Expand sidebar</span></button>
         </div>
       </header>
       <div class="totp-toolbar">
@@ -1755,7 +1770,7 @@
               <div id="device-start-code-form" class="device-start-code-form" hidden>
                 <label class="settings-hint" for="device-start-code-input">Approval code</label>
                 <input id="device-start-code-input" class="device-start-code-input" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX">
-                <p id="device-start-code-error" class="device-start-code-error" hidden></p>
+                <p id="device-start-code-error" class="device-start-code-error" role="alert" hidden></p>
                 <div class="settings-actions">
                   <button type="button" id="btn-device-start-code-submit" class="btn primary">Check code</button>
                 </div>
@@ -1928,7 +1943,7 @@
                 <button type="button" class="password-toggle btn ghost sm" data-target="password-change-confirm" aria-label="Show password">Show</button>
               </span>
             </label>
-            <p id="password-change-error" class="settings-hint error" hidden></p>
+            <p id="password-change-error" class="settings-hint error" role="alert" hidden></p>
             <button type="button" id="btn-change-password" class="btn primary">Change vault password</button>
             <p class="settings-hint">Re-encrypts every note on this device. Other devices need the new password to sync.</p>
           </div>
@@ -1972,7 +1987,7 @@
                     <button type="button" class="password-toggle btn ghost sm" data-target="attachment-repair-password" aria-label="Show password">Show</button>
                   </span>
                 </label>
-                <p id="attachment-repair-error" class="settings-hint error" hidden></p>
+                <p id="attachment-repair-error" class="settings-hint error" role="alert" hidden></p>
                 <button type="button" id="btn-repair-attachments" class="btn">Repair documents</button>
               </div>
               <p class="settings-hint">Re-OCR documents on this device (zero-knowledge). Regenerates PDF list thumbnails on iPhone.</p>
@@ -2474,7 +2489,7 @@
         <span id="scan-name-label">Document name</span>
         <input id="scan-name" type="text" maxlength="120" required autocomplete="off" autocapitalize="words" enterkeyhint="done" placeholder="e.g. Passport, June invoice">
       </label>
-      <p id="scan-name-error" class="error" hidden>Enter a name for this document.</p>
+      <p id="scan-name-error" class="error" role="alert" hidden>Enter a name for this document.</p>
     </div>
     <footer class="scan-dialog-foot">
       <button type="button" class="btn ghost" id="scan-cancel">Cancel</button>
@@ -2645,9 +2660,9 @@
       <div class="account-info-row"><dt>Two-factor</dt><dd id="account-info-2fa">—</dd></div>
       <div class="account-info-row"><dt>Passkeys</dt><dd id="account-info-passkeys">—</dd></div>
     </dl>
-    <p id="account-info-error" class="error account-info-error" hidden></p>
+    <p id="account-info-error" class="error account-info-error" role="alert" hidden></p>
     <div class="confirm-dialog-actions">
-      <button type="button" class="btn primary" id="account-info-close">OK</button>
+      <button type="button" class="btn primary" id="account-info-close">Close</button>
     </div>
   </div>
   <div id="agenda-scope-backdrop" class="settings-backdrop agenda-scope-backdrop" hidden></div>
@@ -2705,6 +2720,7 @@
   <div id="agenda-detail-card" class="confirm-dialog agenda-detail-card" hidden role="dialog" aria-modal="true" aria-labelledby="agenda-detail-title">
     <h2 id="agenda-detail-title" class="agenda-editor-heading">Event</h2>
     <p id="agenda-detail-when" class="agenda-detail-when muted"></p>
+    <p id="agenda-detail-calendar" class="agenda-detail-calendar muted"></p>
     <p id="agenda-detail-repeat" class="agenda-detail-repeat muted" hidden></p>
     <p id="agenda-detail-location" class="agenda-detail-loc" hidden></p>
     <p id="agenda-detail-join" class="agenda-detail-join" hidden></p>
@@ -2721,28 +2737,31 @@
       <p id="agenda-edit-series-notice" class="agenda-editor-series-notice" hidden>
         Changes apply to the <strong>entire recurring series</strong> (not a single occurrence).
       </p>
-      <label class="settings-row stacked">Title
+      <label class="settings-row stacked" for="agenda-edit-title">Title
         <input id="agenda-edit-title" type="text" maxlength="500" autocomplete="off" placeholder="Add title">
       </label>
-      <label class="settings-row checkbox agenda-editor-allday">
+      <p class="field-error" id="agenda-edit-title-error" role="alert" hidden>Give the event a title.</p>
+      <label class="settings-row checkbox agenda-editor-allday" for="agenda-edit-allday">
         <span>All day</span>
         <input id="agenda-edit-allday" type="checkbox">
       </label>
       <div class="agenda-editor-datetime-row">
         <label class="settings-row stacked agenda-editor-datetime-label" for="agenda-edit-start">Starts
           <span class="agenda-editor-datetime-field">
-            <input id="agenda-edit-start" type="datetime-local" step="60">
+            <input id="agenda-edit-start" type="datetime-local" step="60" aria-describedby="agenda-edit-start-error">
           </span>
         </label>
+        <p class="field-error agenda-field-error" id="agenda-edit-start-error">Enter a complete date and time.</p>
         <label class="settings-row stacked agenda-editor-datetime-label" for="agenda-edit-end">Ends
           <span class="agenda-editor-datetime-field">
-            <input id="agenda-edit-end" type="datetime-local" step="60">
+            <input id="agenda-edit-end" type="datetime-local" step="60" aria-describedby="agenda-edit-end-error">
           </span>
         </label>
+        <p class="field-error agenda-field-error" id="agenda-edit-end-error">Enter a complete date and time.</p>
       </div>
       <fieldset class="agenda-editor-recurrence">
         <legend class="muted">Repeat</legend>
-        <label class="settings-row stacked">Pattern
+        <label class="settings-row stacked" for="agenda-edit-repeat">Pattern
           <select id="agenda-edit-repeat">
             <option value="none">Does not repeat</option>
             <option value="daily">Daily</option>
@@ -2758,9 +2777,10 @@
         <p id="agenda-edit-rrule-advanced" class="agenda-editor-rrule-advanced" hidden>
           Custom rule: <code id="agenda-edit-rrule-raw"></code>
         </p>
-        <label class="settings-row stacked" id="agenda-edit-until-wrap">Repeat until (optional)
-          <input id="agenda-edit-until" type="date" autocomplete="off">
+        <label class="settings-row stacked" id="agenda-edit-until-wrap" for="agenda-edit-until">Repeat until (optional)
+          <input id="agenda-edit-until" type="date" autocomplete="off" aria-describedby="agenda-edit-until-error">
         </label>
+        <p class="field-error agenda-field-error" id="agenda-edit-until-error">Enter a complete date, or clear the field.</p>
       </fieldset>
       <fieldset class="agenda-editor-reminders" id="agenda-edit-reminders-wrap">
         <legend class="muted">Reminders</legend>
@@ -2773,37 +2793,39 @@
           <label class="settings-row checkbox"><span>1 hour before</span><input type="checkbox" data-agenda-reminder-offset="60"></label>
           <label class="settings-row checkbox"><span>1 day before</span><input type="checkbox" data-agenda-reminder-offset="1440"></label>
         </div>
-        <label class="settings-row stacked">Custom (minutes before, e.g. 20 or 20, 120)
-          <input id="agenda-edit-reminders-custom" type="text" inputmode="numeric" maxlength="60" autocomplete="off" spellcheck="false">
+        <label class="settings-row stacked" for="agenda-edit-reminders-custom">Custom (minutes before, e.g. 20 or 20, 120)
+          <input id="agenda-edit-reminders-custom" type="text" inputmode="numeric" maxlength="60" autocomplete="off" spellcheck="false" pattern="\s*(?=\d{1,6}(?!\d))0*(?:\d{1,4}|[1-3]\d{4}|40[0-2]\d{2}|403[01]\d|40320)(?:[\s,;]+(?=\d{1,6}(?!\d))0*(?:\d{1,4}|[1-3]\d{4}|40[0-2]\d{2}|403[01]\d|40320))*[\s,;]*" aria-describedby="agenda-edit-reminders-custom-error">
         </label>
+        <p class="field-error agenda-field-error" id="agenda-edit-reminders-custom-error">Use whole numbers of minutes from 0 to 40320 (28 days), separated by commas, for example 20, 120.</p>
         <p class="settings-hint agenda-local-reminders-hint">Reminders only work while Deeperguard is open in your browser. They show in the app and, if you allowed it, as a browser notification. These reminders send no email and no push message.</p>
         <div class="agenda-editor-server-reminders" data-plan-feature="agenda_reminders" data-plan-lock-hint="Email and push reminders, which also work when Deeperguard is closed, are a separate Pro option.">
           <p class="settings-hint agenda-reminders-privacy-hint">Email and push reminders (Pro, optional). Offsets stay in your vault. The server sees reminder times and channel, never event titles, locations or notes.</p>
           <p id="agenda-edit-reminders-hint" class="settings-hint agenda-reminders-hint" role="status" hidden></p>
         </div>
       </fieldset>
-      <label class="settings-row stacked">Location
+      <label class="settings-row stacked" for="agenda-edit-location">Location
         <input id="agenda-edit-location" type="text" maxlength="500" autocomplete="off">
       </label>
-      <label class="settings-row stacked" id="agenda-edit-tz-row">Time zone
+      <label class="settings-row stacked" id="agenda-edit-tz-row" for="agenda-edit-tz">Time zone
         <input id="agenda-edit-tz" type="text" list="agenda-tz-list" maxlength="64" autocomplete="off" spellcheck="false">
         <datalist id="agenda-tz-list"></datalist>
       </label>
-      <label class="settings-row stacked" id="agenda-edit-calendar-row">Calendar
+      <label class="settings-row stacked" id="agenda-edit-calendar-row" for="agenda-edit-calendar">Calendar
         <select id="agenda-edit-calendar"></select>
       </label>
       <fieldset class="agenda-editor-colors">
         <legend class="muted" id="agenda-edit-colors-legend">Color</legend>
         <div id="agenda-edit-colors" class="agenda-color-swatches" aria-labelledby="agenda-edit-colors-legend"></div>
       </fieldset>
-      <label class="settings-row stacked">Meeting link (https only)
-        <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://">
+      <label class="settings-row stacked" for="agenda-edit-webcall">Meeting link (https only)
+        <input id="agenda-edit-webcall" type="url" inputmode="url" autocomplete="off" placeholder="https://" pattern="[Hh][Tt][Tt][Pp][Ss]://.+" aria-describedby="agenda-edit-webcall-error">
       </label>
+      <p class="field-error agenda-field-error" id="agenda-edit-webcall-error">Enter a full link starting with https://. Other links are not saved.</p>
       <p id="agenda-edit-join" class="settings-hint" hidden></p>
-      <label class="settings-row stacked">Notes
+      <label class="settings-row stacked" for="agenda-edit-notes">Notes
         <textarea id="agenda-edit-notes" rows="2" maxlength="16000" autocomplete="off"></textarea>
       </label>
-      <label class="settings-row stacked">Guests (comma-separated)
+      <label class="settings-row stacked" for="agenda-edit-attendees">Guests (comma-separated)
         <input id="agenda-edit-attendees" type="text" maxlength="2000" autocomplete="off">
       </label>
     </div>
@@ -2958,7 +2980,13 @@
   {{ asset_script('js/search.js') }}
   {{ asset_script('js/templates.js') }}
   {{ asset_script('js/spreadsheet.js') }}
+  {{ asset_script('js/vendor/dompurify/purify.min.js') }}
+  {{ asset_script('js/vendor/markdown-it/markdown-it.min.js') }}
+  {{ asset_script('js/vendor/highlightjs/highlight.min.js') }}
   {{ asset_script('js/markdown.js') }}
+  {{ asset_script('js/table-editor.js') }}
+  {{ asset_script('js/vendor/codemirror/codemirror.min.js', defer=True) }}
+  {{ asset_script('js/rich-editor.js') }}
   {{ asset_script('js/in-doc-nav.js') }}
   {{ asset_script('js/superscript.js') }}
   {{ asset_script('js/notelinks.js') }}
@@ -2967,6 +2995,7 @@
   {{ asset_script('js/checklist.js') }}
   {{ asset_script('js/tagsuggest.js') }}
   {{ asset_script('js/blob-urls.js') }}
+  {{ asset_script('js/mermaid-view.js') }}
   {{ asset_script('js/preview.js') }}
   {{ asset_script('js/doc-inline-controls.js') }}
   {{ asset_script('js/photo-ocr-preprocess.js') }}

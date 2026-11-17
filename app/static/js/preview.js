@@ -1761,11 +1761,14 @@ const NotesPreview = (() => {
     return {
       code: kids.find((el) => el.tagName === 'CODE') || null,
       button: kids.find((el) => el.classList?.contains('code-copy-btn')) || null,
+      status: kids.find((el) => el.classList?.contains('code-copy-status')) || null,
     };
   }
 
   function decorateCodeBlocks(root) {
     if (!root?.querySelectorAll || typeof document === 'undefined') return 0;
+    // ```mermaid blocks become sandboxed diagrams first; their source <pre> then gets the copy button too.
+    if (typeof window !== 'undefined') window.NotesMermaid?.decorate?.(root);
     let added = 0;
     root.querySelectorAll('pre.code-preview').forEach((pre) => {
       const { code, button } = codeBlockParts(pre);
@@ -1775,7 +1778,13 @@ const NotesPreview = (() => {
       btn.className = 'code-copy-btn';
       btn.setAttribute('aria-label', CODE_COPY_ARIA);
       btn.textContent = CODE_COPY_LABEL;
+      // Polite live region next to the button: screen readers announce "Gekopieerd" when it fills.
+      const status = document.createElement('span');
+      status.className = 'sr-only code-copy-status';
+      status.setAttribute('role', 'status');
+      status.setAttribute('aria-live', 'polite');
       pre.appendChild(btn);
+      pre.appendChild(status);
       added += 1;
     });
     return added;
@@ -1783,7 +1792,7 @@ const NotesPreview = (() => {
 
   async function copyCodeBlock(btn, { clipboard, onError } = {}) {
     const pre = btn?.closest?.('pre.code-preview');
-    const { code } = codeBlockParts(pre);
+    const { code, status } = codeBlockParts(pre);
     if (!code) return false;
     const target = clipboard || (typeof navigator !== 'undefined' ? navigator.clipboard : null);
     try {
@@ -1794,11 +1803,18 @@ const NotesPreview = (() => {
       return false;
     }
     clearTimeout(btn._codeCopyTimer);
+    clearTimeout(btn._codeCopyStatusTimer);
     btn.textContent = CODE_COPIED_LABEL;
     btn.classList.add('is-copied');
+    // Clear first so a second copy of the same block is announced again.
+    if (status) {
+      status.textContent = '';
+      btn._codeCopyStatusTimer = setTimeout(() => { status.textContent = CODE_COPIED_LABEL; }, 50);
+    }
     btn._codeCopyTimer = setTimeout(() => {
       btn.textContent = CODE_COPY_LABEL;
       btn.classList.remove('is-copied');
+      if (status) status.textContent = '';
     }, CODE_COPY_RESET_MS);
     return true;
   }

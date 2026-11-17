@@ -84,6 +84,8 @@ for (const f of ['LICENSE-simple-icons.txt', 'SOURCE.txt']) assert.ok(fs.existsS
 assert.ok(/CC0/.test(fs.readFileSync(path.join(brandsDir, 'LICENSE-simple-icons.txt'), 'utf8')));
 assert.ok(/trademark/i.test(fs.readFileSync(path.join(brandsDir, 'SOURCE.txt'), 'utf8')));
 const tpl = fs.readFileSync(path.join(__dirname, '..', 'app', 'templates', 'app.html'), 'utf8');
-const dlg = tpl.slice(tpl.indexOf('id="totp-icon-field"') < 0 ? tpl.indexOf('totp-icon-field') : 0, tpl.indexOf('id="totp-icon-grid"') + 100);
-assert.ok(dlg.length > 100 && !/<img/i.test(dlg.slice(dlg.indexOf('totp-icon-field'))));
+const fieldStart = tpl.indexOf('totp-icon-field');
+const gridEnd = tpl.indexOf('id="totp-icon-grid"');
+assert.ok(fieldStart > 0 && gridEnd > fieldStart, 'icon field and grid are in app.html');
+assert.ok(!/<img/i.test(tpl.slice(fieldStart, gridEnd)), 'icon picker block uses no <img>');
 console.log('totp icons ok');

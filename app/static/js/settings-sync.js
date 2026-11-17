@@ -20,6 +20,7 @@ const NotesSettingsSync = (() => {
     theme: { check: oneOf(['light', 'dark', 'system']), def: 'light' },
     fontSize: { check: (v) => Number.isInteger(v) && v >= 13 && v <= 22, def: 16 },
     monospace: { check: bool, def: false },
+    richEditor: { check: bool, def: false },
     spellcheck: { check: bool, def: true },
     hidePreviews: { check: bool, def: false },
     compactList: { check: bool, def: true },
