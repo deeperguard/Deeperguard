@@ -34,9 +34,9 @@ assert.ok(!appCss.includes('.folder-head:hover .folder-select::after'), 'title p
 const hoverOverlayBlock = appCss.split('.folder-head:not(:has(.folder-rename-input)):hover::after,')[1].split('.folder-block.active > .folder-head:not(:has(.folder-rename-input)):hover::after')[0];
 assert.ok(hoverOverlayBlock.includes('white-space: normal'), 'hover title must wrap naturally, not single-line ellipsis');
 assert.ok(hoverOverlayBlock.includes('overflow-wrap: break-word'));
-assert.ok(hoverOverlayBlock.includes('width: max-content'), 'popover must grow to fit the full title');
+assert.ok(hoverOverlayBlock.includes('right: var(--folder-strip-w)'), 'popover must stop where the action strip starts');
 assert.ok(hoverOverlayBlock.includes('word-break: normal'), 'must not force per-letter breaks in a narrow box');
-assert.ok(hoverOverlayBlock.includes('top: calc(100%'), 'popover must sit below the row, not over action buttons');
+assert.ok(hoverOverlayBlock.includes('top: 0'), 'popover must overlay the name area, not the action buttons');
 assert.ok(
   appCss.includes('.folder-head:not(:has(.folder-rename-input)):hover .folder-select'),
   'truncated label must hide while popover is shown',
@@ -50,14 +50,8 @@ assert.ok(!hoverOverlayBlock.includes('white-space: nowrap'), 'hover overlay mus
 assert.ok(!hoverOverlayBlock.includes('100cqw'), 'popover must not rely on container queries on the label');
 assert.ok(hoverOverlayBlock.includes('z-index: 5'), 'title popover stacks above following folder rows');
 
-assert.ok(
-  appCss.includes('body:has(.sidebar-nav .folder-head:hover) .sidebar-nav .sidebar-scroll > .nav-browse > #folder-section'),
-  'folder-section overflow:clip must release while a row is hovered',
-);
-assert.ok(
-  appCss.includes('body:has(.sidebar-nav .folder-head:hover) .sidebar-nav .sidebar-scroll > #folder-section'),
-  'folder-section clip release must cover direct scroll children too',
-);
+// The scroller must keep its overflow while a row is hovered: releasing it let rows slide under the footer.
+assert.ok(!appCss.includes('body:has(.sidebar-nav .folder-head:hover) .sidebar-nav'), 'hover must not release sidebar overflow');
 
 // Folder tree (WAI-ARIA tree): nested rows and groups. Notes under a folder are no longer listed in the sidebar.
 assert.ok(renderFolders.includes('role="treeitem"') && renderFolders.includes('aria-expanded='));
