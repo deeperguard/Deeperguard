@@ -183,6 +183,9 @@ def parse_reach(reach: str) -> dict:
         return {"kind": "via", "via": _ticks(reach)}
     if reach.startswith("conditional"):
         return {"kind": "conditional"}
+    if reach.startswith("replaced by "):
+        *openers, control = _ticks(reach.split("(")[0])
+        return {"kind": "replaced", "via": openers, "control": control}
     if reach.startswith("phone-only:"):
         out = {"kind": "phone-only", "phone_via": None, "desktop": None, "desktop_via": []}
         for clause in reach[len("phone-only:"):].split(";"):
@@ -324,6 +327,12 @@ CLOSERS = (
 
 def escape_all(page) -> None:
     """Close whatever an earlier check left open, through its own visible close control."""
+    backdrop = page.locator("#agenda-phone-menu-backdrop").locator("visible=true")
+    if backdrop.count():
+        # The menu panel covers the backdrop centre: click its bottom-left corner.
+        size = page.viewport_size
+        backdrop.first.click(position={"x": 5, "y": size["height"] - 5}, timeout=3000)
+        page.wait_for_timeout(250)
     for selector in CLOSERS:
         loc = page.locator(selector).locator("visible=true")
         if loc.count():
@@ -364,12 +373,24 @@ def open_fresh(page, title: str) -> None:
     open_note(page, title)
 
 
-def check_rows(page, report: Report, where: str, rows: list[dict], reset) -> None:
-    """Rows of one screen: present, named and reachable the way the table says."""
+def check_rows(page, report: Report, where: str, rows: list[dict], reset, reach: str = "reach") -> None:
+    """Rows of one screen: present, named and reachable the way the table says.
+
+    `reach` names the table column used: "reach" (desktop) or "phone_reach" (390px).
+    """
+    def spec(row: dict) -> dict:
+        return row if reach == "reach" else row[reach]
+
+    def label_of(row: dict) -> str:
+        return f"[{where}] {row['selector']} ({spec(row)['text'] if reach != 'reach' else row['reach']})"
+
+    def target(row: dict) -> str:
+        return spec(row).get("control", row["selector"])
+
     groups: dict[tuple, list[dict]] = {}
     for row in rows:
-        if row["kind"] in ("visible", "via"):
-            groups.setdefault(tuple(row["via"]), []).append(row)
+        if spec(row)["kind"] in ("visible", "via", "replaced"):
+            groups.setdefault(tuple(spec(row)["via"]), []).append(row)
     for via, group in groups.items():
         reset()
         opened = True
@@ -379,24 +400,23 @@ def check_rows(page, report: Report, where: str, rows: list[dict], reset) -> Non
             except Exception as err:  # noqa: BLE001 - reported as a failure
                 opened = False
                 for row in group:
-                    report.check(f"[{where}] {row['selector']} ({row['reach']})", False,
-                                 f"opener {opener} not clickable: {first_line(err)}")
+                    report.check(label_of(row), False, f"opener {opener} not clickable: {first_line(err)}")
                 break
         if not opened:
             continue
         for row in group:
-            info = probe(page, row["selector"])
-            label = f"[{where}] {row['selector']} ({row['reach']})"
+            info = probe(page, target(row))
+            label = label_of(row)
             if not report.check(label + " present", info["present"]):
                 continue
             report.check(label + " reachable", info["visible"], info)
             report.check(label + " has an accessible name", bool(info["name"]), info)
     reset()
     for row in rows:
-        if row["kind"] != "conditional":
+        if spec(row)["kind"] != "conditional":
             continue
         info = probe(page, row["selector"])
-        label = f"[{where}] {row['selector']} ({row['reach']})"
+        label = label_of(row)
         if report.check(label + " present", info["present"]):
             report.check(label + " has an accessible name", bool(info["name"]), info)
 
@@ -807,6 +827,11 @@ def main() -> int:
             phone.evaluate(DISMISS_JS)
             phone.wait_for_timeout(500)
             check_quick_row_phone(phone, report)
+            check_rows(phone, report, "phone agenda", [r for r in ACTIONS if r["applies"] in ("all", "agenda")],
+                       tab_reset(phone, "#app-tab-agenda"), reach="phone_reach")
+            seed_totp(phone)
+            check_rows(phone, report, "phone 2fa", [r for r in ACTIONS if r["applies"] in ("all", "2fa")],
+                       tab_reset(phone, "#app-tab-2fa"), reach="phone_reach")
             browser.close()
     finally:
         stop_server(proc)
