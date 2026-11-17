@@ -309,7 +309,7 @@ CLOSERS = (
     "#doc-close", "#note-options-close", "#search-filter-close", "#find-close",
     "#agenda-calendar-settings-close", "#note-row-menu-backdrop",
     '#btn-editor-overflow-desktop[aria-expanded="true"]', '#btn-editor-overflow-mobile[aria-expanded="true"]',
-    '#tag-bar-toggle[aria-expanded="true"]', '#btn-nav-pin[aria-pressed="true"]',
+    '#tag-bar-toggle[aria-expanded="true"]', '#btn-nav-pin[aria-expanded="true"]',
 )
 
 
