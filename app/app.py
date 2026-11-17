@@ -47,6 +47,7 @@ from srp_auth import (
     new_srp_salt_hex,
     normalize_srp_kdf_version,
 )
+import vault_keys
 from vault_crypto import password_unlocks_samples
 import passkey_signin
 import webauthn_helper as webauthn_mod
@@ -2289,6 +2290,144 @@ def api_account_password():
             db.clear_user_legacy_password(uid)
     _revoke_other_sessions(uid, reason="password")
     return jsonify({"ok": True, "password_changed_at": changed_at, "auth_security_at": changed_at})
+
+
+def _vault_keys_user():
+    """(user, error response) for the wrapped-recovery-key endpoints."""
+    if not strict_zk():
+        return None, (jsonify({"error": "not found"}), 404)
+    uid = auth.current_user_id()
+    user = db.get_user_by_id(uid) if uid else None
+    if not user:
+        return None, (jsonify({"error": "not found"}), 404)
+    return user, None
+
+
+def _vault_keys_json(payload: dict, status: int = 200):
+    resp = jsonify(payload)
+    resp.status_code = status
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+def _vault_keys_write_conflict(status: str, key_rev: int, key_id: str):
+    if status == "not_found":
+        return _vault_keys_json({"error": "not found"}, 404)
+    if status == "no_recovery_key":
+        return _vault_keys_json({"error": "no_recovery_key"}, 404)
+    return _vault_keys_json({"error": status, "key_rev": key_rev, "key_id": key_id}, 409)
+
+
+@app.get("/api/account/vault-keys")
+def api_account_vault_keys():
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    status = db.get_vault_keys_status(int(user["id"]))
+    return _vault_keys_json({"schema": 1, "key_mode": "derived", **status})
+
+
+@app.post("/api/account/vault-keys/challenge")
+def api_account_vault_keys_challenge():
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    email = str(user["email"] or "").strip().lower()
+    if _auth_rate_limited("account-vault-keys", email):
+        return jsonify({"error": "too many attempts"}), 429
+    if not db.user_has_srp(user):
+        return jsonify({"error": "not applicable"}), 404
+    try:
+        b_hex = _stored_srp_challenge(email, user, auth.SRP_PURPOSE_VAULT_KEYS)
+    except ValueError:
+        return jsonify({"error": "invalid credentials"}), 401
+    return _vault_keys_json({
+        "srp_salt": str(user["srp_salt"]),
+        "B": b_hex,
+        "srp_kdf_version": db.user_srp_kdf_version(user),
+    })
+
+
+@app.post("/api/account/vault-keys/prove")
+def api_account_vault_keys_prove():
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    body = request.get_json(silent=True) or {}
+    a_hex = str(body.get("A") or "").strip().lower()
+    m1 = str(body.get("M1") or "").strip().lower()
+    email = str(user["email"] or "").strip().lower()
+    if _auth_rate_limited("account-vault-keys", email):
+        return jsonify({"error": "too many attempts"}), 429
+    if not a_hex or not m1:
+        return jsonify({"error": "missing srp proof"}), 400
+    if not _verify_stored_srp_proof(email, user, a_hex, m1, auth.SRP_PURPOSE_VAULT_KEYS):
+        return jsonify({"error": "invalid password"}), 401
+    return _vault_keys_json({"token": auth.issue_vault_keys_token(), "expires_in": _password_rotation_seconds()})
+
+
+def _vault_keys_write_gate(body: dict):
+    """CSRF and password-proof token check shared by the wrap write endpoints.
+
+    Guessing is limited at challenge/prove, which is the only way to get a token.
+    """
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    if not auth.vault_keys_token_valid(str(body.get("token") or "")):
+        return jsonify({"error": "invalid or expired token"}), 401
+    return None
+
+
+@app.put("/api/account/vault-keys/recovery")
+def api_account_vault_keys_recovery_put():
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid body"}), 400
+    gate = _vault_keys_write_gate(body)
+    if gate:
+        return gate
+    fields, problem = vault_keys.parse_recovery_put(body)
+    if fields is None:
+        return jsonify({"error": problem}), 400
+    uid = int(user["id"])
+    status, key_rev, key_id = db.put_recovery_wrap(uid, **fields)
+    if status not in ("ok", "unchanged"):
+        return _vault_keys_write_conflict(status, key_rev, key_id)
+    auth.consume_vault_keys_token()
+    if status == "ok":
+        db.touch_auth_security(uid)
+    return _vault_keys_json({"ok": True, "key_rev": key_rev, "key_id": key_id})
+
+
+@app.delete("/api/account/vault-keys/recovery")
+def api_account_vault_keys_recovery_delete():
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid body"}), 400
+    gate = _vault_keys_write_gate(body)
+    if gate:
+        return gate
+    extra = vault_keys.unexpected_fields(body, vault_keys.RECOVERY_DELETE_FIELDS)
+    rev = vault_keys.parse_expected_rev(body.get("expected_key_rev"))
+    if extra or rev is None:
+        return jsonify({"error": "invalid body"}), 400
+    uid = int(user["id"])
+    status, key_rev, key_id = db.delete_recovery_wrap(uid, expected_key_rev=rev)
+    if status != "ok":
+        return _vault_keys_write_conflict(status, key_rev, key_id)
+    auth.consume_vault_keys_token()
+    db.touch_auth_security(uid)
+    return _vault_keys_json({"ok": True, "key_rev": key_rev, "key_id": key_id})
 
 
 @app.post("/api/account/vault-kdf")

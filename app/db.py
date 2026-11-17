@@ -273,6 +273,29 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute(
             "ALTER TABLE users ADD COLUMN stripe_cancel_at_period_end INTEGER NOT NULL DEFAULT 0"
         )
+    for col, ddl in (
+        ("vault_key_id", "TEXT NOT NULL DEFAULT ''"),
+        ("vault_key_rev", "INTEGER NOT NULL DEFAULT 0"),
+        ("recovery_failed_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("recovery_locked_until", "REAL NOT NULL DEFAULT 0"),
+        ("recovery_lock_level", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS vault_recovery_wraps (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            key_id TEXT NOT NULL,
+            wrap_version INTEGER NOT NULL,
+            recovery_salt TEXT NOT NULL,
+            wrap TEXT NOT NULL,
+            proof_hash TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            last_used_at REAL NOT NULL DEFAULT 0
+        )
+        """
+    )
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS webauthn_credentials (
@@ -1465,6 +1488,125 @@ def user_auth_security_at(user) -> float:
     except (KeyError, TypeError, ValueError):
         return 0.0
     return value if value > 0 else 0.0
+
+
+def get_vault_keys_status(user_id: int) -> dict | None:
+    """Public wrap metadata for one account. Never includes a wrap or proof."""
+    conn = connection()
+    user = conn.execute(
+        "SELECT vault_key_id, vault_key_rev, recovery_locked_until FROM users WHERE id = ?",
+        (int(user_id),),
+    ).fetchone()
+    if not user:
+        return None
+    row = conn.execute(
+        "SELECT wrap_version, created_at, last_used_at FROM vault_recovery_wraps WHERE user_id = ?",
+        (int(user_id),),
+    ).fetchone()
+    return {
+        "key_id": str(user["vault_key_id"]),
+        "key_rev": int(user["vault_key_rev"]),
+        "recovery_locked_until": float(user["recovery_locked_until"] or 0),
+        "recovery": {
+            "active": row is not None,
+            "created_at": float(row["created_at"]) if row else 0.0,
+            "last_used_at": float(row["last_used_at"]) if row else 0.0,
+            "wrap_version": int(row["wrap_version"]) if row else 0,
+        },
+    }
+
+
+def _vault_keys_conflict(conn: sqlite3.Connection, user_id: int, expected_rev: int) -> tuple[str, int, str]:
+    cur = conn.execute(
+        "SELECT vault_key_id, vault_key_rev FROM users WHERE id = ?", (int(user_id),),
+    ).fetchone()
+    if not cur:
+        return "not_found", 0, ""
+    code = "key_rev_mismatch" if int(cur["vault_key_rev"]) != expected_rev else "key_id_mismatch"
+    return code, int(cur["vault_key_rev"]), str(cur["vault_key_id"])
+
+
+def put_recovery_wrap(
+    user_id: int,
+    *,
+    expected_key_rev: int,
+    key_id: str,
+    wrap_version: int,
+    recovery_salt: str,
+    wrap_json: str,
+    proof_hash: str,
+) -> tuple[str, int, str]:
+    """Create or replace the single recovery wrap with compare-and-set (VAULT_RECOVERY 2.2).
+
+    Returns (status, key_rev, key_id); status is "ok", "unchanged", "key_rev_mismatch",
+    "key_id_mismatch" or "not_found". On anything but ok/unchanged nothing was written.
+    """
+    uid = int(user_id)
+    with tx() as conn:
+        same = conn.execute(
+            """
+            SELECT u.vault_key_rev AS rev FROM vault_recovery_wraps w
+            JOIN users u ON u.id = w.user_id
+            WHERE w.user_id = ? AND w.key_id = ? AND w.wrap_version = ? AND w.recovery_salt = ?
+              AND w.wrap = ? AND w.proof_hash = ? AND u.vault_key_id = ?
+            """,
+            (uid, key_id, wrap_version, recovery_salt, wrap_json, proof_hash, key_id),
+        ).fetchone()
+        if same:
+            return "unchanged", int(same["rev"]), key_id
+        cur = conn.execute(
+            """
+            UPDATE users
+            SET vault_key_rev = vault_key_rev + 1, vault_key_id = ?,
+                recovery_failed_count = 0, recovery_locked_until = 0, recovery_lock_level = 0
+            WHERE id = ? AND vault_key_rev = ?
+              AND (vault_key_id = ?
+                   OR NOT EXISTS (SELECT 1 FROM vault_recovery_wraps WHERE user_id = ?))
+            """,
+            (key_id, uid, int(expected_key_rev), key_id, uid),
+        )
+        if int(cur.rowcount or 0) == 0:
+            return _vault_keys_conflict(conn, uid, int(expected_key_rev))
+        conn.execute(
+            """
+            INSERT INTO vault_recovery_wraps
+                (user_id, key_id, wrap_version, recovery_salt, wrap, proof_hash, created_at, last_used_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            ON CONFLICT(user_id) DO UPDATE SET
+                key_id = excluded.key_id, wrap_version = excluded.wrap_version,
+                recovery_salt = excluded.recovery_salt, wrap = excluded.wrap,
+                proof_hash = excluded.proof_hash, created_at = excluded.created_at,
+                last_used_at = 0
+            """,
+            (uid, key_id, wrap_version, recovery_salt, wrap_json, proof_hash, now()),
+        )
+        row = conn.execute("SELECT vault_key_rev FROM users WHERE id = ?", (uid,)).fetchone()
+        return "ok", int(row["vault_key_rev"]), key_id
+
+
+def delete_recovery_wrap(user_id: int, *, expected_key_rev: int) -> tuple[str, int, str]:
+    """Revoke the recovery wrap. Status "no_recovery_key" when none exists (nothing changed)."""
+    uid = int(user_id)
+    with tx() as conn:
+        user = conn.execute(
+            "SELECT vault_key_rev FROM users WHERE id = ?", (uid,),
+        ).fetchone()
+        if not user:
+            return "not_found", 0, ""
+        if int(user["vault_key_rev"]) != int(expected_key_rev):
+            return _vault_keys_conflict(conn, uid, int(expected_key_rev))
+        has = conn.execute(
+            "SELECT 1 FROM vault_recovery_wraps WHERE user_id = ?", (uid,),
+        ).fetchone()
+        if not has:
+            return "no_recovery_key", int(expected_key_rev), ""
+        # No other wraps exist yet, so the account is back to "no wraps": free the key id.
+        conn.execute(
+            "UPDATE users SET vault_key_rev = vault_key_rev + 1, vault_key_id = '' WHERE id = ?",
+            (uid,),
+        )
+        conn.execute("DELETE FROM vault_recovery_wraps WHERE user_id = ?", (uid,))
+        return "ok", int(expected_key_rev) + 1, ""
 
 
 def touch_auth_security(user_id: int) -> float:
