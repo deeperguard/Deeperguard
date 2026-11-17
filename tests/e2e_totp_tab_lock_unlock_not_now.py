@@ -45,6 +45,10 @@ DOM_JS = """() => {
 
 # Generous auto-wait limit: it only costs time when something is really broken.
 EXPECT_MS = 30000
+# Waits for the vault to become unlocked after register or unlock.
+UNLOCKED_WAIT_MS = EXPECT_MS * 4
+# Waits for the vault to lock and for the unlock form to appear.
+LOCKED_WAIT_MS = EXPECT_MS * 2
 
 
 def main() -> int:
@@ -87,7 +91,7 @@ def main() -> int:
                 }"""
             )
             page.click("#register-submit")
-            page.wait_for_function(UNLOCKED_JS, timeout=EXPECT_MS * 4)
+            page.wait_for_function(UNLOCKED_JS, timeout=UNLOCKED_WAIT_MS)
 
             # The card is shown once after registering; it is not shown again after a
             # later unlock (see docs/bugs/2fa-tab-after-unlock.md), so "Not now" comes first.
@@ -97,11 +101,11 @@ def main() -> int:
             expect(page.locator("#device-phrase-prompt")).to_be_hidden(timeout=EXPECT_MS)
 
             page.locator("#btn-lock-head:visible, #btn-lock-nav:visible").first.click(timeout=EXPECT_MS)
-            page.wait_for_function(LOCKED_JS, timeout=EXPECT_MS * 2)
-            page.wait_for_selector("#unlock-password", state="visible", timeout=EXPECT_MS * 2)
+            page.wait_for_function(LOCKED_JS, timeout=LOCKED_WAIT_MS)
+            page.wait_for_selector("#unlock-password", state="visible", timeout=LOCKED_WAIT_MS)
             page.fill("#unlock-password", PASSWORD)
             page.click("#unlock-submit")
-            page.wait_for_function(UNLOCKED_JS, timeout=EXPECT_MS * 4)
+            page.wait_for_function(UNLOCKED_JS, timeout=UNLOCKED_WAIT_MS)
 
             for label in ("first click", "second click"):
                 page.click("#app-tab-2fa", timeout=EXPECT_MS)
