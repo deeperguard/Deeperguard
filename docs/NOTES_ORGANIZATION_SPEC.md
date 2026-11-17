@@ -256,6 +256,9 @@ Template folders, per-template shortcuts, and date arithmetic (`{{date+1d}}`).
 - A `[[Title]]` that matches no note, or several, stays as typed text until
   resolved; it is **not** a link and is not indexed. On several matches the picker
   asks. Pasting `[[Title]]` from Obsidian is resolved by title on import (section 3.5).
+- **Keyboard:** with the caret inside a stored link in the editor, `Ctrl+Enter`
+  (`Cmd+Enter` on macOS) follows it, like a click in the preview. A dead link opens
+  the repair panel instead of a note.
 
 Because the stored form is a standard Markdown link, the note stays readable in any
 Markdown viewer and in exports; the `dg-note:` target simply does not open there.

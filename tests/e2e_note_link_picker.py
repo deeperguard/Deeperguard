@@ -98,9 +98,17 @@ def main() -> int:
             link.click()
             opened_target()
 
-            # Keyboard: caret inside the link, Ctrl+Enter follows it.
+            # Keyboard: caret in the middle of the link text, Ctrl+Enter follows it.
             open_source()
-            page.evaluate("() => { const b = document.getElementById('note-body'); b.focus(); b.setSelectionRange(10, 10); }")
+            page.wait_for_function(
+                "() => document.getElementById('note-body').value.includes('[Boodschappen](')", timeout=10000
+            )
+            link_start = page.locator("#note-body").input_value().index("[Boodschappen](") + 1
+            caret = link_start + len("Boodschappen") // 2
+            page.evaluate(
+                "(caret) => { const b = document.getElementById('note-body'); b.focus(); b.setSelectionRange(caret, caret); }",
+                caret,
+            )
             page.keyboard.press("Control+Enter")
             opened_target()
 
@@ -140,8 +148,6 @@ def main() -> int:
             # Same in the plain editor.
             page.select_option("#note-editor-type", "plain")
             dead_edit = page.locator(f'#note-body-links a.note-link-dead[data-dg-note="{target}"]')
-            if not dead_edit.is_visible():
-                page.click("#note-body")
             dead_edit.wait_for(state="visible", timeout=10000)
             dead_edit.click()
             panel.wait_for(state="visible", timeout=10000)
