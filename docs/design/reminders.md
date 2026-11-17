@@ -11,7 +11,7 @@ Het bouwt voort op, en herhaalt niet:
 
 Wat dit document toevoegt: één gecontroleerd overzicht van wat er nu **echt** is (§1, tegen de draaiende app
 nagelopen), een tabel van wat de server per veld ziet (§3), de bezorging met ontdubbeling (§4) en de
-keuzes en mijlpalen (§6, §7). Regelnummers gelden voor de boom van 2026-11-17; controleer ze bij wijzigingen.
+keuzes en mijlpalen (§6, §7). Verwijzingen naar code noemen bestands-, functie-, constante- en tabelnamen, geen regelnummers; regelnummers verschuiven bij elke wijziging.
 
 ## 1. Wat er nu bestaat
 
@@ -51,24 +51,24 @@ zie §5).
 
 | Onderdeel | Waar | Wat het doet |
 | --- | --- | --- |
-| Plan-poort | `app/plans.py:124` (`reminders`), `:129` (`agenda_reminders`) | Beide alleen Pro. Het notitie-kanaal (`reminders`) en het agenda-kanaal zijn aparte plan-rechten. |
-| Agenda-herinneringen, client | `app/static/js/agenda-reminders.js` (606 regels): `computePlannedReminders` (159), `syncEventReminders` (345), `flushPending` (392), `topUp` (419), `enablePushFromGesture` (522); `PLAN_HORIZON_DAYS = 60` (19), `MAX_ROWS_PER_EVENT = 150` (21), `TOP_UP_INTERVAL_MS` 12 uur (23) | Plant per afspraak, per voorkomen en per offset een rij; id is een SHA-256 van `(event, slot, offset, kanaal)` zodat elk apparaat dezelfde id krijgt. E-mail wordt naar beneden afgerond op 900 s. Push niet (zie §3). |
-| Agenda-herinneringen, API | `app/app.py`: `AGENDA_REMINDER_ALLOWED_KEYS` (2616) = `id, fire_at, channel, local_time_label`; `/api/agenda-reminders/sync` (2653), `/push-config` (2692), `/push-subscribe` (2708) | Strikte sleutellijst; push-endpoint alleen bij bekende pushdiensten (`push_endpoint_allowed`). |
-| Agenda-herinneringen, opslag | `app/db.py`: tabel `agenda_scheduled_reminders` (372), `sync_agenda_reminders` (3338), `AGENDA_REMINDER_PENDING_CAP = 500` (3302), e-mail-afronding `AGENDA_EMAIL_WINDOW_SEC = 900` | Zie §3 voor de kolommen. |
-| Bezorging | `app/agenda_reminder_cron.py`: `run_agenda_reminders` (144), `try_send_push` (94), `agenda_email_body` (80), `agenda_reminder_line` (70), `DEFAULT_MAX_LATE_SEC` 30 min (35) | Een herinnering die meer dan 30 minuten te laat is, wordt gesloten zonder verzending. |
-| Venster-push, server | `app/app.py` `PUSH_WINDOW_KEYS = {id, window_start}` (2740), `/api/push-windows` (2744), `/api/push-windows/delete` (2781); `app/db.py` tabel `push_reminder_windows` (400), `put_push_windows`, `delete_push_windows`, `due_push_windows`, `PUSH_WINDOW_CAP = 50`; `app/agenda_reminder_cron.py:run_push_windows` (192) | Willekeurige 32-hex id en een veelvoud van 900 s; lege push; rij weg na verzending. |
+| Plan-poort | `app/plans.py` (`reminders`, `agenda_reminders`) | Beide alleen Pro. Het notitie-kanaal (`reminders`) en het agenda-kanaal zijn aparte plan-rechten. |
+| Agenda-herinneringen, client | `app/static/js/agenda-reminders.js`: `computePlannedReminders`, `syncEventReminders`, `flushPending`, `topUp`, `enablePushFromGesture`; `PLAN_HORIZON_DAYS = 60`, `MAX_ROWS_PER_EVENT = 150`, `TOP_UP_INTERVAL_MS` 12 uur | Plant per afspraak, per voorkomen en per offset een rij; id is een SHA-256 van `(event, slot, offset, kanaal)` zodat elk apparaat dezelfde id krijgt. E-mail wordt naar beneden afgerond op 900 s. Push niet (zie §3). |
+| Agenda-herinneringen, API | `app/app.py`: `AGENDA_REMINDER_ALLOWED_KEYS` = `id, fire_at, channel, local_time_label`; `/api/agenda-reminders/sync`, `/push-config`, `/push-subscribe` | Strikte sleutellijst; push-endpoint alleen bij bekende pushdiensten (`push_endpoint_allowed`). |
+| Agenda-herinneringen, opslag | `app/db.py`: tabel `agenda_scheduled_reminders`, `sync_agenda_reminders`, `AGENDA_REMINDER_PENDING_CAP = 500`, e-mail-afronding `AGENDA_EMAIL_WINDOW_SEC = 900` | Zie §3 voor de kolommen. |
+| Bezorging | `app/agenda_reminder_cron.py`: `run_agenda_reminders`, `try_send_push`, `agenda_email_body`, `agenda_reminder_line`, `DEFAULT_MAX_LATE_SEC` 30 min | Een herinnering die meer dan 30 minuten te laat is, wordt gesloten zonder verzending. |
+| Venster-push, server | `app/app.py` `PUSH_WINDOW_KEYS = {id, window_start}`, `/api/push-windows`, `/api/push-windows/delete`; `app/db.py` tabel `push_reminder_windows`, `put_push_windows`, `delete_push_windows`, `due_push_windows`, `PUSH_WINDOW_CAP = 50`; `app/agenda_reminder_cron.py:run_push_windows` | Willekeurige 32-hex id en een veelvoud van 900 s; lege push; rij weg na verzending. |
 | Venster-push, client | **ontbreekt**: geen enkel bestand onder `app/static/js` roept `/api/push-windows` aan | De serverkant uit idee #75 bestaat, de client en de melding met tekst (M2 en M3 daar) nog niet. |
-| Service worker | `app/static/sw.js`: `push` (540), `notificationclick` (567), `periodicsync` (490) | Zonder data toont hij "You have a reminder" (tag `dg-window-reminder`). Met data toont hij `title`/`body` uit de payload. `periodicsync` stuurt alleen een bericht naar open vensters. |
-| Lokale herinneringen (agenda) | `app/static/js/agenda-local-reminders.js` (304 regels): `dueReminders` (52), `createPlanner` (105), `showNotification` (231); `TICK_MS = 15000`, `MISSED_WINDOW_MS` 24 uur | Draait in de tab, zonder netwerk; klokt elke 15 s; "al getoond" in `localStorage` als hash onder een Web Lock zodat één tab het toont; gemiste (< 24 uur) als "Missed" bij openen. `dueReminders` slaat `agenda_task` expliciet over (regel 57). |
-| Notitie-herinnering | `app/static/js/app.js`: `noteReminderPayload` (17437), `queueReminderOp` (17469), `applyReminderOp` (17484), `cancelNoteReminder` (17499); veld `content.warn_at`; `app/app.py` `/api/reminders` (2581-2613); `app/db.py` tabel `note_reminders` (119); `app/warning_cron.py` | **Bestaat al**, met exacte tijd in klare vorm op de server (zie §3). De matrix zegt "ontbreekt"; correcter is: "bestaat, server-getimed, Pro, niet privé genoeg". |
-| Taken in de agenda | `app/static/js/agenda-tasks.js` (188 regels): `buildTask` (50), `normalizeTask` (81), `placeTasks` (118), `formatDue`, `accessibleName`; `app/static/js/store.js`: `listAgendaTasks` (2082), `upsertAgendaTask` (2088); renderen in `app/static/js/agenda.js` (rond 467-690) | Elke taak is een eigen versleuteld item `type: 'agenda_task'` met `due` (YYYY-MM-DD), `due_time`, `done_at`, `note_uuid`, `rrule`, `reminder: null`. **Het veld `reminder` is gereserveerd maar niets leest het**; taken hebben dus geen herinnering. |
+| Service worker | `app/static/sw.js`: `push`, `notificationclick`, `periodicsync` | Zonder data toont hij "You have a reminder" (tag `dg-window-reminder`). Met data toont hij `title`/`body` uit de payload. `periodicsync` stuurt alleen een bericht naar open vensters. |
+| Lokale herinneringen (agenda) | `app/static/js/agenda-local-reminders.js`: `dueReminders`, `createPlanner`, `showNotification`; `TICK_MS = 15000`, `MISSED_WINDOW_MS` 24 uur | Draait in de tab, zonder netwerk; klokt elke 15 s; "al getoond" in `localStorage` als hash onder een Web Lock zodat één tab het toont; gemiste (< 24 uur) als "Missed" bij openen. `dueReminders` slaat `agenda_task` expliciet over. |
+| Notitie-herinnering | `app/static/js/app.js`: `noteReminderPayload`, `queueReminderOp`, `applyReminderOp`, `cancelNoteReminder`; veld `content.warn_at`; `app/app.py` `/api/reminders` (`api_reminders_list`, `api_reminders_upsert`); `app/db.py` tabel `note_reminders`; `app/warning_cron.py` | **Bestaat al**, met exacte tijd in klare vorm op de server (zie §3). De matrix zegt "ontbreekt"; correcter is: "bestaat, server-getimed, Pro, niet privé genoeg". |
+| Taken in de agenda | `app/static/js/agenda-tasks.js`: `buildTask`, `normalizeTask`, `placeTasks`, `formatDue`, `accessibleName`; `app/static/js/store.js`: `listAgendaTasks`, `upsertAgendaTask`; renderen in `app/static/js/agenda.js` | Elke taak is een eigen versleuteld item `type: 'agenda_task'` met `due` (YYYY-MM-DD), `due_time`, `done_at`, `note_uuid`, `rrule`, `reminder: null`. **Het veld `reminder` is gereserveerd maar niets leest het**; taken hebben dus geen herinnering. |
 
 ### 1.3 Wat dit betekent voor de opdracht
 
 - "Push zonder inhoud" geldt vandaag alleen voor het nog ongebruikte venster-pad. De werkelijke agenda-push
   stuurt wél een tekst (`You have an event at 14:30.`) en bewaart een exacte `fire_at` plus `local_time_label`
   in klare vorm. Dat is een afwijking van de belofte in de opdracht en van de e-mailregel in
-  `docs/PRIVACY.md` (regel 58, alleen e-mail). `docs/PRIVACY.md` noemt push en notitie-herinneringen niet.
+  `docs/PRIVACY.md` (de bullet over agenda-e-mail, alleen e-mail). `docs/PRIVACY.md` noemt push en notitie-herinneringen niet.
   Dit is het belangrijkste gat (§3, §6 K1).
 - "Preciezer dan 15 minuten" bestaat al lokaal (15 s-tik) en kan server-side alleen ten koste van privacy.
 - Niet opnieuw bouwen: de lokale planner, de offset-voorinstellingen, de stabiele id's, de plan-poort, de
@@ -95,10 +95,9 @@ zie §5).
    al heeft, "E-mail (exacte tijd bij ons zichtbaar)". Geen toestemmingsvraag bij het laden van de pagina.
    Elke melding opent de bijbehorende notitie, taak of afspraak.
 
-Vergelijking (algemene kennis, **verify**): Google Agenda/Outlook sturen server-push met titel en tijd in
-klare vorm; Apple werkt lokaal plus iCloud-sync; Proton en Tuta houden meldingen vooral lokaal; Standard
-Notes kent geen herinneringen, Notesnook en Joplin lokale. Het doel hier is dezelfde gemakkelijke bediening
-met aantoonbaar minder zichtbare metadata, en een duidelijk label waar dat niet kan.
+Doel: dezelfde gemakkelijke bediening als bij de bekende agenda-apps, met aantoonbaar minder zichtbare
+metadata, en een duidelijk label waar dat niet kan. Een vergelijking met concurrenten is in dit document
+niet opgenomen; die moet met bronnen worden onderzocht voordat ze hier komt.
 
 ## 3. Datamodel en wat de server ziet
 
@@ -130,7 +129,7 @@ gelezen; "Doel" is wat dit ontwerp vastlegt.
 | --- | --- | --- | --- | --- | --- |
 | `id` (UUID, SHA-256 van event, slot, offset, kanaal) | agenda e-mail en push | onze server | dezelfde herinnering op elk apparaat herkennen, herplanning zonder dubbel | gezien | blijft; afleiding bevat geen klare data, maar is stabiel per herinnering (koppelbaar over dagen) |
 | `fire_at` e-mail | agenda e-mail | onze server | wanneer de mail weg moet | afgerond op 900 s (gezien en server dwingt het af: `db.py` `AGENDA_EMAIL_WINDOW_SEC`) | blijft |
-| `fire_at` push | agenda push | onze server | wanneer de push weg moet | **exacte seconde**, niet afgerond (`agenda-reminders.js:159`) | afgerond op 900 s of via venster-pad (K1) |
+| `fire_at` push | agenda push | onze server | wanneer de push weg moet | **exacte seconde**, niet afgerond (`computePlannedReminders` in `agenda-reminders.js`) | afgerond op 900 s of via venster-pad (K1) |
 | `local_time_label` | agenda push | onze server | tekst "event at HH:MM" in de push | opgeslagen als `HH:MM` van de starttijd van de afspraak; leeg bij e-mail | verdwijnt (K1) |
 | `channel` | agenda | onze server | kiezen tussen e-mail en push | gezien | blijft |
 | push-payload `title`, `body`, `url`, `reminder_id` | agenda push | onze server (bij verzending), pushdienst ziet alleen versleutelde bytes (RFC 8291) en het tijdstip | de melding tonen | `"You have an event at 14:30."` en het `reminder_id` | lege payload, de service worker toont eigen tekst |
@@ -181,7 +180,7 @@ voor notities en taken (uitbreiding van `dueReminders`, nu `agenda_task` explici
 | --- | --- | --- |
 | R1 | **Tijdstip-metadata**: wie de database leest ziet `window_start` per account, aantal en spreiding. Ook op 15 minuten rond tonen veel herinneringen op een vaste tijd een patroon (slaaptijd, werkdag). `agenda_scheduled_reminders` heeft per push-rij de exacte starttijd. | Venster-pad voor alles wat de app dicht moet bereiken; agenda-push erop overzetten (K1); claimtekst noemt "tijdstip van het venster" en "aantal"; retentiegetallen in `docs/PRIVACY.md` bevestigen |
 | R2 | **Koppelbaarheid van id's**: de agenda-id is een SHA-256 van vaste invoer en dus stabiel; hetzelfde id keert terug bij herplannen | Venster-id's zijn willekeurig en per voorkomen nieuw; bij herplannen wordt het oude id ingetrokken en een nieuw gemaakt |
-| R3 | **iOS/Safari**: Web Push werkt alleen voor een PWA op het beginscherm (vanaf iOS 16.4), nooit in een gewone Safari-tab. Een push zonder zichtbare melding laat het abonnement vervallen. Gebruikers moeten de toestemming zelf vanuit een tik vragen. Achtergrondtimers worden geparkeerd; een lokale herinnering kan dus niet vuren als de app niet voorgrond is. | Elke push toont altijd een melding (al zo in `sw.js:540`); hulptekst "Zet op beginscherm"; geen belofte van aflevering; **verify** op een echt iPhone/iPad-apparaat |
+| R3 | **iOS/Safari**: Web Push werkt alleen voor een PWA op het beginscherm (vanaf iOS 16.4), nooit in een gewone Safari-tab. Een push zonder zichtbare melding laat het abonnement vervallen. Gebruikers moeten de toestemming zelf vanuit een tik vragen. Achtergrondtimers worden geparkeerd; een lokale herinnering kan dus niet vuren als de app niet voorgrond is. | Elke push toont altijd een melding (al zo in de `push`-handler van `sw.js`); hulptekst "Zet op beginscherm"; geen belofte van aflevering; **verify** op een echt iPhone/iPad-apparaat |
 | R4 | **Service worker**: de worker kan de kluissleutel niet gebruiken en mag dat niet; hij kan worden afgebroken, vervangen of door de browser vergeten (opslag wissen, "site-gegevens wissen"). Een nieuwe worker-versie moet het bestaande `push`-gedrag behouden; `sw.js` zit in de clientmanifest-controle. | Meldingssleutel apart (`extractable: false`, ontwerp #75 §3); bij verlies generieke tekst; tests op het gedrag van de `push`-handler; bij een worker-wijziging `scripts/build-client-manifest.py` draaien |
 | R5 | **Best effort**: Doze en batterijbesparing vertragen of laten pushes vallen; Chrome kan pushes beperken bij een gesloten browser | "Best effort" in de UI; gemiste herinneringen bij openen tonen (bestaat, 24 uur) |
 | R6 | **Dubbele melding** (lokaal én push, meerdere tabs) | §4: `tag`, Web Lock, onderdrukking |
@@ -199,7 +198,7 @@ geen van deze keuzes; het gaat om tijdstip-metadata.
 | # | Keuze | Opties | Privacy-effect | Aanbeveling |
 | --- | --- | --- | --- | --- |
 | K1 | **Fijnere of grovere servervensters** | (a) 15 minuten (nu, ontwerp #75); (b) 5 minuten; (c) 1 minuut of exact; (d) 60 minuten; (e) agenda-push ook naar vensters overzetten en `local_time_label` en de tekst in de push schrappen | (a) server ziet een kwartier; (b) en (c) onthullen de minuut en vergroten koppelbaarheid met activiteit (alleen de tijd van de melding, niet de inhoud); (d) minder zichtbaar, maar de melding komt tot een uur te vroeg, dat is voor taken en afspraken vaak onbruikbaar; (e) sluit het gat uit §3: de server ziet dan niet meer de exacte starttijd van push-afspraken | Houd 15 minuten; doe (e); voor "exact" geldt de lokale timer. Wie preciezer wil, kan dat alleen met de app open, of in een latere opt-in met 5 minuten waarbij de UI zegt dat de server de minuut leert |
-| K2 | **Vallen notitie-herinneringen ook onder Pro?** | (a) ja, zoals nu (`plans.py:124` `reminders` Pro); (b) lokale herinnering gratis, server-kanalen (venster-push en e-mail) Pro; (c) alles gratis | (a) en (b) verschillen niet voor privacy: de server ziet alleen iets bij de server-kanalen. (c) laat meer accounts `window_start`-rijen opbouwen (meer metadata, geen extra inhoud). De exacte `warn_at` op de server blijft hoe dan ook alleen voor het bestaande kanaal | (b): lokaal voor iedereen (geen server, geen metadata), server-kanalen Pro; het bestaande exacte kanaal labelen en afbouwen |
+| K2 | **Vallen notitie-herinneringen ook onder Pro?** | (a) ja, zoals nu (`plans.py`, `reminders` Pro); (b) lokale herinnering gratis, server-kanalen (venster-push en e-mail) Pro; (c) alles gratis | (a) en (b) verschillen niet voor privacy: de server ziet alleen iets bij de server-kanalen. (c) laat meer accounts `window_start`-rijen opbouwen (meer metadata, geen extra inhoud). De exacte `warn_at` op de server blijft hoe dan ook alleen voor het bestaande kanaal | (b): lokaal voor iedereen (geen server, geen metadata), server-kanalen Pro; het bestaande exacte kanaal labelen en afbouwen |
 | K3 | **Bestaande exacte kanalen** (e-mail bij notities met `warn_at`; agenda-push met `fire_at` en label) | houden met label, naar venster omzetten, of uitfaseren | houden: de server blijft de exacte tijd van die items zien; omzetten of uitfaseren: dat verdwijnt | Notitie-mail houden met label "exacte tijd zichtbaar voor de server"; agenda-push omzetten (K1e) |
 | K4 | **Melding met tekst** | alleen generiek, of titel via lokale meldingssleutel | titel verlaat het apparaat niet; wel zichtbaar op het vergrendelscherm bij diefstal | aanbieden, standaard uit |
 | K5 | **iOS alleen via beginscherm** acceptabel in de UI-tekst? | ja / nee | geen effect op wat de server ziet | ja, met uitleg |
