@@ -256,6 +256,21 @@ function tab(clock, storage, locks, shown) {
     const p = L.createPlanner({ now: () => T0 + 15 * MIN, storage: memoryStorage(), locks: fakeLocks(), listEvents: () => { throw new Error('read while locked'); }, isUnlocked: () => false, show: (r) => shown.push(r) });
     assert.deepStrictEqual(await p.check(), []);
   }
+  {
+    // Locked vault with a due reminder: nothing shown, nothing stored as shown; it comes after unlocking.
+    events = [ev()];
+    const storage = memoryStorage();
+    const shown = [];
+    let unlocked = false;
+    const p = L.createPlanner({ now: () => T0 + 15 * MIN, storage, locks: fakeLocks(), listEvents: () => events, isUnlocked: () => unlocked, show: (r) => shown.push(r) });
+    await p.check();
+    assert.strictEqual(shown.length, 0, 'locked vault shows nothing');
+    assert.ok(!storage.getItem(L.SHOWN_KEY), 'locked vault stores nothing as shown');
+    unlocked = true;
+    await p.check();
+    assert.strictEqual(shown.length, 1, 'reminder still comes after unlocking');
+    assert.strictEqual(shown[0].minutes, 15);
+  }
 
   // --- Notification only with permission, never for missed ones ---------------------------
   {
