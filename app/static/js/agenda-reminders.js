@@ -267,7 +267,6 @@
     }
   }
 
-  /** Channels the user switched on, on this device. */
   /** Size (seconds) of the window that reminder times are rounded down to before upload: 900, or 300 after opt-in. */
   function serverWindowSec() {
     return readPrefs().reminder_window_min === 5 ? FINE_WINDOW_SEC : EMAIL_WINDOW_SEC;
@@ -299,6 +298,7 @@
     }
   }
 
+  /** Channels the user switched on, on this device. */
   function channelPrefs() {
     const prefs = readPrefs();
     const channels = [];
@@ -535,7 +535,6 @@
     topUp(true).catch(() => {});
   }
 
-  /** Text for the editor when ticking an offset would do nothing. Empty when reminders can be sent. */
   function onWindowChange(ev) {
     const prefs = readPrefs();
     if (ev.currentTarget.value === '5') prefs.reminder_window_min = 5;
@@ -548,6 +547,7 @@
     global.NotesAgendaTaskReminders?.onAgendaShown?.()?.catch(() => {});
   }
 
+  /** Text for the editor when ticking an offset would do nothing. Empty when reminders can be sent. */
   function editorHint() {
     if (!hasAgendaRemindersEntitlement()) return '';
     if (!channelPrefs().length) {
