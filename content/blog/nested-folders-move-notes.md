@@ -12,7 +12,7 @@ A folder name is information. "Divorce", "Clinic", "Acme acquisition": even with
 
 ## Folders can be nested
 
-Create a folder from the Folders section in the sidebar. Each folder row has a **+** button for a new subfolder, a rename button and a delete button. Right-click (or press the context-menu key) for the same actions in a menu.
+Create a folder from the Folders section in the sidebar. Each folder row has a **+** button for a new subfolder, a rename button, an **ⓘ** button that opens "View on server" for that folder, and a delete button. Right-click (or press the context-menu key) for the same actions in a menu.
 
 Nesting goes up to eight levels deep, and a folder name must be unique among its siblings, ignoring upper and lower case. The same name can exist in two different branches, so "Archive" can live under both "Work" and "Home". The code refuses cycles, so a folder can never end up inside itself.
 
@@ -25,7 +25,7 @@ The sidebar is a real tree for assistive technology, with levels and expanded or
 - **Up** and **Down** move between visible folders, **Home** and **End** jump to the first and last.
 - **Right** expands a folder, or steps into its first subfolder if it is already open. **Left** collapses it, or steps up to the parent.
 - **Enter** or **Space** selects the folder and filters the note list to it.
-- **F2** renames, and the context-menu key opens the actions menu.
+- **F2** renames, **Delete** removes the folder after a confirmation, and the context-menu key opens the actions menu.
 
 "All notes" is the first row of the tree. It is a view, not a folder. Which folders are open is remembered on the device, in the browser's local storage.
 
