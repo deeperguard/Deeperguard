@@ -122,10 +122,10 @@ class NotesAppTests(unittest.TestCase):
         arl._hits.clear()
 
     def tearDown(self):
+        stop_app_background_threads()
         self.tmp.cleanup()
         for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS", "NOTES_ALLOWED_CIDRS", "NOTES_SKIP_LOGIN", "NOTES_BUILD", "NOTES_SERVER_INFO_REFRESH", "NOTES_SERVER_OCR", "NOTES_STRICT_ZK", "NOTES_ADMIN_EMAILS", "NOTES_DEFAULT_USER_QUOTA_MB", "NOTES_DEFAULT_PLAN", "NOTES_APP_PATH", "NOTES_AUTH_RATE_LIMIT", "NOTES_REPAIR_LOGIN_PASSWORD", "NOTES_PCLOUD_CREDENTIALS_KEY"):
             os.environ.pop(key, None)
-        stop_app_background_threads()
 
     def _srp_verifier(
         self,
