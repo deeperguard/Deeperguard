@@ -16276,6 +16276,7 @@
       document.getElementById('btn-disable-totp').hidden = true;
       document.getElementById('btn-setup-totp').hidden = true;
     }
+    window.NotesRecoveryKey?.refresh();
     const passkeyWrap = document.getElementById('passkey-settings');
     const passkeyList = document.getElementById('passkey-list');
     const addPasskeyBtn = document.getElementById('btn-add-passkey');

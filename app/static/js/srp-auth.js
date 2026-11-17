@@ -555,6 +555,20 @@
     });
   }
 
+  // One-time token for writing vault-key wraps (docs/VAULT_RECOVERY.md 2.3).
+  async function vaultKeysProve(email, password) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const challenge = await postJson('/api/account/vault-keys/challenge', {});
+    const client = new SrpClient();
+    client.step1(normalizedEmail, password);
+    const creds = await client.step2(
+      challenge.srp_salt,
+      challenge.B,
+      normalizeSrpKdfVersion(challenge.srp_kdf_version),
+    );
+    return postJson('/api/account/vault-keys/prove', { A: creds.A, M1: creds.M1 });
+  }
+
   /**
    * Step 2: commit new SRP credentials after vault re-key + sync (rotation token required).
    */
@@ -582,6 +596,7 @@
     vaultRecovery,
     accountUnlock,
     passwordChangeProve,
+    vaultKeysProve,
     passwordChangeCommit,
     repairLogin,
     passwordSignIn,

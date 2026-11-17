@@ -7401,6 +7401,7 @@ const NotesStore = (() => {
     setSessionRevokedHandler,
     unlock,
     isUnlocked,
+    vaultKeyHandle: () => state.cryptoKey,
     isKeyVerified,
     markKeyVerified,
     probeServerKey,

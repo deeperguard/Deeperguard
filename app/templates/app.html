@@ -1955,6 +1955,32 @@
             <label class="settings-row checkbox"><span>Disable password sign-in</span><input id="pref-disable-password-login" type="checkbox"></label>
             <p id="passkey-signin-toggle-hint" class="settings-hint"></p>
           </div>
+          <div id="recovery-key-settings" class="settings-nested stack">
+            <p class="settings-subtitle" id="recovery-key-title">Vault recovery key</p>
+            <p class="settings-hint">A recovery key is for your notes vault. It is not the same as the account sign-in recovery codes above, which only help you sign in. We never see your recovery key and cannot show it again later.</p>
+            <p id="recovery-key-status" class="settings-hint" role="status" aria-live="polite">Loading…</p>
+            <label class="settings-row stacked" for="recovery-key-password">Account password
+              <input id="recovery-key-password" type="password" autocomplete="current-password" aria-describedby="recovery-key-status">
+            </label>
+            <p id="recovery-key-replace-warning" class="settings-hint" hidden>Creating a new recovery key makes the old one stop working at once.</p>
+            <div class="settings-actions">
+              <button type="button" id="btn-recovery-key-create" class="btn" hidden>Create recovery key</button>
+              <button type="button" id="btn-recovery-key-regenerate" class="btn" hidden>Create a new recovery key</button>
+            </div>
+            <div id="recovery-key-reveal" class="settings-nested stack" hidden>
+              <p class="settings-hint">This is your new recovery key. It is shown only now. Write it down or save it somewhere safe.</p>
+              <code id="recovery-key-text" class="recovery-key-text" tabindex="0" aria-label="New recovery key"></code>
+              <div class="settings-actions">
+                <button type="button" id="btn-recovery-key-copy" class="btn ghost">Copy</button>
+                <button type="button" id="btn-recovery-key-download" class="btn ghost">Download as text file</button>
+              </div>
+              <label class="settings-row checkbox"><span>I stored my recovery key</span><input id="recovery-key-confirm" type="checkbox"></label>
+              <div class="settings-actions">
+                <button type="button" id="btn-recovery-key-save" class="btn primary" disabled>Activate recovery key</button>
+                <button type="button" id="btn-recovery-key-cancel" class="btn ghost">Cancel</button>
+              </div>
+            </div>
+          </div>
           <div id="password-change" class="settings-nested stack">
             <label class="settings-row stacked" for="password-change-current">Current vault password
               <input id="password-change-current" type="password" autocomplete="off" required aria-required="true" readonly>
@@ -2996,6 +3022,7 @@
   {{ asset_script('js/sanitize.js') }}
   {{ asset_script('js/webauthn-client.js') }}
   {{ asset_script('js/passkeys.js') }}
+  {{ asset_script('js/recovery-key.js') }}
   {{ asset_script('js/passkey-signin.js') }}
   {{ asset_script('js/vault-secrets.js') }}
   {{ asset_script('js/conflict-copy.js') }}
