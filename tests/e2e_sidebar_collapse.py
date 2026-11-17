@@ -77,7 +77,7 @@ def main() -> int:
                 st = state(page, tab)
                 report.check(f"{tab}: collapsed by default, toggle says Expand",
                              not st["pinned"] and st["expanded"] == "false"
-                             and st["toggleName"] == "Expand sidebar" and st["toggleTitle"] == st["toggleName"], str(st))
+                             and st["toggleName"] == "Expand/Collapse sidebar" and st["toggleTitle"] == st["toggleName"], str(st))
                 report.check(f"{tab}: icon-only entries have aria-label and tooltip",
                              bool(st["rows"]) and all(r["name"] and r["title"] and not r["textShown"] for r in st["rows"]),
                              str(st["rows"]))
@@ -90,7 +90,7 @@ def main() -> int:
                 go(page, tab)
                 st = state(page, tab)
                 report.check(f"{tab}: expanded after toggle, toggle says Collapse",
-                             st["pinned"] and st["expanded"] == "true" and st["toggleName"] == "Collapse sidebar"
+                             st["pinned"] and st["expanded"] == "true" and st["toggleName"] == "Expand/Collapse sidebar"
                              and st["stored"] is True, str(st))
 
             # Expanded survives a reload; then collapse from 2FA and check that too.
