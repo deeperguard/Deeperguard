@@ -73,6 +73,7 @@ global.NotesSanitize = require(path.join(jsRoot, 'sanitize.js'));
 
 vm.runInThisContext(fs.readFileSync(path.join(jsRoot, 'vendor', 'noble-crypto.js'), 'utf8'));
 global.NotesCrypto = require(path.join(jsRoot, 'crypto.js'));
+require(path.join(jsRoot, 'labels.js'));
 const NotesStore = require(path.join(jsRoot, 'store.js'));
 
 function fakeFile(text, name = 'scan.txt', type = 'text/plain') {

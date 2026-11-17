@@ -1053,6 +1053,7 @@ const NotesStore = (() => {
       title_manual: false,
       content: '',
       tags: [],
+      folder_id: '',
       attachments: [],
       revisions: [],
       editor: 'plain',
@@ -1073,6 +1074,8 @@ const NotesStore = (() => {
     return {
       type: 'folder',
       title: title || 'Folder',
+      parent_id: '',
+      order: 0,
       created_at: now,
       updated_at: now,
     };
@@ -5125,10 +5128,20 @@ const NotesStore = (() => {
       .sort((a, b) => (a.content.title || '').localeCompare(b.content.title || ''));
   }
 
-  function createFolder(title) {
+  // uuid -> folder content, in the shape NotesLabels helpers expect (title is the name).
+  function folderIndex() {
+    return new Map(listFolders().map((f) => [f.uuid, f.content]));
+  }
+
+  // Create a folder, optionally under a parent. Returns the uuid, or null when the
+  // parent is unknown or the nesting would be too deep.
+  function createFolder(title, parentId) {
     const name = String(title || '').trim() || 'Folder';
+    const byId = folderIndex();
+    const parent = parentId || '';
+    if (!NotesLabels.validateParent(null, parent, byId).ok) return null;
     const id = newUuid();
-    upsert(id, defaultFolder(name));
+    upsert(id, { ...defaultFolder(name), parent_id: parent, order: NotesLabels.nextOrder(parent, byId) });
     return id;
   }
 
@@ -5137,21 +5150,37 @@ const NotesStore = (() => {
     if (!folder || folder.content?.type !== 'folder') return false;
     const name = String(title || '').trim();
     if (!name) return false;
-    const taken = listFolders().some((item) => (
-      item.uuid !== uuid
-      && String(item.content?.title || '').trim().toLowerCase() === name.toLowerCase()
-    ));
-    if (taken) return false;
+    if (NotesLabels.siblingNameTaken(name, NotesLabels.parentOf(folder.content), folderIndex(), uuid)) return false;
     upsert(uuid, { ...folder.content, title: name });
     return true;
   }
 
-  function deleteFolder(uuid) {
+  // Move a folder (with its subfolders) under another folder, or to the root with ''.
+  // Rejects cycles, unknown parents, too deep nesting and a duplicate name next to it.
+  function moveFolder(uuid, parentId) {
     const folder = get(uuid);
     if (!folder || folder.content?.type !== 'folder') return false;
+    const byId = folderIndex();
+    const parent = parentId || '';
+    if (!NotesLabels.validateParent(uuid, parent, byId).ok) return false;
+    if (parent === NotesLabels.parentOf(folder.content)) return true;
+    if (NotesLabels.siblingNameTaken(NotesLabels.nameOf(folder.content), parent, byId, uuid)) return false;
+    upsert(uuid, { ...folder.content, parent_id: parent, order: NotesLabels.nextOrder(parent, byId) });
+    return true;
+  }
+
+  // Notes go to the root and subfolders move up to the deleted folder's parent.
+  function deleteFolder(uuid) {
+    const folder = get(uuid);
+    if (!folder || folder.deleted || folder.content?.type !== 'folder') return false;
     for (const note of listNotes()) {
       if (note.content.folder_id !== uuid) continue;
       upsert(note.uuid, { ...note.content, folder_id: '' }, { touchUpdatedAt: false, touchSyncOnly: true });
+    }
+    const up = NotesLabels.parentOf(folder.content);
+    for (const child of listFolders()) {
+      if (NotesLabels.parentOf(child.content) !== uuid) continue;
+      upsert(child.uuid, { ...child.content, parent_id: up });
     }
     remove(uuid);
     return true;
@@ -7305,6 +7334,7 @@ const NotesStore = (() => {
     notesInFolder,
     createFolder,
     renameFolder,
+    moveFolder,
     deleteFolder,
     listTags,
     noteCountForTag,
