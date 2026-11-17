@@ -172,6 +172,14 @@
             body: JSON.stringify({ endpoint, windows: added }),
           });
           next = [...kept, ...added];
+          if (!storedTask(taskId)) {
+            // the task was deleted while uploading: nothing records these ids, so withdraw them now
+            try {
+              await withdraw(added.map((w) => w.id));
+            } catch (err) {
+              failure = failure || err; // queued for retry by withdraw()
+            }
+          }
         } catch (err) {
           failure = failure || err;
         }

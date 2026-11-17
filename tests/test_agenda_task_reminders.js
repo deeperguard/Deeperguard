@@ -155,6 +155,22 @@ const save = (id, fields) => tasks.set(id, T.buildTask({ title: 'SECRET-TITLE', 
   assert.deepStrictEqual(TR.plannedWindows({ due: fmt(inDays(400)), reminder: { offsets: [0] } }, now), []);
   assert.deepStrictEqual(TR.plannedWindows({ due, reminder: null }, now), []);
 
+  // The task is deleted while the upload is in flight: the just-uploaded ids are withdrawn.
+  reset();
+  save('t8', { due, reminder: { offsets: [0] } });
+  const realApi = global.NotesStore.api;
+  global.NotesStore.api = async (url, opts) => {
+    const res = await realApi(url, opts);
+    if (url === '/api/push-windows') tasks.delete('t8');
+    return res;
+  };
+  await TR.syncTaskReminders('t8');
+  global.NotesStore.api = realApi;
+  assert.strictEqual(puts().length, 1);
+  assert.strictEqual(dels().length, 1);
+  assert.deepStrictEqual(dels()[0].body.ids, puts()[0].body.windows.map((w) => w.id));
+  assert.strictEqual(tasks.has('t8'), false);
+
   // The editor offsets are normalised.
   assert.deepStrictEqual(T.normalizeReminder({ offsets: [60, 10, 10, -1, 'x', 99999999] }), { offsets: [10, 60] });
   assert.strictEqual(T.normalizeReminder({ offsets: [] }), null);
