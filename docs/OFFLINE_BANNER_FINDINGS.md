@@ -113,3 +113,39 @@ Tests (`tests/test_e2e_offline_banner.py`, Playwright against a local server):
   failing is not enough here: a successful sync correctly clears the banner again.)
 
 `tests/e2e_offline_banner_after_reload.py` remains as the manual reproduction script.
+
+## Raw script output
+
+Verbatim output of `tests/e2e_offline_banner_after_reload.py`, run on this branch
+(fix applied), Playwright with `/usr/bin/chromium`, one local server per run.
+
+Steps run without options, three runs. Run 1 in full; runs 2 and 3 printed the same
+lines except for the port number:
+
+```
+after create: {'bannerShown': False, 'text': '', 'retryShown': False, 'retryDisabled': False, 'elementAtRetryCentre': None, 'navigatorOnLine': True, 'reachable': True}
+after reload (locked): {'bannerShown': False, 'text': '', 'retryShown': False, 'retryDisabled': False, 'elementAtRetryCentre': None, 'navigatorOnLine': True, 'reachable': True}
+after unlock: {'bannerShown': False, 'text': '', 'retryShown': False, 'retryDisabled': False, 'elementAtRetryCentre': None, 'navigatorOnLine': True, 'reachable': True}
+note rows: 1
+t=  0.0s banner shown=False: {'bannerShown': False, 'text': '', 'retryShown': False, 'retryDisabled': False, 'elementAtRetryCentre': None, 'navigatorOnLine': True, 'reachable': True}
+banner hidden-attribute changes: []
+api health traffic: ['200 http://127.0.0.1:43575/api/health', '200 http://127.0.0.1:43575/api/health', '200 http://127.0.0.1:43575/api/health', '200 http://127.0.0.1:43575/api/health']
+e2e_offline_banner_after_reload: no unexpected offline banner
+```
+
+With `--fail-after-unlock 1`, run twice on this branch. Only the relevant lines are
+copied here; the other lines were the same as above:
+
+```
+banner hidden-attribute changes: [{'ms': 2126, 'hidden': True}, {'ms': 2168, 'hidden': True}]
+api health traffic: [..., 'FAILED http://127.0.0.1:58937/api/health net::ERR_CONNECTION_RESET', ...]
+e2e_offline_banner_after_reload: no unexpected offline banner
+```
+
+The second run printed `[{'ms': 2126, 'hidden': True}, {'ms': 2135, 'hidden': True}]`.
+Each `hidden: True` entry is the attribute being set again while the banner was already
+hidden. No `hidden: False` entry appears, so the banner was never shown.
+
+The 25-26 ms show-and-hide figure in "Cause of the false banner" was measured on the
+code before the fix (commit 44e834d). These runs do not cover it: the pre-fix code was
+not re-run for this section, so that figure has not been reproduced again.
