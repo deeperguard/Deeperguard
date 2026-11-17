@@ -228,6 +228,19 @@ const days = (rows) => fireTimes(rows).map((d) => `${d.getMonth() + 1}/${d.getDa
     assert.strictEqual(upserts, 1, 'unchanged plan does not rewrite the vault');
     assert.deepStrictEqual(calls[1].delete_ids, []);
 
+    // Turning email reminders off removes every email row from the server; turning them on again re-uploads them.
+    const emailIds = stored.scheduled_reminder_ids.map((x) => x.id).sort();
+    storage.set('deeperguard-prefs', JSON.stringify({ agenda_reminder_push: true }));
+    await R.syncEventReminders('ev-1');
+    const optOut = calls[calls.length - 1];
+    assert.deepStrictEqual(optOut.reminders, []);
+    assert.deepStrictEqual(optOut.delete_ids.sort(), emailIds);
+    assert.deepStrictEqual(stored.scheduled_reminder_ids, []);
+    storage.set('deeperguard-prefs', JSON.stringify({ agenda_reminder_email: true, agenda_reminder_push: true }));
+    await R.syncEventReminders('ev-1');
+    assert.deepStrictEqual(calls[calls.length - 1].reminders.map((r) => r.id).sort(), emailIds);
+    assert.strictEqual(stored.scheduled_reminder_ids.length, emailIds.length);
+
     failNext = true;
     await assert.rejects(R.syncEventReminders('ev-1'));
     assert.deepStrictEqual(JSON.parse(storage.get('agenda_reminder_pending_v1')).events, ['ev-1']);
