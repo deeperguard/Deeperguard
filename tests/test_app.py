@@ -1990,6 +1990,9 @@ class NotesAppTests(unittest.TestCase):
         # (2x cores), 56-59s with 32 (4x cores). The 120s default covers up to ~4x overload.
         self._run_node_script("test_crypto.js")
 
+    def test_client_recovery_key_crypto(self):
+        self._run_node_script("test_recovery_key_crypto.js")
+
     def test_client_attachment_encryption(self):
         self._run_node_script("test_store_attachments.js")
 
