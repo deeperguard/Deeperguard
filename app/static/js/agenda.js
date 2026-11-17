@@ -3086,6 +3086,7 @@
     else delete nextBody.tz;
     S.upsertAgendaEvent(id, nextBody);
     syncRemindersAfterSave(id);
+    if (global.NotesAgendaLocalReminders) global.NotesAgendaLocalReminders.askPermissionForNewReminder(nextBody.reminders);
     closeEditor();
     render();
     toastMsg('Event saved');

@@ -125,6 +125,25 @@
   }
 
   /**
+   * The expander repeats in the device's zone. An event with its own zone keeps its wall-clock time
+   * there (09:00 in New York stays 09:00 after New York changes to winter time), so the occurrence
+   * is moved to that wall time on the same repeat day. Overridden times are left as they are.
+   */
+  function keepEventZoneWallTime(ev, start) {
+    const Tz = global.NotesAgendaTz;
+    const first = new Date(ev.start);
+    if (!Tz || !Tz.isValidTz(ev.tz) || !Number.isFinite(first.getTime())) return start;
+    const hm = (d) => d.getHours() * 60 + d.getMinutes();
+    if (hm(start) !== hm(first)) return start;
+    const dayNo = (d) => Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / MS_DAY);
+    const wall = Tz.toLocalInput(first.getTime(), ev.tz);
+    const base = Date.UTC(+wall.slice(0, 4), +wall.slice(5, 7) - 1, +wall.slice(8, 10));
+    const day = new Date(base + (dayNo(start) - dayNo(first)) * MS_DAY).toISOString().slice(0, 10);
+    const ms = Tz.fromLocalInput(`${day}${wall.slice(10)}`, ev.tz);
+    return Number.isFinite(ms) ? new Date(ms) : start;
+  }
+
+  /**
    * Upcoming occurrences as { start, slotMs }: `start` is when the occurrence really begins
    * (after a per-occurrence edit), `slotMs` identifies its place in the series.
    */
@@ -151,6 +170,7 @@
     }
     return rows
       .filter((o) => o && o.start instanceof Date && Number.isFinite(o.start.getTime()))
+      .map((o) => (o.recurring && !ev.all_day ? { ...o, start: keepEventZoneWallTime(ev, o.start) } : o))
       .map((o) => ({
         // A non-repeating all-day event is clipped to the range by the calendar; use its real start.
         start: (!o.recurring && ev.all_day) ? new Date(new Date(ev.start).setHours(0, 0, 0, 0)) : o.start,
