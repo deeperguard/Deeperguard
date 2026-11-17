@@ -17968,7 +17968,11 @@
       toast('Choose a date and time');
       return;
     }
-    const push = !clear && !!document.getElementById('note-reminder-push')?.checked;
+    let push = !clear && !!document.getElementById('note-reminder-push')?.checked;
+    const R = window.NotesAgendaReminders;
+    const pushAllowed = !!(R && typeof R.hasAgendaRemindersEntitlement === 'function' && R.hasAgendaRemindersEntitlement());
+    const pushDowngraded = push && !pushAllowed;
+    if (pushDowngraded) push = false;
     const content = { ...note.content };
     if (iso) {
       // Keep the id of the window already on the server so the sync can withdraw or move it.
@@ -17980,7 +17984,8 @@
     }
     NotesStore.upsert(currentId, content);
     if (iso) syncNotePushReminder(currentId);
-    toast(iso ? 'Reminder saved' : 'Reminder cleared');
+    if (pushDowngraded) toast('Reminder saved on this device only. Closed-app push needs a Pro account.', true);
+    else toast(iso ? 'Reminder saved' : 'Reminder cleared');
     updateNoteInfoPanel(NotesStore.get(currentId));
     renderNotes();
   }
@@ -17996,12 +18001,15 @@
     return true;
   }
 
-  let dueReminderHashPending = location.hash === '#due-reminder';
+  // The flag expires: a notification tapped while the vault was locked must not open a note at a much later unlock.
+  const DUE_REMINDER_HASH_TTL_MS = 5 * 60 * 1000;
+  let dueReminderHashAt = location.hash === '#due-reminder' ? Date.now() : 0;
   function checkDueReminderHash() {
-    if (!dueReminderHashPending || !NotesStore.isUnlocked?.()) return;
-    dueReminderHashPending = false;
+    if (!dueReminderHashAt || !NotesStore.isUnlocked?.()) return;
+    const fresh = Date.now() - dueReminderHashAt <= DUE_REMINDER_HASH_TTL_MS;
+    dueReminderHashAt = 0;
     history.replaceState(null, '', location.pathname + location.search);
-    openDueReminderNote();
+    if (fresh) openDueReminderNote();
   }
   navigator.serviceWorker?.addEventListener('message', (e) => {
     if (e.data && e.data.type === 'dg-open-due-reminder') openDueReminderNote();
