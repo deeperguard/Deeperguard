@@ -10001,43 +10001,58 @@ body.search-filters-open .fab-stack,
   .editor-head-main {
     flex: 0 0 auto;
     display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-start;
-    column-gap: 12px;
-    row-gap: 4px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
     width: 100%;
     min-width: 0;
   }
   .editor-head-main .title-input {
-    flex: 1 1 14rem;
-    width: auto;
+    flex: 0 0 auto;
+    width: 100%;
     min-width: 0;
     max-width: 100%;
   }
+  /* Compact meta row under the title: folder, then tags, both 32px high. */
   .editor-head-main .editor-meta-row {
-    display: contents;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-1) var(--space-2);
   }
-  .editor-head-main .tag-bar-shell {
-    flex: 1 1 100%;
-    order: 3;
-    min-width: 0;
-  }
-  .editor-head-main .editor-folder-control {
-    order: 2;
+  .editor-head-main .editor-meta-row .editor-folder-control {
     flex: 0 1 auto;
     width: auto;
-    max-width: min(14rem, 100%);
+    max-width: min(220px, 100%);
     min-width: 0;
     margin: 0;
-    align-self: center;
-    justify-content: flex-start;
+    padding: 0;
   }
-  .editor-head-main .editor-folder-control select {
+  .editor-head-main .editor-meta-row .editor-folder-control select {
     width: auto;
-    max-width: 14rem;
+    max-width: 220px;
     min-width: 0;
+    height: 32px;
+    min-height: 32px;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+  }
+  .editor-head-main .editor-meta-row .tag-bar-shell {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .editor-head-main .editor-meta-row .tag-bar-shell:not(.is-collapsed) {
+    flex: 1 1 100%;
+  }
+  .editor-head-main .tag-bar-toggle {
+    width: auto;
+    max-width: 100%;
+    min-height: 32px;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
   }
   .title-input {
     display: block;
@@ -10492,14 +10507,24 @@ body.search-filters-open .fab-stack,
   body.note-readonly .editor-toolbar-menu-item#btn-redo {
     display: none !important;
   }
-  .editor-toolbar-row-item.btn.icon,
-  .editor-toolbar-row-item.edit-lock-btn {
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    min-height: 34px;
+  /* One toolbar row: every button the same 36px square with the same radius. */
+  .editor-actions-overflow-panel .editor-toolbar-row-item.btn.icon,
+  .editor-actions-overflow-panel .editor-toolbar-row-item.edit-lock-btn,
+  .editor-actions-overflow-panel #btn-ai-chat.editor-toolbar-row-item {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
     padding: 0;
+    gap: 0;
     justify-content: center;
+    border-radius: var(--radius-sm);
+  }
+  .editor-actions-overflow-panel .editor-toolbar-row-item .editor-select {
+    height: 36px;
+    min-height: 36px;
+    border-radius: var(--radius-sm);
   }
   .editor-toolbar-row-item#btn-ai-chat .editor-phone-strip-label {
     display: none !important;
@@ -10849,6 +10874,17 @@ body.vault-pulling .sync-progress {
   color: var(--text);
   background-color: var(--bg-elevated);
 }
+/* Document view of an attachment note: the text format and the text
+   undo/redo have nothing to act on, so they are not shown. They return as
+   soon as the note text is edited ("Edit" in the "…" menu). */
+.editor.doc-preview-active .editor-note-type-control,
+.editor.doc-preview-active #btn-undo,
+.editor.doc-preview-active #btn-redo {
+  display: none !important;
+}
+/* No tags yet: the toggle reads as a quiet "Add tag" button. */
+.tag-bar-shell.is-collapsed.is-empty .tag-bar-toggle-label { display: none; }
+.tag-bar-shell.is-collapsed.is-empty .tag-bar-toggle-summary::before { content: "+ "; }
 .narrow-only { display: none; }
 .toast-undo { margin-left: 4px; }
 .check-row:has(.check-box[aria-checked="true"]) .check-text {

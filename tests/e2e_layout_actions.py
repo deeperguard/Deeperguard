@@ -15,6 +15,12 @@ Two kinds of row are checked by what they do, not only by being there:
     at phone width the quick row itself is opened and clicked the same way;
   - `.note-row-delete` is checked per row kind (normal, trashed, locked).
 
+The note header and toolbar (section 7.5) are measured on both note types: the
+title on its own line, folder and tags on one compact row, toolbar buttons of
+one size with a tooltip and an aria-label in tab order, and controls of the
+other note type hidden (the format select on a PDF note) while they keep
+working where they apply.
+
     python tests/e2e_layout_actions.py
 """
 from __future__ import annotations
@@ -392,6 +398,151 @@ def check_rows(page, report: Report, where: str, rows: list[dict], reset) -> Non
             report.check(label + " has an accessible name", bool(info["name"]), info)
 
 
+# --------------------------------------------------------------------------
+# Note header and toolbar (docs/UI_POLISH.md section 7.5).
+# --------------------------------------------------------------------------
+
+TOOLBAR_SIZE = 36
+# The toolbar buttons in the order of section 7.5; the note type select sits
+# between the lock button and Find where it applies.
+TOOLBAR_BUTTONS = [
+    "#btn-prevent-edit", "#btn-find-desktop", "#btn-ai-chat",
+    '[data-editor-proxy="btn-star"].editor-desktop-star', "#btn-download-note", "#btn-editor-overflow-desktop",
+]
+TAB_ORDER = {
+    "plain": ["note-title", "note-folder-select", "tag-bar-toggle", "btn-prevent-edit", "note-editor-type",
+              "btn-find-desktop", "btn-ai-chat", "star", "btn-download-note", "btn-editor-overflow-desktop"],
+    "pdf": ["note-title", "note-folder-select", "tag-bar-toggle", "btn-prevent-edit",
+            "btn-find-desktop", "btn-ai-chat", "star", "btn-download-note", "btn-editor-overflow-desktop"],
+}
+# Controls that do not apply to a note type must not be shown for it, neither
+# in the toolbar row nor in its "…" menu.
+HIDDEN_FOR = {
+    "plain": ["#btn-preview", "#btn-ocr-text", "#btn-rescan-ocr", "#btn-desktop-doc-fullscreen"],
+    "pdf": ["#note-editor-type", "#btn-undo", "#btn-redo", "#md-toolbar"],
+}
+
+BOX_JS = """(sel) => {
+  const el = Array.from(document.querySelectorAll(sel)).find((x) => x.getClientRects().length);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height,
+    title: (el.getAttribute('title') || '').trim(), label: (el.getAttribute('aria-label') || '').trim(),
+    text: (el.innerText || '').replace(/\\s+/g, ' ').trim(), radius: getComputedStyle(el).borderTopLeftRadius };
+}"""
+
+FOCUS_JS = """() => {
+  const el = document.activeElement;
+  return el ? (el.id || (el.matches('[data-editor-proxy="btn-star"]') ? 'star' : el.tagName)) : '';
+}"""
+
+NOTE_EDITOR_JS = """(title) => NotesStore.listNotes()
+  .find((n) => !n.deleted && n.content.title === title)?.content.editor || 'plain'"""
+
+CLEAR_TAGS_JS = """(title) => {
+  const note = NotesStore.listNotes().find((n) => !n.deleted && n.content.title === title);
+  NotesStore.upsert(note.uuid, { ...note.content, tags: [] });
+}"""
+
+
+def check_header_layout(page, report: Report, where: str, title: str) -> None:
+    """Title on its own line; folder and tags on one compact row under it."""
+    open_fresh(page, title)
+    head, folder, tags = (page.evaluate(BOX_JS, sel) for sel in ("#note-title", "#note-folder-select", "#tag-bar-toggle"))
+    lock = page.evaluate(BOX_JS, "#btn-prevent-edit")
+    if not report.check(f"[{where}] title, folder and tags are shown", bool(head and folder and tags and lock)):
+        return
+    report.check(f"[{where}] nothing shares the title line",
+                 folder["top"] >= head["bottom"] and tags["top"] >= head["bottom"], [head, folder, tags])
+    report.check(f"[{where}] folder and tags share one row of the same height",
+                 abs(folder["top"] - tags["top"]) <= 1 and folder["height"] == tags["height"] == 32, [folder, tags])
+    report.check(f"[{where}] folder comes first and is at most 220px wide",
+                 folder["right"] <= tags["left"] and folder["width"] <= 220, [folder, tags])
+    report.check(f"[{where}] the toolbar sits under the meta row", lock["top"] >= folder["bottom"], [folder, lock])
+    report.check(f"[{where}] a note without tags offers 'Add tag' instead of 'None'",
+                 "Add tag" in tags["text"] and "None" not in tags["text"], tags)
+
+
+def check_toolbar_buttons(page, report: Report, where: str, title: str, scope: str) -> None:
+    """Equal-size buttons, each with a tooltip and an aria-label, in a logical tab order."""
+    open_fresh(page, title)
+    boxes = []
+    for selector in TOOLBAR_BUTTONS:
+        box = page.evaluate(BOX_JS, selector)
+        if not report.check(f"[{where}] toolbar {selector} is shown", bool(box)):
+            continue
+        boxes.append(box)
+        report.check(f"[{where}] toolbar {selector} is {TOOLBAR_SIZE}x{TOOLBAR_SIZE}px",
+                     box["width"] == TOOLBAR_SIZE and box["height"] == TOOLBAR_SIZE, box)
+        report.check(f"[{where}] toolbar {selector} has a tooltip", bool(box["title"]), box)
+        report.check(f"[{where}] toolbar {selector} has an aria-label", bool(box["label"]), box)
+    report.check(f"[{where}] toolbar buttons share one row, radius and left-to-right order",
+                 len({(b["top"], b["radius"]) for b in boxes}) == 1
+                 and [b["left"] for b in boxes] == sorted(b["left"] for b in boxes), boxes)
+    page.focus("#note-title")
+    seen = [page.evaluate(FOCUS_JS)]
+    for _ in TAB_ORDER[scope][1:]:
+        page.keyboard.press("Tab")
+        seen.append(page.evaluate(FOCUS_JS))
+    report.check(f"[{where}] Tab walks title, folder, tags and then the toolbar in order", seen == TAB_ORDER[scope], seen)
+
+
+def check_type_specific(page, report: Report, where: str, title: str, scope: str) -> None:
+    """Controls of the other note type are hidden, not shown idle."""
+    open_fresh(page, title)
+    for selector in HIDDEN_FOR[scope]:
+        report.check(f"[{where}] {selector} is not in the toolbar", not probe(page, selector).get("visible"))
+    click_visible(page, "#btn-editor-overflow-desktop")
+    for selector in HIDDEN_FOR[scope]:
+        report.check(f"[{where}] {selector} is not in the '…' menu", not probe(page, selector).get("visible"))
+    escape_all(page)
+
+
+def check_note_type_select(page, report: Report) -> None:
+    """The format select still works on a plain note and comes back when a PDF note's text is edited."""
+    open_fresh(page, PLAIN_TITLE)
+    box = page.evaluate(BOX_JS, "#note-editor-type")
+    if report.check("[plain note] #note-editor-type is shown, named and as high as the buttons",
+                    bool(box) and bool(box["label"]) and box["height"] == TOOLBAR_SIZE, box):
+        page.select_option("#note-editor-type", "checklist")
+        page.wait_for_timeout(500)
+        report.check("[plain note] choosing Checklist changes the note's format",
+                     page.evaluate(NOTE_EDITOR_JS, PLAIN_TITLE) == "checklist" and probe(page, "#checklist").get("visible"))
+        page.select_option("#note-editor-type", "plain")
+        page.wait_for_timeout(500)
+        report.check("[plain note] choosing Plain text changes it back",
+                     page.evaluate(NOTE_EDITOR_JS, PLAIN_TITLE) == "plain" and probe(page, "#note-body").get("visible"))
+
+    open_fresh(page, PDF_TITLE)
+    report.check("[PDF note] #note-editor-type is hidden in the document view",
+                 not probe(page, "#note-editor-type").get("visible"))
+    click_visible(page, "#btn-editor-overflow-desktop")
+    click_visible(page, "#btn-preview")
+    report.check("[PDF note] #note-editor-type returns when the note text is edited",
+                 probe(page, "#note-editor-type").get("visible") and probe(page, "#note-body").get("visible"))
+    click_visible(page, "#btn-editor-overflow-desktop")
+    click_visible(page, "#btn-preview")
+    report.check("[PDF note] #note-editor-type is hidden again back in the document view",
+                 not probe(page, "#note-editor-type").get("visible"))
+
+
+def check_tag_summary(page, report: Report) -> None:
+    """One tag: the meta row names it. No tag again: back to 'Add tag'."""
+    open_fresh(page, PLAIN_TITLE)
+    click_visible(page, "#tag-bar-toggle")
+    page.fill("#tag-bar-input", "layout-tag")
+    click_visible(page, "#tag-bar-add")
+    open_fresh(page, PLAIN_TITLE)
+    text = (page.evaluate(BOX_JS, "#tag-bar-toggle") or {}).get("text", "")
+    report.check("[plain note] a tagged note shows 'Tags' and the tag name", "Tags" in text and "layout-tag" in text
+                 and "Add tag" not in text, text)
+    page.evaluate(CLEAR_TAGS_JS, PLAIN_TITLE)
+    open_fresh(page, PLAIN_TITLE)
+    text = (page.evaluate(BOX_JS, "#tag-bar-toggle") or {}).get("text", "")
+    report.check("[plain note] with the tag removed it offers 'Add tag' again", "Add tag" in text, text)
+
+
+
 def seed_note(page, title: str, **extra) -> str:
     note_id = page.evaluate(SEED_NOTE_JS, [title, extra])
     page.wait_for_timeout(300)
@@ -630,6 +781,13 @@ def main() -> int:
             seed_totp(page)
             check_rows(page, report, "2fa", [r for r in ACTIONS if r["applies"] in ("all", "2fa")],
                        tab_reset(page, "#app-tab-2fa"))
+
+            for where, title, scope in (("plain note", PLAIN_TITLE, "plain"), ("PDF note", PDF_TITLE, "pdf")):
+                check_header_layout(page, report, where, title)
+                check_toolbar_buttons(page, report, where, title, scope)
+                check_type_specific(page, report, where, title, scope)
+            check_note_type_select(page, report)
+            check_tag_summary(page, report)
 
             check_quick_row_desktop(page, report)
             check_row_delete(page, report)
