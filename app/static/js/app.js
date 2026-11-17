@@ -17865,13 +17865,13 @@
   }
 
   // Best effort: the stored window id stays on the note, so the next sync retries the withdrawal.
-  function noteReminderWithdrawFailed() {}
+  function ignoreWithdrawError() {}
 
   function cancelNoteReminder(uuid, { note } = {}) {
     if (!uuid) return;
     const target = note || NotesStore.get(uuid);
     // Closed-app push window of the private reminder (random id only; no note id goes to the server).
-    if (target?.content) window.NotesNoteReminders?.cancelNoteReminders(target.content).catch(noteReminderWithdrawFailed);
+    if (target?.content) window.NotesNoteReminders?.cancelNoteReminders(target.content).catch(ignoreWithdrawError);
     if (target && !noteHasReminder(target)) return;
     queueReminderOp(uuid, 'cancel');
     applyReminderOp(uuid, 'cancel')
@@ -17984,7 +17984,7 @@
       const prev = Array.isArray(content.reminders) ? content.reminders[0] : null;
       content.reminders = [{ at: iso, push, ...(prev?.rid ? { rid: prev.rid, window_start: prev.window_start } : {}) }];
     } else {
-      window.NotesNoteReminders?.cancelNoteReminders(note.content).catch(noteReminderWithdrawFailed);
+      window.NotesNoteReminders?.cancelNoteReminders(note.content).catch(ignoreWithdrawError);
       delete content.reminders;
     }
     NotesStore.upsert(currentId, content);
