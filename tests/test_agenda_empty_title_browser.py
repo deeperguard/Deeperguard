@@ -148,3 +148,29 @@ def test_untitled_event_can_be_renamed(page):
     title = page.evaluate(
         "(id) => NotesStore.listAgendaEvents().find(e => e.id === id)?.title", event_id)
     assert title == "Renamed"
+
+
+def test_multiple_reminders_are_saved_and_shown_again(page):
+    """Presets plus a custom value are stored as several offsets, survive a reopen, and the
+    editor says reminders only work while the app is open."""
+    before = set(_event_ids(page))
+    _add_event(page)
+    hint = page.locator("#agenda-edit-reminders-wrap .agenda-local-reminders-hint").inner_text()
+    assert "only work while Deeperguard is open" in hint
+    assert "send no email and no push" in hint
+    page.fill("#agenda-edit-title", "Reminder event")
+    page.check('[data-agenda-reminder-offset="5"]')
+    page.check('[data-agenda-reminder-offset="1440"]')
+    page.fill("#agenda-edit-reminders-custom", "20")
+    page.click("#agenda-edit-save")
+    page.wait_for_selector("#agenda-editor", state="hidden", timeout=10_000)
+    event_id = next(i for i in _event_ids(page) if i not in before)
+    stored = page.evaluate(
+        "(id) => NotesStore.listAgendaEvents().find(e => e.id === id).reminders", event_id)
+    assert sorted(stored) == [5, 20, 1440]
+    _open_event_editor(page, event_id)
+    assert page.is_checked('[data-agenda-reminder-offset="5"]')
+    assert page.is_checked('[data-agenda-reminder-offset="1440"]')
+    assert not page.is_checked('[data-agenda-reminder-offset="15"]')
+    assert page.input_value("#agenda-edit-reminders-custom") == "20"
+    _cancel_editor(page)
