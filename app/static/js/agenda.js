@@ -387,6 +387,7 @@
     // Channel availability can change (email confirmed, push enabled): refresh on every open.
     global.NotesAgendaReminders?.wireAgendaReminderSettings?.();
     global.NotesAgendaSubs?.onAgendaShown?.();
+    global.NotesAgendaCalendars?.setExportHandler?.(exportAgendaToIcs);
     global.NotesAgendaCalendars?.wire?.({ onChange: render });
     const closeBtn = document.getElementById('agenda-calendar-settings-close');
     if (closeBtn) closeBtn.focus();
@@ -1114,16 +1115,29 @@
     };
   }
 
-  function exportAgendaToIcs() {
+  /** Export every event, or only those of one calendar when `calendarId` is given. */
+  function exportAgendaToIcs(calendarId) {
     const Ics = global.NotesAgendaIcs;
     const S = getStore();
     if (!Ics || typeof Ics.buildIcsCalendarFromEvents !== 'function' || !S || typeof S.listAgendaEvents !== 'function') {
       if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('Export unavailable', true);
       return;
     }
-    const rows = listAgendaEvents() || [];
+    let rows = listAgendaEvents() || [];
+    const Cals = global.NotesAgendaCalendars;
+    let cal = null;
+    if (typeof calendarId === 'string' && calendarId && Cals) {
+      const map = Cals.calendarMap();
+      cal = map.get(calendarId) || null;
+      rows = rows.filter((ev) => {
+        const c = Cals.calendarForEvent(ev, map);
+        return c && c.id === calendarId;
+      });
+    }
     if (!rows.length) {
-      if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('No events to export', true);
+      if (typeof global.notesAgendaToast === 'function') {
+        global.notesAgendaToast(cal ? `No events in ${cal.name} to export` : 'No events to export', true);
+      }
       return;
     }
     const icsText = Ics.buildIcsCalendarFromEvents(flattenEventsForIcsExport(rows));
@@ -1132,7 +1146,8 @@
     const a = document.createElement('a');
     const stamp = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `deeperguard-calendar-${stamp}.ics`;
+    const slug = cal ? cal.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) : '';
+    a.download = `deeperguard-calendar${slug ? `-${slug}` : ''}-${stamp}.ics`;
     a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
