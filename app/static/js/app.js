@@ -1859,12 +1859,23 @@
   }
 
   function activateNoteLink(link) {
-    const uuid = link.dataset.dgNote;
-    if (!link.dataset.dead) {
-      if (uuid && NotesStore.get(uuid)) openNote(uuid);
+    // Edit-mode overlays are redrawn on every keystroke, so their dead-link
+    // panel goes above the text (or after the checklist row) instead.
+    let anchor = link;
+    if (link.closest('#note-body-links')) anchor = document.getElementById('note-body-wrap');
+    else if (link.closest('.check-text-links')) anchor = link.closest('.check-row');
+    followNoteLink(link.dataset.dgNote, anchor);
+  }
+
+  // State is resolved now, not taken from the drawn link: the target may have
+  // been deleted or restored since the text was last rendered.
+  function followNoteLink(uuid, panelAnchor) {
+    const kind = NotesLinks.resolve(uuid, noteLinkLookup).state;
+    if (kind === 'ok') {
+      openNote(uuid);
       return;
     }
-    showDeadLinkPanel(link, uuid, link.dataset.dead);
+    showDeadLinkPanel(panelAnchor, uuid, kind);
   }
 
   function showDeadLinkPanel(anchor, uuid, kind) {
@@ -1915,7 +1926,8 @@
     });
     mk('Remove link', () => finish(NotesLinks.removeLink(ui.body.value, uuid)));
     mk('Close', closeDeadLinkPanel);
-    anchor.after(panel);
+    if (anchor.id === 'note-body-wrap') anchor.before(panel);
+    else anchor.after(panel);
   }
 
   function restoreNoteKeepOpen(id) {
@@ -1923,6 +1935,7 @@
     if (!note?.content?.trashed) return;
     NotesStore.upsert(id, { ...note.content, trashed: false });
     refreshPreview();
+    syncEditLinkOverlay();
     toast('Restored to notes');
   }
 
@@ -2252,7 +2265,7 @@
       const input = wrap.querySelector('.check-text');
       const layer = wrap.querySelector('.check-text-links');
       if (!input || !layer) return;
-      layer.innerHTML = NotesLinkOverlay.renderHtml(input.value);
+      layer.innerHTML = NotesLinkOverlay.renderHtml(input.value, { noteLookup: noteLinkLookup });
     });
   }
 
@@ -2289,7 +2302,7 @@
       syncSuperscriptFormatMirror();
       return;
     }
-    layer.innerHTML = NotesLinkOverlay.renderHtml(ui.body.value);
+    layer.innerHTML = NotesLinkOverlay.renderHtml(ui.body.value, { noteLookup: noteLinkLookup });
     syncEditLinkScroll();
     syncSuperscriptFormatMirror();
   }
@@ -2300,6 +2313,12 @@
     document.body.addEventListener('click', (event) => {
       const anchor = event.target?.closest?.('a.edit-link[href], a.in-doc-link[href]');
       if (!anchor) return;
+      if (anchor.dataset.dgNote) {
+        event.preventDefault();
+        event.stopPropagation();
+        activateNoteLink(anchor);
+        return;
+      }
       const href = anchor.getAttribute('href') || '';
       if (followInDocLink(href)) {
         event.preventDefault();
@@ -14434,7 +14453,7 @@
         commit(NotesChecklist.setText(rows, input.dataset.checkText, input.value), { rerender: false });
         const layer = input.parentElement?.querySelector('.check-text-links');
         if (layer && window.NotesLinkOverlay?.renderHtml) {
-          layer.innerHTML = NotesLinkOverlay.renderHtml(input.value);
+          layer.innerHTML = NotesLinkOverlay.renderHtml(input.value, { noteLookup: noteLinkLookup });
         }
       });
       input.addEventListener('keydown', (event) => {
@@ -14637,6 +14656,7 @@
   function openNote(id, { skipGate = false, skipFlush = false } = {}) {
     const note = NotesStore.get(id);
     if (!note) return;
+    closeDeadLinkPanel();
     const previousId = currentId && currentId !== id ? currentId : null;
     if (previousId) {
       unlockedNotes.delete(previousId);
@@ -20948,6 +20968,16 @@
         const next = NotesLinks.applyChoice(ui.body.value, trigger, note);
         setBodyText(next.value, next.caret);
       },
+    });
+    // Keyboard route to the link the mouse can click: Ctrl/Cmd+Enter with the
+    // caret inside a [Title](dg-note:<uuid>) link follows it.
+    ui.body.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey) || event.isComposing) return;
+      const caret = ui.body.selectionStart;
+      const link = NotesLinks.findLinks(ui.body.value).find((l) => caret > l.start && caret < l.end);
+      if (!link) return;
+      event.preventDefault();
+      followNoteLink(link.uuid, document.getElementById('note-body-wrap'));
     });
   }
   ui.body.addEventListener('scroll', () => {

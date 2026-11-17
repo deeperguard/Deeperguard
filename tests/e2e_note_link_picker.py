@@ -1,4 +1,6 @@
-"""E2E (Playwright): typing `[[Bo` opens the note link picker and inserts a link.
+"""E2E (Playwright): typing `[[Bo` opens the note link picker and inserts a link;
+in the preview, clicking that link opens the target note, and once the target is
+deleted the link is shown dead and clicking it opens the repair panel.
 
 Regression for "listNotes is not defined": the picker's candidate list called a
 bare listNotes() instead of NotesStore.listNotes(), so no picker appeared and
@@ -68,6 +70,83 @@ def main() -> int:
                 " && !document.getElementById('note-body').value.includes('[[Bo')",
                 timeout=10000,
             )
+            target = page.wait_for_function(
+                "() => NotesStore.listNotes().find((n) => n.content.title === 'Boodschappen')?.uuid",
+                timeout=10000,
+            ).json_value()
+            source = page.wait_for_function(
+                "() => NotesStore.listNotes().find((n) => n.content.title === 'Tweede')?.uuid",
+                timeout=10000,
+            ).json_value()
+            page.evaluate("() => NotesStore.flush && NotesStore.flush()")
+
+            def open_source():
+                page.locator(f'.note-row[data-id="{source}"]').click()
+                page.wait_for_function(
+                    "() => document.getElementById('note-title').value === 'Tweede'", timeout=10000
+                )
+
+            def opened_target():
+                page.wait_for_function(
+                    "() => document.getElementById('note-title').value === 'Boodschappen'", timeout=10000
+                )
+
+            # Plain editor: the link in the text is clickable and opens note A.
+            link = page.locator(f'#note-body-links a.note-link[data-dg-note="{target}"]')
+            link.wait_for(state="visible", timeout=10000)
+            assert link.get_attribute("data-dead") is None
+            link.click()
+            opened_target()
+
+            # Keyboard: caret inside the link, Ctrl+Enter follows it.
+            open_source()
+            page.evaluate("() => { const b = document.getElementById('note-body'); b.focus(); b.setSelectionRange(10, 10); }")
+            page.keyboard.press("Control+Enter")
+            opened_target()
+
+            # Markdown preview: rendered with the live title, click opens A.
+            open_source()
+            def show_preview():
+                if page.locator("#preview").is_visible():
+                    return
+                if not page.locator("#btn-preview").is_visible():
+                    page.locator("#btn-editor-overflow-desktop").click()
+                page.locator("#btn-preview").click()
+                page.locator("#preview").wait_for(state="visible", timeout=10000)
+
+            page.select_option("#note-editor-type", "markdown")
+            show_preview()
+            preview_link = page.locator(f'#preview a.note-link[data-dg-note="{target}"]')
+            preview_link.wait_for(state="visible", timeout=10000)
+            assert preview_link.inner_text() == "Boodschappen", preview_link.inner_text()
+            preview_link.click()
+            opened_target()
+
+            # Delete A for good: in the preview the link is dead, and clicking
+            # it opens the repair panel instead of throwing or navigating.
+            page.evaluate(f"() => NotesStore.remove('{target}', {{ force: true }})")
+            open_source()
+            show_preview()
+            dead = page.locator(f'#preview a.note-link-dead[data-dg-note="{target}"]')
+            dead.wait_for(state="visible", timeout=10000)
+            assert dead.get_attribute("data-dead") == "missing"
+            dead.click()
+            panel = page.locator("#note-link-dead-panel")
+            panel.wait_for(state="visible", timeout=10000)
+            assert "deleted" in panel.inner_text()
+            assert page.locator("#note-title").input_value() == "Tweede"
+            panel.get_by_role("button", name="Close").click()
+
+            # Same in the plain editor.
+            page.select_option("#note-editor-type", "plain")
+            dead_edit = page.locator(f'#note-body-links a.note-link-dead[data-dg-note="{target}"]')
+            if not dead_edit.is_visible():
+                page.click("#note-body")
+            dead_edit.wait_for(state="visible", timeout=10000)
+            dead_edit.click()
+            panel.wait_for(state="visible", timeout=10000)
+            assert "deleted" in panel.inner_text()
+            assert page.locator("#note-title").input_value() == "Tweede"
             # Chromium logs this on every page load because the CSP is delivered
             # via <meta>; it is unrelated to the picker.
             errors = [e for e in errors if "'frame-ancestors' is ignored" not in e]
