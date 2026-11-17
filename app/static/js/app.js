@@ -10557,7 +10557,7 @@
   let onlineRecoveryActive = false;
   let offlineWatchTickActive = false;
 
-  async function probeNetwork({ syncOnRecovery = false, forceHealth = false } = {}) {
+  async function probeNetwork({ syncOnRecovery = false, forceHealth = false, confirming = false } = {}) {
     // iOS LAN-only Wi‑Fi may report navigator.onLine=false while homelab is reachable.
     // Cellular without WireGuard cannot reach 192.168.x — expect failures there.
     try {
@@ -10595,6 +10595,13 @@
       }
       return true;
     } catch (err) {
+      // One failed /api/health (or a request skipped by the failure backoff) is
+      // not proof of an outage: re-check once, clearing the backoff gate, before the
+      // banner flips. The browser's own offline signal still counts immediately.
+      if (networkReachable && !confirming && navigator.onLine !== false) {
+        try { window.__notesResetHealthBackoff?.({ abort: false }); } catch (e) { /* ignore */ }
+        return probeNetwork({ syncOnRecovery, forceHealth: true, confirming: true });
+      }
       const wasReachable = networkReachable;
       if (networkReachable) {
         networkReachable = false;
