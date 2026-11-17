@@ -7,6 +7,7 @@ Skips when Playwright/Chromium is unavailable.
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -82,6 +83,18 @@ def test_default_is_fifteen_minutes_with_label_and_disclosure(page):
     ):
         assert needed in text, needed
     assert "15-minute window" in page.evaluate(TEXT, "agenda-reminder-email-explainer")
+
+
+def test_email_checkbox_is_off_and_announces_what_the_server_sees(page):
+    email = page.locator("#agenda-reminder-email")
+    assert not email.is_checked()
+    assert page.get_by_label("Email reminders").evaluate("el => el.id") == "agenda-reminder-email"
+    # The accessible description a screen reader announces with the checkbox: the disclosure, then the
+    # status line (this account has not confirmed its address, so the checkbox is disabled and says why).
+    assert email.is_disabled()
+    sync_api.expect(email).to_have_accessible_description(re.compile(
+        r"^Off by default\..*only the 15-minute window.*never which event\..*not end-to-end encrypted\."
+        r" Confirm your email address to receive email reminders\.\s*$"))
 
 
 def test_keyboard_choice_is_stored_restored_and_reflected_in_the_texts(page):
