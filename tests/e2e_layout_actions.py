@@ -433,9 +433,9 @@ TOOLBAR_BUTTONS = [
     '[data-editor-proxy="btn-star"].editor-desktop-star', "#btn-download-note", "#btn-editor-overflow-desktop",
 ]
 TAB_ORDER = {
-    "plain": ["note-title", "note-folder-select", "btn-move-note", "tag-bar-toggle", "btn-prevent-edit", "note-editor-type",
+    "plain": ["note-title", "note-folder-select", "tag-bar-toggle", "btn-prevent-edit", "note-editor-type",
               "btn-find-desktop", "btn-ai-chat", "star", "btn-download-note", "btn-editor-overflow-desktop"],
-    "pdf": ["note-title", "note-folder-select", "btn-move-note", "tag-bar-toggle", "btn-prevent-edit",
+    "pdf": ["note-title", "note-folder-select", "tag-bar-toggle", "btn-prevent-edit",
             "btn-find-desktop", "btn-ai-chat", "star", "btn-download-note", "btn-editor-overflow-desktop"],
 }
 # Controls that do not apply to a note type must not be shown for it, neither
