@@ -67,6 +67,9 @@ def main() -> int:
             def focused_name() -> str:
                 return page.evaluate("() => document.activeElement.getAttribute('aria-label')")
 
+            # With no folders yet, the tree still offers "All notes".
+            assert names() == ["All notes"], names()
+
             # --- create a folder, then a subfolder through the context menu ---
             page.locator("#btn-new-folder").click()
             page.fill("#folder-name-input", "Work")
@@ -202,7 +205,8 @@ def main() -> int:
             message = page.locator("#confirm-message").inner_text()
             assert "1 note" in message and "subfolder" not in message, message
             page.locator("#confirm-ok").click()
-            page.wait_for_function("() => document.querySelectorAll('#folder-list [role=treeitem]').length === 0")
+            page.wait_for_function("() => document.querySelectorAll('#folder-list [role=treeitem]').length === 1")
+            assert names() == ["All notes"], names()
             assert page.locator(".note-row").count() == 3
             assert page.evaluate("() => NotesStore.listNotes().every((n) => !n.content.folder_id)")
 
