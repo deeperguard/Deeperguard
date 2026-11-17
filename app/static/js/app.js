@@ -7024,6 +7024,13 @@
       await NotesStore.finishUnlockMaintenance();
     }
     refreshSyncMeta();
+    // Flat labels from before nesting become root labels; safe to repeat on every unlock.
+    try {
+      NotesStore.migrateLabels();
+      NotesStore.repairLabels();
+    } catch (err) {
+      console.warn('label migration failed', err);
+    }
     if (typeof NotesStore.mergeDuplicateTags === 'function') {
       try {
         NotesStore.mergeDuplicateTags();
