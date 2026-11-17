@@ -160,7 +160,7 @@
       return align ? ` style="text-align:${align}"` : '';
     };
     const head = table.header.map((cell, idx) => (
-      `<th dir="auto"${alignAttr(idx)}>${renderInlineCell(cell)}</th>`
+      `<th scope="col" dir="auto"${alignAttr(idx)}>${renderInlineCell(cell)}</th>`
     )).join('');
     const body = table.rows.map((row) => (
       `<tr>${row.map((cell, idx) => `<td dir="auto"${alignAttr(idx)}>${renderInlineCell(cell)}</td>`).join('')}</tr>`
@@ -432,6 +432,7 @@
       token.attrs = (token.attrs || []).filter(([name]) => name !== 'style');
       const align = /text-align:(left|center|right)/.exec(style);
       if (align) token.attrJoin('class', `md-align-${align[1]}`);
+      if (token.type === 'th_open') token.attrSet('scope', 'col');
       return self.renderToken(tokens, idx, options);
     };
     md.renderer.rules.th_open = alignCell;

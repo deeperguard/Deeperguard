@@ -172,7 +172,8 @@ MALICIOUS = [
 def test_malicious_language_or_code_executes_nothing(browser, md):
     page = _page(browser)
     _show(page, md)
-    page.locator("#preview pre button.code-copy-btn").first.click() if page.locator("#preview pre button").count() else None
+    if page.locator("#preview pre button").count():
+        page.locator("#preview pre button.code-copy-btn").first.click()
     page.wait_for_timeout(100)
     assert page.evaluate("window.__xss") is None
     assert page.evaluate("window.__alerts.length") == 0

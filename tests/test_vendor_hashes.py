@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 THIRD_PARTY = ROOT / "docs" / "THIRD_PARTY.md"
-VENDOR_DIRS = ["markdown-it", "dompurify", "highlightjs", "mermaid"]
+VENDOR_DIRS = ["markdown-it", "dompurify", "highlightjs", "mermaid", "codemirror"]
 
 
 def _listed() -> dict[str, str]:
@@ -42,21 +42,26 @@ class VendorHashTests(unittest.TestCase):
         head = (ROOT / "app/static/js/vendor/highlightjs/highlight.min.js").read_text(encoding="utf-8")[:120]
         self.assertIn("Highlight.js v11.11.1", head)
         self.assertRegex(text, r"\| Mermaid \| 11\.4\.1 \| MIT \|")
+        self.assertRegex(text, r"\| CodeMirror 6 \| state 6\.5\.2, view 6\.36\.8, commands 6\.8\.1, language 6\.11\.0 \| MIT \|")
 
     def test_no_eval_in_vendored_rich_libraries(self):
-        for rel in ("markdown-it/markdown-it.min.js", "dompurify/purify.min.js", "highlightjs/highlight.min.js", "mermaid/mermaid.min.js"):
+        for rel in ("markdown-it/markdown-it.min.js", "dompurify/purify.min.js", "highlightjs/highlight.min.js", "mermaid/mermaid.min.js", "codemirror/codemirror.min.js"):
             body = (ROOT / "app/static/js/vendor" / rel).read_text(encoding="utf-8")
             self.assertNotIn("new Function", body, rel)
             self.assertNotRegex(body, r"\beval\(", rel)
 
     def test_client_manifest_lists_vendored_files(self):
         manifest = json.loads((ROOT / "app" / "static" / "client-manifest.json").read_text(encoding="utf-8"))
-        blob = json.dumps(manifest)
+        assets = manifest["assets"]
         listed = _listed()
         for rel, digest in listed.items():
-            if rel.endswith(".js"):
-                self.assertIn(rel.split("app/static/", 1)[1], blob, rel)
-                self.assertIn(digest, blob, rel)
+            # The manifest covers scripts and styles only (scripts/build-client-manifest.py INCLUDE_SUFFIXES);
+            # LICENSE files are documented in THIRD_PARTY.md but not shipped as assets.
+            if not rel.endswith((".js", ".mjs", ".css")):
+                continue
+            key = rel.split("app/static/", 1)[1]
+            self.assertIn(key, assets, rel)
+            self.assertEqual(assets[key]["sha256"], digest, rel)
 
 
 if __name__ == "__main__":

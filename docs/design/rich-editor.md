@@ -1,6 +1,6 @@
 # Ontwerp: opgemaakte Markdown-editor, weergave en zoeken in de app
 
-Status: voorstel, nog niet gebouwd. Er is geen code gewijzigd. Dit document hoort bij idee #52 en is de
+Status: voorstel; mijlpaal 3 (tabeleditor) en 5 (opgemaakte bewerkmodus) zijn gebouwd, zie de noot in sectie 7. Dit document hoort bij idee #52 en is de
 eerste taak; de bouwtaken (sectie 6) volgen pas na de keuzes van de eigenaar (sectie 7). De XSS-testvectoren
 waaraan elke bouwtaak moet voldoen staan in [rich-editor-tests.md](rich-editor-tests.md).
 
@@ -58,7 +58,8 @@ Weergave van GFM-tabellen met uitlijning (`:---`, `:---:`, `---:`) en horizontaa
 schermen. Tabeleditor: cursor in een tabel toont een werkbalk om rij/kolom boven/onder/links/rechts toe te
 voegen, te verwijderen, te verplaatsen, en kolomuitlijning te zetten; Tab/Shift+Tab loopt door de cellen.
 De editor schrijft altijd terug als nette GFM-pipetabel (kolombreedtes uitgelijnd alleen als de oorspronkelijke
-tabel dat al was, zie round-trip, sectie 2.2).
+tabel dat al was, zie round-trip, sectie 2.2). Typen in de Markdown-bron zelf sluit het paneel met een korte melding (bewust: de
+bron is dan de enige plek waar je bewerkt); de editor zelf houdt het paneel open bij zijn eigen schrijfacties.
 
 ### 1.4 Ctrl+F binnen een notitie
 Ctrl/Cmd+F opent de bestaande zoekbalk, nu ook in de weergave en WYSIWYG-modus: alle treffers gemarkeerd
@@ -363,6 +364,20 @@ zoekindex (alleen na keuze, 7.3).
 
 Per keuze een aanbeveling; de bouwtaken wachten hierop.
 
+**Mijlpaal 3 (tabellen en tabeleditor) is gebouwd:** `app/static/js/table-editor.js` met de rasterbewerker in
+de Bron-modus. Esc en de knop Done (Klaar) sluiten de editor zonder bevestiging; dat kan omdat elke wijziging
+direct in de bron wordt geschreven.
+
+**Mijlpaal 5 (WYSIWYG) is gebouwd met de aanbevelingen bij keuze 1, 2, 5 (voor zover hieronder vermeld) en 8:**
+CodeMirror 6 als gevendorde bundel (`scripts/vendor/codemirror/build.py`, registratie in `THIRD_PARTY.md`),
+`app/static/js/rich-editor.js`, wissel Opgemaakt/Bron met de knop in de werkbalk of Ctrl+/. Afwijkingen van
+het ontwerp, zoals gebouwd: (a) de standaardmodus is **Bron** voor alle notities; de keuze wordt per account
+onthouden (`richEditor` in de versleutelde instellingen), "Opgemaakt voor nieuwe notities" is niet gebouwd;
+(b) de drempel is vast 500.000 tekens of 20.000 regels (niet instelbaar); (c) tabellen worden in de
+opgemaakte modus als uitgelijnde bronregels getoond en met de knop Table ingevoegd; de rasterbewerker
+(`table-editor.js`) werkt in Bron; (d) Ctrl+F binnen de opgemaakte modus (1.4) is nog niet aangesloten;
+(e) het bundelbestand wordt met `defer` bij het laden van de pagina opgehaald, niet pas bij de eerste bewerking.
+
 1. **Editorbibliotheek.** Opties: CodeMirror 6 (live preview, document = Markdown), ProseMirror/Tiptap
    (boomdocument), eigen lichte laag. **Aanbeveling: CodeMirror 6**, vanwege de structurele round-trip en
    undo/zoeken ingebouwd; accepteert een gedocumenteerde vendor-build-stap (5.4).
@@ -386,3 +401,16 @@ Per keuze een aanbeveling; de bouwtaken wachten hierop.
 8. **Drempel grote notities** (terugval naar Bron). **Aanbeveling: 500 kB of 20.000 regels**, instelbaar.
 9. **Aanscherpen `style-src`** (weg met `'unsafe-inline'`). **Aanbeveling: apart traject**, buiten dit punt,
    maar nieuwe code mag er niet van afhangen.
+
+## 8. Bekende beperkingen
+
+- **Undo-geschiedenis bij de wissel Bron ↔ Opgemaakt.** De belofte in sectie 1 dat de undo-geschiedenis de
+  wissel overleeft, is in de eerste versie niet gehaald. De editor wordt bij het wisselen vernietigd en
+  opnieuw aangemaakt, waardoor de CodeMirror-history verdwijnt; het bronveld houdt alleen de eigen
+  browser-undo. Bewaren van de history per notitie is een mogelijke vervolgstap.
+- **De modus is een voorkeur, geen eigenschap van de notitie.** `prefs.richEditor` (Opgemaakt of Bron) geldt
+  voor alle notities. Wie één notitie naar Bron wisselt, ziet daarna ook andere en nieuwe notities in Bron,
+  tot de gebruiker weer wisselt. Dit wijkt af van de aanbeveling bij open keuze 5.
+- **Regeleinden bij plakken.** De editor werkt intern met `\n`; de `\r` van een CRLF-notitie blijft in de
+  tekst staan. Geplakte tekst wordt aangepast aan de regeleinden van het document (CRLF als het document
+  CRLF bevat), zodat er geen gemengde regeleinden ontstaan.

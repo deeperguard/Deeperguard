@@ -1,0 +1,145 @@
+# /verify: `Failed to load resource: net::ERR_FAILED` on reload
+
+Idea #192 (task #223), found by the beta tester at commit `08f7d5b`. This is
+diagnosis only. No app code was changed.
+
+## Summary
+
+| Question | Answer |
+| --- | --- |
+| Which resource fails? | `https://api.github.com/repos/deeperguard/Deeperguard/releases/tags/<RELEASE_TAG>` (for example `.../releases/tags/v0.65.132`). It is a `fetch` request. |
+| `requestfailed` failure text | `net::ERR_FAILED` (resource type `fetch`) |
+| Which code makes the request? | `fetchReleaseJson()` in `app/static/js/release-integrity.js`. It uses `mode: 'cors'`, `cache: 'no-store'` and `credentials: 'omit'`. |
+| Where does the console line come from? | Chromium prints `Failed to load resource: net::ERR_FAILED` when that fetch fails at the network level. |
+| When does the status line `Could not check (offline / rate-limited)` appear? | When `STATUS.unavailable` is returned. That happens when the GitHub request throws, or when GitHub answers 403/429 (the `rate_limited` path). See `formatMessage()` in `release-integrity.js`. |
+| Product problem or test artefact? | See "Production or test artefact?" below. |
+
+The same-origin assets are not the cause. `marketing.js` with its `integrity`
+attribute, the same-origin `/static/client-manifest.json`, the CSS and the
+service worker produced no failed request in any run. The service worker does
+handle the `/verify` navigation (`/verify` is not in `isMarketingPage()`), as a
+network-first navigation through `networkFirstNavigate()` in `app/static/sw.js`.
+It does not intercept the GitHub request, though: the fetch handler returns
+early for cross-origin URLs (`!sameOrigin(url)`, `sw.js:522`), so
+`api.github.com` never passes through `respondWith()`. The failing request
+therefore comes straight from the page to the network, and the service worker
+cannot be the cause. The same-origin `/verify` navigation itself never failed
+in any run.
+
+## Reproduce
+
+From the repo root, with Playwright and Chromium installed:
+
+```
+python3 tests/repro_verify_reload.py                    # normal network
+python3 tests/repro_verify_reload.py --block-external   # simulates a sandbox without network
+```
+
+The script starts the app from this checkout through the existing
+`tests/e2e_signup_autounlock.py` helpers. It opens `/verify` and reloads it 4
+times. For each step it prints every `requestfailed` event (resource type, URL,
+failure), every console message, page errors, requests to `api.github.com` and
+the release status line. /verify is a public page, so no unlocked vault is
+needed.
+
+### Observed output
+
+With `--block-external` (all non-local requests aborted), on the first load and
+on each of the 4 reloads:
+
+```
+[reloadN] requestfailed fetch https://api.github.com/repos/deeperguard/Deeperguard/releases/tags/v0.65.132 -> net::ERR_FAILED
+[reloadN] console.error: Failed to load resource: net::ERR_FAILED
+[reloadN] status: Status: Could not check (offline / rate-limited)
+```
+
+This is exactly the signature the tester reported: one console line per
+reload, no script error, no failed same-origin request, plus the "Could not
+check" status line.
+
+With normal network access in this environment, the load did not fail:
+
+```
+[goto]    request https://api.github.com/repos/deeperguard/Deeperguard/releases/tags/v0.65.132
+[goto]    request https://api.github.com/repos/deeperguard/Deeperguard/releases/latest
+[goto]    status: Matches signed release v0.65.132
+[reload1..4] no GitHub request, no failure, status: Matches signed release v0.65.132
+```
+
+The result of a match is stored in `localStorage` (`notes_release_hash_check_v3`,
+TTL 6 h), so reloads then make no GitHub request at all. A result of
+`unavailable` is deliberately not treated as fresh (`cacheLooksFresh()`), so
+every reload retries GitHub and fails again while the network stays down.
+
+## Cause
+
+`release-integrity.js` on /verify asks the GitHub release API for the signed
+release. When that cross-origin request cannot complete (no network or DNS,
+a blocking proxy or extension, or a CORS-less error response such as one
+produced by a rate limiter), Chromium reports `net::ERR_FAILED` and logs it to
+the console. The code handles the failure and shows "Could not check
+(offline / rate-limited)". The console line is therefore the browser's own
+log of an error the page already handles, not an uncaught error.
+
+CSP is not involved. `connect-src` includes `https://api.github.com` on
+/verify (`_csp_allows_github_api()` in `app/auth.py`). A CSP block would be
+reported as a CSP violation, not `ERR_FAILED`. SRI is not involved either. An
+SRI mismatch is reported as an integrity error on the script or stylesheet,
+and `marketing.js` loaded every time.
+
+## What is not established
+
+The tester saw no error on the first open and an error on each reload. I did
+**not** reproduce that "first load clean, reloads failing" pattern. A match is
+cached, so reloads normally make no GitHub request. Two consistent
+explanations remain, and neither could be confirmed here:
+
+1. The first load did not use the cached match path (for example the tag or
+   local hash differed from the cache, or the cache was cleared) and
+   succeeded. A later check returned `unavailable` (network loss or
+   rate limit), and `unavailable` is never cached, so each following reload
+   retried and failed.
+2. The tester's browser or network blocks `api.github.com` intermittently.
+   The first load may have shown the error in a console that was not yet
+   open.
+
+The tester's step log does not contain the status line, which is why the two
+could not be told apart. Next time, capture the `requestfailed` URL in
+DevTools (Network, filter on `api.github.com`) and read
+`localStorage['notes_release_hash_check_v3']`.
+
+## Production or test artefact?
+
+- **Test artefact (partly):** the error requires `api.github.com` to be
+  unreachable. In a sandbox without external network it appears on every load
+  and reload (reproduced above). No same-origin resource, SRI check or CSP rule
+  is at fault.
+- **Product observation:** in production the same line appears for any visitor
+  whose network blocks or rate-limits `api.github.com`. It is harmless because
+  the page handles it. It is still noisy, and a rate-limited response that
+  lacks CORS headers shows up as `ERR_FAILED` rather than the 403/429 branch.
+  So it is a minor product wart, not a break in the integrity check.
+
+## Chosen solution (SRI and CSP unchanged)
+
+The cause is a test artefact plus a harmless browser log line, so no app code,
+`integrity` attribute or CSP header was changed. The page already handles the
+failed GitHub request: no uncaught error, and the status line honestly says
+`Could not check (offline / rate-limited)`.
+
+What changed is the test side:
+
+- `tests/e2e_verify_reload_console.py` opens `/verify`, reloads it 3 times
+  with all foreign requests blocked (sandbox without network) and fails on any
+  `requestfailed`, console error or page error that comes from the app's own
+  origin. Console errors are attributed by the URL of the failing resource, so
+  the browser's `ERR_FAILED` line for the blocked `api.github.com` request is
+  judged separately: it is tolerated only because the same run must show the
+  status line `Could not check`.
+- The test proves it can fail: it runs the same checker with a wrong
+  `integrity` hash on the `marketing.js` script tag and with `marketing.js`
+  aborted, and fails if either goes unnoticed.
+
+Not done: caching an `unavailable` result for a few minutes to avoid repeated
+GitHub requests. It would only reduce the log noise and changes the retry
+behaviour of About, so it was left out.

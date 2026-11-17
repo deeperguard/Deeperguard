@@ -125,6 +125,7 @@ function rowOf(markup, id) {
   assert.ok(markup.includes('name="mode" value="move" checked'), 'moving is the default choice');
   assert.ok(markup.includes('name="mode" value="delete"'), 'deleting the events is an explicit choice');
   assert.ok(markup.includes('aria-label="Calendar to move the events to"'));
+  assert.ok(markup.includes('selected>Privé (default)</option>'), 'dialog says the default calendar is the target');
   Cals._ui.deleting = '';
 
   assert.ok(!Cals.deleteCalendar(work, undefined).ok, 'no silent default: a mode is required');

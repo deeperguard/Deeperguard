@@ -333,6 +333,7 @@ class Round60ClientIntegrityTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("agenda calendars relock ok", proc.stdout)
 
     def test_agenda_calendars_ui_contract(self):
         proc = subprocess.run(
