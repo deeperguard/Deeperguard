@@ -6,7 +6,9 @@ note), Agenda and 2FA at desktop width. For every row of the control table in
 section 7.2 (read into ACTIONS below) the control must exist, have an
 accessible name and be reachable: visible, or visible after opening the listed
 visible menu/disclosure. Note-type specific actions are only checked on the
-note type they apply to.
+note type they apply to. A second account repeats the row check at 390x844
+against the Phone reach column, on the plain note and the PDF note (each
+opened by tapping its row in the list), Agenda and 2FA.
 
 Two kinds of row are checked by what they do, not only by being there:
   - the six quick-row buttons of the note info panel are phone-only. On
@@ -318,7 +320,7 @@ def click_visible(page, selector: str) -> None:
 
 
 CLOSERS = (
-    "#doc-close", "#note-options-close", "#search-filter-close", "#find-close",
+    "#doc-close", "#doc-immersive-close", "#note-options-close", "#search-filter-close", "#find-close",
     "#agenda-calendar-settings-close", "#note-row-menu-backdrop",
     '#btn-editor-overflow-desktop[aria-expanded="true"]', '#btn-editor-overflow-mobile[aria-expanded="true"]',
     '#tag-bar-toggle[aria-expanded="true"]', '#btn-nav-pin[aria-expanded="true"]',
@@ -327,12 +329,13 @@ CLOSERS = (
 
 def escape_all(page) -> None:
     """Close whatever an earlier check left open, through its own visible close control."""
-    backdrop = page.locator("#agenda-phone-menu-backdrop").locator("visible=true")
-    if backdrop.count():
-        # The menu panel covers the backdrop centre: click its bottom-left corner.
-        size = page.viewport_size
-        backdrop.first.click(position={"x": 5, "y": size["height"] - 5}, timeout=3000)
-        page.wait_for_timeout(250)
+    for selector in ("#agenda-phone-menu-backdrop", "#editor-toolbar-menu-backdrop"):
+        backdrop = page.locator(selector).locator("visible=true")
+        if backdrop.count():
+            # The menu panel covers the backdrop centre: click its bottom-left corner.
+            size = page.viewport_size
+            backdrop.first.click(position={"x": 5, "y": size["height"] - 5}, timeout=3000)
+            page.wait_for_timeout(250)
     for selector in CLOSERS:
         loc = page.locator(selector).locator("visible=true")
         if loc.count():
@@ -433,9 +436,10 @@ TOOLBAR_BUTTONS = [
     '[data-editor-proxy="btn-star"].editor-desktop-star', "#btn-download-note", "#btn-editor-overflow-desktop",
 ]
 TAB_ORDER = {
-    "plain": ["note-title", "note-folder-select", "tag-bar-toggle", "btn-prevent-edit", "note-editor-type",
-              "btn-find-desktop", "btn-ai-chat", "star", "btn-download-note", "btn-editor-overflow-desktop"],
-    "pdf": ["note-title", "note-folder-select", "tag-bar-toggle", "btn-prevent-edit",
+    "plain": ["note-title", "note-folder-select", "btn-move-note", "tag-bar-toggle", "btn-prevent-edit",
+              "note-editor-type", "btn-find-desktop", "btn-ai-chat", "star", "btn-download-note",
+              "btn-editor-overflow-desktop"],
+    "pdf": ["note-title", "note-folder-select", "btn-move-note", "tag-bar-toggle", "btn-prevent-edit",
             "btn-find-desktop", "btn-ai-chat", "star", "btn-download-note", "btn-editor-overflow-desktop"],
 }
 # Controls that do not apply to a note type must not be shown for it, neither
@@ -666,6 +670,15 @@ def phone_back_to_list(page) -> None:
             page.wait_for_timeout(400)
 
 
+def open_fresh_phone(page, title: str) -> None:
+    """Phone: back to the list, then open the note by tapping its list row (via the other note first)."""
+    for name in (PDF_TITLE if title == PLAIN_TITLE else PLAIN_TITLE, title):
+        escape_all(page)
+        phone_back_to_list(page)
+        reset_notes(page)
+        open_by_title(page, name)
+
+
 def check_quick_row_phone(page, report: Report) -> None:
     """Phone width: the quick row itself is shown in the note info panel and works."""
     for index, row in enumerate(quick_rows()):
@@ -827,6 +840,12 @@ def main() -> int:
             phone.evaluate(DISMISS_JS)
             phone.wait_for_timeout(500)
             check_quick_row_phone(phone, report)
+            phone.evaluate(SEED_JS, base64.b64encode(make_pdf()).decode("ascii"))
+            for where, title, scope in (("phone plain note", PLAIN_TITLE, "plain"),
+                                        ("phone PDF note", PDF_TITLE, "pdf")):
+                rows = [row for row in ACTIONS if row["applies"] in ("all", "notes", scope)]
+                check_rows(phone, report, where, rows, lambda title=title: open_fresh_phone(phone, title),
+                           reach="phone_reach")
             check_rows(phone, report, "phone agenda", [r for r in ACTIONS if r["applies"] in ("all", "agenda")],
                        tab_reset(phone, "#app-tab-agenda"), reach="phone_reach")
             seed_totp(phone)
