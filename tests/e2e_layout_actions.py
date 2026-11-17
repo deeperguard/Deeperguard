@@ -508,6 +508,30 @@ def check_quick_row_phone(page, report: Report) -> None:
         phone_back_to_list(page)
 
 
+SETTLED_JS = """(selector) => new Promise((resolve) => {
+  const el = document.querySelector(selector);
+  if (!el) return resolve(false);
+  let last = null;
+  const tick = () => requestAnimationFrame(() => {
+    const busy = el.getAnimations({ subtree: true })
+      .some((a) => a.playState === 'running' || a.playState === 'pending');
+    const opacity = getComputedStyle(el).opacity;
+    if (!busy && opacity === last) return resolve(true);
+    last = opacity;
+    tick();
+  });
+  tick();
+})"""
+
+ROW_LISTED_JS = """(title) => Array.from(document.querySelectorAll('.note-row .note-item'))
+  .some((item) => (item.innerText || '').includes(title))"""
+
+
+def settle(page, selector: str) -> None:
+    """Wait until the element's CSS transitions have finished, so its opacity is its resting value."""
+    page.wait_for_function(SETTLED_JS, arg=selector, timeout=5000)
+
+
 def check_row_delete(page, report: Report) -> None:
     """`.note-row-delete` per row kind: shown on hover/focus, or replaced by the row menu."""
     row = next(r for r in ACTIONS if r["selector"] == ".note-row-delete")
@@ -525,13 +549,14 @@ def check_row_delete(page, report: Report) -> None:
         if kind == "trashed":
             show_view(page, "trash")
         redraw_list(page)
+        page.wait_for_function(ROW_LISTED_JS, arg=titles[kind], timeout=10000)
         info = page.evaluate(ROW_JS, titles[kind])
         if not report.check(label + ": row is listed", bool(info), titles[kind]):
             continue
         report.check(label + ": present with an accessible name", info["hasDelete"] and bool(info["name"]), info)
         scope = '.note-row[data-layout-probe="1"]'
         page.locator(scope).hover()
-        page.wait_for_timeout(350)
+        settle(page, f"{scope} .note-row-delete")
         hovered = probe(page, f"{scope} .note-row-delete")
         shown = bool(hovered.get("visible")) and hovered.get("opacity", 0) > 0.5
         report.check(label + (": shown on hover" if expect["shown"] else ": not shown, also not on hover"),
@@ -539,7 +564,7 @@ def check_row_delete(page, report: Report) -> None:
         if expect["shown"]:
             page.mouse.move(1, 1)
             page.locator(f"{scope} .note-row-delete").focus()
-            page.wait_for_timeout(350)
+            settle(page, f"{scope} .note-row-delete")
             focused = probe(page, f"{scope} .note-row-delete")
             report.check(label + ": present and reachable by keyboard focus",
                          focused.get("present") and focused.get("visible"), focused)
@@ -625,7 +650,8 @@ def main() -> int:
     if report.failures:
         print(f"\n{len(report.failures)} of {report.checked} checks failed", file=sys.stderr)
         return 1
-    print(f"OK - {len(ACTIONS)} table rows, {report.checked} checks: every action is present, named and reachable")
+    print(f"OK - {len(ACTIONS)} table rows, {report.checked} checks: "
+          "every action is present, named, reachable and working")
     return 0
 
 
