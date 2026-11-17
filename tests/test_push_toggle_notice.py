@@ -7,6 +7,11 @@ from pathlib import Path
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "app" / "templates" / "app.html"
 
+# Claims that the server is fully blind to reminders. They are false: the server
+# learns each reminder's ID, due time and channel.
+BLINDNESS_CLAIMS = ("server knows nothing", "server sees nothing", "server cannot see",
+                    "server can’t see", "server weet niets")
+
 
 class _Collect(HTMLParser):
     def __init__(self):
@@ -45,6 +50,8 @@ class PushToggleNoticeTest(unittest.TestCase):
                        "removes its push address", "backups and logs"):
             self.assertIn(needed, notice)
         self.assertNotIn("15-minute window", notice)
+        for claim in BLINDNESS_CLAIMS:
+            self.assertNotIn(claim, notice.lower())
 
     def test_visibility_notice_states_window_for_email_and_exact_time_for_push(self):
         c = _Collect()
@@ -54,6 +61,8 @@ class PushToggleNoticeTest(unittest.TestCase):
         self.assertIn("Email reminders show only a 15-minute window", notice)
         self.assertIn("Push reminders show the exact time", notice)
         self.assertIn("only work while Deeperguard is open", notice)
+        for claim in BLINDNESS_CLAIMS:
+            self.assertNotIn(claim, notice.lower())
 
 
 if __name__ == "__main__":
