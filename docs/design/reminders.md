@@ -113,7 +113,7 @@ nieuwe velden zijn optioneel; onbekende velden blijven behouden bij bewerken (ou
 | `note` | `reminders` | nieuw: `[{rid, at, push}]`; `at` echte tijd, `push` bool, `rid` 16 willekeurige bytes (hex) alleen als `push` aan staat |
 | `agenda_task` | `due`, `due_time` | bestaat |
 | `agenda_task` | `reminder` | bestaat als `null`; wordt `{offsets: [minuten], time: "HH:MM", push: bool}` voor dateerbare taken |
-| `agenda_task` | `reminders_rids` | nieuw: de `rid`'s per voorkomen die naar de server zijn gegaan, zodat ze bij afvinken, verwijderen of wijzigen kunnen worden ingetrokken |
+| `agenda_task` | `reminder_windows` | gebouwd (M3): `[{id, window_start}]`, de `rid`'s en vensters die naar de server zijn gegaan, zodat ze bij afvinken, verwijderen of wijzigen kunnen worden ingetrokken |
 | `agenda_event` | `reminders`, `scheduled_reminder_ids` | bestaan |
 
 De koppeling `rid <-> item` staat alleen in het versleutelde item. Een nieuw veld raakt het sync-schema:

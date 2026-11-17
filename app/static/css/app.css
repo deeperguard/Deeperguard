@@ -12058,6 +12058,11 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .agenda-task-form-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .agenda-task-form-row > span { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 140px; }
 .agenda-task-form input[type="text"], .agenda-task-form input[type="date"], .agenda-task-form input[type="time"], .agenda-task-form textarea { min-height: 40px; }
+.agenda-task-reminders { border: 1px solid var(--border, rgba(127,127,127,.35)); border-radius: 8px; padding: 8px 12px; margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.agenda-task-reminders legend { padding: 0 4px; }
+.agenda-task-reminder-opt { display: flex; align-items: center; justify-content: flex-start; gap: 8px; min-height: 44px; }
+.agenda-task-reminder-opt input { width: auto; flex: none; margin: 0; }
+.agenda-task-reminders p { margin: 4px 0 0; font-size: .85em; }
 .agenda-task-form-done { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .agenda-task-form-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
 .agenda-task-form-spacer { flex: 1; }
