@@ -28,8 +28,17 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+_APP_ENV_NAMES = {"DROPBOX_APP_KEY", "GOOGLE_OAUTH_CLIENT_ID", "SOURCE_DATE_EPOCH"}
+
+
 def start_server(root: Path, port: int, extra_env: dict | None = None):
-    env = dict(os.environ)
+    # Do not inherit app settings from the parent process: other tests in the same
+    # run set NOTES_*/STRIPE_* variables in os.environ and would leak into this server.
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith(("NOTES_", "STRIPE_")) and k not in _APP_ENV_NAMES
+    }
     env.update(extra_env or {})
     env.update(
         NOTES_ROOT=str(root),
@@ -88,7 +97,7 @@ with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
-    for _ in range(80):
+    for _ in range(240):  # up to ~60 s: importing the app is slow on a loaded build host
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=0.5):
                 return proc
