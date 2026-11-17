@@ -1817,19 +1817,8 @@
     const header = phone ? renderPhoneHeader(range) : renderDesktopSide() + renderDesktopHeader(range);
     rootEl.innerHTML = (
       header
-      + (global.NotesAgendaCalendars ? global.NotesAgendaCalendars.legendHtml() : '')
       + `<div class="agenda-body agenda-view-${esc(state.view)}">${main}</div>`
     );
-    rootEl.querySelectorAll('[data-agenda-legend]').forEach((cb) => {
-      cb.addEventListener('change', () => {
-        const id = cb.getAttribute('data-agenda-legend');
-        if (global.NotesAgendaCalendars.setCalendarVisible(id, cb.checked)) {
-          render();
-          rootEl.querySelector(`[data-agenda-legend="${id.replace(/["\\]/g, '\\$&')}"]`)?.focus();
-        }
-      });
-    });
-
     const prev = rootEl.querySelector('#agenda-prev');
     const next = rootEl.querySelector('#agenda-next');
     const todayB = rootEl.querySelector('#agenda-today');

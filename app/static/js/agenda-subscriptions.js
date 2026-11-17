@@ -354,6 +354,7 @@
   }
 
   function rerenderAgenda() {
+    if (global.NotesAgendaCalendars && typeof global.NotesAgendaCalendars.renderSubscriptions === 'function') global.NotesAgendaCalendars.renderSubscriptions();
     if (global.NotesAgenda && typeof global.NotesAgenda.render === 'function') global.NotesAgenda.render();
   }
 

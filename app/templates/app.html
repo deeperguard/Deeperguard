@@ -1526,18 +1526,19 @@
           <button type="button" class="btn icon" id="agenda-calendar-settings-close" aria-label="Close calendar settings">×</button>
         </header>
         <div class="agenda-calendar-settings-body">
+          <section class="agenda-calendars" aria-labelledby="agenda-calendars-heading">
+            <h3 id="agenda-calendars-heading" class="section-label">Calendars</h3>
+            <p class="settings-hint muted">Untick a calendar to hide its events. Names and colors stay encrypted in your vault.</p>
+            <div id="agenda-calendars-list"></div>
+            <ul id="agenda-calendars-subs" class="agenda-cal-list" aria-label="Subscribed calendars"></ul>
+            <p id="agenda-calendars-status" class="sr-only" aria-live="polite"></p>
+          </section>
           <p class="settings-hint">Import or export calendar files on this device only. If Agenda looks out of date after an update, close the tab and open Deeperguard again (the offline worker fetches a fresh shell).</p>
           <p class="settings-hint">Import supports .ics from other apps. Events stay encrypted in your vault; only https links are used as join targets.</p>
           <section class="agenda-backup" aria-labelledby="agenda-backup-heading">
             <h3 id="agenda-backup-heading" class="section-label">Agenda backup</h3>
             <p class="settings-hint muted">Before every sync merge this device keeps an encrypted copy of your agenda (last 3). Restoring puts the newest copy back and syncs it.</p>
             <button type="button" class="btn" id="agenda-backup-restore">Restore last local agenda backup</button>
-          </section>
-          <section class="agenda-calendars" aria-labelledby="agenda-calendars-heading">
-            <h3 id="agenda-calendars-heading" class="section-label">My calendars</h3>
-            <p class="settings-hint muted">Untick a calendar to hide its events. Names and colors stay encrypted in your vault.</p>
-            <div id="agenda-calendars-list"></div>
-            <p id="agenda-calendars-status" class="sr-only" aria-live="polite"></p>
           </section>
           <fieldset class="agenda-task-prefs">
             <legend class="section-label">Tasks</legend>
@@ -2424,7 +2425,8 @@
                 <button type="button" id="note-reminder-clear" class="btn ghost sm">Clear</button>
               </span>
             </div>
-            <p class="note-warn-hint" id="note-reminder-hint">Saved inside the encrypted note. The server never sees the time. Nothing is sent or shown yet.</p>
+            <label class="note-reminder-push"><input type="checkbox" id="note-reminder-push" aria-describedby="note-reminder-hint"> Also remind me when the app is closed (Pro)</label>
+            <p class="note-warn-hint" id="note-reminder-hint">The time is saved inside the encrypted note. If you tick the box, the server learns a 15-minute window and an anonymous id, never the note or its title, and the notification can come up to 15 minutes early. Needs push turned on in Calendar settings.</p>
           </dd>
         </div>
       </dl>
@@ -3010,6 +3012,7 @@
   {{ asset_script('js/agenda-local-reminders.js') }}
   {{ asset_script('js/agenda-tasks.js') }}
   {{ asset_script('js/agenda-task-reminders.js') }}
+  {{ asset_script('js/note-reminders.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/totp.js') }}
   {{ asset_script('js/totp-icons.js') }}
