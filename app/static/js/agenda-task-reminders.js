@@ -222,6 +222,8 @@
     DEFAULT_TIME,
     plannedWindows,
     deviceEndpoint,
+    randomId,
+    withdraw,
     syncTaskReminders,
     cancelTaskReminders,
     flushPending,

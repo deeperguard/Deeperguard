@@ -17732,6 +17732,8 @@
     if (reminderInput) {
       reminderInput.value = toDatetimeLocalValue(noteReminderAt(note));
       document.getElementById('note-reminder-field')?.classList.toggle('is-empty', !reminderInput.value);
+      const pushBox = document.getElementById('note-reminder-push');
+      if (pushBox) pushBox.checked = !!(Array.isArray(note.content.reminders) && note.content.reminders[0]?.push);
     }
     const conflictRow = document.getElementById('note-info-conflict-row');
     const conflictHint = document.getElementById('note-info-conflict-hint');
@@ -17829,9 +17831,14 @@
     return Number.isFinite(ms) && ms > 0;
   }
 
+  // Best effort: the stored window id stays on the note, so the next sync retries the withdrawal.
+  function noteReminderWithdrawFailed() {}
+
   function cancelNoteReminder(uuid, { note } = {}) {
     if (!uuid) return;
     const target = note || NotesStore.get(uuid);
+    // Closed-app push window of the private reminder (random id only; no note id goes to the server).
+    if (target?.content) window.NotesNoteReminders?.cancelNoteReminders(target.content).catch(noteReminderWithdrawFailed);
     if (target && !noteHasReminder(target)) return;
     queueReminderOp(uuid, 'cancel');
     applyReminderOp(uuid, 'cancel')
@@ -17840,6 +17847,7 @@
   }
 
   function restoreNoteReminder(note) {
+    if (note?.uuid) syncNotePushReminder(note.uuid);
     if (!note?.uuid || !noteHasReminder(note)) return;
     queueReminderOp(note.uuid, 'restore');
     applyReminderOp(note.uuid, 'restore')
@@ -17909,8 +17917,19 @@
     renderNotes();
   }
 
+  function syncNotePushReminder(uuid) {
+    const NR = window.NotesNoteReminders;
+    if (!NR || !uuid) return;
+    NR.syncNoteReminders(uuid).then(() => updateNoteInfoPanel(NotesStore.get(currentId))).catch((err) => {
+      toast(err?.code === 'no_device'
+        ? 'Reminder saved. Turn on push on this device in Calendar settings to get it when the app is closed.'
+        : 'The closed-app reminder could not be updated yet. It is retried when you save it again.', true);
+    });
+  }
+
   // The reminder lives only in the note's encrypted content; unlike the email
-  // warning above, nothing is sent to /api/reminders.
+  // warning above, nothing about the note is sent to /api/reminders. With "push" on, only a
+  // random id and a 15-minute window go to the server (note-reminders.js).
   function saveNoteReminder({ clear = false } = {}) {
     if (!currentId) return;
     const note = NotesStore.get(currentId);
@@ -17921,14 +17940,44 @@
       toast('Choose a date and time');
       return;
     }
+    const push = !clear && !!document.getElementById('note-reminder-push')?.checked;
     const content = { ...note.content };
-    if (iso) content.reminders = [{ at: iso, push: false }];
-    else delete content.reminders;
+    if (iso) {
+      // Keep the id of the window already on the server so the sync can withdraw or move it.
+      const prev = Array.isArray(content.reminders) ? content.reminders[0] : null;
+      content.reminders = [{ at: iso, push, ...(prev?.rid ? { rid: prev.rid, window_start: prev.window_start } : {}) }];
+    } else {
+      window.NotesNoteReminders?.cancelNoteReminders(note.content).catch(noteReminderWithdrawFailed);
+      delete content.reminders;
+    }
     NotesStore.upsert(currentId, content);
+    if (iso) syncNotePushReminder(currentId);
     toast(iso ? 'Reminder saved' : 'Reminder cleared');
     updateNoteInfoPanel(NotesStore.get(currentId));
     renderNotes();
   }
+
+  /** A closed-app reminder notification was opened: find its note locally and open it. */
+  function openDueReminderNote() {
+    const NR = window.NotesNoteReminders;
+    if (!NR || !NotesStore.isUnlocked?.()) return false;
+    const uuid = NR.findDueNote(NotesStore.listNotes(), Date.now());
+    if (!uuid) return false;
+    NR.markDelivered(uuid);
+    openNote(uuid);
+    return true;
+  }
+
+  let dueReminderHashPending = location.hash === '#due-reminder';
+  function checkDueReminderHash() {
+    if (!dueReminderHashPending || !NotesStore.isUnlocked?.()) return;
+    dueReminderHashPending = false;
+    history.replaceState(null, '', location.pathname + location.search);
+    openDueReminderNote();
+  }
+  navigator.serviceWorker?.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'dg-open-due-reminder') openDueReminderNote();
+  });
 
   function toggleNoteProtection() {
     if (!currentId) return;
@@ -26157,6 +26206,7 @@ async function showSettings() {
           refreshTotpVault({ migrate: true });
           if (!currentId) openPendingDeepLink({ final: true });
           reconcileReminderSideEffects();
+          checkDueReminderHash();
           // Round 72: resolve true so online-recovery can tell success from abort.
           return true;
         })
