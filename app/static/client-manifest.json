@@ -98,10 +98,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1058500,
-      "sha256": "1374636cadc6a3e4945f516bb844d40ab6172fd23b909a00fa03f4a8cf2ab201",
-      "sri": "sha384-Z74mjaK9Kx3WmGcT/O/Av5kW500K2dx+eToEuOA8ynVHlq7E9LyCfwW2bgxhDF/a",
-      "url": "/static/js/app.1374636cadc6a3e4.js"
+      "bytes": 1059125,
+      "sha256": "ddd1652f11ab65905b0230543f8085da055415624c1b575bb1b06f88e7be8057",
+      "sri": "sha384-fekJJ6mx6vdBOjSY0VBK9UUwhbCj1jjIlZwRSX7XNMvlylWMWGJV9a7C5vG0ulcj",
+      "url": "/static/js/app.ddd1652f11ab6590.js"
     },
     "js/auth-pages.js": {
       "bytes": 41606,
@@ -597,6 +597,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "dfbd870bc2c88d0dfde3a006c8cf403322a6cfb6fccbb738f6b7cab0ed26b2b7",
+  "manifest_sha256": "2433b75bf74a1bfcabf29b0f3eb7387844a29da54da02a025b50efab41cfa5c9",
   "version": 1
 }
