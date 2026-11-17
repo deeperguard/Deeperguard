@@ -2176,6 +2176,17 @@ const NotesStore = (() => {
     return removed;
   }
 
+  /** Cancel the server reminders of rows removed by a fold, as the refresh does for pruned rows. */
+  function cancelRemindersOfRows(removed) {
+    const R = globalThis.NotesAgendaReminders;
+    if (!R || typeof R.cancelEventReminders !== 'function') return;
+    (removed || []).forEach(({ id, row }) => {
+      try {
+        Promise.resolve(R.cancelEventReminders(id, row)).catch(() => {});
+      } catch (err) { /* best effort */ }
+    });
+  }
+
   /**
    * Merge two agenda packs event by event (sync conflict between devices).
    * - An event only one side has is kept, unless the other side deleted it later.
@@ -2210,7 +2221,7 @@ const NotesStore = (() => {
     for (const [id, at] of Object.entries(deleted)) {
       if (nowMs - agendaStampMs(at) > AGENDA_TOMBSTONE_TTL_MS) delete deleted[id];
     }
-    foldSubscriptionDuplicates(events, deleted, nowMs);
+    cancelRemindersOfRows(foldSubscriptionDuplicates(events, deleted, nowMs));
     const updated = agendaStampMs(local.updated_at) >= agendaStampMs(remote.updated_at)
       ? local.updated_at
       : remote.updated_at;

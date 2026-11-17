@@ -135,6 +135,21 @@ function titles() {
   h.stopPushTimer();
   assert.strictEqual(NotesStore.listAgendaEvents().find((e) => e.id === lunch.id).updated_at, before);
 
+  // --- merge folds subscription doubles and cancels their reminders ----------
+  const cancelled = [];
+  globalThis.NotesAgendaReminders = { cancelEventReminders: async (id, row) => { cancelled.push([id, row.title]); } };
+  const subEv = (title, ms) => ({ ...ev(title, ms), subscription_id: 'sub1', ical_uid: 'u1', scheduled_reminder_ids: [{ id: 'r-' + title }] });
+  const mergedSub = NotesStore.mergeAgendaPacks(
+    { type: 'agenda_pack', events: { 'dup-a': subEv('A', 1000) }, deleted_events: {} },
+    { type: 'agenda_pack', events: { 'dup-b': subEv('B', 2000) }, deleted_events: {} },
+    5000,
+  );
+  assert.strictEqual(Object.keys(mergedSub.events).length, 1, 'doubles fold to one row');
+  assert.deepStrictEqual(Object.keys(mergedSub.deleted_events).length, 1, 'removed row is tombstoned');
+  assert.strictEqual(cancelled.length, 1, 'reminders of the removed row are cancelled');
+  assert.ok(!(cancelled[0][0] in mergedSub.events));
+  delete globalThis.NotesAgendaReminders;
+
   console.log('sync agenda merge ok');
   process.exit(0);
 })().catch((err) => {
