@@ -144,6 +144,30 @@ def main() -> int:
             page.keyboard.press("Tab")
             assert not page.evaluate("() => !!document.activeElement.closest('#folder-list')"), "tree is one tab stop"
 
+            # --- the context menu closed from the keyboard drops its outside-click listener ---
+            item("Work").focus()
+            page.evaluate(
+                """() => {
+                  window.pointerdownListeners = { added: 0, removed: 0 };
+                  const add = document.addEventListener.bind(document);
+                  const remove = document.removeEventListener.bind(document);
+                  document.addEventListener = (type, fn, capture) => {
+                    if (type === 'pointerdown') window.pointerdownListeners.added += 1;
+                    return add(type, fn, capture);
+                  };
+                  document.removeEventListener = (type, fn, capture) => {
+                    if (type === 'pointerdown') window.pointerdownListeners.removed += 1;
+                    return remove(type, fn, capture);
+                  };
+                }"""
+            )
+            page.keyboard.press("Shift+F10")
+            page.get_by_role("menuitem", name="Rename").wait_for(state="visible", timeout=10000)
+            page.wait_for_function("() => window.pointerdownListeners.added === 1")  # registered after the open
+            page.keyboard.press("Tab")
+            assert page.locator("#folder-menu").count() == 0
+            assert page.evaluate("() => window.pointerdownListeners") == {"added": 1, "removed": 1}, page.evaluate("() => window.pointerdownListeners")
+
             # --- rename with F2 ---
             item("Work").focus()
             page.keyboard.press("F2")

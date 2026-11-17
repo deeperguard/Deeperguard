@@ -9812,10 +9812,14 @@
     input.focus();
   }
 
+  let folderMenuAway = null;
+
   function closeFolderMenu(restoreFocus) {
     const menu = document.getElementById('folder-menu');
     if (!menu) return;
     const owner = menu.dataset.owner;
+    if (folderMenuAway) document.removeEventListener('pointerdown', folderMenuAway, true);
+    folderMenuAway = null;
     menu.remove();
     if (restoreFocus && owner) focusFolderItem(owner);
   }
@@ -9851,11 +9855,11 @@
       folderAction(uuid, btn.dataset.act);
     });
     setTimeout(() => {
-      const away = (event) => {
-        if (!document.getElementById('folder-menu')) { document.removeEventListener('pointerdown', away, true); return; }
-        if (!menu.contains(event.target)) { document.removeEventListener('pointerdown', away, true); closeFolderMenu(false); }
+      if (!menu.isConnected) return;
+      folderMenuAway = (event) => {
+        if (!menu.contains(event.target)) closeFolderMenu(false);
       };
-      document.addEventListener('pointerdown', away, true);
+      document.addEventListener('pointerdown', folderMenuAway, true);
     }, 0);
   }
 
