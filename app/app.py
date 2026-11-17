@@ -36,7 +36,7 @@ from uploads import ensure_user_upload_dir, user_upload_dir
 import promo as notes_promo
 from backup_mail import send_user_backup
 from admin_notify import log_signup_notify_config, notify_new_user_signup
-from mailer import send_contact_email
+from mailer import send_contact_email, send_plain_email
 from backup_pcloud import pcloud_credentials_configured, save_pcloud_settings, sync_user_backup
 from passwords import hash_password, new_kdf_salt, verify_password
 from srp_auth import (
@@ -2428,6 +2428,78 @@ def api_account_vault_keys_recovery_delete():
     auth.consume_vault_keys_token()
     db.touch_auth_security(uid)
     return _vault_keys_json({"ok": True, "key_rev": key_rev, "key_id": key_id})
+
+
+def _vault_recovery_locked(retry_after: int):
+    resp = _vault_keys_json({"error": "recovery locked", "retry_after": int(retry_after)}, 429)
+    resp.headers["Retry-After"] = str(int(retry_after))
+    return resp
+
+
+def _vault_recovery_mail(user, subject: str, text: str) -> None:
+    """Best-effort notice; it never contains a key, token or proof."""
+    try:
+        send_plain_email(str(user["email"]), subject, text)
+    except Exception:
+        log.exception("vault recovery notice mail failed")
+
+
+@app.post("/api/account/vault-keys/recover/start")
+def api_account_vault_keys_recover_start():
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    if _auth_rate_limited("vault-recovery-key", str(user["email"] or "")):
+        return jsonify({"error": "too many attempts"}), 429
+    status, data = db.get_recovery_start(int(user["id"]))
+    if status == "locked":
+        return _vault_recovery_locked(data["retry_after"])
+    if status != "ok":
+        return _vault_keys_write_conflict(status, 0, "")
+    return _vault_keys_json(data)
+
+
+@app.post("/api/account/vault-keys/recover/commit")
+def api_account_vault_keys_recover_commit():
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    if _auth_rate_limited("vault-recovery-key", str(user["email"] or "")):
+        return jsonify({"error": "too many attempts"}), 429
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid body"}), 400
+    fields, problem = vault_keys.parse_recovery_commit(body)
+    if fields is None:
+        return jsonify({"error": problem}), 400
+    uid = int(user["id"])
+    status, data = db.commit_vault_recovery(
+        uid, keep_session_token=auth.current_session_token(), **fields,
+    )
+    if status == "locked":
+        return _vault_recovery_locked(data["retry_after"])
+    if status == "bad_proof":
+        if data.get("locked_now"):
+            _vault_recovery_mail(
+                user, "Recovery key locked",
+                "Too many wrong recovery key attempts on your account. Recovery is locked for a while. "
+                "If this was not you, change your account security settings.",
+            )
+            return _vault_recovery_locked(data["retry_after"])
+        return _vault_keys_json({"error": "invalid proof"}, 403)
+    if status != "ok":
+        return _vault_keys_write_conflict(status, int(data.get("key_rev", 0)), str(data.get("key_id", "")))
+    _vault_recovery_mail(
+        user, "Your recovery key was used",
+        "The recovery key of your account was used to set a new vault password. "
+        "All other sessions were signed out and a new recovery key replaced the old one. "
+        "If this was not you, secure your account now.",
+    )
+    return _vault_keys_json({"ok": True, **data})
 
 
 @app.post("/api/account/vault-kdf")

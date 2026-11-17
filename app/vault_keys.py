@@ -13,6 +13,9 @@ from typing import Any
 
 WRAP_VERSION = 1
 MAX_WRAP_BYTES = 4096
+RECOVERY_MAX_FAILED = 5
+RECOVERY_LOCK_BASE_SECONDS = 900
+RECOVERY_LOCK_MAX_SECONDS = 86400
 
 _KEY_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _PROOF_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -20,6 +23,12 @@ RECOVERY_PUT_FIELDS = frozenset(
     {"expected_key_rev", "key_id", "wrap_version", "recovery_salt", "wrap", "proof_hash", "token", "csrf_token"}
 )
 RECOVERY_DELETE_FIELDS = frozenset({"expected_key_rev", "token", "csrf_token"})
+RECOVERY_COMMIT_FIELDS = frozenset(
+    {"proof", "expected_key_rev", "from_key_id", "to_key_id", "srp_salt", "srp_verifier",
+     "srp_kdf_version", "new_recovery", "csrf_token"}
+)
+_NEW_RECOVERY_FIELDS = frozenset({"recovery_salt", "wrap", "wrap_version", "proof_hash"})
+_HEX_RE = re.compile(r"^[0-9a-f]+$")
 _WRAP_FIELDS = frozenset({"v", "iv", "data"})
 
 
@@ -90,4 +99,41 @@ def parse_recovery_put(body: dict) -> tuple[dict | None, str]:
         "recovery_salt": body["recovery_salt"],
         "wrap_json": wrap_json,
         "proof_hash": proof_hash,
+    }, ""
+
+
+def lock_seconds(level: int) -> int:
+    """Lock length after the 5th failure at the given lock level (3.3): 900 * 2^level, capped."""
+    return min(RECOVERY_LOCK_MAX_SECONDS, RECOVERY_LOCK_BASE_SECONDS * (2 ** max(0, min(int(level), 16))))
+
+
+def parse_recovery_commit(body: dict) -> tuple[dict | None, str]:
+    """Validate the body of recover/commit. `proof` stays a hex string of 32 raw bytes."""
+    extra = unexpected_fields(body, RECOVERY_COMMIT_FIELDS)
+    if extra:
+        return None, "unexpected field: " + ", ".join(extra)
+    proof = body.get("proof")
+    if not isinstance(proof, str) or not re.fullmatch(r"[0-9a-f]{64}", proof):
+        return None, "invalid proof"
+    from_key_id, to_key_id = body.get("from_key_id"), body.get("to_key_id")
+    if not valid_key_id(from_key_id) or not valid_key_id(to_key_id):
+        return None, "invalid key_id"
+    srp_salt, srp_verifier = body.get("srp_salt"), body.get("srp_verifier")
+    for value in (srp_salt, srp_verifier):
+        if not isinstance(value, str) or not _HEX_RE.match(value) or len(value) > 1024:
+            return None, "invalid srp verifier"
+    if body.get("srp_kdf_version") != 2:
+        return None, "srp_kdf_version 2 required"
+    new = body.get("new_recovery")
+    if not isinstance(new, dict) or set(new) != _NEW_RECOVERY_FIELDS:
+        return None, "invalid new_recovery"
+    fields, problem = parse_recovery_put({
+        "expected_key_rev": body.get("expected_key_rev"), "key_id": to_key_id, **new,
+    })
+    if fields is None:
+        return None, problem
+    fields.pop("key_id")
+    return {
+        **fields, "proof": proof, "from_key_id": from_key_id, "to_key_id": to_key_id,
+        "srp_salt": srp_salt, "srp_verifier": srp_verifier,
     }, ""
