@@ -1,7 +1,7 @@
 /**
  * Templates UI flow: "Save as template" from the note menu, the "New from
  * template" dialog (arrow keys, Escape, title field, Create), built-ins,
- * the Templates view with management empty state, and the protected-note
+ * "Manage templates" opened from the dialog, and the protected-note
  * refusal. Runs the real template section of app.js against a DOM stub and
  * the real NotesStore.
  */
@@ -19,7 +19,8 @@ const { NotesStore } = h;
 
 // --- markup ---
 for (const id of ['template-dialog', 'template-dialog-list', 'template-dialog-name', 'template-dialog-create',
-  'template-dialog-cancel', 'template-dialog-manage', 'btn-new-from-template', 'btn-save-template']) {
+  'template-dialog-cancel', 'template-dialog-manage', 'btn-new-from-template', 'btn-save-template',
+  'template-manager', 'template-manager-list', 'template-manager-close']) {
   assert.ok(appHtml.includes(`id="${id}"`), `missing #${id}`);
 }
 assert.ok(/id="template-dialog"[^>]*role="dialog"[^>]*aria-modal="true"/.test(appHtml));
@@ -28,9 +29,6 @@ assert.ok(appHtml.includes('{% raw %}{{date}}'), 'variable names in the help tex
 assert.ok(appHtml.indexOf("js/templates.js") < appHtml.indexOf("js/app.js')"), 'templates.js loads before app.js');
 assert.ok(appJs.includes("getElementById('btn-new-from-template')?.addEventListener('click', () => openTemplateDialog())"));
 assert.ok(appJs.includes("getElementById('btn-save-template')?.addEventListener('click', () => saveCurrentAsTemplate())"));
-assert.ok(appJs.includes("title: 'No templates yet'") && appJs.includes('move it to Trash to delete it'), 'Templates view explains management');
-assert.ok(appJs.includes('data-empty-template'), 'Templates empty view offers New from template');
-assert.ok(appJs.includes("templates: 'Templates'"), 'list title for the Templates view');
 
 // --- DOM stub ---
 class El {
@@ -52,7 +50,7 @@ const doc = {
 const $ = (id) => doc.getElementById(id);
 
 // --- run the real template section of app.js ---
-const start = appJs.indexOf('  // --- Templates (spec section 2)');
+const start = appJs.indexOf('  // --- Templates (design M3)');
 const end = appJs.indexOf('  function createTag(title,', start);
 assert.ok(start > 0 && end > start, 'template section found in app.js');
 const section = appJs.slice(start, end);
@@ -70,6 +68,7 @@ const ctx = {
   renderTags() {},
   openNote: (id) => { log.opened.push(id); },
   setFilter: (name) => { log.filters.push(name); ctx.currentFilter = name; },
+  confirmAction: async () => true,
 };
 vm.createContext(ctx);
 vm.runInContext(`${section}\nthis.api = { saveCurrentAsTemplate, openTemplateDialog, get dialog() { return templateDialog; } };`, ctx);
@@ -87,7 +86,7 @@ const ui = ctx.api;
   ctx.currentId = noteId;
     const tplId = ui.saveCurrentAsTemplate();
   assert.ok(tplId, 'template created');
-  assert.strictEqual(NotesStore.get(tplId).content.is_template, true);
+  assert.strictEqual(NotesStore.get(tplId).content.type, 'template');
   assert.strictEqual(log.toasts.pop().msg, 'Saved as template');
 
   // 2. Protected note is refused, nothing created
@@ -152,8 +151,8 @@ const ui = ctx.api;
   assert.strictEqual(made.is_template, false);
   assert.deepStrictEqual(made.tags, [label], 'labels carried over');
 
-  // 5. Built-in via Enter, from the Templates view: switches back to All notes
-  ctx.currentFilter = 'templates';
+  // 5. Built-in via Enter, from Trash: switches back to All notes
+  ctx.currentFilter = 'trash';
   ui.openTemplateDialog();
   dialogEl.fire('keydown', { key: 'ArrowDown' }); // Meeting note
   $('template-dialog-name').value = 'Kickoff';
@@ -165,20 +164,23 @@ const ui = ctx.api;
   assert.strictEqual(log.filters.pop(), 'all');
   assert.strictEqual(T.listTemplates(NotesStore).length, 1, 'built-ins are not stored as templates');
 
-  // 6. Manage templates -> Templates view; empty-state hint when no user templates
+  // 6. Manage templates opens the manager dialog with the user's templates
   ui.openTemplateDialog();
   $('template-dialog-manage').fire('click');
   assert.strictEqual(dialogEl.hidden, true);
-  assert.strictEqual(log.filters.pop(), 'templates');
-  // Rename/edit = normal note edit; trash hides it from the dialog
-  NotesStore.upsert(tplId, { ...NotesStore.get(tplId).content, title: 'Daily standup', content: 'Edited {{title}}' });
+  assert.strictEqual($('template-manager').hidden, false, 'manager visible');
+  assert.ok($('template-manager-list').innerHTML.includes('Standup') && $('template-manager-list').innerHTML.includes('data-tpl-action="delete"'));
+  $('template-manager-close').fire('click');
+  assert.strictEqual($('template-manager').hidden, true);
+  // Renamed template is offered under its new name; a deleted one is not
+  T.updateTemplate(NotesStore, tplId, { title: 'Daily standup', body: 'Edited {{title}}' });
   ui.openTemplateDialog();
   assert.ok($('template-dialog-list').innerHTML.includes('Daily standup'), 'renamed template listed');
   $('template-dialog-cancel').fire('click');
-  NotesStore.upsert(tplId, { ...NotesStore.get(tplId).content, trashed: true });
+  T.deleteTemplate(NotesStore, tplId);
   ui.openTemplateDialog();
   html = $('template-dialog-list').innerHTML;
-  assert.ok(!html.includes('Daily standup'), 'trashed template not offered');
+  assert.ok(!html.includes('Daily standup'), 'deleted template not offered');
   assert.ok(html.includes('No templates of your own yet') && html.includes('Save as template'), 'empty-state help');
   dialogEl.fire('click', { target: dialogEl });
   assert.strictEqual(dialogEl.hidden, true, 'backdrop click closes');

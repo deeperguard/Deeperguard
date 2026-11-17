@@ -317,6 +317,16 @@
       </div>
     </div>
   </div>
+  <div id="template-manager" class="template-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="template-manager-title" aria-describedby="template-manager-help">
+    <div class="template-dialog-card">
+      <h2 id="template-manager-title">Manage templates</h2>
+      <p id="template-manager-help" class="template-dialog-help">Names and text are encrypted on this device before sync; the server cannot read them. Deleting a template does not change notes made from it.</p>
+      <div id="template-manager-list"></div>
+      <div class="template-dialog-actions">
+        <button type="button" id="template-manager-close" class="btn ghost sm">Close</button>
+      </div>
+    </div>
+  </div>
   <div id="quick-capture" class="template-dialog quick-capture" hidden role="dialog" aria-modal="true" aria-labelledby="quick-capture-title">
     <div class="template-dialog-card">
       <h2 id="quick-capture-title">Quick capture</h2>
@@ -827,7 +837,7 @@
             <button type="button" class="filter" data-filter="pinned" title="Starred" aria-label="Starred"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="12 3 15 9 21 10 16.5 14.5 18 21 12 17.5 6 21 7.5 14.5 3 10 9 9"/></svg><span>Starred</span></button>
             <button type="button" class="filter" data-filter="archived" title="Archived" aria-label="Archived"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Archived</span></button>
             <button type="button" class="filter" data-filter="trash" title="Trash" aria-label="Trash"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5h6v2M8 7l1 13h6l1-13"/></svg><span>Trash</span></button>
-            <button type="button" class="filter" data-filter="templates" title="Templates" aria-label="Templates"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2"/></svg><span>Templates</span></button>
+            <button type="button" class="filter" data-filter="templates" title="Manage templates" aria-label="Templates" aria-haspopup="dialog"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2"/></svg><span>Templates</span></button>
             <button type="button" class="filter" data-filter="untagged" title="Untagged" aria-label="Untagged"><svg class="filter-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12l8-8h7v7l-8 8z"/><circle cx="16" cy="8" r="1" fill="currentColor"/></svg><span>Untagged</span></button>
           </nav>
         </details>

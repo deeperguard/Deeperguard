@@ -5186,6 +5186,25 @@ const NotesStore = (() => {
     return true;
   }
 
+  // Encrypted `type: 'template'` items (templates.js). Not notes: they never
+  // show up in note lists, search, counts or backlinks.
+  function listTemplateItems() {
+    return [...state.items.values()].filter((i) => i.content?.type === 'template' && !i.deleted);
+  }
+
+  function noteHasAttachments(noteId) {
+    return attachmentsForNote(noteId).some((att) => !att.deleted);
+  }
+
+  // Turn a legacy template note into a template item under the same uuid.
+  function replaceWithTemplate(uuid, content) {
+    const item = get(uuid);
+    if (!item || item.deleted || item.content?.type !== 'note' || content?.type !== 'template') return false;
+    upsert(uuid, content, { touchUpdatedAt: false, touchSyncOnly: true });
+    if (typeof NotesSearch !== 'undefined' && NotesSearch.removeFromIndex) NotesSearch.removeFromIndex(uuid);
+    return true;
+  }
+
   function listTags() {
     return [...state.items.values()]
       .filter((i) => i.content?.type === 'tag' && !i.deleted)
@@ -7344,6 +7363,9 @@ const NotesStore = (() => {
     moveTag,
     migrateLabels,
     repairLabels,
+    listTemplateItems,
+    noteHasAttachments,
+    replaceWithTemplate,
     setTagColor,
     deleteTag,
     mergeDuplicateTags,

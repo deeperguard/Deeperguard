@@ -3211,7 +3211,6 @@
     documents: 'Files',
     archived: 'Archived',
     trash: 'Trash',
-    templates: 'Templates',
   };
 
   function kindIconSvg(name) {
@@ -4310,6 +4309,9 @@
     hideFindBar();
     hideTagSuggest();
     closeDocPreview();
+    // Both template dialogs show template names and text.
+    templateDialog?.close();
+    closeTemplateManager();
     ui.shell.classList.remove('editor-open');
     currentId = null;
     listSelectionId = null;
@@ -7049,6 +7051,12 @@
       NotesStore.repairLabels();
     } catch (err) {
       console.warn('label migration failed', err);
+    }
+    // Templates written as `is_template` notes become `template` items; idempotent.
+    try {
+      NotesTemplates.migrateLegacy(NotesStore);
+    } catch (err) {
+      console.warn('template migration failed', err);
     }
     if (typeof NotesStore.mergeDuplicateTags === 'function') {
       try {
@@ -9925,12 +9933,6 @@
         body: 'Move a note into this folder, or create a new note.',
       };
     }
-    if (currentFilter === 'templates') {
-      return {
-        title: 'No templates yet',
-        body: 'Open a note and choose “Save as template” in its ⋯ menu. Open a template here to rename or edit it like any note; move it to Trash to delete it. Start a note from one with “New from template”.',
-      };
-    }
     if (currentFilter === 'pinned') {
       return {
         title: 'No starred notes yet',
@@ -9951,11 +9953,6 @@
 
   function emptyListActionsHtml() {
     if (currentFilter === 'pinned' || currentFilter === 'archived') return '';
-    if (currentFilter === 'templates') {
-      return `<div class="note-list-empty-actions">
-                <button type="button" class="btn primary sm" data-empty-template>New from template</button>
-              </div>`;
-    }
     // Tag/folder filters: never imply a sync problem for a brand-new empty view.
     if (currentTag || currentFolder) {
       return `<div class="note-list-empty-actions">
@@ -11209,7 +11206,6 @@
       });
       ui.noteList.querySelector('[data-empty-sync]')?.addEventListener('click', () => triggerPullSync());
       ui.noteList.querySelector('[data-empty-new]')?.addEventListener('click', () => createNote());
-      ui.noteList.querySelector('[data-empty-template]')?.addEventListener('click', () => openTemplateDialog());
       ui.noteList.querySelector('[data-empty-scan]')?.addEventListener('click', pickScanFile);
       renderVaultStats();
       return;
@@ -19019,7 +19015,7 @@
     }
   }
 
-  // --- Templates (spec section 2): encrypted is_template notes, filled client-side ---
+  // --- Templates (design M3): encrypted `template` items, filled client-side ---
   function saveCurrentAsTemplate() {
     if (!currentId || !NotesStore.isUnlocked()) return null;
     flushSave();
@@ -19050,7 +19046,7 @@
     list?.querySelector('.tpl-option.active')?.scrollIntoView?.({ block: 'nearest' });
   }
 
-  function openTemplateDialog() {
+  function openTemplateDialog({ selectId = '' } = {}) {
     if (!NotesStore.isUnlocked()) {
       toast('Unlock the vault first', true);
       return null;
@@ -19061,9 +19057,10 @@
     const opener = document.activeElement;
     templateDialog = NotesTemplates.createDialog({
       store: NotesStore,
+      selectId,
       onCreate(id) {
         if (!id) return;
-        if (currentFilter === 'templates' || currentFilter === 'trash') setFilter('all');
+        if (currentFilter === 'trash') setFilter('all');
         renderNotes();
         renderTags();
         openNote(id);
@@ -19075,8 +19072,7 @@
         if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
       },
       onManage() {
-        setFilter('templates');
-        renderNotes();
+        openTemplateManager();
       },
     });
     if (els.name) els.name.value = '';
@@ -19114,6 +19110,141 @@
     document.getElementById('template-dialog-cancel')?.addEventListener('click', () => templateDialog?.close());
     document.getElementById('template-dialog-manage')?.addEventListener('click', () => templateDialog?.manage());
     document.getElementById('template-dialog-create')?.addEventListener('click', () => templateDialog?.confirm());
+  })();
+
+  // "Manage templates": view, rename (and edit the text), delete, or use a template.
+  let templateManager = null;
+  function templateManagerEls() {
+    return {
+      root: document.getElementById('template-manager'),
+      list: document.getElementById('template-manager-list'),
+      close: document.getElementById('template-manager-close'),
+    };
+  }
+
+  function renderTemplateManager(focus) {
+    const { list, close } = templateManagerEls();
+    if (!list || !templateManager) return;
+    const items = NotesTemplates.listTemplates(NotesStore);
+    if (templateManager.editingId && !items.some((n) => n.uuid === templateManager.editingId)) templateManager.editingId = '';
+    list.innerHTML = NotesTemplates.managerHtml(items, { editingId: templateManager.editingId });
+    if (!focus) return;
+    const row = focus.id ? list.querySelector(`[data-tpl-id="${CSS.escape(focus.id)}"]`) : null;
+    const target = (row && ((focus.selector && row.querySelector(focus.selector)) || row.querySelector('button')))
+      || list.querySelector('[data-tpl-action]')
+      || close;
+    target?.focus?.();
+  }
+
+  function openTemplateManager() {
+    if (!NotesStore.isUnlocked()) {
+      toast('Unlock the vault first', true);
+      return null;
+    }
+    const els = templateManagerEls();
+    if (!els.root) return null;
+    templateManager = { editingId: '', opener: document.activeElement };
+    els.root.hidden = false;
+    renderTemplateManager({});
+    return templateManager;
+  }
+
+  function closeTemplateManager() {
+    const els = templateManagerEls();
+    if (!templateManager || !els.root) return;
+    const { opener } = templateManager;
+    templateManager = null;
+    els.root.hidden = true;
+    if (els.list) els.list.innerHTML = '';
+    const back = opener && opener.isConnected ? opener : document.getElementById('btn-new-from-template');
+    back?.focus?.();
+  }
+
+  async function templateManagerAction(action, id) {
+    if (!templateManager) return;
+    if (action === 'use') {
+      closeTemplateManager();
+      openTemplateDialog({ selectId: id });
+      return;
+    }
+    if (action === 'edit') {
+      templateManager.editingId = id;
+      renderTemplateManager({ id, selector: 'input[name="name"]' });
+      return;
+    }
+    if (action === 'cancel') {
+      templateManager.editingId = '';
+      renderTemplateManager({ id, selector: '[data-tpl-action="edit"]' });
+      return;
+    }
+    if (action === 'delete') {
+      const name = NotesStore.get(id)?.content?.title || 'this template';
+      const ok = await confirmAction(`Delete the template “${name}”? Notes made from it stay as they are.`, {
+        title: 'Delete template',
+        confirmLabel: 'Delete',
+        danger: true,
+      });
+      if (!ok || !templateManager) return;
+      const items = NotesTemplates.listTemplates(NotesStore);
+      const index = items.findIndex((n) => n.uuid === id);
+      const result = NotesTemplates.deleteTemplate(NotesStore, id);
+      if (result.error) {
+        toast('Could not delete the template', true);
+        return;
+      }
+      const next = items[index + 1] || items[index - 1];
+      renderTemplateManager({ id: next?.uuid || '' });
+      if (result.trashed) renderNotes();
+      toast(result.trashed ? 'Template moved to Trash' : 'Template deleted');
+    }
+  }
+
+  function saveTemplateManagerForm(form) {
+    const id = form.dataset.tplForm;
+    const name = form.querySelector('input[name="name"]');
+    const body = form.querySelector('textarea[name="body"]');
+    const result = NotesTemplates.updateTemplate(NotesStore, id, {
+      title: name?.value,
+      body: body ? body.value : undefined,
+    });
+    if (result.error) {
+      const msg = form.querySelector('.tpl-manage-error');
+      if (msg) msg.textContent = result.error === 'empty' ? 'Give the template a name.' : 'This template no longer exists.';
+      if (result.error === 'empty') name?.focus();
+      else renderTemplateManager({});
+      return;
+    }
+    templateManager.editingId = '';
+    renderTemplateManager({ id, selector: '[data-tpl-action="edit"]' });
+    toast('Template saved');
+  }
+
+  (() => {
+    const { root, list, close } = templateManagerEls();
+    if (!root) return;
+    root.addEventListener('keydown', (event) => {
+      if (!templateManager || event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (templateManager.editingId) templateManagerAction('cancel', templateManager.editingId);
+      else closeTemplateManager();
+    });
+    list?.addEventListener('click', (event) => {
+      const btn = event.target.closest?.('[data-tpl-action]');
+      const row = btn?.closest?.('[data-tpl-id]');
+      if (!btn || !row) return;
+      templateManagerAction(btn.dataset.tplAction, row.dataset.tplId);
+    });
+    list?.addEventListener('submit', (event) => {
+      const form = event.target.closest?.('[data-tpl-form]');
+      if (!form || !templateManager) return;
+      event.preventDefault();
+      saveTemplateManagerForm(form);
+    });
+    root.addEventListener('click', (event) => {
+      if (event.target === root) closeTemplateManager();
+    });
+    close?.addEventListener('click', () => closeTemplateManager());
   })();
 
   function createTag(title, { assignToCurrent = false, navigate = true } = {}) {
@@ -20855,6 +20986,11 @@
 
   ui.filters.querySelectorAll('.filter').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (btn.dataset.filter === 'templates') {
+        if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
+        openTemplateManager();
+        return;
+      }
       currentFolder = null;
       if (btn.dataset.filter === 'all') currentTag = null;
       setFilter(btn.dataset.filter);
@@ -20869,6 +21005,11 @@
     filterSelect.value = currentFilter;
     filterSelect.addEventListener('change', () => {
       if (filterSelect.value === 'folder') return;
+      if (filterSelect.value === 'templates') {
+        syncFilterSelect();
+        openTemplateManager();
+        return;
+      }
       currentFolder = null;
       if (filterSelect.value === 'all') currentTag = null;
       setFilter(filterSelect.value);
