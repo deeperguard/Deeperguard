@@ -2426,8 +2426,14 @@ const NotesStore = (() => {
     return listAgendaSubscriptions().find((s) => s.id === subId) || null;
   }
 
+  /** Palette key of a subscription's colour (see agenda-calendars.js); '' = none chosen. */
+  function cleanSubColor(c) {
+    const k = typeof c === 'string' ? c.trim().toLowerCase() : '';
+    return /^[a-z]{1,20}$/.test(k) ? k : '';
+  }
+
   /** `url` must already be normalised (NotesAgendaSubs.normalizeFeedUrl). */
-  function addAgendaSubscription({ name, url }) {
+  function addAgendaSubscription({ name, url, color }) {
     ensureAgendaPack();
     const pack = agendaPackRecord();
     if (!pack) throw lockedError();
@@ -2438,6 +2444,7 @@ const NotesStore = (() => {
       id,
       name: String(name || '').trim().slice(0, 120) || `Calendar ${count + 1}`,
       url: String(url || ''),
+      ...(cleanSubColor(color) ? { color: cleanSubColor(color) } : {}),
       mode: 'direct',
       relay_consent_at: null,
       last_refresh: null,
@@ -2462,6 +2469,16 @@ const NotesStore = (() => {
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'last_error_code')) {
       next.last_error_code = patch.last_error_code ? safeSubErrorCode(patch.last_error_code) : null;
     }
+    // `url` must already be normalised; the caller replaces the events right after (refreshAgendaSubscriptionRows).
+    if (patch && typeof patch.url === 'string' && patch.url) {
+      next.url = patch.url;
+      next.last_error_code = null;
+      next.last_refresh = null;
+      // A new link is a new consent decision: back to direct unless the caller re-grants relay.
+      next.mode = 'direct';
+      next.relay_consent_at = null;
+    }
+    if (patch && typeof patch.color === 'string' && cleanSubColor(patch.color)) next.color = cleanSubColor(patch.color);
     // On/off switch: off hides its events and pauses every refresh (direct and relay).
     if (patch && typeof patch.enabled === 'boolean') next.enabled = patch.enabled;
     const nowIso = new Date().toISOString();

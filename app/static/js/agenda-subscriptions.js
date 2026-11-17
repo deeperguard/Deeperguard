@@ -384,6 +384,135 @@
     if (global.NotesAgenda && typeof global.NotesAgenda.render === 'function') global.NotesAgenda.render();
   }
 
+  /** Open edit form: {id, node}. The node survives the periodic list re-render so typing is not lost. */
+  let editing = null;
+
+  /**
+   * Edit form for one subscription (name + feed link, pre-filled). A changed link goes through the
+   * same steps as "Add a subscription": normalizeFeedUrl, preview, relay consent; nothing is saved
+   * until the user confirms the preview.
+   */
+  function buildEditForm(sub) {
+    const S = store();
+    const form = el('form', 'agenda-subscribe-form agenda-subscription-edit');
+    form.autocomplete = 'off';
+    form.setAttribute('aria-label', `Edit ${sub.name}`);
+    const field = (key, label, value, attrs) => {
+      const id = `agenda-sub-edit-${sub.id}-${key}`;
+      const lab = el('label', 'agenda-field-label', label);
+      lab.htmlFor = id;
+      const input = document.createElement('input');
+      input.id = id;
+      input.autocomplete = 'off';
+      Object.assign(input, attrs);
+      input.value = value;
+      form.appendChild(lab);
+      form.appendChild(input);
+      return input;
+    };
+    const nameInput = field('name', 'Name', sub.name, { type: 'text', maxLength: 120 });
+    const urlInput = field('url', 'Feed link', sub.url, { type: 'url', inputMode: 'url', spellcheck: false, maxLength: 2048, required: true });
+    const preview = el('div', 'agenda-subscribe-preview');
+    preview.setAttribute('aria-live', 'polite');
+    preview.hidden = true;
+    const actions = el('div', 'agenda-subscription-actions');
+    const submit = el('button', 'btn primary', 'Save');
+    submit.type = 'submit';
+    const cancel = el('button', 'btn', 'Cancel');
+    cancel.type = 'button';
+    actions.appendChild(submit);
+    actions.appendChild(cancel);
+    form.appendChild(actions);
+    form.appendChild(preview);
+    const close = (focusSel) => {
+      editing = null;
+      renderList();
+      const f = focusSel && document.querySelector(focusSel);
+      if (f) f.focus();
+    };
+    cancel.addEventListener('click', () => close(`[data-sub-edit="${sub.id}"]`));
+    const showError = (code, url) => {
+      preview.textContent = '';
+      const p = el('p', 'settings-hint agenda-subscription-error', errorText(code));
+      p.setAttribute('role', 'alert');
+      preview.appendChild(p);
+      preview.hidden = false;
+      if (code === 'E_NETWORK_OR_CORS' && url) {
+        const b = el('button', 'btn sm', 'Fetch via server…');
+        b.type = 'button';
+        b.addEventListener('click', async () => {
+          if (!unlocked() || !(await askRelayConsent())) return;
+          await runPreview(url, 'relay');
+        });
+        preview.appendChild(b);
+      }
+    };
+    const save = (url, out, mode) => {
+      if (!unlocked()) { showError('E_LOCKED'); return; }
+      const cur = S.getAgendaSubscription(sub.id);
+      if (!cur) { showError('E_URL'); return; }
+      // Name first: refreshed events carry the subscription name as their source.
+      S.updateAgendaSubscription(sub.id, { name: nameInput.value, url });
+      if (mode === 'relay') S.updateAgendaSubscription(sub.id, { mode: 'relay', relay_consent: true });
+      const res = S.refreshAgendaSubscriptionRows(sub.id, out.events, { allowShrink: true });
+      if (res && res.removedEvents) cancelReminders(res.removedEvents);
+      toast(`Updated ${S.getAgendaSubscription(sub.id).name}`);
+      close(`[data-sub-edit="${sub.id}"]`);
+      rerenderAgenda();
+    };
+    const showPreview = (out, url, mode) => {
+      preview.textContent = '';
+      preview.appendChild(el('p', 'agenda-import-counts', `${out.events.length} event${out.events.length === 1 ? '' : 's'} in this feed${mode === 'relay' ? ' (via server)' : ''}`));
+      const ul = el('ul', 'agenda-subscribe-sample');
+      out.events.slice(0, 5).forEach((e) => ul.appendChild(el('li', '', `${e.title || 'Untitled'} · ${e.start || ''}`)));
+      preview.appendChild(ul);
+      preview.appendChild(el('p', 'settings-hint muted', 'Saving replaces the events of the old link with these. Events from a subscription are replaced at every refresh; local edits to them are lost.'));
+      const ok = el('button', 'btn primary', 'Save new link');
+      ok.type = 'button';
+      ok.addEventListener('click', () => save(url, out, mode));
+      preview.appendChild(ok);
+      preview.hidden = false;
+      ok.focus();
+    };
+    const runPreview = async (url, mode) => {
+      preview.hidden = false;
+      preview.textContent = mode === 'relay' ? 'Fetching preview via server…' : 'Fetching preview…';
+      const out = await previewUrl(url, mode);
+      if (!out.ok) showError(out.code, mode === 'relay' ? '' : url);
+      else showPreview(out, url, mode);
+    };
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      if (!unlocked()) { showError('E_LOCKED'); return; }
+      let url;
+      try {
+        url = normalizeFeedUrl(urlInput.value);
+      } catch (err) {
+        showError('E_URL');
+        return;
+      }
+      if (url === sub.url) {
+        // Link unchanged: nothing to fetch; only the name can change.
+        if (nameInput.value.trim()) S.updateAgendaSubscription(sub.id, { name: nameInput.value });
+        close(`[data-sub-edit="${sub.id}"]`);
+        rerenderAgenda();
+        return;
+      }
+      // A subscription that uses the server asks for consent again for the new link before anything is fetched.
+      if (usesRelay(sub)) {
+        if (!(await askRelayConsent())) {
+          preview.hidden = false;
+          preview.textContent = 'Nothing was fetched; the old link is unchanged.';
+          return;
+        }
+        await runPreview(url, 'relay');
+        return;
+      }
+      await runPreview(url, 'direct');
+    });
+    return form;
+  }
+
   function renderList() {
     const list = typeof document !== 'undefined' && document.getElementById('agenda-subscriptions-list');
     if (!list) return;
@@ -395,9 +524,16 @@
       list.appendChild(el('p', 'settings-hint muted', 'No subscribed calendars.'));
       return;
     }
+    if (editing && !subs.some((x) => x.id === editing.id)) editing = null;
     subs.forEach((sub) => {
       const on = isEnabled(sub);
       const row = el('div', 'agenda-subscription-row');
+      if (editing && editing.id === sub.id) {
+        row.appendChild(el('strong', 'agenda-subscription-name', sub.name));
+        row.appendChild(editing.node);
+        list.appendChild(row);
+        return;
+      }
       const head = el('div', 'agenda-subscription-head');
       head.appendChild(el('strong', 'agenda-subscription-name', sub.name));
       if (!on) head.appendChild(el('span', 'agenda-subscription-via agenda-subscription-off', 'Off'));
@@ -412,6 +548,18 @@
         on ? statusText(sub) : 'Off: hidden from the agenda and not refreshed. Turn it on under Calendars above.');
       if (showError) status.setAttribute('role', 'alert');
       row.appendChild(status);
+      const Cals = global.NotesAgendaCalendars;
+      if (Cals && typeof Cals.colorPickerEl === 'function') {
+        const holder = el('div', 'agenda-subscription-color');
+        holder.appendChild(Cals.colorPickerEl(`sub-${sub.id}`, sub.color || 'slate', `Colour of ${sub.name}`));
+        holder.addEventListener('change', (ev) => {
+          const r = ev.target;
+          if (!r || r.type !== 'radio' || !r.checked) return;
+          S.updateAgendaSubscription(sub.id, { color: r.value });
+          rerenderAgenda();
+        });
+        row.appendChild(holder);
+      }
       const actions = el('div', 'agenda-subscription-actions');
       const btn = (label, fn) => {
         const b = el('button', 'btn sm', label);
@@ -428,6 +576,14 @@
           rerenderAgenda();
         }
       });
+      const editBtn = btn('Edit', () => {
+        editing = { id: sub.id, node: buildEditForm(sub) };
+        renderList();
+        const first = editing.node.querySelector('input');
+        if (first) first.focus();
+      });
+      editBtn.setAttribute('data-sub-edit', sub.id);
+      editBtn.setAttribute('aria-label', `Edit ${sub.name} (name and feed link)`);
       const refreshBtn = btn('Refresh', async () => {
         if (!isEnabled(store().getAgendaSubscription(sub.id))) return;
         refreshBtn.disabled = true;
@@ -485,6 +641,12 @@
     const urlInput = document.getElementById('agenda-subscribe-url');
     const nameInput = document.getElementById('agenda-subscribe-name');
     const preview = document.getElementById('agenda-subscribe-preview');
+    const colorHolder = el('div', 'agenda-subscribe-color');
+    const Cals = global.NotesAgendaCalendars;
+    if (Cals && typeof Cals.colorPickerEl === 'function') {
+      colorHolder.appendChild(Cals.colorPickerEl('subscribe', '', 'Colour (optional)'));
+      form.insertBefore(colorHolder, form.querySelector('button[type="submit"]'));
+    }
     const showError = (code, url) => {
       preview.textContent = '';
       const p = el('p', 'settings-hint agenda-subscription-error', errorText(code));
@@ -519,7 +681,11 @@
           return;
         }
         const S = store();
-        const sub = S.addAgendaSubscription({ name: nameInput.value, url });
+        const sub = S.addAgendaSubscription({
+          name: nameInput.value,
+          url,
+          color: (colorHolder.querySelector('input:checked') || {}).value,
+        });
         // Consent was given in the dialog just before this preview.
         if (mode === 'relay') S.updateAgendaSubscription(sub.id, { mode: 'relay', relay_consent: true });
         S.refreshAgendaSubscriptionRows(sub.id, out.events, { allowShrink: true });

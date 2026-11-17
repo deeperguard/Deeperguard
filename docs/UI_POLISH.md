@@ -1137,6 +1137,7 @@ header would close the section again.
 | `#agenda-calendar-export-ics` | Export calendar (.ics) | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
 | `#agenda-reminder-email` | E-mail reminders (label) | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
 | `#agenda-reminder-push` | Push reminders (label) | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
+| `#agenda-reminder-push-explainer` | Push reminders notice (text, described by the Push toggle) | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
 | `#agenda-open-app-settings` | Open app settings… | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
 | `#agenda-backup-restore` | Restore last local agenda backup | Calendar menu | Unchanged | agenda | conditional: local backup exists | conditional: local backup exists |
 | `#agenda-reminder-enable-push` | Enable push on this device | Calendar menu | Unchanged | agenda | conditional: push not enabled yet | conditional: push not enabled yet |

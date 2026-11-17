@@ -67,7 +67,7 @@
    */
   function subscriptionCalendar(sub) {
     return {
-      id: `sub:${sub.id}`, subId: sub.id, name: sub.name, color: 'slate', visible: sub.enabled !== false, subscribed: true,
+      id: `sub:${sub.id}`, subId: sub.id, name: sub.name, color: sub.color || 'slate', visible: sub.enabled !== false, subscribed: true,
     };
   }
 
@@ -266,10 +266,11 @@
   /** UI state: which row is being edited ('new' for the create form) or confirmed for delete. */
   const ui = { editing: '', deleting: '' };
 
-  function colorPickerHtml(prefix, selected) {
-    const sel = paletteEntry(selected).key;
+  /** `selected` empty = nothing checked (optional choice); `legend` names the group for screen readers. */
+  function colorPickerHtml(prefix, selected, legend) {
+    const sel = selected ? paletteEntry(selected).key : '';
     return (
-      `<fieldset class="agenda-cal-colors"><legend class="muted">Color</legend>`
+      `<fieldset class="agenda-cal-colors"><legend class="muted">${esc(legend || 'Color')}</legend>`
       + PALETTE.map((p) => (
         `<label class="agenda-cal-color" title="${esc(p.name)}">`
         + `<input type="radio" name="${esc(prefix)}-color" value="${esc(p.key)}"${p.key === sel ? ' checked' : ''}>`
@@ -279,6 +280,13 @@
       )).join('')
       + '</fieldset>'
     );
+  }
+
+  /** The same picker as a DOM element (for code that must not assign innerHTML itself). */
+  function colorPickerEl(prefix, selected, legend) {
+    const t = document.createElement('template');
+    t.innerHTML = colorPickerHtml(prefix, selected, legend);
+    return t.content.firstElementChild;
   }
 
   const DEFAULT_REMINDER_PRESETS = [0, 5, 10, 15, 30, 60, 1440];
@@ -550,6 +558,8 @@
     labelHtml,
     lastUsedCalendarId,
     renderSubscriptions,
+    colorPickerEl,
+    paletteEntry,
     createCalendar,
     renameCalendar,
     setCalendarColor,
