@@ -112,7 +112,12 @@ def main() -> int:
             assert "In work" in page.locator(".note-row").first.inner_text()
             assert item("Work").get_attribute("aria-selected") == "true"
             pick("Projects")
-            page.wait_for_function("() => document.querySelectorAll('.note-row').length === 1")
+            # Wait for the Projects selection itself: "Work" also shows exactly one row, so a bare
+            # row count would pass on the stale list.
+            page.wait_for_function(
+                "() => document.querySelectorAll('.note-row').length === 1"
+                " && document.querySelector('.note-row').innerText.includes('In projects')"
+            )
             assert "In projects" in page.locator(".note-row").first.inner_text()
             pick("All notes")
             page.wait_for_function("() => document.querySelectorAll('.note-row').length === 3")
