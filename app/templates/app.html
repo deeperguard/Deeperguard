@@ -1072,6 +1072,7 @@
       <div id="note-row-menu-backdrop" class="note-row-menu-backdrop" hidden aria-hidden="true"></div>
       <div id="note-row-menu" class="note-row-menu" role="menu" aria-label="Note actions" hidden>
         <button type="button" id="note-row-menu-secure-send" class="note-row-menu-item" role="menuitem">Share by link</button>
+        <button type="button" id="note-row-menu-move" class="note-row-menu-item" role="menuitem">Move to folder…</button>
         <button type="button" id="note-row-menu-trash" class="note-row-menu-item" role="menuitem">Trash</button>
       </div>
       </div>
@@ -1127,6 +1128,7 @@
                 <option value="">No folder</option>
               </select>
             </label>
+            <button type="button" id="btn-move-note" class="btn ghost sm" aria-haspopup="dialog">Move to folder…</button>
             <div id="tag-bar-shell" class="tag-bar-shell is-collapsed">
               <button type="button" id="tag-bar-toggle" class="tag-bar-toggle" aria-expanded="false" aria-controls="tag-bar">
                 <span class="tag-bar-toggle-label">Tags</span>
@@ -2857,6 +2859,14 @@
     <div class="confirm-dialog-actions">
       <button type="button" class="btn ghost" id="hero-guide-scan">Scan now</button>
       <button type="button" class="btn primary" id="hero-guide-close">Got it</button>
+    </div>
+  </div>
+  <div id="folder-move" class="confirm-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="folder-move-title" aria-describedby="folder-move-explain">
+    <h2 id="folder-move-title">Move to folder</h2>
+    <p class="muted nav-explain" id="folder-move-explain">Pick a folder with the arrow keys and press Enter, or click it. Only this note changes.</p>
+    <div id="folder-move-tree" class="folder-move-tree" role="tree" aria-label="Folders"></div>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn ghost" id="folder-move-cancel">Cancel</button>
     </div>
   </div>
   <div id="folder-prompt" class="confirm-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="folder-prompt-title" aria-describedby="folder-prompt-explain">
