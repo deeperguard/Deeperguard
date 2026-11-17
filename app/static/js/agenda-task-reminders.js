@@ -5,6 +5,8 @@
  * - Each reminder is uploaded to `POST /api/push-windows` as `{ id, window_start }` only: a random
  *   32-hex id that is not derived from the task, and the start of the 15-minute window (a multiple of
  *   900 s, rounded down, so it can arrive up to 15 minutes early). No title, date or exact time.
+ *   A device that opted in to the 5-minute window (Calendar settings) rounds to 300 s instead and
+ *   sends `window_sec: 300` with the upload.
  * - The ids of the uploaded windows are kept in the task (`reminder_windows`), so ticking the task off,
  *   deleting it, or changing its date or offsets withdraws them (`POST /api/push-windows/delete`).
  * - The push itself is empty; the service worker shows its own generic text.
@@ -32,13 +34,25 @@
     return !!(R && typeof R.hasAgendaRemindersEntitlement === 'function' && R.hasAgendaRemindersEntitlement());
   }
 
+  /** Window size in seconds: 900, or 300 when this device opted in to the finer window. */
+  function windowSec() {
+    const R = remindersApi();
+    return R && typeof R.serverWindowSec === 'function' ? R.serverWindowSec() : WINDOW_SEC;
+  }
+
+  /** Extra request field for windows that need the 5-minute opt-in (none for 15-minute windows). */
+  function windowSecField(windows) {
+    const R = remindersApi();
+    return R && typeof R.windowSecField === 'function' ? R.windowSecField(windows.map((w) => w.window_start)) : {};
+  }
+
   function randomId() {
     const bytes = new Uint8Array(16);
     global.crypto.getRandomValues(bytes);
     return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
-  /** Window starts (seconds, multiples of 900) for a task: sorted, unique, in the future, not too far ahead. */
+  /** Window starts (seconds, multiples of the window size) for a task: sorted, unique, in the future, not too far ahead. */
   function plannedWindows(task, nowMs) {
     const T = tasksApi();
     if (!T || !task || T.isDone(task)) return [];
@@ -49,9 +63,10 @@
     const [hh, mm] = (/^([01]\d|2[0-3]):([0-5]\d)$/.test(String(task.due_time || '')) ? task.due_time : DEFAULT_TIME)
       .split(':').map(Number);
     const dueMs = new Date(due.getFullYear(), due.getMonth(), due.getDate(), hh, mm).getTime();
+    const size = windowSec();
     const out = new Set();
     for (const minutes of offsets) {
-      const start = Math.floor((dueMs - minutes * 60000) / 1000 / WINDOW_SEC) * WINDOW_SEC;
+      const start = Math.floor((dueMs - minutes * 60000) / 1000 / size) * size;
       // A window that has already begun would push at once, before the real time: skip it.
       if (start * 1000 <= nowMs || start > nowMs / 1000 + MAX_AHEAD_SEC) continue;
       out.add(start);
@@ -169,7 +184,7 @@
         try {
           await S.api('/api/push-windows', {
             method: 'POST',
-            body: JSON.stringify({ endpoint, windows: added }),
+            body: JSON.stringify({ endpoint, windows: added, ...windowSecField(added) }),
           });
           next = [...kept, ...added];
           if (!storedTask(taskId)) {
@@ -227,6 +242,8 @@
 
   global.NotesAgendaTaskReminders = {
     WINDOW_SEC,
+    windowSec,
+    windowSecField,
     DEFAULT_TIME,
     plannedWindows,
     deviceEndpoint,

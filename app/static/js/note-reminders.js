@@ -4,7 +4,8 @@
  * - The note keeps `reminders: [{ at, push, rid, window_start }]` in its encrypted content.
  * - With `push` on, one window is uploaded to `POST /api/push-windows` as `{ id, window_start }` only:
  *   `id` is the random `rid` (not derived from the note), `window_start` is the reminder time rounded
- *   down to a multiple of 900 s, so the push can come up to 15 minutes early. No note id, no title, no
+ *   down to a multiple of 900 s (300 s on a device that opted in to the 5-minute window, which then
+ *   also sends `window_sec: 300`), so the push can come up to 15 minutes early. No note id, no title, no
  *   exact time. The push is empty; the service worker shows its own generic text.
  * - Opening that notification makes the client look the note up locally (`findDueNote`): the note whose
  *   window has just begun. The server never learns which note it was.
@@ -31,12 +32,14 @@
     return content && Array.isArray(content.reminders) ? content.reminders[0] || null : null;
   }
 
-  /** Window start (seconds, multiple of 900) for a note's reminder, or 0 when none should be scheduled. */
+  /** Window start (seconds, multiple of the window size) for a note's reminder, or 0 when none should be scheduled. */
   function plannedWindow(content, nowMs) {
     const entry = firstEntry(content);
     const ms = Date.parse(entry && entry.at);
     if (!entry || !entry.push || content.trashed || !Number.isFinite(ms) || ms <= 0) return 0;
-    const start = Math.floor(ms / 1000 / WINDOW_SEC) * WINDOW_SEC;
+    const TR = taskReminders();
+    const size = TR ? TR.windowSec() : WINDOW_SEC;
+    const start = Math.floor(ms / 1000 / size) * size;
     // A window that has already begun would push at once, before the real time: skip it.
     if (start * 1000 <= nowMs || start > nowMs / 1000 + MAX_AHEAD_SEC) return 0;
     return start;
@@ -88,7 +91,7 @@
         try {
           await S.api('/api/push-windows', {
             method: 'POST',
-            body: JSON.stringify({ endpoint, windows: [added] }),
+            body: JSON.stringify({ endpoint, windows: [added], ...TR.windowSecField([added]) }),
           });
           next = added;
         } catch (err) {

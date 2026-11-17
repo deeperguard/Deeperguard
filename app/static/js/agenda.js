@@ -679,11 +679,12 @@
       cb.disabled = readOnly || !pro;
     });
     const hint = dlg.querySelector('#agenda-task-reminder-hint');
-    hint.textContent = pro ? TASK_REMINDER_COPY : 'Task reminders are included with Pro.';
+    const copy = R ? R.windowCopy(TASK_REMINDER_COPY) : TASK_REMINDER_COPY;
+    hint.textContent = pro ? copy : 'Task reminders are included with Pro.';
     if (!pro || !TR) return;
     TR.deviceEndpoint().then((endpoint) => {
       if (!endpoint && !dlg.hidden) {
-        hint.textContent = `Push is off on this device: turn it on in Calendar settings first. ${TASK_REMINDER_COPY}`;
+        hint.textContent = `Push is off on this device: turn it on in Calendar settings first. ${copy}`;
       }
     });
   }
