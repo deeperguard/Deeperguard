@@ -956,11 +956,13 @@ drawer is opened with `#btn-list-menu`, the note actions with
 `conditional: <state>` when the control is not shown at 390px or needs a state
 (desktop-only controls such as `#btn-list-toggle` and `#btn-nav-pin`, controls
 that a phone control replaces, long press or swipe on a row), the phone twin
-being named in brackets; and the `phone-only` and `by row kind` forms. For
+being named in brackets; `replaced by` the openers and, last, the phone
+control that takes the place of a desktop control which is not rendered at
+390px (the test checks that phone control like a `via` row); and the
+`phone-only` and `by row kind` forms. For
 `by row kind` at phone width, `hidden` with `.note-swipe-delete` means the
-row is swiped. The desktop checks do not read this column yet; the table parser
-in `tests/e2e_layout_actions.py` exposes it as `phone_reach` and checks that
-every row has a value that parses.
+row is swiped. At 390px `tests/e2e_layout_actions.py` checks the `all`, `agenda`
+and `2fa` rows against this column; its parser exposes it as `phone_reach`.
 
 <!-- layout-actions:start -->
 | Selector | Accessible name | Current place | New place | Applies to | Reach | Phone reach |
@@ -1113,8 +1115,8 @@ every row has a value that parses.
 | `[data-agenda-view="agenda"]` | List | Agenda view switch | Content header, view switch | agenda | visible | via `#agenda-phone-more` |
 | `#agenda-search` | Search events | Agenda toolbar | Content header, right | agenda | visible | via `#agenda-phone-more` |
 | `#agenda-calendar-settings-btn` | Calendar menu | Agenda toolbar | Sidebar section "Calendars" (and header button on phone) | agenda | visible | via `#agenda-phone-more` |
-| `#agenda-add-task` | + Task | Agenda toolbar | Content header, right | agenda | visible | conditional: desktop only, not shown at 390px (phone: `#agenda-phone-more` `#agenda-phone-add-task`) |
-| `#agenda-add-event` | + Event | Agenda toolbar | Content header, right (primary) | agenda | visible | conditional: desktop only, not shown at 390px (phone: `#agenda-fab-add`) |
+| `#agenda-add-task` | + Task | Agenda toolbar | Content header, right | agenda | visible | replaced by `#agenda-phone-more` `#agenda-phone-add-task` (the desktop button is not rendered at 390px) |
+| `#agenda-add-event` | + Event | Agenda toolbar | Content header, right (primary) | agenda | visible | replaced by `#agenda-fab-add` (the desktop button is not rendered at 390px) |
 | `#agenda-calendar-settings-close` | Close calendar settings | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
 | `#agenda-pref-show-tasks` | Show tasks (label) | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
 | `#agenda-pref-show-completed` | Show completed (label) | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
