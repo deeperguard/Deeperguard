@@ -1278,6 +1278,24 @@ desktop and phone; synthetic data only).
 5. **Footer/width**: status line, backlinks, maximum reading width (7.7).
 6. **Responsive check**: 1280, 1440, 1920+, tablet, phone (7.8).
 
+### 7.10 Screenshot suite
+
+`tests/screenshot_layout_suite.py` produces the before/after screenshots
+for the tasks above. It starts a local server, signs up a throwaway
+account and creates synthetic data only (one plain note, one PDF note, a
+few agenda events, three 2FA entries with made-up secrets). It then saves
+full-page PNGs of Notes (plain note), Notes (PDF note), Agenda and 2FA at
+five viewports: 1280x800, 1440x900, 1920x1080, 820x1180 (tablet) and
+390x844 (phone).
+
+    python tests/screenshot_layout_suite.py --out <dir>
+
+The files are named `<screen>-<width>.png` with screen `notes-plain`,
+`notes-pdf`, `agenda` or `2fa` (20 files, for example
+`notes-pdf-390.png`). Without `--out` they go to `layout-screenshots/` in
+the current directory, which is git-ignored. Do not commit the PNGs; attach
+them to the pull request instead.
+
 ---------------------------------------------------------------------------
 
 ## 8. Inventory status (audit task 113)
