@@ -365,7 +365,8 @@
 
   /**
    * Switch a subscription on or off (stored in the encrypted pack, synced with it).
-   * Off: its events are hidden and it is not refreshed. On: refreshed once right away.
+   * Off: its events are hidden and it is not refreshed. On: refreshed once right away, as a manual
+   * refresh (turning it on is a user action), so a large removal asks for confirmation like the Refresh button.
    * Resolves with the refresh result when switched on, {ok:true} when switched off, null when not possible.
    */
   async function setEnabled(subId, on) {
@@ -376,7 +377,9 @@
     if (isEnabled(sub) === !!on) return { ok: true, unchanged: true };
     S.updateAgendaSubscription(subId, { enabled: !!on });
     if (!on) return { ok: true };
-    return refresh(subId, { auto: true });
+    return refresh(subId, {
+      confirmShrink: async (n) => !!(global.confirm && global.confirm(`This refresh removes ${n} events of "${sub.name}". Continue?`)),
+    });
   }
 
   function rerenderAgenda() {
