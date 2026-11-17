@@ -34,8 +34,17 @@ MEASURE_JS = """() => {
   const out = [];
   document.querySelectorAll('body *').forEach((el) => {
     const r = el.getBoundingClientRect();
-    if (!r.width || !r.height || r.right <= vw + 0.5) return;
+    if (!r.width || !r.height) return;
     const cs = getComputedStyle(el);
+    // Content (text, inline boxes) that overflows a visible-overflow box is not
+    // in the box rect; its reach is left + scrollWidth. Only the overflow not
+    // already explained by a child element that runs past the window is counted.
+    let right = r.right;
+    if (cs.overflowX === 'visible' && el.scrollWidth > el.clientWidth + 0.5
+        && ![...el.children].some((c) => c.getBoundingClientRect().right > vw + 0.5)) {
+      right = Math.max(right, r.left + el.scrollWidth);
+    }
+    if (right <= vw + 0.5) return;
     if (cs.visibility === 'hidden' || cs.position === 'fixed') return;
     if (el.closest('[hidden], [aria-hidden="true"], [inert]')) return;
     let clippedBy = '';
@@ -49,7 +58,7 @@ MEASURE_JS = """() => {
     const id = el.id ? '#' + el.id : '';
     const cls = typeof el.className === 'string' && el.className
       ? '.' + el.className.trim().split(/\\s+/).join('.') : '';
-    out.push(el.tagName.toLowerCase() + id + cls + ' right=' + Math.round(r.right)
+    out.push(el.tagName.toLowerCase() + id + cls + ' right=' + Math.round(right)
       + (clippedBy ? ' clipped by ' + clippedBy : ''));
   });
   return { vw, root, body, offenders: out.slice(0, 15), count: out.length };
@@ -80,12 +89,40 @@ def screens(page):
     )
 
 
+SELFTEST_HTML = (
+    "<html><body style='margin:0'>"
+    "<div style='width:300px'>" + "W" * 400 + "</div>"
+    "</body></html>"
+)
+
+
+def selftest(pw) -> str | None:
+    """The measurement must report text that overflows a box (no element box
+    runs past the window). Returns an error message, or None when it does."""
+    browser = pw.chromium.launch()
+    try:
+        page = browser.new_page(viewport={"width": 390, "height": PHONE_HEIGHT})
+        page.set_content(SELFTEST_HTML)
+        m = page.evaluate(MEASURE_JS)
+    finally:
+        browser.close()
+    if m["root"] <= m["vw"]:
+        return f"selftest: overflowing text did not widen the page ({m['root']} <= {m['vw']})"
+    if m["count"] == 0:
+        return "selftest: overflowing text was not listed as an offender"
+    return None
+
+
 def main() -> int:
     proc, url = base.run_server()
     failures = []
     checked = 0
     try:
         with sync_playwright() as pw:
+            problem = selftest(pw)
+            if problem:
+                print("FAIL", problem, file=sys.stderr)
+                return 1
             browser, page, _ids = base.boot(pw, url)
             base.seed_totp(page)
             for width in WIDTHS:
@@ -99,7 +136,7 @@ def main() -> int:
                     if m["root"] > m["vw"] or m["body"] > m["vw"] or m["count"]:
                         failures.append(
                             f"{name} @ {width}: html {m['root']} body {m['body']} window {m['vw']}; "
-                            f"sticking out: {m['offenders']}"
+                            f"sticking out: {m['offenders'] or 'no offender found'}"
                         )
             browser.close()
     finally:
