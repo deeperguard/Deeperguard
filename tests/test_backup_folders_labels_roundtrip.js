@@ -1,6 +1,7 @@
 // Export -> import keeps the folder tree, the nested labels and which note sits
 // where; a backup written before folders/nested labels existed still imports.
-// The export rows are built like buildLocalBackup in app.js (persisted ciphertext).
+// exportRows is a copy of the row-building in buildLocalBackup (app.js), not a call to it,
+// so a change in buildLocalBackup is not caught here.
 const assert = require('assert');
 const h = require('./sync_harness');
 
