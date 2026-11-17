@@ -559,6 +559,19 @@
     if (el) el.focus({ preventScroll: false });
   }
 
+  /** Bring the closed-app reminder windows of a task in line with it (done or changed tasks withdraw theirs). */
+  function syncTaskReminders(id) {
+    const TR = global.NotesAgendaTaskReminders;
+    if (!TR || !id) return;
+    TR.syncTaskReminders(id).catch((err) => {
+      if (err && err.code === 'no_device') {
+        toastMsg('Task reminder not scheduled: turn on push on this device in Calendar settings.', true);
+        return;
+      }
+      toastMsg('Task reminders could not be updated. They will be retried when you open the Agenda.', true);
+    });
+  }
+
   function setTaskDone(id, done) {
     const S = getStore();
     const T = global.NotesAgendaTasks;
@@ -566,6 +579,7 @@
     if (!S || !T || !task || T.normalizeTask(task).readOnly) return;
     const before = { ...task };
     S.upsertAgendaTask(id, T.withDone(task, done));
+    syncTaskReminders(id);
     render();
     focusTaskControl(id, 'data-agenda-task-toggle');
     if (!done) {
@@ -577,12 +591,23 @@
       const st = getStore();
       if (!st) return;
       st.upsertAgendaTask(id, T.withDone(before, false));
+      syncTaskReminders(id);
       render();
       announceTask(`Task reopened: ${task.title}.`);
     };
     if (typeof global.notesAgendaToastUndo === 'function') global.notesAgendaToastUndo('Task done.', undo);
     else toastMsg('Task done.');
   }
+
+  /** [minutes before, label]; a task without a time is reminded relative to 09:00. */
+  const TASK_REMINDER_PRESETS = [
+    [0, 'At the due time (09:00 if no time is set)'],
+    [10, '10 min before'],
+    [60, '1 hour before'],
+    [1440, '1 day before'],
+  ];
+  const TASK_REMINDER_COPY = 'The server sees only a random id and a 15-minute window, never the task. '
+    + 'The push can arrive up to 15 minutes early and shows no text.';
 
   let taskDialogReturnFocus = null;
   let taskDialogId = '';
@@ -608,6 +633,13 @@
       + '</div>'
       + '<label for="agenda-task-notes">Notes</label>'
       + '<textarea id="agenda-task-notes" rows="3" maxlength="5000"></textarea>'
+      + '<fieldset class="agenda-task-reminders" id="agenda-task-reminders">'
+      + '<legend>Reminder</legend>'
+      + TASK_REMINDER_PRESETS.map(([n, label]) => (
+        `<label class="agenda-task-reminder-opt"><input type="checkbox" data-agenda-task-reminder-offset="${n}"> ${label}</label>`
+      )).join('')
+      + '<p id="agenda-task-reminder-hint" class="muted" role="status"></p>'
+      + '</fieldset>'
       + '<label class="agenda-task-form-done"><input id="agenda-task-done" type="checkbox"> Done</label>'
       + '<p id="agenda-task-error" class="error" role="alert" hidden></p>'
       + '<p id="agenda-task-readonly" class="muted" hidden>Update Deeperguard to edit this task.</p>'
@@ -637,6 +669,35 @@
     return dlg;
   }
 
+  function fillTaskReminderFields(dlg, task, readOnly) {
+    const R = global.NotesAgendaReminders;
+    const TR = global.NotesAgendaTaskReminders;
+    const offsets = (task && task.reminder && Array.isArray(task.reminder.offsets)) ? task.reminder.offsets : [];
+    const pro = !!(R && R.hasAgendaRemindersEntitlement && R.hasAgendaRemindersEntitlement());
+    dlg.querySelectorAll('[data-agenda-task-reminder-offset]').forEach((cb) => {
+      cb.checked = offsets.includes(Number(cb.getAttribute('data-agenda-task-reminder-offset')));
+      cb.disabled = readOnly || !pro;
+    });
+    const hint = dlg.querySelector('#agenda-task-reminder-hint');
+    hint.textContent = pro ? TASK_REMINDER_COPY : 'Task reminders are included with Pro.';
+    if (!pro || !TR) return;
+    TR.deviceEndpoint().then((endpoint) => {
+      if (!endpoint && !dlg.hidden) {
+        hint.textContent = `Push is off on this device: turn it on in Calendar settings first. ${TASK_REMINDER_COPY}`;
+      }
+    });
+  }
+
+  /** Checked presets, plus offsets of the task this editor has no checkbox for (set on another client). */
+  function readTaskReminderFields(dlg, prev) {
+    const shown = new Set(TASK_REMINDER_PRESETS.map(([n]) => n));
+    const kept = prev && prev.reminder && Array.isArray(prev.reminder.offsets)
+      ? prev.reminder.offsets.filter((n) => !shown.has(n)) : [];
+    const picked = [...dlg.querySelectorAll('[data-agenda-task-reminder-offset]:checked')]
+      .map((cb) => Number(cb.getAttribute('data-agenda-task-reminder-offset')));
+    return { offsets: [...kept, ...picked] };
+  }
+
   function openTaskDialog(id, opts) {
     const T = global.NotesAgendaTasks;
     if (!T) return;
@@ -659,6 +720,7 @@
     dlg.querySelector('#agenda-task-readonly').hidden = !ro;
     dlg.querySelector('#agenda-task-save').disabled = ro;
     dlg.querySelector('#agenda-task-delete').disabled = ro;
+    fillTaskReminderFields(dlg, task, ro);
     const err = dlg.querySelector('#agenda-task-error');
     err.hidden = true;
     err.textContent = '';
@@ -692,6 +754,7 @@
       due: dlg.querySelector('#agenda-task-due').value,
       due_time: dlg.querySelector('#agenda-task-time').value,
       notes: dlg.querySelector('#agenda-task-notes').value,
+      reminder: readTaskReminderFields(dlg, prev),
       done_at: wantDone ? (wasDone ? prev.done_at : new Date().toISOString()) : '',
     }, prev);
     if (!next) {
@@ -708,6 +771,7 @@
       return;
     }
     if (!id) return;
+    syncTaskReminders(id);
     taskDialogId = id;
     taskDialogReturnFocus = null;
     closeTaskDialog();
@@ -722,6 +786,9 @@
     const task = id ? findTask(id) : null;
     if (!S || !task || typeof S.removeAgendaTask !== 'function') return;
     const saved = { ...task };
+    if (global.NotesAgendaTaskReminders) {
+      global.NotesAgendaTaskReminders.cancelTaskReminders(task).catch(() => {});
+    }
     S.removeAgendaTask(id);
     taskDialogReturnFocus = null;
     taskDialogId = '';
@@ -733,7 +800,8 @@
       const st = getStore();
       if (!st) return;
       // A fresh id: the old one carries a delete tombstone.
-      st.upsertAgendaTask('', { ...saved });
+      const restored = st.upsertAgendaTask('', { ...saved, reminder_windows: [] });
+      syncTaskReminders(restored);
       render();
     };
     if (typeof global.notesAgendaToastUndo === 'function') global.notesAgendaToastUndo('Task deleted.', undo);
@@ -3570,6 +3638,7 @@
     startMinuteClock();
     global.NotesAgendaReminders?.onAgendaShown?.();
     global.NotesAgendaSubs?.onAgendaShown?.();
+    global.NotesAgendaTaskReminders?.onAgendaShown?.();
   }
 
   function onTabShown() {
@@ -3578,6 +3647,7 @@
     if (minuteClock) minuteClock.tick();
     global.NotesAgendaReminders?.onAgendaShown?.();
     global.NotesAgendaSubs?.onAgendaShown?.();
+    global.NotesAgendaTaskReminders?.onAgendaShown?.();
   }
 
   global.NotesAgenda = {

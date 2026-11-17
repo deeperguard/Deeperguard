@@ -42,6 +42,17 @@
     return s && Number.isFinite(Date.parse(s)) ? s : '';
   }
 
+  const MAX_REMINDER_OFFSET = 28 * 24 * 60;
+  const MAX_REMINDER_OFFSETS = 8;
+
+  /** `{ offsets: [minutes] }` (sorted, unique, whole minutes 0..4 weeks, at most 8), or null for none. */
+  function normalizeReminder(raw) {
+    const list = raw && Array.isArray(raw.offsets) ? raw.offsets : [];
+    const offsets = [...new Set(list.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= MAX_REMINDER_OFFSET))]
+      .sort((a, b) => a - b).slice(0, MAX_REMINDER_OFFSETS);
+    return offsets.length ? { offsets } : null;
+  }
+
   /**
    * Build the payload to save from editor fields. Unknown keys of `prev` are kept
    * (additive schema), so a newer client's fields survive an edit here.
@@ -66,7 +77,7 @@
       rrule: String(base.rrule || ''),
       done_at: isoOrEmpty(f.done_at ?? base.done_at),
       note_uuid: String(base.note_uuid || ''),
-      reminder: base.reminder ?? null,
+      reminder: 'reminder' in f ? normalizeReminder(f.reminder) : (base.reminder ?? null),
       created_at: base.created_at || now,
       updated_at: now,
     };
@@ -177,6 +188,7 @@
     dateKey,
     parseDue,
     buildTask,
+    normalizeReminder,
     normalizeTask,
     isDone,
     withDone,
