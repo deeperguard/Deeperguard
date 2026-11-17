@@ -39,7 +39,8 @@ class PushToggleNoticeTest(unittest.TestCase):
         target = toggle["aria-describedby"]
         self.assertIn(target, c.attrs)
         notice = " ".join(c.text[target].split())
-        for needed in ("Off by default", "push address", "random ID", "IP address",
+        for needed in ("Off by default", "push address", "random ID", "15-minute window",
+                       "up to 15 minutes early",
                        "never learns event titles", "Google, Apple or Mozilla",
                        "removes its push address", "backups and logs"):
             self.assertIn(needed, notice)
