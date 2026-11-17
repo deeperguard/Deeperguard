@@ -9713,10 +9713,7 @@
       if (!title) {
         toast('Enter a folder name', true);
       } else if (title.toLowerCase() !== currentName.toLowerCase()) {
-        const taken = NotesStore.listFolders().some((item) => (
-          item.uuid !== uuid
-          && String(item.content?.title || '').trim().toLowerCase() === title.toLowerCase()
-        ));
+        const taken = NotesLabels.siblingNameTaken(title, NotesLabels.parentOf(folder.content), folderIndex(), uuid);
         if (taken) toast('A folder with that name already exists', true);
         else if (NotesStore.renameFolder(uuid, title)) renamedTo = title;
       } else if (title !== currentName) {
@@ -9748,145 +9745,305 @@
     input.addEventListener('input', () => syncTagLimitHint(input));
   }
 
+  const FOLDER_ALL = '__all_notes__';
+
+  function folderIndex() {
+    return new Map(NotesStore.listFolders().map((f) => [f.uuid, f.content]));
+  }
+
+  function openFolderSet() {
+    const map = folderOpenMap();
+    return new Set(Object.keys(map).filter((id) => map[id]));
+  }
+
+  function folderTreeRows(byId) {
+    const rows = NotesLabelTree.visibleRows(byId, openFolderSet());
+    return [{ uuid: FOLDER_ALL, parent: '', level: 1, hasChildren: false, expanded: false }, ...rows];
+  }
+
+  function folderItemEl(uuid) {
+    return document.querySelector(`#folder-list [data-folder-item="${CSS.escape(uuid)}"]`);
+  }
+
+  function focusFolderItem(uuid) {
+    const el = folderItemEl(uuid);
+    if (!el) return;
+    document.querySelectorAll('#folder-list [data-folder-item][tabindex="0"]').forEach((n) => { n.tabIndex = -1; });
+    el.tabIndex = 0;
+    el.focus();
+  }
+
+  function selectFolderItem(uuid) {
+    if (uuid === FOLDER_ALL) {
+      currentFolder = null;
+      currentTag = null;
+      setFilter('all');
+    } else {
+      currentFolder = currentFolder === uuid ? null : uuid;
+      if (currentFolder) {
+        currentTag = null;
+        if (currentFilter === 'trash' || currentFilter === 'untagged') setFilter('all');
+      }
+    }
+    renderTags();
+    renderNotes();
+    syncFilterSelect();
+    closeEditorIfNoteLeftView();
+    if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
+  }
+
+  function beginCreateSubfolder(parentId) {
+    if (!NotesStore.isUnlocked()) { toast('Unlock the vault first', true); return; }
+    const parent = NotesStore.get(parentId);
+    if (!parent || parent.deleted) return;
+    const section = document.getElementById('folder-section');
+    if (section) section.open = true;
+    const composer = document.getElementById('folder-composer');
+    const input = document.getElementById('folder-name-input');
+    if (!composer || !input) return;
+    composer.hidden = false;
+    composer.dataset.parent = parentId;
+    input.placeholder = `Subfolder of ${NotesLabels.nameOf(parent.content)}`;
+    input.value = '';
+    input.focus();
+  }
+
+  function closeFolderMenu(restoreFocus) {
+    const menu = document.getElementById('folder-menu');
+    if (!menu) return;
+    const owner = menu.dataset.owner;
+    menu.remove();
+    if (restoreFocus && owner) focusFolderItem(owner);
+  }
+
+  function openFolderMenu(uuid, anchor) {
+    closeFolderMenu(false);
+    const menu = document.createElement('div');
+    menu.id = 'folder-menu';
+    menu.className = 'label-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Folder actions');
+    menu.dataset.owner = uuid;
+    const entry = (action, text) => `<button type="button" role="menuitem" tabindex="-1" data-act="${action}">${text}</button>`;
+    menu.innerHTML = entry('sub', 'New subfolder') + entry('rename', 'Rename') + entry('delete', 'Delete…');
+    document.body.appendChild(menu);
+    const rect = anchor.getBoundingClientRect();
+    menu.style.top = `${Math.min(rect.bottom, window.innerHeight - 160)}px`;
+    menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 240))}px`;
+    const items = () => [...menu.querySelectorAll('[role="menuitem"]')];
+    items()[0].focus();
+    menu.addEventListener('keydown', (event) => {
+      const list = items();
+      const i = list.indexOf(document.activeElement);
+      if (event.key === 'ArrowDown') { event.preventDefault(); list[(i + 1) % list.length].focus(); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); list[(i - 1 + list.length) % list.length].focus(); }
+      else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeFolderMenu(true); }
+      else if (event.key === 'Tab') { event.preventDefault(); closeFolderMenu(true); }
+    });
+    menu.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-act]');
+      if (!btn) return;
+      closeFolderMenu(false);
+      folderAction(uuid, btn.dataset.act);
+    });
+    setTimeout(() => {
+      const away = (event) => {
+        if (!document.getElementById('folder-menu')) { document.removeEventListener('pointerdown', away, true); return; }
+        if (!menu.contains(event.target)) { document.removeEventListener('pointerdown', away, true); closeFolderMenu(false); }
+      };
+      document.addEventListener('pointerdown', away, true);
+    }, 0);
+  }
+
+  function folderAction(uuid, action) {
+    if (action === 'sub') beginCreateSubfolder(uuid);
+    else if (action === 'rename') beginRenameFolder(uuid);
+    else if (action === 'delete') deleteFolderWithConfirm(uuid);
+  }
+
+  function deleteFolderWithConfirm(id) {
+    const folder = NotesStore.get(id);
+    if (!folder || folder.deleted || folder.content?.type !== 'folder') return;
+    const byId = folderIndex();
+    const name = NotesLabels.nameOf(folder.content) || 'this folder';
+    const parentId = NotesLabels.parentOf(folder.content);
+    const parent = parentId ? byId.get(parentId) : null;
+    const noteIds = NotesStore.listNotes().filter((n) => n.content?.folder_id === id).map((n) => n.uuid);
+    const childIds = NotesStore.listFolders().filter((f) => NotesLabels.parentOf(f.content) === id).map((f) => f.uuid);
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const parts = [`Delete folder “${name}”?`];
+    parts.push(noteIds.length
+      ? `${plural(noteIds.length, 'note')} in it move out of the folder to All notes.`
+      : 'It contains no notes.');
+    if (childIds.length) {
+      parts.push(`${plural(childIds.length, 'subfolder')} move up to ${parent ? `“${NotesLabels.nameOf(parent)}”` : 'the top level'}.`);
+    }
+    parts.push('No notes are deleted.');
+    confirmAction(parts.join(' '), {
+      title: 'Delete folder',
+      confirmLabel: 'Delete',
+      danger: true,
+    }).then((ok) => {
+      if (!ok) return;
+      const current = NotesStore.get(id);
+      if (!current || current.deleted) return;
+      const snapshot = {
+        uuid: id,
+        content: { ...current.content },
+        noteIds,
+        childIds,
+        wasCurrent: currentFolder === id,
+      };
+      if (currentFolder === id) currentFolder = null;
+      NotesStore.deleteFolder(id);
+      renderFolders();
+      renderNotes();
+      syncFilterSelect();
+      if (currentId) syncNoteFolderControl(NotesStore.get(currentId));
+      toastWithUndo('Folder removed', () => {
+        NotesStore.upsert(snapshot.uuid, { ...snapshot.content });
+        snapshot.childIds.forEach((childId) => {
+          const child = NotesStore.get(childId);
+          if (!child || child.deleted) return;
+          NotesStore.upsert(childId, { ...child.content, parent_id: snapshot.uuid });
+        });
+        snapshot.noteIds.forEach((noteId) => {
+          const note = NotesStore.get(noteId);
+          if (!note || note.deleted) return;
+          NotesStore.upsert(noteId, { ...note.content, folder_id: snapshot.uuid }, {
+            touchUpdatedAt: false,
+            touchSyncOnly: true,
+          });
+        });
+        if (snapshot.wasCurrent) currentFolder = snapshot.uuid;
+        renderFolders();
+        renderNotes();
+        syncFilterSelect();
+        toast('Folder restored');
+      });
+    });
+  }
+
+  function bindFolderTree(host) {
+    if (host.dataset.treeBound) return;
+    host.dataset.treeBound = '1';
+    host.addEventListener('click', (event) => {
+      const item = event.target.closest('[data-folder-item]');
+      if (!item) return;
+      const id = item.dataset.folderItem;
+      const act = event.target.closest('[data-folder-add], [data-folder-rename], [data-server-copy], [data-folder-remove]');
+      if (act) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (act.dataset.folderAdd) beginCreateSubfolder(id);
+        else if (act.dataset.folderRename) beginRenameFolder(id);
+        else if (act.dataset.serverCopy) {
+          openServerCopyView(id).catch((err) => toast(err.message || 'Could not load server copy', true));
+        } else if (act.dataset.folderRemove) deleteFolderWithConfirm(id);
+        return;
+      }
+      if (event.target.closest('.folder-rename-input')) return;
+      if (event.target.closest('[data-folder-toggle]')) {
+        setFolderOpen(id, !openFolderSet().has(id));
+        renderFolders();
+        focusFolderItem(id);
+        return;
+      }
+      if (event.detail > 1) return;
+      selectFolderItem(id);
+      focusFolderItem(id);
+    });
+    host.addEventListener('dblclick', (event) => {
+      const btn = event.target.closest('[data-folder-select]');
+      if (!btn) return;
+      event.preventDefault();
+      beginRenameFolder(btn.dataset.folderSelect);
+    });
+    host.addEventListener('contextmenu', (event) => {
+      const item = event.target.closest('[data-folder-item]');
+      if (!item || item.dataset.folderItem === FOLDER_ALL || event.target.closest('.folder-rename-input')) return;
+      event.preventDefault();
+      openFolderMenu(item.dataset.folderItem, item);
+    });
+    host.addEventListener('keydown', (event) => {
+      const item = event.target.closest('[data-folder-item]');
+      if (!item || event.target !== item) return;
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      const id = item.dataset.folderItem;
+      const key = event.shiftKey && event.key === 'F10' ? 'ContextMenu' : event.key;
+      if (key === 'Delete') {
+        if (id === FOLDER_ALL) return;
+        event.preventDefault();
+        deleteFolderWithConfirm(id);
+        return;
+      }
+      const act = NotesLabelTree.navigate(folderTreeRows(folderIndex()), id, key);
+      if (!Object.keys(act).length) return;
+      if ((act.rename || act.menu) && id === FOLDER_ALL) return;
+      event.preventDefault();
+      if (act.focus) focusFolderItem(act.focus);
+      else if (act.expand || act.collapse) {
+        setFolderOpen(act.expand || act.collapse, !!act.expand);
+        renderFolders();
+        focusFolderItem(act.expand || act.collapse);
+      } else if (act.select) {
+        selectFolderItem(act.select);
+        focusFolderItem(act.select);
+      } else if (act.rename) beginRenameFolder(act.rename);
+      else if (act.menu) openFolderMenu(act.menu, item);
+    });
+  }
+
   function renderFolders() {
     const host = document.getElementById('folder-list');
     if (!host || !NotesStore.listFolders) return;
     const folders = NotesStore.listFolders();
     document.getElementById('folder-section')?.classList.toggle('is-empty', folders.length === 0);
-    const openMap = folderOpenMap();
-    host.innerHTML = folders.map((folder) => {
-      const notes = NotesStore.notesInFolder(folder.uuid);
-      const open = !!openMap[folder.uuid];
-      const active = currentFolder === folder.uuid ? ' active' : '';
-      const kids = notes.map((note) => {
-        const noteOpen = editorNoteOpen() && currentId === note.uuid;
-        const inThisView = currentFolder === folder.uuid;
-        const on = (noteOpen && inThisView) ? ' active' : '';
-        // All Notes stays the active view. The folder only gets a quiet marker.
-        const current = (noteOpen && !inThisView) ? ' is-current' : '';
-        return `<button type="button" class="folder-note${on}${current}" data-folder-note="${escapeAttr(note.uuid)}">${escapeHtml(NotesSearch.effectiveNoteTitle(note) || 'Untitled')}</button>`;
-      }).join('');
-      const holdsOpen = notes.some((note) => editorNoteOpen() && currentId === note.uuid && currentFolder !== folder.uuid);
-      const folderTitle = folder.content.title || 'Folder';
-      return `<div class="folder-block${active}${open ? ' is-open' : ''}${holdsOpen ? ' has-open-note' : ''}" data-folder="${escapeAttr(folder.uuid)}">
-        <div class="folder-head" data-folder-title="${escapeAttr(folderTitle)}">
-          <button type="button" class="folder-toggle" data-folder-toggle="${escapeAttr(folder.uuid)}" aria-expanded="${open ? 'true' : 'false'}" aria-label="${open ? 'Collapse' : 'Expand'} ${escapeAttr(folderTitle)}">${open ? '▾' : '▸'}</button>
-          <button type="button" class="folder-select" data-folder-select="${escapeAttr(folder.uuid)}"${active ? ' aria-current="true"' : ''} data-folder-title="${escapeAttr(folderTitle)}" title="${escapeAttr(folderTitle)}">${escapeHtml(folderTitle)}</button>
-          <span class="tag-count folder-count">${notes.length}</span>
+    const byId = folderIndex();
+    const kids = NotesLabelTree.childMap(byId);
+    const open = openFolderSet();
+    const hadFocus = host.contains(document.activeElement) ? document.activeElement.closest('[data-folder-item]') : null;
+    const focusId = hadFocus ? hadFocus.dataset.folderItem : null;
+    const rows = folderTreeRows(byId);
+    const selectedId = currentFolder && byId.has(currentFolder) ? currentFolder : FOLDER_ALL;
+    const tabbable = rows.some((r) => r.uuid === (focusId || selectedId)) ? (focusId || selectedId) : FOLDER_ALL;
+    const roots = kids.get('') || [];
+    const node = (id, level, pos, size) => {
+      const folder = byId.get(id);
+      const folderTitle = NotesLabels.nameOf(folder) || 'Folder';
+      const sub = kids.get(id) || [];
+      const expanded = sub.length > 0 && open.has(id);
+      const count = NotesStore.notesInFolder(id).length;
+      const sel = selectedId === id;
+      const active = sel ? ' active' : '';
+      const q = escapeAttr(id);
+      return `<li role="none" class="folder-block${active}${expanded ? ' is-open' : ''}" data-folder="${q}">
+        <div class="folder-head" data-folder-title="${escapeAttr(folderTitle)}" role="treeitem" data-folder-item="${q}" aria-level="${level}" aria-posinset="${pos}" aria-setsize="${size}" aria-selected="${sel ? 'true' : 'false'}"${sub.length ? ` aria-expanded="${expanded ? 'true' : 'false'}"` : ''} aria-label="${escapeAttr(folderTitle)}, ${count}" tabindex="${id === tabbable ? '0' : '-1'}" style="--folder-level:${level - 1}">
+          <button type="button" class="folder-toggle" data-folder-toggle="${q}" tabindex="-1" aria-hidden="true"${sub.length ? '' : ' disabled'}>${sub.length ? (expanded ? '▾' : '▸') : ''}</button>
+          <button type="button" class="folder-select" data-folder-select="${q}" tabindex="-1" data-folder-title="${escapeAttr(folderTitle)}" title="${escapeAttr(folderTitle)}">${escapeHtml(folderTitle)}</button>
+          <span class="tag-count folder-count" aria-hidden="true">${count}</span>
           <div class="folder-head-actions" role="group" aria-label="Folder actions">
-            <button type="button" class="folder-rename" data-folder-rename="${escapeAttr(folder.uuid)}" aria-label="Rename folder ${escapeAttr(folder.content.title || 'Folder')}">✎</button>
-            <button type="button" class="folder-server-copy" data-server-copy="${escapeAttr(folder.uuid)}" aria-label="View on server for folder ${escapeAttr(folder.content.title || 'Folder')}" title="View on server">ⓘ</button>
-            <button type="button" class="tag-remove folder-remove" data-folder-remove="${escapeAttr(folder.uuid)}" aria-label="Delete folder ${escapeAttr(folder.content.title || 'Folder')}">×</button>
+            <button type="button" class="folder-add" data-folder-add="${q}" tabindex="-1" aria-label="New subfolder in ${escapeAttr(folderTitle)}" title="New subfolder">+</button>
+            <button type="button" class="folder-rename" data-folder-rename="${q}" tabindex="-1" aria-label="Rename folder ${escapeAttr(folderTitle)}">✎</button>
+            <button type="button" class="folder-server-copy" data-server-copy="${q}" tabindex="-1" aria-label="View on server for folder ${escapeAttr(folderTitle)}" title="View on server">ⓘ</button>
+            <button type="button" class="tag-remove folder-remove" data-folder-remove="${q}" tabindex="-1" aria-label="Delete folder ${escapeAttr(folderTitle)}">×</button>
           </div>
         </div>
-        <div class="folder-notes"${open ? '' : ' hidden'}>${kids || '<p class="folder-empty muted">Empty</p>'}</div>
-      </div>`;
-    }).join('');
-    host.querySelectorAll('[data-folder-toggle]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.folderToggle;
-        const block = host.querySelector(`[data-folder="${id}"]`);
-        const next = !block?.classList.contains('is-open');
-        setFolderOpen(id, next);
-        renderFolders();
-      });
-    });
-    host.querySelectorAll('[data-folder-select]').forEach((btn) => {
-      btn.addEventListener('click', (event) => {
-        if (event.detail > 1) return;
-        const id = btn.dataset.folderSelect;
-        currentFolder = currentFolder === id ? null : id;
-        if (currentFolder) {
-          currentTag = null;
-          if (currentFilter === 'trash' || currentFilter === 'untagged') setFilter('all');
-        }
-        renderTags();
-        renderNotes();
-        syncFilterSelect();
-        closeEditorIfNoteLeftView();
-        if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
-      });
-      btn.addEventListener('dblclick', (event) => {
-        event.preventDefault();
-        beginRenameFolder(btn.dataset.folderSelect);
-      });
-    });
-    host.querySelectorAll('[data-folder]').forEach((block) => {
-      block.addEventListener('contextmenu', (event) => {
-        if (event.target.closest('[data-folder-note], [data-folder-remove], .folder-rename-input')) return;
-        event.preventDefault();
-        beginRenameFolder(block.dataset.folder);
-      });
-    });
-    host.querySelectorAll('[data-folder-rename]').forEach((btn) => {
-      btn.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        beginRenameFolder(btn.dataset.folderRename);
-      });
-    });
-    host.querySelectorAll('[data-server-copy]').forEach((btn) => {
-      btn.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        openServerCopyView(btn.dataset.serverCopy).catch((err) => toast(err.message || 'Could not load server copy', true));
-      });
-    });
-    host.querySelectorAll('[data-folder-note]').forEach((btn) => {
-      btn.addEventListener('click', (event) => {
-        if (typeof shouldSwallowNoteOpen === 'function' && shouldSwallowNoteOpen()) {
-          event.preventDefault();
-          event.stopPropagation();
-          return;
-        }
-        const folderId = btn.closest('[data-folder]')?.dataset.folder || '';
-        if (folderId) currentFolder = folderId;
-        openNote(btn.dataset.folderNote);
-        if (document.body.classList.contains('nav-drawer-open')) setNavDrawer(false);
-      });
-    });
-    host.querySelectorAll('[data-folder-remove]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.folderRemove;
-        const folder = NotesStore.get(id);
-        if (!folder) return;
-        const name = folder?.content?.title || 'this folder';
-        confirmAction(`Remove “${name}”? Notes in it stay in your list.`, {
-          title: 'Remove folder',
-          confirmLabel: 'Remove',
-          danger: true,
-        }).then((ok) => {
-          if (!ok) return;
-          const snapshot = {
-            uuid: id,
-            content: { ...folder.content },
-            noteIds: NotesStore.listNotes()
-              .filter((n) => n.content?.folder_id === id)
-              .map((n) => n.uuid),
-            wasCurrent: currentFolder === id,
-          };
-          if (currentFolder === id) currentFolder = null;
-          NotesStore.deleteFolder(id);
-          renderFolders();
-          renderNotes();
-          toastWithUndo('Folder removed', () => {
-            NotesStore.upsert(snapshot.uuid, { ...snapshot.content });
-            snapshot.noteIds.forEach((noteId) => {
-              const note = NotesStore.get(noteId);
-              if (!note || note.deleted) return;
-              NotesStore.upsert(noteId, { ...note.content, folder_id: snapshot.uuid }, {
-                touchUpdatedAt: false,
-                touchSyncOnly: true,
-              });
-            });
-            if (snapshot.wasCurrent) currentFolder = snapshot.uuid;
-            renderFolders();
-            renderNotes();
-            toast('Folder restored');
-          });
-        });
-      });
-    });
+        ${sub.length ? `<ul role="group" class="folder-group"${expanded ? '' : ' hidden'}>${expanded ? sub.map((s, i) => node(s, level + 1, i + 1, sub.length)).join('') : ''}</ul>` : ''}
+      </li>`;
+    };
+    const allSel = selectedId === FOLDER_ALL;
+    const all = `<li role="none" class="folder-block folder-all-block${allSel ? ' active' : ''}">
+        <div class="folder-head folder-all" data-folder-title="All notes" role="treeitem" data-folder-item="${FOLDER_ALL}" aria-level="1" aria-posinset="1" aria-setsize="${roots.length + 1}" aria-selected="${allSel ? 'true' : 'false'}" aria-label="All notes" tabindex="${tabbable === FOLDER_ALL ? '0' : '-1'}" style="--folder-level:0">
+          <span class="folder-toggle" aria-hidden="true"></span>
+          <span class="folder-select">All notes</span>
+        </div>
+      </li>`;
+    host.innerHTML = folders.length
+      ? `<ul role="tree" class="folder-tree" aria-label="Folders">${all}${roots.map((r, i) => node(r, 1, i + 2, roots.length + 1)).join('')}</ul>`
+      : '';
+    bindFolderTree(host);
+    if (focusId) focusFolderItem(focusId);
     syncNavFilterActive();
   }
 
@@ -20551,8 +20708,14 @@
   function hideFolderComposer() {
     const composer = document.getElementById('folder-composer');
     const input = document.getElementById('folder-name-input');
-    if (composer) composer.hidden = true;
-    if (input) input.value = '';
+    if (composer) {
+      composer.hidden = true;
+      delete composer.dataset.parent;
+    }
+    if (input) {
+      input.value = '';
+      input.placeholder = 'Folder name';
+    }
   }
 
   function createFolderFromComposer() {
@@ -20567,11 +20730,22 @@
       input?.focus();
       return;
     }
-    const folderId = NotesStore.createFolder(name);
+    const parentId = document.getElementById('folder-composer')?.dataset.parent || '';
+    if (NotesLabels.siblingNameTaken(name, parentId, folderIndex())) {
+      toast('A folder with that name already exists here', true);
+      input?.focus();
+      return;
+    }
+    const folderId = NotesStore.createFolder(name, parentId);
+    if (!folderId) {
+      toast('Cannot create a folder here (maximum nesting depth reached)', true);
+      input?.focus();
+      return;
+    }
     hideFolderComposer();
-    if (!folderId) return;
     const assignTo = folderCreateForNote;
     folderCreateForNote = '';
+    if (parentId) setFolderOpen(parentId, true);
     setFolderOpen(folderId, true);
     currentFolder = folderId;
     prefs.foldersCollapsed = false;
