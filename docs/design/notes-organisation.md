@@ -134,9 +134,9 @@ labels" in de UI). Geen test voor nesting, want die bestaat nog niet.
 mappen als boom (`renderFolders` in `app.js`, `folder-block` en `folder-head`).
 De notities onder een map staan daar niet meer: de oude `folder-note`-knoppen
 om ze uit te klappen zijn verdwenen. Wie de notities van een map wil zien,
-kiest de map; de notitielijst staat dan in het hoofdvenster. Het ongebruikte
-CSS voor `.folder-note` en `.folder-notes` (`app.css`) is nog niet verwijderd;
-dat hoort bij een vervolgtaak.
+kiest de map; de notitielijst staat dan in het hoofdvenster. De ongebruikte
+CSS voor `.folder-note` en `.folder-notes` is in de vervolgtaak uit `app.css`
+verwijderd. `.folder-head` en `.folder-block` blijven in gebruik.
 
 ### 1.4 Notitielinks (werkt)
 

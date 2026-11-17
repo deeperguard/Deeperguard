@@ -64,8 +64,7 @@ assert.ok(appJs.includes("cancelLabel: 'Cancel'"));
 // 7. Folder rows match the desktop Views font size.
 const folderIdx = css.indexOf('.sidebar-nav .folder-select');
 assert.ok(folderIdx > css.indexOf('@media (min-width: 1000px)'));
-assert.ok(css.includes('.sidebar-nav .folder-note'));
-assert.ok(/\.sidebar-nav \.folder-note \{\s*font-size: 14px;/.test(css));
+assert.ok(/\.sidebar-nav \.folder-select \{\s*font-size: 14px;/.test(css));
 
 // 8. Hidden file inputs stay on-screen at 1px and clicks restore scroll.
 const fileRule = css.split('input[type="file"].sr-file')[1].split('}')[0];
