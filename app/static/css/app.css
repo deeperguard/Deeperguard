@@ -12889,4 +12889,24 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   margin: var(--space-4);
 }
 .agenda-legend-sub { cursor: default; }
+
+/* Tablet and phone (docs/UI_POLISH.md 7.8): "Linked from" shares the inset of
+   the Attachments and Version history labels; >=1000px sets its own 32px. */
+@media (max-width: 999px) {
+  .editor .backlinks {
+    box-sizing: border-box;
+    padding-inline: var(--space-4);
+  }
+}
+/* Phone: the 2FA title and its count get their own row instead of being
+   squeezed into a narrow column by the buttons; the PDF zoom, fit, page and
+   full-screen controls fit on one row at 390px (they still wrap if needed). */
+@media (max-width: 599px) {
+  .totp-head { flex-wrap: wrap; row-gap: var(--space-2); }
+  .totp-head-copy { flex: 1 0 100%; min-width: 0; }
+  .doc-inline-toolbar { gap: var(--space-1); padding-inline: var(--space-2); }
+  .doc-inline-toolbar .doc-inline-ctl { padding-inline: var(--space-2); }
+  .doc-inline-zoom-level,
+  .doc-inline-page { min-width: 40px; }
+}
 .agenda-legend-badge { font-size: 11px; border: 1px solid currentColor; border-radius: 8px; padding: 0 6px; opacity: .85; }
