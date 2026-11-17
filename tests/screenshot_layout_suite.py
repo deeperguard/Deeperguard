@@ -53,6 +53,8 @@ TOTP_ENTRIES = [
     ("Example Bank", "carol@example.test", "MFRGGZDFMZTWQ2LK"),
 ]
 
+FLUSH_JS = "async () => { await NotesStore.flush(); }"
+
 
 def add_totp(page) -> None:
     page.click("#app-tab-2fa", timeout=10000)
@@ -64,6 +66,18 @@ def add_totp(page) -> None:
         page.fill("#totp-add-secret", secret)
         page.click("#totp-add-save")
         page.wait_for_selector("text=" + issuer, timeout=10000)
+
+
+def wait_rendered(page, screen: str) -> None:
+    """Wait for the screen's content to be on screen, so an empty list is never shot."""
+    if screen == "agenda":
+        page.wait_for_selector("#agenda-root [data-agenda-id]", state="visible", timeout=10000)
+    elif screen == "2fa":
+        page.wait_for_function(
+            """(n) => Array.from(document.querySelectorAll('[data-totp-copy]'))
+              .filter((el) => el.getClientRects().length > 0).length >= n""",
+            arg=len(TOTP_ENTRIES), timeout=10000,
+        )
 
 
 def show(page, screen: str) -> None:
@@ -79,6 +93,7 @@ def show(page, screen: str) -> None:
         page.wait_for_timeout(1500)  # let the viewer render
     else:
         page.click("#app-tab-" + screen, timeout=10000)
+        wait_rendered(page, screen)
         page.wait_for_timeout(800)
 
 
@@ -89,6 +104,7 @@ def main() -> int:
     parser.add_argument("--out", default=DEFAULT_OUT, help="output folder (default: " + DEFAULT_OUT + ")")
     out = Path(parser.parse_args().out)
     out.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
 
     proc, url = run_server()
     try:
@@ -99,7 +115,9 @@ def main() -> int:
             page.evaluate(DISMISS_JS)
             page.evaluate(SEED_JS, base64.b64encode(make_pdf()).decode("ascii"))
             page.evaluate(AGENDA_JS)
+            page.evaluate(FLUSH_JS)
             add_totp(page)
+            page.evaluate(FLUSH_JS)
             for width, height in SIZES:
                 page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(500)
@@ -108,11 +126,18 @@ def main() -> int:
                     page.mouse.move(width - 5, height - 5)
                     page.wait_for_timeout(300)
                     target = out / (screen + "-" + str(width) + ".png")
+                    target.unlink(missing_ok=True)  # a stale file from an earlier run must not count
                     page.screenshot(path=str(target), full_page=True)
+                    if target.exists():
+                        written.append(target)
                     print("saved", target)
             browser.close()
     finally:
         stop_server(proc)
+    expected = len(SIZES) * len(SCREENS)
+    if len(written) != expected:
+        print(f"ERROR: wrote {len(written)} screenshots, expected {expected}", file=sys.stderr)
+        return 1
     return 0
 
 
