@@ -194,6 +194,54 @@ const subEvents = (id) => Object.entries(pack.events).filter(([, e]) => e.subscr
   }
   ok('ok no link leaks');
 
+  // Doubles: two devices refresh the same feed independently, then merge.
+  {
+    const SUB = { id: 'sd', name: 'Feed', url: FEED_URL };
+    const feedRows = [
+      { title: 'A', ical_uid: 'uid-a', start: '2026-01-01T10:00:00Z', end: '2026-01-01T11:00:00Z' },
+      { title: 'B', ical_uid: 'uid-b', start: '2026-01-02T10:00:00Z', end: '2026-01-02T11:00:00Z' },
+    ];
+    const own = { type: 'agenda_event', title: 'A', start: '2026-01-01T10:00:00Z', end: '2026-01-01T11:00:00Z', updated_at: '2026-01-01T00:00:00Z' };
+    const start = { type: 'agenda_pack', subscriptions: { sd: SUB }, events: { own1: own, own2: { ...own } } };
+    const dev1 = RealStore.applySubscriptionRefresh(start, 'sd', feedRows, { nowMs: Date.parse('2026-02-01T00:00:00Z') }).content;
+    const dev2 = RealStore.applySubscriptionRefresh(start, 'sd', feedRows, { nowMs: Date.parse('2026-02-01T00:05:00Z') }).content;
+    const forSub = (c) => Object.values(c.events).filter((e) => e.subscription_id === 'sd');
+    assert.deepStrictEqual(Object.keys(dev1.events).sort(), Object.keys(dev2.events).sort(), 'same ids on every device');
+    const m = RealStore.mergeAgendaPacks(dev1, dev2, Date.parse('2026-02-02T00:00:00Z'));
+    assert.strictEqual(forSub(m).length, 2);
+    assert.deepStrictEqual(forSub(m).map((e) => e.ical_uid).sort(), ['uid-a', 'uid-b']);
+    assert.ok(m.events.own1 && m.events.own2, 'own events with equal title/time untouched');
+
+    // Legacy packs with random ids: merge folds to one per uid, losers tombstoned and stay gone.
+    const legacy = (prefix) => {
+      const c = JSON.parse(JSON.stringify(dev1));
+      c.events = { own1: own, own2: { ...own } };
+      for (const r of feedRows) c.events[prefix + r.ical_uid] = { ...dev1.events[RealStore.subscriptionEventId('sd', r.ical_uid)] };
+      return c;
+    };
+    const lm = RealStore.mergeAgendaPacks(legacy('x-'), legacy('y-'), Date.parse('2026-02-02T00:00:00Z'));
+    assert.strictEqual(forSub(lm).length, 2);
+    const gone = Object.keys(legacy('x-').events).concat(Object.keys(legacy('y-').events))
+      .filter((id) => !lm.events[id]);
+    assert.strictEqual(gone.length, 2);
+    gone.forEach((id) => assert.ok(lm.deleted_events[id], 'tombstoned'));
+    const again = RealStore.mergeAgendaPacks(legacy('x-'), lm, Date.parse('2026-02-03T00:00:00Z'));
+    assert.strictEqual(forSub(again).length, 2, 'folded rows do not return after sync');
+    assert.ok(again.events.own1 && again.events.own2);
+
+    // Refresh heals a pack that already has doubles (also two rows sharing a uid) and reports them for reminders.
+    const dirty = JSON.parse(JSON.stringify(legacy('x-')));
+    dirty.events.extra = { ...dirty.events['x-uid-a'], updated_at: '2026-01-01T00:00:00Z', imported_at: '2026-01-01T00:00:00Z' };
+    const healed = RealStore.applySubscriptionRefresh(dirty, 'sd', feedRows, { nowMs: Date.parse('2026-02-05T00:00:00Z') });
+    assert.strictEqual(forSub(healed.content).length, 2);
+    assert.strictEqual(healed.removedEvents.length, 1);
+    assert.ok(healed.content.deleted_events[healed.removedEvents[0].id]);
+    assert.ok(healed.content.events.own1 && healed.content.events.own2);
+    const back = RealStore.mergeAgendaPacks(healed.content, dirty, Date.parse('2026-02-06T00:00:00Z'));
+    assert.strictEqual(forSub(back).length, 2, 'removed double does not come back');
+    ok('ok duplicate folding');
+  }
+
   // Relay: opt-in per subscription, never a silent fallback.
   {
     const calls = [];

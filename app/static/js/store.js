@@ -2119,6 +2119,64 @@ const NotesStore = (() => {
   }
 
   /**
+   * Id of a feed event: the same on every device (subscription id + ical_uid), so two devices
+   * refreshing one feed independently write the same row instead of two. 128-bit hash
+   * (four seeded 32-bit lanes) formatted like a UUID.
+   */
+  function subscriptionEventId(subId, uid) {
+    const str = `${subId}\u0000${uid}`;
+    const seeds = [0x9e3779b1, 0x85ebca6b, 0xc2b2ae35, 0x27d4eb2f];
+    const h = seeds.map((seed) => {
+      let a = seed;
+      let b = ~seed;
+      for (let i = 0; i < str.length; i += 1) {
+        const c = str.charCodeAt(i);
+        a = Math.imul(a ^ c, 2654435761);
+        b = Math.imul(b ^ c, 1597334677);
+      }
+      a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909);
+      b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909);
+      return ((a ^ b) >>> 0).toString(16).padStart(8, '0');
+    }).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+  }
+
+  /**
+   * Fold doubles inside one subscription: at most one event per (subscription_id, ical_uid).
+   * Keeps the row with the deterministic id, else the newest, else the smallest id; the others
+   * are removed from `events` and tombstoned in `deleted` (stamp = max(nowMs, row stamp), so the
+   * tombstone beats the row). Only events with a subscription_id and an ical_uid are touched;
+   * the user's own events never are. Mutates both maps; returns [{id, row}] of the removed rows.
+   */
+  function foldSubscriptionDuplicates(events, deleted, nowMs) {
+    const groups = new Map();
+    for (const [eid, ev] of Object.entries(events)) {
+      const uid = ev && ev.subscription_id ? String(ev.ical_uid || '').trim() : '';
+      if (!uid) continue;
+      const key = `${ev.subscription_id}\u0000${uid}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(eid);
+    }
+    const removed = [];
+    for (const ids of groups.values()) {
+      if (ids.length < 2) continue;
+      const ev0 = events[ids[0]];
+      const wanted = subscriptionEventId(ev0.subscription_id, String(ev0.ical_uid).trim());
+      ids.sort((x, y) => (
+        (y === wanted) - (x === wanted)
+        || agendaEventStampMs(events[y]) - agendaEventStampMs(events[x])
+        || (x < y ? -1 : 1)
+      ));
+      for (const eid of ids.slice(1)) {
+        removed.push({ id: eid, row: events[eid] });
+        deleted[eid] = new Date(Math.max(nowMs, agendaEventStampMs(events[eid]))).toISOString();
+        delete events[eid];
+      }
+    }
+    return removed;
+  }
+
+  /**
    * Merge two agenda packs event by event (sync conflict between devices).
    * - An event only one side has is kept, unless the other side deleted it later.
    * - An event both sides have: the newer `updated_at` wins; on a tie the local copy.
@@ -2152,6 +2210,7 @@ const NotesStore = (() => {
     for (const [id, at] of Object.entries(deleted)) {
       if (nowMs - agendaStampMs(at) > AGENDA_TOMBSTONE_TTL_MS) delete deleted[id];
     }
+    foldSubscriptionDuplicates(events, deleted, nowMs);
     const updated = agendaStampMs(local.updated_at) >= agendaStampMs(remote.updated_at)
       ? local.updated_at
       : remote.updated_at;
@@ -2329,6 +2388,9 @@ const NotesStore = (() => {
     const nowIso = new Date(opts.nowMs || Date.now()).toISOString();
     const events = { ...(base.events || {}) };
     const deleted = { ...(base.deleted_events || {}) };
+    // Doubles of this subscription (two devices refreshed the same feed) fold to one row first.
+    const folded = foldSubscriptionDuplicates(events, deleted, opts.nowMs || Date.now())
+      .filter(({ row }) => row.subscription_id === subId);
     const mine = new Map();
     for (const [eid, ev] of Object.entries(events)) {
       if (ev && ev.subscription_id === subId) mine.set(String(ev.ical_uid || eid), eid);
@@ -2357,7 +2419,7 @@ const NotesStore = (() => {
       }
       if (prev) changed += 1;
       else added += 1;
-      writes.push([eid || newUuid(), nextRow]);
+      writes.push([eid || subscriptionEventId(subId, key), nextRow]);
     }
     const doomed = [...mine.entries()].filter(([key]) => !seen.has(key)).map(([, eid]) => eid);
     if (!opts.allowShrink && doomed.length > 20 && doomed.length * 2 > mine.size) {
@@ -2367,7 +2429,7 @@ const NotesStore = (() => {
       events[eid] = row;
       delete deleted[eid];
     }
-    const removedEvents = doomed.map((eid) => ({ id: eid, row: events[eid] }));
+    const removedEvents = [...folded, ...doomed.map((eid) => ({ id: eid, row: events[eid] }))];
     for (const eid of doomed) {
       delete events[eid];
       deleted[eid] = nowIso;
@@ -2378,7 +2440,7 @@ const NotesStore = (() => {
       added,
       changed,
       unchanged,
-      removed: doomed.length,
+      removed: doomed.length + folded.length,
       removedEvents,
     };
   }
@@ -7413,6 +7475,7 @@ const NotesStore = (() => {
     upsertAgendaEvent,
     removeAgendaEvent,
     mergeAgendaPacks,
+    subscriptionEventId,
     listAgendaBackups,
     restoreAgendaBackup,
     DEFAULT_CALENDAR_ID,
