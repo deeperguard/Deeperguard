@@ -69,8 +69,10 @@ SRP_PURPOSE_REPAIR_LOGIN = "repair-login"
 SRP_PURPOSE_VAULT_RECOVERY = "vault-recovery"
 SRP_PURPOSE_PASSWORD_CHANGE = "password-change"
 SRP_PURPOSE_UNLOCK = "account-unlock"
+SRP_PURPOSE_VAULT_KEYS = "vault-keys"
 SRP_PURPOSE_KDF_UPGRADE = "kdf-upgrade"
 SESSION_PW_ROTATION = "pw_rotation"
+SESSION_VAULT_KEYS = "vault_keys_token"
 SESSION_SID = "sid"
 
 PASSWORD_ROTATION_SECONDS = int(os.environ.get("NOTES_PASSWORD_ROTATION_SECONDS", "600"))
@@ -976,6 +978,31 @@ def consume_password_rotation_token(user_id: int, token: str) -> bool:
         return False
     session.pop(SESSION_PW_ROTATION, None)
     return True
+
+
+def issue_vault_keys_token() -> str:
+    """Short-lived proof that the vault password was verified before a wrap change."""
+    token = secrets.token_urlsafe(32)
+    session[SESSION_VAULT_KEYS] = {
+        "hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        "exp": time.time() + PASSWORD_ROTATION_SECONDS,
+    }
+    return token
+
+
+def vault_keys_token_valid(token: str) -> bool:
+    row = session.get(SESSION_VAULT_KEYS)
+    if not isinstance(row, dict):
+        return False
+    if time.time() > float(row.get("exp") or 0):
+        session.pop(SESSION_VAULT_KEYS, None)
+        return False
+    got = hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
+    return hmac.compare_digest(str(row.get("hash") or ""), got)
+
+
+def consume_vault_keys_token() -> None:
+    session.pop(SESSION_VAULT_KEYS, None)
 
 
 def pop_srp_credential_challenge(
