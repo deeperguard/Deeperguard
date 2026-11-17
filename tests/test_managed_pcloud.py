@@ -22,6 +22,7 @@ ENV_KEYS = (
 class ManagedPcloudTests(unittest.TestCase):
     def setUp(self):
         self.saved = {k: os.environ.get(k) for k in ENV_KEYS}
+        self.addCleanup(self._restore_env)
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         os.environ["NOTES_ROOT"] = str(root)
@@ -45,6 +46,8 @@ class ManagedPcloudTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def _restore_env(self):
         for k, v in self.saved.items():
             if v is None:
                 os.environ.pop(k, None)

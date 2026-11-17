@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app"
 sys.path.insert(0, str(APP))
+from test_app import stop_app_background_threads  # noqa: E402
 
 _ISOLATED_APP_MODULES = frozenset(
     {
@@ -56,6 +57,7 @@ class AgendaRemindersApiTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        stop_app_background_threads()
         cls._tmp.cleanup()
         for key in (
             "NOTES_ROOT",

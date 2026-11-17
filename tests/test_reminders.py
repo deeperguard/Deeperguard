@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 sys.path.insert(0, str(APP_DIR))
+from test_app import stop_app_background_threads  # noqa: E402
 
 NOTE_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
@@ -56,6 +57,7 @@ class ReminderTests(unittest.TestCase):
         self.client = self.app_mod.app.test_client()
 
     def tearDown(self):
+        stop_app_background_threads()
         self.tmp.cleanup()
         for key in (
             "NOTES_ROOT",

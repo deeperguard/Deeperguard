@@ -17,6 +17,44 @@ APP_DIR = Path(__file__).resolve().parents[1] / "app"
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+# Daemon threads the app starts; each can log into a later test. Value: the
+# stop function in the thread's own module, or None when the thread ends by itself.
+_APP_BACKGROUND_THREADS = {
+    "pcloud-health": None,
+    "server-info-initial": "stop_refresh_loop",
+    "server-info-refresh": "stop_refresh_loop",
+    "ocr-jobs": "stop_worker",
+    "signin-alert": None,
+}
+
+
+def stop_app_background_threads(timeout: float = 60.0) -> None:
+    """Stop and wait for the app's background threads, or fail with the names still alive.
+
+    A thread may belong to a module copy that an earlier test already purged
+    from sys.modules, so the stop function is looked up in the globals of the
+    thread's own target function.
+    """
+    deadline = time.monotonic() + timeout
+
+    def live():
+        return [
+            t for t in threading.enumerate()
+            if t.name in _APP_BACKGROUND_THREADS and t is not threading.current_thread() and t.is_alive()
+        ]
+
+    for thread in live():
+        stop_name = _APP_BACKGROUND_THREADS[thread.name]
+        target = getattr(thread, "_target", None)
+        stop = getattr(target, "__globals__", {}).get(stop_name) if stop_name else None
+        if callable(stop):
+            stop(max(0.0, deadline - time.monotonic()))
+    for thread in live():
+        thread.join(max(0.0, deadline - time.monotonic()))
+    alive = sorted({t.name for t in live()})
+    if alive:
+        raise AssertionError(f"background thread still alive after {timeout:g}s: {', '.join(alive)}")
+
 
 def _concat_css_media_blocks(css: str, predicate: str) -> str:
     """Concatenate rule bodies from every @media (<predicate>) { ... } block."""
@@ -89,6 +127,7 @@ class NotesAppTests(unittest.TestCase):
         self.tmp.cleanup()
         for key in ("NOTES_ROOT", "NOTES_DATA", "NOTES_KEYS", "NOTES_ALLOWED_CIDRS", "NOTES_SKIP_LOGIN", "NOTES_BUILD", "NOTES_SERVER_INFO_REFRESH", "NOTES_SERVER_OCR", "NOTES_STRICT_ZK", "NOTES_ADMIN_EMAILS", "NOTES_DEFAULT_USER_QUOTA_MB", "NOTES_DEFAULT_PLAN", "NOTES_APP_PATH", "NOTES_AUTH_RATE_LIMIT", "NOTES_REPAIR_LOGIN_PASSWORD", "NOTES_PCLOUD_CREDENTIALS_KEY"):
             os.environ.pop(key, None)
+        stop_app_background_threads()
 
     def _srp_verifier(
         self,
@@ -5904,6 +5943,83 @@ class NotesAppTests(unittest.TestCase):
         self.assertNotIn("'listPaneWidth'", app_js.split("GLOBAL_PREF_KEYS", 1)[1].split("];", 1)[0])
 
 
+class AppBackgroundThreadStopTests(unittest.TestCase):
+    def setUp(self):
+        stop_app_background_threads()
+
+    def tearDown(self):
+        stop_app_background_threads()
+
+    @staticmethod
+    def _alive(name):
+        return [t for t in threading.enumerate() if t.name == name and t.is_alive()]
+
+    def test_stop_refresh_loop_joins_threads_and_allows_restart(self):
+        from unittest.mock import patch
+
+        import server_info_cache as sic
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.dict(os.environ, {"NOTES_SERVER_INFO_REFRESH": "1"}), \
+                patch.object(sic, "CACHE_DIR", Path(tmp) / "cache"), \
+                patch.object(sic, "refresh_all_users", lambda: 0):
+            for _ in range(2):
+                sic.start_refresh_loop()
+                self.assertTrue(self._alive("server-info-refresh"))
+                self.assertTrue(sic.stop_refresh_loop(5))
+                self.assertEqual(self._alive("server-info-refresh"), [])
+                self.assertEqual(self._alive("server-info-initial"), [])
+                self.assertFalse(sic._thread_started)
+                self.assertFalse(sic._stop.is_set())
+
+    def test_ocr_stop_worker_joins_thread_and_allows_restart(self):
+        import ocr_jobs
+
+        for _ in range(2):
+            ocr_jobs._ensure_worker()
+            self.assertTrue(self._alive("ocr-jobs"))
+            self.assertTrue(ocr_jobs.stop_worker(5))
+            self.assertEqual(self._alive("ocr-jobs"), [])
+            self.assertFalse(ocr_jobs._worker_started)
+        self.assertTrue(ocr_jobs.stop_worker(5))
+
+    def test_helper_stops_threads_of_a_purged_module_copy(self):
+        from unittest.mock import patch
+
+        import ocr_jobs
+        import server_info_cache as sic
+
+        # Like a later test that purged these modules: the helper cannot find
+        # the threads' modules in sys.modules.
+        purged = {name: sys.modules.pop(name) for name in ("ocr_jobs", "server_info_cache")}
+        try:
+            with tempfile.TemporaryDirectory() as tmp, \
+                    patch.dict(os.environ, {"NOTES_SERVER_INFO_REFRESH": "1"}), \
+                    patch.object(sic, "CACHE_DIR", Path(tmp) / "cache"), \
+                    patch.object(sic, "refresh_all_users", lambda: 0):
+                ocr_jobs._ensure_worker()
+                sic.start_refresh_loop()
+                self.assertTrue(self._alive("ocr-jobs"))
+                self.assertTrue(self._alive("server-info-refresh"))
+                stop_app_background_threads(timeout=5)
+        finally:
+            sys.modules.update(purged)
+        for name in ("ocr-jobs", "server-info-refresh", "server-info-initial"):
+            self.assertEqual(self._alive(name), [], name)
+
+    def test_helper_fails_with_name_of_thread_that_does_not_end(self):
+        release = threading.Event()
+        thread = threading.Thread(target=release.wait, name="signin-alert", daemon=True)
+        thread.start()
+        try:
+            with self.assertRaisesRegex(AssertionError, "signin-alert"):
+                stop_app_background_threads(timeout=0.2)
+        finally:
+            release.set()
+            thread.join(5)
+        stop_app_background_threads(timeout=5)
+
+
 _APP_RELOAD_MODULES = {
     "app",
     "auth",
@@ -5944,9 +6060,19 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
         os.environ.pop("NOTES_DISABLE_CIDR_GATE", None)
         os.environ.pop("NOTES_OCR_EPHEMERAL", None)
         os.environ.pop("NOTES_SECURE_COOKIES", None)
+        os.environ.pop("NOTES_PCLOUD_SERVICE_REMOTE", None)
+        os.environ.pop("NOTES_PCLOUD_SERVICE_ROOT", None)
         (root / "keys").mkdir(parents=True)
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
-        self._purge_app_modules()
+        stop_app_background_threads()
+        purged = self._purge_app_modules()
+        # Put back the other app modules once tearDown purged this test's copies:
+        # later test modules hold references to them (e.g. test_ics_relay patches
+        # its imported ics_relay), and before this class they never were purged.
+        self.addCleanup(sys.modules.update, {
+            name: module for name, module in purged.items()
+            if name not in _APP_RELOAD_MODULES and not name.startswith("app.")
+        })
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -5964,13 +6090,22 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
             "NOTES_DISABLE_CIDR_GATE",
             "NOTES_OCR_EPHEMERAL",
             "NOTES_SECURE_COOKIES",
+            "NOTES_PCLOUD_SERVICE_REMOTE",
+            "NOTES_PCLOUD_SERVICE_ROOT",
         ):
             os.environ.pop(key, None)
+        stop_app_background_threads()
 
     def _purge_app_modules(self):
-        for name in list(sys.modules):
-            if name in _APP_RELOAD_MODULES or name.startswith("app."):
-                sys.modules.pop(name, None)
+        # Also purge every other module loaded from app/ (e.g. pcloud_service_token),
+        # so none keeps the config and db of an earlier test. Returns the purged modules.
+        purged = {}
+        for name, module in list(sys.modules.items()):
+            path = getattr(module, "__file__", None)
+            in_app_dir = bool(path) and Path(path).resolve().is_relative_to(APP_DIR)
+            if name in _APP_RELOAD_MODULES or name.startswith("app.") or in_app_dir:
+                purged[name] = sys.modules.pop(name)
+        return purged
 
     def _import_app(self):
         return importlib.import_module("app")

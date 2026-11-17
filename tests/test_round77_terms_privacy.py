@@ -5,6 +5,8 @@ import re
 import unittest
 from pathlib import Path
 
+from test_app import stop_app_background_threads
+
 ROOT = Path(__file__).resolve().parents[1]
 LEGAL = ROOT / "app" / "templates" / "legal.html"
 MARKETING_CSS = ROOT / "app" / "static" / "css" / "marketing.css"
@@ -211,6 +213,7 @@ class Round77TermsPrivacyTests(unittest.TestCase):
             self.assertNotIn("Draft – to be reviewed by a lawyer", phtml)
             self.assertNotIn("Draft – to be reviewed by a lawyer", thtml)
         finally:
+            stop_app_background_threads()
             tmp.cleanup()
 
 

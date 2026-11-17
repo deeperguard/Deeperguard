@@ -22,6 +22,7 @@ _lock = threading.Lock()
 _memory: dict[int, dict[str, Any]] = {}
 _thread_started = False
 _stop = threading.Event()
+_threads: list[threading.Thread] = []
 
 
 def _cache_path(user_id: int) -> Path:
@@ -160,5 +161,25 @@ def start_refresh_loop() -> None:
         return
     _thread_started = True
     warm_memory_from_disk()
-    threading.Thread(target=refresh_all_users, name="server-info-initial", daemon=True).start()
-    threading.Thread(target=_refresh_loop, name="server-info-refresh", daemon=True).start()
+    for target, name in ((refresh_all_users, "server-info-initial"), (_refresh_loop, "server-info-refresh")):
+        thread = threading.Thread(target=target, name=name, daemon=True)
+        _threads.append(thread)
+        thread.start()
+
+
+def stop_refresh_loop(timeout: float = 5.0) -> bool:
+    """Stop and join the threads of start_refresh_loop (used by tests; never called in production).
+
+    Returns True when no thread is left alive; only then can the loop be started again.
+    """
+    global _thread_started
+    _stop.set()
+    deadline = time.monotonic() + max(0.0, timeout)
+    for thread in list(_threads):
+        thread.join(max(0.0, deadline - time.monotonic()))
+    if any(thread.is_alive() for thread in _threads):
+        return False
+    _threads.clear()
+    _stop.clear()
+    _thread_started = False
+    return True

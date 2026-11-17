@@ -24,6 +24,7 @@ VAULT_PASSWORD_HASH = "argon2-hash-SECRET"
 class ManagedRunTests(unittest.TestCase):
     def setUp(self):
         self.saved = {k: os.environ.get(k) for k in ENV_KEYS}
+        self.addCleanup(self._restore_env)
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         os.environ.update(
@@ -52,6 +53,8 @@ class ManagedRunTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def _restore_env(self):
         for k, v in self.saved.items():
             if v is None:
                 os.environ.pop(k, None)

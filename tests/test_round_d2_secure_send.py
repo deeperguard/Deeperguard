@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Always put app/ first: with repo root on sys.path, bare "import app" binds the empty package.
 sys.path = [p for p in sys.path if p != str(APP_DIR)]
 sys.path.insert(0, str(APP_DIR))
+from test_app import stop_app_background_threads  # noqa: E402
 
 
 class D2SecureSendTests(unittest.TestCase):
@@ -53,6 +54,7 @@ class D2SecureSendTests(unittest.TestCase):
         self._login()
 
     def tearDown(self):
+        stop_app_background_threads()
         self.tmp.cleanup()
 
     def _login(self):

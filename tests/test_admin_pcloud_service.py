@@ -16,12 +16,23 @@ import test_stripe_billing as _tsb  # noqa: E402
 _SETUP, _TEARDOWN = _tsb.StripeBillingTests.setUp, _tsb.StripeBillingTests.tearDown
 del _tsb
 
+from test_app import stop_app_background_threads  # noqa: E402
+
 TOKEN = "ADMINPASTEDtokenXyz0987654321"
+
+
+def _restore_env(key, value):
+    if value is None:
+        os.environ.pop(key, None)
+    else:
+        os.environ[key] = value
 URL = "/api/admin/pcloud-service"
 
 
 class AdminPcloudServiceTests(unittest.TestCase):
     def setUp(self):
+        saved = os.environ.get("NOTES_PCLOUD_SERVICE_REMOTE")
+        self.addCleanup(_restore_env, "NOTES_PCLOUD_SERVICE_REMOTE", saved)
         for name in ("admin_api", "admin_notify", "backup_pcloud", "backup_mail", "mailer",
                      "pcloud_service_token", "auth_rate_limit", "server_info_cache"):
             sys.modules.pop(name, None)
@@ -39,11 +50,11 @@ class AdminPcloudServiceTests(unittest.TestCase):
         self.bodies: list[str] = []
 
     def tearDown(self):
-        os.environ.pop("NOTES_PCLOUD_SERVICE_REMOTE", None)
         import auth_rate_limit
 
         auth_rate_limit._hits.clear()
         _TEARDOWN(self)
+        stop_app_background_threads()
 
     def _login(self, uid):
         import secrets

@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_stripe_billing as _tsb  # noqa: E402
 
 _SETUP, _TEARDOWN = _tsb.StripeBillingTests.setUp, _tsb.StripeBillingTests.tearDown
+from test_app import stop_app_background_threads  # noqa: E402
+
 del _tsb
 
 REMOTE = "SentinelRemote"
@@ -18,8 +20,22 @@ ROOT = "Sentinel/RootDir"
 CFG = "/tmp/sentinel-rclone.conf"
 
 
+PCLOUD_ENV_KEYS = ("NOTES_PCLOUD_SERVICE_REMOTE", "NOTES_PCLOUD_SERVICE_ROOT",
+                   "NOTES_PCLOUD_SERVICE_RCLONE_CONFIG", "PATH")
+
+
+def _restore_env(saved):
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
 class ManagedApiTests(unittest.TestCase):
-    setUp = _SETUP
+    def setUp(self):
+        self.addCleanup(_restore_env, {k: os.environ.get(k) for k in PCLOUD_ENV_KEYS})
+        _SETUP(self)
 
     def _login(self, uid):
         import secrets
@@ -37,10 +53,7 @@ class ManagedApiTests(unittest.TestCase):
 
     def tearDown(self):
         _TEARDOWN(self)
-        for k in ("NOTES_PCLOUD_SERVICE_REMOTE", "NOTES_PCLOUD_SERVICE_ROOT",
-                  "NOTES_PCLOUD_SERVICE_RCLONE_CONFIG"):
-            os.environ.pop(k, None)
-        os.environ["PATH"] = self._path
+        stop_app_background_threads()
 
     def _prep(self, remote=True, healthy=True, plan="pro"):
         self._path = os.environ["PATH"]
