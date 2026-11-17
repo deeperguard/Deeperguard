@@ -2774,6 +2774,9 @@ def api_push_windows_put():
     if not endpoint or not isinstance(raw, list) or not raw or len(raw) > db.PUSH_WINDOW_CAP:
         return jsonify({"error": "invalid body"}), 400
     cleaned: list[tuple[str, int]] = []
+    # The horizon is computed from the clock at request time: window_start must be <= now +
+    # PUSH_WINDOW_MAX_AHEAD_SEC. A window on that edge is accepted or rejected depending on the
+    # second it is uploaded in.
     latest = int(time.time()) + db.PUSH_WINDOW_MAX_AHEAD_SEC
     for w in raw:
         if not isinstance(w, dict) or set(w.keys()) != PUSH_WINDOW_KEYS:
