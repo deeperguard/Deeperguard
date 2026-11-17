@@ -7,7 +7,8 @@ document.elementFromPoint which element lies on its centre, at rest and while th
 pointer hovers the row (the hover action strip must not cover it). Then it does a
 real click() without force and checks that the folder is selected and the note
 list is filtered. Enter, the arrow keys and the 'New subfolder in' button must
-keep working.
+keep working. The hard-coded --folder-strip-w must equal the rendered width of the
+action strip, for a fine pointer (hover) and for a coarse (touch) pointer.
 
     python tests/e2e_folder_click_hit.py
 """
@@ -31,6 +32,12 @@ TOP_JS = """([selector, key]) => {
   return { covered: !top || !btn.contains(top),
            top: top ? `${top.tagName.toLowerCase()}.${top.className}` : null };
 }"""
+STRIP_JS = """(name) => {
+  const head = [...document.querySelectorAll('#folder-list [role=treeitem]')]
+    .find((h) => h.getAttribute('aria-label').startsWith(name + ','));
+  return { strip: head.querySelector('.folder-head-actions').getBoundingClientRect().width,
+           declared: parseFloat(getComputedStyle(head).getPropertyValue('--folder-strip-w')) };
+}"""
 SELECTED_JS = """([id]) => document.querySelector(`#folder-list [data-folder-item="${id}"]`).getAttribute('aria-selected') === 'true'"""
 ROWS_JS = "(n) => document.querySelectorAll('.note-row').length === n"
 ONLY_NOTE_JS = """(title) => { const rows = document.querySelectorAll('.note-row'); return rows.length === 1 && rows[0].innerText.includes(title); }"""
@@ -41,6 +48,29 @@ SEED_JS ="""() => {
     NotesStore.upsert(crypto.randomUUID(), { ...NotesStore.defaultNote(), title, title_manual: true, content: title, folder_id: fid });
   });
 }"""
+
+
+def touch_strip_measure(browser, base: str) -> dict:
+    """Creates 'Werk' in a touch context (coarse pointer) and measures its action strip there."""
+    context = browser.new_context(viewport={"width": 1400, "height": 900}, has_touch=True)
+    page = context.new_page()
+    register(page, base)
+    cdp = context.new_cdp_session(page)
+    cdp.send("Emulation.setEmulatedMedia", {"features": [
+        {"name": "pointer", "value": "coarse"}, {"name": "any-pointer", "value": "coarse"},
+        {"name": "hover", "value": "none"}, {"name": "any-hover", "value": "none"},
+    ]})
+    page.wait_for_function("() => matchMedia('(pointer: coarse)').matches")
+    page.locator("#btn-nav-pin").click()
+    page.wait_for_function("() => document.body.classList.contains('nav-pinned')")
+    page.evaluate("() => { document.getElementById('folder-section').open = true; }")
+    page.locator("#btn-new-folder").click()
+    page.fill("#folder-name-input", "Werk")
+    page.keyboard.press("Enter")
+    page.locator('#folder-list [role=treeitem][aria-label^="Werk,"]').wait_for(state="attached", timeout=10000)
+    got = page.evaluate(STRIP_JS, "Werk")
+    context.close()
+    return got
 
 
 def main() -> int:
@@ -55,6 +85,11 @@ def main() -> int:
         with sync_playwright() as p:
             browser = launch(p)
             page = browser.new_context(viewport={"width": 1400, "height": 900}).new_page()
+
+            def assert_strip_width(name: str, label: str) -> None:
+                got = page.evaluate(STRIP_JS, name)
+                assert abs(got["strip"] - got["declared"]) < 0.5, f"{label}: {got}"
+
             page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
             page.on(
                 "console",
@@ -74,6 +109,9 @@ def main() -> int:
             page.fill("#folder-name-input", "Werk")
             page.keyboard.press("Enter")
             item("Werk").wait_for(state="visible", timeout=10000)
+            assert_strip_width("Werk", "fine pointer")
+            touch = touch_strip_measure(browser, base)
+            assert abs(touch["strip"] - touch["declared"]) < 0.5, f"coarse pointer: {touch}"
 
             item("Werk").hover()
             page.get_by_role("button", name="New subfolder in Werk").click()
