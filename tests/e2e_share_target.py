@@ -25,6 +25,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from e2e_signup_autounlock import PASSWORD, free_port, start_server  # noqa: E402
 
+# Cause of the flake: the share POST was sent before the service worker
+# controlled the page (clients.claim() lags under load), so it never got the
+# worker's redirect. The wait is on that state, not a blanket longer timeout.
+SW_CONTROL_TIMEOUT_MS = 60_000
+CONTROLLED_JS = "() => !!navigator.serviceWorker.controller"
+
 DUMP_STORAGE_JS = """async () => {
   const out = [];
   for (let i = 0; i < localStorage.length; i += 1) {
@@ -126,17 +132,30 @@ def register(page, base: str) -> None:
 
 
 def wait_sw_controls(page, base: str) -> None:
+    """Block until a service worker controls the page.
+
+    Only the worker turns a share POST into the /app?action=share redirect.
+    serviceWorker.ready resolves on activation, but the page becomes controlled
+    only after the worker's clients.claim(), which lags when the machine is
+    busy. A POST before that goes to the server instead of the worker, so wait
+    for the controller explicitly.
+    """
     page.evaluate("() => navigator.serviceWorker.ready")
-    for _ in range(3):
-        if page.evaluate("() => !!navigator.serviceWorker.controller"):
-            return
+    try:
+        page.wait_for_function(CONTROLLED_JS, timeout=SW_CONTROL_TIMEOUT_MS)
+    except Exception:
+        # A page loaded before the first activation stays uncontrolled until
+        # the next navigation: reload once, then wait again.
         page.goto(f"{base}/app", wait_until="domcontentloaded")
-        page.evaluate("() => navigator.serviceWorker.ready")
-    raise AssertionError("service worker never controlled /app")
+        page.wait_for_function(CONTROLLED_JS, timeout=SW_CONTROL_TIMEOUT_MS)
 
 
 def share(page, text: str, title: str = "", url: str = "") -> None:
-    with page.expect_navigation(url="**/app?action=share*", wait_until="domcontentloaded"):
+    # Without a controlling worker the POST would hit the server, not the worker.
+    assert page.evaluate(CONTROLLED_JS), "share needs a controlling service worker"
+    with page.expect_navigation(
+        url="**/app?action=share*", wait_until="domcontentloaded", timeout=SW_CONTROL_TIMEOUT_MS
+    ):
         page.evaluate(SHARE_JS, [text, title, url])
 
 
