@@ -1,7 +1,5 @@
 """Tests for Deeperguard."""
-import contextlib
 import importlib
-import logging
 import os
 import shutil
 import subprocess
@@ -6110,33 +6108,8 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
     def _import_app(self):
         return importlib.import_module("app")
 
-    @contextlib.contextmanager
     def _assert_no_startup_warnings(self):
-        # assertNoLogs sees records from every thread, so a daemon thread left
-        # over from an earlier test can log a warning while this import runs
-        # (seen on a loaded build server). Startup warnings are emitted by the
-        # importing thread, so only that thread's records count.
-        records = []
-        me = threading.get_ident()
-
-        class _Collect(logging.Handler):
-            def emit(self, record):
-                if record.thread == me:
-                    records.append(record)
-
-        handler = _Collect(level=logging.WARNING)
-        logger = logging.getLogger("deeperguard")
-        # Like assertNoLogs: force WARNING so a higher configured level cannot
-        # hide startup warnings, and restore the previous level afterwards.
-        old_level = logger.level
-        logger.setLevel(logging.WARNING)
-        logger.addHandler(handler)
-        try:
-            yield
-        finally:
-            logger.removeHandler(handler)
-            logger.setLevel(old_level)
-        self.assertEqual([r.getMessage() for r in records], [])
+        return self.assertNoLogs("deeperguard", level="WARNING")
 
     def test_server_ocr_startup_warning_when_enabled(self):
         os.environ["NOTES_SERVER_OCR"] = "1"
