@@ -378,6 +378,9 @@
       `<button type="button" class="btn ghost sm" data-agenda-cal-action="edit" aria-label="${esc(`Rename or recolor ${name}`)}"`
       + ` aria-expanded="${ui.editing === cal.id ? 'true' : 'false'}">Edit</button>`
     );
+    html += (
+      `<button type="button" class="btn ghost sm" data-agenda-cal-action="export" aria-label="${esc(`Export ${name} as .ics`)}">Export</button>`
+    );
     if (!cal.is_default) {
       html += (
         `<button type="button" class="btn ghost sm" data-agenda-cal-action="delete" aria-label="${esc(`Delete ${name}`)}"`
@@ -410,6 +413,7 @@
   // ---- DOM wiring ------------------------------------------------------------
 
   let onChange = () => {};
+  let onExport = () => {};
   let wiredRoot = null;
   let wiredSubsRoot = null;
 
@@ -445,7 +449,9 @@
     if (!btn || btn.getAttribute('data-agenda-cal-action') === 'toggle') return;
     const action = btn.getAttribute('data-agenda-cal-action');
     const id = btn.closest('[data-agenda-cal-id]')?.getAttribute('data-agenda-cal-id') || '';
-    if (action === 'new') {
+    if (action === 'export') {
+      onExport(id);
+    } else if (action === 'new') {
       ui.editing = 'new';
       ui.deleting = '';
       renderList('[data-agenda-cal-form="new"] input[name="name"]');
@@ -527,6 +533,11 @@
     handleClick({ target: root().querySelector('[data-agenda-cal-action="cancel"]') || root() });
   }
 
+  /** The host supplies the per-calendar .ics export; it receives the calendar id. */
+  function setExportHandler(fn) {
+    if (typeof fn === 'function') onExport = fn;
+  }
+
   /** Wire once; `opts.onChange` re-renders the agenda after a change. */
   function wire(opts) {
     if (opts && typeof opts.onChange === 'function') onChange = opts.onChange;
@@ -569,6 +580,7 @@
     renderHtml,
     renderList,
     wire,
+    setExportHandler,
     _ui: ui,
     _setStore(s) { storeOverride = s; },
   };
