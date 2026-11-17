@@ -15233,7 +15233,10 @@
     });
     renderFolders();
     renderNotes();
-    if (noteId === currentId) updateNoteMeta(NotesStore.get(noteId));
+    if (noteId === currentId) {
+      updateNoteMeta(NotesStore.get(noteId));
+      syncNoteFolderControl(NotesStore.get(noteId));
+    }
     toast(next ? 'Moved to folder' : 'Removed from folder');
     return true;
   }

@@ -4,7 +4,8 @@ A note is moved with the "Move to folder…" picker (opened from the note's "⋯
 menu, picked with the keyboard), the editor's "Move to folder…" button opens the
 same picker and keeps Tab inside it, and another note is dragged onto a folder in
 the sidebar. After a reload and a new unlock, both notes are still in their new
-folders. Any pageerror / console.error fails the test.
+folders. Moving an open note to "No folder" updates the editor's Folder field and
+survives a reload. Any pageerror / console.error fails the test.
 
     python tests/e2e_move_note_folder.py
 """
@@ -42,7 +43,13 @@ SEED_JS = """() => {
   }
 }"""
 
-LEVELS_JS = """() => [...document.querySelectorAll('#folder-move-tree [role=treeitem]')]
+# ["folder" if a folder is selected else "", shown text] of the editor's Folder select.
+FOLDER_FIELD_JS = """() => {
+  const s = document.getElementById('note-folder-select');
+  return [s.value ? 'folder' : '', s.options[s.selectedIndex].textContent];
+}"""
+
+LEVELS_JS ="""() => [...document.querySelectorAll('#folder-move-tree [role=treeitem]')]
   .map((e) => [e.textContent.trim(), e.getAttribute('aria-level')])"""
 
 
@@ -149,6 +156,36 @@ def main() -> int:
             page.wait_for_function("() => NotesStore.listNotes().length >= 2")
             placement = page.evaluate(PLACEMENT_JS)
             assert placement == {"Alpha": "Projects", "Beta": "Work"}, placement
+
+            # 4) Open Alpha (in Projects): the editor's Folder field shows it. Moving it
+            # to "No folder" from the "⋯" menu while it is open must update that field.
+            page.locator(".note-row", has_text="Alpha").click()
+            assert page.evaluate(FOLDER_FIELD_JS) == ["folder", "Projects"], page.evaluate(FOLDER_FIELD_JS)
+            page.locator(".note-row", has_text="Alpha").locator(".note-row-more").focus()
+            page.keyboard.press("Enter")
+            page.locator("#note-row-menu-move").click()
+            page.locator("#folder-move").wait_for(state="visible")
+            page.locator("#folder-move-tree [data-move-target='']").click()
+            page.locator("#folder-move").wait_for(state="hidden")
+            assert page.evaluate(FOLDER_FIELD_JS) == ["", "No folder"], page.evaluate(FOLDER_FIELD_JS)
+            assert page.evaluate(PLACEMENT_JS) == {"Alpha": "", "Beta": "Work"}
+
+            # Same through the editor's own button, Beta (in Work) now open.
+            page.locator(".note-row", has_text="Beta").click()
+            assert page.evaluate(FOLDER_FIELD_JS) == ["folder", "Work"]
+            page.locator("#btn-move-note").click()
+            page.locator("#folder-move-tree [data-move-target='']").click()
+            page.locator("#folder-move").wait_for(state="hidden")
+            assert page.evaluate(FOLDER_FIELD_JS) == ["", "No folder"], page.evaluate(FOLDER_FIELD_JS)
+
+            # After a reload and unlock, neither note is in its old folder any more.
+            page.wait_for_timeout(500)
+            page.reload(wait_until="domcontentloaded")
+            unlock(page)
+            page.wait_for_function("() => NotesStore.listNotes().length >= 2")
+            assert page.evaluate(PLACEMENT_JS) == {"Alpha": "", "Beta": ""}
+            page.locator(".note-row", has_text="Alpha").click()
+            assert page.evaluate(FOLDER_FIELD_JS) == ["", "No folder"], page.evaluate(FOLDER_FIELD_JS)
             browser.close()
         for line in errors:
             print("FAIL:", line)
