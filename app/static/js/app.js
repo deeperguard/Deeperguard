@@ -15300,6 +15300,17 @@
         list[n].tabIndex = 0;
         list[n].focus();
       };
+      if (event.key === 'Tab') {
+        // aria-modal: keep Tab inside the dialog (folder rows + Cancel), wrapping at both ends.
+        const cancel = document.getElementById('folder-move-cancel');
+        const stops = [...list, cancel].filter(Boolean);
+        const at = stops.indexOf(document.activeElement);
+        event.preventDefault();
+        if (at < 0) (list.find((el) => el.tabIndex === 0) || list[0] || cancel)?.focus();
+        else if (event.shiftKey) stops[(at - 1 + stops.length) % stops.length].focus();
+        else stops[(at + 1) % stops.length].focus();
+        return;
+      }
       if (i < 0) return;
       else if (event.key === 'ArrowDown') go(Math.min(i + 1, list.length - 1));
       else if (event.key === 'ArrowUp') go(Math.max(i - 1, 0));
