@@ -25,6 +25,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from e2e_signup_autounlock import PASSWORD, free_port, start_server  # noqa: E402
 
+# Every wait is for something that must happen, never for something that must
+# not; a generous limit only costs time when the page really is broken. The
+# build server runs several suites at once, where registration (key derivation
+# in the browser) and the service worker round trip take far longer than alone.
+LOAD_TIMEOUT_MS = 180_000
+
 DUMP_STORAGE_JS = """async () => {
   const out = [];
   for (let i = 0; i < localStorage.length; i += 1) {
@@ -122,7 +128,7 @@ def register(page, base: str) -> None:
         }"""
     )
     page.click("#register-submit")
-    page.wait_for_function(UNLOCKED_JS, timeout=120000)
+    page.wait_for_function(UNLOCKED_JS, timeout=LOAD_TIMEOUT_MS)
 
 
 def wait_sw_controls(page, base: str) -> None:
@@ -154,11 +160,12 @@ def main() -> int:
     root = Path(tempfile.mkdtemp(prefix="e2e-share-"))
     port = free_port()
     base = f"http://127.0.0.1:{port}"
-    proc = start_server(root, port)
+    proc = start_server(root, port, startup_wait=LOAD_TIMEOUT_MS / 1000)
     try:
         with sync_playwright() as p:
             browser = launch(p)
             context = browser.new_context(service_workers="allow")
+            context.set_default_timeout(LOAD_TIMEOUT_MS)
             page = context.new_page()
             register(page, base)
             wait_sw_controls(page, base)
@@ -166,12 +173,12 @@ def main() -> int:
             # share arriving later: the vault is locked after the reload.
             page.evaluate("() => sessionStorage.clear()")
             page.goto(f"{base}/app", wait_until="domcontentloaded")
-            page.wait_for_selector("#unlock-screen:not([hidden])", timeout=60000)
+            page.wait_for_selector("#unlock-screen:not([hidden])", timeout=LOAD_TIMEOUT_MS)
 
             # 1. Share while locked.
             secret = "ZKSHARE" + secrets.token_hex(8)
             share(page, f"{secret} body line", title=f"{secret} title", url="https://example.test/x")
-            page.wait_for_selector("#unlock-share-hint:not([hidden])", timeout=20000)
+            page.wait_for_selector("#unlock-share-hint:not([hidden])", timeout=LOAD_TIMEOUT_MS)
             hint = page.inner_text("#unlock-share-hint")
             assert "Shared content is waiting. Unlock to save it." in hint, hint
             assert not page.evaluate(UNLOCKED_JS), "vault must still be locked"
@@ -184,8 +191,8 @@ def main() -> int:
             # 2. Unlock: sheet opens prefilled, nothing saved before Save.
             page.fill("#unlock-password", PASSWORD)
             page.click("#unlock-submit")
-            page.wait_for_function(UNLOCKED_JS, timeout=120000)
-            page.wait_for_function(SHEET_OPEN_JS, arg=secret, timeout=20000)
+            page.wait_for_function(UNLOCKED_JS, timeout=LOAD_TIMEOUT_MS)
+            page.wait_for_function(SHEET_OPEN_JS, arg=secret, timeout=LOAD_TIMEOUT_MS)
             assert page.is_hidden("#unlock-share-hint")
             assert page.is_checked("#quick-capture-note")
             before = note_titles(page)
@@ -213,7 +220,7 @@ def main() -> int:
                 }""",
                 secret2,
             )
-            page.wait_for_function(SHEET_OPEN_JS, arg=secret2, timeout=20000)
+            page.wait_for_function(SHEET_OPEN_JS, arg=secret2, timeout=LOAD_TIMEOUT_MS)
             page.click("#quick-capture-cancel")
             page.wait_for_selector("#quick-capture", state="hidden")
             assert not any(secret2 in t for t in note_titles(page)), "Cancel must discard"
@@ -221,7 +228,7 @@ def main() -> int:
             # 4. Shortcut: Ctrl+Shift+K opens the sheet; Task saves a checklist.
             page.click("body")
             page.keyboard.press("Control+Shift+K")
-            page.wait_for_selector("#quick-capture:not([hidden])", timeout=5000)
+            page.wait_for_selector("#quick-capture:not([hidden])", timeout=LOAD_TIMEOUT_MS)
             task = "Task" + secrets.token_hex(4)
             page.fill("#quick-capture-text", task)
             page.click("label:has(#quick-capture-task)")
