@@ -9864,6 +9864,8 @@ body.search-filters-open .fab-stack,
     padding-left: 32px;
     padding-right: 32px;
   }
+  /* Only the status line and backlinks are capped at --content-max-viewer;
+     the PDF/attachment viewer itself gets no maximum and may be wider. */
   .editor-pane .editor.doc-preview-active .editor-foot,
   .editor-pane .editor.doc-preview-active .backlinks {
     width: 100%;
