@@ -157,6 +157,12 @@ dat meer dan 30 minuten te laat is, wordt zonder verzending gewist. De service w
 Zonder meldingssleutel is dat de generieke tekst "You have a reminder"; met de sleutel (ontwerp #75 §3, M3)
 zoekt hij het lokaal versleutelde bericht bij het `rid` en toont de titel.
 
+**Bekende beperking (notities).** Hebben twee notities in hetzelfde venster een herinnering, dan verwijst de
+melding maar naar één notitie: `findDueNote` kiest de laatste. De andere notitie houdt zijn `rid` tot de
+volgende bewerking, want alleen de geopende notitie wordt als bezorgd gemarkeerd (`markDelivered`). Het venster
+is op de server al verstuurd en de volgende synchronisatie trekt het oude `rid` in. Er is geen lijst met alle
+notities uit dat venster.
+
 **Lokale timer voor de exacte tijd.** Zolang een tab open is en de kluis ontgrendeld, draait de bestaande
 planner (`createPlanner`, tik 15 s en `visibilitychange`) en toont de herinnering op de echte tijd, ook
 voor notities en taken (uitbreiding van `dueReminders`, nu `agenda_task` expliciet overgeslagen).
