@@ -9,10 +9,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_stripe_billing as _tsb  # noqa: E402
-
-_SETUP, _TEARDOWN = _tsb.StripeBillingTests.setUp, _tsb.StripeBillingTests.tearDown
 from test_app import stop_app_background_threads  # noqa: E402
 
+_SETUP, _TEARDOWN = _tsb.StripeBillingTests.setUp, _tsb.StripeBillingTests.tearDown
 del _tsb
 
 REMOTE = "SentinelRemote"
