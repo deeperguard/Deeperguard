@@ -18,6 +18,7 @@ sync_api = pytest.importorskip("playwright.sync_api")
 from run_agenda_editor_browser import free_port, start_server  # noqa: E402
 
 PASSWORD = "CalPickerPass1!abc"
+UNLOCKED_JS = "() => typeof NotesStore !== 'undefined' && NotesStore.isUnlocked()"
 
 
 @pytest.fixture(scope="module")
@@ -80,6 +81,18 @@ def _view(page, view):
 
 def _chip_titles(page, selector):
     return page.eval_on_selector_all(selector, "els => els.map(e => e.title)")
+
+
+def _assert_week_takes_body(page):
+    """The week overview fills the whole agenda body, so no space is left for a side strip."""
+    box = page.evaluate("""() => {
+      const w = document.querySelector('.agenda-week-layout').getBoundingClientRect();
+      const b = document.querySelector('.agenda-body').getBoundingClientRect();
+      return { wLeft: w.left, wWidth: w.width, bLeft: b.left, bWidth: b.width };
+    }""")
+    assert box["wWidth"] > 0, box
+    assert abs(box["wWidth"] - box["bWidth"]) < 1, box
+    assert abs(box["wLeft"] - box["bLeft"]) < 1, box
 
 
 def test_subscription_name_everywhere(page):
@@ -180,6 +193,20 @@ def test_calendar_toggle_in_settings_hides_events(page):
     assert page.get_by_role("checkbox", name="Show Spoor").is_checked() is False
     assert page.evaluate(
         "() => NotesAgendaCalendars.listCalendars().find(c => c.name === 'Spoor').visible") is False
+
+    # Survives a reload (vault unlocked again): still off and its event still hidden.
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("#unlock-password", state="attached", timeout=60_000)
+    page.fill("#unlock-password", PASSWORD)
+    page.click("#unlock-submit")
+    page.wait_for_function(UNLOCKED_JS, timeout=120_000)
+    page.click("#app-tab-agenda")
+    page.wait_for_selector("#agenda-add-event", timeout=30_000)
+    _view(page, "week")
+    assert page.locator(".agenda-event-chip", has_text="Spoorwerk").count() == 0
+    page.locator("#agenda-calendar-settings-btn:visible").first.click()
+    page.wait_for_selector("#agenda-calendar-settings:not([hidden])", timeout=30_000)
+    assert page.get_by_role("checkbox", name="Show Spoor").is_checked() is False
     page.get_by_role("checkbox", name="Show Spoor").focus()
     page.keyboard.press("Space")
     page.wait_for_function(
@@ -189,4 +216,8 @@ def test_calendar_toggle_in_settings_hides_events(page):
     page.set_viewport_size({"width": 390, "height": 800})
     page.evaluate("() => NotesAgenda.render()")
     assert page.locator(".agenda-legend").count() == 0
+    _assert_week_takes_body(page)
     page.set_viewport_size({"width": 1280, "height": 800})
+    page.evaluate("() => NotesAgenda.render()")
+    assert page.locator(".agenda-legend").count() == 0
+    _assert_week_takes_body(page)
