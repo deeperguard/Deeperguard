@@ -1,6 +1,6 @@
 # False "You're offline" banner after reload (idea #199)
 
-Status: investigated, **no app code changed**. Checked on `main` at 44e834d with
+Status: investigated and **fixed** (see "Applied fix"). The findings below were measured before the fix. Checked on `main` at 44e834d with
 `tests/e2e_offline_banner_after_reload.py` (Playwright, `/usr/bin/chromium`, a real
 local server started by the same helper the other e2e tests use).
 
@@ -86,12 +86,30 @@ banner is gone by the time a script reaches it, and the click waits until the 60
 timeout. This matches the tester's report, but it is an inference: I could not
 reproduce a 6000 ms timeout itself.
 
-## Proposed minimal fix (not applied)
+## Applied fix
 
-In `probeNetwork`'s catch (`app/static/js/app.js:10597`), do not mark the app offline
-on the first failed health request while the page is online and unlocked. Make one
-confirming forced probe (`forceHealth: true`, which bypasses the backoff gate) after
-the 1500 ms timeout and only then set `networkReachable = false`. Add a regression
-test that aborts one health request and asserts the banner stays hidden. The real
-offline case keeps working: the `offline` event (`app.js:26529`) and sync failures
-still set the state immediately.
+`probeNetwork` (`app/static/js/app.js`, catch block) no longer flips the app to
+offline on the first failed health check. While the app thinks it is reachable and
+`navigator.onLine` is not `false`, it clears the health failure backoff gate
+(`__notesResetHealthBackoff({ abort: false })`, without aborting anything in flight)
+and probes once more (`confirming: true`). Only when that second probe also fails
+does `networkReachable` become false and the banner show. One extra
+request of at most 1.5 s is the cost.
+
+Unchanged: the `offline` window event and sync failures classified by
+`isProbablyOffline` still set the offline state immediately, `#btn-network-retry` and
+the banner markup are untouched, and no crypto, auth or sync-format code changed.
+
+The backoff gate had to be cleared because `window.__notesFetchHealth` (`force`) only
+bypasses the success cache, not the failure backoff; a forced probe alone would have
+returned `null` again right after the first failure.
+
+Tests (`tests/test_e2e_offline_banner.py`, Playwright against a local server):
+
+- Reload, unlock, filter on the parent label `boodschappen` while one `/api/health`
+  request is aborted by a foreground event: the banner never gets shown.
+- With the whole `/api/**` unreachable: the banner appears and `#btn-network-retry` is
+  visible, enabled, not covered, and a click reaches its handler. (Only `/api/health`
+  failing is not enough here: a successful sync correctly clears the banner again.)
+
+`tests/e2e_offline_banner_after_reload.py` remains as the manual reproduction script.
