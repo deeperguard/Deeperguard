@@ -56,12 +56,6 @@ assert.ok(css.includes('background: var(--sn-nav-bg)'));
 const tagOpen = css.split('.sidebar-nav .tag-section[open] {')[1].split('}')[0];
 assert.ok(tagOpen.includes('overflow: visible'));
 
-// 6. A note opened from All Notes marks its folder without selecting that view.
-assert.ok(appJs.includes('is-current'));
-assert.ok(appJs.includes('has-open-note'));
-assert.ok(appJs.includes('currentFolder === folder.uuid'));
-assert.ok(css.includes('.folder-note.is-current'));
-
 // 7. Escape clears search, then blurs.
 assert.ok(appJs.includes("clearSearch({ blur: false })"));
 assert.ok(appJs.includes('ui.search.blur()'));

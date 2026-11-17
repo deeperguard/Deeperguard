@@ -2,10 +2,10 @@
   "asset_count": 99,
   "assets": {
     "css/app.css": {
-      "bytes": 357506,
-      "sha256": "46be9354f22691e60feefe3ed3742e8ba86d54e185b87856319214cf72188e71",
-      "sri": "sha384-penrOrAs1fzBwBGVaPRXJ0S80xcEHra9ZtVGuhLwpQF/l9EYt2zF1dgGQDYcRjeW",
-      "url": "/static/css/app.46be9354f22691e6.css"
+      "bytes": 356783,
+      "sha256": "92157ac7b28fd91537b68cc38942fa72f7c9d38edaff18d8f34579c24cbc0031",
+      "sri": "sha384-RXK3tqS61a/ePuy1VxDYB5iumXM8jG+1g3w0acyV0n3eW5vvkl3mSZVYX5TI4t5v",
+      "url": "/static/css/app.92157ac7b28fd915.css"
     },
     "css/marketing.css": {
       "bytes": 55848,
@@ -597,6 +597,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "78fa0a0190c38005fca17d15d47fe542129e8d33a0fa6d18fce7b69f15865d12",
+  "manifest_sha256": "58785ab64424a0e29d937f5fc0b2ff9df991b23459da432b8364c13894cca155",
   "version": 1
 }

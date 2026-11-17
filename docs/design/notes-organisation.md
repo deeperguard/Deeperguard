@@ -130,6 +130,14 @@ het als `undefined`, dus als "geen map". Dat werkt, maar het is niet expliciet.
 De map-tests: `tests/test_folder_tag_explain.js` (de uitleg "één map, meerdere
 labels" in de UI). Geen test voor nesting, want die bestaat nog niet.
 
+**Gedragswijziging door taak 155 (mapboom in de zijbalk):** de zijbalk toont
+mappen als boom (`renderFolders` in `app.js`, `folder-block` en `folder-head`).
+De notities onder een map staan daar niet meer: de oude `folder-note`-knoppen
+om ze uit te klappen zijn verdwenen. Wie de notities van een map wil zien,
+kiest de map; de notitielijst staat dan in het hoofdvenster. De ongebruikte
+CSS voor `.folder-note` en `.folder-notes` is in de vervolgtaak uit `app.css`
+verwijderd. `.folder-head` en `.folder-block` blijven in gebruik.
+
 ### 1.4 Notitielinks (werkt)
 
 | Onderdeel | Regel | Opmerking |
