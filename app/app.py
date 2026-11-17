@@ -2774,6 +2774,7 @@ def api_push_windows_put():
     if not endpoint or not isinstance(raw, list) or not raw or len(raw) > db.PUSH_WINDOW_CAP:
         return jsonify({"error": "invalid body"}), 400
     cleaned: list[tuple[str, int]] = []
+    latest = int(time.time()) + db.PUSH_WINDOW_MAX_AHEAD_SEC
     for w in raw:
         if not isinstance(w, dict) or set(w.keys()) != PUSH_WINDOW_KEYS:
             return jsonify({"error": "invalid window"}), 400
@@ -2782,6 +2783,8 @@ def api_push_windows_put():
             return jsonify({"error": "invalid id"}), 400
         if type(start) is not int or start <= 0 or start % db.PUSH_WINDOW_SEC:
             return jsonify({"error": "window_start must be a multiple of 900"}), 400
+        if start > latest:
+            return jsonify({"error": "window_start too far ahead"}), 400
         cleaned.append((rid, start))
     result = db.put_push_windows(uid, endpoint, cleaned)
     if result == "no_device":

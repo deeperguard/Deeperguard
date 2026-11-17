@@ -154,7 +154,7 @@ minuut. Bij de bestaande agenda-push ziet hij de exacte aanvangstijd van de afsp
 een veelvoud van 900 s en uploadt alleen `{id, window_start}` (`POST /api/push-windows`, het bestaande
 endpoint). Het `id` is 16 willekeurige bytes en niet afgeleid van item of tijd. De server stuurt een lege
 push zodra `window_start <= nu` (`run_push_windows`), wist de rij en bewaart geen `sent_at`. Een venster
-dat meer dan 30 minuten te laat is, wordt zonder verzending gewist. De service worker toont dan een melding.
+dat meer dan 30 minuten te laat is, wordt zonder verzending gewist. Een venster mag hoogstens 366 dagen na de upload liggen (`PUSH_WINDOW_MAX_AHEAD_SEC`, anders HTTP 400), zodat geen rij langer blijft staan. De service worker toont dan een melding.
 Zonder meldingssleutel is dat de generieke tekst "You have a reminder"; met de sleutel (ontwerp #75 §3, M3)
 zoekt hij het lokaal versleutelde bericht bij het `rid` en toont de titel.
 
@@ -186,7 +186,7 @@ voor notities en taken (uitbreiding van `dueReminders`, nu `agenda_task` explici
 | R5 | **Best effort**: Doze en batterijbesparing vertragen of laten pushes vallen; Chrome kan pushes beperken bij een gesloten browser | "Best effort" in de UI; gemiste herinneringen bij openen tonen (bestaat, 24 uur) |
 | R6 | **Dubbele melding** (lokaal én push, meerdere tabs) | §4: `tag`, Web Lock, onderdrukking |
 | R7 | **Titels op het vergrendelscherm** bij "melding met tekst" | Aparte schakelaar, standaard uit, waarschuwing (ontwerp #75 §3) |
-| R8 | **Plan-poort**: Pro-gebruikers die downgraden houden rijen | Bestaand: `update_user_plan` wist wachtende agenda-rijen; hetzelfde voor `push_reminder_windows` controleren (nu: `run_push_windows` wist rijen van accounts zonder het recht) |
+| R8 | **Plan-poort**: Pro-gebruikers die downgraden houden rijen | Bestaand: `update_user_plan` wist wachtende agenda-rijen; `update_user_plan` wist ook alle rijen in `push_reminder_windows`; `run_push_windows` wist daarnaast rijen van accounts zonder het recht |
 | R9 | **Drie kanalen naast elkaar** (lokaal, venster, bestaande exacte) verwarren | Eén blok in Instellingen met labels; K1 en K2 beslissen over uitfaseren |
 | R10 | **localStorage met tijden**: `agenda_reminder_pending_v1` bevat `fire_at` in klare vorm (wachtrij bij mislukte sync) | Verplaatsen naar versleutelde opslag (al genoemd in `REMINDERS_TASKS_SPEC.md` §1 en §9); niet in dit ontwerp opgelost |
 | R11 | **Claim loopt achter**: `docs/PRIVACY.md` noemt agenda-e-mail maar geen push en geen notitie-herinneringen | Claim bijwerken voor de release van M5; byte-identieke claim-test (ontwerp #75 M4) |
