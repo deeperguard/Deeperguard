@@ -2736,6 +2736,20 @@ def api_agenda_push_subscribe():
     return jsonify({"ok": True})
 
 
+@app.post("/api/agenda-reminders/push-unsubscribe")
+def api_agenda_push_unsubscribe():
+    """Turn push off for one device: forget its endpoint and keys (its pending windows go with it)."""
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    body = request.get_json(silent=True) or {}
+    endpoint = str(body.get("endpoint") or "").strip()
+    if set(body.keys()) - {"endpoint"} or not endpoint:
+        return jsonify({"error": "invalid body"}), 400
+    db.delete_web_push_subscription(uid, endpoint)
+    return jsonify({"ok": True})
+
+
 PUSH_WINDOW_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 PUSH_WINDOW_KEYS = frozenset({"id", "window_start"})
 

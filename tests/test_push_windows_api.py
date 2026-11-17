@@ -102,6 +102,24 @@ class PushWindowsApiTest(_Base):
         db.delete_web_push_subscription(uid, ENDPOINT)
         self.assertEqual(self._rows(), [])
 
+    def test_unsubscribe_forgets_device_and_its_windows(self):
+        import db
+
+        uid = self._login_free_user()
+        self._subscribe()
+        self.assertEqual(self._put([self._win()]).status_code, 200)
+        url = "/api/agenda-reminders/push-unsubscribe"
+        self.assertEqual(self.client.post(url, headers=self._hdr(), json={}).status_code, 400)
+        self.assertEqual(
+            self.client.post(url, headers=self._hdr(), json={"endpoint": ENDPOINT, "x": 1}).status_code, 400
+        )
+        for _ in range(2):  # the same action twice stays ok
+            res = self.client.post(url, headers=self._hdr(), json={"endpoint": ENDPOINT})
+            self.assertEqual(res.status_code, 200)
+        self.assertEqual(db.list_web_push_subscriptions(uid), [])
+        self.assertEqual([r for r in self._rows() if r["user_id"] == uid], [])
+        self.assertEqual(self._put([self._win()]).status_code, 404)
+
     def test_sender_pushes_empty_payload_and_deletes_row(self):
         import agenda_reminder_cron as cron
 
