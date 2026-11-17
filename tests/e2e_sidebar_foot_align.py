@@ -100,7 +100,6 @@ def main() -> int:
                 report.check(f"{theme}: expanded toggle says Collapse sidebar",
                              d["toggleName"] == "Collapse sidebar" and d["toggleTitle"] == "Collapse sidebar"
                              and d["toggleText"] == "Collapse sidebar", str(d))
-                page.screenshot(path=f"/tmp/t306/test-{theme}.png")
             browser.close()
     finally:
         base.stop_server(proc)
