@@ -412,6 +412,18 @@
         on ? statusText(sub) : 'Off: hidden from the agenda and not refreshed. Turn it on under Calendars above.');
       if (showError) status.setAttribute('role', 'alert');
       row.appendChild(status);
+      const Cals = global.NotesAgendaCalendars;
+      if (Cals && typeof Cals.colorPickerEl === 'function') {
+        const holder = el('div', 'agenda-subscription-color');
+        holder.appendChild(Cals.colorPickerEl(`sub-${sub.id}`, sub.color || 'slate', `Colour of ${sub.name}`));
+        holder.addEventListener('change', (ev) => {
+          const r = ev.target;
+          if (!r || r.type !== 'radio' || !r.checked) return;
+          S.updateAgendaSubscription(sub.id, { color: r.value });
+          rerenderAgenda();
+        });
+        row.appendChild(holder);
+      }
       const actions = el('div', 'agenda-subscription-actions');
       const btn = (label, fn) => {
         const b = el('button', 'btn sm', label);
@@ -485,6 +497,12 @@
     const urlInput = document.getElementById('agenda-subscribe-url');
     const nameInput = document.getElementById('agenda-subscribe-name');
     const preview = document.getElementById('agenda-subscribe-preview');
+    const colorHolder = el('div', 'agenda-subscribe-color');
+    const Cals = global.NotesAgendaCalendars;
+    if (Cals && typeof Cals.colorPickerEl === 'function') {
+      colorHolder.appendChild(Cals.colorPickerEl('subscribe', '', 'Colour (optional)'));
+      form.insertBefore(colorHolder, form.querySelector('button[type="submit"]'));
+    }
     const showError = (code, url) => {
       preview.textContent = '';
       const p = el('p', 'settings-hint agenda-subscription-error', errorText(code));
@@ -519,7 +537,11 @@
           return;
         }
         const S = store();
-        const sub = S.addAgendaSubscription({ name: nameInput.value, url });
+        const sub = S.addAgendaSubscription({
+          name: nameInput.value,
+          url,
+          color: (colorHolder.querySelector('input:checked') || {}).value,
+        });
         // Consent was given in the dialog just before this preview.
         if (mode === 'relay') S.updateAgendaSubscription(sub.id, { mode: 'relay', relay_consent: true });
         S.refreshAgendaSubscriptionRows(sub.id, out.events, { allowShrink: true });
