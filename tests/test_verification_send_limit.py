@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 sys.path.insert(0, str(APP_DIR))
+from test_app import stop_app_background_threads  # noqa: E402
 
 
 class VerificationSendLimitTests(unittest.TestCase):
@@ -52,6 +53,7 @@ class VerificationSendLimitTests(unittest.TestCase):
         self.vsl = importlib.import_module("verification_send_limit")
 
     def tearDown(self):
+        stop_app_background_threads()
         try:
             self.db.reset_connection()
         except Exception:

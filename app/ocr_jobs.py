@@ -15,6 +15,8 @@ _jobs: dict[str, dict[str, Any]] = {}
 _queue: list[str] = []
 _queue_cond = threading.Condition(_lock)
 _worker_started = False
+_worker_thread: threading.Thread | None = None
+_stop = threading.Event()
 _MAX_JOBS = 32
 _JOB_TTL_SEC = 3600
 _MAX_JOBS_PER_USER = 4
@@ -39,8 +41,10 @@ def _purge_old_jobs() -> None:
 def _worker_loop() -> None:
     while True:
         with _queue_cond:
-            while not _queue:
+            while not _queue and not _stop.is_set():
                 _queue_cond.wait()
+            if _stop.is_set():
+                return
             job_id = _queue.pop(0)
             job = _jobs.get(job_id)
             if not job or job.get("status") != "pending":
@@ -87,13 +91,36 @@ def _worker_loop() -> None:
 
 
 def _ensure_worker() -> None:
-    global _worker_started
+    global _worker_started, _worker_thread
     with _lock:
         if _worker_started:
             return
         thread = threading.Thread(target=_worker_loop, name="ocr-jobs", daemon=True)
         thread.start()
+        _worker_thread = thread
         _worker_started = True
+
+
+def stop_worker(timeout: float = 5.0) -> bool:
+    """Stop and join the worker thread (used by tests; never called in production).
+
+    A running job finishes first; queued jobs stay queued. Returns True when the
+    worker is gone; only then can a later submit() start a new one.
+    """
+    global _worker_started, _worker_thread
+    with _queue_cond:
+        thread = _worker_thread
+        _stop.set()
+        _queue_cond.notify_all()
+    if thread is not None:
+        thread.join(max(0.0, timeout))
+        if thread.is_alive():
+            return False
+    with _lock:
+        _worker_thread = None
+        _worker_started = False
+        _stop.clear()
+    return True
 
 
 def submit(
