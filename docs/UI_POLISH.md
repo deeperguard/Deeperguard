@@ -899,10 +899,15 @@ editor. Target, shared by Notes, Agenda and 2FA:
 2. **One sidebar.** Sections as rows of icon + label in one visual style
    (`.btn ghost`, `--touch-min` high): views (`#filters`), Folders, Tags, then
    a footer group (Secure Send, Settings, Lock, Account info, Sync). It
-   collapses to icons only; `#btn-nav-pin` becomes the collapse/expand toggle
-   (`aria-expanded`). Collapsed icons keep `aria-label` and get a `title`
-   tooltip; the active view has `aria-current="page"` plus the accent
-   background. Agenda and 2FA use the same sidebar frame for their own
+   collapses to icons only; `#btn-nav-pin` becomes the collapse/expand toggle.
+   The toggle is a disclosure button: its accessible name and `title` are the
+   fixed text "Expand/Collapse sidebar" (on Notes, Agenda and 2FA alike), and
+   `aria-expanded` carries the state. `aria-expanded="true"` means the sidebar
+   is pinned open (`body.nav-pinned`, stored as `navPinned`). It does not
+   reflect the temporary hover or focus expansion of a collapsed sidebar, so
+   while the pointer or focus opens it, `aria-expanded` stays `"false"`.
+   Collapsed icons keep `aria-label` and get a `title` tooltip; the active
+   view has `aria-current="page"` plus the accent background. Agenda and 2FA use the same sidebar frame for their own
    section actions (calendar menu; 2FA add/import/settings) so the frame does
    not jump between areas.
 3. **List column** (Notes): 320px default, `min 260px`, `max 420px`,
@@ -967,7 +972,7 @@ openers and control that offer the action instead).
 | `#btn-secure-send-nav` | Secure Send | Icon rail, bottom (boxed) | Sidebar: footer group, icon + label | notes | visible |
 | `#btn-settings-nav` | Settings | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible |
 | `#btn-lock-nav` | Vault unlocked. Tap to lock. | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible |
-| `#btn-nav-pin` | Expand sidebar / Collapse sidebar | Icon rail, bottom (boxed) | Sidebar: collapse/expand toggle | notes | visible |
+| `#btn-nav-pin` | Expand/Collapse sidebar | Icon rail, bottom (boxed) | Sidebar: collapse/expand toggle | notes | visible |
 | `#btn-account-info-nav` | Account info | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible |
 | `#btn-secure-send-head` | Secure Send | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone |
 | `#btn-lock-head` | Vault unlocked. Tap to lock. | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone |
