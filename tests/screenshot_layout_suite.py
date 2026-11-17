@@ -21,8 +21,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from e2e_layout_actions import (  # noqa: E402
-    DISMISS_JS, PDF_TITLE, PLAIN_TITLE, SEED_JS, make_pdf, open_note, register,
-    run_server, stop_server,
+    DISMISS_JS, PDF_TITLE, PLAIN_TITLE, SEED_JS, make_pdf, open_note,
+    phone_back_to_list, register, run_server, stop_server,
 )
 
 # (width, height): desktop sizes, tablet, phone.
@@ -67,6 +67,8 @@ def add_totp(page) -> None:
 
 
 def show(page, screen: str) -> None:
+    # On tablet/phone an open note hides the list: go back before opening the next.
+    phone_back_to_list(page)
     if screen == "notes-plain":
         open_note(page, PLAIN_TITLE)
     elif screen == "notes-pdf":
