@@ -153,7 +153,7 @@ minuut. Bij de bestaande agenda-push ziet hij de exacte aanvangstijd van de afsp
 een veelvoud van 900 s en uploadt alleen `{id, window_start}` (`POST /api/push-windows`, het bestaande
 endpoint). Het `id` is 16 willekeurige bytes en niet afgeleid van item of tijd. De server stuurt een lege
 push zodra `window_start <= nu` (`run_push_windows`), wist de rij en bewaart geen `sent_at`. Een venster
-dat meer dan 30 minuten te laat is, wordt zonder verzending gewist. Een venster mag hoogstens 366 dagen na de upload liggen (`PUSH_WINDOW_MAX_AHEAD_SEC`, anders HTTP 400), zodat geen rij langer blijft staan. De service worker toont dan een melding.
+dat meer dan 30 minuten te laat is, wordt zonder verzending gewist. De service worker toont dan een melding. Een venster mag hoogstens 366 dagen na de upload liggen (`PUSH_WINDOW_MAX_AHEAD_SEC`, anders HTTP 400), zodat geen rij langer blijft staan.
 Zonder meldingssleutel is dat de generieke tekst "You have a reminder"; met de sleutel (ontwerp #75 §3, M3)
 zoekt hij het lokaal versleutelde bericht bij het `rid` en toont de titel.
 
