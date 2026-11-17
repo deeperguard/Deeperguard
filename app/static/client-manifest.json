@@ -1,11 +1,11 @@
 {
-  "asset_count": 98,
+  "asset_count": 99,
   "assets": {
     "css/app.css": {
-      "bytes": 356709,
-      "sha256": "49c027ff25f3e27ff4dac7e993608104a58b020d2a27a74c64e5de3e2972acac",
-      "sri": "sha384-alxmi2fyN5Awah5Xq4oyFOkWxnSybWs1WGVPIR7+9LmcnvyqxsEJ5eIO/FacJ1v1",
-      "url": "/static/css/app.49c027ff25f3e27f.css"
+      "bytes": 356882,
+      "sha256": "633cee066892a8932d2a764033644f71d3d4f07890bd4a5c597cb5def999ef98",
+      "sri": "sha384-Yh/+gBK2+ccvxZtIWiey4FZrb4uNPqAKL9TG5E/1ikDLGiu2mtPt1YjW3NvH7XX9",
+      "url": "/static/css/app.633cee066892a893.css"
     },
     "css/marketing.css": {
       "bytes": 55848,
@@ -68,10 +68,10 @@
       "url": "/static/js/agenda-subscriptions.a2efe80d7ed22b7c.js"
     },
     "js/agenda-task-reminders.js": {
-      "bytes": 8649,
-      "sha256": "3a80e98901711046e26f99f61aa5ba625aaf26219160c572032e0158aa70660e",
-      "sri": "sha384-tg3XChEZAyc6WGXJWMyd0uMGvE9hZ0gN2I2snMqBfCSuIFx6PBuynFumzuQdLsL9",
-      "url": "/static/js/agenda-task-reminders.3a80e98901711046.js"
+      "bytes": 8677,
+      "sha256": "ac90a0479807c6f51b0b23f66e1c224eb4d38109071b83ebdac10def79608cb9",
+      "sri": "sha384-aEBjWRtqnbpR2JRkX+ivFUTQG9HNZsOHqubXY8G3hIJOYhk4Uyx+DIkosJPGUa/c",
+      "url": "/static/js/agenda-task-reminders.ac90a0479807c6f5.js"
     },
     "js/agenda-tasks.js": {
       "bytes": 7055,
@@ -98,10 +98,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1054684,
-      "sha256": "a6cc5fc6b783ce2fc76c6238242de50caa168404adfc1fe2e1a24e75eee17bb6",
-      "sri": "sha384-l0EplciROnws12LM7VLSbKwZruVl09qC+jAesT7wxVze2HP0pwS6d4sc+nqXWgBA",
-      "url": "/static/js/app.a6cc5fc6b783ce2f.js"
+      "bytes": 1057286,
+      "sha256": "0014d950673ae9ab78cbcd8c8499d4f46fb4cef00c3a3143ef6b846437ccbc7d",
+      "sri": "sha384-mafrER0rj1Lvtfsesy4znaVfwdRn+JGbs1185TX2QjJOSU4wfHDdvpKcn1ka4JNS",
+      "url": "/static/js/app.0014d950673ae9ab.js"
     },
     "js/auth-pages.js": {
       "bytes": 41606,
@@ -270,6 +270,12 @@
       "sha256": "c130d18227e2c783968ad3737b79ca8858d02365fc4b764351fa0b25d7a9a8b7",
       "sri": "sha384-xM47+X+gkrtz54EdSi4OpEqRU5F8H4XZD4rHQxDmkKmVJIym8QN4vlM4VOJ3VAt0",
       "url": "/static/js/note-history.c130d18227e2c783.js"
+    },
+    "js/note-reminders.js": {
+      "bytes": 6050,
+      "sha256": "2ade12333b2dd4e531ea4433dbf86733796d275da43e1594e7cb8143411b8351",
+      "sri": "sha384-QazWDtGLJe2pnu1agYu91X36+fltSsDk5pNf4/nOy4VCK4sEYJprEp2wZkoAODdM",
+      "url": "/static/js/note-reminders.2ade12333b2dd4e5.js"
     },
     "js/notelinks.js": {
       "bytes": 10893,
@@ -591,6 +597,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "6644616826cf1357bde77097fe4e040f77da93eb28aa9e05be3aef13138b05bd",
+  "manifest_sha256": "5213f58d2fe991877464ae837e09701c7e6450de7d924e389d81e07d72fefd27",
   "version": 1
 }

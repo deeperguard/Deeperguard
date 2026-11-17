@@ -546,7 +546,7 @@ self.addEventListener('push', (event) => {
         body: 'You have a reminder',
         icon: '/static/icons/icon-192.png',
         tag: 'dg-window-reminder',
-        data: { url: '/app' },
+        data: { url: '/app#due-reminder', openDueReminder: true },
       }),
     );
     return;
@@ -567,10 +567,15 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const target = (event.notification.data && event.notification.data.url) || '/app';
+  const openDue = !!(event.notification.data && event.notification.data.openDueReminder);
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {
-        if (c.url && 'focus' in c) return c.focus();
+        if (c.url && 'focus' in c) {
+          // The open app finds the note locally; the push never said which one it was.
+          if (openDue) c.postMessage({ type: 'dg-open-due-reminder' });
+          return c.focus();
+        }
       }
       if (clients.openWindow) return clients.openWindow(target);
       return undefined;
