@@ -606,7 +606,7 @@
     [60, '1 hour before'],
     [1440, '1 day before'],
   ];
-  const TASK_REMINDER_COPY = 'The server sees only a random id and a 15-minute window, never the task. '
+  const TASK_REMINDER_COPY = 'The server never sees the task itself. '
     + 'The push can arrive up to 15 minutes early and shows no text.';
 
   let taskDialogReturnFocus = null;
