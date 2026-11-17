@@ -144,6 +144,66 @@ def test_pick_colour_changes_dot_and_events_and_persists(env):
         "radio", name="Purple").is_checked()
 
 
+def _lum(rgb):
+    chans = []
+    for v in rgb:
+        v /= 255
+        chans.append(v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * chans[0] + 0.7152 * chans[1] + 0.0722 * chans[2]
+
+
+def _ratio(fg, bg):
+    hi, lo = sorted([_lum(fg), _lum(bg)], reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _rgb(css):
+    return [float(v) for v in css[css.index("(") + 1:css.index(")")].replace(",", " ").split()[:3]]
+
+
+def test_add_form_colour_resets_after_subscribing(env):
+    page = env["page"]
+    _open_settings(page)
+    form = page.locator("#agenda-subscribe-form")
+
+    def subscribe(name, colour=None):
+        before = page.evaluate("() => NotesStore.listAgendaSubscriptions().length")
+        page.fill("#agenda-subscribe-url", f"https://feed-c.example.invalid/{name}.ics")
+        page.fill("#agenda-subscribe-name", name)
+        if colour:
+            form.get_by_role("radio", name=colour).check()
+        form.locator("button[type=submit]").click()
+        page.locator("#agenda-subscribe-preview").get_by_role("button", name="Subscribe", exact=True).click()
+        page.wait_for_function("n => NotesStore.listAgendaSubscriptions().length === n", arg=before + 1)
+        return page.evaluate("() => NotesStore.listAgendaSubscriptions().slice(-1)[0]")
+
+    first = subscribe("Tweede", "Purple")
+    assert first["color"] == "purple"
+    # The choice does not carry over into the form for the next subscription.
+    assert form.locator("input:checked").count() == 0
+    second = subscribe("Derde")
+    assert "color" not in second
+    assert page.get_by_role("group", name="Colour of Derde").get_by_role("radio", name="Slate").is_checked()
+
+
+def test_palette_text_contrast_in_both_themes(env):
+    page = env["page"]
+    _open_settings(page)
+    keys = page.evaluate("() => NotesAgendaCalendars.PALETTE.map((p) => p.key)")
+    for theme in ("light", "dark"):
+        page.evaluate("t => document.querySelector(`[data-theme-opt=\"${t}\"]`).click()", theme)
+        page.wait_for_function("t => document.documentElement.dataset.theme === t", arg=theme)
+        swatches = page.evaluate("""() => [...document.querySelectorAll('#agenda-subscribe-form .agenda-cal-color')].map((l) => {
+          const s = getComputedStyle(l.querySelector('.agenda-cal-color-swatch'));
+          return { key: l.querySelector('input').value, fg: s.color, bg: s.backgroundColor };
+        })""")
+        assert sorted(s["key"] for s in swatches) == sorted(keys), swatches
+        for s in swatches:
+            ratio = _ratio(_rgb(s["fg"]), _rgb(s["bg"]))
+            assert ratio >= 4.5, (theme, s["key"], round(ratio, 2))
+    page.evaluate("() => document.querySelector('[data-theme-opt=\"light\"]').click()")
+
+
 def test_add_form_has_optional_colour(env):
     page = env["page"]
     _open_settings(page)

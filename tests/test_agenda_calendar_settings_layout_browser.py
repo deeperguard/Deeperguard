@@ -41,6 +41,7 @@ MEASURE = """(sel) => {
   const rows = [...root.querySelectorAll('.agenda-subscription-row')];
   const sections = heads.map((h) => h.closest('section'));
   const gaps = sections.slice(1).map((s, i) => rect(s).top - rect(sections[i]).bottom);
+  const addPicker = root.querySelector('#agenda-subscribe-form .agenda-subscribe-color .agenda-cal-colors');
   const rowInfo = rows.map((r) => {
     const btns = [...r.querySelectorAll('.agenda-subscription-actions .btn')];
     return {
@@ -53,11 +54,15 @@ MEASURE = """(sel) => {
       statusTop: rect(r.querySelector('.agenda-subscription-status')).top,
       statusBottom: rect(r.querySelector('.agenda-subscription-status')).bottom,
       actionsTop: rect(r.querySelector('.agenda-subscription-actions')).top,
+      statusLeft: left(r.querySelector('.agenda-subscription-status')),
+      pickerLeft: left(r.querySelector('.agenda-subscription-color .agenda-cal-colors')),
+      pickerRight: rect(r.querySelector('.agenda-subscription-color .agenda-cal-colors')).right,
     };
   });
   return {
     base: left(body) + parseFloat(getComputedStyle(body).paddingLeft),
     heads: heads.map(left), fields: fields.map(left), rows: rows.map(left), rowInfo,
+    addColour: left(addPicker), addColourRight: rect(addPicker).right,
     order: heads.map((h) => h.textContent), gaps,
     bodyRight: rect(body).right, noSideScroll: body.scrollWidth <= body.clientWidth + 1,
     sectionGap: parseFloat(getComputedStyle(body).rowGap),
@@ -131,8 +136,9 @@ def test_one_left_edge_and_aligned_rows(ctx, width, height):
     m = page.evaluate(MEASURE, PANEL)
     assert m["order"] == ["Calendars", "Subscribed calendars", "Add a subscription", "Help"]
     assert len(m["rows"]) == 3 and len(m["fields"]) == 4
-    for x in m["heads"] + m["fields"] + m["rows"]:
+    for x in m["heads"] + m["fields"] + m["rows"] + [m["addColour"]]:
         assert abs(x - m["base"]) <= 1, (x, m["base"])
+    assert m["addColourRight"] <= m["bodyRight"] + 1, "add-form colour picker overflows the panel"
     assert m["noSideScroll"], "panel scrolls sideways"
     assert m["sectionGap"] >= 20
     for g in m["gaps"]:
@@ -140,6 +146,7 @@ def test_one_left_edge_and_aligned_rows(ctx, width, height):
     all_heights = []
     for r in m["rowInfo"]:
         assert not r["overflow"] and r["right"] <= m["bodyRight"] + 1
+        assert abs(r["pickerLeft"] - r["statusLeft"]) <= 1 and r["pickerRight"] <= r["right"], r
         assert max(r["heights"]) - min(r["heights"]) <= 0.5, r
         all_heights += r["heights"]
         assert r["statusTop"] >= r["titleBottom"] - 1 and r["actionsTop"] >= r["statusBottom"] + 4, r
