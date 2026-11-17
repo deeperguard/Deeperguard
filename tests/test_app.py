@@ -1,7 +1,6 @@
 """Tests for Deeperguard."""
 import contextlib
 import importlib
-import logging
 import os
 import shutil
 import subprocess
@@ -5938,6 +5937,9 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
         os.environ.pop("NOTES_DISABLE_CIDR_GATE", None)
         os.environ.pop("NOTES_OCR_EPHEMERAL", None)
         os.environ.pop("NOTES_SECURE_COOKIES", None)
+        # A configured managed pCloud remote makes the import start the
+        # "pcloud-health" thread, which logs "managed pcloud backup unavailable".
+        os.environ.pop("NOTES_PCLOUD_SERVICE_REMOTE", None)
         (root / "keys").mkdir(parents=True)
         (root / "keys" / "flask-secret").write_text("test-secret", encoding="utf-8")
         self._purge_app_modules()
@@ -5958,12 +5960,18 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
             "NOTES_DISABLE_CIDR_GATE",
             "NOTES_OCR_EPHEMERAL",
             "NOTES_SECURE_COOKIES",
+            "NOTES_PCLOUD_SERVICE_REMOTE",
         ):
             os.environ.pop(key, None)
 
     def _purge_app_modules(self):
-        for name in list(sys.modules):
-            if name in _APP_RELOAD_MODULES or name.startswith("app."):
+        # Also purge every other module loaded from APP_DIR (e.g.
+        # pcloud_service_token): they keep the config/db of an earlier test and
+        # would report its stored pCloud token as configured.
+        app_dir = str(APP_DIR)
+        for name, mod in list(sys.modules.items()):
+            path = getattr(mod, "__file__", None) or ""
+            if name in _APP_RELOAD_MODULES or name.startswith("app.") or path.startswith(app_dir):
                 sys.modules.pop(name, None)
 
     def _import_app(self):
@@ -5971,31 +5979,10 @@ class ServerOcrStartupWarningTests(unittest.TestCase):
 
     @contextlib.contextmanager
     def _assert_no_startup_warnings(self):
-        # assertNoLogs sees records from every thread, so a daemon thread left
-        # over from an earlier test can log a warning while this import runs
-        # (seen on a loaded build server). Startup warnings are emitted by the
-        # importing thread, so only that thread's records count.
-        records = []
-        me = threading.get_ident()
-
-        class _Collect(logging.Handler):
-            def emit(self, record):
-                if record.thread == me:
-                    records.append(record)
-
-        handler = _Collect(level=logging.WARNING)
-        logger = logging.getLogger("deeperguard")
-        # Like assertNoLogs: force WARNING so a higher configured level cannot
-        # hide startup warnings, and restore the previous level afterwards.
-        old_level = logger.level
-        logger.setLevel(logging.WARNING)
-        logger.addHandler(handler)
-        try:
+        # setUp removes the sources of background-thread warnings (see there),
+        # so nothing but the importing thread can log inside this window.
+        with self.assertNoLogs("deeperguard", level="WARNING"):
             yield
-        finally:
-            logger.removeHandler(handler)
-            logger.setLevel(old_level)
-        self.assertEqual([r.getMessage() for r in records], [])
 
     def test_server_ocr_startup_warning_when_enabled(self):
         os.environ["NOTES_SERVER_OCR"] = "1"
