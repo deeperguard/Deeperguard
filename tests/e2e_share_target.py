@@ -29,6 +29,9 @@ from e2e_signup_autounlock import PASSWORD, free_port, start_server  # noqa: E40
 # controlled the page (clients.claim() lags under load), so it never got the
 # worker's redirect. The wait is on that state, not a blanket longer timeout.
 SW_CONTROL_TIMEOUT_MS = 60_000
+# Shared wait for UI state (unlock hint, sheet, quick capture): one value, so
+# a slow machine gets the same headroom on every step.
+UI_TIMEOUT_MS = 20_000
 CONTROLLED_JS = "() => !!navigator.serviceWorker.controller"
 
 DUMP_STORAGE_JS = """async () => {
@@ -140,10 +143,12 @@ def wait_sw_controls(page, base: str) -> None:
     busy. A POST before that goes to the server instead of the worker, so wait
     for the controller explicitly.
     """
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
     page.evaluate("() => navigator.serviceWorker.ready")
     try:
         page.wait_for_function(CONTROLLED_JS, timeout=SW_CONTROL_TIMEOUT_MS)
-    except Exception:
+    except PlaywrightTimeoutError:
         # A page loaded before the first activation stays uncontrolled until
         # the next navigation: reload once, then wait again.
         page.goto(f"{base}/app", wait_until="domcontentloaded")
@@ -190,7 +195,7 @@ def main() -> int:
             # 1. Share while locked.
             secret = "ZKSHARE" + secrets.token_hex(8)
             share(page, f"{secret} body line", title=f"{secret} title", url="https://example.test/x")
-            page.wait_for_selector("#unlock-share-hint:not([hidden])", timeout=20000)
+            page.wait_for_selector("#unlock-share-hint:not([hidden])", timeout=UI_TIMEOUT_MS)
             hint = page.inner_text("#unlock-share-hint")
             assert "Shared content is waiting. Unlock to save it." in hint, hint
             assert not page.evaluate(UNLOCKED_JS), "vault must still be locked"
@@ -204,7 +209,7 @@ def main() -> int:
             page.fill("#unlock-password", PASSWORD)
             page.click("#unlock-submit")
             page.wait_for_function(UNLOCKED_JS, timeout=120000)
-            page.wait_for_function(SHEET_OPEN_JS, arg=secret, timeout=20000)
+            page.wait_for_function(SHEET_OPEN_JS, arg=secret, timeout=UI_TIMEOUT_MS)
             assert page.is_hidden("#unlock-share-hint")
             assert page.is_checked("#quick-capture-note")
             before = note_titles(page)
@@ -232,7 +237,7 @@ def main() -> int:
                 }""",
                 secret2,
             )
-            page.wait_for_function(SHEET_OPEN_JS, arg=secret2, timeout=20000)
+            page.wait_for_function(SHEET_OPEN_JS, arg=secret2, timeout=UI_TIMEOUT_MS)
             page.click("#quick-capture-cancel")
             page.wait_for_selector("#quick-capture", state="hidden")
             assert not any(secret2 in t for t in note_titles(page)), "Cancel must discard"
@@ -240,7 +245,7 @@ def main() -> int:
             # 4. Shortcut: Ctrl+Shift+K opens the sheet; Task saves a checklist.
             page.click("body")
             page.keyboard.press("Control+Shift+K")
-            page.wait_for_selector("#quick-capture:not([hidden])", timeout=5000)
+            page.wait_for_selector("#quick-capture:not([hidden])", timeout=UI_TIMEOUT_MS)
             task = "Task" + secrets.token_hex(4)
             page.fill("#quick-capture-text", task)
             page.click("label:has(#quick-capture-task)")
