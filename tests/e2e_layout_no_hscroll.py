@@ -99,7 +99,7 @@ def main() -> int:
                     if m["root"] > m["vw"] or m["body"] > m["vw"] or m["count"]:
                         failures.append(
                             f"{name} @ {width}: html {m['root']} body {m['body']} window {m['vw']}; "
-                            f"sticking out: {m['offenders']}"
+                            f"sticking out: {m['offenders'] or 'no offender found'}"
                         )
             browser.close()
     finally:
