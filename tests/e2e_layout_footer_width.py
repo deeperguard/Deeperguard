@@ -62,6 +62,26 @@ def main() -> int:
             assert "0 words" not in text, text
             assert "Scanned text:" in text and "words" in text, text
 
+            viewer = page.evaluate(
+                """() => {
+                  const r = (sel) => {
+                    const el = document.querySelector(sel);
+                    return el ? el.getBoundingClientRect().width : null;
+                  };
+                  return {
+                    active: !!document.querySelector('.editor.doc-preview-active'),
+                    inline: r('.editor.doc-preview-active .doc-inline'),
+                    card: r('.editor.doc-preview-active .doc-inline-card'),
+                    foot: r('.editor.doc-preview-active .editor-foot'),
+                    max: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--content-max-viewer')),
+                  };
+                }"""
+            )
+            assert viewer["active"], viewer
+            assert viewer["inline"] > content_max, viewer
+            assert viewer["inline"] > viewer["max"], viewer
+            assert viewer["foot"] <= viewer["max"] + 1, viewer
+
             toggle = page.locator("#btn-list-toggle")
             assert toggle.get_attribute("aria-expanded") == "true"
             toggle.click()
@@ -71,12 +91,32 @@ def main() -> int:
             prefs = json.loads(page.evaluate("() => localStorage.getItem('deeperguard-prefs')"))
             assert prefs.get("listCollapsed") is True, prefs
 
+            page.reload()
+            page.wait_for_function(
+                "() => document.body.classList.contains('unlocked') || document.getElementById('unlock-password')",
+                timeout=30000,
+            )
+            if page.locator("#unlock-password").count() and not page.evaluate(base.UNLOCKED_JS):
+                page.fill("#unlock-password", base.PASSWORD)
+                page.click("#unlock-submit")
+            page.wait_for_function(base.UNLOCKED_JS, timeout=60000)
+            page.wait_for_function("() => document.documentElement.classList.contains('list-collapsed')")
+            assert page.locator("#btn-list-toggle").get_attribute("aria-expanded") == "false"
+            assert not page.locator("#note-list").is_visible()
+
             page.locator("#btn-list-toggle").click()
             page.wait_for_function("() => !document.documentElement.classList.contains('list-collapsed')")
             assert page.locator("#btn-list-toggle").get_attribute("aria-expanded") == "true"
             prefs = json.loads(page.evaluate("() => localStorage.getItem('deeperguard-prefs')"))
             assert prefs.get("listCollapsed") is False, prefs
             assert page.locator("#note-list").is_visible()
+
+            splitter = page.locator("#pane-splitter")
+            before = int(splitter.get_attribute("aria-valuenow"))
+            splitter.focus()
+            page.keyboard.press("ArrowRight")
+            after = int(splitter.get_attribute("aria-valuenow"))
+            assert after > before, (before, after)
             browser.close()
     finally:
         base.stop_server(proc)
