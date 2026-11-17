@@ -454,9 +454,9 @@
       if (!unlocked()) { showError('E_LOCKED'); return; }
       const cur = S.getAgendaSubscription(sub.id);
       if (!cur) { showError('E_URL'); return; }
-      // Name first: refreshed events carry the subscription name as their source.
-      S.updateAgendaSubscription(sub.id, { name: nameInput.value, url });
-      if (mode === 'relay') S.updateAgendaSubscription(sub.id, { mode: 'relay', relay_consent: true });
+      // One write for name, link and mode, before the events are replaced: refreshed events carry the subscription name as their source.
+      // A new link starts as direct unless relay consent was given for this preview.
+      S.updateAgendaSubscription(sub.id, { name: nameInput.value, url, mode: mode === 'relay' ? 'relay' : 'direct', relay_consent: mode === 'relay' });
       const res = S.refreshAgendaSubscriptionRows(sub.id, out.events, { allowShrink: true });
       if (res && res.removedEvents) cancelReminders(res.removedEvents);
       toast(`Updated ${S.getAgendaSubscription(sub.id).name}`);
@@ -487,6 +487,9 @@
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       if (!unlocked()) { showError('E_LOCKED'); return; }
+      // Read the subscription now: it may have been switched on/off or moved to another mode since the form was built.
+      const cur = S.getAgendaSubscription(sub.id);
+      if (!cur) { showError('E_URL'); return; }
       let url;
       try {
         url = normalizeFeedUrl(urlInput.value);
@@ -494,7 +497,7 @@
         showError('E_URL');
         return;
       }
-      if (url === sub.url) {
+      if (url === cur.url) {
         // Link unchanged: nothing to fetch; only the name can change.
         if (nameInput.value.trim()) S.updateAgendaSubscription(sub.id, { name: nameInput.value });
         close(`[data-sub-edit="${sub.id}"]`);
@@ -502,7 +505,7 @@
         return;
       }
       // A subscription that uses the server asks for consent again for the new link before anything is fetched.
-      if (usesRelay(sub)) {
+      if (usesRelay(cur)) {
         if (!(await askRelayConsent())) {
           preview.hidden = false;
           preview.textContent = 'Nothing was fetched; the old link is unchanged.';
