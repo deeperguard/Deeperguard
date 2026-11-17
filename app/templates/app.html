@@ -1569,7 +1569,7 @@
           <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-import-ics">Import calendar (.ics)</button>
           <p class="settings-hint muted agenda-cal-action-sub">Choose one or more files exported from another calendar, or drop .ics files onto the Agenda. You will see a preview before anything is saved.</p>
           <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-export-ics">Export calendar (.ics)</button>
-          <p class="settings-hint muted agenda-cal-action-sub">Downloads a standard .ics file with your events. The file is <strong>not encrypted</strong> — titles, times, and notes are readable plaintext. Keep it private and share carefully.</p>
+          <p class="settings-hint muted agenda-cal-action-sub">Downloads a standard .ics file with all your events; use Export on a calendar above for just that one. The file is <strong>not encrypted</strong> — titles, times, and notes are readable plaintext. Keep it private and share carefully.</p>
           <fieldset class="agenda-local-reminder-settings" id="agenda-local-reminder-settings">
             <legend class="muted">Reminders in this browser</legend>
             <p class="settings-hint" id="agenda-local-reminder-explainer"><strong>Reminders only work while Deeperguard is open in your browser</strong> (a tab or the installed app) and your vault is unlocked. These reminders send no email and no push message, and nothing about them goes to the server or to anyone else. They show inside Deeperguard and, if you allow it, as a browser notification. A reminder you miss because Deeperguard was closed is shown once as &ldquo;Missed&rdquo; the next time you open it.</p>
@@ -1590,6 +1590,13 @@
             <p class="settings-hint muted" id="agenda-reminder-push-explainer">Off by default. Push needs this device to be enabled below. Our server then stores this device&rsquo;s push address (the endpoint and push keys from your browser) and, for each reminder, a random ID, the exact time it is due and, for timed events, the event&rsquo;s start time, together with your account. It never learns event titles, locations or notes. Google, Apple or Mozilla, whichever runs your browser&rsquo;s push service, can see that a notification is sent to this device and when. &ldquo;Turn off push on this device&rdquo; unsubscribes it and removes its push address from our server; copies in backups and logs, and anything kept by your push service, may remain until they expire. Delivery is not guaranteed.</p>
             <button type="button" class="btn primary sm" id="agenda-reminder-enable-push" hidden>Enable push on this device</button>
             <p id="agenda-reminder-push-status" class="settings-hint muted" hidden></p>
+            <label class="settings-row" for="agenda-reminder-window"><span>Timing when Deeperguard is closed</span>
+              <select id="agenda-reminder-window" aria-describedby="agenda-reminder-window-explainer">
+                <option value="15">Within 15 minutes (default)</option>
+                <option value="5">Within 5 minutes</option>
+              </select>
+            </label>
+            <p class="settings-hint muted" id="agenda-reminder-window-explainer">This is for email reminders for events and for push reminders for tasks and notes, planned from this browser. With 5 minutes they arrive at most 5 minutes early instead of 15. The price: our server then learns when each of those reminders is due to within 5 minutes instead of 15, and can tell that you chose this. Your email provider and our mail relay, or your browser&rsquo;s push service, see the sending time just as closely. Titles, locations and notes are still never sent. A finer step is not offered, because our server sends reminders once every 5 minutes; for the exact minute, keep Deeperguard open. Event and task reminders move to the new timing when you change this; a note reminder keeps its timing until you save that reminder again.</p>
             </div>
           </fieldset>
           <button type="button" class="btn ghost sm agenda-calendar-settings-account" id="agenda-open-app-settings">Open app settings…</button>

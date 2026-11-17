@@ -183,7 +183,7 @@ voor notities en taken (uitbreiding van `dueReminders`, nu `agenda_task` explici
     die opnieuw met dezelfde `tag` en `silent: true` (vervangt hem op zijn plaats); is hij al weggeklikt,
     dan toont hij een stille melding en sluit die meteen.
   - Komt de push vóór de exacte tijd (het venster begint eerder), dan blijven er twee meldingen: eerst
-    de generieke, daarna de lokale.
+    de generieke, daarna de lokale. Vervolgtaak (niet gebouwd): dit ontdubbelen hoort bij M5.
 - Over apparaten heen: elk apparaat toont zijn eigen melding; dat is gewenst (telefoon en laptop). Een
   gesloten of afgevinkte taak intrekt het `rid` op de server en wist het lokale bericht.
 
