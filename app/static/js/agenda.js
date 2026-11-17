@@ -1411,7 +1411,7 @@
       + '<button type="button" class="btn ghost side-item agenda-calendar-menu-btn" id="agenda-calendar-settings-btn" aria-expanded="false" aria-controls="agenda-calendar-settings" aria-label="Calendar menu" title="Calendar menu">'
       + '<svg class="ui-icon side-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 10h18M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
       + '<span class="side-label side-label-always">Calendar menu</span></button>'
-      + '<button type="button" id="btn-agenda-nav-toggle" data-nav-toggle class="btn ghost side-item" title="Expand/Collapse sidebar" aria-label="Expand/Collapse sidebar" aria-expanded="' + NAVX + '">'
+      + '<button type="button" id="btn-agenda-nav-toggle" data-nav-toggle class="btn ghost side-item" title="' + NAVT + '" aria-label="' + NAVT + '" aria-expanded="' + NAVX + '">'
       + '<svg class="ui-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 4v16" fill="none" stroke="currentColor" stroke-width="2"/></svg>'
       + '<span class="side-label" data-nav-toggle-label>' + NAVT + '</span></button>'
       + '</aside>'
