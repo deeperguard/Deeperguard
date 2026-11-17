@@ -2,10 +2,10 @@
  * Deeperguard Agenda — "Calendars" list in the calendar settings panel
  * (docs/design/calendar-multi.md §1, milestone M2).
  *
- * Create, rename, recolor, show/hide and delete calendars; switch URL subscriptions on or off. Colors come from a fixed palette of
- * keys (never free hex); every key has a text color with at least 4.5:1 contrast, checked by
- * tests/test_agenda_calendars_ui.js via tests/agenda_contrast_utils.js. Events always show the
- * calendar name next to the color, so color is never the only cue.
+ * Create, rename, recolor, show/hide and delete calendars; switch URL subscriptions on or off.
+ * Colors come from a fixed palette of keys (never free hex); every key has a text color with at least
+ * 4.5:1 contrast, checked by tests/test_agenda_calendars_ui.js via tests/agenda_contrast_utils.js.
+ * Events always show the calendar name next to the color, so color is never the only cue.
  *
  * All controls are native buttons, inputs, radios and selects, so keyboard and screen readers
  * work without custom key handling. Calendar names stay inside the encrypted pack: nothing here
