@@ -1064,6 +1064,7 @@ const NotesStore = (() => {
       archived: false,
       trashed: false,
       warn_at: '',
+      reminders: [],
       created_at: now,
       updated_at: now,
     };
@@ -1535,6 +1536,7 @@ const NotesStore = (() => {
     delete copy.attachment_names;
     delete copy.sn_pending_files;
     delete copy.warn_at;
+    delete copy.reminders;
     copy.attachments = [];
     copy.title = title ? `${title}${CONFLICT_SUFFIX}` : 'Conflict copy';
     copy.title_manual = true;

@@ -27,6 +27,7 @@ const src = [
   slice('function kindIconSvg(name)', 'function isTwoFaListNote(note)'),
   slice('function kindIconHtml(kind, badgeLabel)', 'function paintListThumbFallback'),
   slice('function noteListPreview(note,', 'function noteSectionKey'),
+  slice('function noteReminderAt(note)', 'function noteReminderChipHtml(note)'),
   slice('function noteTagChipsHtml(note,', 'function virtualListWindow('),
   slice('function renderSectionRows(', 'function renderNotesNow()'),
   slice('function escapeHtml(text)', 'function safeColor(color)'),
@@ -42,6 +43,7 @@ const factory = new Function('scope', `
   const isTwoFaListNote = () => false;
   const noteIndexingBadge = () => '';
   const noteWarnChipHtml = () => '';
+  const noteReminderChipHtml = () => '';
   const tagMap = () => scope.tags;
   const folderMap = () => new Map();
   const safeColor = (c) => c || '#888';
