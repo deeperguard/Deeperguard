@@ -325,7 +325,7 @@ revoking therefore needs the password even on a passkey-unlocked device.
 
 | Method and path | Needs | Body | Effect / answer |
 | --- | --- | --- | --- |
-| `GET /api/account/vault-keys` | session | none | `{schema:1, key_id, key_rev, key_mode:"derived", recovery:{active, created_at, last_used_at, wrap_version}, prf_salt, prf:[{credential_id, created_at, current:bool}], pending_rekey:bool, invalidated_at, recovery_locked_until}`. **Never** returns a wrap |
+| `GET /api/account/vault-keys` | session | none | `{schema:1, account_id, key_id, key_rev, key_mode:"derived", recovery:{active, created_at, last_used_at, wrap_version}, prf_salt, prf:[{credential_id, created_at, current:bool}], pending_rekey:bool, invalidated_at, recovery_locked_until}`. **Never** returns a wrap |
 | `PUT /api/account/vault-keys/recovery` | token | `expected_key_rev, key_id, wrap_version, recovery_salt, wrap, proof_hash` | create or **replace** the single recovery wrap; the old row is overwritten (old key invalid at once). Resets the failure counter. Mail + `auth_security_at` bump. 200 `{key_rev, key_id}` |
 | `DELETE /api/account/vault-keys/recovery` | token | `expected_key_rev` | **revoke**: deletes the row; mail + bump |
 | `PUT /api/account/vault-keys/prf/<credential_id>` | token | `expected_key_rev, key_id, wrap_version, wrap, prf_salt` | upsert this passkey's wrap; `credential_id` must belong to the user. `prf_salt` is accepted only when the account has none (CAS) or equals the stored one |

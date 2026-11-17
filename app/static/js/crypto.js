@@ -477,6 +477,7 @@ const NotesCrypto = (() => {
     hashBytes,
     hmacSha256,
     hkdfSha256,
+    b64,
     generateRecoveryKey,
     generateRecoverySalt,
     encodeRecoveryKey,

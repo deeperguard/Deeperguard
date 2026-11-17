@@ -8670,6 +8670,148 @@
     window.__notesSubmitUnlock();
   }
 
+  // Forgotten vault password: recover with the recovery key (docs/VAULT_RECOVERY.md 3.2).
+  const recoverForm = document.getElementById('recover-form');
+  if (recoverForm) {
+    const rEl = (id) => document.getElementById(id);
+    const rSteps = ['enter', 'show', 'done'];
+    let rBusy = false;
+    let rCancelConfirm = null;
+    const rShowStep = (name) => {
+      rSteps.forEach((step) => { rEl(`recover-step-${step}`).hidden = step !== name; });
+    };
+    const rError = (text) => {
+      const el = rEl('recover-error');
+      el.hidden = !text;
+      el.textContent = text || '';
+      const invalid = !!text;
+      ['recover-key', 'recover-new', 'recover-new2'].forEach((id) => {
+        if (invalid) rEl(id).setAttribute('aria-invalid', 'true');
+        else rEl(id).removeAttribute('aria-invalid');
+      });
+    };
+    const rStatus = (text) => {
+      const el = rEl('recover-status');
+      el.hidden = !text;
+      el.textContent = text || '';
+    };
+    const rOpen = (open) => {
+      recoverForm.hidden = !open;
+      unlockForm.hidden = open;
+      rEl('unlock-forgot').setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) {
+        rShowStep('enter');
+        rError('');
+        rStatus('');
+        (rEl('recover-key').value ? rEl('recover-new') : rEl('recover-key')).focus();
+      } else {
+        ['recover-key', 'recover-new', 'recover-new2'].forEach((id) => { rEl(id).value = ''; });
+        unlockPassword?.focus();
+      }
+    };
+    rEl('unlock-forgot')?.addEventListener('click', () => rOpen(true));
+    rEl('recover-cancel').addEventListener('click', () => {
+      if (rCancelConfirm) {
+        rCancelConfirm();
+        return;
+      }
+      if (!rBusy) rOpen(false);
+    });
+    rEl('recover-stored').addEventListener('change', () => {
+      rEl('recover-finish').disabled = !rEl('recover-stored').checked;
+    });
+    rEl('recover-download').addEventListener('click', () => {
+      const text = `Deeperguard recovery key\n\n${rEl('recover-newkey').textContent}\n\n`
+        + 'Keep this file somewhere safe outside this device. Anyone with this key and access to your account can open your vault.\n';
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'deeperguard-recovery-key.txt';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+    rEl('recover-print').addEventListener('click', () => {
+      const frame = document.createElement('iframe');
+      frame.setAttribute('aria-hidden', 'true');
+      frame.style.cssText = 'position:fixed;width:0;height:0;border:0';
+      document.body.appendChild(frame);
+      const doc = frame.contentDocument;
+      doc.title = 'Deeperguard recovery key';
+      const heading = doc.createElement('h1');
+      heading.textContent = 'Deeperguard recovery key';
+      const key = doc.createElement('p');
+      key.style.cssText = 'font:20px monospace';
+      key.textContent = rEl('recover-newkey').textContent;
+      doc.body.append(heading, key);
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+      window.setTimeout(() => frame.remove(), 1000);
+    });
+    rEl('recover-done').addEventListener('click', () => location.reload());
+
+    recoverForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (rBusy) return;
+      const keyText = rEl('recover-key').value;
+      const next = rEl('recover-new').value;
+      if (!keyText.trim()) { rError('Enter your recovery key.'); rEl('recover-key').focus(); return; }
+      if (next.length < 8) { rError('The new password must be at least 8 characters.'); rEl('recover-new').focus(); return; }
+      if (next !== rEl('recover-new2').value) { rError('The two new passwords are not the same.'); rEl('recover-new2').focus(); return; }
+      rError('');
+      rBusy = true;
+      rEl('recover-submit').disabled = true;
+      rStatus('Checking your recovery key…');
+      try {
+        await NotesStore.recoverWithRecoveryKey(keyText, next, {
+          confirmNewKey: (text) => new Promise((resolve, reject) => {
+            rStatus('');
+            rEl('recover-newkey').textContent = text;
+            rEl('recover-stored').checked = false;
+            rEl('recover-finish').disabled = true;
+            rShowStep('show');
+            rEl('recover-newkey').focus();
+            rCancelConfirm = () => {
+              rCancelConfirm = null;
+              const err = new Error('Cancelled. Nothing was changed.');
+              err.code = 'RECOVERY_CANCELLED';
+              reject(err);
+            };
+            rEl('recover-finish').onclick = () => {
+              rCancelConfirm = null;
+              rShowStep('enter');
+              rStatus('Re-encrypting your notes with the new password…');
+              resolve();
+            };
+          }),
+        });
+        ['recover-key', 'recover-new', 'recover-new2'].forEach((id) => { rEl(id).value = ''; });
+        rStatus('');
+        rShowStep('done');
+        rEl('recover-done').focus();
+      } catch (err) {
+        rStatus('');
+        rShowStep('enter');
+        rError(err?.message || 'Recovery failed. Nothing was changed.');
+        rEl('recover-key').focus();
+      } finally {
+        rBusy = false;
+        rEl('recover-submit').disabled = false;
+      }
+    });
+
+    let stashedKey = '';
+    try {
+      stashedKey = sessionStorage.getItem('notes_recover_key') || '';
+      sessionStorage.removeItem('notes_recover_key');
+    } catch (err) { /* ignore */ }
+    if (stashedKey && !NotesStore.isUnlocked()) {
+      rEl('recover-key').value = stashedKey;
+      rOpen(true);
+    }
+  }
+
   document.getElementById('unlock-empty-retry')?.addEventListener('click', () => {
     stopEmptyDeviceBackgroundRetry();
     setEmptyDeviceUnlockUi('clear');

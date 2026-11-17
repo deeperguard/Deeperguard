@@ -40,6 +40,13 @@
         <p id="login-recovery-hint" class="hint">Each recovery code works once, and only after its waiting period ends. It signs you in; you still need your vault password to unlock your notes.</p>
         <button type="button" id="login-recovery-submit" class="btn subtle block">Sign in with recovery code</button>
       </div>
+      <div id="login-recoverkey-block" class="stack" hidden>
+        <label>Recovery key
+          <input id="login-recovery-key" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XX" aria-describedby="login-recoverkey-hint login-error">
+        </label>
+        <p id="login-recoverkey-hint" class="hint">Uses the email above. You must be signed in on this device first (with a passkey or a recovery code); your vault then opens with the recovery key and you choose a new password.</p>
+        <button type="button" id="login-recoverkey-submit" class="btn subtle block">Continue with recovery key</button>
+      </div>
       <p id="login-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
       <div id="session-cap-panel" class="session-cap-panel" hidden>
         <p class="hint">Signing out a device ends its session there. Your notes are not deleted.</p>
@@ -51,6 +58,7 @@
       <button type="button" class="btn subtle block" id="webauthn-login">Sign in with passkey</button>
       <p class="hint center">A passkey signs you in. Unlocking your notes still needs your vault password.</p>
       <p class="hint center"><button type="button" class="btn link" id="login-toggle-recovery" hidden>Use a recovery code</button></p>
+      <p class="hint center"><button type="button" class="btn link" id="login-toggle-recoverkey" aria-controls="login-recoverkey-block" aria-expanded="false">Forgot your vault password? Use your recovery key</button></p>
     </form>
     {% with auth_guard_form_id='login-form', auth_guard_submit_id='login-submit', auth_guard_fn='__notesSubmitLogin', auth_guard_queued='__notesLoginQueued' %}
     {% include 'partials/auth-native-submit-guard.html' %}

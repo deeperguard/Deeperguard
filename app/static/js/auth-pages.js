@@ -348,6 +348,43 @@ if (loginForm) {
     }
   });
 
+  document.getElementById('login-toggle-recoverkey')?.addEventListener('click', () => {
+    const block = document.getElementById('login-recoverkey-block');
+    const toggle = document.getElementById('login-toggle-recoverkey');
+    if (!block || !toggle) return;
+    block.hidden = !block.hidden;
+    toggle.setAttribute('aria-expanded', block.hidden ? 'false' : 'true');
+    if (!block.hidden) document.getElementById('login-recovery-key')?.focus();
+  });
+
+  document.getElementById('login-recoverkey-submit')?.addEventListener('click', async () => {
+    showError('login-error', '');
+    const email = String(emailInput?.value || '').trim().toLowerCase();
+    const key = String(document.getElementById('login-recovery-key')?.value || '').trim();
+    if (!email) {
+      showError('login-error', 'Enter your email first');
+      return;
+    }
+    if (!key) {
+      showError('login-error', 'Enter your recovery key');
+      return;
+    }
+    let account = null;
+    try {
+      const res = await fetch('/api/account', { credentials: 'same-origin' });
+      if (res.ok) account = await res.json();
+    } catch (err) { /* offline: handled below */ }
+    if (!account || String(account.email || '').trim().toLowerCase() !== email) {
+      showError(
+        'login-error',
+        'Sign in as this account first: use a passkey or “Use a recovery code” above. Then come back here and use your recovery key.',
+      );
+      return;
+    }
+    try { sessionStorage.setItem('notes_recover_key', key); } catch (err) { /* ignore */ }
+    location.replace(afterAuthUrl('/app'));
+  });
+
   let sessionCapRevokeToken = '';
 
   function hideSessionCapPanel() {

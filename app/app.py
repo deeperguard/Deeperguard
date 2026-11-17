@@ -2324,7 +2324,7 @@ def api_account_vault_keys():
     if err:
         return err
     status = db.get_vault_keys_status(int(user["id"]))
-    return _vault_keys_json({"schema": 1, "key_mode": "derived", **status})
+    return _vault_keys_json({"schema": 1, "account_id": str(int(user["id"])), "key_mode": "derived", **status})
 
 
 @app.post("/api/account/vault-keys/challenge")

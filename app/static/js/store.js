@@ -7098,6 +7098,230 @@ const NotesStore = (() => {
     }
   }
 
+  function recoveryKeyError(code, message) {
+    const err = new Error(message);
+    err.code = code;
+    return err;
+  }
+
+  function recoveryLockedMessage(seconds) {
+    const minutes = Math.max(1, Math.ceil(Number(seconds || 0) / 60));
+    const wait = minutes >= 120 ? `${Math.ceil(minutes / 60)} hours` : `${minutes} minute${minutes === 1 ? '' : 's'}`;
+    return `Too many wrong recovery key attempts. Recovery is locked for about ${wait}. Your vault password still works if you remember it.`;
+  }
+
+  // Forgotten vault password: unwrap the vault key with the recovery key, set a
+  // new password and replace the recovery key (docs/VAULT_RECOVERY.md 3.2).
+  // Nothing is written until the new recovery key is confirmed; the server then
+  // changes login verifier, key id and recovery wrap in one transaction, after
+  // every item was re-encrypted and uploaded. `confirmNewKey(text)` resolves
+  // once the user has stored the new recovery key (reject to cancel).
+  async function recoverWithRecoveryKey(recoveryKeyText, newPassword, { confirmNewKey } = {}) {
+    if (passwordChangeInFlight) throw new Error('Password change already in progress');
+    const next = String(newPassword || '').trim();
+    if (next.length < 8) throw new Error('New password must be at least 8 characters');
+    if (typeof confirmNewKey !== 'function') throw new Error('Missing recovery key confirmation');
+    let recoveryKey;
+    try {
+      recoveryKey = NotesCrypto.decodeRecoveryKey(recoveryKeyText);
+    } catch (err) {
+      throw recoveryKeyError(
+        'RECOVERY_KEY_FORMAT',
+        'This is not a valid recovery key. Check it for typos: it has 8 groups of 4 characters and a 2-character ending. Nothing was changed.',
+      );
+    }
+    let start;
+    let keyStatus;
+    let account;
+    try {
+      start = await api('/api/account/vault-keys/recover/start', { method: 'POST', body: '{}' });
+      keyStatus = await api('/api/account/vault-keys');
+      account = await api('/api/account');
+    } catch (err) {
+      if (err?.status === 429 && err.retryAfter) throw recoveryKeyError('RECOVERY_LOCKED', recoveryLockedMessage(err.retryAfter));
+      if (err?.status === 404 && /no_recovery_key/.test(err.message)) {
+        throw recoveryKeyError('RECOVERY_NONE', 'This account has no recovery key. Nothing was changed.');
+      }
+      throw err;
+    }
+    const accountId = String(keyStatus.account_id || '');
+    const salt = account.kdf_salt;
+    const kdfVersion = Number(account.vault_kdf_version) >= 2 ? 2 : 1;
+    const email = String(account.email || '').trim().toLowerCase();
+    const recoverySalt = bytesFromB64(start.recovery_salt);
+    let oldKey;
+    try {
+      if (start.key_id !== keyStatus.key_id) throw new Error('stale wrap');
+      oldKey = await NotesCrypto.unwrapVaultKey(
+        NotesCrypto.deriveRecoveryWrapKey(recoveryKey, recoverySalt),
+        { wrap_version: start.wrap_version, key_id: start.key_id, blob: start.wrap },
+        { accountId, type: 'recovery' },
+      );
+    } catch (err) {
+      throw recoveryKeyError(
+        'RECOVERY_KEY_WRONG',
+        'This recovery key does not open this vault. It may be mistyped, or it was replaced by a newer one. Nothing was changed.',
+      );
+    }
+    const proofBytes = NotesCrypto.hkdfSha256(recoveryKey, recoverySalt, 'deeperguard/recovery-proof/v1', 32);
+    const proof = Array.from(proofBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+    // The new recovery key is shown and confirmed before any item is touched.
+    const newRecoveryKey = NotesCrypto.generateRecoveryKey();
+    const newRecoverySalt = NotesCrypto.generateRecoverySalt();
+    await confirmNewKey(NotesCrypto.encodeRecoveryKey(newRecoveryKey));
+
+    passwordChangeInFlight = true;
+    let rotated = false;
+    let committed = false;
+    let snapshot = [];
+    let pristine = new Map();
+    let newKey = null;
+    try {
+      // Load and decrypt the vault with the recovered key.
+      lock();
+      state.cryptoKey = oldKey;
+      state.altCryptoKey = null;
+      state.kdfVersion = kdfVersion;
+      state.keyVerified = true;
+      if (typeof NotesFreshness !== 'undefined') {
+        NotesFreshness.setCryptoKey(oldKey);
+        try { await NotesFreshness.load(oldKey); } catch (err) { /* bootstrap empty freshness */ }
+      }
+      sessionStorage.setItem('notes_unlocked', '1');
+      sessionStorage.setItem('notes_salt', salt);
+      await sync({ quiet: true, full: true });
+      snapshot = [...state.items.entries()].map(([uuid, item]) => ({ uuid, item: cloneSyncItem(item) }));
+      pristine = new Map(snapshot.map(({ uuid, item }) => {
+        const copy = cloneSyncItem(item);
+        if (copy.content?.type === 'attachment' && copy.content.file_enc) {
+          delete copy.content.file_enc;
+          copy.content.file_enc_stored = true;
+        }
+        return [uuid, copy];
+      }));
+      try {
+        await hydrateSnapshotBlobs(snapshot);
+      } catch (err) {
+        const reason = isProbablyOffline(err) ? 'You are offline' : (err?.message || 'Download failed');
+        throw new Error(`${reason}. Some documents are not on this device yet; they must be downloaded before the vault can be re-encrypted. Try again when online.`);
+      }
+
+      const derived = await deriveVaultKey(next, salt, kdfVersion);
+      newKey = derived.key || derived;
+      state.cryptoKey = newKey;
+      if (typeof NotesFreshness !== 'undefined') NotesFreshness.setCryptoKey(newKey);
+      rotated = true;
+      const ts = Date.now() / 1000;
+      for (const { uuid, item } of snapshot) {
+        if (item.content?.type === 'attachment' && item.content.file_enc) {
+          try {
+            await rekeyAttachmentFileEnc(item.content, oldKey, newKey);
+          } catch (err) {
+            throw new Error(`Could not re-encrypt “${item.content.filename || 'document'}”. Nothing was changed.`);
+          }
+        }
+        if (item.content?.type === 'attachment' && item.content.preview_enc) {
+          try {
+            await rekeyAttachmentPreviewEnc(item.content, oldKey, newKey);
+          } catch (err) {
+            delete item.content.preview_enc;
+          }
+        }
+        item.updated_at = Math.max(Number(item.updated_at) || 0, ts);
+        if (typeof NotesFreshness !== 'undefined' && item.content && typeof item.content === 'object') {
+          item.content = NotesFreshness.stampForUpsert(uuid, item.content, { bump: true, existing: item });
+        }
+        state.items.set(uuid, item);
+        state.dirty.add(uuid);
+        await persistLocal(uuid, item);
+      }
+      const pushed = await flush();
+      const unsynced = snapshot.filter(({ uuid }) => state.dirty.has(uuid) && !state.blocked.has(uuid)).length;
+      if (!pushed || unsynced) {
+        const detail = state.lastError ? ` (${state.lastError})` : '';
+        throw new Error(`The re-encrypted vault could not be uploaded${detail}. Nothing was changed — try again when online.`);
+      }
+
+      const srp = await NotesSrpAuth.makeVerifier(email, next);
+      const newWrap = await NotesCrypto.wrapVaultKey(
+        newKey,
+        NotesCrypto.deriveRecoveryWrapKey(newRecoveryKey, newRecoverySalt),
+        { accountId, type: 'recovery' },
+      );
+      const newProof = NotesCrypto.hkdfSha256(newRecoveryKey, newRecoverySalt, 'deeperguard/recovery-proof/v1', 32);
+      let res;
+      try {
+        res = await api('/api/account/vault-keys/recover/commit', {
+          method: 'POST',
+          body: JSON.stringify({
+            proof,
+            expected_key_rev: start.key_rev,
+            from_key_id: start.key_id,
+            to_key_id: newWrap.key_id,
+            srp_salt: srp.srp_salt,
+            srp_verifier: srp.srp_verifier,
+            srp_kdf_version: srp.srp_kdf_version,
+            new_recovery: {
+              recovery_salt: NotesCrypto.b64(newRecoverySalt),
+              wrap: newWrap.blob,
+              wrap_version: newWrap.wrap_version,
+              proof_hash: await NotesCrypto.hashBytes(newProof),
+            },
+          }),
+        });
+      } catch (err) {
+        if (err?.status === 429 && err.retryAfter) throw recoveryKeyError('RECOVERY_LOCKED', recoveryLockedMessage(err.retryAfter));
+        if (err?.status === 403) throw recoveryKeyError('RECOVERY_KEY_WRONG', 'This recovery key was refused. Nothing was changed.');
+        if (err?.status === 409) {
+          throw recoveryKeyError('RECOVERY_STALE', 'Your account changed on another device while you were recovering. Nothing was changed — start again.');
+        }
+        throw err;
+      }
+      committed = true;
+      ackPasswordChanged(res?.password_changed_at);
+      ackAuthSecurity(res?.auth_security_at || res?.password_changed_at);
+      return { reencrypted: snapshot.length };
+    } catch (err) {
+      if (rotated && !committed) {
+        // Put the old-key copies back so the old password keeps working.
+        try {
+          state.cryptoKey = oldKey;
+          if (typeof NotesFreshness !== 'undefined') NotesFreshness.setCryptoKey(oldKey);
+          const now = Date.now() / 1000;
+          for (const { uuid } of snapshot) {
+            const live = state.items.get(uuid);
+            const restored = pristine.get(uuid);
+            if (!restored) continue;
+            if (live?.content?.type === 'attachment' && live.content.file_enc) {
+              restored.content.file_enc = live.content.file_enc;
+              delete restored.content.file_enc_stored;
+              try {
+                await rekeyAttachmentFileEnc(restored.content, newKey, oldKey);
+              } catch (rekeyErr) {
+                restored.content.file_enc = live.content.file_enc;
+              }
+            }
+            if (live?.rev != null) restored.rev = live.rev;
+            restored.updated_at = Math.max(Number(restored.updated_at) || 0, now);
+            restored.content = bumpFreshness(uuid, restored.content, live);
+            state.items.set(uuid, restored);
+            state.dirty.add(uuid);
+            await persistLocal(uuid, restored);
+          }
+          await flush();
+        } catch (rollbackErr) {
+          console.warn('recovery rollback failed', rollbackErr);
+        }
+      }
+      throw err;
+    } finally {
+      passwordChangeInFlight = false;
+      // The page reloads to the unlock screen afterwards; the vault stays locked here.
+      lock();
+    }
+  }
+
   function noteHasPendingFile(note, fileId, fileName) {
     const pending = note?.content?.sn_pending_files || [];
     if (fileId && pending.some((item) => item.uuid === fileId)) return true;
@@ -7523,6 +7747,7 @@ const NotesStore = (() => {
     refreshVaultHead,
     migrateVaultKdfIfNeeded,
     changePassword,
+    recoverWithRecoveryKey,
     repairAttachmentsWithPreviousPassword,
     mergeCrossDeviceProtection,
     noteTextDiffers,

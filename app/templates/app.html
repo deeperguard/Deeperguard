@@ -608,12 +608,47 @@
         <button type="button" id="unlock-submit" class="btn primary block">Unlock</button>
         <p id="unlock-saved-hint" class="auth-hint" hidden>A password is saved on this device for offline unlock. You still enter it each time Notes opens.</p>
         <button type="button" id="unlock-clear-saved" class="btn ghost block" hidden>Clear saved password</button>
+        <button type="button" id="unlock-forgot" class="btn link" aria-controls="recover-form" aria-expanded="false">Forgot your vault password? Use your recovery key</button>
         <button type="button" id="unlock-signout" class="btn ghost block"{% if skip_login %} hidden{% endif %}>Sign out</button>
         <details class="auth-hint unlock-help">
           <summary>Having trouble on iPhone?</summary>
           <p id="unlock-secure-hint" hidden>Offline unlock on iPhone needs a secure connection. If Safari warns about the certificate, <a href="/ca.crt" download>install the certificate</a>, or open the app once while you are online.</p>
           <p>If notes will not open, use the vault password from the device where you created them. Password help is in Settings after you unlock. Write to <span id="unlock-support-email"></span> if you are stuck.</p>
         </details>
+      </form>
+      <form id="recover-form" class="stack" novalidate autocomplete="off" hidden>
+        <h2 id="recover-title">Recover with your recovery key</h2>
+        <div id="recover-step-enter" class="stack">
+          <p class="hint">Your recovery key opens your vault on this device and lets you choose a new vault password. It was shown once when it was created; we cannot show it again. You must be signed in; if you are not, use “Sign in again” first.</p>
+          <label>Recovery key
+            <input id="recover-key" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XX" aria-describedby="recover-error">
+          </label>
+          <label>New vault password
+            <input id="recover-new" type="password" autocomplete="new-password" aria-describedby="recover-hint recover-error">
+          </label>
+          <label>Repeat new vault password
+            <input id="recover-new2" type="password" autocomplete="new-password" aria-describedby="recover-error">
+          </label>
+          <p id="recover-hint" class="hint">At least 8 characters. It also becomes your sign-in password, and your other signed-in devices are signed out.</p>
+          <button type="submit" id="recover-submit" class="btn primary block">Set new password</button>
+        </div>
+        <div id="recover-step-show" class="stack" hidden>
+          <p><strong>Your new recovery key.</strong> The old one no longer works. Store the new one somewhere safe outside this device; we cannot show it again.</p>
+          <code id="recover-newkey" class="recovery-key" tabindex="0" aria-label="New recovery key"></code>
+          <div class="stack">
+            <button type="button" id="recover-download" class="btn block">Download as text file</button>
+            <button type="button" id="recover-print" class="btn block">Print</button>
+          </div>
+          <label class="check"><input type="checkbox" id="recover-stored"> I stored my new recovery key</label>
+          <button type="button" id="recover-finish" class="btn primary block" disabled>Continue</button>
+        </div>
+        <div id="recover-step-done" class="stack" hidden>
+          <p role="status">Your vault password was changed and your notes were re-encrypted. Unlock with your new password.</p>
+          <button type="button" id="recover-done" class="btn primary block">Go to unlock</button>
+        </div>
+        <p id="recover-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" hidden></p>
+        <p id="recover-status" class="unlock-status muted" role="status" aria-live="polite" hidden></p>
+        <button type="button" id="recover-cancel" class="btn ghost block">Back</button>
       </form>
     </main>
   </div>
