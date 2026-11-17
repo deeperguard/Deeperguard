@@ -52,6 +52,7 @@ agenda_pack.subscriptions = {
     url:              string   // normalised https:// URL; webcal:// and webcals:// are rewritten to https://
     mode:             "direct" | "relay"
     relay_consent_at: string|null  // ISO time of the user's explicit choice; null unless mode === "relay"
+    enabled?:         boolean      // on/off switch in Calendar settings; missing = on
     last_refresh:     string|null  // ISO time of the last successful refresh
     last_error_code:  string|null  // short code from section 6; never contains the URL or a message from the network
     created_at, updated_at: ISO strings
@@ -68,6 +69,10 @@ Rules:
 - `mode` starts as `direct`. It becomes `relay` only after the user picks the
   relay in a dialog that says what the server will see (section 7), and then
   `relay_consent_at` is set. Switching back to `direct` clears `relay_consent_at`.
+- `enabled: false` (the switch in the Calendars section) hides the subscription's
+  events in every agenda view and pauses it: no automatic or manual refresh, no
+  direct fetch and no relay request (refresh answers `E_OFF`, which is not
+  stored). Switching it on refreshes it once.
 - `last_error_code` is one of the fixed codes in section 6 or `null`. No free
   text, no URL, no exception message.
 - The `url` field is never copied to events, to the `source` label, to toasts,
@@ -251,6 +256,7 @@ Fixed set, safe to show and to store in `last_error_code`:
 | `E_RATE` | Relay rate limit (HTTP 429). |
 | `E_AUTH` | Relay only: not signed in (HTTP 401). |
 | `E_SHRINK` | Automatic refresh refused because it would delete most events. |
+| `E_OFF` | Refresh refused because the subscription is switched off (returned only, never stored). |
 
 ## 7. Threat model and honest trade-offs
 

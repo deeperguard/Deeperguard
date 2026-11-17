@@ -2,7 +2,7 @@
  * Deeperguard Agenda — "Calendars" list in the calendar settings panel
  * (docs/design/calendar-multi.md §1, milestone M2).
  *
- * Create, rename, recolor, show/hide and delete calendars. Colors come from a fixed palette of
+ * Create, rename, recolor, show/hide and delete calendars; switch URL subscriptions on or off. Colors come from a fixed palette of
  * keys (never free hex); every key has a text color with at least 4.5:1 contrast, checked by
  * tests/test_agenda_calendars_ui.js via tests/agenda_contrast_utils.js. Events always show the
  * calendar name next to the color, so color is never the only cue.
@@ -61,9 +61,14 @@
     return out;
   }
 
-  /** Read-only stand-in for a URL subscription, so its events carry the subscription's own name. */
+  /**
+   * Read-only stand-in for a URL subscription, so its events carry the subscription's own name.
+   * A subscription switched off (`enabled === false`) is not visible; missing `enabled` means on.
+   */
   function subscriptionCalendar(sub) {
-    return { id: `sub:${sub.id}`, name: sub.name, color: 'slate', visible: true, subscribed: true };
+    return {
+      id: `sub:${sub.id}`, subId: sub.id, name: sub.name, color: 'slate', visible: sub.enabled !== false, subscribed: true,
+    };
   }
 
   function listSubscriptionCalendars() {
@@ -123,26 +128,64 @@
   }
 
   /**
-   * Read-only rows for the URL subscriptions in the Calendars section of the settings panel.
-   * Subscriptions have no on/off control: they are shown and removed from their own list below.
+   * Rows for the URL subscriptions in the Calendars section of the settings panel. Each has one
+   * on/off switch (off = events hidden and no refresh); rename, refresh and delete stay in the
+   * Subscribed calendars list below.
    */
   function subscriptionRowsHtml() {
     return listSubscriptionCalendars().map((c) => {
       const p = paletteEntry(c.color);
+      const on = c.visible;
+      const name = c.name || 'Agenda';
       return (
-        '<li class="agenda-cal-row agenda-cal-row-sub"><div class="agenda-cal-row-main">'
-        + '<span class="agenda-cal-toggle">'
+        `<li class="agenda-cal-row agenda-cal-row-sub${on ? '' : ' is-hidden'}" data-agenda-sub-id="${esc(c.subId)}"><div class="agenda-cal-row-main">`
+        + `<label class="agenda-cal-toggle"><input type="checkbox" role="switch" data-agenda-cal-action="sub-toggle"${on ? ' checked' : ''}`
+        + ` aria-label="${esc(`Subscribed calendar ${name}`)}">`
         + `<span class="agenda-cal-dot" data-agenda-cal-color="${esc(p.key)}" style="background:${p.bg}" aria-hidden="true"></span>`
-        + `<span class="agenda-cal-name">${esc(c.name || 'Agenda')}</span></span>`
-        + '<span class="agenda-cal-badge">Subscribed · read-only</span>'
+        + `<span class="agenda-cal-name">${esc(name)}</span></label>`
+        + `<span class="agenda-cal-badge" aria-hidden="true">${on ? 'Subscribed · on' : 'Subscribed · off'}</span>`
         + '</div></li>'
       );
     }).join('');
   }
 
-  function renderSubscriptions() {
-    const el = typeof document !== 'undefined' ? document.getElementById('agenda-calendars-subs') : null;
-    if (el) el.innerHTML = subscriptionRowsHtml();
+  function subsRoot() {
+    return typeof document !== 'undefined' ? document.getElementById('agenda-calendars-subs') : null;
+  }
+
+  function renderSubscriptions(focusSubId) {
+    const el = subsRoot();
+    if (!el) return;
+    el.innerHTML = subscriptionRowsHtml();
+    if (!focusSubId) return;
+    const row = [...el.querySelectorAll('[data-agenda-sub-id]')].find((li) => li.getAttribute('data-agenda-sub-id') === focusSubId);
+    const input = row && row.querySelector('[data-agenda-cal-action="sub-toggle"]');
+    if (input) input.focus();
+  }
+
+  /** Switch handler: stores the choice, re-renders at once, refreshes once when turned on. */
+  async function handleSubToggle(ev) {
+    const cb = ev.target.closest('[data-agenda-cal-action="sub-toggle"]');
+    if (!cb) return;
+    const subId = cb.closest('[data-agenda-sub-id]')?.getAttribute('data-agenda-sub-id') || '';
+    const Subs = global.NotesAgendaSubs;
+    const S = getStore();
+    const sub = S && typeof S.getAgendaSubscription === 'function' ? S.getAgendaSubscription(subId) : null;
+    if (!sub || !Subs || typeof Subs.setEnabled !== 'function') {
+      renderSubscriptions();
+      return;
+    }
+    const on = cb.checked;
+    const pending = Subs.setEnabled(subId, on);
+    announce(`${sub.name} ${on ? 'on' : 'off'}`);
+    renderSubscriptions(subId);
+    Subs.renderList();
+    onChange();
+    const res = await pending;
+    if (!on || !res) return;
+    if (!res.ok && typeof global.notesAgendaToast === 'function') global.notesAgendaToast(Subs.errorText(res.code), true);
+    Subs.renderList();
+    onChange();
   }
 
   function eventCounts() {
@@ -360,6 +403,7 @@
 
   let onChange = () => {};
   let wiredRoot = null;
+  let wiredSubsRoot = null;
 
   function root() {
     return typeof document !== 'undefined' ? document.getElementById('agenda-calendars-list') : null;
@@ -486,6 +530,11 @@
       el.addEventListener('change', handleChange);
       el.addEventListener('submit', handleSubmit);
       el.addEventListener('keydown', handleKeydown);
+    }
+    const subs = subsRoot();
+    if (subs && wiredSubsRoot !== subs) {
+      wiredSubsRoot = subs;
+      subs.addEventListener('change', (ev) => { handleSubToggle(ev).catch(() => {}); });
     }
     renderList();
   }

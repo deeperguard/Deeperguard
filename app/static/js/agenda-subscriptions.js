@@ -5,6 +5,7 @@
  * - Fetching runs in js/ics-fetch-worker.js (own narrow CSP); parsing reuses
  *   NotesAgendaIcs.parseIcsFile, dedupe reuses the store's UID + RECURRENCE-ID merge.
  * - Automatic refresh only while the vault is open, at most every 30 minutes;
+ *   a subscription switched off (enabled === false) is never fetched, directly or via the relay;
  *   stopAll() (called from NotesStore.lock) clears timers, aborts fetches, drops late results.
  * Feed content is rendered with textContent only.
  */
@@ -29,6 +30,7 @@
     E_AUTH: 'Sign in again to refresh.',
     E_SHRINK: 'Refresh skipped: it would remove most events of this calendar. Refresh by hand to confirm.',
     E_LOCKED: 'Unlock your vault to refresh.',
+    E_OFF: 'This subscription is off. Turn it on to refresh it.',
   };
 
   function codeError(code) {
@@ -159,6 +161,11 @@
     return mode === 'relay' ? relayFetch(url) : workerFetch(url);
   }
 
+  /** Missing `enabled` (older packs) means on. */
+  function isEnabled(sub) {
+    return !!sub && sub.enabled !== false;
+  }
+
   function usesRelay(sub) {
     return !!(sub && sub.mode === 'relay' && sub.relay_consent_at);
   }
@@ -198,11 +205,14 @@
       if (!unlocked()) return { ok: false, code: 'E_LOCKED' };
       const sub = S.getAgendaSubscription(subId);
       if (!sub) return { ok: false, code: 'E_URL' };
+      if (!isEnabled(sub)) return { ok: false, code: 'E_OFF' };
       const myEpoch = epoch;
       lastAttempt.set(subId, Date.now());
       const out = parseFeed(await fetchText(sub.url, usesRelay(sub) ? 'relay' : 'direct'));
       // Late response after lock (or a lock/unlock cycle): drop it.
       if (myEpoch !== epoch || !unlocked()) return { ok: false, code: 'E_LOCKED' };
+      // Switched off (or deleted) while the fetch ran: drop the result.
+      if (!isEnabled(S.getAgendaSubscription(subId))) return { ok: false, code: 'E_OFF' };
       if (!out.ok) {
         S.updateAgendaSubscription(subId, { last_error_code: out.code });
         return { ok: false, code: out.code };
@@ -239,11 +249,11 @@
     return nowMs - last >= AUTO_REFRESH_MS;
   }
 
-  /** One automatic pass: only with an open vault, only subscriptions not refreshed for 30 minutes. */
+  /** One automatic pass: only with an open vault, only subscriptions that are on and not refreshed for 30 minutes. */
   async function tick(nowMs = Date.now()) {
     if (!unlocked()) return [];
     const S = store();
-    const due = S.listAgendaSubscriptions().filter((s) => isDue(s, nowMs));
+    const due = S.listAgendaSubscriptions().filter((s) => isEnabled(s) && isDue(s, nowMs));
     const results = [];
     for (const sub of due) {
       if (!unlocked()) break;
@@ -353,6 +363,22 @@
     return true;
   }
 
+  /**
+   * Switch a subscription on or off (stored in the encrypted pack, synced with it).
+   * Off: its events are hidden and it is not refreshed. On: refreshed once right away.
+   * Resolves with the refresh result when switched on, {ok:true} when switched off, null when not possible.
+   */
+  async function setEnabled(subId, on) {
+    if (!unlocked()) return null;
+    const S = store();
+    const sub = S.getAgendaSubscription(subId);
+    if (!sub) return null;
+    if (isEnabled(sub) === !!on) return { ok: true, unchanged: true };
+    S.updateAgendaSubscription(subId, { enabled: !!on });
+    if (!on) return { ok: true };
+    return refresh(subId, { auto: true });
+  }
+
   function rerenderAgenda() {
     if (global.NotesAgendaCalendars && typeof global.NotesAgendaCalendars.renderSubscriptions === 'function') global.NotesAgendaCalendars.renderSubscriptions();
     if (global.NotesAgenda && typeof global.NotesAgenda.render === 'function') global.NotesAgenda.render();
@@ -370,17 +396,21 @@
       return;
     }
     subs.forEach((sub) => {
+      const on = isEnabled(sub);
       const row = el('div', 'agenda-subscription-row');
       const head = el('div', 'agenda-subscription-head');
       head.appendChild(el('strong', 'agenda-subscription-name', sub.name));
+      if (!on) head.appendChild(el('span', 'agenda-subscription-via agenda-subscription-off', 'Off'));
       if (usesRelay(sub)) {
         const tag = el('span', 'agenda-subscription-via', 'via server');
         tag.title = 'Fetched through the Deeperguard server, which sees the link and the calendar while fetching';
         head.appendChild(tag);
       }
       row.appendChild(head);
-      const status = el('p', 'agenda-subscription-status' + (sub.last_error_code ? ' agenda-subscription-error' : ''), statusText(sub));
-      if (sub.last_error_code) status.setAttribute('role', 'alert');
+      const showError = on && sub.last_error_code;
+      const status = el('p', 'agenda-subscription-status' + (showError ? ' agenda-subscription-error' : ''),
+        on ? statusText(sub) : 'Off: hidden from the agenda and not refreshed. Turn it on under Calendars above.');
+      if (showError) status.setAttribute('role', 'alert');
       row.appendChild(status);
       const actions = el('div', 'agenda-subscription-actions');
       const btn = (label, fn) => {
@@ -399,6 +429,7 @@
         }
       });
       const refreshBtn = btn('Refresh', async () => {
+        if (!isEnabled(store().getAgendaSubscription(sub.id))) return;
         refreshBtn.disabled = true;
         const res = await refresh(sub.id, {
           confirmShrink: async (n) => !!(global.confirm && global.confirm(`This refresh removes ${n} events of "${sub.name}". Continue?`)),
@@ -409,13 +440,17 @@
         renderList();
         rerenderAgenda();
       });
+      if (!on) {
+        refreshBtn.disabled = true;
+        refreshBtn.title = errorText('E_OFF');
+      }
       if (usesRelay(sub)) {
         btn('Switch to direct', () => {
           disableRelay(sub.id);
           toast('Consent withdrawn; fetching directly again');
           renderList();
         });
-      } else if (sub.last_error_code === 'E_NETWORK_OR_CORS') {
+      } else if (on && sub.last_error_code === 'E_NETWORK_OR_CORS') {
         btn('Fetch via server…', async () => {
           if (await enableRelay(sub.id)) {
             renderList();
@@ -541,6 +576,8 @@
     relayFetch,
     enableRelay,
     disableRelay,
+    isEnabled,
+    setEnabled,
     CONSENT_TEXT,
     tick,
     start,
