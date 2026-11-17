@@ -32,10 +32,10 @@
       "url": "/static/js/agenda-ics.d0e5a60081217f05.js"
     },
     "js/agenda-local-reminders.js": {
-      "bytes": 23649,
-      "sha256": "aa65a2fbea032477914173c2d07cc32e18fdaaa64c938bbfd8311fdfb744be16",
-      "sri": "sha384-XtCUiwt1CYrAgIP04sUoPG7Xf49yjoejoMPr9aB7uIvrVFkz30SsuAS1lLcv8Ede",
-      "url": "/static/js/agenda-local-reminders.aa65a2fbea032477.js"
+      "bytes": 24330,
+      "sha256": "73b64aaa99caa5d92ca14103a9837ba55925bd7e862fa376755f40b01892d908",
+      "sri": "sha384-vgN0Y/aaFLWMXWaJBuQeZrhaEU52f2xWQ5sbvmjf/KfQAVaAxM5SlYszryqlbLyR",
+      "url": "/static/js/agenda-local-reminders.73b64aaa99caa5d9.js"
     },
     "js/agenda-occurrence.js": {
       "bytes": 14589,
@@ -50,10 +50,10 @@
       "url": "/static/js/agenda-recurrence.d22af61eb67f7444.js"
     },
     "js/agenda-reminders.js": {
-      "bytes": 28494,
-      "sha256": "7c56ec5d7b58f82e75c59b353d9bb51256efc5a0e1dfecb5d3ce4534fa57dd6c",
-      "sri": "sha384-OvwqSWU1K4nINFIGGG5kZhU9fgtko/1/jY/NR7nxEmzee7dZs2WX0HhXSP2QT1sL",
-      "url": "/static/js/agenda-reminders.7c56ec5d7b58f82e.js"
+      "bytes": 29697,
+      "sha256": "5e019b69683dd299dc2ab306414a3ef2b5ecea7fae719d35c827b8fe4eefa2ec",
+      "sri": "sha384-i8inlCzdPo9uRqybGpZUolfvCjUiGack0wvFmO3l2Z8aHzF8XT9D3VKcipUPLDru",
+      "url": "/static/js/agenda-reminders.5e019b69683dd299.js"
     },
     "js/agenda-scroll-core.js": {
       "bytes": 9517,
@@ -86,10 +86,10 @@
       "url": "/static/js/agenda-tz.57449e80ad590b0f.js"
     },
     "js/agenda.js": {
-      "bytes": 149782,
-      "sha256": "5cbd5bbd7aaccddf2494f2f683dcc09700ea065c9bb790149311804c3ebaba1a",
-      "sri": "sha384-d4PM09xahNVnykFLc5ljIMhQl7TZqeUJSnTOAE1yuvQLaElHcjvcCH7S7XSTJYwJ",
-      "url": "/static/js/agenda.5cbd5bbd7aaccddf.js"
+      "bytes": 149906,
+      "sha256": "955d75cc76dccda2b5c014fa8c6ffb4251b4c99cc54e8797d592ccf38dcead03",
+      "sri": "sha384-yRlv/woolQgnBmojzTS69U3aAB1dlwoyuvVaKc/Rau+Gr12vqWtwlYhJYYPhKSr7",
+      "url": "/static/js/agenda.955d75cc76dccda2.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -597,6 +597,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "4518635cbea4cae97675d9ce5d77e3f0bbf0301e4e076f7f4e561e38e2d6ba70",
+  "manifest_sha256": "60bf612dea704b49d70312c1f9eeffb111810e0fda51b3162c098feba86d7bde",
   "version": 1
 }

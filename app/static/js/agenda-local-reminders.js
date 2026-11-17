@@ -10,7 +10,8 @@
  *   tasks (`reminder.offsets` before the due time, 09:00 without a time) and notes
  *   (`reminders[0].at`) fire on their exact minute the same way.
  * - Display: always a banner in the app; also a browser Notification when the user allowed it.
- *   Permission is asked only after a click on "Allow browser notifications".
+ *   Permission is asked only after a click: on "Allow browser notifications", or when the user
+ *   saves an event with a reminder for the first time. Never while loading.
  * - A reminder that came due while Deeperguard was closed (up to 24 hours back) is shown once,
  *   marked "Missed", the next time the app is open. No OS notification for those.
  * - Several open tabs: "already shown" is kept in localStorage and claimed under a Web Lock
@@ -557,6 +558,17 @@
     });
   }
 
+  /**
+   * Called from the click that saves an event with reminders: the first time the user sets one is
+   * the moment to ask. Never at load, and never again once the browser has an answer.
+   */
+  function askPermissionForNewReminder(offsets) {
+    const N = global.Notification;
+    if (!Array.isArray(offsets) || !offsets.length) return;
+    if (typeof N !== 'function' || N.permission !== 'default' || typeof N.requestPermission !== 'function') return;
+    Promise.resolve(N.requestPermission()).catch(() => {}).finally(refreshPermissionUi);
+  }
+
   let planner = null;
   function startInBrowser() {
     wireSettings();
@@ -584,5 +596,6 @@
     hashKey,
     wireSettings,
     refreshPermissionUi,
+    askPermissionForNewReminder,
   };
 }(typeof window !== 'undefined' ? window : globalThis));

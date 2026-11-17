@@ -45,7 +45,7 @@ global.document = {
   body: { classList: { contains: () => false, add() {}, remove() {}, toggle() {} } },
 };
 global.__DG_NO_LOCAL_REMINDERS = true; // the test drives the planner itself
-for (const f of ['agenda-ics', 'agenda-recurrence', 'agenda-occurrence', 'agenda-scroll-core', 'agenda-reminders', 'agenda', 'agenda-local-reminders']) {
+for (const f of ['agenda-tz', 'agenda-ics', 'agenda-recurrence', 'agenda-occurrence', 'agenda-scroll-core', 'agenda-reminders', 'agenda', 'agenda-local-reminders']) {
   vm.runInThisContext(read(`app/static/js/${f}.js`), { filename: `${f}.js` });
 }
 const R = global.NotesAgendaReminders;
@@ -126,6 +126,59 @@ function tab(clock, storage, locks, shown) {
     assert.ok(/at start/.test(text.body), text.body);
   }
 
+  // --- 5 minutes before: one notification in the open app, none after reload ---------------
+  {
+    events = [ev({ reminders: [5] })];
+    const clock = { now: T0 + 25 * MIN };
+    const storage = memoryStorage();
+    const shown = [];
+    await tab(clock, storage, fakeLocks(), shown).check();
+    assert.strictEqual(shown.length, 1);
+    assert.strictEqual(shown[0].minutes, 5);
+    assert.strictEqual(shown[0].missed, false);
+    // Page reloaded or vault unlocked again: a fresh planner on the same storage stays quiet.
+    clock.now += 30000;
+    await tab(clock, storage, fakeLocks(), shown).check();
+    assert.strictEqual(shown.length, 1, 'no duplicate after reload');
+  }
+
+  // --- time zone: a repeating event keeps its wall time in its own zone across DST ---------
+  {
+    // 09:00 New York on Fri 30 Oct 2026 (EDT, 13:00Z); New York leaves summer time on 1 Nov.
+    const nyc = ev({ start: '2026-10-30T13:00:00.000Z', end: '2026-10-30T14:00:00.000Z', tz: 'America/New_York', rrule: 'FREQ=DAILY;COUNT=4', reminders: [5], updated_at: '2026-10-01T00:00:00.000Z' });
+    const due = (e) => R.expandOccurrences(e, new Date('2026-10-29T00:00:00Z'), new Date('2026-11-05T00:00:00Z')).map((o) => o.start.toISOString());
+    assert.deepStrictEqual(due(nyc), [
+      '2026-10-30T13:00:00.000Z', '2026-10-31T13:00:00.000Z', '2026-11-01T14:00:00.000Z', '2026-11-02T14:00:00.000Z',
+    ]);
+    events = [nyc];
+    const shown = [];
+    const clock = { now: Date.parse('2026-11-02T13:54:00Z') };
+    const storage = memoryStorage();
+    await tab(clock, storage, fakeLocks(), shown).check();
+    assert.ok(shown.every((r) => r.missed), '08:54 New York: nothing on time yet (an earlier day may show as missed)');
+    shown.length = 0;
+    clock.now = Date.parse('2026-11-02T13:55:30Z');
+    await tab(clock, storage, fakeLocks(), shown).check();
+    assert.strictEqual(shown.length, 1, '08:55 New York, 5 minutes before 09:00 in winter time');
+  }
+
+  // --- first reminder asks for permission once, never when nothing is set ------------------
+  {
+    let asked = 0;
+    global.Notification = function Notification() {};
+    global.Notification.permission = 'default';
+    global.Notification.requestPermission = () => { asked += 1; return Promise.resolve('granted'); };
+    L.askPermissionForNewReminder([]);
+    assert.strictEqual(asked, 0, 'no reminder set: no prompt');
+    L.askPermissionForNewReminder([5]);
+    assert.strictEqual(asked, 1, 'first reminder set: prompt');
+    global.Notification.permission = 'denied';
+    L.askPermissionForNewReminder([5]);
+    assert.strictEqual(asked, 1, 'a decided permission is not asked again');
+    delete global.Notification;
+    events = [ev()];
+  }
+
   // --- repeating event: each occurrence gets its own reminder ------------------------------
   events = [ev({ rrule: 'FREQ=DAILY;COUNT=3', reminders: [5] })];
   {
@@ -202,6 +255,21 @@ function tab(clock, storage, locks, shown) {
     const shown = [];
     const p = L.createPlanner({ now: () => T0 + 15 * MIN, storage: memoryStorage(), locks: fakeLocks(), listEvents: () => { throw new Error('read while locked'); }, isUnlocked: () => false, show: (r) => shown.push(r) });
     assert.deepStrictEqual(await p.check(), []);
+  }
+  {
+    // Locked vault with a due reminder: nothing shown, nothing stored as shown; it comes after unlocking.
+    events = [ev()];
+    const storage = memoryStorage();
+    const shown = [];
+    let unlocked = false;
+    const p = L.createPlanner({ now: () => T0 + 15 * MIN, storage, locks: fakeLocks(), listEvents: () => events, isUnlocked: () => unlocked, show: (r) => shown.push(r) });
+    await p.check();
+    assert.strictEqual(shown.length, 0, 'locked vault shows nothing');
+    assert.ok(!storage.getItem(L.SHOWN_KEY), 'locked vault stores nothing as shown');
+    unlocked = true;
+    await p.check();
+    assert.strictEqual(shown.length, 1, 'reminder still comes after unlocking');
+    assert.strictEqual(shown[0].minutes, 15);
   }
 
   // --- Notification only with permission, never for missed ones ---------------------------
