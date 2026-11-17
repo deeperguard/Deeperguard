@@ -958,8 +958,9 @@ drawer is opened with `#btn-list-menu`, the note actions with
 (desktop-only controls such as `#btn-list-toggle` and `#btn-nav-pin`, controls
 that a phone control replaces, long press or swipe on a row), the phone twin
 being named in brackets; `replaced by` the openers and, last, the phone
-control that takes the place of a desktop control which is not rendered at
-390px (the test checks that phone control like a `via` row); and the
+control that takes the place of a desktop control which is hidden at 390px
+(display:none) (the test checks that phone control like a `via` row, and that
+the hidden desktop control is present and named); and the
 `phone-only` and `by row kind` forms. For
 `by row kind` at phone width, `hidden` with `.note-swipe-delete` means the
 row is swiped. At 390px `tests/e2e_layout_actions.py` checks every row
@@ -1127,8 +1128,8 @@ header would close the section again.
 | `[data-agenda-view="agenda"]` | List | Agenda view switch | Content header, view switch | agenda | visible | via `#agenda-phone-more` |
 | `#agenda-search` | Search events | Agenda toolbar | Content header, right | agenda | visible | via `#agenda-phone-more` |
 | `#agenda-calendar-settings-btn` | Calendar menu | Agenda toolbar | Sidebar section "Calendars" (and header button on phone) | agenda | visible | via `#agenda-phone-more` |
-| `#agenda-add-task` | + Task | Agenda toolbar | Content header, right | agenda | visible | replaced by `#agenda-phone-more` `#agenda-phone-add-task` (the desktop button is not rendered at 390px) |
-| `#agenda-add-event` | + Event | Agenda toolbar | Content header, right (primary) | agenda | visible | replaced by `#agenda-fab-add` (the desktop button is not rendered at 390px) |
+| `#agenda-add-task` | + Task | Agenda toolbar | Content header, right | agenda | visible | replaced by `#agenda-phone-more` `#agenda-phone-add-task` (the desktop button is hidden at 390px (display:none)) |
+| `#agenda-add-event` | + Event | Agenda toolbar | Content header, right (primary) | agenda | visible | replaced by `#agenda-fab-add` (the desktop button is hidden at 390px (display:none)) |
 | `#agenda-calendar-settings-close` | Close calendar settings | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
 | `#agenda-pref-show-tasks` | Show tasks (label) | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
 | `#agenda-pref-show-completed` | Show completed (label) | Calendar menu | Unchanged | agenda | via `#agenda-calendar-settings-btn` | via `#agenda-phone-more` `#agenda-calendar-settings-btn` |
