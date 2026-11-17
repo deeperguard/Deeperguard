@@ -694,6 +694,7 @@
         S.refreshAgendaSubscriptionRows(sub.id, out.events, { allowShrink: true });
         urlInput.value = '';
         nameInput.value = '';
+        colorHolder.querySelectorAll('input').forEach((r) => { r.checked = false; });
         preview.hidden = true;
         preview.textContent = '';
         toast(`Subscribed to ${sub.name}`);
