@@ -10,7 +10,6 @@ the pull request; the document is not adjusted to fit the app.
 from __future__ import annotations
 
 import json
-import re
 import sys
 import time
 import unittest
@@ -20,7 +19,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from test_push_windows_api import ENDPOINT, PushWindowsApiTest as _Base  # noqa: E402
+from test_agenda_reminders_api import AgendaRemindersFixture  # noqa: E402
+from test_push_windows_api import ENDPOINT, PushWindowsHelpers  # noqa: E402
 
 TITLE = "SECRET-TITLE-Dentist"
 DESCRIPTION = "SECRET-DESCRIPTION-bring-the-X-ray"
@@ -28,7 +28,7 @@ WINDOW = 900
 ALLOWED_COLUMNS = {"id", "user_id", "device_id", "window_start", "created_at"}
 
 
-class ReminderPushContractTest(_Base):
+class ReminderPushContractTest(PushWindowsHelpers, AgendaRemindersFixture, unittest.TestCase):
     def _send_all(self, fake, now_ts):
         import agenda_reminder_cron as cron
 
@@ -110,12 +110,8 @@ class ReminderPushContractTest(_Base):
         with mock.patch.dict(sys.modules, {"pywebpush": mock.MagicMock(webpush=fake, WebPushException=Exception)}):
             cron.try_send_push(uid, "Deeperguard", cron.agenda_reminder_line("14:30"), str(uuid.uuid4()))
         data = fake.call_args.kwargs["data"]
-        self.assertTrue(data is None or not re.search(r"\d{1,2}:\d{2}", data))
+        self.assertIsNone(data)
 
-
-# Inherited tests belong to the base classes; only run this file's own.
-for _name in [n for n in dir(_Base) if n.startswith("test_") and n not in vars(ReminderPushContractTest)]:
-    setattr(ReminderPushContractTest, _name, None)
 
 if __name__ == "__main__":
     unittest.main()
