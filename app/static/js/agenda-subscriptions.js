@@ -371,13 +371,15 @@
     }
     subs.forEach((sub) => {
       const row = el('div', 'agenda-subscription-row');
-      row.appendChild(el('strong', '', sub.name));
+      const head = el('div', 'agenda-subscription-head');
+      head.appendChild(el('strong', 'agenda-subscription-name', sub.name));
       if (usesRelay(sub)) {
         const tag = el('span', 'agenda-subscription-via', 'via server');
         tag.title = 'Fetched through the Deeperguard server, which sees the link and the calendar while fetching';
-        row.appendChild(tag);
+        head.appendChild(tag);
       }
-      const status = el('p', 'settings-hint' + (sub.last_error_code ? ' agenda-subscription-error' : ''), statusText(sub));
+      row.appendChild(head);
+      const status = el('p', 'agenda-subscription-status' + (sub.last_error_code ? ' agenda-subscription-error' : ''), statusText(sub));
       if (sub.last_error_code) status.setAttribute('role', 'alert');
       row.appendChild(status);
       const actions = el('div', 'agenda-subscription-actions');
@@ -424,7 +426,7 @@
           }
         });
       }
-      btn('Delete', () => {
+      const del = btn('Delete', () => {
         const ok = global.confirm && global.confirm(`Delete the subscription "${sub.name}" and all of its events?`);
         if (!ok) return;
         const res = S.removeAgendaSubscription(sub.id);
@@ -434,6 +436,7 @@
         renderList();
         rerenderAgenda();
       });
+      del.classList.add('danger');
       row.appendChild(actions);
       list.appendChild(row);
     });

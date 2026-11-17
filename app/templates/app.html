@@ -1533,6 +1533,27 @@
             <ul id="agenda-calendars-subs" class="agenda-cal-list" aria-label="Subscribed calendars"></ul>
             <p id="agenda-calendars-status" class="sr-only" aria-live="polite"></p>
           </section>
+          <section class="agenda-subscriptions" aria-labelledby="agenda-subscriptions-heading">
+            <h3 id="agenda-subscriptions-heading" class="section-label">Subscribed calendars</h3>
+            <div id="agenda-subscriptions-list" class="agenda-subscriptions-list"></div>
+          </section>
+          <section class="agenda-subscribe" aria-labelledby="agenda-subscribe-heading">
+            <h3 id="agenda-subscribe-heading" class="section-label">Add a subscription</h3>
+            <p class="settings-hint muted" id="agenda-subscribe-explainer">Paste a calendar feed link (webcal:// or https://). Your browser fetches it straight from the provider; the link never passes through Deeperguard and is stored only in your encrypted vault. The provider sees your IP address and when you refresh. Feeds refresh at most every 30 minutes while your vault is open. Many providers block direct fetching from a browser; you will then see an error and can choose, per calendar, to fetch through the Deeperguard server instead: the server then sees the link and the calendar while fetching, but does not store or log them. The default is no.</p>
+            <form id="agenda-subscribe-form" class="agenda-subscribe-form" autocomplete="off">
+              <label class="agenda-field-label" for="agenda-subscribe-url">Feed link</label>
+              <input id="agenda-subscribe-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" required aria-describedby="agenda-subscribe-url-error">
+              <p class="field-error agenda-field-error" id="agenda-subscribe-url-error">Enter the full feed link, starting with https:// or webcal://.</p>
+              <label class="agenda-field-label" for="agenda-subscribe-name">Name (optional)</label>
+              <input id="agenda-subscribe-name" type="text" autocomplete="off" maxlength="120">
+              <button type="submit" class="btn agenda-cal-action">Preview feed</button>
+            </form>
+            <div id="agenda-subscribe-preview" class="agenda-subscribe-preview" aria-live="polite" hidden></div>
+          </section>
+          <section class="agenda-help" aria-labelledby="agenda-help-heading">
+            <h3 id="agenda-help-heading" class="section-label">Help</h3>
+            <p class="settings-hint muted">Feed blocked by the provider? Open the link in a new browser tab, save the .ics file, then import it here. The download goes straight from the provider to your device; the link never passes through Deeperguard. On iOS, the system may offer to add the events to the Calendar app instead of saving a file.</p>
+          </section>
           <p class="settings-hint">Import or export calendar files on this device only. If Agenda looks out of date after an update, close the tab and open Deeperguard again (the offline worker fetches a fresh shell).</p>
           <p class="settings-hint">Import supports .ics from other apps. Events stay encrypted in your vault; only https links are used as join targets.</p>
           <section class="agenda-backup" aria-labelledby="agenda-backup-heading">
@@ -1547,21 +1568,6 @@
           </fieldset>
           <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-import-ics">Import calendar (.ics)</button>
           <p class="settings-hint muted agenda-cal-action-sub">Choose one or more files exported from another calendar, or drop .ics files onto the Agenda. You will see a preview before anything is saved.</p>
-          <section class="agenda-subscriptions" aria-labelledby="agenda-subscriptions-heading">
-            <h3 id="agenda-subscriptions-heading" class="section-label">Subscribed calendars</h3>
-            <p class="settings-hint muted agenda-cal-action-sub">Paste a calendar feed link (webcal:// or https://). Your browser fetches it straight from the provider; the link never passes through Deeperguard and is stored only in your encrypted vault. The provider sees your IP address and when you refresh. Feeds refresh at most every 30 minutes while your vault is open. Many providers block direct fetching from a browser; you will then see an error and can choose, per calendar, to fetch through the Deeperguard server instead: the server then sees the link and the calendar while fetching, but does not store or log them. The default is no.</p>
-            <form id="agenda-subscribe-form" class="agenda-subscribe-form" autocomplete="off">
-              <label class="settings-hint" for="agenda-subscribe-url">Feed link</label>
-              <input id="agenda-subscribe-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" required aria-describedby="agenda-subscribe-url-error">
-              <p class="field-error agenda-field-error" id="agenda-subscribe-url-error">Enter the full feed link, starting with https:// or webcal://.</p>
-              <label class="settings-hint" for="agenda-subscribe-name">Name (optional)</label>
-              <input id="agenda-subscribe-name" type="text" autocomplete="off" maxlength="120">
-              <button type="submit" class="btn agenda-cal-action">Preview feed</button>
-            </form>
-            <div id="agenda-subscribe-preview" class="agenda-subscribe-preview" aria-live="polite" hidden></div>
-            <div id="agenda-subscriptions-list" class="agenda-subscriptions-list"></div>
-          </section>
-          <p class="settings-hint muted agenda-cal-action-sub">Feed blocked by the provider? Open the link in a new browser tab, save the .ics file, then import it here. The download goes straight from the provider to your device; the link never passes through Deeperguard. On iOS, the system may offer to add the events to the Calendar app instead of saving a file.</p>
           <button type="button" class="btn primary agenda-cal-action" id="agenda-calendar-export-ics">Export calendar (.ics)</button>
           <p class="settings-hint muted agenda-cal-action-sub">Downloads a standard .ics file with your events. The file is <strong>not encrypted</strong> — titles, times, and notes are readable plaintext. Keep it private and share carefully.</p>
           <fieldset class="agenda-local-reminder-settings" id="agenda-local-reminder-settings">

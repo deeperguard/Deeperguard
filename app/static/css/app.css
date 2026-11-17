@@ -1349,7 +1349,7 @@ html:not([data-theme="dark"]) .agenda-list-when { color: #334155; }
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(380px, 100%);
+  width: min(480px, 100%);
   max-width: 100%;
   min-width: 0;
   z-index: 45;
@@ -1391,7 +1391,7 @@ body.agenda-calendar-settings-open {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-5);
 }
 .agenda-cal-action {
   align-self: stretch;
@@ -1405,6 +1405,66 @@ body.agenda-calendar-settings-open {
   font-size: 12px;
   line-height: 1.4;
 }
+/* Calendar settings panel: one left edge and one spacing scale for headings, text, labels, fields,
+   subscription rows and buttons. */
+.agenda-calendar-settings-body > section,
+.agenda-calendar-settings-body > fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.agenda-calendar-settings-body .section-label,
+.agenda-calendar-settings-body legend {
+  margin: 0;
+  padding: 0;
+}
+.agenda-calendar-settings-body .settings-hint {
+  padding: 0;
+  font-size: 13px;
+}
+.agenda-calendar-settings-body .agenda-cal-row-main { padding-inline: 0; }
+.agenda-calendar-settings-body .agenda-cal-action { margin-top: var(--space-2); }
+.agenda-calendar-settings-body > .agenda-cal-action { margin-top: 0; }
+.agenda-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.agenda-subscribe-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.agenda-subscribe-form input { width: 100%; min-width: 0; box-sizing: border-box; }
+.agenda-subscribe-form .agenda-field-error { margin: 0; }
+.agenda-subscribe-preview { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.agenda-subscribe-preview > * { margin: 0; }
+.agenda-subscriptions-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.agenda-subscriptions-list > .settings-hint { margin: 0; }
+.agenda-subscription-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+.agenda-subscription-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.agenda-subscription-name { min-width: 0; overflow-wrap: anywhere; }
+.agenda-subscription-head .agenda-subscription-via { margin: 0; color: var(--muted); }
+.agenda-subscription-status { margin: 0; font-size: 12px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+.agenda-subscription-status.agenda-subscription-error,
+.agenda-subscribe-preview .agenda-subscription-error { color: var(--danger); }
+.agenda-subscription-row .agenda-subscription-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: stretch; }
+.agenda-subscription-row .agenda-subscription-actions .btn { flex: 1 1 4.5rem; min-width: 0; min-height: calc(var(--touch) + var(--space-2)); padding: 8px 6px; font-size: 13px; line-height: 1.2; text-align: center; }
+.agenda-subscription-row .agenda-subscription-actions .btn.danger { margin-inline-start: var(--space-2); }
+
 .agenda-calendar-menu-btn {
   min-height: 44px;
   padding: 0 14px;
@@ -1475,7 +1535,7 @@ body.agenda-editor-open {
     box-shadow: none;
   }
   .agenda-calendar-settings-head { padding: 12px 14px; }
-  .agenda-calendar-settings-body { padding: 14px; gap: 12px; }
+  .agenda-calendar-settings-body { padding: 14px; }
 }
 @media (max-width: 430px) {
   .agenda-top {
