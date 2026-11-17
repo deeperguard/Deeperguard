@@ -385,7 +385,7 @@ def check_rows(page, report: Report, where: str, rows: list[dict], reset, reach:
         return row if reach == "reach" else row[reach]
 
     def label_of(row: dict) -> str:
-        return f"[{where}] {row['selector']} ({spec(row)['text'] if reach != 'reach' else row['reach']})"
+        return f"[{where}] {row['selector']} ({row['reach'] if reach == 'reach' else row[reach]['text']})"
 
     def target(row: dict) -> str:
         return spec(row).get("control", row["selector"])
