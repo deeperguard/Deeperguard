@@ -2142,6 +2142,12 @@ class NotesAppTests(unittest.TestCase):
     def test_client_link_overlay(self):
         self._run_node_script("test_link_overlay.js")
 
+    def test_client_note_links(self):
+        self._run_node_script("test_notelinks.js")
+
+    def test_client_note_link_overlay(self):
+        self._run_node_script("test_note_link_overlay.js")
+
     def test_client_note_history(self):
         self._run_node_script("test_note_history.js")
 

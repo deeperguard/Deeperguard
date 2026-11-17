@@ -6312,6 +6312,11 @@ body.scan-dialog-open {
   box-decoration-break: clone;
   cursor: pointer;
 }
+.note-body-links a.edit-link.note-link-dead,
+.check-text-links a.edit-link.note-link-dead {
+  opacity: 1;
+  background-image: repeating-linear-gradient(90deg, var(--danger, #b3261e) 0 4px, transparent 4px 7px);
+}
 .note-body-wrap.edit-links-active .note-body {
   position: relative;
   z-index: 1;
