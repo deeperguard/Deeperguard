@@ -59,16 +59,16 @@ zie §5).
 | Venster-push, server | `app/app.py` `PUSH_WINDOW_KEYS = {id, window_start}` (2740), `/api/push-windows` (2744), `/api/push-windows/delete` (2781); `app/db.py` tabel `push_reminder_windows` (400), `put_push_windows`, `delete_push_windows`, `due_push_windows`, `PUSH_WINDOW_CAP = 50`; `app/agenda_reminder_cron.py:run_push_windows` (192) | Willekeurige 32-hex id en een veelvoud van 900 s; lege push; rij weg na verzending. |
 | Venster-push, client | **ontbreekt**: geen enkel bestand onder `app/static/js` roept `/api/push-windows` aan | De serverkant uit idee #75 bestaat, de client en de melding met tekst (M2 en M3 daar) nog niet. |
 | Service worker | `app/static/sw.js`: `push` (540), `notificationclick` (567), `periodicsync` (490) | Zonder data toont hij "You have a reminder" (tag `dg-window-reminder`). Met data toont hij `title`/`body` uit de payload. `periodicsync` stuurt alleen een bericht naar open vensters. |
-| Lokale herinneringen (agenda) | `app/static/js/agenda-local-reminders.js` (304 regels): `dueReminders` (52), `createPlanner` (105), `showNotification` (231); `TICK_MS = 15000`, `MISSED_WINDOW_MS` 24 uur | Draait in de tab, zonder netwerk; klokt elke 15 s; "al getoond" in `localStorage` als hash onder een Web Lock zodat één tab het toont; gemiste (< 24 uur) als "Missed" bij openen. `dueReminders` slaat `agenda_task` expliciet over (regel 57). |
-| Notitie-herinnering | `app/static/js/app.js`: `noteReminderPayload` (17437), `queueReminderOp` (17469), `applyReminderOp` (17484), `cancelNoteReminder` (17499); veld `content.warn_at`; `app/app.py` `/api/reminders` (2581-2613); `app/db.py` tabel `note_reminders` (119); `app/warning_cron.py` | **Bestaat al**, met exacte tijd in klare vorm op de server (zie §3). De matrix zegt "ontbreekt"; correcter is: "bestaat, server-getimed, Pro, niet privé genoeg". |
-| Taken in de agenda | `app/static/js/agenda-tasks.js` (188 regels): `buildTask` (50), `normalizeTask` (81), `placeTasks` (118), `formatDue`, `accessibleName`; `app/static/js/store.js`: `listAgendaTasks` (2082), `upsertAgendaTask` (2088); renderen in `app/static/js/agenda.js` (rond 467-690) | Elke taak is een eigen versleuteld item `type: 'agenda_task'` met `due` (YYYY-MM-DD), `due_time`, `done_at`, `note_uuid`, `rrule`, `reminder: null`. **Het veld `reminder` is gereserveerd maar niets leest het**; taken hebben dus geen herinnering. |
+| Lokale herinneringen (agenda) | `app/static/js/agenda-local-reminders.js` (304 regels): `dueReminders`, `createPlanner`, `showNotification`; `TICK_MS = 15000`, `MISSED_WINDOW_MS` 24 uur | Draait in de tab, zonder netwerk; klokt elke 15 s; "al getoond" in `localStorage` als hash onder een Web Lock zodat één tab het toont; gemiste (< 24 uur) als "Missed" bij openen. `dueReminders` slaat `agenda_task` expliciet over. |
+| Notitie-herinnering | `app/static/js/app.js`: `noteReminderPayload`, `queueReminderOp`, `applyReminderOp`, `cancelNoteReminder`; veld `content.warn_at`; `app/app.py` `/api/reminders` (`api_reminders_list`, `api_reminders_upsert`); `app/db.py` tabel `note_reminders`; `app/warning_cron.py` | **Bestaat al**, met exacte tijd in klare vorm op de server (zie §3). De matrix zegt "ontbreekt"; correcter is: "bestaat, server-getimed, Pro, niet privé genoeg". |
+| Taken in de agenda | `app/static/js/agenda-tasks.js` (188 regels): `buildTask`, `normalizeTask`, `placeTasks`, `formatDue`, `accessibleName`; `app/static/js/store.js`: `listAgendaTasks`, `upsertAgendaTask`; renderen in `app/static/js/agenda.js` | Elke taak is een eigen versleuteld item `type: 'agenda_task'` met `due` (YYYY-MM-DD), `due_time`, `done_at`, `note_uuid`, `rrule`, `reminder: null`. **Het veld `reminder` is gereserveerd maar niets leest het**; taken hebben dus geen herinnering. |
 
 ### 1.3 Wat dit betekent voor de opdracht
 
 - "Push zonder inhoud" geldt vandaag alleen voor het nog ongebruikte venster-pad. De werkelijke agenda-push
   stuurt wél een tekst (`You have an event at 14:30.`) en bewaart een exacte `fire_at` plus `local_time_label`
   in klare vorm. Dat is een afwijking van de belofte in de opdracht en van de e-mailregel in
-  `docs/PRIVACY.md` (regel 58, alleen e-mail). `docs/PRIVACY.md` noemt push en notitie-herinneringen niet.
+  `docs/PRIVACY.md` (de bullet over agenda-e-mail, alleen e-mail). `docs/PRIVACY.md` noemt push en notitie-herinneringen niet.
   Dit is het belangrijkste gat (§3, §6 K1).
 - "Preciezer dan 15 minuten" bestaat al lokaal (15 s-tik) en kan server-side alleen ten koste van privacy.
 - Niet opnieuw bouwen: de lokale planner, de offset-voorinstellingen, de stabiele id's, de plan-poort, de
@@ -95,10 +95,9 @@ zie §5).
    al heeft, "E-mail (exacte tijd bij ons zichtbaar)". Geen toestemmingsvraag bij het laden van de pagina.
    Elke melding opent de bijbehorende notitie, taak of afspraak.
 
-Vergelijking (algemene kennis, **verify**): Google Agenda/Outlook sturen server-push met titel en tijd in
-klare vorm; Apple werkt lokaal plus iCloud-sync; Proton en Tuta houden meldingen vooral lokaal; Standard
-Notes kent geen herinneringen, Notesnook en Joplin lokale. Het doel hier is dezelfde gemakkelijke bediening
-met aantoonbaar minder zichtbare metadata, en een duidelijk label waar dat niet kan.
+Doel: dezelfde gemakkelijke bediening als bij de bekende agenda-apps, met aantoonbaar minder zichtbare
+metadata, en een duidelijk label waar dat niet kan. Een vergelijking met concurrenten is in dit document
+niet opgenomen; die moet met bronnen worden onderzocht voordat ze hier komt.
 
 ## 3. Datamodel en wat de server ziet
 
