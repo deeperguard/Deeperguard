@@ -900,8 +900,9 @@ editor. Target, shared by Notes, Agenda and 2FA:
    (`.btn ghost`, `--touch-min` high): views (`#filters`), Folders, Tags, then
    a footer group (Secure Send, Settings, Lock, Account info, Sync). It
    collapses to icons only; `#btn-nav-pin` becomes the collapse/expand toggle.
-   The toggle is a disclosure button: its accessible name and `title` are the
-   fixed text "Expand/Collapse sidebar" (on Notes, Agenda and 2FA alike), and
+   The toggle is a disclosure button: its accessible name, `title` and visible
+   label say what it will do ("Expand sidebar" when collapsed, "Collapse
+   sidebar" when expanded; on Notes, Agenda and 2FA alike), and
    `aria-expanded` carries the state. `aria-expanded="true"` means the sidebar
    is pinned open (`body.nav-pinned`, stored as `navPinned`). It does not
    reflect the temporary hover or focus expansion of a collapsed sidebar, so
@@ -993,7 +994,7 @@ reached `via` `#btn-back` first.
 | `#btn-secure-send-nav` | Secure Send | Icon rail, bottom (boxed) | Sidebar: footer group, icon + label | notes | visible | conditional: desktop only, not shown at 390px (phone: `#btn-secure-send-head`) |
 | `#btn-settings-nav` | Settings | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible | conditional: desktop only, not shown at 390px (phone: `#btn-settings-head`) |
 | `#btn-lock-nav` | Vault unlocked. Tap to lock. | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible | conditional: desktop only, not shown at 390px (phone: `#btn-lock-head`) |
-| `#btn-nav-pin` | Expand/Collapse sidebar | Icon rail, bottom (boxed) | Sidebar: collapse/expand toggle | notes | visible | conditional: desktop only, not shown at 390px |
+| `#btn-nav-pin` | Expand sidebar / Collapse sidebar | Icon rail, bottom (boxed) | Sidebar: collapse/expand toggle | notes | visible | conditional: desktop only, not shown at 390px |
 | `#btn-account-info-nav` | Account info | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible | conditional: not shown at 390px (sidebar footer is desktop only) |
 | `#btn-secure-send-head` | Secure Send | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | via `#btn-back` |
 | `#btn-lock-head` | Vault unlocked. Tap to lock. | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | via `#btn-back` |

@@ -37,7 +37,6 @@ assert.ok(markdown.includes('function wrapMarkdownBlocks('));
 assert.ok(!markdown.includes("html.replace(/\\n\\n/g, '</p><p>')"));
 assert.ok(css.includes('.md-toolbar'));
 assert.ok(css.includes('flex-wrap: nowrap'));
-assert.ok(css.includes('.folder-note {\n  border: 0;\n  background: transparent;\n  color: inherit;\n  font-size: 13px;'));
 assert.ok(auth.includes('stashBootDerivedKey'));
 assert.ok(!store.includes('function adoptDerivedVaultKey('));
 assert.ok(secrets.includes('notes_boot_kdf'));

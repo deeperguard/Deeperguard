@@ -59,4 +59,12 @@ assert.ok(
   'folder-section clip release must cover direct scroll children too',
 );
 
+// Folder tree (WAI-ARIA tree): nested rows and groups. Notes under a folder are no longer listed in the sidebar.
+assert.ok(renderFolders.includes('role="treeitem"') && renderFolders.includes('aria-expanded='));
+assert.ok(renderFolders.includes('class="folder-group"'));
+assert.ok(appCss.includes('padding-left: calc(var(--folder-level, 0) * 16px)'));
+assert.ok(appCss.includes('.folder-group[hidden] { display: none !important; }'));
+assert.ok(!renderFolders.includes('folder-note'), 'folder-note markup is gone from renderFolders');
+assert.ok(!appCss.includes('.folder-note') && !appCss.includes('.folder-notes'), 'folder-note CSS is removed');
+
 console.log('test_round85_sidebar_folder_label: ok');

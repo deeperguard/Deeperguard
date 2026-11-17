@@ -4469,7 +4469,7 @@ body.app-updating #btn-refresh-app .app-update-spinner {
   font: inherit;
 }
 .folder-toggle { width: 22px; flex: 0 0 22px; padding: 4px 0; opacity: 0.7; }
-.folder-select, .folder-note { font-size: 13px; font-weight: 400; line-height: 1.3; }
+.folder-select { font-size: 13px; font-weight: 400; line-height: 1.3; }
 .folder-select { flex: 1; min-width: 0; text-align: left; padding: 6px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative; z-index: 0; }
 @media (hover: hover) and (pointer: fine) {
   .folder-head:hover,
@@ -4520,29 +4520,6 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 .folder-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .folder-toggle:disabled { cursor: default; }
 .folder-all .folder-select { cursor: pointer; padding: 6px 4px; }
-.folder-notes { display: flex; flex-direction: column; padding: 0 0 4px 22px; }
-.folder-notes[hidden] { display: none !important; }
-.folder-note {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 1.3;
-  text-align: left;
-  padding: 5px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.folder-note.active, .folder-note:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.folder-note.is-current {
-  background: transparent;
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 70%, transparent);
-  font-weight: 600;
-}
 .folder-block.has-open-note > .folder-head .folder-select {
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 70%, transparent);
 }
@@ -9563,8 +9540,7 @@ body.search-filters-open .fab-stack,
     text-align: left;
     transition: background 0.15s ease, color 0.15s ease;
   }
-  .sidebar-nav .folder-select,
-  .sidebar-nav .folder-note {
+  .sidebar-nav .folder-select {
     font-size: 14px;
     font-weight: 400;
   }
@@ -10433,7 +10409,7 @@ body.search-filters-open .fab-stack,
     font-size: 14px;
     text-align: left;
   }
-  .sidebar-foot .sn-item svg.ui-icon {
+  .sidebar-foot .btn.icon.sn-item svg.ui-icon {
     width: 16px;
     height: 16px;
     flex: 0 0 16px;
@@ -10454,6 +10430,27 @@ body.search-filters-open .fab-stack,
   .sidebar-foot .sn-item[aria-pressed="true"] {
     background: color-mix(in srgb, var(--accent) 16%, var(--sn-nav-bg));
     color: var(--accent);
+  }
+  /* Sync row: same icon column and label edge as the .sn-item rows above it. */
+  .sidebar-foot .brand-sync-row { padding-inline: 6px; width: auto; }
+  .sidebar-foot .brand-sync-row .btn-sync-now {
+    justify-content: flex-start;
+    gap: 10px;
+    height: auto;
+    min-height: 36px;
+    max-height: none;
+    padding: 7px 10px;
+    border-radius: 8px;
+    color: var(--sn-nav-text);
+    font-size: 14px;
+    font-weight: inherit;
+    letter-spacing: normal;
+    text-align: left;
+  }
+  .sidebar-foot .brand-sync-row .btn-sync-now::before {
+    width: 16px;
+    height: 16px;
+    color: var(--sn-nav-muted);
   }
   .sn-item-label {
     min-width: 0;
