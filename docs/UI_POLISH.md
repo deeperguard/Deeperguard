@@ -961,8 +961,12 @@ control that takes the place of a desktop control which is not rendered at
 390px (the test checks that phone control like a `via` row); and the
 `phone-only` and `by row kind` forms. For
 `by row kind` at phone width, `hidden` with `.note-swipe-delete` means the
-row is swiped. At 390px `tests/e2e_layout_actions.py` checks the `all`, `agenda`
-and `2fa` rows against this column; its parser exposes it as `phone_reach`.
+row is swiped. At 390px `tests/e2e_layout_actions.py` checks every row
+against this column (the plain note and the PDF note, Agenda and 2FA); its
+parser exposes it as `phone_reach`. For the Notes rows the phone starting
+point is an open note, opened by tapping its row in the list. On a phone the
+open note covers the list, so controls of the list screen and its drawer are
+reached `via` `#btn-back` first.
 
 <!-- layout-actions:start -->
 | Selector | Accessible name | Current place | New place | Applies to | Reach | Phone reach |
@@ -971,51 +975,51 @@ and `2fa` rows against this column; its parser exposes it as `phone_reach`.
 | `#app-tab-agenda` | Agenda | Top bar | Top nav | all | visible | visible |
 | `#app-tab-2fa` | 2FA | Top bar | Top nav | all | visible | visible |
 | `#btn-drawer-close` | Close | Loose button under top bar | Sidebar header, shown only when sidebar is an overlay drawer | notes | conditional: overlay drawer (tablet/phone) | conditional: overlay drawer open and `#btn-list-menu` covered by it |
-| `.filter[data-filter="all"]` | Notes | Icon rail, top | Sidebar: Views, icon + label | notes | visible | via `#btn-list-menu` |
-| `.filter[data-filter="documents"]` | Files | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-list-menu` |
-| `.filter[data-filter="pinned"]` | Starred | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-list-menu` |
-| `.filter[data-filter="archived"]` | Archived | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-list-menu` |
-| `.filter[data-filter="trash"]` | Trash | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-list-menu` |
-| `.filter[data-filter="templates"]` | Templates | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-list-menu` |
-| `.filter[data-filter="untagged"]` | Untagged | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-list-menu` |
-| `#filter-section summary` | Views | Pinned sidebar, section label | Sidebar: Views section header | notes | via `#btn-nav-pin` | via `#btn-list-menu` |
-| `#folder-section summary` | Folders | Pinned sidebar, section label | Sidebar: Folders section header | notes | via `#btn-nav-pin` | visible |
-| `#btn-new-folder` | + New folder | Pinned sidebar, Folders | Sidebar: Folders section | notes | conditional: folders section open | via `#btn-list-menu` `#folder-section summary` |
-| `#tag-section summary` | Tags | Pinned sidebar, section label | Sidebar: Tags section header | notes | via `#btn-nav-pin` | visible |
-| `#btn-new-tag` | + New tag | Pinned sidebar, Tags | Sidebar: Tags section | notes | conditional: tags section open | via `#btn-list-menu` |
-| `#btn-manage-tags` | Manage | Pinned sidebar, Tags | Sidebar: Tags section | notes | conditional: tags section open | via `#btn-list-menu` |
+| `.filter[data-filter="all"]` | Notes | Icon rail, top | Sidebar: Views, icon + label | notes | visible | via `#btn-back` `#btn-list-menu` |
+| `.filter[data-filter="documents"]` | Files | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-back` `#btn-list-menu` |
+| `.filter[data-filter="pinned"]` | Starred | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-back` `#btn-list-menu` |
+| `.filter[data-filter="archived"]` | Archived | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-back` `#btn-list-menu` |
+| `.filter[data-filter="trash"]` | Trash | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-back` `#btn-list-menu` |
+| `.filter[data-filter="templates"]` | Templates | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-back` `#btn-list-menu` |
+| `.filter[data-filter="untagged"]` | Untagged | Icon rail, top | Sidebar: Views | notes | visible | via `#btn-back` `#btn-list-menu` |
+| `#filter-section summary` | Views | Pinned sidebar, section label | Sidebar: Views section header | notes | via `#btn-nav-pin` | via `#btn-back` `#btn-list-menu` |
+| `#folder-section summary` | Folders | Pinned sidebar, section label | Sidebar: Folders section header | notes | via `#btn-nav-pin` | via `#btn-back` |
+| `#btn-new-folder` | + New folder | Pinned sidebar, Folders | Sidebar: Folders section | notes | conditional: folders section open | via `#btn-back` `#btn-list-menu` `#folder-section summary` |
+| `#tag-section summary` | Tags | Pinned sidebar, section label | Sidebar: Tags section header | notes | via `#btn-nav-pin` | via `#btn-back` |
+| `#btn-new-tag` | + New tag | Pinned sidebar, Tags | Sidebar: Tags section | notes | conditional: tags section open | via `#btn-back` `#btn-list-menu` |
+| `#btn-manage-tags` | Manage | Pinned sidebar, Tags | Sidebar: Tags section | notes | conditional: tags section open | via `#btn-back` `#btn-list-menu` |
 | `#btn-sync-now` | Sync now | Pinned sidebar, bottom | Sidebar: footer group | notes | via `#btn-nav-pin` | conditional: desktop only, not shown at 390px (phone: state text in `#sync-indicator`) |
-| `#sync-indicator` | Waiting to sync (state text) | Sidebar head (phone) | Sidebar: footer group, next to Sync | notes | conditional: phone / sync state | visible |
+| `#sync-indicator` | Waiting to sync (state text) | Sidebar head (phone) | Sidebar: footer group, next to Sync | notes | conditional: phone / sync state | via `#btn-back` |
 | `#btn-secure-send-nav` | Secure Send | Icon rail, bottom (boxed) | Sidebar: footer group, icon + label | notes | visible | conditional: desktop only, not shown at 390px (phone: `#btn-secure-send-head`) |
 | `#btn-settings-nav` | Settings | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible | conditional: desktop only, not shown at 390px (phone: `#btn-settings-head`) |
 | `#btn-lock-nav` | Vault unlocked. Tap to lock. | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible | conditional: desktop only, not shown at 390px (phone: `#btn-lock-head`) |
 | `#btn-nav-pin` | Expand/Collapse sidebar | Icon rail, bottom (boxed) | Sidebar: collapse/expand toggle | notes | visible | conditional: desktop only, not shown at 390px |
 | `#btn-account-info-nav` | Account info | Icon rail, bottom (boxed) | Sidebar: footer group | notes | visible | conditional: not shown at 390px (sidebar footer is desktop only) |
-| `#btn-secure-send-head` | Secure Send | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | visible |
-| `#btn-lock-head` | Vault unlocked. Tap to lock. | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | visible |
-| `#btn-settings-head` | Settings | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | visible |
+| `#btn-secure-send-head` | Secure Send | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | via `#btn-back` |
+| `#btn-lock-head` | Vault unlocked. Tap to lock. | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | via `#btn-back` |
+| `#btn-settings-head` | Settings | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | via `#btn-back` |
 | `#btn-account-info-head` | Account info | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | conditional: not shown at 390px (hidden in the phone sidebar head) |
 | `#btn-new` | New note | Sidebar head (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | conditional: not shown at 390px (phone: `#btn-new-list`) |
-| `#btn-new-from-template` | New from template | Sidebar head (phone drawer) | Sidebar: Views, next to Templates | notes | conditional: phone | visible |
-| `#filter-select` | Filter notes | Sidebar (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | visible |
+| `#btn-new-from-template` | New from template | Sidebar head (phone drawer) | Sidebar: Views, next to Templates | notes | conditional: phone | via `#btn-back` |
+| `#filter-select` | Filter notes | Sidebar (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | via `#btn-back` |
 | `#sort-select-sidebar` | Sort notes | Sidebar (phone drawer) | Unchanged (phone drawer) | notes | conditional: phone | conditional: desktop only, not shown at 390px (phone: `#btn-list-sort`) |
-| `#btn-list-scan` | Add document | List header | List header | notes | visible | visible |
-| `#btn-list-density` | Toggle list density | List header | List header | notes | visible | visible |
+| `#btn-list-scan` | Add document | List header | List header | notes | visible | via `#btn-back` |
+| `#btn-list-density` | Toggle list density | List header | List header | notes | visible | via `#btn-back` |
 | `#sort-select` | Sort notes | List header | List header | notes | visible | conditional: desktop only, not shown at 390px (phone: `#btn-list-sort`) |
-| `#btn-new-list` | New note | List header | List header (primary) | notes | visible | visible |
-| `#btn-list-menu` | Open sidebar | List header (phone) | Unchanged (phone) | notes | conditional: phone | visible |
-| `#btn-list-sort` | Sort: … Tap to change. | List header (phone) | Unchanged (phone) | notes | conditional: phone | visible |
+| `#btn-new-list` | New note | List header | List header (primary) | notes | visible | via `#btn-back` |
+| `#btn-list-menu` | Open sidebar | List header (phone) | Unchanged (phone) | notes | conditional: phone | via `#btn-back` |
+| `#btn-list-sort` | Sort: … Tap to change. | List header (phone) | Unchanged (phone) | notes | conditional: phone | via `#btn-back` |
 | `#btn-list-toggle` | Hide note list / Show note list | (new) | Divider between list and content: collapse/expand the list column | notes | conditional: desktop | conditional: desktop only, not shown at 390px |
-| `#search` | Search notes and scanned documents | List header | List header, full width | notes | visible | visible |
-| `#search-filter-toggle` | Search filters | In search field | In search field | notes | visible | visible |
-| `#search-titles-only` | Titles only (label) | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#search-filter-toggle` |
-| `#search-include-protected` | Include protected (label) | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#search-filter-toggle` |
-| `#search-include-archived` | Include archived (label) | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#search-filter-toggle` |
-| `#search-include-trashed` | Include trashed (label) | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#search-filter-toggle` |
-| `#search-filter-clear` | Clear all | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#search-filter-toggle` |
-| `#search-filter-apply` | Done | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#search-filter-toggle` |
-| `#search-filter-close` | Close filters | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#search-filter-toggle` |
-| `.note-item` | note title (text) | List row | List row: icon, title + meta line, date | notes | visible | visible |
+| `#search` | Search notes and scanned documents | List header | List header, full width | notes | visible | via `#btn-back` |
+| `#search-filter-toggle` | Search filters | In search field | In search field | notes | visible | via `#btn-back` |
+| `#search-titles-only` | Titles only (label) | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#btn-back` `#search-filter-toggle` |
+| `#search-include-protected` | Include protected (label) | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#btn-back` `#search-filter-toggle` |
+| `#search-include-archived` | Include archived (label) | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#btn-back` `#search-filter-toggle` |
+| `#search-include-trashed` | Include trashed (label) | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#btn-back` `#search-filter-toggle` |
+| `#search-filter-clear` | Clear all | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#btn-back` `#search-filter-toggle` |
+| `#search-filter-apply` | Done | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#btn-back` `#search-filter-toggle` |
+| `#search-filter-close` | Close filters | Search filter panel | Unchanged | notes | via `#search-filter-toggle` | via `#btn-back` `#search-filter-toggle` |
+| `.note-item` | note title (text) | List row | List row: icon, title + meta line, date | notes | visible | via `#btn-back` |
 | `.note-row-more` | More actions for <title> | List row, right | List row, menu column | notes | visible | conditional: not shown at 390px (phone: long press on a row opens its menu) |
 | `.note-row-delete` | Trash note <title> / Delete note <title> | List row, extra X on the row | Normal rows: List row "…" menu (X no longer a separate column, stays in the DOM with `data-in-menu`); trashed and locked rows have no "…" menu and keep the X | notes | by row kind: normal hidden, action via `.note-row-more` `#note-row-menu-trash`; trashed visible on hover or focus; locked visible on hover or focus | by row kind: normal hidden, action via `.note-swipe-delete`; trashed hidden, action via `.note-swipe-delete`; locked hidden, action via `.note-swipe-delete` |
 | `#note-row-menu-secure-send` | Share by link | Row "…" menu | Row "…" menu | notes | via `.note-row-more` | conditional: phone, long press on a row |
@@ -1062,7 +1066,7 @@ and `2fa` rows against this column; its parser exposes it as `phone_reach`.
 | `#btn-clear-checked` | Clear checked | Toolbar "…" menu | Toolbar "…" menu | notes | conditional: checklist notes | conditional: checklist notes |
 | `#btn-delete-forever` | Delete forever | Toolbar "…" menu | Toolbar "…" menu | notes | conditional: note in trash | conditional: note in trash |
 | `#btn-mobile-doc-attachment-share` | Share file | Toolbar "…" menu (phone) | Unchanged (phone) | notes | conditional: phone, file note | conditional: phone, file note |
-| `#btn-note-type-menu` | Note type | Toolbar "…" menu (phone) | Unchanged (phone) | notes | conditional: phone | via `#btn-editor-overflow-mobile` |
+| `#btn-note-type-menu` | Note type | Toolbar "…" menu (phone) | Unchanged (phone); hidden for attachment-only notes | plain | conditional: phone | via `#btn-editor-overflow-mobile` |
 | `#btn-editor-overflow-mobile` | More actions | Editor head (phone) | Unchanged (phone) | notes | conditional: phone | visible |
 | `#btn-find` | Find in note | Editor head (phone) | Unchanged (phone) | notes | conditional: phone | visible |
 | `.editor-mobile-proxy[data-editor-proxy="btn-prevent-edit"]` | Lock editing | Editor head (phone) | Unchanged (phone) | notes | conditional: phone | visible |

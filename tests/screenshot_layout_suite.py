@@ -67,7 +67,10 @@ def add_totp(page) -> None:
 
 
 def show(page, screen: str) -> None:
-    # On tablet/phone an open note hides the list: go back before opening the next.
+    # On tablet/phone an open note hides the list: go back before opening the
+    # next. The back button is only shown on the Notes tab, so switch to it first.
+    if screen.startswith("notes-"):
+        page.click("#app-tab-notes", timeout=10000)
     phone_back_to_list(page)
     if screen == "notes-plain":
         open_note(page, PLAIN_TITLE)
