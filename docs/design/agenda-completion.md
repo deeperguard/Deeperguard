@@ -181,7 +181,7 @@ nagelopen en dus **geen** feit voor publiek gebruik; vóór gebruik op de site o
 controleren.
 
 | | Proton Calendar | Notesnook | Deeperguard (dit ontwerp) |
-|---|---|---|---|---|
+|---|---|---|---|
 | Agenda zelf | Ja, versleuteld; meerdere agenda's met kleur, tijdzone per afspraak, herinneringen per afspraak en een standaard per agenda | Geen agenda; herinneringen aan notities | Ja, versleuteld; meerdere agenda's, kleur, zone per afspraak |
 | Herinneringen als app dicht is | Pushmeldingen in de mobiele apps, e-mail naar het adres; de server kent daarvoor tijdstippen | Lokale meldingen op het apparaat, geen server-push | Lokaal standaard; push in vensters en generieke e-mail alleen op keuze |
 | Webcal | Een agenda delen via een geheime link is mogelijk, met de bijbehorende waarschuwing dat die link leesbaar is; abonneren op andermans link kan | Niet van toepassing | Abonneren werkt; eigen feed alleen na een keuze van de eigenaar |
@@ -190,7 +190,7 @@ controleren.
 ## 6. Mijlpalen (in de volgorde van de taken)
 
 | # | Mijlpaal | Afhankelijkheid | Klaar als |
-|---|---|---|---|---|
+|---|---|---|---|
 | M1 | Inventaris en ontwerp (dit document) | geen | Document goedgekeurd; keuzes in sectie 7 beantwoord |
 | M2 | Hele-dag- en zwevende afspraken: `start_local`/`end_local`/`floating` in de editor, weergave, expansie en import/export | M1 | Wissel van apparaatzone verschuift geen hele-dag-afspraak (test met twee zones); zomertijdgrens getest |
 | M3 | Lokale herinneringen via de service worker (`showNotification`), dubbele-bezorging-marker | M1 | Test: melding komt na toestemming, banner als terugval, één per herinnering over twee tabs |
