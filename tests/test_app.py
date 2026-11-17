@@ -1948,8 +1948,8 @@ class NotesAppTests(unittest.TestCase):
         self._run_node_script("test_unlock_worker_watchdog.js")
 
     def test_client_crypto_bytes(self):
-        # PBKDF2/Argon2 vectors take ~110s on the CI box; leave headroom under load.
-        self._run_node_script("test_crypto.js", timeout=360)
+        # Two production-parameter Argon2 derivations (main thread + worker thread), ~8s idle.
+        self._run_node_script("test_crypto.js")
 
     def test_client_attachment_encryption(self):
         self._run_node_script("test_store_attachments.js")
