@@ -1,7 +1,8 @@
 """E2E (Playwright): move notes between folders.
 
 A note is moved with the "Move to folder…" picker (opened from the note's "⋯"
-menu, picked with the keyboard) and another note is dragged onto a folder in
+menu, picked with the keyboard), the editor's "Move to folder…" button opens the
+same picker and keeps Tab inside it, and another note is dragged onto a folder in
 the sidebar. After a reload and a new unlock, both notes are still in their new
 folders. Any pageerror / console.error fails the test.
 
@@ -108,6 +109,20 @@ def main() -> int:
             page.locator("#note-row-menu-move").click()
             page.keyboard.press("Escape")
             page.locator("#folder-move").wait_for(state="hidden")
+            assert page.evaluate(PLACEMENT_JS) == {"Alpha": "Projects", "Beta": ""}
+
+            # 1b) The editor's "Move to folder…" button opens the same picker. Tab and
+            # Shift+Tab stay inside it; Escape closes it and returns focus to the button.
+            page.locator(".note-row", has_text="Beta").click()
+            page.locator("#btn-move-note").click()
+            page.locator("#folder-move").wait_for(state="visible")
+            for key in ["Tab"] * 4 + ["Shift+Tab"] * 6:
+                page.keyboard.press(key)
+                inside = page.evaluate("() => !!document.activeElement.closest('#folder-move')")
+                assert inside, f"{key} left the picker"
+            page.keyboard.press("Escape")
+            page.locator("#folder-move").wait_for(state="hidden")
+            assert page.evaluate("() => document.activeElement.id") == "btn-move-note"
             assert page.evaluate(PLACEMENT_JS) == {"Alpha": "Projects", "Beta": ""}
 
             # 2) Drag Beta onto the Work folder in the sidebar.
