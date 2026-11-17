@@ -497,6 +497,7 @@
     try {
       const server = await loadServerChannels(true);
       if (btn) btn.hidden = !server.push;
+      await refreshPushDeviceUi();
       if (pushEl instanceof HTMLInputElement) {
         pushEl.disabled = !server.push;
         if (!server.push) pushEl.checked = false;
@@ -554,6 +555,37 @@
     if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('Push enabled on this device');
   }
 
+  async function disablePushFromGesture() {
+    const S = global.NotesStore;
+    if (!S || typeof S.api !== 'function' || !navigator.serviceWorker?.pushManager) return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      // Server first: if it fails the browser subscription stays and the user can retry.
+      await S.api('/api/agenda-reminders/push-unsubscribe', {
+        method: 'POST',
+        body: JSON.stringify({ endpoint: sub.endpoint }),
+      });
+      await sub.unsubscribe();
+    }
+    const pushEl = document.getElementById('agenda-reminder-push');
+    if (pushEl instanceof HTMLInputElement) pushEl.checked = false;
+    onChannelChange();
+    if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('Push turned off on this device');
+  }
+
+  /** The device button reads "Enable" or "Turn off" depending on whether this browser holds a subscription. */
+  async function refreshPushDeviceUi() {
+    const btn = document.getElementById('agenda-reminder-enable-push');
+    if (!btn || !navigator.serviceWorker?.pushManager) return;
+    let sub = null;
+    try {
+      sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+    } catch (e) { /* no service worker: treat as not subscribed */ }
+    btn.dataset.subscribed = sub ? '1' : '';
+    btn.textContent = sub ? 'Turn off push on this device' : 'Enable push on this device';
+  }
+
   let settingsWired = false;
 
   function wireAgendaReminderSettings() {
@@ -563,8 +595,12 @@
     settingsWired = true;
     document.getElementById('agenda-reminder-email')?.addEventListener('change', onChannelChange);
     document.getElementById('agenda-reminder-push')?.addEventListener('change', onChannelChange);
-    document.getElementById('agenda-reminder-enable-push')?.addEventListener('click', () => {
-      enablePushFromGesture().catch(() => {});
+    document.getElementById('agenda-reminder-enable-push')?.addEventListener('click', (ev) => {
+      const subscribed = ev.currentTarget.dataset.subscribed === '1';
+      const run = subscribed ? disablePushFromGesture() : enablePushFromGesture();
+      run.catch(() => {
+        if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('Could not change push on this device', true);
+      }).finally(() => refreshPushDeviceUi());
     });
     if (typeof global.addEventListener === 'function') {
       global.addEventListener('online', () => { flushPending(); });
