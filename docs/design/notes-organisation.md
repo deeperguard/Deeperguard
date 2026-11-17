@@ -138,6 +138,22 @@ kiest de map; de notitielijst staat dan in het hoofdvenster. De ongebruikte
 CSS voor `.folder-note` en `.folder-notes` is in de vervolgtaak uit `app.css`
 verwijderd. `.folder-head` en `.folder-block` blijven in gebruik.
 
+**Map-filter zonder submappen:** een map toont alleen notities die direct in die
+map staan. De filter is een exacte vergelijking op `folder_id` op drie plekken:
+`app.js:10849` (`listStoredFiles`), `search.js:962` en de telling `notesInFolder`
+(`store.js:5129`), die ook op de maprij staat. Een labelfilter neemt de subtakken
+wel mee (§1.2). De UI zegt niets over submappen. `docs/NESTED_FOLDERS_SPEC.md`
+beschrijft wel dat een mapfilter de submappen meeneemt (regel 383 en regel 619,
+"Folder filter includes descendants"), en de huidige code wijkt daar dus van af.
+Dit blijft zo tot de eigenaar kiest (§9-6).
+
+**Koppeling met de labelboom:** de mapboom hergebruikt `labeltree.js`.
+`renderFolders` gebruikt `NotesLabelTree.childMap` (`app.js:10033`), `folderTreeRows`
+gebruikt `visibleRows` (`app.js:9764`), en de toetsenbordnavigatie gebruikt `navigate`
+(`app.js:10010`). Die drie zijn in `labeltree.js:153` geëxporteerd. De mapboom
+tekent zijn eigen markup (`folder-head`) en gebruikt `NotesLabelTree.html` niet.
+Een wijziging aan `childMap`, `visibleRows` of `navigate` verandert dus ook de mapboom.
+
 ### 1.4 Notitielinks (werkt)
 
 | Onderdeel | Regel | Opmerking |
@@ -582,6 +598,13 @@ en de tests slagen.
    plus een expliciete actie "Organiseer labels" voor labels met `/` of `>`, met
    voorbeeld en teller.** Zo wordt er niets zonder de gebruiker geschreven, en de
    bestaande labels blijven bruikbaar.
+
+6. **Map-filter: alleen directe notities, of ook submappen.** Nu: alleen directe
+   notities, ook in de telling op de maprij (§1.3). Labels nemen subtakken wel mee.
+   **Aanbeveling: submappen standaard meenemen, zoals `NESTED_FOLDERS_SPEC.md` en
+   het labelgedrag, met de telling op de maprij die hetzelfde getal toont als de
+   lijst.** Als de eigenaar directe notities wil houden, is een schakelaar "inclusief
+   submappen" de alternatieve optie.
 
 ---
 
