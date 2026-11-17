@@ -7048,9 +7048,13 @@
     // Flat labels from before nesting become root labels; safe to repeat on every unlock.
     try {
       NotesStore.migrateLabels();
-      NotesStore.repairLabels();
     } catch (err) {
       console.warn('label migration failed', err);
+    }
+    try {
+      NotesStore.repairLabels();
+    } catch (err) {
+      console.warn('label repair failed', err);
     }
     // Templates written as `is_template` notes become `template` items; idempotent.
     try {
