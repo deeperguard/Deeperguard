@@ -12865,3 +12865,5 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   border-radius: var(--radius-md);
   margin: var(--space-4);
 }
+.agenda-legend-sub { cursor: default; }
+.agenda-legend-badge { font-size: 11px; border: 1px solid currentColor; border-radius: 8px; padding: 0 6px; opacity: .85; }

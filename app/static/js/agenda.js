@@ -3030,7 +3030,12 @@
       const hidden = c.visible === false ? ' (hidden)' : '';
       return `<option value="${esc(c.id)}" data-agenda-cal-color="${esc(p.key)}">${esc(c.name || 'Agenda')}${hidden}</option>`;
     }).join('');
-    if (current) sel.value = current.id;
+    if (current && current.subscribed) {
+      // Read-only stand-in: shown and selected, but empty-valued so saving never changes calendarId.
+      sel.insertAdjacentHTML('afterbegin',
+        `<option value="" disabled selected data-agenda-subscribed="1">${esc(current.name || 'Agenda')} (subscribed, read-only)</option>`);
+      sel.selectedIndex = 0;
+    } else if (current) sel.value = current.id;
   }
 
   function readCalendarSelect(base) {

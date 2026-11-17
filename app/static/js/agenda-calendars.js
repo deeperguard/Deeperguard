@@ -61,9 +61,25 @@
     return out;
   }
 
+  /** Read-only stand-in for a URL subscription, so its events carry the subscription's own name. */
+  function subscriptionCalendar(sub) {
+    return { id: `sub:${sub.id}`, name: sub.name, color: 'slate', visible: true, subscribed: true };
+  }
+
+  function listSubscriptionCalendars() {
+    const S = getStore();
+    if (!S || typeof S.listAgendaSubscriptions !== 'function') return [];
+    return S.listAgendaSubscriptions().map(subscriptionCalendar);
+  }
+
   /** Calendar an event is shown in (missing/unknown calendarId = default calendar). */
   function calendarForEvent(ev, map) {
     const S = getStore();
+    const subId = ev && ev.subscription_id;
+    if (subId && S && typeof S.getAgendaSubscription === 'function') {
+      const sub = S.getAgendaSubscription(subId);
+      if (sub) return subscriptionCalendar(sub);
+    }
     const m = map || calendarMap();
     const raw = String((ev && ev.calendarId) || '').trim();
     if (raw && m.has(raw)) return m.get(raw);
@@ -82,7 +98,7 @@
     const p = paletteEntry(cal.color);
     return (
       `<span class="agenda-cal-label${extraClass ? ` ${extraClass}` : ''}" data-agenda-cal-color="${esc(p.key)}"`
-      + ` style="background:${p.bg};color:${p.text}">${esc(cal.name || 'Agenda')}</span>`
+      + ` style="background:${p.bg};color:${p.text}"${cal.subscribed ? ' title="Subscribed calendar (read-only)"' : ''}>${esc(cal.name || 'Agenda')}</span>`
     );
   }
 
@@ -110,6 +126,16 @@
   function legendHtml() {
     const cals = listCalendars();
     if (!cals.length) return '';
+    const subs = listSubscriptionCalendars().map((c) => {
+      const p = paletteEntry(c.color);
+      return (
+        '<li><span class="agenda-legend-item agenda-legend-sub">'
+        + `<span class="agenda-legend-swatch" data-agenda-cal-color="${esc(p.key)}" style="background:${p.bg}" aria-hidden="true"></span>`
+        + `<span class="agenda-legend-name">${esc(c.name || 'Agenda')}</span>`
+        + '<span class="agenda-legend-badge">Subscribed · read-only</span>'
+        + '</span></li>'
+      );
+    }).join('');
     const items = cals.map((c) => {
       const p = paletteEntry(c.color);
       return (
@@ -120,7 +146,7 @@
         + `${c.visible === false ? '<span class="sr-only">, hidden</span>' : ''}`
         + '</label></li>'
       );
-    }).join('');
+    }).join('') + subs;
     return `<ul class="agenda-legend" aria-label="Calendars shown">${items}</ul>`;
   }
 
