@@ -2384,6 +2384,7 @@ def update_user_plan(user_id: int, plan: str) -> None:
                 "DELETE FROM agenda_scheduled_reminders WHERE user_id = ? AND sent_at = 0",
                 (int(user_id),),
             )
+            conn.execute("DELETE FROM push_reminder_windows WHERE user_id = ?", (int(user_id),))
 
 
 def delete_pending_agenda_reminders(user_id: int) -> int:
@@ -3573,6 +3574,9 @@ def list_web_push_subscriptions(user_id: int) -> list[dict[str, Any]]:
 
 PUSH_WINDOW_SEC = 900
 PUSH_WINDOW_CAP = 50
+# Expiry: a window may lie at most this far after its (last) upload; once due, the sender
+# pushes and deletes it, or deletes it unsent when it is overdue.
+PUSH_WINDOW_MAX_AHEAD_SEC = 366 * 24 * 60 * 60
 
 
 def put_push_windows(user_id: int, endpoint: str, windows: list[tuple[str, int]]) -> str:

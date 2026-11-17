@@ -136,6 +136,42 @@ class PushWindowsApiTest(_Base):
         self.assertNotIn("headers", fake.call_args.kwargs)
         self.assertEqual([r for r in self._rows() if r["user_id"] == uid], [])
 
+    def test_window_beyond_expiry_horizon_is_rejected_without_writing(self):
+        import db
+
+        uid = self._login_free_user()
+        self._subscribe()
+        now = int(time.time())
+        last_ok = (now + db.PUSH_WINDOW_MAX_AHEAD_SEC) // 900 * 900
+        too_far = last_ok + 900
+        ok_win = self._win(last_ok)
+        # One bad window in a batch rejects the whole batch.
+        self.assertEqual(self._put([ok_win, self._win(too_far)]).status_code, 400)
+        self.assertEqual(self._put([self._win(900 * 10**8)]).status_code, 400)
+        self.assertEqual([r for r in self._rows() if r["user_id"] == uid], [])
+        self.assertEqual(self._put([ok_win]).status_code, 200)
+        self.assertEqual([r["id"] for r in self._rows() if r["user_id"] == uid], [ok_win["id"]])
+        # Moving an existing window past the horizon is rejected too and keeps the old value.
+        self.assertEqual(self._put([{"id": ok_win["id"], "window_start": too_far}]).status_code, 400)
+        self.assertEqual([r["window_start"] for r in self._rows() if r["user_id"] == uid], [last_ok])
+
+    def test_downgrade_drops_pending_windows_of_that_account_only(self):
+        import db
+
+        other = self._login_free_user()
+        self._subscribe()
+        self.assertEqual(self._put([self._win()]).status_code, 200)
+        uid = self._login_free_user()
+        self._subscribe()
+        self.assertEqual(self._put([self._win(), self._win()]).status_code, 200)
+        plan = db.get_user_by_id(uid)["plan"]
+        db.update_user_plan(uid, plan)  # same plan: windows stay
+        self.assertEqual(len([r for r in self._rows() if r["user_id"] == uid]), 2)
+        for _ in range(2):  # downgrading twice is harmless
+            db.update_user_plan(uid, "free")
+        self.assertEqual([r for r in self._rows() if r["user_id"] == uid], [])
+        self.assertEqual(len([r for r in self._rows() if r["user_id"] == other]), 1)
+
     def test_overdue_window_is_deleted_unsent(self):
         import agenda_reminder_cron as cron
 
