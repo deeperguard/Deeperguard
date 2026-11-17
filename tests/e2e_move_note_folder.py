@@ -49,7 +49,7 @@ FOLDER_FIELD_JS = """() => {
   return [s.value ? 'folder' : '', s.options[s.selectedIndex].textContent];
 }"""
 
-LEVELS_JS ="""() => [...document.querySelectorAll('#folder-move-tree [role=treeitem]')]
+LEVELS_JS = """() => [...document.querySelectorAll('#folder-move-tree [role=treeitem]')]
   .map((e) => [e.textContent.trim(), e.getAttribute('aria-level')])"""
 
 
@@ -179,7 +179,8 @@ def main() -> int:
             assert page.evaluate(FOLDER_FIELD_JS) == ["", "No folder"], page.evaluate(FOLDER_FIELD_JS)
 
             # After a reload and unlock, neither note is in its old folder any more.
-            page.wait_for_timeout(500)
+            # Wait until both moves have been saved (the sync queue is empty) before reloading.
+            page.wait_for_function("() => NotesStore.state.dirty.size === 0", timeout=30000)
             page.reload(wait_until="domcontentloaded")
             unlock(page)
             page.wait_for_function("() => NotesStore.listNotes().length >= 2")
