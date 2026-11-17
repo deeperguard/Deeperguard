@@ -28,7 +28,7 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def start_server(root: Path, port: int, extra_env: dict | None = None, startup_wait: float = 20.0):
+def start_server(root: Path, port: int, extra_env: dict | None = None):
     env = dict(os.environ)
     env.update(extra_env or {})
     env.update(
@@ -88,7 +88,7 @@ with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
-    for _ in range(int(startup_wait / 0.25)):
+    for _ in range(80):
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=0.5):
                 return proc

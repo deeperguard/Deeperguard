@@ -25,11 +25,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from e2e_signup_autounlock import PASSWORD, free_port, start_server  # noqa: E402
 
-# Every wait is for something that must happen, never for something that must
-# not; a generous limit only costs time when the page really is broken. The
-# build server runs several suites at once, where registration (key derivation
-# in the browser) and the service worker round trip take far longer than alone.
-LOAD_TIMEOUT_MS = 180_000
+# Cause of the flake: the share POST was sent before the service worker
+# controlled the page (clients.claim() lags under load), so it never got the
+# worker's redirect. The wait is on that state, not a blanket longer timeout.
+SW_CONTROL_TIMEOUT_MS = 60_000
+CONTROLLED_JS = "() => !!navigator.serviceWorker.controller"
 
 DUMP_STORAGE_JS = """async () => {
   const out = [];
@@ -128,21 +128,34 @@ def register(page, base: str) -> None:
         }"""
     )
     page.click("#register-submit")
-    page.wait_for_function(UNLOCKED_JS, timeout=LOAD_TIMEOUT_MS)
+    page.wait_for_function(UNLOCKED_JS, timeout=120000)
 
 
 def wait_sw_controls(page, base: str) -> None:
+    """Block until a service worker controls the page.
+
+    Only the worker turns a share POST into the /app?action=share redirect.
+    serviceWorker.ready resolves on activation, but the page becomes controlled
+    only after the worker's clients.claim(), which lags when the machine is
+    busy. A POST before that goes to the server instead of the worker, so wait
+    for the controller explicitly.
+    """
     page.evaluate("() => navigator.serviceWorker.ready")
-    for _ in range(3):
-        if page.evaluate("() => !!navigator.serviceWorker.controller"):
-            return
+    try:
+        page.wait_for_function(CONTROLLED_JS, timeout=SW_CONTROL_TIMEOUT_MS)
+    except Exception:
+        # A page loaded before the first activation stays uncontrolled until
+        # the next navigation: reload once, then wait again.
         page.goto(f"{base}/app", wait_until="domcontentloaded")
-        page.evaluate("() => navigator.serviceWorker.ready")
-    raise AssertionError("service worker never controlled /app")
+        page.wait_for_function(CONTROLLED_JS, timeout=SW_CONTROL_TIMEOUT_MS)
 
 
 def share(page, text: str, title: str = "", url: str = "") -> None:
-    with page.expect_navigation(url="**/app?action=share*", wait_until="domcontentloaded"):
+    # Without a controlling worker the POST would hit the server, not the worker.
+    assert page.evaluate(CONTROLLED_JS), "share needs a controlling service worker"
+    with page.expect_navigation(
+        url="**/app?action=share*", wait_until="domcontentloaded", timeout=SW_CONTROL_TIMEOUT_MS
+    ):
         page.evaluate(SHARE_JS, [text, title, url])
 
 
@@ -160,12 +173,11 @@ def main() -> int:
     root = Path(tempfile.mkdtemp(prefix="e2e-share-"))
     port = free_port()
     base = f"http://127.0.0.1:{port}"
-    proc = start_server(root, port, startup_wait=LOAD_TIMEOUT_MS / 1000)
+    proc = start_server(root, port)
     try:
         with sync_playwright() as p:
             browser = launch(p)
             context = browser.new_context(service_workers="allow")
-            context.set_default_timeout(LOAD_TIMEOUT_MS)
             page = context.new_page()
             register(page, base)
             wait_sw_controls(page, base)
@@ -173,12 +185,12 @@ def main() -> int:
             # share arriving later: the vault is locked after the reload.
             page.evaluate("() => sessionStorage.clear()")
             page.goto(f"{base}/app", wait_until="domcontentloaded")
-            page.wait_for_selector("#unlock-screen:not([hidden])", timeout=LOAD_TIMEOUT_MS)
+            page.wait_for_selector("#unlock-screen:not([hidden])", timeout=60000)
 
             # 1. Share while locked.
             secret = "ZKSHARE" + secrets.token_hex(8)
             share(page, f"{secret} body line", title=f"{secret} title", url="https://example.test/x")
-            page.wait_for_selector("#unlock-share-hint:not([hidden])", timeout=LOAD_TIMEOUT_MS)
+            page.wait_for_selector("#unlock-share-hint:not([hidden])", timeout=20000)
             hint = page.inner_text("#unlock-share-hint")
             assert "Shared content is waiting. Unlock to save it." in hint, hint
             assert not page.evaluate(UNLOCKED_JS), "vault must still be locked"
@@ -191,8 +203,8 @@ def main() -> int:
             # 2. Unlock: sheet opens prefilled, nothing saved before Save.
             page.fill("#unlock-password", PASSWORD)
             page.click("#unlock-submit")
-            page.wait_for_function(UNLOCKED_JS, timeout=LOAD_TIMEOUT_MS)
-            page.wait_for_function(SHEET_OPEN_JS, arg=secret, timeout=LOAD_TIMEOUT_MS)
+            page.wait_for_function(UNLOCKED_JS, timeout=120000)
+            page.wait_for_function(SHEET_OPEN_JS, arg=secret, timeout=20000)
             assert page.is_hidden("#unlock-share-hint")
             assert page.is_checked("#quick-capture-note")
             before = note_titles(page)
@@ -220,7 +232,7 @@ def main() -> int:
                 }""",
                 secret2,
             )
-            page.wait_for_function(SHEET_OPEN_JS, arg=secret2, timeout=LOAD_TIMEOUT_MS)
+            page.wait_for_function(SHEET_OPEN_JS, arg=secret2, timeout=20000)
             page.click("#quick-capture-cancel")
             page.wait_for_selector("#quick-capture", state="hidden")
             assert not any(secret2 in t for t in note_titles(page)), "Cancel must discard"
@@ -228,7 +240,7 @@ def main() -> int:
             # 4. Shortcut: Ctrl+Shift+K opens the sheet; Task saves a checklist.
             page.click("body")
             page.keyboard.press("Control+Shift+K")
-            page.wait_for_selector("#quick-capture:not([hidden])", timeout=LOAD_TIMEOUT_MS)
+            page.wait_for_selector("#quick-capture:not([hidden])", timeout=5000)
             task = "Task" + secrets.token_hex(4)
             page.fill("#quick-capture-text", task)
             page.click("label:has(#quick-capture-task)")
