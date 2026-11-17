@@ -81,7 +81,16 @@ def _chip_titles(page, selector):
 def test_subscription_name_everywhere(page):
     sub_id = _setup(page)
     dialogs = []
-    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    prompt_answer = {"value": ""}
+
+    def on_dialog(d):
+        if d.type == "prompt":
+            d.accept(prompt_answer["value"])
+        else:
+            dialogs.append(d.message)
+            d.dismiss()
+
+    page.on("dialog", on_dialog)
 
     for view, sel in (("month", ".agenda-month-ev"), ("week", ".agenda-event-chip"), ("day", ".agenda-event-chip")):
         _view(page, view)
@@ -97,6 +106,12 @@ def test_subscription_name_everywhere(page):
     row.first.click()
     page.wait_for_selector("#agenda-detail-calendar", state="visible", timeout=30_000)
     assert page.inner_text("#agenda-detail-calendar") == "Calendar: Team Rooster"
+    page.click("#agenda-detail-edit")
+    page.wait_for_selector("#agenda-editor:not([hidden]) #agenda-edit-calendar", timeout=30_000)
+    selected = page.locator("#agenda-edit-calendar option:checked")
+    assert "Team Rooster" in selected.inner_text()
+    assert selected.evaluate("o => o.disabled && o.value === ''")
+    page.click("#agenda-edit-cancel")
     page.keyboard.press("Escape")
 
     legend = page.locator(".agenda-legend li", has_text="Team Rooster")
@@ -104,11 +119,19 @@ def test_subscription_name_everywhere(page):
     assert legend.locator("input").count() == 0
     assert page.locator(".agenda-legend li", has_text="Werk").locator("input").count() == 1
 
-    # Rename: no reload, the agenda shows the new name at once; a hostile name stays text.
-    page.evaluate("(id) => { NotesStore.updateAgendaSubscription(id, { name: 'Nieuw rooster' }); NotesAgenda.render(); }", sub_id)
+    # Rename through the real UI (prompt dialog): no reload, no manual render().
+    def rename(name):
+        prompt_answer["value"] = name
+        page.locator("#agenda-calendar-settings-btn:visible").first.click()
+        page.wait_for_selector("#agenda-calendar-settings:not([hidden])", timeout=30_000)
+        row = page.locator(".agenda-subscription-row", has=page.locator("strong"))
+        row.get_by_role("button", name="Rename").first.click()
+        page.click("#agenda-calendar-settings-close")
+
+    rename("Nieuw rooster")
     assert "Nieuw rooster" in page.locator(".agenda-list-row", has_text="Rooster dienst").inner_text()
     assert page.locator(".agenda-legend li", has_text="Nieuw rooster").count() == 1
-    page.evaluate("(id) => { NotesStore.updateAgendaSubscription(id, { name: %r }); NotesAgenda.render(); }" % HOSTILE, sub_id)
+    rename(HOSTILE)
     assert HOSTILE in page.locator(".agenda-legend").inner_text()
     assert page.locator(".agenda-body img, .agenda-legend img").count() == 0
     assert dialogs == []
