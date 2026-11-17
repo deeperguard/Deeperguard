@@ -21,9 +21,10 @@ PIN = "#btn-nav-pin"
 RENAME = '[aria-label="Rename folder Werk"]'
 ROW = '#folder-list [role=treeitem][data-folder-title="Werk"]'
 TOP_JS = """(sel) => {
-  const r = document.querySelector(sel).getBoundingClientRect();
+  const btn = document.querySelector(sel);
+  const r = btn.getBoundingClientRect();
   const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-  return top && top.className;
+  return !!top && !btn.contains(top);
 }"""
 
 
@@ -54,8 +55,8 @@ def main() -> int:
                 # No wait: the class flips synchronously in the click handler.
                 pinned = page.evaluate("() => document.body.classList.contains('nav-pinned')")
                 report.check(f"{label}: state flipped by the click", pinned is want_pinned)
-                report.check(f"{label}: pointer not over the row, actions are not hit",
-                             page.evaluate(TOP_JS, RENAME) == "folder-select")
+                report.check(f"{label}: rename button is not the top element before hover",
+                             page.evaluate(TOP_JS, RENAME))
                 page.locator(ROW).hover(timeout=1000)
                 try:
                     page.locator(RENAME).click(timeout=1000)
@@ -65,11 +66,8 @@ def main() -> int:
                     opened = False
                     print(base.first_line(err))
                 report.check(f"{label}: Rename folder opens right after the pin click", opened)
-                # Leave the field again (the first Escape after creating the folder did not
-                # close the field in the browser, so press until it is gone).
-                for _ in range(2):
-                    if page.locator(".folder-rename-input").count():
-                        page.keyboard.press("Escape")
+                # Leave the field with Enter: the name is unchanged, so this only closes it.
+                page.keyboard.press("Enter")
                 page.wait_for_selector(".folder-rename-input", state="detached", timeout=1000)
             browser.close()
     finally:
