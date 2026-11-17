@@ -16,8 +16,8 @@ from test_agenda_reminders_api import AgendaRemindersApiTest as _Base  # noqa: E
 ENDPOINT = "https://fcm.googleapis.com/fcm/send/abc"
 
 
-class PushWindowsApiTest(_Base):
-    # Reuse the isolated app fixture and login helper; the inherited tests are not re-run here.
+class PushWindowsHelpers:
+    # Request helpers for the push-window tests. The app fixture comes from the class that mixes this in.
     def _hdr(self):
         return self._csrf_headers()
 
@@ -48,6 +48,7 @@ class PushWindowsApiTest(_Base):
 
         return [dict(r) for r in db.connection().execute("SELECT * FROM push_reminder_windows").fetchall()]
 
+class PushWindowsApiTest(PushWindowsHelpers, _Base):
     def test_schema_has_exactly_the_claimed_columns(self):
         import db
 

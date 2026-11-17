@@ -35,7 +35,9 @@ def _purge_isolated_app_modules() -> None:
             sys.modules.pop(name, None)
 
 
-class AgendaRemindersApiTest(unittest.TestCase):
+class AgendaRemindersFixture:
+    """Isolated app and login helpers, shared with the push-window tests. Holds no test cases."""
+
     @classmethod
     def setUpClass(cls):
         cls._tmp = tempfile.TemporaryDirectory(prefix="dg-agenda-rem-")
@@ -177,6 +179,7 @@ class AgendaRemindersApiTest(unittest.TestCase):
             ).fetchall()
         ]
 
+class AgendaRemindersApiTest(AgendaRemindersFixture, unittest.TestCase):
     def test_free_plan_blocks_agenda_reminder_sync(self):
         self._login_free_user(plan="free")
         res = self._sync([self._row()])
