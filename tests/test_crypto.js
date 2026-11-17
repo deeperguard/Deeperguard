@@ -2,6 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { Worker } = require('worker_threads');
 
 const jsRoot = path.join(__dirname, '..', 'app', 'static', 'js');
 const vendorRoot = path.join(jsRoot, 'vendor');
@@ -11,47 +12,58 @@ vm.runInThisContext(
 );
 const NotesCrypto = require(path.join(jsRoot, 'crypto.js'));
 
+// Runs crypto-worker.js in a real worker thread: its own realm and globals, so
+// the worker must load the vendor files itself through importScripts, as in
+// the browser. (A vm.createContext sandbox made Argon2 about 30x slower,
+// because every global lookup goes through the context's interceptors.)
+const WORKER_HOST = `
+const { parentPort, workerData } = require('worker_threads');
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const load = (file) => vm.runInThisContext(
+  fs.readFileSync(path.join(workerData.jsRoot, file), 'utf8'),
+  { filename: file },
+);
+globalThis.self = globalThis;
+globalThis.importScripts = (...urls) => urls.forEach(load);
+globalThis.postMessage = (msg) => parentPort.postMessage(msg);
+parentPort.on('message', (data) => self.onmessage({ data }));
+load('crypto-worker.js');
+`;
+
 function loadCryptoWorker() {
-  const sandbox = {
-    console,
-    TextEncoder,
-    TextDecoder,
-    Uint8Array,
-    atob,
-    btoa,
-    setInterval: () => 0,
-    clearInterval: () => {},
-  };
-  sandbox.self = sandbox;
-  vm.createContext(sandbox);
-  sandbox.importScripts = (...urls) => {
-    for (const url of urls) {
-      vm.runInContext(fs.readFileSync(path.join(jsRoot, url), 'utf8'), sandbox);
-    }
-  };
-  vm.runInContext(fs.readFileSync(path.join(jsRoot, 'crypto-worker.js'), 'utf8'), sandbox);
+  const thread = new Worker(WORKER_HOST, { eval: true, workerData: { jsRoot } });
+  const pending = new Map();
+  let nextId = 1;
+  thread.on('message', (msg) => {
+    const entry = pending.get(msg.id);
+    if (!entry || msg.progress !== undefined) return;
+    pending.delete(msg.id);
+    if (msg.ok) entry.resolve(msg);
+    else entry.reject(new Error(msg.error || 'worker request failed'));
+  });
+  thread.on('error', (err) => {
+    for (const entry of pending.values()) entry.reject(err);
+    pending.clear();
+  });
+  function request(data) {
+    return new Promise((resolve, reject) => {
+      const id = nextId;
+      nextId += 1;
+      pending.set(id, { resolve, reject });
+      thread.postMessage({ ...data, id });
+    });
+  }
   return {
-    deriveKey(password, salt, kdfVersion) {
-      return new Promise((resolve, reject) => {
-        sandbox.postMessage = (msg) => {
-          if (msg.ok) resolve(msg.result);
-          else reject(new Error(msg.error || 'worker derive failed'));
-        };
-        sandbox.onmessage({
-          data: { id: 1, type: 'deriveKey', password, salt, kdfVersion },
-        }).catch(reject);
-      });
+    async deriveKey(password, salt, kdfVersion) {
+      return (await request({ type: 'deriveKey', password, salt, kdfVersion })).result;
     },
-    decrypt(rawKey, payload) {
-      return new Promise((resolve, reject) => {
-        sandbox.postMessage = (msg) => {
-          if (msg.ok) resolve(msg.content);
-          else reject(new Error(msg.error || 'worker decrypt failed'));
-        };
-        sandbox.onmessage({
-          data: { id: 2, type: 'decrypt', rawKey, payload },
-        }).catch(reject);
-      });
+    async decrypt(rawKey, payload) {
+      return (await request({ type: 'decrypt', rawKey, payload })).content;
+    },
+    terminate() {
+      return thread.terminate();
     },
   };
 }
@@ -90,6 +102,7 @@ function loadCryptoWorker() {
   const noteEnc = await NotesCrypto.encryptObject(v2Key, note);
   const workerNote = await worker.decrypt(workerKey.raw, noteEnc);
   assert.strictEqual(JSON.stringify(workerNote), JSON.stringify(note));
+  await worker.terminate();
 
   console.log('ok');
 })().catch((err) => {

@@ -582,6 +582,16 @@ MERMAID_SANDBOX_CSP = (
 )
 
 
+# The two scripts the sandbox document loads. The iframe has an opaque origin, so for it every request to
+# this server is cross-origin and the app-wide CORP `same-origin` would abort them. Both are public code.
+MERMAID_SANDBOX_ASSETS = frozenset({"js/vendor/mermaid/mermaid.min.js", "js/mermaid-sandbox.js"})
+
+
+def _is_mermaid_sandbox_asset(path: str) -> bool:
+    rel = path.removeprefix("/static/")
+    return rel in MERMAID_SANDBOX_ASSETS or client_assets.resolve_hashed_static(path) in MERMAID_SANDBOX_ASSETS
+
+
 def _is_ics_fetch_worker_path(path: str) -> bool:
     """The feed-fetch worker (plain or content-hashed name) gets its own narrow CSP."""
     if path == "/static/js/ics-fetch-worker.js":
@@ -602,6 +612,8 @@ def _headers(response):
         response.headers["Content-Security-Policy"] = MERMAID_SANDBOX_CSP
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers.pop("Content-Security-Policy-Report-Only", None)
+    if _is_mermaid_sandbox_asset(request.path):
+        response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
     for key, value in auth.security_headers().items():
         response.headers.setdefault(key, value)
     if request.path.startswith("/api/"):

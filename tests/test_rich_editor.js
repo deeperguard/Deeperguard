@@ -1,7 +1,7 @@
 // Formatted Markdown editor. The behaviour checks run in real Chromium
 // (tests/test_rich_editor_browser.py: byte-exact round-trip over a corpus, toolbar and shortcuts,
 // undo/redo, pasted HTML, keyboard use, typing speed). Here: the pure helpers and the page markup
-// (needs python3 with pytest, Playwright and Chromium for the browser part).
+// (the browser part needs python3 with pytest, Playwright and Chromium, and fails without them).
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -23,10 +23,8 @@ for (const [button] of toolbar[1].matchAll(/<button[^>]*>/g)) {
   assert.ok(/aria-label="[^"]+"/.test(button) || /id="btn-(rich|md)-mode"/.test(button), `button without aria-label: ${button}`);
 }
 
+// A missing Playwright or Chromium is a failure, not a skip: otherwise the core checks never run and the test stays green.
 const run = spawnSync('python3', ['-I', '-m', 'pytest', '-q', path.join(__dirname, 'test_rich_editor_browser.py')], { encoding: 'utf8' });
-if (/\bskipped\b/.test(run.stdout) && !/\bpassed\b/.test(run.stdout)) {
-  console.log('skipped real-browser run: ' + run.stdout.trim().split('\n').pop());
-} else {
-  assert.strictEqual(run.status, 0, `browser run failed:\n${run.stdout}\n${run.stderr}`);
-}
+assert.strictEqual(run.status, 0, `browser run failed:\n${run.stdout}\n${run.stderr}`);
+assert.ok(/\bpassed\b/.test(run.stdout) && !/\bskipped\b/.test(run.stdout), `browser checks did not all run:\n${run.stdout}`);
 console.log('ok');

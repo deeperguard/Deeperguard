@@ -6,13 +6,18 @@
 // The iframe (and with it the 2.5 MB Mermaid bundle) is created only when a note has a mermaid block.
 const NotesMermaid = (() => {
   const SANDBOX_URL = '/static/mermaid-sandbox.html';
+  // Keep equal to MAX_SOURCE in mermaid-sandbox.js: the sandbox rejects longer sources.
   const MAX_SOURCE = 20000;
+  const MAX_LABEL = 300;
   const MAX_HEIGHT = 4000;
   const TIMEOUT_MS = 10000;
   const ERROR_TEXT = 'Dit diagram kan niet worden getoond. De bron staat hieronder.';
   const ARIA_PREFIX = 'Mermaid-diagram. Bron: ';
   let counter = 0;
   let queue = Promise.resolve();
+  // The render in flight: the figure it belongs to and a function that ends it early.
+  let figureInFlight = null;
+  let cancelRender = null;
 
   function theme() {
     const attr = document.documentElement.getAttribute('data-theme');
@@ -20,15 +25,17 @@ const NotesMermaid = (() => {
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
 
-  // Resolves { height } or { error }; on time-out the caller removes (destroys) the iframe.
+  // Resolves { height }, { error } or { cancelled }; on time-out or cancel the caller removes (destroys) the iframe.
   function renderInSandbox(iframe, source, id) {
     return new Promise((resolve) => {
       let timer = null;
       const done = (result) => {
         clearTimeout(timer);
         window.removeEventListener('message', onMessage);
+        cancelRender = null;
         resolve(result);
       };
+      cancelRender = () => done({ cancelled: true });
       function onMessage(event) {
         if (event.source !== iframe.contentWindow) return;
         const data = event.data;
@@ -39,25 +46,24 @@ const NotesMermaid = (() => {
         }
         if (data.type !== 'dg-mermaid-result' || data.id !== id) return;
         if (typeof data.error === 'string') {
-          done({ error: data.error.slice(0, 300) });
+          done({ error: true });
         } else if (Number.isFinite(data.height) && data.height > 0) {
           done({ height: Math.min(Math.ceil(data.height), MAX_HEIGHT) });
         } else {
-          done({ error: 'invalid reply' });
+          done({ error: true });
         }
       }
       window.addEventListener('message', onMessage);
-      timer = setTimeout(() => done({ error: 'timeout' }), TIMEOUT_MS);
+      timer = setTimeout(() => done({ error: true }), TIMEOUT_MS);
       iframe.src = SANDBOX_URL;
     });
   }
 
-  function fail(figure, pre, detail) {
+  function fail(figure, pre) {
     const note = document.createElement('p');
     note.className = 'md-mermaid-error';
     note.setAttribute('role', 'alert');
     note.textContent = ERROR_TEXT;
-    if (detail) note.title = detail;
     figure.textContent = '';
     figure.classList.add('is-error');
     figure.append(note, pre);
@@ -70,7 +76,7 @@ const NotesMermaid = (() => {
     const box = document.createElement('div');
     box.className = 'md-mermaid-box';
     box.setAttribute('role', 'img');
-    box.setAttribute('aria-label', `${ARIA_PREFIX}${source}`);
+    box.setAttribute('aria-label', `${ARIA_PREFIX}${source.length > MAX_LABEL ? `${source.slice(0, MAX_LABEL)}…` : source}`);
     const iframe = document.createElement('iframe');
     iframe.className = 'md-mermaid-frame';
     iframe.title = 'Mermaid-diagram';
@@ -86,10 +92,13 @@ const NotesMermaid = (() => {
     details.append(summary, pre);
     figure.textContent = '';
     figure.append(box, details);
+    figureInFlight = figure;
     const result = await renderInSandbox(iframe, source, id);
-    if (result.error) {
+    if (result.cancelled) {
       iframe.remove();
-      fail(figure, pre, result.error);
+    } else if (result.error) {
+      iframe.remove();
+      fail(figure, pre);
     } else {
       iframe.style.height = `${result.height}px`;
       figure.classList.add('is-rendered');
@@ -99,6 +108,8 @@ const NotesMermaid = (() => {
   // Replaces every ```mermaid block under root by a diagram figure. Returns the number of blocks found.
   function decorate(root) {
     if (!root?.querySelectorAll || typeof document === 'undefined') return 0;
+    // A new preview replaced the figure of the render in flight: end that render now instead of at the time-out.
+    if (cancelRender && !figureInFlight?.isConnected) cancelRender();
     let found = 0;
     root.querySelectorAll('pre.code-preview > code.language-mermaid').forEach((code) => {
       const pre = code.parentElement;
@@ -108,7 +119,7 @@ const NotesMermaid = (() => {
       figure.className = 'md-mermaid';
       pre.replaceWith(figure);
       if (!source.trim() || source.length > MAX_SOURCE) {
-        fail(figure, pre, '');
+        fail(figure, pre);
         return;
       }
       const loading = document.createElement('p');
@@ -116,7 +127,7 @@ const NotesMermaid = (() => {
       loading.textContent = 'Diagram laden…';
       figure.append(loading);
       // One render at a time (design 4.3).
-      queue = queue.then(() => mount(figure, pre, source)).catch(() => fail(figure, pre, ''));
+      queue = queue.then(() => mount(figure, pre, source)).catch(() => fail(figure, pre));
     });
     return found;
   }

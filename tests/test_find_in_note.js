@@ -18,10 +18,12 @@ assert.deepStrictEqual(findMatches('x <img src=x onerror=alert(1)> y', '<img src
 assert.deepStrictEqual(findMatches('abab', 'ab', opts), [{ start: 0, end: 2 }, { start: 2, end: 4 }]);
 assert.deepStrictEqual(findMatches('abc', '', opts), []);
 
+// 'İ' lowercases to two code units; the offsets must still point into the original text.
+assert.deepStrictEqual(findMatches('İa a', 'a', opts), [{ start: 1, end: 2 }, { start: 3, end: 4 }], 'offsets after İ');
+assert.deepStrictEqual(findMatches('xİy', 'y', opts), [{ start: 2, end: 3 }], 'offset after İ in the middle');
+assert.deepStrictEqual(findMatches('İa a', 'a', { literal: true }), [{ start: 1, end: 2 }, { start: 3, end: 4 }], 'offsets after İ without accent folding');
+assert.deepStrictEqual(findMatches('İstanbul', 'İSTANBUL', opts), [{ start: 0, end: 8 }], 'İ matches itself');
+
 const run = spawnSync('python3', [path.join(__dirname, 'find_in_note_browser.py')], { encoding: 'utf8' });
-if (run.status === 77) {
-  console.log('skipped real-DOM run: ' + run.stdout.trim());
-} else {
-  assert.strictEqual(run.status, 0, `real-DOM find run failed:\n${run.stdout}\n${run.stderr}`);
-}
+assert.strictEqual(run.status, 0, `real-DOM find run failed (Playwright must be installed, the run is not skipped):\n${run.stdout}\n${run.stderr}`);
 console.log('ok');

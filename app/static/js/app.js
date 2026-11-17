@@ -667,11 +667,14 @@
 
   function applyNavRail() {
     document.body.classList.toggle('nav-pinned', !!prefs.navPinned);
-    const pin = document.getElementById('btn-nav-pin');
-    if (pin) {
-      pin.setAttribute('aria-pressed', prefs.navPinned ? 'true' : 'false');
-      pin.title = prefs.navPinned ? 'Collapse sidebar' : 'Pin sidebar';
-    }
+    const text = prefs.navPinned ? 'Collapse sidebar' : 'Expand sidebar';
+    document.querySelectorAll('[data-nav-toggle]').forEach((btn) => {
+      btn.setAttribute('aria-expanded', prefs.navPinned ? 'true' : 'false');
+      btn.setAttribute('aria-label', 'Expand/Collapse sidebar');
+      btn.title = 'Expand/Collapse sidebar';
+      const label = btn.querySelector('[data-nav-toggle-label]');
+      if (label) label.textContent = text;
+    });
     if (prefs.navPinned) setNavViewsOpen(false);
   }
   applyTheme();
@@ -4379,10 +4382,17 @@
     document.documentElement.classList.toggle('toast-above-dialog', lift);
   }
 
+  /** Errors are announced at once (alert); other toasts politely (status). */
+  function setToastRole(el, isError) {
+    el.setAttribute('role', isError ? 'alert' : 'status');
+    el.setAttribute('aria-live', isError ? 'assertive' : 'polite');
+  }
+
   function toastWithUndo(message, onUndo) {
     const el = document.getElementById('toast');
     if (!el) return;
     el.classList.remove('error');
+    setToastRole(el, false);
     el.replaceChildren();
     const label = document.createElement('span');
     label.textContent = message;
@@ -4434,6 +4444,7 @@
     el.replaceChildren();
     el.textContent = message;
     el.classList.toggle('error', !!isError);
+    setToastRole(el, !!isError);
     el.hidden = false;
     document.documentElement.classList.toggle('totp-toast-open', on2fa);
     syncToastDialogLift();
@@ -19164,6 +19175,12 @@
     if (ui.docViewer) ui.docViewer.style.paddingTop = '';
   }
 
+  function closeFindBarToNote() {
+    hideFindBar();
+    if (!ui.body.hidden) ui.body.focus();
+    else if (!ui.preview.hidden) ui.preview.focus();
+  }
+
   function syncFindBarChrome(open = findBarOpen()) {
     ui.editor?.classList.toggle('find-open', !!open);
     document.body.classList.toggle('find-bar-open', !!open);
@@ -20872,7 +20889,12 @@
     }
     scheduleSave();
     autosizeNoteBody();
-    if (!tableEditorController.writing) closeTableEditor();
+    // Typing in the Markdown source closes an open table editor on purpose: the source is then the
+    // only thing being edited. Only the editor's own writes (setSource sets writing) keep it open.
+    if (!tableEditorController.writing && tableEditorController()?.isOpen()) {
+      closeTableEditor();
+      toast('Table editor closed: the note text was changed outside it');
+    }
     syncEditLinkOverlay();
     syncSuperscriptFormatMirror();
     syncCodeHighlight();
@@ -21071,9 +21093,7 @@
     }
     if (event.key === 'Escape') {
       event.stopPropagation();
-      hideFindBar();
-      if (!ui.body.hidden) ui.body.focus();
-      else if (!ui.preview.hidden) ui.preview.focus();
+      closeFindBarToNote();
     }
   });
   document.getElementById('find-next').addEventListener('click', () => advanceFind(1));
@@ -22143,7 +22163,8 @@ async function showSettings() {
       setNavViewsOpen(false);
     }
   });
-  document.getElementById('btn-nav-pin')?.addEventListener('click', () => {
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest?.('[data-nav-toggle]')) return;
     prefs.navPinned = !prefs.navPinned;
     savePrefs();
     applyNavRail();
@@ -26242,7 +26263,7 @@ async function showSettings() {
       }
       const findBar = document.getElementById('find-bar');
       if (findBar && !findBar.hidden) {
-        hideFindBar();
+        closeFindBarToNote();
         stop();
         return;
       }
