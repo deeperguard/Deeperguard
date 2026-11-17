@@ -1263,6 +1263,19 @@ Width (`listPaneWidth`) and `listCollapsed` live in the local
 The phone layout keeps working as it does now; the existing >=1000px rule
 (section 1.3) stays the desktop switch.
 
+Below 1000px "Linked from" (`.backlinks`) uses the same `--space-4` inset as
+the Attachments and Version history labels. Below 600px the 2FA title and
+account count take their own row above the 2FA buttons, and the PDF viewer
+controls (zoom, fit width, page, full screen) use tighter gaps so they fit on
+one row at 390px (they still wrap on narrower screens).
+
+`tests/e2e_layout_no_hscroll.py` checks Notes (plain and PDF note), Agenda
+and 2FA at 1280, 1440, 1920, 820 and 390 (390x844). It fails on page-level
+horizontal scroll and also on shown content past the right edge that an
+`overflow: hidden`/`clip` container cuts off. Without that second check the
+`overflow: hidden` on html/body and `overflow-x: hidden` on the compact
+`.app-root` would hide such content from the scroll check.
+
 ### 7.9 Order of the follow-up tasks
 
 Each task ships on its own, leaves no half-converted screen, keeps
