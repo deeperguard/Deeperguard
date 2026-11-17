@@ -2469,6 +2469,15 @@ const NotesStore = (() => {
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'last_error_code')) {
       next.last_error_code = patch.last_error_code ? safeSubErrorCode(patch.last_error_code) : null;
     }
+    // `url` must already be normalised; the caller replaces the events right after (refreshAgendaSubscriptionRows).
+    if (patch && typeof patch.url === 'string' && patch.url) {
+      next.url = patch.url;
+      next.last_error_code = null;
+      next.last_refresh = null;
+      // A new link is a new consent decision: back to direct unless the caller re-grants relay.
+      next.mode = 'direct';
+      next.relay_consent_at = null;
+    }
     if (patch && typeof patch.color === 'string' && cleanSubColor(patch.color)) next.color = cleanSubColor(patch.color);
     // On/off switch: off hides its events and pauses every refresh (direct and relay).
     if (patch && typeof patch.enabled === 'boolean') next.enabled = patch.enabled;
