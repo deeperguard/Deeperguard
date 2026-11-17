@@ -58,8 +58,8 @@ zie §5).
 | Bezorging | `app/agenda_reminder_cron.py`: `run_agenda_reminders`, `try_send_push`, `agenda_email_body`, `agenda_reminder_line`, `DEFAULT_MAX_LATE_SEC` 30 min | Een herinnering die meer dan 30 minuten te laat is, wordt gesloten zonder verzending. |
 | Venster-push, server | `app/app.py` `PUSH_WINDOW_KEYS = {id, window_start}`, `/api/push-windows`, `/api/push-windows/delete`; `app/db.py` tabel `push_reminder_windows`, `put_push_windows`, `delete_push_windows`, `due_push_windows`, `PUSH_WINDOW_CAP = 50`; `app/agenda_reminder_cron.py:run_push_windows` | Willekeurige 32-hex id en een veelvoud van 900 s; lege push; rij weg na verzending. |
 | Venster-push, client | **ontbreekt**: geen enkel bestand onder `app/static/js` roept `/api/push-windows` aan | De serverkant uit idee #75 bestaat, de client en de melding met tekst (M2 en M3 daar) nog niet. |
-| Service worker | `app/static/sw.js`: `push`, `notificationclick`, `periodicsync` | Zonder data toont hij "You have a reminder" (tag `dg-window-reminder`). Met data toont hij `title`/`body` uit de payload. `periodicsync` stuurt alleen een bericht naar open vensters. |
-| Lokale herinneringen (agenda) | `app/static/js/agenda-local-reminders.js`: `dueReminders`, `createPlanner`, `showNotification`; `TICK_MS = 15000`, `MISSED_WINDOW_MS` 24 uur | Draait in de tab, zonder netwerk; klokt elke 15 s; "al getoond" in `localStorage` als hash onder een Web Lock zodat één tab het toont; gemiste (< 24 uur) als "Missed" bij openen. `dueReminders` slaat `agenda_task` expliciet over. |
+| Service worker | `app/static/sw.js`: `push`, `notificationclick`, `periodicsync` | Zonder data toont hij "You have a reminder" (tag `dg-window-reminder`). Met data toont hij `title`/`body` uit de payload. Een push voor een herinnering die een tab al toonde, vervangt die melding stil (§4). `periodicsync` stuurt alleen een bericht naar open vensters. |
+| Lokale herinneringen (agenda) | `app/static/js/agenda-local-reminders.js`: `dueReminders`, `createPlanner`, `showNotification`; `TICK_MS = 15000`, `MISSED_WINDOW_MS` 24 uur | Draait in de tab, zonder netwerk; klokt elke 15 s; "al getoond" in `localStorage` als hash onder een Web Lock zodat één tab het toont; gemiste (< 24 uur) als "Missed" bij openen. `dueReminders` slaat `agenda_task` over; taken (`dueTaskReminders`) en notities (`dueNoteReminders`) vuren in dezelfde planner op de exacte minuut. Ontdubbeling met push: §4. |
 | Notitie-herinnering | `app/static/js/app.js`: `noteReminderPayload`, `queueReminderOp`, `applyReminderOp`, `cancelNoteReminder`; veld `content.warn_at`; `app/app.py` `/api/reminders` (`api_reminders_list`, `api_reminders_upsert`); `app/db.py` tabel `note_reminders`; `app/warning_cron.py` | **Bestaat al**, met exacte tijd in klare vorm op de server (zie §3). De matrix zegt "ontbreekt"; correcter is: "bestaat, server-getimed, Pro, niet privé genoeg". |
 | Taken in de agenda | `app/static/js/agenda-tasks.js`: `buildTask`, `normalizeTask`, `placeTasks`, `formatDue`, `accessibleName`; `app/static/js/store.js`: `listAgendaTasks`, `upsertAgendaTask`; renderen in `app/static/js/agenda.js` | Elke taak is een eigen versleuteld item `type: 'agenda_task'` met `due` (YYYY-MM-DD), `due_time`, `done_at`, `note_uuid`, `rrule`, `reminder: null`. **Het veld `reminder` is gereserveerd maar niets leest het**; taken hebben dus geen herinnering. |
 
@@ -168,9 +168,22 @@ voor notities en taken (uitbreiding van `dueReminders`, nu `agenda_task` explici
   hem toont.
 - De melding gebruikt `tag = rid` in `showNotification` en `new Notification`, zodat een tweede melding met
   dezelfde tag de eerste vervangt in plaats van erbij te komen.
-- Komt de push binnen terwijl een tab de herinnering al getoond heeft, dan vraagt de service worker de open
-  vensters (`clients.matchAll`) en onderdrukt de push als een venster `rid` al als getoond heeft gemeld
-  (bericht van de tab naar de worker). Is er geen venster open, dan toont de push.
+- Komt de push binnen nadat een tab de herinnering al getoond heeft, dan geeft de service worker geen
+  tweede melding. Gebouwd (M5) met IndexedDB `deeperguard-reminder-dedup` in plaats van een bericht
+  naar open vensters, zodat het ook werkt als de tab intussen dicht is. De planner
+  (`agenda-local-reminders.js`) schrijft daar alleen wat de server al kent: het push-`id` van een
+  getoonde afspraak-herinnering, en voor taken en notities per venster het willekeurige `rid`, het begin
+  van het venster en of alle herinneringen van dat venster lokaal getoond zijn. Geen titels.
+  - Agenda-push: de payload heeft `reminder_id`; staat dat id in de lijst, dan is het dezelfde herinnering.
+  - Lege venster-push: die heeft geen id. De worker behandelt hem alleen als getoond als de lijst van de
+    tab alle vensters dekt waar hij bij kan horen (begin tot 2 uur terug, 5 minuten vooruit), er minstens
+    één is, en elk daarvan volledig lokaal getoond is. Twee items in één venster waarvan één nog niet
+    getoond is, of een ouder venster dat niet getoond is: dan de gewone melding.
+  - Ook dan roept de worker `showNotification` aan (R3): staat de lokale melding er nog, dan toont hij
+    die opnieuw met dezelfde `tag` en `silent: true` (vervangt hem op zijn plaats); is hij al weggeklikt,
+    dan toont hij een stille melding en sluit die meteen.
+  - Komt de push vóór de exacte tijd (het venster begint eerder), dan blijven er twee meldingen: eerst
+    de generieke, daarna de lokale.
 - Over apparaten heen: elk apparaat toont zijn eigen melding; dat is gewenst (telefoon en laptop). Een
   gesloten of afgevinkte taak intrekt het `rid` op de server en wist het lokale bericht.
 

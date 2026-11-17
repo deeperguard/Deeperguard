@@ -537,31 +537,130 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-self.addEventListener('push', (event) => {
-  if (!event.data) {
+// ---- reminders already shown by an open tab (agenda-local-reminders.js writes this store) ----
+const REMINDER_DEDUP_DB = 'deeperguard-reminder-dedup';
+const REMINDER_DEDUP_STORE = 'state';
+/** An empty window push may be for any window that started up to this long ago (or a little ahead, clock skew). */
+const WINDOW_PUSH_BACK_MS = 2 * 3600 * 1000;
+const WINDOW_PUSH_SKEW_MS = 5 * 60 * 1000;
+const ALREADY_SHOWN_TAG = 'dg-reminder-already-shown';
+
+function readReminderDedup(key) {
+  return new Promise((resolve) => {
+    let req;
+    try {
+      req = indexedDB.open(REMINDER_DEDUP_DB, 1);
+    } catch (err) {
+      resolve(null);
+      return;
+    }
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(REMINDER_DEDUP_STORE)) req.result.createObjectStore(REMINDER_DEDUP_STORE);
+    };
+    req.onerror = () => resolve(null);
+    req.onsuccess = () => {
+      const db = req.result;
+      try {
+        const get = db.transaction(REMINDER_DEDUP_STORE, 'readonly').objectStore(REMINDER_DEDUP_STORE).get(key);
+        get.onsuccess = () => { db.close(); resolve(get.result || null); };
+        get.onerror = () => { db.close(); resolve(null); };
+      } catch (err) {
+        db.close();
+        resolve(null);
+      }
+    };
+  });
+}
+
+/**
+ * Tags of the local notifications that already covered this push, or null when the push must show.
+ * - Agenda push: its `reminder_id` was recorded when a tab showed that reminder.
+ * - Empty window push: it carries no id, so it is only treated as shown when the tab's snapshot
+ *   covers every window this push could belong to, at least one such window exists, and every
+ *   reminder of every one of them was shown locally. Anything unknown or partial shows normally.
+ */
+async function locallyShownTags(payload, nowMs) {
+  if (payload) {
+    const id = String(payload.reminder_id || '');
+    if (!id) return null;
+    const ids = await readReminderDedup('ids');
+    const hit = ids && ids[id];
+    return hit && hit.exp > nowMs ? [String(hit.tag || '')] : null;
+  }
+  const snap = await readReminderDedup('windows');
+  if (!snap || !Array.isArray(snap.windows)) return null;
+  const lo = nowMs - WINDOW_PUSH_BACK_MS;
+  const hi = nowMs + WINDOW_PUSH_SKEW_MS;
+  if (!(snap.from <= lo && snap.to >= hi)) return null;
+  const candidates = snap.windows.filter((w) => w && w.start * 1000 >= lo && w.start * 1000 <= hi);
+  if (!candidates.length || !candidates.every((w) => w.shown === true)) return null;
+  return candidates.flatMap((w) => (Array.isArray(w.tags) ? w.tags : []));
+}
+
+/**
+ * Handle a push whose reminder a tab already showed without a second visible notification, while
+ * still calling showNotification (iOS ends a subscription after pushes that show nothing).
+ * The local notification is still there: show it again with the same tag, silently, which
+ * replaces it in place. It was dismissed or shown in-page only: show a silent placeholder and
+ * close it right away.
+ */
+async function showAlreadyShown(tags) {
+  const open = await self.registration.getNotifications().catch(() => []);
+  const same = open.filter((n) => n.tag && tags.includes(n.tag));
+  if (same.length) {
+    const n = same[same.length - 1];
+    await self.registration.showNotification(n.title, {
+      body: n.body,
+      icon: n.icon || '/static/icons/icon-192.png',
+      tag: n.tag,
+      data: n.data,
+      silent: true,
+      renotify: false,
+    });
+    return 'replaced';
+  }
+  await self.registration.showNotification('Deeperguard', {
+    body: 'Reminder already shown',
+    icon: '/static/icons/icon-192.png',
+    tag: ALREADY_SHOWN_TAG,
+    silent: true,
+  });
+  const placeholders = await self.registration.getNotifications({ tag: ALREADY_SHOWN_TAG }).catch(() => []);
+  placeholders.forEach((n) => n.close());
+  return 'closed';
+}
+
+async function handleReminderPush(data, nowMs) {
+  let payload = null;
+  if (data) {
+    payload = { title: 'Deeperguard', body: 'You have an upcoming event', url: '/app' };
+    try {
+      payload = { ...payload, ...data.json() };
+    } catch (err) { /* use defaults */ }
+  }
+  const tags = await locallyShownTags(payload, nowMs).catch(() => null);
+  if (tags) return showAlreadyShown(tags);
+  if (!payload) {
     // Opt-in window reminder: the push is empty on purpose. Always show something (iOS drops
     // subscriptions after silent pushes). Per-reminder local text is a later milestone (M3).
-    event.waitUntil(
-      self.registration.showNotification('Deeperguard', {
-        body: 'You have a reminder',
-        icon: '/static/icons/icon-192.png',
-        tag: 'dg-window-reminder',
-        data: { url: '/app#due-reminder', openDueReminder: true },
-      }),
-    );
-    return;
-  }
-  let payload = { title: 'Deeperguard', body: 'You have an upcoming event', url: '/app' };
-  try {
-    payload = { ...payload, ...event.data.json() };
-  } catch (err) { /* use defaults */ }
-  event.waitUntil(
-    self.registration.showNotification(payload.title || 'Deeperguard', {
-      body: payload.body || 'You have an upcoming event',
+    await self.registration.showNotification('Deeperguard', {
+      body: 'You have a reminder',
       icon: '/static/icons/icon-192.png',
-      data: { url: payload.url || '/app', reminder_id: payload.reminder_id || '' },
-    }),
-  );
+      tag: 'dg-window-reminder',
+      data: { url: '/app#due-reminder', openDueReminder: true },
+    });
+    return 'window';
+  }
+  await self.registration.showNotification(payload.title || 'Deeperguard', {
+    body: payload.body || 'You have an upcoming event',
+    icon: '/static/icons/icon-192.png',
+    data: { url: payload.url || '/app', reminder_id: payload.reminder_id || '' },
+  });
+  return 'agenda';
+}
+
+self.addEventListener('push', (event) => {
+  event.waitUntil(handleReminderPush(event.data, Date.now()));
 });
 
 self.addEventListener('notificationclick', (event) => {
