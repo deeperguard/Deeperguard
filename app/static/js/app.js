@@ -667,11 +667,14 @@
 
   function applyNavRail() {
     document.body.classList.toggle('nav-pinned', !!prefs.navPinned);
-    const pin = document.getElementById('btn-nav-pin');
-    if (pin) {
-      pin.setAttribute('aria-pressed', prefs.navPinned ? 'true' : 'false');
-      pin.title = prefs.navPinned ? 'Collapse sidebar' : 'Pin sidebar';
-    }
+    const text = prefs.navPinned ? 'Collapse sidebar' : 'Expand sidebar';
+    document.querySelectorAll('[data-nav-toggle]').forEach((btn) => {
+      btn.setAttribute('aria-expanded', prefs.navPinned ? 'true' : 'false');
+      btn.setAttribute('aria-label', text);
+      btn.title = text;
+      const label = btn.querySelector('[data-nav-toggle-label]');
+      if (label) label.textContent = text;
+    });
     if (prefs.navPinned) setNavViewsOpen(false);
   }
   applyTheme();
@@ -22160,7 +22163,8 @@ async function showSettings() {
       setNavViewsOpen(false);
     }
   });
-  document.getElementById('btn-nav-pin')?.addEventListener('click', () => {
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest?.('[data-nav-toggle]')) return;
     prefs.navPinned = !prefs.navPinned;
     savePrefs();
     applyNavRail();
