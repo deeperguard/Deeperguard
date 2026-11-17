@@ -114,10 +114,14 @@ def test_subscription_name_everywhere(page):
     page.click("#agenda-edit-cancel")
     page.keyboard.press("Escape")
 
-    legend = page.locator(".agenda-legend li", has_text="Team Rooster")
-    assert "Subscribed" in legend.inner_text()
-    assert legend.locator("input").count() == 0
-    assert page.locator(".agenda-legend li", has_text="Werk").locator("input").count() == 1
+    assert page.locator(".agenda-legend").count() == 0
+    page.locator("#agenda-calendar-settings-btn:visible").first.click()
+    page.wait_for_selector("#agenda-calendar-settings:not([hidden])", timeout=30_000)
+    sub_row = page.locator("#agenda-calendars-subs li", has_text="Team Rooster")
+    assert "Subscribed · read-only" in sub_row.inner_text()
+    assert sub_row.locator("input").count() == 0
+    assert page.locator("#agenda-calendars-list li", has_text="Werk").locator("input").count() == 1
+    page.click("#agenda-calendar-settings-close")
 
     # Rename through the real UI (prompt dialog): no reload, no manual render().
     def rename(name):
@@ -130,8 +134,49 @@ def test_subscription_name_everywhere(page):
 
     rename("Nieuw rooster")
     assert "Nieuw rooster" in page.locator(".agenda-list-row", has_text="Rooster dienst").inner_text()
-    assert page.locator(".agenda-legend li", has_text="Nieuw rooster").count() == 1
     rename(HOSTILE)
-    assert HOSTILE in page.locator(".agenda-legend").inner_text()
-    assert page.locator(".agenda-body img, .agenda-legend img").count() == 0
+    page.locator("#agenda-calendar-settings-btn:visible").first.click()
+    page.wait_for_selector("#agenda-calendar-settings:not([hidden])", timeout=30_000)
+    assert HOSTILE in page.locator("#agenda-calendars-subs").inner_text()
+    assert "Nieuw rooster" not in page.locator("#agenda-calendars-subs").inner_text()
+    assert page.locator(".agenda-body img, #agenda-calendar-settings img").count() == 0
+    page.click("#agenda-calendar-settings-close")
     assert dialogs == []
+
+
+def test_calendar_toggle_in_settings_hides_events(page):
+    page.evaluate("""() => {
+      const id = NotesAgendaCalendars.createCalendar('Spoor', 'red');
+      const start = new Date();
+      start.setHours(14, 0, 0, 0);
+      NotesStore.upsertAgendaEvent('33333333-3333-4333-8333-333333333333', {
+        title: 'Spoorwerk', start: start.toISOString(), all_day: false, calendarId: id,
+        end: new Date(start.getTime() + 3600000).toISOString() });
+    }""")
+    _view(page, "week")
+    assert page.locator(".agenda-legend").count() == 0
+    chips = page.locator(".agenda-event-chip", has_text="Spoorwerk")
+    assert chips.count() == 1
+    page.locator("#agenda-calendar-settings-btn:visible").first.click()
+    page.wait_for_selector("#agenda-calendar-settings:not([hidden])", timeout=30_000)
+    heading = page.locator("#agenda-calendars-heading")
+    assert heading.text_content() == "Calendars"
+    toggle = page.get_by_role("checkbox", name="Show Spoor")
+    toggle.focus()
+    page.keyboard.press("Space")  # keyboard operation, panel stays open
+    assert page.locator("#agenda-calendar-settings:not([hidden])").count() == 1
+    page.wait_for_function(
+        "() => ![...document.querySelectorAll('.agenda-event-chip')].some(c => c.textContent.includes('Spoorwerk'))")
+    assert page.get_by_role("checkbox", name="Show Spoor").is_checked() is False
+    assert page.evaluate(
+        "() => NotesAgendaCalendars.listCalendars().find(c => c.name === 'Spoor').visible") is False
+    page.get_by_role("checkbox", name="Show Spoor").focus()
+    page.keyboard.press("Space")
+    page.wait_for_function(
+        "() => [...document.querySelectorAll('.agenda-event-chip')].some(c => c.textContent.includes('Spoorwerk'))")
+    assert page.get_by_role("checkbox", name="Show Spoor").is_checked() is True
+    page.click("#agenda-calendar-settings-close")
+    page.set_viewport_size({"width": 390, "height": 800})
+    page.evaluate("() => NotesAgenda.render()")
+    assert page.locator(".agenda-legend").count() == 0
+    page.set_viewport_size({"width": 1280, "height": 800})

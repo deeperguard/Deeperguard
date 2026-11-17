@@ -1,4 +1,4 @@
-// Assigning events to a calendar, hiding/showing calendars (legend + settings share one flag),
+// Assigning events to a calendar, hiding/showing calendars,
 // and reminders of events in a hidden calendar. Behaviour only: real store, real modules.
 const assert = require('assert');
 const path = require('path');
@@ -32,7 +32,6 @@ const ev = (id) => NotesStore.listAgendaEvents().find((e) => e.id === id);
 
   // --- hide and show: same data back ------------------------------------------------------
   const before = JSON.stringify(ev('e-work'));
-  assert.ok(Cals.legendHtml().includes(`data-agenda-legend="${work}" checked`));
   assert.ok(Cals.setCalendarVisible(work, false));
   assert.strictEqual(Cals.lastUsedCalendarId(NotesStore.listAgendaEvents()), '',
     'a hidden calendar is not the default for a new event');
@@ -44,9 +43,8 @@ const ev = (id) => NotesStore.listAgendaEvents().find((e) => e.id === id);
   const shown = NotesStore.listAgendaEvents().filter((e) => Cals.isEventVisible(e, map)).map((e) => e.id);
   assert.deepStrictEqual(shown, ['e-def'], 'events of the hidden calendar are not drawn');
   assert.ok(ev('e-work'), 'hidden events are not deleted');
-  const legend = Cals.legendHtml();
-  assert.ok(!legend.includes(`data-agenda-legend="${work}" checked`) && legend.includes(', hidden</span>'),
-    'legend shows hidden state in text too');
+  const hiddenRow = Cals.renderHtml();
+  assert.ok(hiddenRow.includes(', hidden</span>'), 'settings list shows hidden state in text too');
   Cals.setCalendarVisible(work, false);
   assert.strictEqual(Cals.calendarMap().get(work).visible, false, 'hiding twice stays hidden');
   assert.ok(Cals.setCalendarVisible(work, true));

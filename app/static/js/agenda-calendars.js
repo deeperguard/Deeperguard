@@ -1,5 +1,5 @@
 /**
- * Deeperguard Agenda — "My calendars" list in the calendar settings panel
+ * Deeperguard Agenda — "Calendars" list in the calendar settings panel
  * (docs/design/calendar-multi.md §1, milestone M2).
  *
  * Create, rename, recolor, show/hide and delete calendars. Colors come from a fixed palette of
@@ -122,32 +122,27 @@
     return bestId;
   }
 
-  /** Legend + filter bar: one native checkbox per calendar, same visibility flag as the settings. */
-  function legendHtml() {
-    const cals = listCalendars();
-    if (!cals.length) return '';
-    const subs = listSubscriptionCalendars().map((c) => {
+  /**
+   * Read-only rows for the URL subscriptions in the Calendars section of the settings panel.
+   * Subscriptions have no on/off control: they are shown and removed from their own list below.
+   */
+  function subscriptionRowsHtml() {
+    return listSubscriptionCalendars().map((c) => {
       const p = paletteEntry(c.color);
       return (
-        '<li><span class="agenda-legend-item agenda-legend-sub">'
-        + `<span class="agenda-legend-swatch" data-agenda-cal-color="${esc(p.key)}" style="background:${p.bg}" aria-hidden="true"></span>`
-        + `<span class="agenda-legend-name">${esc(c.name || 'Agenda')}</span>`
-        + '<span class="agenda-legend-badge">Subscribed · read-only</span>'
-        + '</span></li>'
+        '<li class="agenda-cal-row agenda-cal-row-sub"><div class="agenda-cal-row-main">'
+        + '<span class="agenda-cal-toggle">'
+        + `<span class="agenda-cal-dot" data-agenda-cal-color="${esc(p.key)}" style="background:${p.bg}" aria-hidden="true"></span>`
+        + `<span class="agenda-cal-name">${esc(c.name || 'Agenda')}</span></span>`
+        + '<span class="agenda-cal-badge">Subscribed · read-only</span>'
+        + '</div></li>'
       );
     }).join('');
-    const items = cals.map((c) => {
-      const p = paletteEntry(c.color);
-      return (
-        `<li><label class="agenda-legend-item${c.visible === false ? ' is-hidden' : ''}">`
-        + `<input type="checkbox" data-agenda-legend="${esc(c.id)}"${c.visible === false ? '' : ' checked'}>`
-        + `<span class="agenda-legend-swatch" data-agenda-cal-color="${esc(p.key)}" style="background:${p.bg}" aria-hidden="true"></span>`
-        + `<span class="agenda-legend-name">${esc(c.name || 'Agenda')}</span>`
-        + `${c.visible === false ? '<span class="sr-only">, hidden</span>' : ''}`
-        + '</label></li>'
-      );
-    }).join('') + subs;
-    return `<ul class="agenda-legend" aria-label="Calendars shown">${items}</ul>`;
+  }
+
+  function renderSubscriptions() {
+    const el = typeof document !== 'undefined' ? document.getElementById('agenda-calendars-subs') : null;
+    if (el) el.innerHTML = subscriptionRowsHtml();
   }
 
   function eventCounts() {
@@ -381,6 +376,7 @@
     const el = root();
     if (!el) return;
     el.innerHTML = renderHtml();
+    renderSubscriptions();
     if (focusSelector) {
       const target = el.querySelector(focusSelector);
       if (target) target.focus();
@@ -504,7 +500,7 @@
     isEventVisible,
     labelHtml,
     lastUsedCalendarId,
-    legendHtml,
+    renderSubscriptions,
     createCalendar,
     renameCalendar,
     setCalendarColor,
