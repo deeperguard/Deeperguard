@@ -262,6 +262,18 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("agenda two devices ok", proc.stdout)
 
+    def test_agenda_push_device_button_contract(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_agenda_push_device_button.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("agenda push device button: ok", proc.stdout)
+
     def test_sync_agenda_safety_contract(self):
         proc = subprocess.run(
             ["node", str(REPO / "tests" / "test_sync_agenda_safety.js")],
