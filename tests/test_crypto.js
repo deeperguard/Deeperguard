@@ -16,6 +16,9 @@ const NotesCrypto = require(path.join(jsRoot, 'crypto.js'));
 // the worker must load the vendor files itself through importScripts, as in
 // the browser. (A vm.createContext sandbox made Argon2 about 30x slower,
 // because every global lookup goes through the context's interceptors.)
+// Timers are not stubbed: setInterval/clearInterval are the real worker-thread
+// timers, which crypto-worker.js uses for its progress ticks (every 700 ms
+// during deriveKey). The earlier vm sandbox stubbed them as no-ops instead.
 const WORKER_HOST = `
 const { parentPort, workerData } = require('worker_threads');
 const fs = require('fs');

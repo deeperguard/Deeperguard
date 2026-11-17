@@ -1985,7 +1985,9 @@ class NotesAppTests(unittest.TestCase):
         self._run_node_script("test_unlock_worker_watchdog.js")
 
     def test_client_crypto_bytes(self):
-        # Two production-parameter Argon2 derivations (main thread + worker thread), ~8s idle.
+        # Two production-parameter Argon2 derivations (main thread + worker thread).
+        # Measured on an 8-core box: ~6.5s idle, 26-32s with 16 busy CPU loops
+        # (2x cores), 56-59s with 32 (4x cores). The 120s default covers up to ~4x overload.
         self._run_node_script("test_crypto.js")
 
     def test_client_attachment_encryption(self):
