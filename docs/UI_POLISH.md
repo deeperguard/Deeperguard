@@ -916,9 +916,14 @@ Status (task 1b, shell frame): Agenda and 2FA use the same left column as
 Notes at 1000px and wider (same `--sn-nav-width`, background and border). It
 holds `#agenda-calendar-settings-btn` (Agenda) and, as a footer group,
 `#btn-totp-lock`, `#btn-totp-settings` (2FA) as icon + label rows;
-`#btn-totp-add` and `#btn-totp-import` sit right in the 2FA content header; the labels collapse to icons while the sidebar is not pinned. The
-active tab carries `aria-current="page"`. Below 1000px the controls stay where
-they were. `tests/e2e_app_frame.py` measures this.
+`#btn-totp-add` and `#btn-totp-import` sit right in the 2FA content header;
+the labels collapse to icons while the sidebar is not pinned. The active tab
+carries `aria-current="page"`. Below 1000px the Notes and 2FA controls stay
+where they were. Agenda between 769px and 999px is the exception: the phone
+layout ends at 768px (`isAgendaPhoneLayout()`), so the calendar menu button is
+drawn as its own row above the agenda header, because the sidebar grid
+(`.agenda-root:not(.agenda-root--phone)`) only applies from 1000px.
+`tests/e2e_app_frame.py` measures this.
 
 ### 7.2 Every existing control and where it goes
 
@@ -1102,7 +1107,7 @@ openers and control that offer the action instead).
 | `#agenda-reminder-enable-push` | Enable push on this device | Calendar menu | Unchanged | agenda | conditional: push not enabled yet |
 | `#btn-totp-add` | Add account | 2FA header | Content header, right (primary) | 2fa | visible |
 | `#btn-totp-import` | Import accounts | 2FA header | Content header, right | 2fa | visible |
-| `#btn-totp-lock` | Lock vault | 2FA header | Sidebar: footer group (same Lock as Notes) | 2fa | visible |
+| `#btn-totp-lock` | Lock vault | 2FA header | Sidebar: footer group (own button, same lockVault action as Notes `#btn-lock-nav`) | 2fa | visible |
 | `#btn-totp-settings` | Settings | 2FA header | Sidebar: footer group (same Settings as Notes) | 2fa | visible |
 | `#totp-search` | Search accounts (…) | 2FA header | Content header, full width | 2fa | visible |
 | `[data-totp-copy]` | Copy code for <account> | 2FA account row | Unchanged | 2fa | visible |
