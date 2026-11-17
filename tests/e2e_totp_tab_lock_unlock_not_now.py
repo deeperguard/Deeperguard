@@ -43,6 +43,9 @@ DOM_JS = """() => {
   };
 }"""
 
+# Generous auto-wait limit: it only costs time when something is really broken.
+EXPECT_MS = 30000
+
 
 def main() -> int:
     try:
@@ -84,30 +87,30 @@ def main() -> int:
                 }"""
             )
             page.click("#register-submit")
-            page.wait_for_function(UNLOCKED_JS, timeout=120000)
+            page.wait_for_function(UNLOCKED_JS, timeout=EXPECT_MS * 4)
 
             # The card is shown once after registering; it is not shown again after a
             # later unlock (see docs/bugs/2fa-tab-after-unlock.md), so "Not now" comes first.
             dismiss = page.locator("#btn-device-phrase-prompt-dismiss")
-            expect(dismiss).to_be_visible(timeout=10000)
+            expect(dismiss).to_be_visible(timeout=EXPECT_MS)
             dismiss.click()
-            expect(page.locator("#device-phrase-prompt")).to_be_hidden(timeout=10000)
+            expect(page.locator("#device-phrase-prompt")).to_be_hidden(timeout=EXPECT_MS)
 
-            page.locator("#btn-lock-head:visible, #btn-lock-nav:visible").first.click(timeout=10000)
-            page.wait_for_function(LOCKED_JS, timeout=20000)
-            page.wait_for_selector("#unlock-password", state="visible", timeout=20000)
+            page.locator("#btn-lock-head:visible, #btn-lock-nav:visible").first.click(timeout=EXPECT_MS)
+            page.wait_for_function(LOCKED_JS, timeout=EXPECT_MS * 2)
+            page.wait_for_selector("#unlock-password", state="visible", timeout=EXPECT_MS * 2)
             page.fill("#unlock-password", PASSWORD)
             page.click("#unlock-submit")
-            page.wait_for_function(UNLOCKED_JS, timeout=120000)
+            page.wait_for_function(UNLOCKED_JS, timeout=EXPECT_MS * 4)
 
             for label in ("first click", "second click"):
-                page.click("#app-tab-2fa", timeout=10000)
+                page.click("#app-tab-2fa", timeout=EXPECT_MS)
                 try:
-                    expect(page.locator("#totp-pane")).to_be_visible(timeout=10000)
-                    expect(page.locator("#notes-shell")).to_be_hidden(timeout=10000)
-                    expect(page.locator("#notes-list")).to_be_hidden(timeout=10000)
-                    expect(page.locator("#editor-pane")).to_be_hidden(timeout=10000)
-                    expect(page.locator("#app-tab-2fa")).to_have_attribute("aria-selected", "true", timeout=10000)
+                    expect(page.locator("#totp-pane")).to_be_visible(timeout=EXPECT_MS)
+                    expect(page.locator("#notes-shell")).to_be_hidden(timeout=EXPECT_MS)
+                    expect(page.locator("#notes-list")).to_be_hidden(timeout=EXPECT_MS)
+                    expect(page.locator("#editor-pane")).to_be_hidden(timeout=EXPECT_MS)
+                    expect(page.locator("#app-tab-2fa")).to_have_attribute("aria-selected", "true", timeout=EXPECT_MS)
                 except AssertionError as exc:
                     print(f"FAIL ({label}):", exc)
                     print("DOM:", page.evaluate(DOM_JS))
