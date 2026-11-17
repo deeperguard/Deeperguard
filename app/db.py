@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -13,6 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
+import vault_keys
 from config import DATA_DIR
 
 _lock = threading.Lock()
@@ -282,6 +284,16 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
     ):
         if col not in cols:
             conn.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS vault_recovery_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL,
+            created_at REAL NOT NULL
+        )
+        """
+    )
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS vault_recovery_wraps (
@@ -1582,6 +1594,137 @@ def put_recovery_wrap(
         )
         row = conn.execute("SELECT vault_key_rev FROM users WHERE id = ?", (uid,)).fetchone()
         return "ok", int(row["vault_key_rev"]), key_id
+
+
+def get_recovery_start(user_id: int) -> tuple[str, dict]:
+    """Wrap material for recover/start. Status "ok", "locked" (data has retry_after),
+    "no_recovery_key" or "not_found". Does not count as a failed attempt."""
+    conn = connection()
+    user = conn.execute(
+        "SELECT vault_key_rev, recovery_locked_until FROM users WHERE id = ?", (int(user_id),),
+    ).fetchone()
+    if not user:
+        return "not_found", {}
+    wait = float(user["recovery_locked_until"] or 0) - now()
+    if wait > 0:
+        return "locked", {"retry_after": int(wait) + 1}
+    row = conn.execute(
+        "SELECT key_id, wrap_version, recovery_salt, wrap FROM vault_recovery_wraps WHERE user_id = ?",
+        (int(user_id),),
+    ).fetchone()
+    if not row:
+        return "no_recovery_key", {}
+    return "ok", {
+        "key_id": str(row["key_id"]),
+        "key_rev": int(user["vault_key_rev"]),
+        "wrap_version": int(row["wrap_version"]),
+        "recovery_salt": str(row["recovery_salt"]),
+        "wrap": json.loads(row["wrap"]),
+    }
+
+
+def commit_vault_recovery(
+    user_id: int,
+    *,
+    proof: str,
+    expected_key_rev: int,
+    from_key_id: str,
+    to_key_id: str,
+    srp_salt: str,
+    srp_verifier: str,
+    recovery_salt: str,
+    wrap_json: str,
+    wrap_version: int,
+    proof_hash: str,
+    keep_session_token: str = "",
+) -> tuple[str, dict]:
+    """Recovery commit of VAULT_RECOVERY 3.2 step 7 in ONE transaction.
+
+    New SRP verifier, new key id, replaced recovery row, the "recovery key used" event
+    and the revocation of all other sessions are written together or not at all.
+    A wrong proof only counts a failure (3.3). Status: "ok", "locked", "bad_proof",
+    "no_recovery_key", "key_rev_mismatch", "key_id_mismatch" or "not_found".
+    """
+    uid = int(user_id)
+    ts = now()
+    with tx() as conn:
+        user = conn.execute(
+            """
+            SELECT vault_key_id, vault_key_rev, recovery_failed_count, recovery_locked_until,
+                   recovery_lock_level
+            FROM users WHERE id = ?
+            """,
+            (uid,),
+        ).fetchone()
+        if not user:
+            return "not_found", {}
+        wait = float(user["recovery_locked_until"] or 0) - ts
+        if wait > 0:
+            return "locked", {"retry_after": int(wait) + 1}
+        old = conn.execute(
+            "SELECT proof_hash FROM vault_recovery_wraps WHERE user_id = ?", (uid,),
+        ).fetchone()
+        if not old:
+            return "no_recovery_key", {}
+        given = hashlib.sha256(bytes.fromhex(proof)).hexdigest()
+        if not hmac.compare_digest(given, str(old["proof_hash"])):
+            failed = int(user["recovery_failed_count"]) + 1
+            if failed >= vault_keys.RECOVERY_MAX_FAILED:
+                level = int(user["recovery_lock_level"])
+                wait = vault_keys.lock_seconds(level)
+                conn.execute(
+                    """
+                    UPDATE users SET recovery_failed_count = 0, recovery_lock_level = ?,
+                        recovery_locked_until = ? WHERE id = ?
+                    """,
+                    (level + 1, ts + wait, uid),
+                )
+                return "bad_proof", {"locked_now": True, "retry_after": wait}
+            conn.execute("UPDATE users SET recovery_failed_count = ? WHERE id = ?", (failed, uid))
+            return "bad_proof", {"locked_now": False}
+        if int(user["vault_key_rev"]) != int(expected_key_rev):
+            code, rev, kid = _vault_keys_conflict(conn, uid, int(expected_key_rev))
+            return code, {"key_rev": rev, "key_id": kid}
+        if str(user["vault_key_id"]) != from_key_id:
+            return "key_id_mismatch", {
+                "key_rev": int(user["vault_key_rev"]), "key_id": str(user["vault_key_id"]),
+            }
+        conn.execute(
+            """
+            UPDATE users
+            SET auth_method = 'srp', srp_salt = ?, srp_verifier = ?, srp_kdf_version = 2,
+                password_hash = '', updated_at = ?, password_changed_at = ?, auth_security_at = ?,
+                vault_key_id = ?, vault_key_rev = vault_key_rev + 1,
+                recovery_failed_count = 0, recovery_locked_until = 0, recovery_lock_level = 0
+            WHERE id = ?
+            """,
+            (srp_salt, srp_verifier, ts, ts, ts, to_key_id, uid),
+        )
+        conn.execute(
+            """
+            UPDATE vault_recovery_wraps
+            SET key_id = ?, wrap_version = ?, recovery_salt = ?, wrap = ?, proof_hash = ?,
+                created_at = ?, last_used_at = 0
+            WHERE user_id = ?
+            """,
+            (to_key_id, wrap_version, recovery_salt, wrap_json, proof_hash, ts, uid),
+        )
+        conn.execute(
+            "INSERT INTO vault_recovery_events (user_id, kind, created_at) VALUES (?, 'recovery_key_used', ?)",
+            (uid, ts),
+        )
+        keep_hash = _session_token_hash(keep_session_token) if keep_session_token else ""
+        conn.execute(
+            """
+            UPDATE user_sessions SET revoked_at = ?, revoke_reason = 'vault-recovery'
+            WHERE user_id = ? AND revoked_at = 0 AND token_hash != ?
+            """,
+            (ts, uid, keep_hash),
+        )
+        return "ok", {
+            "key_rev": int(user["vault_key_rev"]) + 1, "key_id": to_key_id,
+            "password_changed_at": ts, "auth_security_at": ts,
+        }
 
 
 def delete_recovery_wrap(user_id: int, *, expected_key_rev: int) -> tuple[str, int, str]:
