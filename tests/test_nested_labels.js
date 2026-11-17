@@ -102,6 +102,9 @@ const apply = (map, updates) => updates.forEach((u) => map.set(u.uuid, u.content
   assert.strictEqual(NotesStore.get(old).content.color, '#abcdef');
   assert.strictEqual(NotesStore.migrateLabels(), 0, 'idempotent in the store too');
   assert.deepStrictEqual(NotesStore.get(noteId).content.tags, [old, alpha, proj], 'note references untouched');
+  const withLabel = (id) => NotesStore.listNotes().filter((n) => (n.content.tags || []).includes(id)).map((n) => n.uuid);
+  assert.deepStrictEqual(withLabel(old), [noteId], 'migrated label still has its note');
+  assert.ok(NotesStore.listTags().some((t) => t.uuid === old && t.content.title === 'Legacy'), 'migrated label still listed');
 
   // delete a parent: children move up (default)
   NotesStore.deleteTag(proj);
