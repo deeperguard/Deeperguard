@@ -1,6 +1,6 @@
 """E2E: no horizontal page scroll on Notes (plain, PDF), Agenda and 2FA.
 
-For every screen and every width in WIDTHS, document.documentElement and
+For every screen and every viewport in VIEWPORTS, document.documentElement and
 document.body must not be wider than the window. On failure the elements that
 stick out past the viewport are listed. 390 runs at 390x844 (phone).
 
@@ -23,9 +23,17 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 import e2e_layout_actions as base  # noqa: E402
 
-WIDTHS = (1280, 1440, 1920, 820, 390)
 HEIGHT = 900
 PHONE_HEIGHT = 844  # 390x844, the phone viewport of the screenshot suite
+
+# width -> viewport height, checked in this order.
+VIEWPORTS = {
+    1280: HEIGHT,
+    1440: HEIGHT,
+    1920: HEIGHT,
+    820: HEIGHT,
+    390: PHONE_HEIGHT,
+}
 
 MEASURE_JS = """() => {
   const vw = window.innerWidth;
@@ -88,8 +96,8 @@ def main() -> int:
         with sync_playwright() as pw:
             browser, page, _ids = base.boot(pw, url)
             base.seed_totp(page)
-            for width in WIDTHS:
-                page.set_viewport_size({"width": width, "height": PHONE_HEIGHT if width < 700 else HEIGHT})
+            for width, height in VIEWPORTS.items():
+                page.set_viewport_size({"width": width, "height": height})
                 page.wait_for_timeout(300)
                 for name, go in screens(page):
                     go()
