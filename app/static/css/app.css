@@ -4356,7 +4356,12 @@ body.app-updating #btn-refresh-app .app-update-spinner {
 .folder-list { display: flex; flex-direction: column; gap: 2px; }
 .folder-block.active > .folder-head { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 8px; }
 .folder-head {
-  --folder-strip-w: 180px; /* width of the .folder-head-actions strip that overlays the row's right end */
+  /* Width of the .folder-head-actions strip that overlays the row's right end.
+     Hard-coded, so it must equal the strip's rendered width: buttons + padding-left.
+     Coarse pointers: 32 + 40 + 40 + 44 + 20 = 176px. Fine pointers: see the
+     (hover: hover) block below (28 + 28 + 28 + 32 + 8 = 124px).
+     tests/e2e_folder_click_hit.py checks this for both. */
+  --folder-strip-w: 176px;
   display: flex;
   align-items: center;
   gap: 4px;
