@@ -49,7 +49,6 @@ def page():
         shutil.rmtree(data, ignore_errors=True)
 
 
-
 HOSTILE = "<img src=x onerror=alert(1)>"
 
 
@@ -65,6 +64,11 @@ def _setup(page):
       const base = { start: start.toISOString(), end: new Date(start.getTime() + 3600000).toISOString(), all_day: false };
       S.upsertAgendaEvent('11111111-1111-4111-8111-111111111111', { ...base, title: 'Rooster dienst', subscription_id: sub.id, source: sub.name });
       S.upsertAgendaEvent('22222222-2222-4222-8222-222222222222', { ...base, title: 'Overleg', calendarId: work });
+      const day = new Date();
+      day.setHours(0, 0, 0, 0);
+      S.upsertAgendaEvent('44444444-4444-4444-8444-444444444444', {
+        title: 'Rooster vrij', start: day.toISOString(), end: new Date(day.getTime() + 86400000).toISOString(),
+        all_day: true, subscription_id: sub.id, source: sub.name });
       return sub.id;
     }""")
 
@@ -97,6 +101,11 @@ def test_subscription_name_everywhere(page):
         titles = _chip_titles(page, sel)
         assert any("Rooster dienst" in t and t.endswith("Team Rooster") for t in titles), (view, titles)
         assert any("Overleg" in t and t.endswith("Werk") for t in titles), (view, titles)
+
+    for view in ("week", "day"):
+        _view(page, view)
+        allday = _chip_titles(page, ".agenda-allday-chip")
+        assert any("Rooster vrij" in t and t.endswith("Team Rooster") for t in allday), (view, allday)
 
     _view(page, "agenda")
     row = page.locator(".agenda-list-row", has_text="Rooster dienst")
