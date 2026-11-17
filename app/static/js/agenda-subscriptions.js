@@ -392,6 +392,7 @@
         if (next && next.trim()) {
           S.updateAgendaSubscription(sub.id, { name: next });
           renderList();
+          rerenderAgenda();
         }
       });
       const refreshBtn = btn('Refresh', async () => {
