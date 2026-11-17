@@ -1,6 +1,6 @@
 # Calendar sharing (research — not implemented)
 
-Deeperguard Agenda today stores events in the vault as ciphertext inside the single `agenda_pack` item (`store.js`: one encrypted blob synced like notes). **There is no calendar sharing, webcal subscription, or multi-user ACL in the product today.** ICS import/export is **file handoff**, not live collaboration.
+Deeperguard Agenda today stores events in the vault as ciphertext inside the single `agenda_pack` item (`store.js`: one encrypted blob synced like notes). **There is no calendar sharing or multi-user ACL in the product today.** The one exception is the opt-in read-only webcal feed of a single calendar (see `docs/design/agenda-completion.md`, M7): for that calendar only, the client uploads a readable `.ics` and the server can read it. ICS import/export is **file handoff**, not live collaboration.
 
 ## Goal (if we add E2EE sharing later)
 
@@ -27,7 +27,7 @@ Group key agreement per calendar — stronger membership privacy, more engineeri
 
 ## What this PR does *not* do
 
-- No shared URLs, **webcal**, public feeds, or server-readable schedules.
+- No shared URLs or public feeds beyond the opt-in per-calendar feed above, and no server-readable schedules for any calendar that has no feed.
 - No weakening encryption or plaintext calendar index on the server.
 - **ICS export** is a **plaintext file download** for the user’s own use — not a sharing protocol.
 

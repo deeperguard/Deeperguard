@@ -12202,7 +12202,7 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .agenda-cal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .agenda-cal-row { border-radius: 10px; }
 .agenda-cal-row:focus-within { background: color-mix(in srgb, var(--text) 6%, transparent); }
-.agenda-cal-row-main { display: flex; align-items: center; gap: 4px; min-height: 40px; padding: 2px 4px; }
+.agenda-cal-row-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 40px; padding: 2px 4px; }
 .agenda-cal-toggle {
   display: flex;
   align-items: center;
@@ -12220,7 +12220,8 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .agenda-cal-row.is-hidden .agenda-cal-dot { opacity: .45; }
 .agenda-cal-add { align-self: flex-start; }
 .agenda-cal-form,
-.agenda-cal-delete {
+.agenda-cal-delete,
+.agenda-cal-feed {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -12255,6 +12256,10 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .agenda-cal-delete-choice { display: flex; flex-direction: column; gap: 6px; border: 0; margin: 0; padding: 0; }
 .agenda-cal-delete-choice select { margin-left: 4px; max-width: 12rem; }
 .agenda-cal-form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.agenda-cal-feed-warning { border-inline-start: 3px solid var(--danger, #c0392b); padding-inline-start: 8px; }
+.agenda-cal-feed-error { color: var(--danger, #c0392b); }
+.agenda-cal-feed-url-row { display: flex; gap: 8px; align-items: center; }
+.agenda-cal-feed-url { flex: 1; min-width: 0; }
 
 /* Shared dialog pattern (docs/UI_POLISH.md 4.3): header with title and close
    button, scrolling body, action bar. Applied to #confirm-dialog; other

@@ -640,6 +640,13 @@ def _headers(response):
         session.accessed = False
         session.modified = False
         _drop_set_cookie(response)
+    elif request.path.startswith("/agenda-feed/"):
+        # Token URL for calendar apps: never cached, never tied to a browser session.
+        response.headers["Cache-Control"] = "no-store"
+        response.headers.pop("Pragma", None)
+        session.accessed = False
+        session.modified = False
+        _drop_set_cookie(response)
     elif request.path in {app_entry_path(), "/manifest.json"}:
         # Revalidate when the phone is online; keep a stale copy for offline.
         # must-revalidate: do not paint a previous deploy's HTML while
@@ -1033,6 +1040,101 @@ ICS_RELAY_MAX_BODY = 4096
 
 def _ics_relay_error(code: str):
     return jsonify({"error": code}), ics_relay.STATUS.get(code, 502)
+
+
+# Opt-in webcal feed of one calendar. This is the one place the server holds readable agenda text:
+# the client uploads the .ics of a single calendar the user chose to publish. The URL token is
+# random, only its hash is stored, and deleting the feed revokes the link.
+AGENDA_FEED_CAL_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+AGENDA_FEED_KEYS = {"calendar_id", "ics", "acknowledged"}
+
+
+def _agenda_feed_body(*, need_ics: bool):
+    """Return (calendar_id, ics, error_response) from the JSON body."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or set(body.keys()) - AGENDA_FEED_KEYS:
+        return None, None, (jsonify({"error": "invalid body"}), 400)
+    cal = body.get("calendar_id")
+    if not isinstance(cal, str) or not AGENDA_FEED_CAL_RE.match(cal):
+        return None, None, (jsonify({"error": "invalid calendar"}), 400)
+    ics = body.get("ics")
+    if need_ics:
+        if not isinstance(ics, str) or not ics.startswith("BEGIN:VCALENDAR"):
+            return None, None, (jsonify({"error": "invalid calendar data"}), 400)
+        if len(ics.encode("utf-8")) > db.AGENDA_FEED_MAX_BYTES:
+            return None, None, (jsonify({"error": "calendar too large"}), 413)
+    return cal, ics, None
+
+
+@app.get("/api/agenda/feeds")
+def api_agenda_feeds_list():
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({"feeds": db.list_agenda_feeds(uid)})
+
+
+@app.post("/api/agenda/feeds")
+def api_agenda_feed_create():
+    """Create the feed, or make a new link (which revokes the old one). Needs explicit consent."""
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    if not auth_rate_allow(f"agenda-feed-write:{uid}", limit=60, window=3600.0):
+        return jsonify({"error": "rate limited"}), 429
+    if (request.get_json(silent=True) or {}).get("acknowledged") is not True:
+        return jsonify({"error": "consent required"}), 400
+    cal, ics, err = _agenda_feed_body(need_ics=True)
+    if err:
+        return err
+    token = db.create_agenda_feed(uid, cal, ics)
+    if token is None:
+        return jsonify({"error": "too many feeds"}), 400
+    url = f"{request.url_root.rstrip('/')}/agenda-feed/{token}.ics"
+    return jsonify({"ok": True, "url": url})
+
+
+@app.post("/api/agenda/feeds/update")
+def api_agenda_feed_update():
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    if not auth_rate_allow(f"agenda-feed-write:{uid}", limit=600, window=3600.0):
+        return jsonify({"error": "rate limited"}), 429
+    cal, ics, err = _agenda_feed_body(need_ics=True)
+    if err:
+        return err
+    if not db.update_agenda_feed(uid, cal, ics):
+        return jsonify({"error": "no feed"}), 404
+    return jsonify({"ok": True})
+
+
+@app.post("/api/agenda/feeds/delete")
+def api_agenda_feed_delete():
+    uid = auth.current_user_id()
+    if not uid:
+        return jsonify({"error": "not found"}), 404
+    cal, _ics, err = _agenda_feed_body(need_ics=False)
+    if err:
+        return err
+    return jsonify({"ok": True, "deleted": db.delete_agenda_feed(uid, cal)})
+
+
+@app.get("/agenda-feed/<token>.ics")
+def agenda_feed_public(token: str):
+    """Public, no session: the token in the URL is the only credential."""
+    if not auth_rate_allow(f"agenda-feed-read:{auth.client_ip()}", limit=300, window=3600.0):
+        return make_response("rate limited", 429, {"Content-Type": "text/plain; charset=utf-8"})
+    ics = db.agenda_feed_by_token(token) if re.fullmatch(r"[A-Za-z0-9_-]{20,64}", token) else None
+    if ics is None:
+        return make_response("not found", 404, {"Content-Type": "text/plain; charset=utf-8"})
+    resp = make_response(ics, 200)
+    resp.headers["Content-Type"] = "text/calendar; charset=utf-8"
+    resp.headers["Content-Disposition"] = 'inline; filename="calendar.ics"'
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return resp
 
 
 @app.post("/api/agenda/ics-relay")

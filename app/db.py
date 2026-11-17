@@ -408,6 +408,20 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_push_reminder_windows_due
             ON push_reminder_windows(window_start);
+
+        -- Opt-in webcal feed of ONE calendar (docs/design/agenda-completion.md M7). Unlike every
+        -- other table this holds readable text: the .ics the client uploaded. Only the SHA-256 of
+        -- the secret URL token is stored; deleting the row revokes the link.
+        CREATE TABLE IF NOT EXISTS agenda_feeds (
+            user_id INTEGER NOT NULL,
+            calendar_id TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            ics TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            PRIMARY KEY (user_id, calendar_id),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
         """
     )
     conn.executescript(
@@ -3648,3 +3662,71 @@ def due_push_windows(now_ts: float) -> list[dict[str, Any]]:
         (int(now_ts),),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ---- Opt-in calendar feed (readable by the server on purpose; see agenda_feeds) ----------------
+AGENDA_FEED_CAP = 20
+AGENDA_FEED_MAX_BYTES = 2 * 1024 * 1024
+
+
+def _feed_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_agenda_feed(user_id: int, calendar_id: str, ics: str) -> str | None:
+    """Create or rotate the feed of one calendar. Returns the new token (shown once), or None at the cap.
+
+    Rotating replaces the hash, so the previous URL stops working at once.
+    """
+    token = secrets.token_urlsafe(32)
+    ts = now()
+    with tx() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM agenda_feeds WHERE user_id = ? AND calendar_id = ?", (user_id, calendar_id)
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE agenda_feeds SET token_hash = ?, ics = ?, created_at = ?, updated_at = ? "
+                "WHERE user_id = ? AND calendar_id = ?",
+                (_feed_hash(token), ics, ts, ts, user_id, calendar_id),
+            )
+            return token
+        n = conn.execute("SELECT COUNT(*) FROM agenda_feeds WHERE user_id = ?", (user_id,)).fetchone()[0]
+        if n >= AGENDA_FEED_CAP:
+            return None
+        conn.execute(
+            "INSERT INTO agenda_feeds (user_id, calendar_id, token_hash, ics, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, calendar_id, _feed_hash(token), ics, ts, ts),
+        )
+    return token
+
+
+def update_agenda_feed(user_id: int, calendar_id: str, ics: str) -> bool:
+    with tx() as conn:
+        return conn.execute(
+            "UPDATE agenda_feeds SET ics = ?, updated_at = ? WHERE user_id = ? AND calendar_id = ?",
+            (ics, now(), user_id, calendar_id),
+        ).rowcount > 0
+
+
+def delete_agenda_feed(user_id: int, calendar_id: str) -> bool:
+    with tx() as conn:
+        return conn.execute(
+            "DELETE FROM agenda_feeds WHERE user_id = ? AND calendar_id = ?", (user_id, calendar_id)
+        ).rowcount > 0
+
+
+def list_agenda_feeds(user_id: int) -> list[dict[str, Any]]:
+    rows = connection().execute(
+        "SELECT calendar_id, updated_at FROM agenda_feeds WHERE user_id = ? ORDER BY calendar_id",
+        (user_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def agenda_feed_by_token(token: str) -> str | None:
+    row = connection().execute(
+        "SELECT ics FROM agenda_feeds WHERE token_hash = ?", (_feed_hash(token),)
+    ).fetchone()
+    return row["ics"] if row else None

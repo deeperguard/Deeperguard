@@ -1115,13 +1115,12 @@
     };
   }
 
-  /** Export every event, or only those of one calendar when `calendarId` is given. */
-  function exportAgendaToIcs(calendarId) {
+  /** The .ics of every event, or only those of one calendar; null while events are unavailable. */
+  function buildCalendarIcs(calendarId) {
     const Ics = global.NotesAgendaIcs;
     const S = getStore();
     if (!Ics || typeof Ics.buildIcsCalendarFromEvents !== 'function' || !S || typeof S.listAgendaEvents !== 'function') {
-      if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('Export unavailable', true);
-      return;
+      return null;
     }
     let rows = listAgendaEvents() || [];
     const Cals = global.NotesAgendaCalendars;
@@ -1134,13 +1133,24 @@
         return c && c.id === calendarId;
       });
     }
-    if (!rows.length) {
+    return { text: Ics.buildIcsCalendarFromEvents(flattenEventsForIcsExport(rows)), cal, count: rows.length };
+  }
+
+  /** Export every event, or only those of one calendar when `calendarId` is given. */
+  function exportAgendaToIcs(calendarId) {
+    const built = buildCalendarIcs(calendarId);
+    if (!built) {
+      if (typeof global.notesAgendaToast === 'function') global.notesAgendaToast('Export unavailable', true);
+      return;
+    }
+    const { cal } = built;
+    if (!built.count) {
       if (typeof global.notesAgendaToast === 'function') {
         global.notesAgendaToast(cal ? `No events in ${cal.name} to export` : 'No events to export', true);
       }
       return;
     }
-    const icsText = Ics.buildIcsCalendarFromEvents(flattenEventsForIcsExport(rows));
+    const icsText = built.text;
     const blob = new Blob([icsText], { type: 'text/calendar;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1801,8 +1811,19 @@
     return html;
   }
 
+  let feedSyncTimer = 0;
+  /** Keep opt-in calendar feeds current after edits; a no-op unless a calendar has a feed. */
+  function scheduleFeedSync() {
+    const Cals = global.NotesAgendaCalendars;
+    if (!Cals || typeof Cals.syncFeeds !== 'function') return;
+    Cals.setFeedHost({ buildIcs: (id) => (buildCalendarIcs(id) || {}).text ?? null });
+    clearTimeout(feedSyncTimer);
+    feedSyncTimer = setTimeout(() => { Cals.syncFeeds(); }, 4000);
+  }
+
   function render() {
     if (!rootEl) return;
+    scheduleFeedSync();
     state.calendarMap = global.NotesAgendaCalendars ? global.NotesAgendaCalendars.calendarMap() : null;
     const range = rangeForView();
     const occ = buildOccurrences(range.start, range.end);

@@ -843,6 +843,9 @@ def public_path(path: str) -> bool:
     # D2 Secure Send: receive shell + explicit Open (never GET/HEAD burn).
     if base.startswith("/receive/"):
         return True
+    # Opt-in calendar feed: calendar apps carry no session; the URL token is the credential.
+    if base.startswith("/agenda-feed/") and base.endswith(".ics"):
+        return True
     if base.startswith("/api/secure-send/") and base.endswith("/open"):
         return True
     from config import INDEXNOW_KEY

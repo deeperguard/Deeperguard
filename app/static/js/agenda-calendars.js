@@ -264,7 +264,7 @@
   // ---- rendering -------------------------------------------------------------
 
   /** UI state: which row is being edited ('new' for the create form) or confirmed for delete. */
-  const ui = { editing: '', deleting: '' };
+  const ui = { editing: '', deleting: '', feeding: '' };
 
   /** `selected` empty = nothing checked (optional choice); `legend` names the group for screen readers. */
   function colorPickerHtml(prefix, selected, legend) {
@@ -361,6 +361,184 @@
     );
   }
 
+  // ---- Opt-in webcal feed (the one place the server can read a calendar) -------------------
+
+  /** calendar id -> updated_at (seconds) of calendars that have a feed on the server. */
+  const feeds = new Map();
+  const pushed = new Map(); // calendar id -> last .ics the server holds, to skip identical uploads
+  let feedsLoaded = false;
+  let feedHost = { buildIcs: () => null };
+  const feedUi = { url: '', urlFor: '', busy: false, error: '' };
+
+  async function feedApi(method, path, body) {
+    const NS = global.NotesStore;
+    let csrf = (NS && typeof NS.csrf === 'function' && NS.csrf()) || '';
+    if (!csrf && NS && typeof NS.loadAccount === 'function') {
+      try { csrf = ((await NS.loadAccount()) || {}).csrf || ''; } catch (e) { /* the route answers 400 */ }
+    }
+    try {
+      const res = await global.fetch(path, {
+        method,
+        credentials: 'same-origin',
+        cache: 'no-store',
+        referrerPolicy: 'no-referrer',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, data };
+    } catch (e) {
+      return { ok: false, status: 0, data: {} };
+    }
+  }
+
+  async function loadFeeds() {
+    const r = await feedApi('GET', '/api/agenda/feeds');
+    if (!r.ok || !Array.isArray(r.data.feeds)) return false;
+    feeds.clear();
+    r.data.feeds.forEach((f) => feeds.set(String(f.calendar_id), Number(f.updated_at) || 0));
+    feedsLoaded = true;
+    return true;
+  }
+
+  function feedPanelHtml(cal) {
+    const name = esc(cal.name || 'Agenda');
+    const on = feeds.has(cal.id);
+    let html = `<div class="agenda-cal-feed" data-agenda-cal-feed="${esc(cal.id)}" role="group" aria-label="${esc(`Subscription link for ${cal.name}`)}">`;
+    html += (
+      '<p class="settings-hint agenda-cal-feed-warning"><strong>The server can read this calendar.</strong> '
+      + 'To make a link that Apple Calendar, Thunderbird or Google Calendar can subscribe to, Deeperguard uploads '
+      + `the titles, places, notes and times of the events in <strong>${name}</strong> as readable text. `
+      + 'Everything else stays encrypted. Anyone who has the link can read the calendar, and the server sees when '
+      + 'and from which address it is fetched. Your other calendars are not uploaded.</p>'
+    );
+    if (feedUi.url && feedUi.urlFor === cal.id) {
+      const webcal = feedUi.url.replace(/^https?:/, 'webcal:');
+      html += (
+        '<label class="settings-hint" for="agenda-cal-feed-url">Your link (shown only now, copy it before closing):</label>'
+        + '<div class="agenda-cal-feed-url-row">'
+        + `<input type="text" id="agenda-cal-feed-url" class="agenda-cal-feed-url" readonly value="${esc(webcal)}">`
+        + '<button type="button" class="btn ghost sm" data-agenda-cal-action="feed-copy">Copy</button></div>'
+      );
+    }
+    if (feedUi.error) html += `<p class="settings-hint agenda-cal-feed-error" role="alert">${esc(feedUi.error)}</p>`;
+    const dis = feedUi.busy ? ' disabled' : '';
+    if (on) {
+      html += (
+        '<p class="settings-hint">The feed is on. It updates while Deeperguard is open and unlocked; your calendar app '
+        + 'decides how often it refreshes. The link can not be shown again. Make a new one if you lost it.</p>'
+      );
+    } else {
+      html += (
+        '<label class="settings-hint agenda-cal-feed-ack"><input type="checkbox" data-agenda-feed-ack>'
+        + ' I understand the server can read this calendar.</label>'
+      );
+    }
+    html += '<div class="agenda-cal-form-actions">';
+    if (on) {
+      html += (
+        `<button type="button" class="btn ghost sm" data-agenda-cal-action="feed-create"${dis}>New link (old link stops working)</button>`
+        + `<button type="button" class="btn danger sm" data-agenda-cal-action="feed-off"${dis}>Turn off and revoke link</button>`
+      );
+    } else {
+      html += `<button type="button" class="btn primary sm" data-agenda-cal-action="feed-create"${dis}>Create link</button>`;
+    }
+    html += '<button type="button" class="btn ghost sm" data-agenda-cal-action="cancel">Close</button></div></div>';
+    return html;
+  }
+
+  async function createFeed(calId, ackBox) {
+    if (feedUi.busy) return;
+    if (!feeds.has(calId) && !(ackBox && ackBox.checked)) {
+      feedUi.error = 'Tick the box to confirm you understand the server can read this calendar.';
+      renderList('[data-agenda-feed-ack]');
+      return;
+    }
+    const ics = feedHost.buildIcs(calId);
+    if (ics == null) {
+      feedUi.error = 'Could not build the calendar. Unlock Deeperguard and try again.';
+      renderList();
+      return;
+    }
+    feedUi.busy = true;
+    feedUi.error = '';
+    renderList();
+    const r = await feedApi('POST', '/api/agenda/feeds', { calendar_id: calId, ics, acknowledged: true });
+    feedUi.busy = false;
+    if (r.ok && r.data.url) {
+      feeds.set(calId, Date.now() / 1000);
+      pushed.set(calId, ics);
+      feedUi.url = r.data.url;
+      feedUi.urlFor = calId;
+      renderList('#agenda-cal-feed-url');
+      const input = document.getElementById('agenda-cal-feed-url');
+      if (input) input.select();
+      announce('Link created. Copy it now; it is not shown again.');
+    } else {
+      feedUi.error = r.status === 413
+        ? 'This calendar is too large for a feed.'
+        : (r.data && r.data.error === 'too many feeds'
+          ? 'You have reached the limit of feeds.'
+          : 'Could not create the link. Check your connection and try again.');
+      renderList();
+    }
+  }
+
+  async function turnOffFeed(calId) {
+    if (feedUi.busy) return;
+    feedUi.busy = true;
+    feedUi.error = '';
+    renderList();
+    const r = await feedApi('POST', '/api/agenda/feeds/delete', { calendar_id: calId });
+    feedUi.busy = false;
+    if (r.ok) {
+      feeds.delete(calId);
+      pushed.delete(calId);
+      feedUi.url = '';
+      feedUi.urlFor = '';
+      renderList(rowSel(calId, 'feed'));
+      announce('Feed turned off. The link no longer works.');
+    } else {
+      feedUi.error = 'Could not turn the feed off. Check your connection and try again.';
+      renderList();
+    }
+  }
+
+  function stripStamp(text) {
+    return String(text).replace(/^DTSTAMP[^\r\n]*/gm, '');
+  }
+
+  let syncing = false;
+  /** Upload changed calendars and remove feeds of deleted calendars. Safe to call often. */
+  async function syncFeeds() {
+    if (syncing) return;
+    syncing = true;
+    try {
+      if (!feedsLoaded && !(await loadFeeds())) return;
+      const known = new Set(listCalendars().map((c) => c.id));
+      for (const calId of [...feeds.keys()]) {
+        if (!known.has(calId)) {
+          const r = await feedApi('POST', '/api/agenda/feeds/delete', { calendar_id: calId });
+          if (r.ok) { feeds.delete(calId); pushed.delete(calId); }
+          continue;
+        }
+        const ics = feedHost.buildIcs(calId);
+        if (ics == null) continue;
+        // DTSTAMP changes on every build; compare without it so only real edits are uploaded.
+        if (pushed.has(calId) && stripStamp(pushed.get(calId)) === stripStamp(ics)) continue;
+        const r = await feedApi('POST', '/api/agenda/feeds/update', { calendar_id: calId, ics });
+        if (r.ok) pushed.set(calId, ics);
+      }
+    } finally {
+      syncing = false;
+    }
+  }
+
+  /** The host builds the .ics of one calendar (null while events are unavailable). */
+  function setFeedHost(host) {
+    if (host && typeof host.buildIcs === 'function') feedHost = host;
+  }
+
   function rowHtml(cal, cals, counts) {
     const p = paletteEntry(cal.color);
     const visible = cal.visible !== false;
@@ -381,6 +559,10 @@
     html += (
       `<button type="button" class="btn ghost sm" data-agenda-cal-action="export" aria-label="${esc(`Export ${name} as .ics`)}">Export</button>`
     );
+    html += (
+      `<button type="button" class="btn ghost sm" data-agenda-cal-action="feed" aria-label="${esc(`Subscription link for ${name}`)}"`
+      + ` aria-expanded="${ui.feeding === cal.id ? 'true' : 'false'}">${feeds.has(cal.id) ? 'Feed on' : 'Feed'}</button>`
+    );
     if (!cal.is_default) {
       html += (
         `<button type="button" class="btn ghost sm" data-agenda-cal-action="delete" aria-label="${esc(`Delete ${name}`)}"`
@@ -389,6 +571,7 @@
     }
     html += '</div>';
     if (ui.editing === cal.id) html += editFormHtml(cal);
+    if (ui.feeding === cal.id) html += feedPanelHtml(cal);
     if (ui.deleting === cal.id) html += deleteFormHtml(cal, cals, counts.get(cal.id) || 0);
     html += '</li>';
     return html;
@@ -451,18 +634,47 @@
     const id = btn.closest('[data-agenda-cal-id]')?.getAttribute('data-agenda-cal-id') || '';
     if (action === 'export') {
       onExport(id);
+    } else if (action === 'feed') {
+      ui.feeding = ui.feeding === id ? '' : id;
+      ui.editing = '';
+      ui.deleting = '';
+      if (feedUi.urlFor !== ui.feeding) { feedUi.url = ''; feedUi.urlFor = ''; }
+      feedUi.error = '';
+      renderList(ui.feeding ? '[data-agenda-cal-feed] input, [data-agenda-cal-feed] [data-agenda-cal-action="feed-create"]' : rowSel(id, 'feed'));
+      if (ui.feeding && !feedsLoaded) loadFeeds().then(() => { if (ui.feeding === id) renderList(); });
+    } else if (action === 'feed-create') {
+      createFeed(id, btn.closest('[data-agenda-cal-feed]')?.querySelector('[data-agenda-feed-ack]'));
+    } else if (action === 'feed-off') {
+      turnOffFeed(id);
+    } else if (action === 'feed-copy') {
+      const input = document.getElementById('agenda-cal-feed-url');
+      const clip = global.navigator && global.navigator.clipboard;
+      if (input) input.select();
+      if (input && clip && clip.writeText) {
+        clip.writeText(input.value).then(() => announce('Link copied'), () => announce('Press Ctrl+C to copy the selected link'));
+      } else announce('Press Ctrl+C to copy the selected link');
     } else if (action === 'new') {
       ui.editing = 'new';
       ui.deleting = '';
+      ui.feeding = '';
       renderList('[data-agenda-cal-form="new"] input[name="name"]');
     } else if (action === 'edit') {
       ui.editing = ui.editing === id ? '' : id;
       ui.deleting = '';
+      ui.feeding = '';
       renderList(ui.editing ? `[data-agenda-cal-id] [data-agenda-cal-form] input[name="name"]` : rowSel(id, 'edit'));
     } else if (action === 'delete') {
       ui.deleting = ui.deleting === id ? '' : id;
       ui.editing = '';
+      ui.feeding = '';
       renderList(ui.deleting ? '[data-agenda-cal-delete] input[name="mode"]' : rowSel(id, 'delete'));
+    } else if (action === 'cancel' && ui.feeding) {
+      const back = ui.feeding;
+      ui.feeding = '';
+      feedUi.url = '';
+      feedUi.urlFor = '';
+      feedUi.error = '';
+      renderList(rowSel(back, 'feed'));
     } else if (action === 'cancel') {
       const wasNew = ui.editing === 'new';
       const back = ui.editing || ui.deleting;
@@ -527,7 +739,7 @@
   }
 
   function handleKeydown(ev) {
-    if (ev.key !== 'Escape' || (!ui.editing && !ui.deleting)) return;
+    if (ev.key !== 'Escape' || (!ui.editing && !ui.deleting && !ui.feeding)) return;
     // Close the inline form first; the panel itself closes on the next Escape.
     ev.stopPropagation();
     handleClick({ target: root().querySelector('[data-agenda-cal-action="cancel"]') || root() });
@@ -581,6 +793,8 @@
     renderList,
     wire,
     setExportHandler,
+    setFeedHost,
+    syncFeeds,
     _ui: ui,
     _setStore(s) { storeOverride = s; },
   };
