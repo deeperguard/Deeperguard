@@ -118,8 +118,9 @@ def test_subscription_name_everywhere(page):
     page.locator("#agenda-calendar-settings-btn:visible").first.click()
     page.wait_for_selector("#agenda-calendar-settings:not([hidden])", timeout=30_000)
     sub_row = page.locator("#agenda-calendars-subs li", has_text="Team Rooster")
-    assert "Subscribed · read-only" in sub_row.inner_text()
-    assert sub_row.locator("input").count() == 0
+    assert "Subscribed · on" in sub_row.inner_text()
+    assert sub_row.locator("input").count() == 1
+    assert sub_row.get_by_role("switch", name="Subscribed calendar Team Rooster").is_checked()
     assert page.locator("#agenda-calendars-list li", has_text="Werk").locator("input").count() == 1
     page.click("#agenda-calendar-settings-close")
 

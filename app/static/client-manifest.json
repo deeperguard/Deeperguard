@@ -20,10 +20,10 @@
       "url": "/static/js/admin.087f5c3c46f3ccfc.js"
     },
     "js/agenda-calendars.js": {
-      "bytes": 21484,
-      "sha256": "2f214531bd2a01781205d792001efc9cb6442da44698ff9b332f5eb074f2db5b",
-      "sri": "sha384-tbh/ksOqOuopienV+UiehjjccfMGhlMFSTr9rziyQ+HvGkUZDnEl98DxeETxZzuZ",
-      "url": "/static/js/agenda-calendars.2f214531bd2a0178.js"
+      "bytes": 23644,
+      "sha256": "17281b4e4412eb8c67cf530807b03351229245b8d24e71cbc532af2b7392e995",
+      "sri": "sha384-/q+Kh4H/vpNOlVYRIMoujViOa1u5st/d5ONWZV+kY/jRtSoud5eFAOvKlFYrHJ9K",
+      "url": "/static/js/agenda-calendars.17281b4e4412eb8c.js"
     },
     "js/agenda-ics.js": {
       "bytes": 30015,
@@ -62,10 +62,10 @@
       "url": "/static/js/agenda-scroll-core.c49da39ee0f797b1.js"
     },
     "js/agenda-subscriptions.js": {
-      "bytes": 21611,
-      "sha256": "783c19d5e3e9d34a7e20c785e255be42307882c7b27e9fba48fb8f791a313e25",
-      "sri": "sha384-qQ5Zp4YqoX5GjhawYsw63csV3zvD/QBI2HlE6T1K18Ob7AVidEoBY5PMKAEI+Z39",
-      "url": "/static/js/agenda-subscriptions.783c19d5e3e9d34a.js"
+      "bytes": 23321,
+      "sha256": "0e758573c21556d6723431e0c916d0fc139b2cbc338a8fd20d415e900bf605e7",
+      "sri": "sha384-0HisGBMKdfb00EsmRVasF0HUILT0RkTzmyJbN1tUJVbEPiChSTNKguFoqPlLL0QA",
+      "url": "/static/js/agenda-subscriptions.0e758573c21556d6.js"
     },
     "js/agenda-task-reminders.js": {
       "bytes": 8677,
@@ -392,10 +392,10 @@
       "url": "/static/js/srp-auth.e306b78c29503b1e.js"
     },
     "js/store.js": {
-      "bytes": 284507,
-      "sha256": "b15e5dfe1a4663f52973d20f9e69b6e40fe7aabb02bfe42a9f2ce21f7bfe9d24",
-      "sri": "sha384-1Q0lE/XsdBpBGJ7CGmgI5r7mZcZvRQ9WXxS+fUsT0hgwjXO0ATrqIxD8CT9I4XS3",
-      "url": "/static/js/store.b15e5dfe1a4663f5.js"
+      "bytes": 284678,
+      "sha256": "d2da7bf03aa332c4ad52db0ba095eae618b268fb1447fa61d9b860ab688276c2",
+      "sri": "sha384-ElIcT+k8W72F2DkOjSvUg7AzLo1K3nhCqEHAMSSVXWGcDLa+ZPA5mmhu9RaxJ8ZU",
+      "url": "/static/js/store.d2da7bf03aa332c4.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -597,6 +597,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "e70db795467a92185a6f140781a4afeb9dbf37fd098e1ba03edf04ee30863c40",
+  "manifest_sha256": "ea6e21fe0ea2fab36214fd22cc296b3b43d5c8903b35d5356dad798cb2394b25",
   "version": 1
 }
