@@ -9953,6 +9953,32 @@
       selectFolderItem(id);
       focusFolderItem(id);
     });
+    // "All notes" is a filter, not a folder: it is no drop target.
+    const dropTarget = (event) => {
+      const item = draggedNoteId ? event.target.closest('#folder-list [data-folder-item]') : null;
+      return item && item.dataset.folderItem !== FOLDER_ALL ? item : null;
+    };
+    host.addEventListener('dragover', (event) => {
+      const item = dropTarget(event);
+      if (!item) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      host.querySelectorAll('.is-drop-target').forEach((el) => { if (el !== item) el.classList.remove('is-drop-target'); });
+      item.classList.add('is-drop-target');
+    });
+    host.addEventListener('dragleave', (event) => {
+      const item = event.target.closest?.('[data-folder-item]');
+      if (item && !item.contains(event.relatedTarget)) item.classList.remove('is-drop-target');
+    });
+    host.addEventListener('drop', (event) => {
+      const item = dropTarget(event);
+      if (!item) return;
+      event.preventDefault();
+      item.classList.remove('is-drop-target');
+      const id = event.dataTransfer.getData(NOTE_DRAG_TYPE) || draggedNoteId;
+      draggedNoteId = '';
+      moveNoteToFolder(id, item.dataset.folderItem);
+    });
     host.addEventListener('dblclick', (event) => {
       const btn = event.target.closest('[data-folder-select]');
       if (!btn) return;
@@ -10919,6 +10945,16 @@
     return `<button type="button" class="note-row-delete" data-id="${id}"${inMenu} aria-label="${label} note ${title}" title="${label}">×</button>`;
   }
 
+  const NOTE_DRAG_TYPE = 'application/x-deeperguard-note';
+  let draggedNoteId = '';
+
+  // Plain notes can be dragged onto a sidebar folder. The "⋯" menu and the
+  // editor button ("Move to folder…") are the keyboard alternative.
+  function noteRowDraggable(note) {
+    return note?.content?.type === 'note' && !note.deleted && !note.content.trashed
+      && !(note.content.locked && !unlockedNotes.has(note.uuid));
+  }
+
   function noteRowMoreBtnHtml(note) {
     if (note?.deleted || note?.content?.trashed) return '';
     if (note?.content?.locked && !unlockedNotes.has(note.uuid)) return '';
@@ -11085,7 +11121,7 @@
       : `<span class="note-modified" data-edited="${editedMs || ''}" title="${escapeAttr(timeTitle)}">${escapeHtml(timeLabel)}</span>`;
     const trailing = `<span class="note-row-trailing">${glyphs}${where}</span>`;
     const secondary = compact ? '' : noteRowSecondaryLine(n, query);
-    return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(n.uuid)}">
+    return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(n.uuid)}"${noteRowDraggable(n) ? ' draggable="true"' : ''}>
       ${noteRowSwipeDeleteHtml(n)}
       ${noteRowRestoreBtnHtml(n)}
       ${noteRowMoreBtnHtml(n)}
@@ -15105,7 +15141,7 @@
     syncEditorMobileDocActions();
     syncEditorMobileProxies();
     if (note && note.content?.locked && !unlockedNotes.has(note.uuid)) {
-      ['btn-share', 'btn-note-info', 'btn-note-type-menu', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate', 'btn-note-secure-send', 'btn-download-note', 'note-folder-control'].forEach((id) => {
+      ['btn-share', 'btn-note-info', 'btn-note-type-menu', 'btn-trash', 'btn-delete-forever', 'btn-clear-checked', 'btn-undo', 'btn-redo', 'btn-prevent-edit', 'btn-ai-chat', 'btn-star', 'btn-pin', 'btn-archive', 'btn-duplicate', 'btn-note-secure-send', 'btn-download-note', 'note-folder-control', 'btn-move-note'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.hidden = true;
       });
@@ -15134,23 +15170,111 @@
     select.value = folders.some((folder) => folder.uuid === current) ? current : '';
   }
 
-  function assignCurrentNoteFolder(folderId) {
-    if (!currentId || !vaultKeyProven()) return;
-    const note = NotesStore.get(currentId);
-    if (!note || note.content?.type !== 'note') return;
+  // Folder membership is not an edit. Keep content.updated_at so the list and
+  // the editor keep showing the same relative time. Only the encrypted note
+  // content and its sync state change; the folder item itself is untouched.
+  function moveNoteToFolder(noteId, folderId) {
+    if (!vaultKeyProven()) {
+      toast('Unlock the vault first', true);
+      return false;
+    }
+    const note = noteId ? NotesStore.get(noteId) : null;
+    if (!note || note.deleted || note.content?.type !== 'note') return false;
+    if (note.content.locked && !unlockedNotes.has(noteId)) {
+      toast('Unlock the note first', true);
+      return false;
+    }
     const next = String(folderId || '');
-    if ((note.content.folder_id || '') === next) return;
-    // Folder membership is not an edit. Keep content.updated_at so the list
-    // and the editor keep showing the same relative time.
-    NotesStore.upsert(currentId, { ...note.content, folder_id: next }, {
+    if (next) {
+      const target = NotesStore.get(next);
+      if (!target || target.deleted || target.content?.type !== 'folder') {
+        toast('That folder no longer exists', true);
+        return false;
+      }
+    }
+    if ((note.content.folder_id || '') === next) return false;
+    NotesStore.upsert(noteId, { ...note.content, folder_id: next }, {
       touchUpdatedAt: false,
       touchSyncOnly: true,
     });
     renderFolders();
     renderNotes();
-    updateNoteMeta(NotesStore.get(currentId));
+    if (noteId === currentId) updateNoteMeta(NotesStore.get(noteId));
     toast(next ? 'Moved to folder' : 'Removed from folder');
+    return true;
   }
+
+  function assignCurrentNoteFolder(folderId) {
+    if (currentId) moveNoteToFolder(currentId, folderId);
+  }
+
+  let folderMoveNoteId = '';
+  let folderMoveReturnFocus = null;
+
+  function closeFolderMove() {
+    const dialog = document.getElementById('folder-move');
+    if (dialog) dialog.hidden = true;
+    folderMoveNoteId = '';
+    const back = folderMoveReturnFocus;
+    folderMoveReturnFocus = null;
+    if (back && back.isConnected) back.focus();
+  }
+
+  function openFolderMove(noteId, returnFocus) {
+    const dialog = document.getElementById('folder-move');
+    const host = document.getElementById('folder-move-tree');
+    const note = noteId ? NotesStore.get(noteId) : null;
+    if (!dialog || !host || !note || note.content?.type !== 'note') return;
+    if (!vaultKeyProven()) {
+      toast('Unlock the vault first', true);
+      return;
+    }
+    folderMoveNoteId = noteId;
+    folderMoveReturnFocus = returnFocus || document.activeElement;
+    const byId = folderIndex();
+    const current = byId.has(note.content.folder_id || '') ? note.content.folder_id : '';
+    const rows = [{ uuid: '', level: 0 }, ...NotesLabelTree.visibleRows(byId, new Set(byId.keys()))];
+    host.innerHTML = rows.map((row, i) => {
+      const name = row.uuid ? (NotesLabels.nameOf(byId.get(row.uuid)) || 'Folder') : 'No folder';
+      const sel = row.uuid === current;
+      return `<button type="button" role="treeitem" class="folder-move-item" data-move-target="${escapeAttr(row.uuid)}" aria-level="${row.level || 1}" aria-posinset="${i + 1}" aria-setsize="${rows.length}" aria-selected="${sel ? 'true' : 'false'}" tabindex="${sel ? '0' : '-1'}" style="--folder-level:${row.level ? row.level - 1 : 0}">${escapeHtml(name)}${sel ? ' (current)' : ''}</button>`;
+    }).join('');
+    dialog.hidden = false;
+    (host.querySelector('[tabindex="0"]') || host.firstElementChild)?.focus();
+  }
+
+  (function bindFolderMove() {
+    const dialog = document.getElementById('folder-move');
+    const host = document.getElementById('folder-move-tree');
+    if (!dialog || !host) return;
+    const items = () => [...host.querySelectorAll('[data-move-target]')];
+    const pick = (el) => {
+      const id = folderMoveNoteId;
+      closeFolderMove();
+      moveNoteToFolder(id, el.dataset.moveTarget);
+    };
+    host.addEventListener('click', (event) => {
+      const el = event.target.closest('[data-move-target]');
+      if (el) pick(el);
+    });
+    dialog.addEventListener('keydown', (event) => {
+      const list = items();
+      const i = list.indexOf(document.activeElement);
+      const go = (n) => {
+        event.preventDefault();
+        list.forEach((el) => { el.tabIndex = -1; });
+        list[n].tabIndex = 0;
+        list[n].focus();
+      };
+      if (i < 0) return;
+      else if (event.key === 'ArrowDown') go(Math.min(i + 1, list.length - 1));
+      else if (event.key === 'ArrowUp') go(Math.max(i - 1, 0));
+      else if (event.key === 'Home') go(0);
+      else if (event.key === 'End') go(list.length - 1);
+      else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(list[i]); }
+    });
+    document.getElementById('folder-move-cancel')?.addEventListener('click', closeFolderMove);
+  }());
 
   function syncNoteInfoActions(note) {
     if (!note) return;
@@ -22156,6 +22280,19 @@
       axis = null;
     }
 
+    list.addEventListener('dragstart', (event) => {
+      const rowEl = event.target.closest?.('.note-row[draggable="true"]');
+      if (!rowEl || !event.dataTransfer) return;
+      event.dataTransfer.setData(NOTE_DRAG_TYPE, rowEl.dataset.id);
+      event.dataTransfer.effectAllowed = 'move';
+      draggedNoteId = rowEl.dataset.id;
+      rowEl.classList.add('is-dragging');
+    });
+    list.addEventListener('dragend', () => {
+      draggedNoteId = '';
+      list.querySelectorAll('.is-dragging').forEach((el) => el.classList.remove('is-dragging'));
+      document.querySelectorAll('#folder-list .is-drop-target').forEach((el) => el.classList.remove('is-drop-target'));
+    });
     list.addEventListener('pointerup', finish);
     list.addEventListener('pointercancel', finish);
     list.addEventListener('click', (event) => {
@@ -22213,6 +22350,15 @@
     if (id) {
       openSecureSendForNote(id).catch((err) => toast(err?.message || 'Secure Send failed', true));
     }
+  });
+  document.getElementById('note-row-menu-move')?.addEventListener('click', () => {
+    const id = noteRowMenuNoteId;
+    const back = ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(id)}"] .note-row-more`);
+    closeNoteRowMenu();
+    if (id) openFolderMove(id, back);
+  });
+  document.getElementById('btn-move-note')?.addEventListener('click', (event) => {
+    if (currentId) openFolderMove(currentId, event.currentTarget);
   });
   document.getElementById('note-row-menu-trash')?.addEventListener('click', () => {
     const id = noteRowMenuNoteId;
@@ -26529,6 +26675,12 @@ async function showSettings() {
       };
       if (globalThis.NotesAgenda && typeof globalThis.NotesAgenda.handleEscapeKey === 'function') {
         if (globalThis.NotesAgenda.handleEscapeKey(event)) return;
+      }
+      const folderMove = document.getElementById('folder-move');
+      if (folderMove && !folderMove.hidden) {
+        closeFolderMove();
+        stop();
+        return;
       }
       const folderPrompt = document.getElementById('folder-prompt');
       if (folderPrompt && !folderPrompt.hidden) {
