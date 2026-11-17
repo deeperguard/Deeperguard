@@ -10373,7 +10373,7 @@ body.search-filters-open .fab-stack,
     font-size: 14px;
     text-align: left;
   }
-  .sidebar-foot .sn-item svg.ui-icon {
+  .sidebar-foot .btn.icon.sn-item svg.ui-icon {
     width: 16px;
     height: 16px;
     flex: 0 0 16px;
@@ -10394,6 +10394,27 @@ body.search-filters-open .fab-stack,
   .sidebar-foot .sn-item[aria-pressed="true"] {
     background: color-mix(in srgb, var(--accent) 16%, var(--sn-nav-bg));
     color: var(--accent);
+  }
+  /* Sync row: same icon column and label edge as the .sn-item rows above it. */
+  .sidebar-foot .brand-sync-row { padding-inline: 6px; width: auto; }
+  .sidebar-foot .brand-sync-row .btn-sync-now {
+    justify-content: flex-start;
+    gap: 10px;
+    height: auto;
+    min-height: 36px;
+    max-height: none;
+    padding: 7px 10px;
+    border-radius: 8px;
+    color: var(--sn-nav-text);
+    font-size: 14px;
+    font-weight: inherit;
+    letter-spacing: normal;
+    text-align: left;
+  }
+  .sidebar-foot .brand-sync-row .btn-sync-now::before {
+    width: 16px;
+    height: 16px;
+    color: var(--sn-nav-muted);
   }
   .sn-item-label {
     min-width: 0;

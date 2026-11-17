@@ -670,8 +670,8 @@
     const text = prefs.navPinned ? 'Collapse sidebar' : 'Expand sidebar';
     document.querySelectorAll('[data-nav-toggle]').forEach((btn) => {
       btn.setAttribute('aria-expanded', prefs.navPinned ? 'true' : 'false');
-      btn.setAttribute('aria-label', 'Expand/Collapse sidebar');
-      btn.title = 'Expand/Collapse sidebar';
+      btn.setAttribute('aria-label', text);
+      btn.title = text;
       const label = btn.querySelector('[data-nav-toggle-label]');
       if (label) label.textContent = text;
     });
