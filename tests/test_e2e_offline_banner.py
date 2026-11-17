@@ -3,7 +3,7 @@
 1. Register, create a labelled note, reload, unlock, filter on the parent label:
    no "You're offline" banner on a reachable server, even when one /api/health
    request fails in between (the app re-checks before it flips to offline).
-2. When /api/health keeps failing, the banner does appear and #btn-network-retry
+2. When /api/** is unreachable, the banner does appear and #btn-network-retry
    is visible, enabled, not covered and clickable.
 
 See docs/OFFLINE_BANNER_FINDINGS.md.
