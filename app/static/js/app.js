@@ -10072,9 +10072,7 @@
           <span class="folder-select">All notes</span>
         </div>
       </li>`;
-    host.innerHTML = folders.length
-      ? `<ul role="tree" class="folder-tree" aria-label="Folders">${all}${roots.map((r, i) => node(r, 1, i + 2, roots.length + 1)).join('')}</ul>`
-      : '';
+    host.innerHTML = `<ul role="tree" class="folder-tree" aria-label="Folders">${all}${roots.map((r, i) => node(r, 1, i + 2, roots.length + 1)).join('')}</ul>`;
     bindFolderTree(host);
     if (focusId) focusFolderItem(focusId);
     syncNavFilterActive();
