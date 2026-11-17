@@ -2410,6 +2410,22 @@
             <p class="note-warn-hint" id="note-warn-hint">Email a link to this note at the chosen time.</p>
           </dd>
         </div>
+        <div class="note-info-wide note-warn-row">
+          <dt>Private reminder</dt>
+          <dd>
+            <div class="note-warn-controls">
+              <label class="note-warn-field is-empty" id="note-reminder-field">
+                <input type="datetime-local" id="note-reminder-at" step="60" aria-label="Reminder date and time" aria-describedby="note-reminder-hint">
+                <span class="note-warn-placeholder" aria-hidden="true">Pick a date and time</span>
+              </label>
+              <span class="note-warn-buttons">
+                <button type="button" id="note-reminder-save" class="btn primary sm">Save</button>
+                <button type="button" id="note-reminder-clear" class="btn ghost sm">Clear</button>
+              </span>
+            </div>
+            <p class="note-warn-hint" id="note-reminder-hint">Saved inside the encrypted note. The server never sees the time. Nothing is sent or shown yet.</p>
+          </dd>
+        </div>
       </dl>
       <div class="note-info-actions note-info-actions-bottom">
         <button type="button" id="note-info-share-bottom" class="btn ghost sm desktop-only">Copy note</button>

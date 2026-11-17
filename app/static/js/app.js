@@ -10525,7 +10525,7 @@
   function notesRenderKey(notes, query) {
     const sf = searchFilterOptions();
     const sfKey = `${sf.titlesOnly ? 1 : 0}:${sf.includeArchived ? 1 : 0}:${sf.includeTrashed ? 1 : 0}:${sf.includeProtected ? 1 : 0}:${sf.tagIds.join(',')}`;
-    const ids = notes.map((n) => `${n.uuid}:${n.content.updated_at || ''}:${(n.content.ocr_text || '').length}:${noteTitleFingerprint(n)}:${n.content.pinned ? 1 : 0}:${n.content.starred ? 1 : 0}:${n.content.warn_at || ''}:${n.content.locked ? 1 : 0}:${n.content.prevent_edit ? 1 : 0}`).join('|');
+    const ids = notes.map((n) => `${n.uuid}:${n.content.updated_at || ''}:${(n.content.ocr_text || '').length}:${noteTitleFingerprint(n)}:${n.content.pinned ? 1 : 0}:${n.content.starred ? 1 : 0}:${n.content.warn_at || ''}:${noteReminderAt(n)}:${n.content.locked ? 1 : 0}:${n.content.prevent_edit ? 1 : 0}`).join('|');
     return `${currentFilter}:${currentTag || ''}:${currentFolder || ''}:${query}:${sfKey}:${prefs.sort}:${activeListNoteId()}:${ids}`;
   }
 
@@ -10862,6 +10862,21 @@
     return files;
   }
 
+  /** The note's private reminder time (ISO string) from the encrypted `reminders` field; '' when none or unreadable. */
+  function noteReminderAt(note) {
+    const first = Array.isArray(note?.content?.reminders) ? note.content.reminders[0] : null;
+    const ms = parseTimestampMs(first?.at);
+    return Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : '';
+  }
+
+  function noteReminderChipHtml(note) {
+    const at = noteReminderAt(note);
+    if (!at) return '';
+    const ms = parseTimestampMs(at);
+    const label = `Reminder ${formatDateTime(ms)}`;
+    return `<span class="note-tag note-tag-warn note-tag-reminder" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2a3.8 3.8 0 0 0-3.8 3.8c0 3-1.3 4-1.3 4h10.2s-1.3-1-1.3-4A3.8 3.8 0 0 0 8 2.2zM6.7 12.4a1.4 1.4 0 0 0 2.6 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="note-tag-warn-text">${escapeHtml(formatWarnChipTime(ms))}</span></span>`;
+  }
+
   function noteWarnChipHtml(note) {
     const warnMs = parseTimestampMs(note?.content?.warn_at);
     // Only upcoming warnings get a chip; once the email has gone out the clock disappears.
@@ -10885,7 +10900,7 @@
     const assigned = [...new Set(note?.content?.tags || [])]
       .map((id) => tagMap().get(id))
       .filter(Boolean);
-    const warn = noteWarnChipHtml(note);
+    const warn = noteWarnChipHtml(note) + noteReminderChipHtml(note);
     if (!assigned.length && !warn) return '';
     const shown = assigned.slice(0, max);
     const extra = assigned.length - shown.length;
@@ -10975,6 +10990,11 @@
     // Comfortable rows show the lock state as a badge in the meta line; the
     // compact density hides that line, so it keeps the small glyph here.
     if (noteListDensity() === 'compact') {
+      const reminderAt = noteReminderAt(note);
+      if (reminderAt) {
+        const label = `Reminder ${formatDateTime(parseTimestampMs(reminderAt))}`;
+        parts.push(`<span class="note-glyph note-glyph-reminder" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">🔔</span>`);
+      }
       if (note.content.locked) {
         parts.push('<span class="note-glyph note-glyph-lock" title="Protected" aria-label="Protected">🔒</span>');
       } else if (note.content.prevent_edit) {
@@ -17708,6 +17728,11 @@
       warnInput.value = toDatetimeLocalValue(note.content.warn_at);
       syncWarnFieldState(warnInput);
     }
+    const reminderInput = document.getElementById('note-reminder-at');
+    if (reminderInput) {
+      reminderInput.value = toDatetimeLocalValue(noteReminderAt(note));
+      document.getElementById('note-reminder-field')?.classList.toggle('is-empty', !reminderInput.value);
+    }
     const conflictRow = document.getElementById('note-info-conflict-row');
     const conflictHint = document.getElementById('note-info-conflict-hint');
     if (conflictRow && conflictHint) {
@@ -17880,6 +17905,27 @@
     } catch (err) {
       toast(err.message || 'Could not save warning', true);
     }
+    updateNoteInfoPanel(NotesStore.get(currentId));
+    renderNotes();
+  }
+
+  // The reminder lives only in the note's encrypted content; unlike the email
+  // warning above, nothing is sent to /api/reminders.
+  function saveNoteReminder({ clear = false } = {}) {
+    if (!currentId) return;
+    const note = NotesStore.get(currentId);
+    if (!note) return;
+    const input = document.getElementById('note-reminder-at');
+    const iso = clear ? '' : warnAtFromInput(input?.value || '');
+    if (!clear && !iso) {
+      toast('Choose a date and time');
+      return;
+    }
+    const content = { ...note.content };
+    if (iso) content.reminders = [{ at: iso, push: false }];
+    else delete content.reminders;
+    NotesStore.upsert(currentId, content);
+    toast(iso ? 'Reminder saved' : 'Reminder cleared');
     updateNoteInfoPanel(NotesStore.get(currentId));
     renderNotes();
   }
@@ -21858,6 +21904,11 @@
 
   document.getElementById('note-warn-save')?.addEventListener('click', () => {
     saveNoteWarning().catch(() => {});
+  });
+  document.getElementById('note-reminder-save')?.addEventListener('click', () => saveNoteReminder());
+  document.getElementById('note-reminder-clear')?.addEventListener('click', () => saveNoteReminder({ clear: true }));
+  document.getElementById('note-reminder-at')?.addEventListener('input', (e) => {
+    document.getElementById('note-reminder-field')?.classList.toggle('is-empty', !e.target.value);
   });
   document.getElementById('note-warn-clear')?.addEventListener('click', () => {
     saveNoteWarning({ clear: true }).catch(() => {});
