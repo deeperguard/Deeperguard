@@ -96,6 +96,9 @@ def main() -> int:
             chip = page.locator(".note-row", has_text="Fresh").locator(INDICATOR)
             chip.wait_for(state="visible")
             assert "Reminder" in (chip.get_attribute("aria-label") or "")
+            # Compact rows: the glyph is the same SVG bell as the chip, not an emoji.
+            assert page.locator(".note-glyph-reminder svg").count() == 1
+            assert "🔔" not in page.locator(".note-glyph-reminder").inner_text()
             stored = page.evaluate(STORED_JS)
             assert stored["Fresh"] == [{"at": "2031-03-04T05:06:00.000Z", "push": False}], stored
             assert stored["Legacy"] is None
@@ -106,6 +109,14 @@ def main() -> int:
             unlock(page)
             page.locator(".note-row", has_text="Fresh").locator(INDICATOR).wait_for()
             assert page.locator(".note-row", has_text="Legacy").locator(INDICATOR).count() == 0
+            # Comfortable rows: own style, not the e-mail warning's; a future time is not shown as passed.
+            page.locator("#btn-list-density").click()
+            page.locator(".note-tag-reminder").wait_for(state="visible")
+            assert page.locator(".note-tag-reminder").count() == 1
+            assert page.locator(".note-tag-reminder.note-tag-warn").count() == 0
+            assert page.locator(".note-tag-reminder-past").count() == 0
+            assert page.locator(".note-tag-reminder svg").count() == 1
+            page.locator("#btn-list-density").click()
             open_info(page, "Fresh")
             assert page.input_value("#note-reminder-at") == WHEN_LOCAL
 

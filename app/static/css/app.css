@@ -5219,6 +5219,31 @@ html[data-theme="light"] .note-lock-badge.note-lock-badge-vault {
   flex-shrink: 0;
 }
 .note-tag-warn-text { line-height: 1; }
+.note-tag-reminder {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 3px 8px 3px 6px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.note-tag-reminder svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+  flex-shrink: 0;
+}
+.note-tag-reminder-text { line-height: 1; }
+.note-tag-reminder-past {
+  color: var(--muted);
+  background: var(--bg-hover);
+  font-weight: 500;
+}
+.note-tag-reminder-past .note-tag-reminder-text { text-decoration: line-through; }
 .md-toolbar, .find-bar {
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
@@ -8182,6 +8207,11 @@ body.note-readonly #checklist:not([hidden]) {
   font-size: 12px;
   line-height: 1;
   opacity: 0.85;
+}
+.note-glyph-reminder svg {
+  width: 12px;
+  height: 12px;
+  display: block;
 }
 .note-item-secondary {
   display: flex;
