@@ -37,7 +37,7 @@ MEASURE = """(sel) => {
   const left = (e) => rect(e).left;
   const ids = '#agenda-calendars-heading, #agenda-subscriptions-heading, #agenda-subscribe-heading, #agenda-help-heading';
   const heads = [...root.querySelectorAll(ids)];
-  const fields = [...root.querySelectorAll('#agenda-subscribe-form label, #agenda-subscribe-form input')];
+  const fields = [...root.querySelectorAll('#agenda-subscribe-form > label, #agenda-subscribe-form > input')];
   const rows = [...root.querySelectorAll('.agenda-subscription-row')];
   const sections = heads.map((h) => h.closest('section'));
   const gaps = sections.slice(1).map((s, i) => rect(s).top - rect(sections[i]).bottom);
