@@ -7534,6 +7534,64 @@ const NotesStore = (() => {
     };
   }
 
+  // Stores notes parsed by NotesMdImport through the normal encrypted path.
+  // Tags are matched by title; attachments are encrypted by addAttachment.
+  async function importMarkdownNotes(parsed) {
+    if (!state.cryptoKey) throw new Error('Unlock the vault first');
+    const tagIds = new Map();
+    for (const tag of listTags()) {
+      const key = String(tag.content.title || '').trim().toLowerCase();
+      if (key && !tagIds.has(key)) tagIds.set(key, tag.uuid);
+    }
+    let tagsCreated = 0;
+    let imported = 0;
+    const failedFiles = [];
+    const attachmentIds = [];
+    for (const incoming of parsed.notes || []) {
+      const ids = [];
+      for (const title of incoming.tags || []) {
+        const key = title.trim().toLowerCase();
+        if (!tagIds.has(key)) {
+          const tagId = newUuid();
+          upsert(tagId, defaultTag(title));
+          tagIds.set(key, tagId);
+          tagsCreated += 1;
+        }
+        ids.push(tagIds.get(key));
+      }
+      const noteId = newUuid();
+      upsert(noteId, {
+        ...defaultNote(),
+        title: incoming.title,
+        title_manual: !!incoming.titleManual,
+        content: incoming.content,
+        editor: incoming.editor || 'markdown',
+        tags: [...new Set(ids)],
+        created_at: incoming.created_at,
+        updated_at: incoming.updated_at,
+      }, { touchUpdatedAt: false });
+      for (const file of incoming.attachments || []) {
+        try {
+          const bytes = file.bytes;
+          attachmentIds.push(await addAttachment(noteId, {
+            name: file.name,
+            type: file.mime,
+            size: bytes.byteLength,
+            arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+          }, { displayName: file.name, intentionalCopy: true }));
+        } catch (err) {
+          failedFiles.push(`${incoming.source}: ${file.name}`);
+        }
+      }
+      // addAttachment touches the note's modified time; restore the imported one.
+      const stored = get(noteId);
+      if (stored) upsert(noteId, { ...stored.content, updated_at: incoming.updated_at }, { touchUpdatedAt: false });
+      imported += 1;
+    }
+    await pushDirty();
+    return { imported, tags: tagsCreated, files: attachmentIds.length, attachmentIds, failedFiles };
+  }
+
   function backupContentsEqual(a, b) {
     if (a === b) return true;
     if (!a || !b) return false;
@@ -7868,6 +7926,7 @@ const NotesStore = (() => {
     forgetLocal,
     importBackup,
     importLooseSnFiles,
+    importMarkdownNotes,
     importAttachment,
     setAttachmentOcr,
     setAttachmentPreview,

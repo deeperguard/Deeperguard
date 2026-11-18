@@ -25724,6 +25724,55 @@ async function showSettings() {
     }
   });
 
+  document.getElementById('import-markdown-file').addEventListener('change', async (e) => {
+    const picked = [...(e.target.files || [])];
+    e.target.value = '';
+    if (!picked.length) return;
+    try {
+      setRestoreResultStatus('');
+      toast('Reading files…');
+      const files = [];
+      for (const file of picked) files.push({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
+      const parsed = await NotesMdImport.parse(files);
+      if (!parsed.notes.length) {
+        setRestoreResultStatus(markdownSkippedReport('Nothing to import', parsed.skipped));
+        toast('No notes found in these files', true);
+        return;
+      }
+      const confirmed = await confirmAction(
+        `${parsed.notes.length} note${parsed.notes.length === 1 ? '' : 's'} and ${parsed.attachmentCount} attachment${parsed.attachmentCount === 1 ? '' : 's'} will be added`
+          + `${parsed.skipped.length ? `; ${parsed.skipped.length} file${parsed.skipped.length === 1 ? ' is' : 's are'} skipped` : ''}. `
+          + 'Existing notes are not changed. Everything is saved encrypted; nothing is fetched from the web.',
+        { title: 'Import from Markdown', confirmLabel: 'Import', danger: false },
+      );
+      if (!confirmed) return;
+      toast('Importing…');
+      const result = await NotesStore.importMarkdownNotes(parsed);
+      renderTags();
+      renderNotes();
+      if (currentId) {
+        renderAttachments(currentId);
+        applyEditorMode();
+      }
+      await enqueueImportedAttachmentOcr(result.attachmentIds);
+      const skipped = [...parsed.skipped, ...result.failedFiles.map((name) => ({ name, reason: 'could not be attached' }))];
+      const head = `Imported ${result.imported} note${result.imported === 1 ? '' : 's'}`
+        + `${result.tags ? `, ${result.tags} new tag${result.tags === 1 ? '' : 's'}` : ''}`
+        + `, ${result.files} attachment${result.files === 1 ? '' : 's'}`;
+      setRestoreResultStatus(markdownSkippedReport(head, skipped));
+      toast(head);
+    } catch (err) {
+      toast(err.message || 'Import failed', true);
+    }
+  });
+
+  function markdownSkippedReport(head, skipped) {
+    if (!skipped.length) return head;
+    const shown = skipped.slice(0, 10).map((s) => `${s.name} (${s.reason})`);
+    const more = skipped.length > shown.length ? `; and ${skipped.length - shown.length} more` : '';
+    return `${head}. Skipped ${skipped.length}: ${shown.join('; ')}${more}`;
+  }
+
   async function buildLocalBackup(report) {
     const account = await NotesStore.loadAccount();
     const rows = [];

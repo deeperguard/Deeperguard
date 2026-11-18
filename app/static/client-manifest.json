@@ -1,5 +1,5 @@
 {
-  "asset_count": 103,
+  "asset_count": 104,
   "assets": {
     "css/app.css": {
       "bytes": 362898,
@@ -98,10 +98,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1069337,
-      "sha256": "02d057eb35af74f6f1152a8bd51124111dc522c5eeee066beb9ed3acfa87fbe6",
-      "sri": "sha384-42wehzqGn4pt8BmZZE3wmtkAZWG5GqhdR5pJnWhGsUDIEPsgHZCg1pW/15GiDfHz",
-      "url": "/static/js/app.02d057eb35af74f6.js"
+      "bytes": 1071795,
+      "sha256": "0d6fc20d71df29c6e3b033ad4e4fb0e99afa0d05913ee47f9bc5e741b5c5de9c",
+      "sri": "sha384-bOFL+bKcnqp06dkanUE449DK46nsRDk2kK4Pq2hRxO1SHBQbNsl3ufuVTHZb7yGS",
+      "url": "/static/js/app.0d6fc20d71df29c6.js"
     },
     "js/auth-pages.js": {
       "bytes": 43723,
@@ -252,6 +252,12 @@
       "sha256": "de66654aca477c3d8da73d2262d5ac03ab68f8f5af357eaf344bd3964d4280da",
       "sri": "sha384-yQMpT9izc4KqGuAPNZ6YzpT0wuN9LJknfyCANJPzsHSqOMltOLJ1YO739J/F3HZS",
       "url": "/static/js/marketing.de66654aca477c3d.js"
+    },
+    "js/md-import.js": {
+      "bytes": 13675,
+      "sha256": "5c56f60e8f3c5c1586a0faface2e5ebeb4c25e2e545a534971703c5356121965",
+      "sri": "sha384-vNMpZPSwVMAYCW2qPy4rofMNtqa9aTtB0yF/lCiX8PCbnM+3CuBwYlSLrBVYG9le",
+      "url": "/static/js/md-import.5c56f60e8f3c5c15.js"
     },
     "js/mermaid-sandbox.js": {
       "bytes": 2465,
@@ -410,10 +416,10 @@
       "url": "/static/js/srp-auth.f25c24074b2750f0.js"
     },
     "js/store.js": {
-      "bytes": 304806,
-      "sha256": "30c1880e630162f90dfe51636870a4445af81816ab66d7fb0d64bd20c6571dcc",
-      "sri": "sha384-g3suyXn/Vlw6SBL0fGmEUXkn4fSsfwQsrmiyQb0EmomZxaLz1EyxxzsLBqT3ifj2",
-      "url": "/static/js/store.30c1880e630162f9.js"
+      "bytes": 307129,
+      "sha256": "89ccbda643d0595380fd1919dbf966e6f17b93d462dc33f510d8864b1dcec691",
+      "sri": "sha384-iApoDfnoFkw7qWMVF6vCP0YquP8Ks+1JXAcxudYRUC6K6GX+STOfPiXidhFvsg5W",
+      "url": "/static/js/store.89ccbda643d05953.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -621,6 +627,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "875293b6a8f8f08bad8bfc7b7a6cb600bdb4589577d5f56350afe8fbd839b9ef",
+  "manifest_sha256": "800f70f19068131ea3e8ebe0b04bb63274a497a5fae558fcbf2dd8bd6920e485",
   "version": 1
 }

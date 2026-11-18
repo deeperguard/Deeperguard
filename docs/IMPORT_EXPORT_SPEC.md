@@ -47,7 +47,8 @@ left out).
 | Standard Notes import | `NotesSnImport.parse`, `convertSn`, `openBackupFile`, `unzip`, `zipStored` (`app/static/js/snimport.js:517`, `:317`, `:700`, `:648`, `:576`), `NotesStore.importBackup` (`store.js:7211`), `importSnFiles` (`store.js:7128`), `importLooseSnFiles` (`store.js:7166`); UI handler on `#import-file` (`app.js:25486`) | Accepts a **decrypted** Standard Notes backup (`.txt`/`.json`, `.zip` with attachment blobs, `.gz`). An encrypted one is refused with a message. Notes, tags (merged by title), file items, Super-note embedded files and pinned/starred/archived/trashed flags are converted. A `.dgbackup` goes through the same entry point. |
 | ICS import | `NotesStore.importAgendaFromIcs` (`store.js:2334`), `NotesAgendaIcs.validateIcsFile` (`agenda-ics.js:527`) | Imports `.ics` into the agenda pack. |
 | 2FA import (Aegis, 2FAS, Google Authenticator, otpauth links) | `app/static/js/totp-import.js`, specified in `docs/2FA_IMPORT_SPEC.md` | Separate spec. Not changed here. |
-| Markdown, ENEX, Google Keep | none | Not present. Built by the next tasks, against sections 3 and 4. |
+| Markdown (`.md` files and ZIP, including the section 2 export) | `NotesMdImport.parse` (`app/static/js/md-import.js`), `NotesStore.importMarkdownNotes` (`store.js`); UI handler on `#import-markdown-file` (`app.js`) | Implements 3.1 and the sanitising of 4.5 for Markdown. A summary is confirmed before saving and the result lists skipped files. |
+| ENEX, Google Keep | none | Not present. Built by the next tasks, against sections 3 and 4. |
 
 ### 1.3 How a note is stored
 
