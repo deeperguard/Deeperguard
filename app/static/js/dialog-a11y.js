@@ -182,6 +182,8 @@
     cancelLabel = 'Cancel',
     extraLabel = '',
     danger = false,
+    verifyPassword = null,
+    maxAttempts = 3,
   } = {}) {
     const d = doc();
     const backdrop = d.getElementById('confirm-backdrop');
@@ -192,7 +194,12 @@
     const cancelBtn = d.getElementById('confirm-cancel');
     const closeBtn = d.getElementById('confirm-close');
     const extraBtn = d.getElementById('confirm-extra');
+    const pwWrap = d.getElementById('confirm-password-wrap');
+    const pwInput = d.getElementById('confirm-password');
+    const pwError = d.getElementById('confirm-password-error');
     if (!backdrop || !dialog || !titleEl || !messageEl || !okBtn || !cancelBtn) return null;
+    // A password check cannot fall back to a plain confirm: without the field, refuse.
+    if (verifyPassword && !(pwWrap && pwInput && pwError)) return null;
     return new Promise((resolve) => {
       cancelBtn.hidden = false;
       if (extraBtn) {
@@ -209,6 +216,12 @@
       cancelBtn.textContent = cancelLabel;
       okBtn.classList.toggle('danger', !!danger);
       setBusy(dialog, false);
+      if (pwWrap) {
+        pwWrap.hidden = !verifyPassword;
+        pwInput.value = '';
+        pwError.hidden = true;
+        pwError.textContent = '';
+      }
       backdrop.hidden = false;
       dialog.hidden = false;
       const unlock = d.getElementById('unlock-screen');
@@ -219,6 +232,9 @@
       const cleanup = (value) => {
         if (done) return;
         done = true;
+        if (pwInput) pwInput.value = '';
+        if (pwWrap) pwWrap.hidden = true;
+        pwInput?.removeEventListener('keydown', onPwKey);
         backdrop.hidden = true;
         dialog.hidden = true;
         d.body.classList.remove('confirm-open', 'confirm-over-unlock');
@@ -233,7 +249,32 @@
         d.removeEventListener('keydown', onKey, true);
         resolve(value);
       };
-      const onOk = () => cleanup(true);
+      let attempts = 0;
+      let checking = false;
+      const onOk = async () => {
+        if (!verifyPassword) { cleanup(true); return; }
+        if (checking) return;
+        const typed = pwInput.value;
+        pwInput.value = '';
+        checking = true;
+        setBusy(dialog, true);
+        let ok = false;
+        try { ok = !!(await verifyPassword(typed)); } catch (err) { ok = false; }
+        checking = false;
+        if (done) return;
+        setBusy(dialog, false);
+        if (ok) { cleanup(true); return; }
+        attempts += 1;
+        if (attempts >= maxAttempts) { cleanup(false); return; }
+        pwError.textContent = 'Wrong password. Nothing was exported.';
+        pwError.hidden = false;
+        pwInput.focus();
+      };
+      const onPwKey = (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        onOk();
+      };
       const onCancel = () => cleanup(false);
       const onExtra = () => cleanup('extra');
       // Escape, close button and backdrop: cancel path only, never while busy.
@@ -245,6 +286,7 @@
         onDismiss();
       };
       okBtn.addEventListener('click', onOk);
+      if (verifyPassword) pwInput.addEventListener('keydown', onPwKey);
       cancelBtn.addEventListener('click', onCancel);
       if (closeBtn) closeBtn.addEventListener('click', onDismiss);
       if (extraBtn && extraLabel) extraBtn.addEventListener('click', onExtra);
