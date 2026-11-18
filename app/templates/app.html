@@ -2126,9 +2126,12 @@
             <label class="file-label btn">Import from Evernote (.enex)
               <input id="import-enex-file" type="file" multiple accept=".enex" hidden>
             </label>
+            <label class="file-label btn">Import from Google Keep (Takeout .zip)
+              <input id="import-keep-file" type="file" accept=".zip,application/zip" hidden>
+            </label>
           </div>
           <p id="restore-result-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
-          <p class="settings-hint">Restore accepts <code>.dgbackup</code> (and legacy <code>.enc.json</code>) Deeperguard backups. Import from Standard Notes accepts encrypted or decrypted SN exports (zip or .txt). Import from Markdown accepts one or more <code>.md</code> files or a ZIP, including the readable export of this app; you see a summary before anything is saved. Images and files that a note links with a relative path inside the ZIP become its attachments. Web addresses are never fetched. Import from Evernote accepts one or more <code>.enex</code> exports: titles, text, tags, dates, to-do checkboxes and attachments are imported; scripts, styles and links other than http, https and mailto are dropped; files with a DOCTYPE or entity declaration are refused.</p>
+          <p class="settings-hint">Restore accepts <code>.dgbackup</code> (and legacy <code>.enc.json</code>) Deeperguard backups. Import from Standard Notes accepts encrypted or decrypted SN exports (zip or .txt). Import from Markdown accepts one or more <code>.md</code> files or a ZIP, including the readable export of this app; you see a summary before anything is saved. Images and files that a note links with a relative path inside the ZIP become its attachments. Web addresses are never fetched. Import from Evernote accepts one or more <code>.enex</code> exports: titles, text, tags, dates, to-do checkboxes and attachments are imported; scripts, styles and links other than http, https and mailto are dropped; files with a DOCTYPE or entity declaration are refused. Import from Google Keep accepts the Takeout ZIP: notes, checklists, labels (as tags), pinned and archived state, dates and attachments are imported from the <code>Keep/*.json</code> files; notes in the Keep trash are skipped, and the HTML copies are ignored.</p>
         </div>
       </div>
       <div data-plan-feature="pcloud_backup">
@@ -3193,6 +3196,7 @@
   {{ asset_script('js/snimport.js') }}
   {{ asset_script('js/md-import.js') }}
   {{ asset_script('js/enex-import.js') }}
+  {{ asset_script('js/keep-import.js') }}
   {{ asset_script('js/ziplib.js') }}
   {{ asset_script('js/readable-export.js') }}
   {{ asset_script('js/labels.js') }}

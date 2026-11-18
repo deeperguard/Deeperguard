@@ -7573,6 +7573,8 @@ const NotesStore = (() => {
         content: incoming.content,
         editor: incoming.editor || 'markdown',
         tags: [...new Set(ids)],
+        archived: !!incoming.archived,
+        pinned: !!incoming.pinned,
         created_at: incoming.created_at,
         updated_at: incoming.updated_at,
       }, { touchUpdatedAt: false });

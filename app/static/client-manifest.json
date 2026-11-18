@@ -1,5 +1,5 @@
 {
-  "asset_count": 105,
+  "asset_count": 106,
   "assets": {
     "css/app.css": {
       "bytes": 365055,
@@ -98,10 +98,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1076920,
-      "sha256": "058927ecbdc3b35e6c5e684e1571b85d8a9b07c1765b11a86f879cb9a4a4d59d",
-      "sri": "sha384-YGt3cy3Kw5QWOwZuV8rX79cgLDwi7dUYxTq9Y0ZnJjoJDxkthP4hVcbxN1q0fAyJ",
-      "url": "/static/js/app.058927ecbdc3b35e.js"
+      "bytes": 1077195,
+      "sha256": "c773588f6d299f04e7ec5d779b23eb61f7ae29b650cffd1f674dddda7bb678dc",
+      "sri": "sha384-4XFgRTKSsojyqcfxJaLQHtZsEUmeUVhnbwZDtqetiSfYZriWyR8Cx4qB16EkWtV+",
+      "url": "/static/js/app.c773588f6d299f04.js"
     },
     "js/auth-pages.js": {
       "bytes": 43723,
@@ -228,6 +228,12 @@
       "sha256": "870b4078c3f65851af81acd024df3ea1f6f32f6d086c81ccb84c5377f304ca44",
       "sri": "sha384-OyOQGbxvTf1NO940eKbODx3Tu61/xhHRERhUo3RQ4SRhl679p1+tA0EdjnyXQpQN",
       "url": "/static/js/kdf-worker.870b4078c3f65851.js"
+    },
+    "js/keep-import.js": {
+      "bytes": 8014,
+      "sha256": "198097bf06f4396ac02a070a2b76b81862883f12f64eed197b1afed5e303188d",
+      "sri": "sha384-EZrJSTtbOm5s1gBje2iDIJwEP3cEK62irhPoyyNixxL8AmU7koCqHRLOW9BqQvNV",
+      "url": "/static/js/keep-import.198097bf06f4396a.js"
     },
     "js/labels.js": {
       "bytes": 9688,
@@ -422,10 +428,10 @@
       "url": "/static/js/srp-auth.f25c24074b2750f0.js"
     },
     "js/store.js": {
-      "bytes": 307607,
-      "sha256": "be370f19dd46439e93a3666088dcb7c5451790b1dc762cd220615c5b7a325465",
-      "sri": "sha384-MBNC4lNKobMyFvm963fsZ/Dx/YhfsbKVMNuj418n/J1hWjclbFsECiDcNDsi4e6m",
-      "url": "/static/js/store.be370f19dd46439e.js"
+      "bytes": 307681,
+      "sha256": "cb79d877fbbd6f28c6ee2b9d8c10d5b21e6da61af6ff9f5584eb33b518dae360",
+      "sri": "sha384-0oqMIVc+ismUKsid3nayjOUyL0i5LzEAoiXsC8CRmu5n5YgEigs5vDZiDaO8kqxF",
+      "url": "/static/js/store.cb79d877fbbd6f28.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -633,6 +639,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "336edb1a7a41ad873e30f3fed252da76735f8872830a5da1a79fc54e89756d4d",
+  "manifest_sha256": "b2bb1122a92ecd39ed50279910ce0358bfda5c866b5c424ff6f012cbdb2839e8",
   "version": 1
 }
