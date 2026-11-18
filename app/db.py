@@ -720,8 +720,13 @@ def update_user_srp_verifier(
     *,
     srp_kdf_version: int | None = None,
     touch_password_changed: bool = True,
+    drop_vault_wraps: bool = False,
 ) -> float:
     """Update the stored SRP verifier.
+
+    drop_vault_wraps=True also deletes every recovery/passkey wrap in the same
+    transaction (a password change makes the vault key new, so the wraps of the old
+    key could only mislead; docs/VAULT_RECOVERY.md 6.2).
 
     touch_password_changed=False is for silent verifier-format upgrades (e.g. SRP
     KDF v1→v2). Those must not bump password_changed_at — the client treats that
@@ -752,6 +757,8 @@ def update_user_srp_verifier(
                     user_id,
                 ),
             )
+            if drop_vault_wraps:
+                _drop_vault_wraps(conn, user_id)
         else:
             conn.execute(
                 """
@@ -1614,6 +1621,15 @@ def _free_key_id_without_wraps(conn: sqlite3.Connection, user_id: int) -> None:
         conn.execute("UPDATE users SET vault_key_id = '' WHERE id = ?", (user_id,))
 
 
+def _drop_vault_wraps(conn: sqlite3.Connection, user_id: int) -> None:
+    """Delete all wraps of the account; bump the revision only when something was removed."""
+    n = conn.execute("DELETE FROM vault_recovery_wraps WHERE user_id = ?", (user_id,)).rowcount
+    n += conn.execute("DELETE FROM vault_prf_wraps WHERE user_id = ?", (user_id,)).rowcount
+    if n:
+        conn.execute("UPDATE users SET vault_key_rev = vault_key_rev + 1 WHERE id = ?", (user_id,))
+        _free_key_id_without_wraps(conn, user_id)
+
+
 def put_prf_wrap(
     user_id: int,
     credential_id: str,
@@ -2120,7 +2136,7 @@ def touch_auth_security(user_id: int) -> float:
     return ts
 
 
-def update_user_password(user_id: int, password_hash: str) -> float:
+def update_user_password(user_id: int, password_hash: str, *, drop_vault_wraps: bool = False) -> float:
     ts = now()
     with tx() as conn:
         conn.execute(
@@ -2131,6 +2147,8 @@ def update_user_password(user_id: int, password_hash: str) -> float:
             """,
             (password_hash, ts, ts, ts, user_id),
         )
+        if drop_vault_wraps:
+            _drop_vault_wraps(conn, user_id)
     return ts
 
 
