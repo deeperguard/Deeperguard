@@ -2284,6 +2284,7 @@ def api_account_password():
             return jsonify({"error": "missing srp verifier"}), 400
         changed_at = db.update_user_srp_verifier(
             uid, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
+            drop_vault_wraps=True,
         )
         db.clear_user_legacy_password(uid)
         _revoke_other_sessions(uid, reason="password")
@@ -2296,7 +2297,7 @@ def api_account_password():
 
     if len(new) < 8:
         return jsonify({"error": "new password must be at least 8 characters"}), 400
-    changed_at = db.update_user_password(uid, hash_password(new))
+    changed_at = db.update_user_password(uid, hash_password(new), drop_vault_wraps=True)
     if srp_salt and srp_verifier:
         db.upgrade_user_to_srp(uid, srp_salt, srp_verifier, srp_kdf_version=srp_kdf_version)
         if strict_zk():
