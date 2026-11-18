@@ -38,6 +38,7 @@
           <li>Argon2id derives your vault key on this device.</li>
           <li>SRP-6a signs you in with proofs — the vault password is not posted as a readable field.</li>
           <li>Unlocking the vault happens on your device. We do not offer a “forgot vault password” reset that recovers your notes.</li>
+          <li>New accounts create a recovery key during sign-up. It is made in your browser and shown only there; we store a copy of your vault key encrypted with it and cannot read the recovery key or that copy. The app has no screen yet to open a vault or reset a password with the recovery key, so today a forgotten vault password still means your notes cannot be opened. Accounts created before this step have no recovery key.</li>
         </ul>
       </article>
 
