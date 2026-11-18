@@ -124,6 +124,10 @@ const NotesStore = (() => {
     // True only after ciphertext decrypts, or an empty vault's account
     // password is proven. A derived key alone is not proof.
     keyVerified: false,
+    // True while the vault key came from a passkey copy, not from a typed password.
+    // Nothing in this session knows the vault password, so every step that would
+    // re-derive from it (KDF retry, upgrade, saved device password) is skipped.
+    passkeySession: false,
     // Light vault: keep note text local, download attachment files only when a note is opened.
     lightVault: false,
   };
@@ -667,6 +671,12 @@ const NotesStore = (() => {
     return hint;
   }
 
+  // The vault password for steps that re-derive the key; '' in a passkey session.
+  function sessionVaultPassword() {
+    if (state.passkeySession) return '';
+    return (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword()) || '';
+  }
+
   function persistVaultKdfServerVersion(version) {
     const next = Number(version) >= 2 ? 2 : 1;
     try {
@@ -700,6 +710,9 @@ const NotesStore = (() => {
 
   async function retryPendingVaultKdfUpgrade() {
     if (!state.cryptoKey) return false;
+    // A passkey session knows neither the password nor whether a local upgrade is
+    // half done: leave the pending flag alone for the next password unlock.
+    if (state.passkeySession) return false;
     if (state.kdfVersion < 2) {
       if (vaultKdfUpgradePending()) {
         try {
@@ -713,8 +726,7 @@ const NotesStore = (() => {
     // Only finish a real local v2 upgrade. Deriving an Argon2 key (empty
     // device, stale flag) must not flip users.vault_kdf_version.
     if (!vaultKdfUpgradePending()) return false;
-    const password = (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword())
-      || '';
+    const password = sessionVaultPassword();
     const salt = sessionStorage.getItem('notes_salt') || cachedAccount().kdf_salt;
     if (password && salt) {
       const probed = await probeVaultKdfVersion(password, salt);
@@ -769,6 +781,7 @@ const NotesStore = (() => {
     state.saltEncoding = derived.encoding || 'hex';
     state.kdfVersion = derived.version || kdfVersion;
     state.altCryptoKey = null;
+    state.passkeySession = false;
     if (state.kdfProbeMixed) {
       const altVersion = kdfVersion >= 2 ? 1 : 2;
       try {
@@ -805,6 +818,44 @@ const NotesStore = (() => {
     }
   }
 
+  // Opens the vault with a key that came out of a passkey copy. kdfVersion is the
+  // account's real version (account status), never a default: a later password change
+  // derives its new key with it. The key counts as verified only when its key_id is
+  // the account's current key_id, so an old but valid copy of an earlier key is refused.
+  async function unlockWithVaultKey(key, { kdfVersion, salt, accountKeyId } = {}) {
+    if (!key || !(key.raw instanceof Uint8Array) || key.raw.length !== 32) throw new Error('Missing encryption key');
+    const version = Number(kdfVersion);
+    if (version !== 1 && version !== 2) throw new Error('Unknown vault KDF version');
+    if (!accountKeyId || NotesCrypto.vaultKeyId(key) !== String(accountKeyId)) {
+      zeroKeyBytes(key);
+      const err = new Error('This passkey holds a copy of an older vault key, so it cannot open your vault now. Use your master password, then turn vault unlock on for this passkey again.');
+      err.code = 'PASSKEY_COPY_STALE';
+      throw err;
+    }
+    state.cryptoKey = key;
+    state.saltEncoding = 'hex';
+    state.kdfVersion = version;
+    state.altCryptoKey = null;
+    state.kdfProbeMixed = false;
+    state.kdfFastReject = false;
+    state.passkeySession = true;
+    state.keyVerified = true;
+    sessionStorage.setItem('notes_unlocked', '1');
+    if (salt) sessionStorage.setItem('notes_salt', String(salt));
+    if (typeof NotesFreshness !== 'undefined') {
+      NotesFreshness.setCryptoKey(state.cryptoKey);
+      try {
+        await NotesFreshness.load(state.cryptoKey);
+      } catch (err) {
+        /* bootstrap empty freshness */
+      }
+    }
+  }
+
+  function isPasskeySession() {
+    return !!state.cryptoKey && state.passkeySession;
+  }
+
   function isUnlocked() {
     return !!state.cryptoKey;
   }
@@ -824,7 +875,8 @@ const NotesStore = (() => {
   function markKeyVerified() {
     if (!state.cryptoKey) return;
     state.keyVerified = true;
-    persistVaultKdfServerVersion(state.kdfVersion);
+    // A passkey session took its KDF version from the account; nothing to record.
+    if (!state.passkeySession) persistVaultKdfServerVersion(state.kdfVersion);
   }
 
   function unverifiedKeyError() {
@@ -863,6 +915,7 @@ const NotesStore = (() => {
     state.altCryptoKey = null;
     state.kdfProbeMixed = false;
     state.keyVerified = false;
+    state.passkeySession = false;
     state.kdfVersion = 1;
     attachmentDecryptInFlight = null;
     lastDerivedKdf = null;
@@ -3420,8 +3473,7 @@ const NotesStore = (() => {
     }
     // Empty device: first derive used the account hint only. Retry the other
     // vault KDF once before declaring the password wrong.
-    const password = (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword())
-      || '';
+    const password = sessionVaultPassword();
     const salt = sessionStorage.getItem('notes_salt') || cachedAccount().kdf_salt || '';
     const altVersion = state.kdfVersion >= 2 ? 1 : 2;
     if (password && salt) {
@@ -4885,8 +4937,7 @@ const NotesStore = (() => {
       let pull = await pullChanges(since, { quiet });
       let noteCount = listNotes().filter((n) => !n.content?.trashed).length;
       if (pull.decryptSkipped > 0 && noteCount === 0) {
-        const password = (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword())
-      || '';
+        const password = sessionVaultPassword();
         const salt = sessionStorage.getItem('notes_salt') || cachedAccount().kdf_salt;
         if (password && salt) {
           const altVersion = state.kdfVersion >= 2 ? 1 : 2;
@@ -6768,6 +6819,8 @@ const NotesStore = (() => {
 
   async function migrateVaultKdfIfNeeded(password, salt) {
     if (!state.cryptoKey) return { migrated: false };
+    // No vault password in a passkey session: the upgrade waits for a password unlock.
+    if (state.passkeySession) return { migrated: false };
     if (state.kdfVersion >= 2) {
       await retryPendingVaultKdfUpgrade();
       return { migrated: false };
@@ -7810,6 +7863,8 @@ const NotesStore = (() => {
     api,
     setSessionRevokedHandler,
     unlock,
+    unlockWithVaultKey,
+    isPasskeySession,
     isUnlocked,
     isKeyVerified,
     markKeyVerified,
@@ -7933,6 +7988,7 @@ const NotesStore = (() => {
     getAttachmentPreviewBytes,
     refreshVaultHead,
     migrateVaultKdfIfNeeded,
+    retryPendingVaultKdfUpgrade,
     changePassword,
     recoverWithRecoveryKey,
     repairAttachmentsWithPreviousPassword,

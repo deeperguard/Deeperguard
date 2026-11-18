@@ -103,6 +103,69 @@
     }
   }
 
+  // Passkeys whose vault copy opens the account's current vault key, from the server
+  // status (no wrap in it). Empty when signed out, offline or none enabled.
+  async function vaultUnlockCredentials() {
+    try {
+      const status = await vaultKeysStatus();
+      return (Array.isArray(status?.prf) ? status.prf : []).filter((r) => r.current).map((r) => r.credential_id);
+    } catch (err) {
+      return [];
+    }
+  }
+
+  // Lock screen: asks the passkey for PRF output, fetches its copy, unwraps the vault
+  // key and opens the vault with it. The unwrapped key must be the account's current
+  // key (key_id from the account status), and the KDF version is the account's own.
+  // Throws on cancel or any failure; nothing is opened then.
+  async function unlockVaultWithPasskey(credentialId) {
+    const C = global.NotesCrypto;
+    let prfOutput = null;
+    let wrapKey = null;
+    let key = null;
+    try {
+      if (await NotesWebAuthn.prfBrowserSupport() === 'unsupported') throw new Error('This browser cannot open your vault with a passkey. Use your master password.');
+      const status = await vaultKeysStatus();
+      const opts = await NotesStore.api(
+        `/api/account/vault-keys/prf/${encodeURIComponent(credentialId)}/options`,
+        { method: 'POST', body: '{}' },
+      );
+      if (!opts.prf_salt) throw new Error('This passkey has no vault copy. Use your master password.');
+      const salt = new Uint8Array(NotesWebAuthn.bufferFromBase64url(opts.prf_salt));
+      const got = await NotesWebAuthn.requestPrfOutput(NotesWebAuthn.prepareAuthenticationOptions(opts.options), salt);
+      if (got.status !== 'ok') throw new Error(got.reason === 'browser'
+        ? 'This browser cannot open your vault with a passkey. Use your master password.'
+        : 'This passkey did not return the secret that vault unlock needs. Use your master password.');
+      prfOutput = got.output;
+      if (got.credentialId !== credentialId) throw new Error('A different passkey answered. Use your master password or try again.');
+      const copy = await NotesStore.api(
+        `/api/account/vault-keys/prf/${encodeURIComponent(credentialId)}/unwrap`,
+        { method: 'POST', body: JSON.stringify({ credential: NotesWebAuthn.authenticationCredentialJson(got.credential) }) },
+      );
+      wrapKey = C.derivePrfWrapKey(prfOutput);
+      key = await C.unwrapVaultKey(
+        wrapKey,
+        { wrap_version: copy.wrap_version, key_id: copy.key_id, blob: copy.wrap },
+        { accountId: String(status.account_id || ''), type: 'prf', binding: credentialId },
+      );
+      // Ask again: the key may have changed while the passkey prompt was open.
+      const fresh = await vaultKeysStatus();
+      const account = await NotesStore.loadAccount({ force: true });
+      const kdfVersion = Number(account?.vault_kdf_version);
+      if (kdfVersion !== 1 && kdfVersion !== 2) throw new Error('Could not read your account settings. Use your master password.');
+      NotesStore.cacheAccount({
+        email: account.email, kdf_salt: account.kdf_salt, vault_kdf_version: kdfVersion, csrf: account.csrf,
+      });
+      await NotesStore.unlockWithVaultKey(key, { kdfVersion, salt: account.kdf_salt, accountKeyId: fresh.key_id });
+      key = null;
+      return { status: 'ok' };
+    } finally {
+      if (prfOutput) prfOutput.fill(0);
+      if (wrapKey) wrapKey.raw.fill(0);
+      if (key) key.raw.fill(0);
+    }
+  }
+
   // Asks this passkey for PRF output, wraps the vault key with it and stores the copy.
   // Resolves {status:'ok'} or {status:'unsupported', reason}; unsupported stores nothing.
   async function enableVaultUnlock(credentialId) {
@@ -325,6 +388,8 @@
     renderPasskeyList,
     configureVaultUnlock,
     enableVaultUnlock,
+    vaultUnlockCredentials,
+    unlockVaultWithPasskey,
     disableVaultUnlock,
     enableVaultUnlockForNew,
   };

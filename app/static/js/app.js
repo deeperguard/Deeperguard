@@ -2723,7 +2723,11 @@
 
   function enableRememberDevice({ auto = false } = {}) {
     prefs.rememberDevice = true;
-    persistDevicePassword((typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword()) || '');
+    const vaultPassword = (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword()) || '';
+    // Unlocked with a passkey: there is no password to save, and an empty one
+    // would erase one saved earlier.
+    const nothingToSave = !vaultPassword && NotesStore.isPasskeySession();
+    if (!nothingToSave) persistDevicePassword(vaultPassword);
     savePrefs();
     const rememberDevice = document.getElementById('pref-remember-device');
     if (rememberDevice) rememberDevice.checked = true;
@@ -2734,6 +2738,10 @@
       localStorage.removeItem('notes_remember_device_declined');
     } catch (err) {
       /* ignore quota */
+    }
+    if (nothingToSave) {
+      toast('Nothing to save yet: you opened the vault with a passkey. Unlock once with your master password to save it on this device.');
+      return;
     }
     toast(auto
       ? 'Remember password enabled — you can unlock offline on this device (vault still locks on restart)'
@@ -6973,6 +6981,7 @@
     clearUnlockPasswordField();
     unlockSubmit.disabled = false;
     unlockSubmit.textContent = 'Unlock';
+    refreshPasskeyUnlockButton().catch(() => {});
     const toastEl = document.getElementById('toast');
     if (toastEl && (window.NotesVaultLock?.isBackgroundSyncToast?.(toastEl.textContent) || !toastEl.classList.contains('error'))) {
       toastEl.hidden = true;
@@ -8678,6 +8687,65 @@
     e.stopPropagation();
     submitUnlockForm().catch(() => {});
   });
+
+  // Lock screen: open the vault with a passkey that has a vault copy. Cancel or any
+  // failure leaves the vault locked, nothing changed, and the password field in use.
+  const unlockPasskeyBtn = document.getElementById('unlock-passkey');
+  let passkeyUnlockIds = [];
+  let passkeyUnlockNext = 0;
+  let passkeyUnlockBusy = false;
+
+  async function refreshPasskeyUnlockButton() {
+    if (!unlockPasskeyBtn || passkeyUnlockBusy) return;
+    passkeyUnlockIds = window.NotesPasskeys?.vaultUnlockCredentials && window.NotesWebAuthn?.supported?.()
+      ? await NotesPasskeys.vaultUnlockCredentials()
+      : [];
+    if (passkeyUnlockBusy || NotesStore.isUnlocked()) return;
+    unlockPasskeyBtn.hidden = passkeyUnlockIds.length === 0;
+  }
+
+  async function unlockWithPasskeyClick() {
+    if (passkeyUnlockBusy || !passkeyUnlockIds.length || NotesStore.isUnlocked()) return;
+    passkeyUnlockBusy = true;
+    unlockPasskeyBtn.disabled = true;
+    unlockPasskeyBtn.setAttribute('aria-busy', 'true');
+    unlockPasskeyBtn.textContent = 'Waiting for passkey…';
+    showUnlockError('');
+    // Several passkeys: each press tries the next one.
+    const credentialId = passkeyUnlockIds[passkeyUnlockNext % passkeyUnlockIds.length];
+    passkeyUnlockNext += 1;
+    try {
+      await NotesPasskeys.unlockVaultWithPasskey(credentialId);
+      unlockPrimaryRevealed = false;
+      sessionExpiredHold = false;
+      await finishUnlocked();
+      stopEmptyDeviceBackgroundRetry();
+      setEmptyDeviceUnlockUi('clear');
+      repairUnlockShellState();
+      if (vaultKeyProven() && !isVaultReadyForSync()) showApp();
+    } catch (err) {
+      try { NotesStore.lock(); } catch (lockErr) { /* ignore */ }
+      markVaultShellLocked();
+      let message = 'Could not unlock with the passkey. Enter your master password.';
+      if (err?.name === 'NotAllowedError' || /cancel/i.test(String(err?.message || ''))) {
+        message = 'Passkey cancelled. Enter your master password to unlock.';
+      } else if (isLoginRequiredError(err)) {
+        message = SESSION_EXPIRED_MESSAGE;
+      } else if (err?.code === 'DECRYPT_FAILED') {
+        message = 'This passkey did not open your notes. Enter your master password.';
+      } else if (err?.message) {
+        message = err.message;
+      }
+      showUnlockError(message);
+      try { unlockPassword?.focus(); } catch (focusErr) { /* ignore */ }
+    } finally {
+      passkeyUnlockBusy = false;
+      unlockPasskeyBtn.disabled = false;
+      unlockPasskeyBtn.removeAttribute('aria-busy');
+      unlockPasskeyBtn.textContent = 'Unlock with passkey';
+    }
+  }
+  unlockPasskeyBtn?.addEventListener('click', () => { unlockWithPasskeyClick().catch(() => {}); });
 
   window.__notesSubmitUnlock = () => {
     submitUnlockForm().catch(() => {});

@@ -3682,6 +3682,9 @@ class NotesAppTests(unittest.TestCase):
     def test_kdf_session_cache_never_persists_derived_key(self):
         self._run_node_script("test_kdf_session_cache.js")
 
+    def test_passkey_session_uses_account_kdf_and_skips_password_steps(self):
+        self._run_node_script("test_passkey_session_kdf.js", timeout=120)
+
     def test_kdf_unlock_succeeds_after_simulated_reload(self):
         self._run_node_script("test_kdf_unlock_after_reload.js", timeout=60)
 
