@@ -92,6 +92,40 @@ def test_dismiss_works_with_the_keyboard_and_shows_a_focus_ring(browser):
     page.locator("#recovery-notice").wait_for(state="hidden")
 
 
+def test_throttled_refresh_fetches_once_per_interval(browser):
+    page = _open(browser)
+    page.locator("#recovery-notice").wait_for(state="visible")
+    result = page.evaluate(
+        """async () => {
+          const box = document.getElementById('recovery-notice');
+          window.calls.length = 0;
+          await NotesRecoveryNotice.refreshThrottled(window.fakeApi, box);
+          await NotesRecoveryNotice.refreshThrottled(window.fakeApi, box);
+          await NotesRecoveryNotice.refreshThrottled(window.fakeApi, box);
+          const afterBursts = window.calls.length;
+          await NotesRecoveryNotice.refreshThrottled(window.fakeApi, box, 0);
+          return [afterBursts, window.calls.length];
+        }"""
+    )
+    assert result == [1, 2]
+
+
+def test_throttled_refresh_retries_when_the_fetch_failed(browser):
+    page = _open(browser)
+    page.locator("#recovery-notice").wait_for(state="visible")
+    count = page.evaluate(
+        """async () => {
+          const box = document.getElementById('recovery-notice');
+          let n = 0;
+          const failing = async () => { n += 1; throw new Error('offline'); };
+          await NotesRecoveryNotice.refreshThrottled(failing, box, 0);
+          await NotesRecoveryNotice.refreshThrottled(failing, box);
+          return n;
+        }"""
+    )
+    assert count == 2
+
+
 def test_failed_dismiss_keeps_the_notice(browser):
     page = _open(browser)
     page.locator("#recovery-notice").wait_for(state="visible")

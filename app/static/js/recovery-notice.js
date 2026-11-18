@@ -59,8 +59,10 @@
       try {
         const data = await api('/api/account/vault-recovery-notices');
         render(container, data && data.notices, dismiss);
+        return true;
       } catch (err) {
         /* offline or signed out: keep what is shown */
+        return false;
       } finally {
         inflight = null;
       }
@@ -68,5 +70,23 @@
     return inflight;
   }
 
-  global.NotesRecoveryNotice = { render, refresh, messageFor };
+  const THROTTLE_MS = 15 * 60 * 1000;
+  let lastCheck = 0;
+
+  /**
+   * Like refresh, but at most once per minIntervalMs, so frequent background syncs do not each
+   * cost an extra request. The first call (app start or login) always fetches; a failed fetch
+   * does not count, so the next call retries.
+   */
+  function refreshThrottled(api, container, minIntervalMs = THROTTLE_MS) {
+    const now = Date.now();
+    if (lastCheck && now - lastCheck < minIntervalMs) return Promise.resolve();
+    const wasCheck = lastCheck;
+    lastCheck = now;
+    return refresh(api, container).then((ok) => {
+      if (!ok) lastCheck = wasCheck;
+    });
+  }
+
+  global.NotesRecoveryNotice = { render, refresh, refreshThrottled, messageFor };
 })(typeof window !== 'undefined' ? window : globalThis);
