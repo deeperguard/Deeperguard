@@ -16,11 +16,11 @@ A feed link is not an ordinary URL. Many providers put a secret token in it: any
 
 1. Unlock your vault and open the Agenda.
 2. Open **Calendar settings** and find **Subscribed calendars**.
-3. Paste the feed link. Both `webcal://` and `https://` links work; `webcal://` is rewritten to `https://`. Give it a name if you like. If you leave the name empty, it becomes "Calendar 1", "Calendar 2" and so on. We never derive the name from the link, because the link may be secret.
+3. Paste the feed link. Both `webcal://` and `https://` links work; `webcal://` is rewritten to `https://`. Give it a name and pick a colour if you like. If you leave the name empty, it becomes "Calendar 1", "Calendar 2" and so on. We never derive the name from the link, because the link may be secret.
 4. Click **Preview feed**. You see how many events the feed has and the first few titles, before anything is saved.
 5. Click **Subscribe**.
 
-Each subscription then has **Rename**, **Refresh** and **Delete**. Delete asks first, then removes the subscription and all of its events.
+Each subscription then has a colour picker, an on/off switch, **Rename**, **Edit** (name and feed link), **Refresh** and **Delete**. Switching a subscription off hides its events and stops refreshing it. Editing the link replaces the events of the old link with the new feed's events after a preview. Delete asks first, then removes the subscription and all of its events. If a sync leaves the same feed event twice, the app folds it back to one.
 
 ## Where the link lives
 
@@ -66,3 +66,5 @@ Be clear-eyed about this mode: it is an exception to "the server only sees ciphe
 - **It does not refresh while you're away.** If no device has the vault open, nothing is fetched.
 
 One honest note on the design: to allow direct fetching, the worker may connect to any `https` host, while the main page stays limited to our own server. Our security documentation lists this as a known trade-off. If you never add a subscription, the worker never starts.
+
+Updated: 2026-11-18: Subscriptions now have a colour, a name you can edit together with the link, an on/off switch, and duplicate feed events are folded into one.
