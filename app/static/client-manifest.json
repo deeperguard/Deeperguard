@@ -626,10 +626,10 @@
       "url": "/static/js/verify-ask-ai-provider.98e9aaa9032db56f.js"
     },
     "js/webauthn-client.js": {
-      "bytes": 6252,
-      "sha256": "83875c33b2c3e80ffa3827da7d34c86391f32628420bde5cdc58c460d8a2e111",
-      "sri": "sha384-ljFBVE/YBimwCgI08APQ9frBQS7DFmEnMIcWuyk/nQD3K3n4Lxn5MQZFwM6m4TWD",
-      "url": "/static/js/webauthn-client.83875c33b2c3e80f.js"
+      "bytes": 6607,
+      "sha256": "a2e6416a33c6387b59adf76f220f37e89986629afd7562f6cb6525d3216803a8",
+      "sri": "sha384-W7zt6kOpTB7GkS4wsSJJGZlCW6WdOmtyHBrVczWSlpceYn3xKKN7iRysHForJVDC",
+      "url": "/static/js/webauthn-client.a2e6416a33c6387b.js"
     },
     "js/ziplib.js": {
       "bytes": 14329,
@@ -639,6 +639,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "31d854f4beedae74594aa63e5e0286cc87411bcc010eb1a3768315711f436d4b",
+  "manifest_sha256": "43c2d5b2041e17c3f47d25cdffbf30b5eac2bc119118673072ef9d8bcc66bac7",
   "version": 1
 }
