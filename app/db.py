@@ -318,6 +318,18 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS vault_pending_rekey (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            from_key_id TEXT NOT NULL,
+            to_key_id TEXT NOT NULL,
+            wrap TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            expires_at REAL NOT NULL
+        )
+        """
+    )
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS webauthn_credentials (
@@ -1521,6 +1533,11 @@ def get_vault_keys_status(user_id: int) -> dict | None:
     ).fetchone()
     if not user:
         return None
+    with tx() as wconn:
+        _purge_expired_pending(wconn, int(user_id), now())
+    pending = conn.execute(
+        "SELECT 1 FROM vault_pending_rekey WHERE user_id = ?", (int(user_id),),
+    ).fetchone()
     row = conn.execute(
         "SELECT wrap_version, created_at, last_used_at FROM vault_recovery_wraps WHERE user_id = ?",
         (int(user_id),),
@@ -1529,6 +1546,7 @@ def get_vault_keys_status(user_id: int) -> dict | None:
         "key_id": str(user["vault_key_id"]),
         "key_rev": int(user["vault_key_rev"]),
         "recovery_locked_until": float(user["recovery_locked_until"] or 0),
+        "pending_rekey": pending is not None,
         "recovery": {
             "active": row is not None,
             "created_at": float(row["created_at"]) if row else 0.0,
@@ -1633,6 +1651,130 @@ def get_recovery_start(user_id: int) -> tuple[str, dict]:
     }
 
 
+def _purge_expired_pending(conn: sqlite3.Connection, user_id: int, ts: float) -> None:
+    """Drop this user's pending rekey row once it is past its expiry (VAULT_RECOVERY 2.1)."""
+    conn.execute(
+        "DELETE FROM vault_pending_rekey WHERE user_id = ? AND expires_at <= ?", (user_id, ts),
+    )
+
+
+def _check_recovery_proof(
+    conn: sqlite3.Connection, uid: int, proof: str, ts: float,
+) -> tuple[str, dict, sqlite3.Row | None]:
+    """Shared gate of recover/pending, its fetch and recover/commit (3.3).
+
+    Returns (status, data, user row). Status "ok" means the proof matched; "locked", "bad_proof"
+    (failure counted, lock applied at the 5th), "no_recovery_key" or "not_found" mean refuse.
+    """
+    user = conn.execute(
+        """
+        SELECT vault_key_id, vault_key_rev, recovery_failed_count, recovery_locked_until,
+               recovery_lock_level
+        FROM users WHERE id = ?
+        """,
+        (uid,),
+    ).fetchone()
+    if not user:
+        return "not_found", {}, None
+    wait = float(user["recovery_locked_until"] or 0) - ts
+    if wait > 0:
+        return "locked", {"retry_after": int(wait) + 1}, user
+    old = conn.execute(
+        "SELECT proof_hash FROM vault_recovery_wraps WHERE user_id = ?", (uid,),
+    ).fetchone()
+    if not old:
+        return "no_recovery_key", {}, user
+    given = hashlib.sha256(bytes.fromhex(proof)).hexdigest()
+    if hmac.compare_digest(given, str(old["proof_hash"])):
+        return "ok", {}, user
+    failed = int(user["recovery_failed_count"]) + 1
+    if failed >= vault_keys.RECOVERY_MAX_FAILED:
+        level = int(user["recovery_lock_level"])
+        wait = vault_keys.lock_seconds(level)
+        conn.execute(
+            """
+            UPDATE users SET recovery_failed_count = 0, recovery_lock_level = ?,
+                recovery_locked_until = ? WHERE id = ?
+            """,
+            (level + 1, ts + wait, uid),
+        )
+        return "bad_proof", {"locked_now": True, "retry_after": wait}, user
+    conn.execute("UPDATE users SET recovery_failed_count = ? WHERE id = ?", (failed, uid))
+    return "bad_proof", {"locked_now": False}, user
+
+
+def put_pending_rekey(
+    user_id: int,
+    *,
+    proof: str,
+    expected_key_rev: int,
+    from_key_id: str,
+    to_key_id: str,
+    wrap_json: str,
+) -> tuple[str, dict]:
+    """Store the pending-rekey checkpoint of VAULT_RECOVERY 3.2 step 4 (replaces an older row).
+
+    The wrap is opaque to the server. A wrong proof is counted as a failed attempt and nothing
+    is stored. Status: "ok", "locked", "bad_proof", "no_recovery_key", "key_rev_mismatch",
+    "key_id_mismatch" or "not_found". The key revision is not bumped; the commit does that.
+    """
+    uid = int(user_id)
+    ts = now()
+    with tx() as conn:
+        status, data, user = _check_recovery_proof(conn, uid, proof, ts)
+        if status != "ok":
+            return status, data
+        if int(user["vault_key_rev"]) != int(expected_key_rev):
+            code, rev, kid = _vault_keys_conflict(conn, uid, int(expected_key_rev))
+            return code, {"key_rev": rev, "key_id": kid}
+        if str(user["vault_key_id"]) != from_key_id:
+            return "key_id_mismatch", {
+                "key_rev": int(user["vault_key_rev"]), "key_id": str(user["vault_key_id"]),
+            }
+        expires_at = ts + vault_keys.PENDING_REKEY_TTL_SECONDS
+        conn.execute(
+            """
+            INSERT INTO vault_pending_rekey (user_id, from_key_id, to_key_id, wrap, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                from_key_id = excluded.from_key_id, to_key_id = excluded.to_key_id,
+                wrap = excluded.wrap, created_at = excluded.created_at,
+                expires_at = excluded.expires_at
+            """,
+            (uid, from_key_id, to_key_id, wrap_json, ts, expires_at),
+        )
+        return "ok", {
+            "key_rev": int(user["vault_key_rev"]), "key_id": str(user["vault_key_id"]),
+            "expires_at": expires_at,
+        }
+
+
+def get_pending_rekey(user_id: int, *, proof: str) -> tuple[str, dict]:
+    """The pending wrap, only after a valid proof (a wrong one counts as a failed attempt).
+
+    Status: "ok", "no_pending" (none, or expired and cleaned up), "locked", "bad_proof",
+    "no_recovery_key" or "not_found".
+    """
+    uid = int(user_id)
+    ts = now()
+    with tx() as conn:
+        status, data, _user = _check_recovery_proof(conn, uid, proof, ts)
+        if status != "ok":
+            return status, data
+        _purge_expired_pending(conn, uid, ts)
+        row = conn.execute(
+            "SELECT from_key_id, to_key_id, wrap, expires_at FROM vault_pending_rekey WHERE user_id = ?",
+            (uid,),
+        ).fetchone()
+        if not row:
+            return "no_pending", {}
+        return "ok", {
+            "from_key_id": str(row["from_key_id"]), "to_key_id": str(row["to_key_id"]),
+            "wrap_version": vault_keys.WRAP_VERSION, "wrap": json.loads(row["wrap"]),
+            "expires_at": float(row["expires_at"]),
+        }
+
+
 def commit_vault_recovery(
     user_id: int,
     *,
@@ -1656,45 +1798,15 @@ def commit_vault_recovery(
     A wrong proof only counts a failure (3.3). The proof is checked before the key revision
     and key id, so a wrong proof with a stale ``expected_key_rev`` or another ``from_key_id``
     is also counted as a failed attempt. Status: "ok", "locked", "bad_proof",
-    "no_recovery_key", "key_rev_mismatch", "key_id_mismatch" or "not_found".
+    "no_recovery_key", "key_rev_mismatch", "key_id_mismatch", "pending_mismatch"
+    (a live pending row names another ``to_key_id``) or "not_found".
     """
     uid = int(user_id)
     ts = now()
     with tx() as conn:
-        user = conn.execute(
-            """
-            SELECT vault_key_id, vault_key_rev, recovery_failed_count, recovery_locked_until,
-                   recovery_lock_level
-            FROM users WHERE id = ?
-            """,
-            (uid,),
-        ).fetchone()
-        if not user:
-            return "not_found", {}
-        wait = float(user["recovery_locked_until"] or 0) - ts
-        if wait > 0:
-            return "locked", {"retry_after": int(wait) + 1}
-        old = conn.execute(
-            "SELECT proof_hash FROM vault_recovery_wraps WHERE user_id = ?", (uid,),
-        ).fetchone()
-        if not old:
-            return "no_recovery_key", {}
-        given = hashlib.sha256(bytes.fromhex(proof)).hexdigest()
-        if not hmac.compare_digest(given, str(old["proof_hash"])):
-            failed = int(user["recovery_failed_count"]) + 1
-            if failed >= vault_keys.RECOVERY_MAX_FAILED:
-                level = int(user["recovery_lock_level"])
-                wait = vault_keys.lock_seconds(level)
-                conn.execute(
-                    """
-                    UPDATE users SET recovery_failed_count = 0, recovery_lock_level = ?,
-                        recovery_locked_until = ? WHERE id = ?
-                    """,
-                    (level + 1, ts + wait, uid),
-                )
-                return "bad_proof", {"locked_now": True, "retry_after": wait}
-            conn.execute("UPDATE users SET recovery_failed_count = ? WHERE id = ?", (failed, uid))
-            return "bad_proof", {"locked_now": False}
+        status, data, user = _check_recovery_proof(conn, uid, proof, ts)
+        if status != "ok":
+            return status, data
         if int(user["vault_key_rev"]) != int(expected_key_rev):
             code, rev, kid = _vault_keys_conflict(conn, uid, int(expected_key_rev))
             return code, {"key_rev": rev, "key_id": kid}
@@ -1702,6 +1814,15 @@ def commit_vault_recovery(
             return "key_id_mismatch", {
                 "key_rev": int(user["vault_key_rev"]), "key_id": str(user["vault_key_id"]),
             }
+        _purge_expired_pending(conn, uid, ts)
+        pending = conn.execute(
+            "SELECT to_key_id FROM vault_pending_rekey WHERE user_id = ?", (uid,),
+        ).fetchone()
+        if pending and str(pending["to_key_id"]) != to_key_id:
+            return "pending_mismatch", {
+                "key_rev": int(user["vault_key_rev"]), "key_id": str(user["vault_key_id"]),
+            }
+        conn.execute("DELETE FROM vault_pending_rekey WHERE user_id = ?", (uid,))
         conn.execute(
             """
             UPDATE users

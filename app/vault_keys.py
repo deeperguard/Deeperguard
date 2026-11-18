@@ -16,6 +16,7 @@ MAX_WRAP_BYTES = 4096
 RECOVERY_MAX_FAILED = 5
 RECOVERY_LOCK_BASE_SECONDS = 900
 RECOVERY_LOCK_MAX_SECONDS = 86400
+PENDING_REKEY_TTL_SECONDS = 86400
 
 _KEY_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _PROOF_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -27,6 +28,10 @@ RECOVERY_COMMIT_FIELDS = frozenset(
     {"proof", "expected_key_rev", "from_key_id", "to_key_id", "srp_salt", "srp_verifier",
      "srp_kdf_version", "new_recovery", "csrf_token"}
 )
+RECOVERY_PENDING_FIELDS = frozenset(
+    {"proof", "expected_key_rev", "from_key_id", "to_key_id", "wrap_version", "wrap", "csrf_token"}
+)
+RECOVERY_PENDING_FETCH_FIELDS = frozenset({"proof", "csrf_token"})
 _NEW_RECOVERY_FIELDS = frozenset({"recovery_salt", "wrap", "wrap_version", "proof_hash"})
 _HEX_RE = re.compile(r"^[0-9a-f]+$")
 _WRAP_FIELDS = frozenset({"v", "iv", "data"})
@@ -136,4 +141,46 @@ def parse_recovery_commit(body: dict) -> tuple[dict | None, str]:
     return {
         **fields, "proof": proof, "from_key_id": from_key_id, "to_key_id": to_key_id,
         "srp_salt": srp_salt, "srp_verifier": srp_verifier,
+    }, ""
+
+
+def _parse_proof(body: dict) -> str | None:
+    proof = body.get("proof")
+    return proof if isinstance(proof, str) and re.fullmatch(r"[0-9a-f]{64}", proof) else None
+
+
+def parse_pending_fetch(body: dict) -> tuple[dict | None, str]:
+    extra = unexpected_fields(body, RECOVERY_PENDING_FETCH_FIELDS)
+    if extra:
+        return None, "unexpected field: " + ", ".join(extra)
+    proof = _parse_proof(body)
+    if proof is None:
+        return None, "invalid proof"
+    return {"proof": proof}, ""
+
+
+def parse_recovery_pending(body: dict) -> tuple[dict | None, str]:
+    """Validate the body of recover/pending. The wrap (new VK under old VK) stays opaque."""
+    extra = unexpected_fields(body, RECOVERY_PENDING_FIELDS)
+    if extra:
+        return None, "unexpected field: " + ", ".join(extra)
+    proof = _parse_proof(body)
+    if proof is None:
+        return None, "invalid proof"
+    from_key_id, to_key_id = body.get("from_key_id"), body.get("to_key_id")
+    if not valid_key_id(from_key_id) or not valid_key_id(to_key_id):
+        return None, "invalid key_id"
+    if body.get("wrap_version") != WRAP_VERSION:
+        return None, "invalid wrap_version"
+    # Same shape rules as the recovery wrap; the salt and proof hash are placeholders here.
+    fields, problem = parse_recovery_put({
+        "expected_key_rev": body.get("expected_key_rev"), "key_id": to_key_id,
+        "wrap_version": WRAP_VERSION, "wrap": body.get("wrap"),
+        "recovery_salt": base64.b64encode(bytes(16)).decode("ascii"), "proof_hash": "0" * 64,
+    })
+    if fields is None:
+        return None, problem
+    return {
+        "proof": proof, "expected_key_rev": fields["expected_key_rev"],
+        "from_key_id": from_key_id, "to_key_id": to_key_id, "wrap_json": fields["wrap_json"],
     }, ""
