@@ -16,6 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 sync_api = pytest.importorskip("playwright.sync_api")
 from run_agenda_editor_browser import free_port, start_server  # noqa: E402
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 PASSWORD = "CalPickerPass1!abc"
 UNLOCKED_JS = "() => typeof NotesStore !== 'undefined' && NotesStore.isUnlocked()"
@@ -42,6 +43,7 @@ def page():
             page.click("#register-submit")
             page.wait_for_function(
                 "() => typeof NotesStore !== 'undefined' && NotesStore.isUnlocked()", timeout=120_000)
+            complete_recovery_key_step(page)
             page.evaluate("() => NotesStore.markKeyVerified?.()")
             yield page
             browser.close()

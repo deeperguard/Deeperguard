@@ -813,6 +813,14 @@ const NotesStore = (() => {
     return !!state.cryptoKey && !!state.keyVerified;
   }
 
+  // A copy of the vault key bytes for wrapping (docs/VAULT_RECOVERY.md 3.1); the
+  // caller zeroes it. Null while locked.
+  function vaultKeyCopy() {
+    const raw = state.cryptoKey && state.cryptoKey.raw;
+    if (!(raw instanceof Uint8Array) || raw.length !== 32) return null;
+    return { raw: new Uint8Array(raw) };
+  }
+
   function markKeyVerified() {
     if (!state.cryptoKey) return;
     state.keyVerified = true;
@@ -7552,6 +7560,7 @@ const NotesStore = (() => {
     remotePasswordChanged,
     ackAuthSecurity,
     remoteAuthSecurityEvent,
+    vaultKeyCopy,
     prepareForRemotePasswordRotation,
     abandonLocalForPasswordRotation,
     passwordChangeInFlight: () => passwordChangeInFlight,

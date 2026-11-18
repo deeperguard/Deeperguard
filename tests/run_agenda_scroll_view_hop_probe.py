@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from run_agenda_view_matrix import ANCHOR_MON, free_port, start_server  # noqa: E402
 
 from playwright.sync_api import sync_playwright
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 RUNS = 3
 
@@ -42,6 +43,7 @@ def probe_once(run_i: int) -> dict:
                 "() => typeof NotesStore !== 'undefined' && NotesStore.isUnlocked()",
                 timeout=120_000,
             )
+            complete_recovery_key_step(page)
             page.evaluate("() => NotesStore.markKeyVerified?.()")
             fx = page.evaluate(
                 """async () => {

@@ -131,6 +131,9 @@ def main() -> int:
         wait.until(EC.presence_of_element_located((By.ID, "app")))
         wait.until(lambda d: d.execute_script(
             "return !!window.NotesStore && NotesStore.isUnlocked();"))
+        from e2e_recovery_key_step import complete_recovery_key_step_selenium
+
+        complete_recovery_key_step_selenium(driver)
         driver.execute_script(
             "for (const t of ['W one', 'W two', 'W three']) {"
             " const id = NotesStore.newUuid();"

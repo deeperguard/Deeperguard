@@ -224,6 +224,9 @@ def unlock_app(driver, wait, base: str) -> None:
     wait.until(lambda d: d.execute_script(
         "return !!window.NotesStore && NotesStore.isUnlocked && NotesStore.isUnlocked();"
     ))
+    from e2e_recovery_key_step import complete_recovery_key_step_selenium
+
+    complete_recovery_key_step_selenium(driver)
 
 
 def attachment_count(driver) -> int:

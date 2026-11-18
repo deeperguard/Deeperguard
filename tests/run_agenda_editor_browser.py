@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app"
@@ -165,6 +166,7 @@ def main() -> int:
                     "() => typeof NotesStore !== 'undefined' && NotesStore.isUnlocked()",
                     timeout=120_000,
                 )
+                complete_recovery_key_step(page)
                 page.evaluate("() => NotesStore.markKeyVerified?.()")
                 fx = page.evaluate(
                     """async () => {

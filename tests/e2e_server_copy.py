@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 APP_DIR = REPO / "app"
@@ -89,6 +90,7 @@ def main() -> int:
                   && !!(NotesStore.isKeyVerified && NotesStore.isKeyVerified())""",
                 timeout=120000,
             )
+            complete_recovery_key_step(page)
 
             page.wait_for_timeout(500)
             ids = page.evaluate(

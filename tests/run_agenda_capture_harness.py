@@ -19,6 +19,7 @@ from run_agenda_view_matrix import (  # noqa: E402
     free_port,
     start_server,
 )
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 DISMISS_CHROME = """
 () => {
@@ -146,6 +147,8 @@ def ensure_session(page, base: str, email: str, password: str, *, registered: bo
         page.check("#register-recover-ack")
         page.click("#register-submit")
     page.wait_for_function(WAIT_APP, timeout=240_000)
+    if not registered:
+        complete_recovery_key_step(page)
     page.evaluate("() => NotesStore.markKeyVerified?.()")
     page.evaluate(DISMISS_CHROME)
 

@@ -951,6 +951,8 @@ if (registerForm) {
     await stashLoginSession(data, email, password);
     try { sessionStorage.setItem('notes_just_registered', '1'); } catch (err) { /* ignore */ }
     try { sessionStorage.setItem('notes_verify_email_hint', '1'); } catch (err) { /* ignore */ }
+    // The app shows the required recovery key step after the vault unlocks.
+    window.NotesRecoveryKeySetup?.markPending(email);
     if (data?.kdf_salt && window.NotesCrypto?.deriveKey && window.NotesVaultSecrets?.stashBootDerivedKey) {
       if (submitBtn) submitBtn.textContent = registerPageLocale() === 'nl' ? 'Kluis voorbereiden…' : 'Preparing your vault…';
       await new Promise((resolve) => {

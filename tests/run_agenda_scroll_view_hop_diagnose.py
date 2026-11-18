@@ -15,6 +15,7 @@ from run_agenda_view_matrix import (  # noqa: E402
     free_port,
     start_server,
 )
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 ART = Path("/opt/cursor/artifacts/agenda-scroll-diagnose")
 ART.mkdir(parents=True, exist_ok=True)
@@ -74,6 +75,7 @@ def main() -> int:
                 "() => typeof NotesStore !== 'undefined' && NotesStore.isUnlocked()",
                 timeout=120_000,
             )
+            complete_recovery_key_step(page)
             page.evaluate("() => NotesStore.markKeyVerified?.()")
             fx = page.evaluate(SEED_FIXTURE)
             page.click("#app-tab-agenda")

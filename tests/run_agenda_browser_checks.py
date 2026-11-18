@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app"
@@ -90,6 +91,7 @@ def main() -> int:
                 page.check("#register-recover-ack")
                 page.click("#register-submit")
                 page.wait_for_function("() => location.pathname === '/app'", timeout=120_000)
+                complete_recovery_key_step(page)
                 page.wait_for_function(
                     "() => typeof NotesStore !== 'undefined' && NotesStore.isUnlocked && NotesStore.isUnlocked()",
                     timeout=60_000,

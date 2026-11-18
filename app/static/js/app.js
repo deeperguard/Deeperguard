@@ -4337,6 +4337,7 @@
     try { window.NotesCloudBackup?.clearPlaintextDropboxTokensFromLocal?.(); } catch (err) { /* ignore */ }
     globalPrefsAppliedAt = 0;
     globalPrefsHydrated = false;
+    window.NotesRecoveryKeySetup?.close();
     NotesStore.lock();
     sessionExpiredAlertShown = false;
     try { sessionStorage.removeItem('notes_totp_resync'); } catch (err) { /* ignore */ }
@@ -6994,6 +6995,19 @@
     clearUnfocusedAt();
   }
 
+  // New accounts must store a recovery key (docs/VAULT_RECOVERY.md 5.1). The
+  // step stays pending on this device until the wrap is saved.
+  function showPendingRecoveryKeyStep() {
+    if (!window.NotesRecoveryKeySetup) return;
+    NotesRecoveryKeySetup.maybeShow({
+      email: expiredSessionEmail(),
+      getVaultKey: () => NotesStore.vaultKeyCopy(),
+      getPassword: () => (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getAccountPassword()) || '',
+      ackAuthSecurity: (at) => NotesStore.ackAuthSecurity(at),
+      toast,
+    }).catch(() => {});
+  }
+
   function showApp() {
     markRememberedShell(true);
     document.body.classList.add('unlocked');
@@ -7023,6 +7037,7 @@
       }
     } catch (err) { /* ignore */ }
     updateEmptyStateVisibility();
+    showPendingRecoveryKeyStep();
     requestAnimationFrame(() => {
       if (!paneSplitDragging) applyListPaneWidth(readStoredListWidth(), { persist: false });
     });

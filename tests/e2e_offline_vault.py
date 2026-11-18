@@ -138,6 +138,9 @@ def unlock_app(driver, wait, base: str) -> None:
     if driver.execute_script(
         "return !!window.NotesStore && NotesStore.isUnlocked && NotesStore.isUnlocked();"
     ):
+        from e2e_recovery_key_step import complete_recovery_key_step_selenium
+
+        complete_recovery_key_step_selenium(driver)
         driver.execute_script(
             "localStorage.setItem('notes_email', arguments[0]);",
             "offline@home.local",
