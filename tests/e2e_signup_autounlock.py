@@ -95,11 +95,14 @@ with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
 """,
         encoding="utf-8",
     )
+    # A file, not a pipe: nobody reads a pipe while the test runs, and the request log
+    # would fill it (~64 KB) and freeze the server.
+    log = open(root / "server.log", "wb")
     proc = subprocess.Popen(
         [sys.executable, str(bootstrap)],
         cwd=str(APP_DIR),
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=log,
         stderr=subprocess.STDOUT,
     )
     # Wall-clock deadline: importing the app is slow on a loaded build host.
@@ -110,8 +113,7 @@ with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
                 return proc
         except OSError:
             if proc.poll() is not None:
-                out = (proc.stdout.read() or b"").decode()
-                raise RuntimeError(out)
+                raise RuntimeError((root / "server.log").read_text(errors="replace"))
             time.sleep(0.25)
     raise RuntimeError("server did not start")
 

@@ -85,11 +85,14 @@ def start_server(root: Path, port: int):
     )
     (root / "keys").mkdir(parents=True, exist_ok=True)
     (root / "keys" / "flask-secret").write_text("e2e-offline-secret", encoding="utf-8")
+    # A file, not a pipe: nobody reads a pipe while the test runs, and the request log
+    # would fill it (~64 KB) and freeze the server.
+    log = open(root / "server.log", "wb")
     proc = subprocess.Popen(
         [sys.executable, "-m", "flask", "run", "--host", "127.0.0.1", "--port", str(port)],
         cwd=str(APP_DIR),
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=log,
         stderr=subprocess.STDOUT,
     )
     for _ in range(80):
@@ -98,7 +101,7 @@ def start_server(root: Path, port: int):
                 return proc
         except OSError:
             if proc.poll() is not None:
-                raise RuntimeError((proc.stdout.read() or b"").decode())
+                raise RuntimeError((root / "server.log").read_text(errors="replace"))
             time.sleep(0.25)
     raise RuntimeError("server did not start")
 
