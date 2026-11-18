@@ -1676,6 +1676,31 @@ def put_prf_wrap(
         return "ok", int(row["vault_key_rev"]), key_id
 
 
+def delete_prf_wrap(user_id: int, credential_id: str, *, expected_key_rev: int) -> tuple[str, int, str]:
+    """Remove one passkey's vault copy; the passkey itself stays for sign-in.
+
+    Status "ok", "key_rev_mismatch" or "not_found" (no such copy for this user).
+    """
+    uid = int(user_id)
+    with tx() as conn:
+        user = conn.execute("SELECT vault_key_rev FROM users WHERE id = ?", (uid,)).fetchone()
+        if not user:
+            return "not_found", 0, ""
+        if int(user["vault_key_rev"]) != int(expected_key_rev):
+            return _vault_keys_conflict(conn, uid, int(expected_key_rev))
+        has = conn.execute(
+            "SELECT 1 FROM vault_prf_wraps WHERE user_id = ? AND credential_id = ?", (uid, credential_id),
+        ).fetchone()
+        if not has:
+            return "not_found", int(expected_key_rev), ""
+        conn.execute("UPDATE users SET vault_key_rev = vault_key_rev + 1 WHERE id = ?", (uid,))
+        conn.execute(
+            "DELETE FROM vault_prf_wraps WHERE user_id = ? AND credential_id = ?", (uid, credential_id),
+        )
+        _free_key_id_without_wraps(conn, uid)
+        return "ok", int(expected_key_rev) + 1, ""
+
+
 def get_prf_salt(user_id: int, credential_id: str) -> str:
     """The (non-secret) salt the passkey needs as PRF input; '' when it has no wrap."""
     row = connection().execute(
