@@ -2996,6 +2996,10 @@
     </div>
     <div class="dialog-body">
       <p id="confirm-message"></p>
+      <div id="confirm-option-wrap" class="confirm-option" hidden>
+        <label class="confirm-option-label"><input id="confirm-option" type="checkbox" aria-describedby="confirm-option-warning"> <span id="confirm-option-text"></span></label>
+        <p id="confirm-option-warning" class="error" role="alert" hidden></p>
+      </div>
       <div id="confirm-password-wrap" hidden>
         <label for="confirm-password">Vault password</label>
         <input id="confirm-password" type="password" autocomplete="current-password" aria-describedby="confirm-password-error">
