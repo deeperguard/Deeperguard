@@ -7014,7 +7014,10 @@
   // step stays pending on this device until the wrap is saved.
   function showPendingRecoveryKeyStep() {
     if (!window.NotesRecoveryKeySetup) return;
-    NotesRecoveryKeySetup.maybeShow(recoveryKeyDeps()).catch(() => {});
+    const deps = recoveryKeyDeps();
+    NotesRecoveryKeySetup.maybeShow(deps)
+      .then((shown) => (shown ? false : NotesRecoveryKeySetup.maybeOffer(deps)))
+      .catch(() => {});
   }
 
   function showApp() {
