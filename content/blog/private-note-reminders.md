@@ -43,7 +43,7 @@ If you change the time, clear the reminder, or trash or delete the note, the app
 Be clear about the trade-off. For a closed-app reminder:
 
 - Our server knows that your account has a pending reminder and roughly when it is due, to within the window. It does not know what it is for.
-- An account can have at most 50 pending windows at once, so the number of them is visible to the server too.
+- An account can have at most 50 pending push windows at once, shared with other closed-app reminders, so the number of them is visible to the server too.
 - The push service run by your browser's vendor (Google, Apple or Mozilla) can see that a notification is sent to your device, and when. Copies in our backups and logs, and anything your push service keeps, may remain until they expire.
 - Delivery is not guaranteed. Browsers, battery savers and operating systems can delay or drop a push.
 
