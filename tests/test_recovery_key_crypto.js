@@ -11,6 +11,8 @@ const hex = (b) => Buffer.from(b).toString('hex');
 const vk = () => ({ raw: new Uint8Array(32).map((_, i) => (i * 7 + 3) & 255) });
 const ctx = { accountId: '42', type: 'recovery' };
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const FIXED_RK = Uint8Array.from(Buffer.from('000102030405060708090a0b0c0d0e0f10111213', 'hex'));
+const FIXED_SALT = Uint8Array.from(Buffer.from('a0a1a2a3a4a5a6a7a8a9aaabacadaeaf', 'hex'));
 
 (async () => {
   // HKDF-SHA256: RFC 5869 test cases 1 and 3
@@ -28,6 +30,13 @@ const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
     '8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8',
   );
 
+  // fixed vectors for our own info strings (values from Node's crypto.hkdfSync)
+  assert.strictEqual(
+    hex(C.deriveRecoveryWrapKey(FIXED_RK, FIXED_SALT).raw),
+    '070ae62aa313847005a4e6e4aafd60d510587e535ae8b4c7f75bc37d9bd1727c',
+  );
+  assert.strictEqual(C.vaultKeyId(vk()), '973c7c0d096f8dba6a66dfc005442ec5');
+
   // entropy: at least 128 bits, and two keys differ
   const rk = C.generateRecoveryKey();
   assert.ok(rk.length * 8 >= 128);
@@ -41,7 +50,7 @@ const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
   assert.ok(C.encodeRecoveryKey(new Uint8Array(20)).startsWith('0000-0000-0000-0000-0000-0000-0000-0000-'));
 
   // typo detection: single-character substitutions and neighbour swaps
-  const compact = text.replace(/-/g, '');
+  const compact = C.encodeRecoveryKey(FIXED_RK).replace(/-/g, '');
   let caught = 0;
   let total = 0;
   const tryDecode = (candidate) => {
