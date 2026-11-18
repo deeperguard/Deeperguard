@@ -15,6 +15,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from e2e_recovery_key_step import complete_recovery_key_step
+
 REPO = Path(__file__).resolve().parents[1]
 APP_DIR = REPO / "app"
 TURNSTILE_TEST_SITE = "1x00000000000000000000AA"
@@ -182,8 +184,6 @@ def main() -> int:
                 timeout=120000,
             )
             # New accounts must finish the required recovery key step before the app is usable.
-            from e2e_recovery_key_step import complete_recovery_key_step
-
             complete_recovery_key_step(page)
             browser.close()
         print("e2e_signup_autounlock ok", email)
