@@ -49,7 +49,9 @@ Secure Send is different: it encrypts in the browser and keeps the decryption ke
 
 ## What support will never ask for
 
-If someone claiming to be support asks for your vault password, recovery material, or 2FA codes, that is a scam. There is no remote restore that bypasses your vault password. Losing the password without a backup you control means the ciphertext stays unreadable — by design.
+If someone claiming to be support asks for your vault password, recovery material (including your recovery key), or 2FA codes, that is a scam. We cannot restore a vault or reset a vault password for you.
+
+New accounts create a recovery key during sign-up. It is made in your browser and shown only there; we store a copy of your vault key encrypted with it and cannot read the recovery key or that copy. The app has no screen yet to open a vault or reset a password with the recovery key, so today a forgotten vault password still means the ciphertext stays unreadable. Accounts created before this step have no recovery key.
 
 During the public beta, Free, Basic, and Pro plan limits apply. Billing is not active yet — see the homepage pricing table for current caps.
 
@@ -60,3 +62,5 @@ During the public beta, Free, Basic, and Pro plan limits apply. Billing is not a
 - Source available for review on GitHub — inspect encryption and client code  
 
 Security reports: notes@deeperguard.com with subject “Vulnerability report”.
+
+Updated: 2026-11-18. The support section now mentions the recovery key that new accounts create during sign-up. It replaces the sentence that said there is no restore that bypasses the vault password and that a lost password is unreadable by design. The app cannot reset a password with the recovery key yet.

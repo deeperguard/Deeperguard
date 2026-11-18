@@ -2,13 +2,13 @@
 title: "A vault password you'll actually remember: how to build a strong passphrase"
 slug: vault-password-passphrase
 date: 2026-11-03
-description: "Your vault password is the one secret everything else rests on. Here's how to build a long, memorable passphrase, where to keep a backup, and what to avoid."
+description: "Your vault password is the main secret protecting your notes. Here's how to build a long, memorable passphrase, where to keep a backup, and what to avoid."
 cover_image: /static/blog/vault-password-passphrase.jpg
 cover_alt: "Illustration of four blank rounded tiles linked into a chain that ends in a key, beside a closed teal padlock on a soft cream and blue background"
 draft: false
 ---
 
-Deeperguard is built so that your notes are encrypted on your device with AES-GCM 256 before they sync, and our servers only ever hold ciphertext. That design has one consequence worth taking seriously: your vault password is the secret that everything else rests on. Make it strong, make it memorable, and keep it to yourself.
+Deeperguard is built so that your notes are encrypted on your device with AES-GCM 256 before they sync, and our servers only ever hold ciphertext. That design has one consequence worth taking seriously: your vault password is the main secret protecting your notes. Make it strong, make it memorable, and keep it to yourself. New accounts also create a recovery key during sign-up, and it needs the same care (see below).
 
 ## Why length beats cleverness
 
@@ -37,7 +37,9 @@ A memorable passphrase can still be forgotten after a long holiday. Keep a backu
 - In a password manager you already trust, or
 - Written on paper and stored somewhere safe at home, not in a note on your phone or in your email.
 
-Store your Deeperguard recovery code the same careful way, and separately from your passphrase if you can. Remember: Deeperguard will never ask you for your vault password or recovery code by email, chat or phone. Anyone who does is trying to scam you.
+Store your Deeperguard recovery code the same careful way, and separately from your passphrase if you can. Remember: Deeperguard will never ask you for your vault password, recovery key or recovery code by email, chat or phone. Anyone who does is trying to scam you.
+
+If you created your account recently, sign-up also showed you a recovery key. It is not the same thing as a recovery code: it is a second way to open your vault, so anyone who has it and can sign in to your account can open your notes. Keep it away from your device, and treat it like the passphrase itself. The app has no screen yet to reset a forgotten password with the recovery key, so it does not replace the backup above. Accounts created before this step have no recovery key.
 
 ## What to avoid
 
@@ -54,3 +56,5 @@ Store your Deeperguard recovery code the same careful way, and separately from y
 - Recovery code stored safely too? ✔
 
 Want to see how your password and notes are protected? Our [security page](/security) explains the design, and Deeperguard's source is available for review on our [verify page](/verify). We'd rather you check than take our word for it.
+
+Updated: 2026-11-18. New accounts now create a recovery key during sign-up, so the vault password is no longer described as the only secret. Added how to store the recovery key and that the app cannot reset a password with it yet.
