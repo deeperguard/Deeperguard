@@ -2206,9 +2206,12 @@
             <label class="file-label btn">Import from Markdown (.md or .zip)
               <input id="import-markdown-file" type="file" multiple accept=".md,.markdown,.zip,text/markdown,application/zip" hidden>
             </label>
+            <label class="file-label btn">Import from Evernote (.enex)
+              <input id="import-enex-file" type="file" multiple accept=".enex" hidden>
+            </label>
           </div>
           <p id="restore-result-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
-          <p class="settings-hint">Restore accepts <code>.dgbackup</code> (and legacy <code>.enc.json</code>) Deeperguard backups. Import from Standard Notes accepts encrypted or decrypted SN exports (zip or .txt). Import from Markdown accepts one or more <code>.md</code> files or a ZIP, including the readable export of this app; you see a summary before anything is saved. Images and files that a note links with a relative path inside the ZIP become its attachments. Web addresses are never fetched.</p>
+          <p class="settings-hint">Restore accepts <code>.dgbackup</code> (and legacy <code>.enc.json</code>) Deeperguard backups. Import from Standard Notes accepts encrypted or decrypted SN exports (zip or .txt). Import from Markdown accepts one or more <code>.md</code> files or a ZIP, including the readable export of this app; you see a summary before anything is saved. Images and files that a note links with a relative path inside the ZIP become its attachments. Web addresses are never fetched. Import from Evernote accepts one or more <code>.enex</code> exports: titles, text, tags, dates, to-do checkboxes and attachments are imported; scripts, styles and links other than http, https and mailto are dropped; files with a DOCTYPE or entity declaration are refused.</p>
         </div>
       </section>
 
@@ -3094,6 +3097,7 @@
   {{ asset_script('js/release-integrity.js') }}
   {{ asset_script('js/snimport.js') }}
   {{ asset_script('js/md-import.js') }}
+  {{ asset_script('js/enex-import.js') }}
   {{ asset_script('js/ziplib.js') }}
   {{ asset_script('js/readable-export.js') }}
   {{ asset_script('js/labels.js') }}

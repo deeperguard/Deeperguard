@@ -1490,6 +1490,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b'/static/js/snimport.', res.data)
         self.assertIn(b'/static/js/readable-export.', res.data)
         self.assertIn(b'/static/js/md-import.', res.data)
+        self.assertIn(b'/static/js/enex-import.', res.data)
         self.assertIn(b"/static/js/checklist.", res.data)
         self.assertIn(b"/static/js/superscript.", res.data)
         self.assertIn(b"Superscript", res.data)

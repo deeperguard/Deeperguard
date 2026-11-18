@@ -25732,7 +25732,7 @@ async function showSettings() {
     }
   });
 
-  document.getElementById('import-markdown-file').addEventListener('change', async (e) => {
+  async function importParsedNotes(e, { parse, title, note }) {
     const picked = [...(e.target.files || [])];
     e.target.value = '';
     if (!picked.length) return;
@@ -25741,7 +25741,7 @@ async function showSettings() {
       toast('Reading files…');
       const files = [];
       for (const file of picked) files.push({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
-      const parsed = await NotesMdImport.parse(files);
+      const parsed = await parse(files);
       if (!parsed.notes.length) {
         setRestoreResultStatus(markdownSkippedReport('Nothing to import', parsed.skipped));
         toast('No notes found in these files', true);
@@ -25749,9 +25749,9 @@ async function showSettings() {
       }
       const confirmed = await confirmAction(
         `${parsed.notes.length} note${parsed.notes.length === 1 ? '' : 's'} and ${parsed.attachmentCount} attachment${parsed.attachmentCount === 1 ? '' : 's'} will be added`
-          + `${parsed.skipped.length ? `; ${parsed.skipped.length} file${parsed.skipped.length === 1 ? ' is' : 's are'} skipped` : ''}. `
-          + 'Existing notes are not changed. Everything is saved encrypted; nothing is fetched from the web.',
-        { title: 'Import from Markdown', confirmLabel: 'Import', danger: false },
+          + `${parsed.skipped.length ? `; ${parsed.skipped.length} item${parsed.skipped.length === 1 ? ' is' : 's are'} skipped` : ''}. `
+          + `Existing notes are not changed. ${note ? `${note} ` : ''}Everything is saved encrypted; nothing is fetched from the web.`,
+        { title, confirmLabel: 'Import', danger: false },
       );
       if (!confirmed) return;
       toast('Importing…');
@@ -25772,7 +25772,16 @@ async function showSettings() {
     } catch (err) {
       toast(err.message || 'Import failed', true);
     }
-  });
+  }
+
+  document.getElementById('import-markdown-file').addEventListener('change', (e) => importParsedNotes(e, {
+    parse: (files) => NotesMdImport.parse(files), title: 'Import from Markdown', note: '',
+  }));
+  document.getElementById('import-enex-file').addEventListener('change', (e) => importParsedNotes(e, {
+    parse: (files) => NotesEnexImport.parse(files),
+    title: 'Import from Evernote',
+    note: 'Only text, tags, dates and attachments are imported; formatting is converted to Markdown.',
+  }));
 
   function markdownSkippedReport(head, skipped) {
     if (!skipped.length) return head;
