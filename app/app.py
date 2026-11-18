@@ -2492,7 +2492,11 @@ def api_account_vault_keys_prf_options(credential_id: str):
     if host_error:
         return jsonify({"error": host_error}), 400
     try:
-        options = webauthn_mod.authentication_options([dict(stored)])
+        options = webauthn_mod.authentication_options(
+            [dict(stored)],
+            session_key=webauthn_mod.SESSION_WEBAUTHN_PRF,
+            require_user_verification=True,
+        )
     except Exception as exc:
         return _generic_client_error("vault-keys prf options failed", exc, status=400)
     return _vault_keys_json({"ok": True, "options": options, "prf_salt": db.get_prf_salt(uid, credential_id)})
@@ -2519,7 +2523,12 @@ def api_account_vault_keys_prf_unwrap(credential_id: str):
     if not webauthn_mod.WEBAUTHN_AVAILABLE:
         return jsonify({"error": "webauthn not available on server"}), 501
     try:
-        verified = webauthn_mod.verify_authentication(credential, dict(stored))
+        verified = webauthn_mod.verify_authentication(
+            credential,
+            dict(stored),
+            session_key=webauthn_mod.SESSION_WEBAUTHN_PRF,
+            require_user_verification=True,
+        )
         db.update_webauthn_sign_count(verified["credential_id"], verified["sign_count"])
     except Exception as exc:
         return _generic_client_error("vault-keys prf unwrap failed", exc, status=401)
