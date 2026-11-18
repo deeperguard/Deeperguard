@@ -24835,10 +24835,16 @@ async function showSettings() {
         + 'your vault password does not protect it. For a safe backup use "Save backup file" instead. '
         + `${exportable} note(s) will be exported`
         + `${lockedCount ? `; ${lockedCount} locked note(s) are skipped` : ''}. `
-        + 'Trashed notes are never exported. Everything is built on this device; nothing is sent to the server.',
-      { title: 'Export without encryption?', confirmLabel: 'Export unencrypted ZIP', danger: true },
+        + 'Trashed notes are never exported. Everything is built on this device; nothing is sent to the server. '
+        + 'Type your vault password to continue.',
+      {
+        title: 'Export without encryption?',
+        confirmLabel: 'Export unencrypted ZIP',
+        danger: true,
+        verifyPassword: (typed) => NotesStore.verifyVaultPassword(typed),
+      },
     );
-    if (!confirmed) return;
+    if (confirmed !== true) return;
     if (btn) btn.disabled = true;
     try {
       await runFileDownloadTask({
