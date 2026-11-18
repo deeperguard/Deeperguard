@@ -24820,6 +24820,60 @@ async function showSettings() {
     }
   });
 
+  document.getElementById('btn-export-readable-zip')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-export-readable-zip');
+    if (btn?.disabled || fileDownloadTaskActive) return;
+    const notes = NotesStore.listNotes();
+    const exportable = notes.filter((n) => !n.content?.trashed && !n.content?.locked).length;
+    if (!exportable) {
+      toast('No notes to export', true);
+      return;
+    }
+    const lockedCount = notes.filter((n) => !n.content?.trashed && n.content?.locked).length;
+    const confirmed = await confirmAction(
+      'This ZIP is NOT encrypted. Anyone who gets the file can read your notes and attachments; '
+        + 'your vault password does not protect it. For a safe backup use "Save backup file" instead. '
+        + `${exportable} note(s) will be exported`
+        + `${lockedCount ? `; ${lockedCount} locked note(s) are skipped` : ''}. `
+        + 'Trashed notes are never exported. Everything is built on this device; nothing is sent to the server.',
+      { title: 'Export without encryption?', confirmLabel: 'Export unencrypted ZIP', danger: true },
+    );
+    if (!confirmed) return;
+    if (btn) btn.disabled = true;
+    try {
+      await runFileDownloadTask({
+        title: 'Readable export',
+        prepareLabel: 'Decrypting notes…',
+        run: async (report) => {
+          const result = await NotesReadableExport.build({
+            notes,
+            tags: NotesStore.listTags(),
+            getAttachment: (id) => NotesStore.get(id),
+            getAttachmentBytes: (id) => NotesStore.getAttachmentBytes(id),
+            onProgress: ({ done, total, status }) => report({
+              status: status === 'Zipping' ? 'Creating ZIP…' : `${status}: ${done} of ${total}`,
+              pct: Math.min(90, Math.round((done / Math.max(1, total)) * 90)),
+              indeterminate: false,
+            }),
+          });
+          if (!result) throw new Error('No notes to export');
+          const url = URL.createObjectURL(new Blob([result.bytes], { type: 'application/zip' }));
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = result.filename;
+          a.click();
+          URL.revokeObjectURL(url);
+          report({ status: 'Download started', pct: 100, indeterminate: false });
+        },
+      });
+      toast('Unencrypted export saved. Delete it when you are done.');
+    } catch (err) {
+      toast(err.message || 'Export failed', true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+
   function syncCloudProviderKeysFromPrefs() {
     const Cloud = window.NotesCloudBackup;
     if (!Cloud?.setUserProviderKeys) return;

@@ -2084,6 +2084,11 @@
           <p id="backup-file-help" class="settings-hint">Downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code> (on iPhone: Save to Files → iCloud Drive).</p>
 
           <div class="settings-actions">
+            <button type="button" id="btn-export-readable-zip" class="btn" aria-describedby="readable-export-help">Alles leesbaar exporteren (ZIP)</button>
+          </div>
+          <p id="readable-export-help" class="settings-hint">Markdown notes plus attachments in one ZIP. <strong>Not encrypted</strong>: anyone with the file can read it. Built on this device; nothing is sent to the server.</p>
+
+          <div class="settings-actions">
             <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not set up yet"{% endif %}>Connect Google Drive</button>
           </div>
           <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not set up yet — add your own key</p>
@@ -3081,6 +3086,7 @@
   {{ asset_script('js/release-integrity.js') }}
   {{ asset_script('js/snimport.js') }}
   {{ asset_script('js/ziplib.js') }}
+  {{ asset_script('js/readable-export.js') }}
   {{ asset_script('js/labels.js') }}
   {{ asset_script('js/labeltree.js') }}
   {{ asset_script('js/store.js') }}

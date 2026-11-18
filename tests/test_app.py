@@ -1488,6 +1488,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertIn(b'data-skip-login="0"', res.data)
         self.assertIn(b"/static/js/preview.", res.data)
         self.assertIn(b'/static/js/snimport.', res.data)
+        self.assertIn(b'/static/js/readable-export.', res.data)
         self.assertIn(b"/static/js/checklist.", res.data)
         self.assertIn(b"/static/js/superscript.", res.data)
         self.assertIn(b"Superscript", res.data)
@@ -2180,6 +2181,9 @@ class NotesAppTests(unittest.TestCase):
 
     def test_client_zip_reader_writer(self):
         self._run_node_script("test_ziplib.js")
+
+    def test_client_readable_export_zip(self):
+        self._run_node_script("test_readable_export.js")
 
     def test_client_secure_send_note_attachments(self):
         self._run_node_script("test_secure_send_note_attachments.js")
