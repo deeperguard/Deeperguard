@@ -333,7 +333,8 @@ revoking therefore needs the password even on a passkey-unlocked device.
 | `DELETE /api/account/vault-keys/prf/<credential_id>` | token | `expected_key_rev` | delete one wrap (passkey stays for sign-in) |
 | `POST /api/account/vault-keys/recover/start` | session | none | locked-out check (3.3); returns `{key_id, key_rev, wrap_version, recovery_salt, wrap}`; 404 `no_recovery_key` if none; 429 with `retry_after` if locked. Does **not** count as a failed attempt |
 | `PUT /api/account/vault-keys/recover/pending` | session | `proof, expected_key_rev, from_key_id, to_key_id, wrap_version, wrap` | verify `proof` (counts a failure when wrong), store `vault_pending_rekey` (3.2 step 4) |
-| `POST /api/account/vault-keys/recover/commit` | session | `proof, expected_key_rev, from_key_id, to_key_id, srp_salt, srp_verifier, srp_kdf_version, new_recovery:{recovery_salt, wrap, wrap_version, proof_hash}` | the atomic commit of 3.2 step 7 |
+| `POST /api/account/vault-keys/recover/pending/fetch` | session | `proof` | returns `{from_key_id, to_key_id, wrap_version, wrap, expires_at}` of the live pending row (7.1 step 2); a wrong `proof` counts as a failed attempt and returns no wrap; 404 `no_pending_rekey` when none or expired (an expired row is deleted) |
+| `POST /api/account/vault-keys/recover/commit` | session | `proof, expected_key_rev, from_key_id, to_key_id, srp_salt, srp_verifier, srp_kdf_version, new_recovery:{recovery_salt, wrap, wrap_version, proof_hash}` | the atomic commit of 3.2 step 7; 409 `pending_mismatch` when a live pending row names another `to_key_id` |
 
 Changes to existing endpoints:
 

@@ -2482,6 +2482,80 @@ def api_account_vault_keys_recover_start():
     return _vault_keys_json(data)
 
 
+def _vault_recovery_proof_failure(user, status: str, data: dict):
+    """Shared answer for a refused proof check; None when the status is not one of those."""
+    if status == "locked":
+        return _vault_recovery_locked(data["retry_after"])
+    if status != "bad_proof":
+        return None
+    if data.get("locked_now"):
+        _vault_recovery_mail(
+            user, "Deeperguard: recovery key locked",
+            "Too many wrong recovery key attempts on your Deeperguard account.\n"
+            "Recovery with the recovery key is locked for a while. Your vault and password did not change.\n"
+            "\n"
+            "Wasn't you? Open deeperguard.com yourself (type it in your browser) "
+            "and go to Settings > Devices to sign out devices you do not recognise, then change your password.\n",
+        )
+        return _vault_recovery_locked(data["retry_after"])
+    return _vault_keys_json({"error": "invalid proof"}, 403)
+
+
+def _vault_recovery_body(user):
+    """(parsed JSON body, error response) after the checks every recover/* write shares."""
+    if not auth.csrf_ok():
+        return None, (jsonify({"error": "invalid CSRF token"}), 400)
+    if _auth_rate_limited("vault-recovery-key", str(user["email"] or "")):
+        return None, (jsonify({"error": "too many attempts"}), 429)
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return None, (jsonify({"error": "invalid body"}), 400)
+    return body, None
+
+
+@app.put("/api/account/vault-keys/recover/pending")
+def api_account_vault_keys_recover_pending_put():
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    body, err = _vault_recovery_body(user)
+    if err:
+        return err
+    fields, problem = vault_keys.parse_recovery_pending(body)
+    if fields is None:
+        return jsonify({"error": problem}), 400
+    status, data = db.put_pending_rekey(int(user["id"]), **fields)
+    refused = _vault_recovery_proof_failure(user, status, data)
+    if refused is not None:
+        return refused
+    if status != "ok":
+        return _vault_keys_write_conflict(status, int(data.get("key_rev", 0)), str(data.get("key_id", "")))
+    return _vault_keys_json({"ok": True, **data})
+
+
+@app.post("/api/account/vault-keys/recover/pending/fetch")
+def api_account_vault_keys_recover_pending_fetch():
+    """The pending wrap for step 2 of 7.1; served only after a valid proof."""
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    body, err = _vault_recovery_body(user)
+    if err:
+        return err
+    fields, problem = vault_keys.parse_pending_fetch(body)
+    if fields is None:
+        return jsonify({"error": problem}), 400
+    status, data = db.get_pending_rekey(int(user["id"]), **fields)
+    refused = _vault_recovery_proof_failure(user, status, data)
+    if refused is not None:
+        return refused
+    if status == "no_pending":
+        return _vault_keys_json({"error": "no_pending_rekey"}, 404)
+    if status != "ok":
+        return _vault_keys_write_conflict(status, 0, "")
+    return _vault_keys_json(data)
+
+
 @app.post("/api/account/vault-keys/recover/commit")
 def api_account_vault_keys_recover_commit():
     user, err = _vault_keys_user()
