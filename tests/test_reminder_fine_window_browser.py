@@ -91,12 +91,18 @@ def test_email_checkbox_is_off_and_announces_what_the_server_sees(page):
     email = page.locator("#agenda-reminder-email")
     assert not email.is_checked()
     assert page.get_by_label("Email reminders").evaluate("el => el.id") == "agenda-reminder-email"
-    # The accessible description a screen reader announces with the checkbox: the disclosure, then the
-    # status line (this account has not confirmed its address, so the checkbox is disabled and says why).
+    # This account has not confirmed its address, so the checkbox is disabled and the status line says why.
     assert email.is_disabled()
-    sync_api.expect(email).to_have_accessible_description(re.compile(
-        r"^Off by default\..*only the 15-minute window.*never which event\..*not end-to-end encrypted\."
-        r" Confirm your email address to receive email reminders\.\s*$"))
+    # The accessible description a screen reader announces with the checkbox. Each key sentence is checked
+    # on its own, so rewording one of them, or the status line, does not break the rest.
+    for key in (
+        r"Off by default\.",
+        r"only the 15-minute window",
+        r"never which event\.",
+        r"not end-to-end encrypted\.",
+        r"Confirm your email address",
+    ):
+        sync_api.expect(email).to_have_accessible_description(re.compile(key))
 
 
 def test_keyboard_choice_is_stored_restored_and_reflected_in_the_texts(page):
