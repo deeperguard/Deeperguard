@@ -516,8 +516,12 @@ Registration (`/api/auth/srp/register`, `app.py:1178`; client `NotesSrpAuth.regi
 `recovery-key-setup.js` runs 3.1 with the confirm step (tick box plus typing one
 4-character group of the key) and checks that the key as shown opens the wrap before
 the `PUT`. A failed save offers to try again; the mark stays until the wrap is stored,
-so the step returns (with a new key) at the next unlock on that device. A new
-account that skips it is in the same state as an existing account.
+so the step returns (with a new key) at the next unlock on that device.
+The step cannot be skipped: the dialog has no close or skip control, and Escape does
+not dismiss it. A new account has no wrap only if the mark is gone before the wrap is
+stored (for example browser storage was cleared, or the account is first unlocked on
+another device, where the mark does not exist). Such an account is in the same state
+as an existing account (5.2, section 4).
 
 ### 5.2 Existing accounts
 
@@ -613,6 +617,7 @@ Attacker capabilities are stated as what they obtain and what they can do with i
 | Threat | What they have | Outcome | Not protected |
 | --- | --- | --- | --- |
 | Stolen server database / backup | all tables incl. wraps, `key_id`, `prf_salt`, `proof_hash`, `recovery_salt`, items | Recovery wrap needs a 160-bit key: not attackable. PRF wrap needs the authenticator secret. `proof_hash` is SHA-256 of an independent 256-bit HKDF output. The password wrap does not exist; the password remains attackable offline **exactly as before** against item GCM tags and `srp_verifier` | A weak password. Wraps and `key_id` add no oracle: any item is already one (see the note on `key_id` below the table) |
+| Stolen server database during a pending rekey (3.2 step 4 to commit) | `vault_pending_rekey`: `VK_new` wrapped under `VK_old`, plus the items | Anyone who tests the **old** password offline (row above) also opens the pending wrap and gets `VK_new`, so for that window the new key is only as strong as the old password. The row is deleted at commit and expires after 24 h (P11) | A weak old password. The exposure lasts until commit or 24 h after step 4, whichever comes first |
 | Stolen recovery key (paper, file, screenshot) | `RK` | With a session on the account (or a stolen session) they recover and **take the account's vault**: new password, notes readable. Without a session they cannot reach the endpoint. Mitigations: TOTP gate, attempt limit, mail + notice on all devices, other sessions ended, the owner can replace/revoke at once | Anyone with `RK` **and** a way to sign in. Treat `RK` like the master password |
 | Malicious or compromised server | can serve any ciphertext, drop or reorder rows, lie in API answers | Cannot read notes or wraps. AAD stops moving a wrap between accounts, types, credentials or key ids; the client recomputes `key_id` of what it unwrapped. A server **can** withhold a wrap (denial of recovery), serve an **older** wrap of the same `key_id` (harmless: same `VK`), and show a wrong "recovery active" flag | The server can serve **malicious client code** (the web app) which sees the password, `RK` or `VK`; defence is the existing release integrity checks (`release-integrity.js`), not this design |
 | Phishing | fake site asking for `RK` or the password | `RK` is as valuable as the password and the only server-visible sign is the mail after use | Human error. Help text must say: the app asks for the recovery key only on the recovery screen of this site; support never asks for it |
@@ -702,14 +707,14 @@ behaviour (DB rows, ciphertext bytes, HTTP status, visible UI), not on source te
 - [ ] E11 Device A enrols a recovery key while device B (same session account) enrols too: one wins, the other gets 409, refetches and sees `active`.
 - [ ] E12 Device A changes the password; device B (unlocked with the old key) tries to upload a wrap: 409 `key_id_mismatch`; B then shows the existing remote-password-change prompt (`remotePasswordChanged`).
 - [ ] P12 Concurrent `PUT recovery` and `POST /api/account/password` with `vault_keys`: exactly one `key_rev` outcome, no wrap with a `key_id` that differs from `users.vault_key_id`.
-- [ ] E14 Revoke all wraps, change the password (wraps absent, current or old client), enrol a recovery key again with the new `key_id`: 200, `users.vault_key_id` equals the new id, `vault_key_rev` strictly increased. Same after the 6.2 late fallback.
 - [ ] E13 Password change by a current client with wraps: new recovery key shown and confirmed, commit atomic, other passkeys marked `current:false`.
+- [ ] E14 Revoke all wraps, change the password (wraps absent, current or old client), enrol a recovery key again with the new `key_id`: 200, `users.vault_key_id` equals the new id, `vault_key_rev` strictly increased. Same after the 6.2 late fallback.
 
 ### 9.8 Old client
 - [ ] P13 Old-client request shapes (no header, no `vault_keys`): unlock proof, sync push/pull, `GET /api/account` all behave as before the feature (golden responses minus the added fields).
 - [ ] P14 Old client with a recovery key: `password/prove` -> 409 `vault_keys_need_update`, no rotation token issued, nothing else changed.
 - [ ] P15 Race: wraps added after `prove`, old client then commits: change accepted, wraps deleted, `vault_keys_invalidated_at` set, mail queued, settings show the explanation.
-- [ ] E14 An old client build (previous release's static files) unlocks an account that has a recovery key and passkey wraps and reads/writes notes normally.
+- [ ] E15 An old client build (previous release's static files) unlocks an account that has a recovery key and passkey wraps and reads/writes notes normally.
 
 ### 9.9 Cross-cutting
 - [ ] P16 Every new endpoint: 401 without session, 400 without CSRF, 403 without 2FA, rate-limited, `no-store`.
