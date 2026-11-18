@@ -10,6 +10,14 @@ const NotesPreview = (() => {
   const MAX_PAGE_DPR = 3;
   const MAX_CANVAS_PIXELS = IS_IOS ? 1800000 : 9000000;
   const MAX_SNAPSHOT_PIXELS = IS_IOS ? 1200000 : 6000000;
+  // Zoomed pages and viewport tiles may use a larger canvas than the fit-width
+  // page, but never more than this (iOS refuses canvases above ~16 megapixels).
+  const MAX_ZOOM_PIXELS = IS_IOS ? 8000000 : 16000000;
+  // Page canvases alive at once: the visible page(s) plus one on each side.
+  const MAX_LIVE_PAGES = 5;
+  // Above these a PDF is not rendered at all; the viewer offers a download.
+  const MAX_PDF_BYTES = IS_IOS ? 60 * 1024 * 1024 : 150 * 1024 * 1024;
+  const MAX_PDF_VIEW_PAGES = 2000;
   const PDF_SRC = '/static/js/vendor/pdfjs/pdf.min.mjs?v=10';
   const PDF_WORKER = '/static/js/vendor/pdfjs/pdf.worker.min.mjs?v=10';
   let workerBlobUrl = '';
@@ -989,13 +997,27 @@ const NotesPreview = (() => {
     return Math.min(MAX_PAGE_DPR, Math.max(2, dpr));
   }
 
+  function discardCanvas(canvas) {
+    if (!canvas) return;
+    // Zero size frees the bitmap now instead of when the GC gets to it.
+    canvas.width = 0;
+    canvas.height = 0;
+    canvas.remove();
+  }
+
+  // limits.wrap: paint into that existing placeholder instead of a new wrap.
+  // limits.holder: receives { page, task } so the caller can cancel the render
+  // and call page.cleanup() when the page leaves the window.
   async function renderPdfPage(doc, pageNum, maxWidth = 900, query = '', boxes = [], limits = {}) {
     const page = await doc.getPage(pageNum);
+    if (limits.holder) limits.holder.page = page;
     const base = page.getViewport({ scale: 1 });
     const dpr = pageBitmapScale();
     const fitScale = Math.min(4, Math.max(0.2, (maxWidth || 900) / (base.width || 1)));
     let scale = fitScale * dpr;
-    const pixelCap = Number(limits.maxPixels) > 0 ? Number(limits.maxPixels) : MAX_CANVAS_PIXELS;
+    const pixelCap = Number(limits.maxPixels) > 0
+      ? Math.min(Number(limits.maxPixels), MAX_ZOOM_PIXELS)
+      : MAX_CANVAS_PIXELS;
     const edgeCap = Number(limits.maxEdge) > 0 ? Number(limits.maxEdge) : 0;
     if (edgeCap > 0) {
       const longEdge = Math.max(base.width || 1, base.height || 1) * scale;
@@ -1010,11 +1032,24 @@ const NotesPreview = (() => {
     const layoutWidth = Math.max(1, Math.ceil(base.width * fitScale));
     const layoutHeight = Math.max(1, Math.ceil(base.height * fitScale));
     const canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
+    canvas.width = Math.max(1, Math.floor(viewport.width));
+    canvas.height = Math.max(1, Math.floor(viewport.height));
     canvas.className = 'doc-page';
-    await page.render({ canvasContext: canvas.getContext('2d', { alpha: false }), viewport }).promise;
-    const wrap = document.createElement('div');
+    try {
+      const task = page.render({ canvasContext: canvas.getContext('2d', { alpha: false }), viewport });
+      if (limits.holder) limits.holder.task = task;
+      await task.promise;
+    } catch (err) {
+      discardCanvas(canvas);
+      throw err;
+    }
+    const wrap = limits.wrap || document.createElement('div');
+    if (limits.wrap) {
+      limits.wrap.querySelectorAll('canvas.doc-page').forEach(discardCanvas);
+      // Before the hit layer, which must stay on top.
+      limits.wrap.prepend(canvas);
+      return wrap;
+    }
     wrap.className = 'doc-page-wrap';
     wrap.dataset.page = String(pageNum);
     wrap.dataset.pdfWidth = String(base.width || 0);
@@ -1065,54 +1100,228 @@ const NotesPreview = (() => {
     return true;
   }
 
-  async function renderPdfDocument(bytes, container, { maxPages = MAX_PDF_PAGES, maxWidth, query, ocrText, ocrBoxes, showExcerpt = true, deferSwap = false, keepBaseWidth = false, maxPixels = 0, maxEdge = 0 } = {}) {
+  // ---- Windowed PDF pages -------------------------------------------------
+  // Every page of a document is a sized placeholder, so scrolling and the page
+  // count are right. Only the visible page(s) and one neighbour on each side
+  // own a canvas; a page that leaves the window has its render task cancelled,
+  // its canvases zeroed and page.cleanup() called.
+  const livePdfStates = new Set();
+
+  function cancelPdfLive(live) {
+    if (!live) return;
+    try { live.holder.task?.cancel(); } catch (err) { /* already finished */ }
+    try { live.tileTask?.cancel(); } catch (err) { /* already finished */ }
+    live.tileTask = null;
+  }
+
+  function releasePdfPage(state, pageNum) {
+    const live = state.live.get(pageNum);
+    state.live.delete(pageNum);
+    cancelPdfLive(live);
+    const wrap = state.wraps[pageNum - 1];
+    wrap?.querySelectorAll('canvas.doc-page, canvas.doc-page-tile').forEach(discardCanvas);
+    try { live?.holder.page?.cleanup(); } catch (err) { /* page already gone */ }
+  }
+
+  function wantedPdfPages(state) {
+    const total = state.wraps.length;
+    const visible = [...state.visible].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
+    // While zoomed in, canvases are large: keep the visible pages only.
+    const reach = state.limits ? 0 : 1;
+    const want = [];
+    const add = (n) => {
+      if (n >= 1 && n <= total && !want.includes(n) && want.length < MAX_LIVE_PAGES) want.push(n);
+    };
+    visible.forEach(add);
+    for (let d = 1; d <= reach; d += 1) {
+      visible.forEach((n) => { add(n - d); add(n + d); });
+    }
+    return new Set(want);
+  }
+
+  function startPdfPage(state, pageNum) {
+    const wrap = state.wraps[pageNum - 1];
+    const live = { holder: {}, gen: state.gen, tileTask: null };
+    state.live.set(pageNum, live);
+    live.done = renderPdfPage(state.pdfDoc, pageNum, state.renderWidth, '', [], {
+      ...(state.limits || {}),
+      wrap,
+      holder: live.holder,
+    }).catch(() => {
+      // Cancelled (page left the window) or failed: the placeholder stays.
+      if (state.live.get(pageNum) === live) state.live.delete(pageNum);
+    });
+    return live.done;
+  }
+
+  function applyPdfWindow(state) {
+    if (state.released) return Promise.resolve();
+    const want = wantedPdfPages(state);
+    for (const n of [...state.live.keys()]) {
+      if (!want.has(n)) releasePdfPage(state, n);
+    }
+    const started = [];
+    want.forEach((n) => {
+      const live = state.live.get(n);
+      if (live && live.gen === state.gen) return;
+      cancelPdfLive(live);
+      started.push(startPdfPage(state, n));
+    });
+    return Promise.all(started);
+  }
+
+  function observePdfWindow(state) {
+    if (typeof IntersectionObserver !== 'function') return;
+    state.observer = new IntersectionObserver((entries) => {
+      // The stage was cleared or replaced: nothing shows this document any more.
+      if (state.wraps[0] && !state.wraps[0].isConnected) {
+        releasePdfState(state);
+        return;
+      }
+      entries.forEach((entry) => {
+        const n = Number(entry.target.dataset.page) || 0;
+        if (entry.isIntersecting) state.visible.add(n);
+        else state.visible.delete(n);
+      });
+      applyPdfWindow(state);
+    });
+    state.wraps.forEach((wrap) => state.observer.observe(wrap));
+  }
+
+  function releasePdfState(state) {
+    if (!state || state.released) return;
+    state.released = true;
+    livePdfStates.delete(state);
+    state.observer?.disconnect();
+    clearTimeout(state.tileTimer);
+    for (const n of [...state.live.keys()]) releasePdfPage(state, n);
+    state.wraps.forEach((wrap) => wrap.querySelectorAll('canvas').forEach(discardCanvas));
+    state.wraps = [];
+    if (state.host && state.host._pdfPaint === state) state.host._pdfPaint = null;
+    try { state.pdfDoc.destroy(); } catch (err) { /* already destroyed */ }
+  }
+
+  function releasePdf(container) {
+    const host = container?.closest?.('.doc-zoom-host') || container;
+    releasePdfState(host?._pdfPaint);
+  }
+
+  function releaseAllPdfs() {
+    [...livePdfStates].forEach(releasePdfState);
+  }
+
+  function livePdfHosts() {
+    return [...livePdfStates].map((state) => state.host);
+  }
+
+  function renderPdfTooLarge(target, message, onDownload) {
+    const box = document.createElement('div');
+    box.className = 'doc-too-large';
+    const p = document.createElement('p');
+    p.className = 'error';
+    p.textContent = message;
+    box.appendChild(p);
+    if (typeof onDownload === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn';
+      btn.textContent = 'Download file';
+      btn.addEventListener('click', () => onDownload());
+      box.appendChild(btn);
+    }
+    target.replaceChildren(box);
+  }
+
+  async function renderPdfDocument(bytes, container, { maxPages = MAX_PDF_PAGES, maxWidth, query, ocrText, ocrBoxes, showExcerpt = true, onDownload } = {}) {
     const needle = String(query || '').trim();
     const host = container?.closest?.('.doc-zoom-host') || container;
     const target = container?.matches?.('.doc-zoom-layer')
       ? container
       : (container?.querySelector?.('.doc-zoom-layer') || container);
     if (!target) return { pages: 0, embeddedHits: 0, renderedWidth: 0 };
+    const size = Number(bytes?.length ?? bytes?.byteLength) || 0;
+    if (size > MAX_PDF_BYTES) {
+      releasePdf(host);
+      renderPdfTooLarge(target, `This PDF is ${Math.round(size / 1048576)} MB, too large to preview safely on this device.`, onDownload);
+      return { pages: 0, embeddedHits: 0, renderedWidth: 0, tooLarge: true };
+    }
     const sink = document.createElement('div');
     let doc;
     try {
       doc = await openPdf(bytes);
     } catch (err) {
-      if (deferSwap) return { pages: 0, embeddedHits: 0, renderedWidth: 0 };
       const p = document.createElement('p');
       p.className = 'error';
       p.textContent = err.message || 'Preview failed';
       target.replaceChildren(p);
       return { pages: 0, embeddedHits: 0, renderedWidth: 0 };
     }
+    if (doc.numPages > MAX_PDF_VIEW_PAGES && maxPages >= doc.numPages) {
+      try { doc.destroy(); } catch (err) { /* nothing to free */ }
+      releasePdf(host);
+      renderPdfTooLarge(target, `This PDF has ${doc.numPages} pages, too many to preview safely on this device.`, onDownload);
+      return { pages: 0, embeddedHits: 0, renderedWidth: 0, tooLarge: true };
+    }
     const pages = Number.isFinite(maxPages) ? Math.min(doc.numPages, maxPages) : doc.numPages;
     const width = Math.max(240, maxWidth || target.clientWidth || container?.clientWidth || 900);
+    const wraps = [];
     let embeddedHits = 0;
     for (let i = 1; i <= pages; i += 1) {
-      const page = await renderPdfPage(doc, i, width, needle, ocrBoxes, { maxPixels, maxEdge });
-      if (page.querySelector('.doc-search-hit')) embeddedHits += 1;
-      sink.appendChild(page);
+      const page = await doc.getPage(i);
+      const base = page.getViewport({ scale: 1 });
+      const wrap = document.createElement('div');
+      wrap.className = 'doc-page-wrap doc-page-pending';
+      wrap.dataset.page = String(i);
+      wrap.dataset.pdfWidth = String(base.width || 0);
+      wrap.dataset.pdfHeight = String(base.height || 0);
+      sizeWrap(wrap, Math.max(1, Math.ceil(base.width)), Math.max(1, Math.ceil(base.height)));
+      if (needle) {
+        try {
+          const content = await page.getTextContent();
+          rememberPdfHits(
+            wrap,
+            pdfTextHitRects(base, content.items || [], needle, base.width, base.height),
+          );
+        } catch (err) {
+          /* keep the page even if text extraction fails */
+        }
+        paintWrapSearchHits(wrap, ocrBoxes, needle, i - 1);
+        if (wrap.querySelector('.doc-search-hit')) embeddedHits += 1;
+      }
+      page.cleanup();
+      wraps.push(wrap);
+      sink.appendChild(wrap);
     }
     if (showExcerpt && needle && !sink.querySelector('.doc-search-hit')) {
       appendSearchExcerpt(sink, ocrText, needle);
     }
+    const previous = host && host._pdfPaint ? host._pdfPaint : null;
+    const state = {
+      host,
+      query: needle,
+      ocrText,
+      ocrBoxes: Array.isArray(ocrBoxes) ? ocrBoxes : [],
+      baseWidth: width,
+      renderedWidth: width,
+      renderWidth: width,
+      limits: null,
+      showExcerpt: showExcerpt !== false,
+      pdfDoc: doc,
+      wraps,
+      live: new Map(),
+      visible: new Set([1]),
+      gen: 0,
+    };
     target.replaceChildren(...sink.childNodes);
-    const previousDoc = host && host._pdfPaint ? host._pdfPaint.pdfDoc : null;
-    if (host && typeof host === 'object') {
-      const previousBase = keepBaseWidth ? host._pdfPaint?.baseWidth : 0;
-      host._pdfPaint = {
-        bytes,
-        query: needle,
-        ocrText,
-        ocrBoxes: Array.isArray(ocrBoxes) ? ocrBoxes : [],
-        baseWidth: previousBase || width,
-        renderedWidth: width,
-        showExcerpt: showExcerpt !== false,
-        pdfDoc: doc,
-      };
-    }
-    if (previousDoc && previousDoc !== doc) {
-      try { previousDoc.destroy(); } catch (err) { /* replaced */ }
-    }
+    if (host && typeof host === 'object') host._pdfPaint = state;
+    if (previous && previous !== state) releasePdfState(previous);
+    // Documents whose stage was replaced (another note opened) free here too.
+    livePdfStates.forEach((other) => {
+      if (other !== state && !other.host?.isConnected) releasePdfState(other);
+    });
+    livePdfStates.add(state);
+    observePdfWindow(state);
+    await applyPdfWindow(state);
     return { pages, embeddedHits, renderedWidth: width };
   }
 
@@ -1174,7 +1383,7 @@ const NotesPreview = (() => {
     }
     let backingWidth = Math.round(visualWidth * bitmap);
     let backingHeight = Math.round(visualHeight * bitmap);
-    const cap = 16000000;
+    const cap = MAX_ZOOM_PIXELS;
     if (backingWidth * backingHeight > cap) {
       const shrink = Math.sqrt(cap / (backingWidth * backingHeight));
       backingWidth = Math.max(1, Math.floor(backingWidth * shrink));
@@ -1210,7 +1419,7 @@ const NotesPreview = (() => {
     if (!canvas?.width || !canvas?.height) return false;
     const fullW = targetWidth * bitmap;
     const fullH = fullW * (canvas.height / canvas.width);
-    return fullW <= 8192 && fullH <= 8192 && fullW * fullH <= 16000000;
+    return fullW <= 8192 && fullH <= 8192 && fullW * fullH <= MAX_ZOOM_PIXELS;
   }
 
   function baseCoversVisible(host, bitmap) {
@@ -1247,7 +1456,7 @@ const NotesPreview = (() => {
     );
     const existing = wrap.querySelector('canvas.doc-page-tile');
     if (tile.backingWidth < 2 || tile.backingHeight < 2) {
-      if (existing) existing.remove();
+      discardCanvas(existing);
       return;
     }
     const viewport = pdfPage.getViewport({
@@ -1266,8 +1475,14 @@ const NotesPreview = (() => {
     canvas.style.height = `${tile.visualHeight / zoom}px`;
     if (!existing) wrap.appendChild(canvas);
     if (host._pdfPaint?.tileGeneration !== generation) return;
+    const live = host._pdfPaint?.live.get(pageNum);
+    if (!live) {
+      discardCanvas(canvas);
+      return;
+    }
     const ctx = canvas.getContext('2d', { alpha: false });
-    await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+    live.tileTask = pdfPage.render({ canvasContext: ctx, viewport });
+    await live.tileTask.promise;
   }
 
   async function paintPdfViewportTiles(container, bitmapScale) {
@@ -1277,15 +1492,15 @@ const NotesPreview = (() => {
     if (!host || !doc) return false;
     const bitmap = Math.max(2, Number(bitmapScale) || pageBitmapScale());
     if (baseCoversVisible(host, bitmap)) {
-      host.querySelectorAll('canvas.doc-page-tile').forEach((el) => el.remove());
+      host.querySelectorAll('canvas.doc-page-tile').forEach(discardCanvas);
       return false;
     }
     const generation = (state.tileGeneration = (state.tileGeneration || 0) + 1);
-    const wraps = [...host.querySelectorAll('.doc-page-wrap')];
-    for (const wrap of wraps) {
+    // Only pages that own a base canvas get a tile; the others are placeholders.
+    for (const pageNum of [...state.live.keys()].sort((a, b) => a - b)) {
       if (state.tileGeneration !== generation) return false;
-      const pageNum = Number(wrap.dataset.page) || 0;
-      if (!pageNum) continue;
+      const wrap = state.wraps[pageNum - 1];
+      if (!wrap) continue;
       try {
         await paintOnePdfTile(host, wrap, doc, pageNum, bitmap, generation);
       } catch (err) {
@@ -1319,6 +1534,16 @@ const NotesPreview = (() => {
     // stay at 2× inside that cap, the visible region is tiled instead.
     const bitmap = pageBitmapScale();
     const targetWidth = Math.round(cssWidth * Math.min(zoom, 4));
+    if (zoom < 1.25 && state.limits) {
+      // Back to fit width: new pages use the normal canvas size again.
+      state.limits = null;
+      state.renderWidth = cssWidth;
+      state.baseWidth = cssWidth;
+      state.renderedWidth = cssWidth;
+      state.gen += 1;
+      await applyPdfWindow(state);
+      return true;
+    }
     if (!fullPageFitsSharpCap(host, targetWidth, bitmap)) {
       await paintPdfViewportTiles(host, bitmap);
       return true;
@@ -1327,32 +1552,23 @@ const NotesPreview = (() => {
     if (!widthChanged && targetWidth * bitmap <= pageBackingWidth(host) * 1.12) return false;
     state.upgrading = true;
     try {
-      const layer = host.querySelector('.doc-zoom-layer') || host;
       const scrollTop = host.scrollTop || 0;
       const scrollLeft = host.scrollLeft || 0;
       const zoomCtl = host._docZoom;
-      await renderPdfDocument(state.bytes, layer, {
-        maxWidth: targetWidth,
-        maxPixels: 16000000,
-        maxEdge: 8192,
-        query: state.query,
-        ocrText: state.ocrText,
-        ocrBoxes: state.ocrBoxes,
-        showExcerpt: state.showExcerpt,
-        deferSwap: true,
-        keepBaseWidth: true,
-      });
-      if (host._pdfPaint) {
-        host._pdfPaint.baseWidth = cssWidth;
-        host._pdfPaint.renderedWidth = targetWidth;
-      }
+      // Re-render only the pages that own a canvas, from the open document.
+      state.renderWidth = targetWidth;
+      state.limits = { maxPixels: 16000000, maxEdge: 8192 };
+      state.gen += 1;
+      await applyPdfWindow(state);
+      state.baseWidth = cssWidth;
+      state.renderedWidth = targetWidth;
       if (zoomCtl && typeof zoomCtl.refresh === 'function') zoomCtl.refresh();
       host.scrollTop = scrollTop;
       host.scrollLeft = scrollLeft;
-      if (state.query) repaintAllSearchHits(layer, state.ocrBoxes, state.query);
+      if (state.query) repaintAllSearchHits(host.querySelector('.doc-zoom-layer') || host, state.ocrBoxes, state.query);
       return true;
     } finally {
-      if (host._pdfPaint) host._pdfPaint.upgrading = false;
+      state.upgrading = false;
     }
   }
 
@@ -1838,6 +2054,7 @@ const NotesPreview = (() => {
     copyCodeBlock,
     bindCodeCopy,
     MAX_PDF_PAGES,
+    MAX_PDF_VIEW_PAGES,
     kindFromMeta,
     resolveKind,
     looksLikeTextBytes,
@@ -1855,6 +2072,9 @@ const NotesPreview = (() => {
     paintPdfViewportTiles,
     renderPdfPage,
     renderPdfDocument,
+    releasePdf,
+    releaseAllPdfs,
+    livePdfHosts,
     upgradePdfQuality,
     upgradeImageQuality,
     rememberImagePaint,

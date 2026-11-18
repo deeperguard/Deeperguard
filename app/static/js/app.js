@@ -4309,6 +4309,8 @@
     hideFindBar();
     hideTagSuggest();
     closeDocPreview();
+    // The inline preview holds its own pdf.js document and page canvases.
+    NotesPreview.releaseAllPdfs();
     // Both template dialogs show template names and text.
     templateDialog?.close();
     closeTemplateManager();
@@ -9041,6 +9043,8 @@
 
   async function signOutCompletely() {
     stopOnlineRecovery('sign-out');
+    closeDocPreview();
+    NotesPreview.releaseAllPdfs();
     clearListThumbCache();
     clearPreviewCache();
     clearScanPageUrls();
@@ -12527,9 +12531,12 @@
       const item = NotesStore.get(id);
       if (!item) throw new Error('File not found');
       const bytes = await NotesStore.getAttachmentBytes(id);
+      const kind = NotesPreview.resolveKind(item.content.mime, item.content.filename, bytes);
       return {
-        url: NotesPreview.blobUrl(bytes, item.content.mime),
-        kind: NotesPreview.resolveKind(item.content.mime, item.content.filename, bytes),
+        // Only images are shown through a URL. PDF and text read the bytes
+        // directly, so no second copy of them is kept as a Blob.
+        url: kind === 'image' ? NotesPreview.blobUrl(bytes, item.content.mime) : '',
+        kind,
         bytes,
         mime: item.content.mime,
         filename: item.content.filename || 'attachment',
@@ -12916,7 +12923,13 @@
         const width = forList
           ? Math.max(720, thumbOutputPx() * 2)
           : Math.max(thumbOutputPx(), stageWidth || THUMB_CSS_PX);
-        const page = await NotesPreview.renderPdfPage(doc, 1, width);
+        let page;
+        try {
+          page = await NotesPreview.renderPdfPage(doc, 1, width);
+        } finally {
+          // Page 1 is painted; the document and its worker are not needed.
+          try { doc.destroy(); } catch (err) { /* already destroyed */ }
+        }
         if (forList) {
           const canvas = page?.tagName === 'CANVAS' ? page : page?.querySelector?.('canvas');
           const fitted = canvas ? fitThumbCanvas(canvas, { cropInk: true }) : null;
@@ -13280,6 +13293,7 @@
           maxWidth,
           query: '',
           showExcerpt: false,
+          onDownload: () => downloadAttachment(attId).catch((err) => toast(err.message || 'Download failed', true)),
         });
         markDocStagePainted(stage);
         return;
@@ -13294,6 +13308,7 @@
         ocrText,
         ocrBoxes: boxes,
         showExcerpt: true,
+        onDownload: () => downloadAttachment(attId).catch((err) => toast(err.message || 'Download failed', true)),
       });
       if (paintToken !== docPaintToken || !stage.isConnected) return;
       if (!attachmentSearchBoxes(attId).length) {
@@ -14136,6 +14151,7 @@
     if (!ui.docViewer) return;
     releaseDocEnhanceObjects(ui.docStage);
     if (ui.docStage._docZoom) ui.docStage._docZoom.destroy();
+    NotesPreview.releasePdf(ui.docStage);
     updateDocZoomLabel();
     setDocImmersive(false);
     document.body.classList.remove('doc-preview-open');

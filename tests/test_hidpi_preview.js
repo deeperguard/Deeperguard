@@ -25,8 +25,6 @@ assert.strictEqual(pageBitmapScale(), 3);
 
 assert.ok(previewSrc.includes('const MAX_PAGE_DPR = 3'));
 assert.ok(previewSrc.includes('Math.max(2, dpr)'));
-assert.ok(previewSrc.includes('deferSwap: true'));
-assert.ok(previewSrc.includes('keepBaseWidth: true'));
 assert.ok(!previewSrc.includes('img.src = canvas.toDataURL'));
 assert.ok(previewSrc.includes('paint.renderedWidth = paint.naturalWidth'));
 
