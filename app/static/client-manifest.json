@@ -422,10 +422,10 @@
       "url": "/static/js/srp-auth.f25c24074b2750f0.js"
     },
     "js/store.js": {
-      "bytes": 307129,
-      "sha256": "89ccbda643d0595380fd1919dbf966e6f17b93d462dc33f510d8864b1dcec691",
-      "sri": "sha384-iApoDfnoFkw7qWMVF6vCP0YquP8Ks+1JXAcxudYRUC6K6GX+STOfPiXidhFvsg5W",
-      "url": "/static/js/store.89ccbda643d05953.js"
+      "bytes": 307315,
+      "sha256": "c5932b551aef9f77f7cddae0b625308a4d5b053f326456128d23c9d5c8206753",
+      "sri": "sha384-zPuRtMneDbCeuTBrCi+eAno4oAvjYnX3UO6Ql46J/y7rcZoWGxLDuadg792nfBXo",
+      "url": "/static/js/store.c5932b551aef9f77.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -633,6 +633,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "4f18b31ca2e7fa8c61eb4577bcb4c0145861ee2a2a3b5fa74318bdd6d2732f0e",
+  "manifest_sha256": "1a65ddcf7cc5547f56f010513453287d0f364ddb016f2427a221f305cb8d4764",
   "version": 1
 }
