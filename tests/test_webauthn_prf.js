@@ -73,6 +73,12 @@ function install({ caps, prf = true, cred = 'credA', seen = [] }) {
   await assert.rejects(C.unwrapVaultKey(C.derivePrfWrapKey(other.output), wrap, { ...ctx, binding: 'credB' }));
   await assert.rejects(C.unwrapVaultKey(C.derivePrfWrapKey(res.output), wrap, { ...ctx, binding: 'credB' }));
 
+  // a passkey outside allowCredentials is rejected with a clear error; a listed one passes
+  const wanted = { ...options, allowCredentials: [{ type: 'public-key', id: new Uint8Array([1, 2, 3]) }] };
+  await assert.rejects(W.requestPrfOutput(wanted, salt), /different passkey/);
+  install({ caps: { 'extension:prf': true }, cred: 'AQID' });
+  assert.strictEqual((await W.requestPrfOutput(wanted, salt)).credentialId, 'AQID');
+
   // authenticator returns no PRF: a clear "unsupported" outcome, nothing derived
   install({ caps: { 'extension:prf': true }, prf: false });
   assert.deepStrictEqual(
