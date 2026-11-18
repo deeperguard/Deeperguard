@@ -1,5 +1,5 @@
 {
-  "asset_count": 101,
+  "asset_count": 102,
   "assets": {
     "css/app.css": {
       "bytes": 362898,
@@ -606,9 +606,15 @@
       "sha256": "83875c33b2c3e80ffa3827da7d34c86391f32628420bde5cdc58c460d8a2e111",
       "sri": "sha384-ljFBVE/YBimwCgI08APQ9frBQS7DFmEnMIcWuyk/nQD3K3n4Lxn5MQZFwM6m4TWD",
       "url": "/static/js/webauthn-client.83875c33b2c3e80f.js"
+    },
+    "js/ziplib.js": {
+      "bytes": 14329,
+      "sha256": "7d7bbbb25f16684add63248e337c99608ba8a1fbcaa4b7ec045bbbe898cf5f2a",
+      "sri": "sha384-tvO1MpcbnRcxKl9rNbEuBMMsJSb6Og9PAXFgQZYTPai4fnkMTZPOfufwTh67976R",
+      "url": "/static/js/ziplib.7d7bbbb25f16684a.js"
     }
   },
   "created": 0,
-  "manifest_sha256": "8ad803a160533607a1ea073f45207513a3c2696ab6db35cd018a22ce93745c4a",
+  "manifest_sha256": "e3eedc193358014dcf2900a5fd3cac0ece3351d3b67f4756e871924b374f2c15",
   "version": 1
 }
