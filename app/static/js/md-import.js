@@ -27,14 +27,11 @@ const NotesMdImport = (() => {
     heic: 'image/heic', zip: 'application/zip', mp3: 'audio/mpeg', mp4: 'video/mp4',
   };
 
-  // Same tags as NotesSanitize RICH_ALLOWED_TAGS (without `button`); every other tag is dropped.
-  const ALLOWED_TAGS = new Set([
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'hr', 'strong', 'em', 'del', 's', 'code', 'pre',
-    'blockquote', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'a', 'img', 'span', 'div',
-  ]);
-  const ALLOWED_ATTR = new Set([
-    'href', 'src', 'title', 'alt', 'class', 'dir', 'colspan', 'rowspan', 'start', 'type', 'rel', 'target', 'scope',
-  ]);
+  // The allowlist is the one of NotesSanitize (spec 4.5); only `button` is not accepted from imports, and
+  // attributes the renderer sets itself (aria-/data-) are not taken over from input.
+  const sanitizeLib = typeof NotesSanitize !== 'undefined' ? NotesSanitize : require('./sanitize.js');
+  const ALLOWED_TAGS = new Set(sanitizeLib.RICH_ALLOWED_TAGS.filter((t) => t !== 'button'));
+  const ALLOWED_ATTR = new Set(sanitizeLib.RICH_ALLOWED_ATTR.filter((a) => !/^(?:aria|data)-/.test(a)));
   const DROP_WITH_CONTENT = 'script|style|iframe|object|embed|noscript|template|textarea|title|xmp|svg|math|form|link|meta|head';
 
   const decoder = () => new TextDecoder('utf-8', { fatal: false });
@@ -125,7 +122,13 @@ const NotesMdImport = (() => {
     // An opening tag that is never closed would run to the end of the text in a browser.
     const open = new RegExp(`<\\s*(?:${DROP_WITH_CONTENT})\\b`, 'i').exec(out);
     if (open) out = out.slice(0, open.index);
-    return out.replace(/<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:\s[^<>]*)?)\/?>/g, cleanTag);
+    // Quote-aware tag scanner; `/` may separate attributes. Autolinks stay; every other `<` is escaped.
+    const tokenRe = /<((?:https?:\/\/|mailto:)[^\s<>]*|[^\s<>@]+@[^\s<>]+\.[^\s<>]+)>|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^<>"'])*)>|</g;
+    return out.replace(tokenRe, (match, auto, closing, name, attrs) => {
+      if (auto) return match;
+      if (name === undefined) return '&lt;';
+      return cleanTag(match, closing, name, attrs);
+    });
   }
 
   /** Removes script and event handlers from HTML in Markdown text; code blocks and code spans stay verbatim. */

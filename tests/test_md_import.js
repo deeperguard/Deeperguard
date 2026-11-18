@@ -110,6 +110,34 @@ const NOW = new Date('2026-11-18T12:00:00Z');
   assert.ok(body.includes('<a href="https://ok.example/">ok</a>'));
   assert.ok(body.includes('<script>shown as code</script>'), 'code blocks are left verbatim');
 
+  // Tags without whitespace before the attributes, multi-line tags and ">" inside values.
+  const sneaky = [
+    '<img/src=x onerror=alert(1)>',
+    '<img/src="data:image/png;base64,AAAA"/onerror=alert(2)>',
+    '<a/href=# onclick=alert(3)>a</a>',
+    '<a/href="#"/onclick=alert(4)>b</a>',
+    '<img src="data:image/png;base64,AAAA" onerror=alert(5)\n>',
+    '<a href="#" title="x>y" onclick="alert(6)">c</a>',
+    '<img alt="a>b" src=x onerror=alert(7)>',
+    '<p onclick=alert(8) <b>d</p>',
+    '<img src="x',
+    'ok <https://example.com/> and 1 < 2',
+  ].join('\n');
+  const sn = (await Import.parse([{ name: 'sneaky.md', bytes: enc(sneaky) }], { now: NOW })).notes[0].content;
+  // Escaped text ("&lt;p onclick=...") is inert; only real tags may not carry handlers.
+  assert.ok(!/<[^>]*\bon[a-z]+\s*=/i.test(sn), `handler survived: ${sn}`);
+  assert.ok(!/<(?!\/?(?:a|p|img)\b|https:)/i.test(sn), `unexpected raw "<": ${sn}`);
+  assert.ok(sn.includes('<a href="#" title="x&gt;y">c</a>'), sn);
+  assert.ok(sn.includes('&lt;img src="x'), 'unterminated tag is escaped');
+  assert.ok(sn.includes('<https://example.com/>') && sn.includes('1 &lt; 2'));
+
+  // The import allowlist is the NotesSanitize allowlist (minus button).
+  for (const tag of NotesSanitize.RICH_ALLOWED_TAGS.filter((t) => t !== 'button' && !['br', 'hr', 'img'].includes(t))) {
+    const out = (await Import.parse([{ name: 't.md', bytes: enc(`<${tag}>x</${tag}>`) }], { now: NOW })).notes[0].content;
+    assert.strictEqual(out, `<${tag}>x</${tag}>`);
+  }
+  assert.ok(!(await Import.parse([{ name: 'b.md', bytes: enc('<button>x</button>') }], { now: NOW })).notes[0].content.includes('<button'));
+
   // --- hostile ZIPs are refused -----------------------------------------------------------------------------
   const base = await Zip.writeZip([{ name: 'ab/cdef.md', bytes: enc('x') }], { compress: false });
   const slip = Uint8Array.from(base);

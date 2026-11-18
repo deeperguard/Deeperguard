@@ -254,10 +254,10 @@
       "url": "/static/js/marketing.de66654aca477c3d.js"
     },
     "js/md-import.js": {
-      "bytes": 13675,
-      "sha256": "5c56f60e8f3c5c1586a0faface2e5ebeb4c25e2e545a534971703c5356121965",
-      "sri": "sha384-vNMpZPSwVMAYCW2qPy4rofMNtqa9aTtB0yF/lCiX8PCbnM+3CuBwYlSLrBVYG9le",
-      "url": "/static/js/md-import.5c56f60e8f3c5c15.js"
+      "bytes": 14047,
+      "sha256": "747981a5c173d6f270999f8e18607cf51052a876995287b994255ee44b23e846",
+      "sri": "sha384-PRBATQFdLYYYqgQ/0xsmS1r8O68zR871dZ2zGU5EhoEzo8mhER0EHEYhd0nehr1f",
+      "url": "/static/js/md-import.747981a5c173d6f2.js"
     },
     "js/mermaid-sandbox.js": {
       "bytes": 2465,
@@ -627,6 +627,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "800f70f19068131ea3e8ebe0b04bb63274a497a5fae558fcbf2dd8bd6920e485",
+  "manifest_sha256": "9d793a83b0d4edc45bf126ebf0498848fb33c7d8529b8abd64e58d4f9b8021ef",
   "version": 1
 }
