@@ -41,7 +41,7 @@ It cannot protect you from:
 
 ## The trade-off: we cannot recover your notes for you
 
-Because we never hold your key, we can't reset your vault password and recover your notes for you. Do not assume a recovery code can recover your vault notes. Never give anyone your vault password or recovery codes. [More on recovery scams](/blog/recovery-scams-2fa-hygiene).
+Because we hold no readable key, we can't reset your vault password and recover your notes for you. Do not assume a recovery code can recover your vault notes. Never give anyone your vault password or recovery codes. [More on recovery scams](/blog/recovery-scams-2fa-hygiene).
 
 ## Quick checklist
 
