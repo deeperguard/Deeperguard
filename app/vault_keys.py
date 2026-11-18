@@ -23,6 +23,9 @@ _PROOF_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 RECOVERY_PUT_FIELDS = frozenset(
     {"expected_key_rev", "key_id", "wrap_version", "recovery_salt", "wrap", "proof_hash", "token", "csrf_token"}
 )
+PRF_PUT_FIELDS = frozenset(
+    {"expected_key_rev", "key_id", "wrap_version", "prf_salt", "wrap", "token", "csrf_token"}
+)
 RECOVERY_DELETE_FIELDS = frozenset({"expected_key_rev", "token", "csrf_token"})
 RECOVERY_COMMIT_FIELDS = frozenset(
     {"proof", "expected_key_rev", "from_key_id", "to_key_id", "srp_salt", "srp_verifier",
@@ -65,6 +68,48 @@ def valid_key_id(value: Any) -> bool:
     return isinstance(value, str) and bool(_KEY_ID_RE.match(value))
 
 
+def _wrap_json(wrap: Any) -> tuple[str | None, str]:
+    """Canonical JSON of a wrapped 32-byte key, or (None, error message)."""
+    if not isinstance(wrap, dict) or set(wrap) != _WRAP_FIELDS or wrap.get("v") != 2:
+        return None, "invalid wrap"
+    iv = _b64(wrap.get("iv"), size=12)
+    data = _b64(wrap.get("data"))
+    # AES-GCM of a 32-byte key: 32 bytes of ciphertext + 16-byte tag.
+    if iv is None or data is None or len(data) != 48:
+        return None, "invalid wrap"
+    wrap_json = json.dumps(
+        {"v": 2, "iv": wrap["iv"], "data": wrap["data"]}, separators=(",", ":"), sort_keys=True,
+    )
+    if len(wrap_json.encode("utf-8")) > MAX_WRAP_BYTES:
+        return None, "wrap too large"
+    return wrap_json, ""
+
+
+def parse_prf_put(body: dict) -> tuple[dict | None, str]:
+    """Validate the body of PUT vault-keys/prf/<credential_id>."""
+    extra = unexpected_fields(body, PRF_PUT_FIELDS)
+    if extra:
+        return None, "unexpected field: " + ", ".join(extra)
+    rev = parse_expected_rev(body.get("expected_key_rev"))
+    if rev is None:
+        return None, "expected_key_rev must be a non-negative integer"
+    key_id = body.get("key_id")
+    if not valid_key_id(key_id):
+        return None, "invalid key_id"
+    version = body.get("wrap_version")
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        return None, "invalid wrap_version"
+    if _b64(body.get("prf_salt"), size=32) is None:
+        return None, "invalid prf_salt"
+    wrap_json, problem = _wrap_json(body.get("wrap"))
+    if wrap_json is None:
+        return None, problem
+    return {
+        "expected_key_rev": rev, "key_id": key_id, "wrap_version": version,
+        "prf_salt": body["prf_salt"], "wrap_json": wrap_json,
+    }, ""
+
+
 def parse_recovery_put(body: dict) -> tuple[dict | None, str]:
     """Return (clean fields, "") or (None, error message)."""
     extra = unexpected_fields(body, RECOVERY_PUT_FIELDS)
@@ -84,19 +129,9 @@ def parse_recovery_put(body: dict) -> tuple[dict | None, str]:
     proof_hash = body.get("proof_hash")
     if not isinstance(proof_hash, str) or not _PROOF_HASH_RE.match(proof_hash):
         return None, "invalid proof_hash"
-    wrap = body.get("wrap")
-    if not isinstance(wrap, dict) or set(wrap) != _WRAP_FIELDS or wrap.get("v") != 2:
-        return None, "invalid wrap"
-    iv = _b64(wrap.get("iv"), size=12)
-    data = _b64(wrap.get("data"))
-    # AES-GCM of a 32-byte key: 32 bytes of ciphertext + 16-byte tag.
-    if iv is None or data is None or len(data) != 48:
-        return None, "invalid wrap"
-    wrap_json = json.dumps(
-        {"v": 2, "iv": wrap["iv"], "data": wrap["data"]}, separators=(",", ":"), sort_keys=True,
-    )
-    if len(wrap_json.encode("utf-8")) > MAX_WRAP_BYTES:
-        return None, "wrap too large"
+    wrap_json, problem = _wrap_json(body.get("wrap"))
+    if wrap_json is None:
+        return None, problem
     return {
         "expected_key_rev": rev,
         "key_id": key_id,
