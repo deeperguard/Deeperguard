@@ -13153,3 +13153,39 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .folder-move-item[aria-selected="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .folder-head.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .note-row[draggable="true"].is-dragging { opacity: .5; }
+
+/* Settings → security groups: purpose line, block heading with its state in words. */
+.security-group-purpose {
+  margin: 0 var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.security-block + .security-block,
+.security-block + .settings-nested,
+.settings-nested + .security-block { border-top: 1px solid var(--border); padding-top: var(--space-2); }
+.security-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3) var(--space-4) 0;
+}
+.security-block-head .settings-subtitle { padding: 0; min-width: 0; overflow-wrap: anywhere; }
+.settings-state {
+  max-width: 100%;
+  padding: 2px var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.settings-hint.security-steps { margin: 0; padding-left: calc(var(--space-4) + 1.4em); }
+.security-steps li + li { margin-top: var(--space-1); }
+.settings-group.security-group > h3 { font-size: var(--text-md); }

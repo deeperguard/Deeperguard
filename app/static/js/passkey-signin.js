@@ -109,6 +109,12 @@
     if (passkeyCountEl) {
       passkeyCountEl.textContent = `${passkeyCount} registered (need 2 for passkey-only sign-in)`;
     }
+    const passkeysState = document.getElementById('sec-state-passkeys');
+    if (passkeysState) {
+      passkeysState.textContent = passkeyCount
+        ? `${passkeyCount} ${passkeyCount === 1 ? 'passkey' : 'passkeys'} added`
+        : 'Not set up';
+    }
 
     if (waitSelect && Array.isArray(ps.wait_choices_seconds)) {
       waitSelect.replaceChildren();
@@ -131,6 +137,10 @@
       statusText = 'Generate one-time recovery codes before turning off password sign-in.';
     } else {
       statusText = 'Add a second passkey, then generate recovery codes.';
+    }
+    const codesState = document.getElementById('sec-state-recovery-codes');
+    if (codesState) {
+      codesState.textContent = state === 'active' ? 'Active' : state === 'pending' ? 'Waiting period running' : 'Not set up';
     }
     if (statusEl) {
       statusEl.textContent = statusText;

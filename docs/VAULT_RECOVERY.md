@@ -709,22 +709,22 @@ behaviour (DB rows, ciphertext bytes, HTTP status, visible UI), not on source te
 
 ### 9.6 Interrupted migration
 - [x] E8 (`tests/test_e2e_vault_recovery_flow.py`) Kill the page between `recover/pending` and the end of the re-encrypt push (abort the request after N rows): reload, sign in, `RK`, finish; every item readable; no row lost; final state equals E5.
-- [ ] E9 Enrollment request dropped before response: retry is idempotent (200, one row).
-- [ ] E10 Passkey created but PRF step cancelled: passkey signs in, list shows "no vault unlock yet", finishing works.
-- [ ] P11 Pending row expires after 24 h; expired row is ignored and cleaned; commit with a mismatching `to_key_id` is rejected.
+- [x] E9 (`tests/test_vault_recovery_interrupted.py`) Enrollment request dropped before response: retry is idempotent (200, one row). Also covered: enrolment that never reaches the server leaves the account unchanged and the next attempt succeeds; recovery interrupted after the pending row keeps the old password and wrap and can finish.
+- [ ] E10 (not covered by a test yet) Passkey created but PRF step cancelled: passkey signs in, list shows "no vault unlock yet", finishing works.
+- [x] P11 (`tests/test_vault_recovery_pending.py`) Pending row expires after 24 h; expired row is ignored and cleaned; commit with a mismatching `to_key_id` is rejected.
 
 ### 9.7 Two devices
-- [ ] E11 Device A enrols a recovery key while device B (same session account) enrols too: one wins, the other gets 409, refetches and sees `active`.
+- [x] E11 (`tests/test_vault_recovery_interrupted.py`, server level: two signed-in devices, concurrent `PUT recovery`) Device A enrols a recovery key while device B enrols too: one wins, the other gets 409 `key_rev_mismatch`, refetches and sees `active`. The browser message of the loser is not covered by a test.
 - [ ] E12 Device A changes the password; device B (unlocked with the old key) tries to upload a wrap: 409 `key_id_mismatch`; B then shows the existing remote-password-change prompt (`remotePasswordChanged`).
-- [ ] P12 Concurrent `PUT recovery` and `POST /api/account/password` with `vault_keys`: exactly one `key_rev` outcome, no wrap with a `key_id` that differs from `users.vault_key_id`.
+- [ ] P12 (open: only the recovery-versus-recovery race is tested) Concurrent `PUT recovery` and `POST /api/account/password` with `vault_keys`: exactly one `key_rev` outcome, no wrap with a `key_id` that differs from `users.vault_key_id`.
 - [ ] E13 Password change by a current client with wraps: new recovery key shown and confirmed, commit atomic, other passkeys marked `current:false`.
 - [ ] E14 Revoke all wraps, change the password (wraps absent, current or old client), enrol a recovery key again with the new `key_id`: 200, `users.vault_key_id` equals the new id, `vault_key_rev` strictly increased. Same after the 6.2 late fallback.
 
 ### 9.8 Old client
-- [ ] P13 Old-client request shapes (no header, no `vault_keys`): unlock proof, sync push/pull, `GET /api/account` all behave as before the feature (golden responses minus the added fields).
-- [ ] P14 Old client with a recovery key: `password/prove` -> 409 `vault_keys_need_update`, no rotation token issued, nothing else changed.
-- [ ] P15 Race: wraps added after `prove`, old client then commits: change accepted, wraps deleted, `vault_keys_invalidated_at` set, mail queued, settings show the explanation.
-- [ ] E15 An old client build (previous release's static files) unlocks an account that has a recovery key and passkey wraps and reads/writes notes normally.
+- [ ] P13 (partly: sign-in, `GET /api/account` and `GET /api/sessions` with a recovery key are tested in `test_vault_recovery_interrupted.py`; sync not) Old-client request shapes (no header, no `vault_keys`): unlock proof, sync push/pull, `GET /api/account` all behave as before the feature (golden responses minus the added fields).
+- [ ] P14 (not built: the server does not read `X-DG-Vault-Schema` yet, so `prove` is not refused; the late fallback of P15 applies instead) Old client with a recovery key: `password/prove` -> 409 `vault_keys_need_update`, no rotation token issued, nothing else changed.
+- [x] P15 (partly, `tests/test_vault_recovery_interrupted.py`) An old client (no header, no `vault_keys`) changes the password with a recovery key present: change accepted, all wraps deleted in the same transaction, `vault_key_rev` bumped, `vault_key_id` freed, settings report no active recovery key, `recover/start` answers 404, a stale device cannot enrol the old key (409), a new key can be enrolled. Not built: `vault_keys_invalidated_at`, the mail and the settings explanation.
+- [ ] E15 (not covered by a test yet) An old client build (previous release's static files) unlocks an account that has a recovery key and passkey wraps and reads/writes notes normally.
 
 ### 9.9 Cross-cutting
 - [ ] P16 Every new endpoint: 401 without session, 400 without CSRF, 403 without 2FA, rate-limited, `no-store`.
