@@ -36,6 +36,32 @@ _APP_ENV_NAMES = {"DROPBOX_APP_KEY", "GOOGLE_OAUTH_CLIENT_ID", "SOURCE_DATE_EPOC
 SERVER_START_TIMEOUT_S = 60
 
 
+def spawn_server(root: Path, argv: list, env: dict, port: int, timeout_s: float = SERVER_START_TIMEOUT_S):
+    """Start the server child with its output in root/server.log and wait until it listens."""
+    # A file, not a pipe: nobody reads a pipe while the test runs, and the request log
+    # would fill it (~64 KB) and freeze the server. The child keeps its own descriptor,
+    # so the parent closes its handle right after Popen.
+    with open(root / "server.log", "wb") as log:
+        proc = subprocess.Popen(
+            argv,
+            cwd=str(APP_DIR),
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
+    # Wall-clock deadline: importing the app is slow on a loaded build host.
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                return proc
+        except OSError:
+            if proc.poll() is not None:
+                raise RuntimeError((root / "server.log").read_text(errors="replace"))
+            time.sleep(0.25)
+    raise RuntimeError("server did not start")
+
+
 def start_server(root: Path, port: int, extra_env: dict | None = None, prelude: str = ""):
     # Do not inherit app settings from the parent process: other tests in the same
     # run set NOTES_*/STRIPE_* variables in os.environ and would leak into this server.
@@ -95,27 +121,7 @@ with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
 """,
         encoding="utf-8",
     )
-    # A file, not a pipe: nobody reads a pipe while the test runs, and the request log
-    # would fill it (~64 KB) and freeze the server.
-    log = open(root / "server.log", "wb")
-    proc = subprocess.Popen(
-        [sys.executable, str(bootstrap)],
-        cwd=str(APP_DIR),
-        env=env,
-        stdout=log,
-        stderr=subprocess.STDOUT,
-    )
-    # Wall-clock deadline: importing the app is slow on a loaded build host.
-    deadline = time.monotonic() + SERVER_START_TIMEOUT_S
-    while time.monotonic() < deadline:
-        try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-                return proc
-        except OSError:
-            if proc.poll() is not None:
-                raise RuntimeError((root / "server.log").read_text(errors="replace"))
-            time.sleep(0.25)
-    raise RuntimeError("server did not start")
+    return spawn_server(root, [sys.executable, str(bootstrap)], env, port)
 
 
 def main() -> int:
