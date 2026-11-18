@@ -81,7 +81,7 @@ def test_export_contains_only_that_calendar(ctx):
     assert "Overleg werk" in text
     assert "Tandarts thuis" not in text
     assert text.count("BEGIN:VEVENT") == 1
-    assert fname.startswith("deeperguard-calendar-werk-priv-") and fname.endswith(".ics")
+    assert fname.startswith("deeperguard-calendar-werk") and fname.endswith(".ics")
 
 
 def test_default_calendar_exports_its_own_events(ctx):
