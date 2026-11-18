@@ -1969,9 +1969,14 @@
           </div>
           <p id="totp-status" class="settings-hint" hidden></p>
           <div id="passkey-settings" class="settings-nested stack" data-plan-feature="passkeys">
-            <p class="settings-hint">Passkeys sign you into your account without typing your account password. Vault unlock still requires your master password on this device — passkeys do not replace it.</p>
+            <p class="settings-hint">Passkeys sign you into your account without typing your account password. Your master password still opens the vault. If you want, you can also let a passkey open the vault; that works only when your browser and the passkey support it, and your master password keeps working either way.</p>
             <div id="passkey-list"></div>
+            <div id="passkey-vault-password-row" class="settings-row stacked" hidden>
+              <label for="passkey-vault-password">Account password (to change vault unlock)</label>
+              <input type="password" id="passkey-vault-password" autocomplete="current-password">
+            </div>
             <div class="settings-actions">
+              <label class="settings-hint"><input type="checkbox" id="passkey-add-unlock"> Also open the vault with the new passkey</label>
               <button type="button" id="btn-add-passkey" class="btn">Add passkey</button>
             </div>
           </div>

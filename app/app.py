@@ -2472,6 +2472,28 @@ def api_account_vault_keys_prf_put(credential_id: str):
     return _vault_keys_json({"ok": True, "key_rev": key_rev, "key_id": key_id})
 
 
+@app.delete("/api/account/vault-keys/prf/<credential_id>")
+def api_account_vault_keys_prf_delete(credential_id: str):
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid body"}), 400
+    gate = _vault_keys_write_gate(body)
+    if gate:
+        return gate
+    extra = vault_keys.unexpected_fields(body, vault_keys.RECOVERY_DELETE_FIELDS)
+    rev = vault_keys.parse_expected_rev(body.get("expected_key_rev"))
+    if extra or rev is None:
+        return jsonify({"error": "invalid body"}), 400
+    status, key_rev, key_id = db.delete_prf_wrap(int(user["id"]), credential_id, expected_key_rev=rev)
+    if status != "ok":
+        return _vault_keys_write_conflict(status, key_rev, key_id)
+    auth.consume_vault_keys_token()
+    return _vault_keys_json({"ok": True, "key_rev": key_rev, "key_id": key_id})
+
+
 @app.post("/api/account/vault-keys/prf/<credential_id>/options")
 def api_account_vault_keys_prf_options(credential_id: str):
     """WebAuthn assertion options for one passkey, plus the (non-secret) PRF salt it needs."""

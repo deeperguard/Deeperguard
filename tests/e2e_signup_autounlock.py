@@ -36,7 +36,7 @@ _APP_ENV_NAMES = {"DROPBOX_APP_KEY", "GOOGLE_OAUTH_CLIENT_ID", "SOURCE_DATE_EPOC
 SERVER_START_TIMEOUT_S = 60
 
 
-def start_server(root: Path, port: int, extra_env: dict | None = None):
+def start_server(root: Path, port: int, extra_env: dict | None = None, prelude: str = ""):
     # Do not inherit app settings from the parent process: other tests in the same
     # run set NOTES_*/STRIPE_* variables in os.environ and would leak into this server.
     env = {
@@ -65,7 +65,7 @@ def start_server(root: Path, port: int, extra_env: dict | None = None):
 
     bootstrap = root / "run_e2e_server.py"
     bootstrap.write_text(
-        f"""
+        f"""{prelude}
 import json
 import urllib.request
 from unittest.mock import patch

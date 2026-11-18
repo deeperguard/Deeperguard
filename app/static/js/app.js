@@ -16443,6 +16443,11 @@
       passkeyWrap.hidden = false;
       const passkeyUrl = account.passkey_url || 'https://www.deeperguard.com/';
       passkeyWrap.dataset.passkeyUrl = passkeyUrl;
+      NotesPasskeys.configureVaultUnlock({
+        getEmail: expiredSessionEmail,
+        getVaultKey: () => NotesStore.vaultKeyCopy(),
+        getPassword: () => (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getAccountPassword()) || '',
+      });
       NotesPasskeys.renderPasskeyList(passkeyList, passkeyUrl).catch(() => {});
       if (addPasskeyBtn) {
         const hostError = NotesWebAuthn?.passkeyHostError?.(passkeyUrl);
@@ -24154,8 +24159,11 @@ async function showSettings() {
       return;
     }
     try {
-      await NotesPasskeys.registerPasskey(passkeyUrl);
+      const credentialId = await NotesPasskeys.registerPasskey(passkeyUrl);
       toast('Passkey added');
+      if (document.getElementById('passkey-add-unlock')?.checked) {
+        await NotesPasskeys.enableVaultUnlockForNew(credentialId);
+      }
       await initSettings();
     } catch (err) {
       toast(err.message || 'Could not add passkey', true);

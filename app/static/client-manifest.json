@@ -98,10 +98,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1066361,
-      "sha256": "ecc9fb765fc715627fa629c2c250ce4062b7f54afe64347639fc57ffdbab9ee7",
-      "sri": "sha384-G9kOrnGfNuC0jMLTb0ZBqbB17Hdo8mZJnjYGCqepaRw/x+vXZlfJvRjVC2PXA08m",
-      "url": "/static/js/app.ecc9fb765fc71562.js"
+      "bytes": 1066790,
+      "sha256": "0b891023124a5c4ba8544d25036dc648ad748e6c36fb5a441d4e311ac6d8c495",
+      "sri": "sha384-lbjWP5W9vl47StMO/fDNU6706Pn3eANb5wdXjNFT0HoFh4IiwgAeMGOXzTTysBrZ",
+      "url": "/static/js/app.0b891023124a5c4b.js"
     },
     "js/auth-pages.js": {
       "bytes": 43723,
@@ -302,10 +302,10 @@
       "url": "/static/js/passkey-signin.c70ca78ced597d14.js"
     },
     "js/passkeys.js": {
-      "bytes": 4529,
-      "sha256": "acaac0fe21c2234f57b258504a6015e19f873cec512581c71d86137d01f82693",
-      "sri": "sha384-tXiiXE5d8aHEKtAOjj2mzlA4TNaNNaMBK5KJZc1U7Af8C/ll+jlBrLxfeiRGRDOP",
-      "url": "/static/js/passkeys.acaac0fe21c2234f.js"
+      "bytes": 13914,
+      "sha256": "d18468902d9940e7813a382d87f287dc56a4e2357992018c404a877e57b0eded",
+      "sri": "sha384-47Ts4bA0+XNwWNSigXnACk5VCOPVJ4/BoHObpFGzVJw9upwj1tjfzSyQ5QoEjYjf",
+      "url": "/static/js/passkeys.d18468902d9940e7.js"
     },
     "js/photo-ocr-preprocess.js": {
       "bytes": 25228,
@@ -609,6 +609,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "74f3e0f626365522b721051e5d945363463b9df12063c6971071d1ae3d021080",
+  "manifest_sha256": "8ad803a160533607a1ea073f45207513a3c2696ab6db35cd018a22ce93745c4a",
   "version": 1
 }
