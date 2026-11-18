@@ -115,7 +115,7 @@
   }
 
   // Runs a get() ceremony asking for PRF output. Returns {status:'ok', output, credentialId}
-  // or {status:'unsupported', reason:'browser'|'authenticator'}. A cancelled ceremony throws.
+  // or {status:'unsupported', reason:'browser'|'authenticator'}. A cancelled ceremony, or an answer from a passkey outside allowCredentials, throws.
   async function requestPrfOutput(authOptions, salt) {
     if (await prfBrowserSupport() === 'unsupported') return { status: 'unsupported', reason: 'browser' };
     const publicKey = {
@@ -125,6 +125,10 @@
     };
     const credential = await global.navigator.credentials.get({ publicKey });
     if (!credential) throw new Error('Passkey request was cancelled');
+    const allowed = Array.isArray(authOptions.allowCredentials) ? authOptions.allowCredentials : [];
+    if (allowed.length && !allowed.some((c) => c.id && bufferToBase64url(c.id) === credential.id)) {
+      throw new Error('A different passkey answered. Choose the passkey you want to use.');
+    }
     const output = prfOutputFromCredential(credential);
     if (!output) return { status: 'unsupported', reason: 'authenticator' };
     return { status: 'ok', output, credentialId: credential.id };
