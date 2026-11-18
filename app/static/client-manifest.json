@@ -320,10 +320,10 @@
       "url": "/static/js/passkey-signin.f0bee54409f23bf3.js"
     },
     "js/passkeys.js": {
-      "bytes": 13914,
-      "sha256": "d18468902d9940e7813a382d87f287dc56a4e2357992018c404a877e57b0eded",
-      "sri": "sha384-47Ts4bA0+XNwWNSigXnACk5VCOPVJ4/BoHObpFGzVJw9upwj1tjfzSyQ5QoEjYjf",
-      "url": "/static/js/passkeys.d18468902d9940e7.js"
+      "bytes": 14081,
+      "sha256": "df3821193f65ab0d8c94720614d54ef7a2467fb9b4bf5a915369c6ab5f2dac8b",
+      "sri": "sha384-BdlhRjJBmEYJBksu8J/0fI3ulKGb98SZmeT/WzdS2rJ9BTQrCXUUqeIfbrby/c2p",
+      "url": "/static/js/passkeys.df3821193f65ab0d.js"
     },
     "js/photo-ocr-preprocess.js": {
       "bytes": 25228,
@@ -639,6 +639,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "7e11ae6be5f0d6068526901bb9e103a41fba338c5a35497520cc0272fdcd5784",
+  "manifest_sha256": "43c2d5b2041e17c3f47d25cdffbf30b5eac2bc119118673072ef9d8bcc66bac7",
   "version": 1
 }

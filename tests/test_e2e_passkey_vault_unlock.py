@@ -161,6 +161,22 @@ class PasskeyVaultUnlockE2E(unittest.TestCase):
 
         self._run(True, body)
 
+    def test_failed_status_lookup_shows_unknown_not_off(self):
+        def body(page, wraps):
+            self._add_passkey(page, with_unlock=True)
+            row = f"{LIST} .passkey-row"
+            page.wait_for_selector(f"{row} .passkey-unlock-status[data-unlock-state='on']")
+            page.route("**/api/account/vault-keys", lambda route: route.abort())
+            page.evaluate("() => NotesPasskeys.renderPasskeyList(document.getElementById('passkey-list'))")
+            page.wait_for_selector(f"{row} .passkey-unlock-status[data-unlock-state='unknown']")
+            self.assertIn("status unknown", page.text_content(f"{row} .passkey-unlock-status"))
+            self.assertTrue(page.is_disabled(f"{row} .passkey-unlock-toggle"))
+            page.unroute("**/api/account/vault-keys")
+            page.evaluate("() => NotesPasskeys.renderPasskeyList(document.getElementById('passkey-list'))")
+            page.wait_for_selector(f"{row} .passkey-unlock-status[data-unlock-state='on']")
+
+        self._run(True, body)
+
     def test_passkey_without_prf_explains_and_stores_nothing(self):
         def body(page, wraps):
             self._add_passkey(page, with_unlock=False)
