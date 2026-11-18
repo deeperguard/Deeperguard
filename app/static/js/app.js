@@ -5815,6 +5815,8 @@
   function confirmAction(message, options = {}) {
     const pending = window.DialogA11y?.confirm(message, options);
     if (pending) return pending;
+    // Fail closed: a password step must never be skipped by the native fallback.
+    if (typeof options.verifyPassword === 'function') return Promise.resolve(false);
     return Promise.resolve(window.confirm(String(message || options.title || 'Confirm')));
   }
 
