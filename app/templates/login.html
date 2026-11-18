@@ -12,7 +12,7 @@
       <h1>Deeperguard</h1>
       {% include 'partials/zk-plain.html' %}
       {% include 'partials/device-phrase-banner.html' %}
-      <p class="auth-hint">Sign in with your account password. It also unlocks your vault, unless you set a separate vault password in Settings. We cannot recover it if you forget it.</p>
+      <p class="auth-hint">Sign in with your account password. It also unlocks your vault, unless you set a separate vault password in Settings. If you forget it and set up a recovery key, you can choose a new one with that key.</p>
     </div>
     {% if signed_in_email %}
     <div class="signed-in-notice" role="status">
@@ -40,6 +40,10 @@
         <p id="login-recovery-hint" class="hint">Each recovery code works once, and only after its waiting period ends. It signs you in; you still need your vault password to unlock your notes.</p>
         <button type="button" id="login-recovery-submit" class="btn subtle block">Sign in with recovery code</button>
       </div>
+      <div id="login-recoverkey-block" class="stack" hidden>
+        <p id="login-recoverkey-hint" class="hint">Forgot your password? With your recovery key you can choose a new one and keep your notes. Enter your email above. You first sign in on this device with a passkey or an account recovery code; your vault then asks for the recovery key.</p>
+        <button type="button" id="login-recoverkey-submit" class="btn subtle block" aria-describedby="login-recoverkey-hint login-error">Continue with recovery key</button>
+      </div>
       <p id="login-error" class="error" role="alert" aria-live="assertive" aria-atomic="true" {% if not form_error %}hidden{% endif %}>{{ form_error or '' }}</p>
       <div id="session-cap-panel" class="session-cap-panel" hidden>
         <p class="hint">Signing out a device ends its session there. Your notes are not deleted.</p>
@@ -51,6 +55,7 @@
       <button type="button" class="btn subtle block" id="webauthn-login">Sign in with passkey</button>
       <p class="hint center">A passkey signs you in. Unlocking your notes still needs your vault password.</p>
       <p class="hint center"><button type="button" class="btn link" id="login-toggle-recovery" hidden>Use a recovery code</button></p>
+      <p class="hint center"><button type="button" class="btn link" id="login-toggle-recoverkey" aria-controls="login-recoverkey-block" aria-expanded="false">Forgot your password? Use your recovery key</button></p>
     </form>
     {% with auth_guard_form_id='login-form', auth_guard_submit_id='login-submit', auth_guard_fn='__notesSubmitLogin', auth_guard_queued='__notesLoginQueued' %}
     {% include 'partials/auth-native-submit-guard.html' %}

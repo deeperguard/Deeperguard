@@ -311,6 +311,49 @@ if (loginForm) {
     }
   });
 
+  document.getElementById('login-toggle-recoverkey')?.addEventListener('click', () => {
+    const block = document.getElementById('login-recoverkey-block');
+    const toggle = document.getElementById('login-toggle-recoverkey');
+    if (!block || !toggle) return;
+    block.hidden = !block.hidden;
+    toggle.setAttribute('aria-expanded', block.hidden ? 'false' : 'true');
+    if (!block.hidden) (emailInput?.value ? document.getElementById('login-recoverkey-submit') : emailInput)?.focus();
+  });
+
+  // The recovery key needs a session (docs/VAULT_RECOVERY.md 3.2). Only a flag
+  // goes to the app; the key itself is typed on the unlock screen that uses it.
+  document.getElementById('login-recoverkey-submit')?.addEventListener('click', async () => {
+    showError('login-error', '');
+    const email = String(emailInput?.value || '').trim().toLowerCase();
+    if (!email) {
+      showError('login-error', 'Enter your email first');
+      emailInput?.focus();
+      return;
+    }
+    try { sessionStorage.setItem('notes_recover_intent', '1'); } catch (err) { /* ignore */ }
+    let account = null;
+    try {
+      const res = await fetch('/api/account', { credentials: 'same-origin' });
+      if (res.ok) account = await res.json();
+    } catch (err) { /* offline: handled below */ }
+    if (account && String(account.email || '').trim().toLowerCase() === email) {
+      location.replace(afterAuthUrl('/app'));
+      return;
+    }
+    const codeBlock = document.getElementById('login-recovery-block');
+    const codeToggle = document.getElementById('login-toggle-recovery');
+    if (codeBlock) codeBlock.hidden = false;
+    if (codeToggle) {
+      codeToggle.hidden = false;
+      codeToggle.textContent = 'Back to passkey sign-in';
+    }
+    showError(
+      'login-error',
+      'Sign in first with “Sign in with passkey” or an account recovery code below. Your vault then asks for your recovery key.',
+    );
+    document.getElementById('login-recovery-code')?.focus();
+  });
+
   document.getElementById('login-recovery-submit')?.addEventListener('click', async () => {
     showError('login-error', '');
     const email = String(emailInput?.value || '').trim().toLowerCase();

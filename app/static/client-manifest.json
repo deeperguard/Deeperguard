@@ -98,16 +98,16 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1060243,
-      "sha256": "65a3565c82aeaaf25f87041fa2141c5c9c8878222aadc774e511b97793eda5d0",
-      "sri": "sha384-5COwcl7akDwbxpkyiL65qK9GknlTE43DxN2MVrTJVUuddFo33P7RL0i/Owi9s6Yc",
-      "url": "/static/js/app.65a3565c82aeaaf2.js"
+      "bytes": 1066361,
+      "sha256": "ecc9fb765fc715627fa629c2c250ce4062b7f54afe64347639fc57ffdbab9ee7",
+      "sri": "sha384-G9kOrnGfNuC0jMLTb0ZBqbB17Hdo8mZJnjYGCqepaRw/x+vXZlfJvRjVC2PXA08m",
+      "url": "/static/js/app.ecc9fb765fc71562.js"
     },
     "js/auth-pages.js": {
-      "bytes": 41737,
-      "sha256": "008edd71f3858a896a13651af7e5e98db22e96e8b80619dee226e191b9f482cf",
-      "sri": "sha384-oSej6mqXWJIgt8m9rRZgzk65uk0+tbQBRz7g12NkaKK2FJSIJw47e7pDaQ1IUw+/",
-      "url": "/static/js/auth-pages.008edd71f3858a89.js"
+      "bytes": 43723,
+      "sha256": "7bf561f6519d2fa721b8eb49465d76df4fe88317bf6252ae0e4a30448b09238d",
+      "sri": "sha384-XPGX/kfr9pCI2Ep65zM4QMXuxk2exCJ9Oi+ku639FnDJI6Q6ZrRbf5MNuhn89bmp",
+      "url": "/static/js/auth-pages.7bf561f6519d2fa7.js"
     },
     "js/backlinks.js": {
       "bytes": 12849,
@@ -404,10 +404,10 @@
       "url": "/static/js/srp-auth.f25c24074b2750f0.js"
     },
     "js/store.js": {
-      "bytes": 289335,
-      "sha256": "e0139ca674ec0f3aead1343ed2fe57f9ece8cda06b766cbaad51cfeab40cf7db",
-      "sri": "sha384-s2ze2yCzEXmIm8Sq22IvL+HVKEB+lXaLdrZKjCV09UX4SgZcJYTfoakNh9VgO09j",
-      "url": "/static/js/store.e0139ca674ec0f3a.js"
+      "bytes": 304806,
+      "sha256": "30c1880e630162f90dfe51636870a4445af81816ab66d7fb0d64bd20c6571dcc",
+      "sri": "sha384-g3suyXn/Vlw6SBL0fGmEUXkn4fSsfwQsrmiyQb0EmomZxaLz1EyxxzsLBqT3ifj2",
+      "url": "/static/js/store.30c1880e630162f9.js"
     },
     "js/superscript.js": {
       "bytes": 23091,
@@ -609,6 +609,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "e5bd9cd4ba013678c94f4776d4fd186eac2277d61dfa0bad648f21fe5520987e",
+  "manifest_sha256": "74f3e0f626365522b721051e5d945363463b9df12063c6971071d1ae3d021080",
   "version": 1
 }
