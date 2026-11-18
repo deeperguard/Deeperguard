@@ -189,6 +189,48 @@ class VaultRecoveryResetTests(unittest.TestCase):
         user, _ = self._row(uid)
         self.assertEqual((user["vault_key_id"], user["vault_key_rev"]), (key_id, 1))
         self.assertGreater(self._status()["recovery_locked_until"], 0)
+        self.mail.assert_called_once()
+        recipient, subject, text = self.mail.call_args.args
+        self.assertEqual(recipient, email)
+        self.assertIn("recovery key locked", subject)
+        self.assertIn("Settings > Devices", text)
+        self.assertNotIn(wrong.hex(), text)
+        self.assertNotIn(proof.hex(), text)
+
+    def test_ip_rate_limit_refuses_start_and_commit(self):
+        import auth_rate_limit as arl
+
+        uid, email, _, csrf, proof, key_id = self._enrolled()
+        arl._hits.clear()
+        with mock.patch.dict("os.environ", {"NOTES_AUTH_RATE_LIMIT": "3"}):
+            for i in range(3):
+                ok = self.client.post(START, json={}, headers={"X-CSRF-Token": csrf})
+                self.assertEqual(ok.status_code, 200, i)
+            start = self.client.post(START, json={}, headers={"X-CSRF-Token": csrf})
+            self.assertEqual((start.status_code, start.get_json()["error"]), (429, "too many attempts"))
+            commit = self._commit(csrf, self._commit_body(proof, email, "brand-new-password-1", key_id))
+            self.assertEqual((commit.status_code, commit.get_json()["error"]), (429, "too many attempts"))
+            # The limit is per client IP: the same account from another address still gets through.
+            elsewhere = self.client.post(
+                START, json={}, headers={"X-CSRF-Token": csrf},
+                environ_overrides={"REMOTE_ADDR": "198.51.100.7"},
+            )
+            self.assertEqual(elsewhere.status_code, 200)
+        user, _ = self._row(uid)
+        self.assertEqual((user["vault_key_id"], user["vault_key_rev"]), (key_id, 1))
+        self.assertEqual((user["recovery_failed_count"], user["recovery_locked_until"]), (0, 0))
+        self.mail.assert_not_called()
+
+    def test_wrong_proof_with_stale_revision_or_foreign_key_id_counts_as_failure(self):
+        uid, email, _, csrf, _, key_id = self._enrolled()
+        wrong = secrets.token_bytes(32)
+        stale = self._commit(csrf, self._commit_body(wrong, email, "brand-new-password-1", key_id, rev=0))
+        self.assertEqual((stale.status_code, stale.get_json()["error"]), (403, "invalid proof"))
+        self.assertEqual(self._row(uid)[0]["recovery_failed_count"], 1)
+        foreign = self._commit(csrf, self._commit_body(wrong, email, "brand-new-password-1", secrets.token_hex(16)))
+        self.assertEqual((foreign.status_code, foreign.get_json()["error"]), (403, "invalid proof"))
+        user, _ = self._row(uid)
+        self.assertEqual((user["recovery_failed_count"], user["vault_key_id"]), (2, key_id))
 
     def test_lock_expires_doubles_next_round_and_success_resets(self):
         import db as notes_db

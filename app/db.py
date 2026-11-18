@@ -1653,7 +1653,9 @@ def commit_vault_recovery(
 
     New SRP verifier, new key id, replaced recovery row, the "recovery key used" event
     and the revocation of all other sessions are written together or not at all.
-    A wrong proof only counts a failure (3.3). Status: "ok", "locked", "bad_proof",
+    A wrong proof only counts a failure (3.3). The proof is checked before the key revision
+    and key id, so a wrong proof with a stale ``expected_key_rev`` or another ``from_key_id``
+    is also counted as a failed attempt. Status: "ok", "locked", "bad_proof",
     "no_recovery_key", "key_rev_mismatch", "key_id_mismatch" or "not_found".
     """
     uid = int(user_id)
