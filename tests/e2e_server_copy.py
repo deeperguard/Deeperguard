@@ -11,6 +11,8 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+
+from e2e_signup_autounlock import spawn_server
 from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
@@ -43,25 +45,13 @@ def start_server(root: Path, port: int):
     env.pop("NOTES_TURNSTILE_SITE_KEY", None)
     (root / "keys").mkdir(parents=True, exist_ok=True)
     (root / "keys" / "flask-secret").write_text("e2e-server-copy", encoding="utf-8")
-    # A file, not a pipe: nobody reads a pipe while the test runs, and the request log
-    # would fill it (~64 KB) and freeze the server.
-    log = open(root / "server.log", "wb")
-    proc = subprocess.Popen(
+    return spawn_server(
+        root,
         [sys.executable, "-m", "flask", "run", "--host", "127.0.0.1", "--port", str(port)],
-        cwd=str(APP_DIR),
-        env=env,
-        stdout=log,
-        stderr=subprocess.STDOUT,
+        env,
+        port,
+        timeout_s=20,
     )
-    for _ in range(80):
-        try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-                return proc
-        except OSError:
-            if proc.poll() is not None:
-                raise RuntimeError((root / "server.log").read_text(errors="replace"))
-            time.sleep(0.25)
-    raise RuntimeError("server did not start")
 
 
 def main() -> int:
