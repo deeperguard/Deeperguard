@@ -2999,6 +2999,11 @@
     </div>
     <div class="dialog-body">
       <p id="confirm-message"></p>
+      <div id="confirm-password-wrap" hidden>
+        <label for="confirm-password">Vault password</label>
+        <input id="confirm-password" type="password" autocomplete="current-password" aria-describedby="confirm-password-error">
+        <p id="confirm-password-error" class="error" role="alert" hidden></p>
+      </div>
     </div>
     <div class="confirm-dialog-actions">
       <button type="button" class="btn ghost" id="confirm-cancel" autofocus>Cancel</button>
