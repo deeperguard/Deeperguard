@@ -128,5 +128,62 @@ const copyOf = (key) => ({ raw: new Uint8Array(key.raw) });
   assert.strictEqual(apiCalls, 0);
   assert.strictEqual(NotesStore.state.kdfVersion, 1);
   NotesStore.lock();
+
+  // 5. Probe on an unreadable vault in a passkey session: no alternative-KDF attempt.
+  const garbageRow = {
+    item_uuid: 'row-1', ciphertext: 'not-a-valid-payload', deleted: 0, synced_at: 1, updated_at: 1,
+  };
+  const pullFetch = async (url) => {
+    apiCalls += 1;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        items: [garbageRow], server_time: Date.now() / 1000, has_more: false, total_undeleted: 1,
+      }),
+    };
+  };
+  const realDerive = NotesCrypto.deriveKey;
+  let deriveCalls = 0;
+  const realWorkerDerive = NotesCrypto.deriveKeyInWorker;
+  NotesCrypto.deriveKey = (...args) => { deriveCalls += 1; return realDerive.apply(NotesCrypto, args); };
+  NotesCrypto.deriveKeyInWorker = (...args) => { deriveCalls += 1; return realDerive.apply(NotesCrypto, args); };
+  const passkeyUnlock = async () => {
+    await NotesStore.unlockWithVaultKey(copyOf(accountKey), { kdfVersion: 2, salt, accountKeyId });
+    NotesVaultSecrets.setVaultPassword(password); // must be ignored in a passkey session
+    return NotesStore.state.cryptoKey;
+  };
+  let keyBefore = await passkeyUnlock();
+  NotesStore.state.keyVerified = false;
+  global.fetch = pullFetch;
+  deriveCalls = 0;
+  const probe = await NotesStore.probeServerKey();
+  assert.strictEqual(probe.ok, false);
+  assert.strictEqual(probe.wrongKey, true);
+  assert.strictEqual(deriveCalls, 0, 'no alternative KDF derive in a passkey session');
+  assert.strictEqual(NotesStore.state.kdfVersion, 2);
+  assert.strictEqual(NotesStore.state.cryptoKey, keyBefore);
+  NotesStore.lock();
+
+  // 6. Sync with unreadable rows and no notes: no KDF retry, no password-based unlock.
+  keyBefore = await passkeyUnlock();
+  deriveCalls = 0;
+  const pullBodies = [];
+  global.fetch = async (url, opts) => {
+    if (opts && opts.body) pullBodies.push(String(url));
+    return pullFetch(url);
+  };
+  try {
+    await NotesStore.sync({ quiet: true, full: true });
+  } catch (err) {
+    /* unreadable rows may surface as a sync error; only the KDF behaviour matters */
+  }
+  assert.strictEqual(deriveCalls, 0, 'sync must not derive a key from an empty password');
+  assert.strictEqual(NotesStore.state.kdfVersion, 2);
+  assert.strictEqual(NotesStore.state.cryptoKey, keyBefore);
+  assert.strictEqual(NotesStore.isPasskeySession(), true);
+  NotesStore.lock();
+  NotesCrypto.deriveKey = realDerive;
+  NotesCrypto.deriveKeyInWorker = realWorkerDerive;
   console.log('passkey session kdf: ok');
 })().catch((err) => { console.error(err); process.exit(1); });
