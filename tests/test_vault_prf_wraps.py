@@ -203,6 +203,34 @@ class VaultPrfWrapTests(unittest.TestCase):
         st = self._status()
         self.assertEqual((st["key_rev"], st["key_id"], st["prf"]), (4, "", []))  # no wrap left: id is free
 
+    def test_disabling_unlock_deletes_only_that_copy(self):
+        import db as notes_db
+
+        uid, email, password, csrf = self._signed_in()
+        a, b = self._passkey(uid), self._passkey(uid)
+        kid = secrets.token_hex(16)
+        self.assertEqual(self._put_prf(email, password, csrf, a, _prf_body(0, kid)).status_code, 200)
+        self.assertEqual(self._put_prf(email, password, csrf, b, _prf_body(1, kid)).status_code, 200)
+
+        def delete(cid, rev, token=None):
+            token = self._token(email, password, csrf) if token is None else token
+            return self.client.delete(
+                f"/api/account/vault-keys/prf/{cid}",
+                json={"expected_key_rev": rev, "token": token}, headers={"X-CSRF-Token": csrf},
+            )
+
+        self.assertEqual(delete(a, 2, token="wrong").status_code, 401)
+        self.assertEqual(delete(a, 1).status_code, 409)  # stale revision
+        resp = delete(a, 2)
+        self.assertEqual(resp.status_code, 200, resp.get_json())
+        left = [r["credential_id"] for r in notes_db.connection().execute("SELECT credential_id FROM vault_prf_wraps")]
+        self.assertEqual(left, [b])
+        self.assertEqual(delete(a, 3).status_code, 404)  # nothing left to delete
+        # The passkey itself still exists for sign-in.
+        self.assertIsNotNone(notes_db.get_webauthn_credential(a))
+        self.assertEqual(delete(b, 3).status_code, 200)
+        self.assertEqual(self._status()["prf"], [])
+
     def test_deleting_passkey_keeps_recovery_wrap_and_key_id(self):
         uid, email, password, csrf = self._signed_in()
         cid = self._passkey(uid)

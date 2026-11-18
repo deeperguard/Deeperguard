@@ -237,7 +237,9 @@ logic) before pushing anything.
   every passkey gets a different `WK_prf` and **its own wrap** of the same `VK`.
 * **Enrollment needs a ceremony that returns PRF output.** Many authenticators
   report `prf.enabled` at `create()` but only return a value at `get()`. The
-  client therefore: creates the passkey (existing flow), then performs a
+  client therefore: creates the passkey (existing flow, now asking for
+  `extensions.prf: {}` at `create()`, which Chromium needs to set up the
+  secret on the credential; browsers that do not know it ignore it), then performs a
   `get()` with the PRF extension on that credential, wraps `VK`, uploads. If the
   `get()` returns no `prf.results.first`, the passkey has **no** vault unlock; the
   app says so (text in section 8.3) and the passkey keeps working for sign-in.
