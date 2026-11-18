@@ -85,7 +85,7 @@ def main() -> int:
             page.evaluate("() => { document.getElementById('folder-section').open = true; }")
 
             page.evaluate(SEED_JS)
-            page.wait_for_timeout(1000)
+            page.wait_for_function("() => NotesStore.state.dirty.size === 0", timeout=30000)
             page.reload(wait_until="domcontentloaded")
             unlock(page)
             page.locator("#folder-section").evaluate("(el) => { el.open = true; }")
@@ -150,7 +150,7 @@ def main() -> int:
             assert page.evaluate(PLACEMENT_JS) == {"Alpha": "Projects", "Beta": "Work"}
 
             # 3) Reload and unlock again: the notes are in their new folders.
-            page.wait_for_timeout(500)
+            page.wait_for_function("() => NotesStore.state.dirty.size === 0", timeout=30000)
             page.reload(wait_until="domcontentloaded")
             unlock(page)
             page.wait_for_function("() => NotesStore.listNotes().length >= 2")
