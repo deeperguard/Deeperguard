@@ -239,6 +239,40 @@ class VaultRecoveryWrapTests(unittest.TestCase):
     def test_requires_login(self):
         self.assertIn(self.client.get("/api/account/vault-keys").status_code, (401, 403))
 
+    def test_stale_key_is_refused_on_first_write_without_any_wrap(self):
+        import db as notes_db
+
+        uid, email, password, csrf = self._signed_in()
+        held = 1700000000.5  # the password-change time this device's vault key belongs to
+        conn = notes_db.connection()
+        conn.execute("UPDATE users SET password_changed_at = ? WHERE id = ?", (held, uid))
+        conn.commit()
+        # Same time: accepted.
+        ok = self._put(email, password, csrf, _body(0, secrets.token_hex(16), password_changed_at=held))
+        self.assertEqual(ok.status_code, 200, ok.get_json())
+        conn.execute("DELETE FROM vault_recovery_wraps WHERE user_id = ?", (uid,))
+        conn.execute("UPDATE users SET vault_key_id = '' WHERE id = ?", (uid,))
+        # Another device changes the password: no wrap exists, so there is no key_id to compare.
+        conn.execute("UPDATE users SET password_changed_at = ? WHERE id = ?", (held + 60, uid))
+        conn.commit()
+        rev = self._status()["key_rev"]
+        for stale in (_body(rev, secrets.token_hex(16), password_changed_at=held), _body(rev, secrets.token_hex(16))):
+            resp = self._put(email, password, csrf, stale)
+            self.assertEqual(resp.status_code, 409, resp.get_json())
+            self.assertEqual(resp.get_json()["error"], "key_id_mismatch")
+        st = self._status()
+        self.assertFalse(st["recovery"]["active"])
+        self.assertEqual((st["key_rev"], st["key_id"]), (rev, ""))
+        # A device that unlocked after the change is accepted.
+        fresh = self._put(email, password, csrf, _body(rev, secrets.token_hex(16), password_changed_at=held + 60))
+        self.assertEqual(fresh.status_code, 200, fresh.get_json())
+
+    def test_rejects_bad_password_changed_at(self):
+        uid, email, password, csrf = self._signed_in()
+        for bad in ("1", True, -1, None):
+            resp = self._put(email, password, csrf, _body(0, secrets.token_hex(16), password_changed_at=bad))
+            self.assertEqual(resp.status_code, 400, bad)
+
     def test_migration_keeps_existing_rows(self):
         import db as notes_db
 

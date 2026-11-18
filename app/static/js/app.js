@@ -6997,17 +6997,24 @@
     clearUnfocusedAt();
   }
 
+  function recoveryKeyDeps() {
+    return {
+      get email() { return expiredSessionEmail(); },
+      getVaultKey: () => NotesStore.vaultKeyCopy(),
+      getPassword: () => (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getAccountPassword()) || '',
+      isUnlocked: () => NotesStore.isUnlocked(),
+      isKeyVerified: () => NotesStore.isKeyVerified(),
+      getPasswordChangedAt: () => NotesStore.passwordChangedAck(),
+      ackAuthSecurity: (at) => NotesStore.ackAuthSecurity(at),
+      toast,
+    };
+  }
+
   // New accounts must store a recovery key (docs/VAULT_RECOVERY.md 5.1). The
   // step stays pending on this device until the wrap is saved.
   function showPendingRecoveryKeyStep() {
     if (!window.NotesRecoveryKeySetup) return;
-    NotesRecoveryKeySetup.maybeShow({
-      email: expiredSessionEmail(),
-      getVaultKey: () => NotesStore.vaultKeyCopy(),
-      getPassword: () => (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getAccountPassword()) || '',
-      ackAuthSecurity: (at) => NotesStore.ackAuthSecurity(at),
-      toast,
-    }).catch(() => {});
+    NotesRecoveryKeySetup.maybeShow(recoveryKeyDeps()).catch(() => {});
   }
 
   function showApp() {
@@ -17822,6 +17829,7 @@
     initSettings().catch(() => {});
     refreshSettingsDiagnostics().catch(() => {});
     try { refreshDevicePhraseUi(); } catch (err) { /* ignore */ }
+    try { window.NotesRecoveryKeySetup?.refreshSettings(recoveryKeyDeps()).catch(() => {}); } catch (err) { /* ignore */ }
     try { refreshGoogleDriveBackupUi(); } catch (err) { /* ignore */ }
     try { refreshDropboxBackupUi(); } catch (err) { /* ignore */ }
     startSignedInDevicesRefresh();

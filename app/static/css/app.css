@@ -5955,6 +5955,14 @@ body.scan-dialog-open {
   display: grid;
   gap: 6px;
 }
+.recovery-key-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 14px;
+}
 .recovery-key-error {
   margin: 0;
   color: var(--danger);

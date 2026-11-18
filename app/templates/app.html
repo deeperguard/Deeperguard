@@ -1996,6 +1996,18 @@
             <label class="settings-row checkbox"><span>Disable password sign-in</span><input id="pref-disable-password-login" type="checkbox"></label>
             <p id="passkey-signin-toggle-hint" class="settings-hint"></p>
           </div>
+          <div id="recovery-key-settings" class="settings-nested stack" role="group" aria-labelledby="recovery-key-settings-title">
+            <p id="recovery-key-settings-title" class="settings-subtitle">Vault recovery key</p>
+            <p class="settings-hint">A recovery key opens your vault if you forget your master password. It is not one of the account recovery codes above, which only help you sign in to your account and do not open your notes. We store only an encrypted copy of your vault key; we cannot read the recovery key and cannot show it again.</p>
+            <p id="recovery-key-settings-status" class="settings-hint" role="status" aria-live="polite">Checking…</p>
+            <p id="recovery-key-settings-why" class="settings-hint" hidden></p>
+            <p id="recovery-key-settings-replace-hint" class="settings-hint" hidden>Creating a new recovery key makes the current one stop working as soon as the new one is saved.</p>
+            <div class="settings-actions">
+              <button type="button" id="btn-recovery-key-create" class="btn" hidden>Create recovery key</button>
+              <button type="button" id="btn-recovery-key-regenerate" class="btn" hidden>Create a new recovery key</button>
+            </div>
+            <p id="recovery-key-settings-note" class="settings-hint" role="status" aria-live="polite" hidden></p>
+          </div>
           <div id="password-change" class="settings-nested stack">
             <label class="settings-row stacked" for="password-change-current">Current vault password
               <input id="password-change-current" type="password" autocomplete="off" required aria-required="true" readonly>
@@ -2525,6 +2537,7 @@
     </header>
     <div class="scan-dialog-body">
       <p id="recovery-key-lead" class="scan-dialog-lead">This recovery key is a second way to open your vault. Store it somewhere safe, away from this device. We cannot read it and cannot show it to you again. Treat it like your password: anyone who has it and can sign in to your account can open your notes.</p>
+      <p id="recovery-key-replace-warning" class="recovery-key-warning" hidden>Warning: your current recovery key stops working as soon as this new one is saved. Anything you printed or saved from the old one will no longer open your vault.</p>
       <p id="recovery-key-print-date" class="recovery-key-print-only"></p>
       <code id="recovery-key-value" class="recovery-key-value" aria-label="Recovery key"></code>
       <div class="recovery-key-actions">
@@ -2543,6 +2556,7 @@
     </div>
     <footer class="scan-dialog-foot">
       <button type="button" id="recovery-key-save" class="btn primary block">Continue</button>
+      <button type="button" id="recovery-key-cancel" class="btn ghost block" hidden>Cancel</button>
     </footer>
   </div>
   <div id="auth-security-notice-backdrop" class="scan-backdrop auth-security-notice-backdrop" hidden aria-hidden="true"></div>
