@@ -4309,6 +4309,7 @@
     hideFindBar();
     hideTagSuggest();
     closeDocPreview();
+    forgetDocPagePositions();
     // The inline preview holds its own pdf.js document and page canvases.
     NotesPreview.releaseAllPdfs();
     // Both template dialogs show template names and text.
@@ -9044,6 +9045,7 @@
   async function signOutCompletely() {
     stopOnlineRecovery('sign-out');
     closeDocPreview();
+    forgetDocPagePositions();
     NotesPreview.releaseAllPdfs();
     clearListThumbCache();
     clearPreviewCache();
@@ -14067,6 +14069,7 @@
     }
     releaseDocEnhanceObjects(ui.docStage);
     showDocStageLoading(ui.docStage);
+    hideDocPageNav();
     if (ui.docStage._docZoom) ui.docStage._docZoom.destroy();
     ui.docViewer.hidden = false;
     document.body.classList.add('doc-preview-open');
@@ -14106,6 +14109,7 @@
         attachDocZoom(ui.docStage, 'pdf');
         maybeUpgradePreviewQuality();
         if (query) finishDocPreviewFind(ui.docStage, query, hitIndex);
+        setupDocPageNav(id, { restore: !query });
         return;
       }
       if (entry.kind === 'text') {
@@ -14161,7 +14165,226 @@
     syncDocEnhance(null);
     ui.docBackdrop.hidden = true;
     ui.docStage.replaceChildren();
+    hideDocPageNav();
     if (returnFocus && returnFocus.isConnected) returnFocus.focus();
+  }
+
+  // ---- Page navigation in the full preview ---------------------------------
+  // The last page per attachment is kept in this Map only (never in storage),
+  // so reopening a document in the same session returns to it.
+  const docPagePositions = new Map();
+  const docPageNav = { page: 0, editing: false, pinnedTop: null, scrollFrame: 0, announceTimer: null, swipe: null };
+
+  function docPageWraps() {
+    return ui.docStage ? ui.docStage.getElementsByClassName('doc-page-wrap') : [];
+  }
+
+  function docPageNavActive() {
+    const nav = document.getElementById('doc-page-nav');
+    return !!(nav && !nav.hidden && ui.docViewer && !ui.docViewer.hidden && docPageWraps().length > 1);
+  }
+
+  // The page that takes up most of the stage's height.
+  function docVisiblePage() {
+    const wraps = docPageWraps();
+    const total = wraps.length;
+    if (!total) return 0;
+    const view = ui.docStage.getBoundingClientRect();
+    let lo = 0;
+    let hi = total - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (wraps[mid].getBoundingClientRect().bottom <= view.top) lo = mid + 1;
+      else hi = mid;
+    }
+    let best = lo;
+    let bestShown = -1;
+    for (let i = lo; i < total; i += 1) {
+      const rect = wraps[i].getBoundingClientRect();
+      if (rect.top >= view.bottom) break;
+      const shown = Math.min(rect.bottom, view.bottom) - Math.max(rect.top, view.top);
+      if (shown > bestShown) {
+        bestShown = shown;
+        best = i;
+      }
+    }
+    return best + 1;
+  }
+
+  function announceDocPage(delay = 0) {
+    clearTimeout(docPageNav.announceTimer);
+    docPageNav.announceTimer = setTimeout(() => {
+      docPageNav.announceTimer = null;
+      const status = document.getElementById('doc-page-status');
+      const total = docPageWraps().length;
+      if (status && docPageNavActive()) status.textContent = `Page ${docPageNav.page} of ${total}`;
+    }, delay);
+  }
+
+  function syncDocPageNav() {
+    const total = docPageWraps().length;
+    const page = docPageNav.page;
+    const input = document.getElementById('doc-page-input');
+    const prev = document.getElementById('doc-page-prev');
+    const next = document.getElementById('doc-page-next');
+    const totalEl = document.getElementById('doc-page-total');
+    if (totalEl) totalEl.textContent = String(total);
+    // Leave a number the user is still typing alone.
+    if (input && !docPageNav.editing) input.value = String(page);
+    const focused = document.activeElement;
+    if (prev) prev.disabled = page <= 1;
+    if (next) next.disabled = page >= total;
+    // A button that turns disabled under focus hands focus to the other one.
+    if (focused === prev && prev.disabled) next?.focus();
+    else if (focused === next && next.disabled) prev?.focus();
+  }
+
+  function setDocPage(page, { announce = 0 } = {}) {
+    const changed = page !== docPageNav.page;
+    docPageNav.page = page;
+    if (previewingId) docPagePositions.set(previewingId, page);
+    syncDocPageNav();
+    if (changed && announce !== false) announceDocPage(announce);
+  }
+
+  function goToDocPage(target, { announce = 0 } = {}) {
+    const wraps = docPageWraps();
+    const total = wraps.length;
+    if (total < 2 || !ui.docStage) return;
+    const page = Math.min(total, Math.max(1, Math.round(Number(target)) || 1));
+    const stage = ui.docStage;
+    // Only scrollTop changes, so the zoom level and horizontal position stay.
+    stage.scrollTop += wraps[page - 1].getBoundingClientRect().top - stage.getBoundingClientRect().top;
+    docPageNav.pinnedTop = stage.scrollTop;
+    setDocPage(page, { announce });
+  }
+
+  function stepDocPage(delta) {
+    goToDocPage((docPageNav.page || docVisiblePage() || 1) + delta);
+  }
+
+  function commitDocPageInput(explicit) {
+    const input = document.getElementById('doc-page-input');
+    docPageNav.editing = false;
+    if (!input || !docPageNavActive()) return;
+    const raw = input.value.trim();
+    const wanted = Number.parseInt(raw, 10);
+    if (!Number.isFinite(wanted) || (!explicit && raw === String(docPageNav.page))) {
+      input.value = String(docPageNav.page);
+      return;
+    }
+    goToDocPage(wanted);
+    // Announced even when the typed number equals the current page.
+    announceDocPage();
+    input.value = String(docPageNav.page);
+  }
+
+  function hideDocPageNav() {
+    const nav = document.getElementById('doc-page-nav');
+    if (nav) nav.hidden = true;
+    const status = document.getElementById('doc-page-status');
+    if (status) status.textContent = '';
+    clearTimeout(docPageNav.announceTimer);
+    cancelAnimationFrame(docPageNav.scrollFrame);
+    docPageNav.announceTimer = null;
+    docPageNav.scrollFrame = 0;
+    docPageNav.page = 0;
+    docPageNav.editing = false;
+    docPageNav.pinnedTop = null;
+    docPageNav.swipe = null;
+  }
+
+  // Shows the controls for a document of two or more pages and, unless a find
+  // match decides the position, returns to the page last seen in this session.
+  function setupDocPageNav(id, { restore = true } = {}) {
+    const nav = document.getElementById('doc-page-nav');
+    const total = docPageWraps().length;
+    if (!nav || previewingId !== id || total < 2) {
+      hideDocPageNav();
+      return;
+    }
+    nav.hidden = false;
+    document.getElementById('doc-page-input')?.setAttribute('aria-label', `Page number, 1 to ${total}`);
+    const saved = restore ? docPagePositions.get(id) : 0;
+    if (saved > 1 && saved <= total) goToDocPage(saved, { announce: false });
+    else setDocPage(docVisiblePage() || 1, { announce: false });
+    syncDocPageNav();
+  }
+
+  function forgetDocPagePositions() {
+    docPagePositions.clear();
+  }
+
+  function isTextEntryTarget(el) {
+    return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+  }
+
+  function bindDocPageNav() {
+    const stage = ui.docStage;
+    if (!stage) return;
+    document.getElementById('doc-page-prev')?.addEventListener('click', () => stepDocPage(-1));
+    document.getElementById('doc-page-next')?.addEventListener('click', () => stepDocPage(1));
+    const input = document.getElementById('doc-page-input');
+    input?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      commitDocPageInput(true);
+    });
+    input?.addEventListener('input', () => { docPageNav.editing = true; });
+    input?.addEventListener('change', () => commitDocPageInput(false));
+    input?.addEventListener('blur', () => {
+      docPageNav.editing = false;
+      if (docPageNav.page) input.value = String(docPageNav.page);
+    });
+    stage.addEventListener('scroll', () => {
+      if (!docPageNavActive() || docPageNav.scrollFrame) return;
+      docPageNav.scrollFrame = requestAnimationFrame(() => {
+        docPageNav.scrollFrame = 0;
+        if (!docPageNavActive()) return;
+        // A jump to the last pages may not reach the top: keep the chosen page
+        // until the user scrolls away from where the jump left the stage.
+        if (docPageNav.pinnedTop !== null && Math.abs(stage.scrollTop - docPageNav.pinnedTop) < 2) return;
+        docPageNav.pinnedTop = null;
+        const page = docVisiblePage();
+        if (page && page !== docPageNav.page) setDocPage(page, { announce: 400 });
+      });
+    }, { passive: true });
+    document.addEventListener('keydown', (event) => {
+      if (!docPageNavActive() || event.defaultPrevented) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (isTextEntryTarget(event.target)) return;
+      const confirmDialog = document.getElementById('confirm-dialog');
+      if (confirmDialog && !confirmDialog.hidden) return;
+      const total = docPageWraps().length;
+      const steps = { ArrowLeft: -1, PageUp: -1, ArrowRight: 1, PageDown: 1 };
+      if (Object.hasOwn(steps, event.key)) {
+        event.preventDefault();
+        stepDocPage(steps[event.key]);
+      } else if (event.key === 'Home' || event.key === 'End') {
+        event.preventDefault();
+        goToDocPage(event.key === 'Home' ? 1 : total);
+      }
+    });
+    // One-finger horizontal swipe turns the page while the document is not
+    // zoomed in. Nothing is prevented, so scrolling and pinch-zoom still work.
+    stage.addEventListener('touchstart', (event) => {
+      const touch = event.touches.length === 1 ? event.touches[0] : null;
+      docPageNav.swipe = touch ? { x: touch.clientX, y: touch.clientY, t: Date.now() } : null;
+    }, { passive: true });
+    stage.addEventListener('touchmove', (event) => {
+      if (event.touches.length !== 1) docPageNav.swipe = null;
+    }, { passive: true });
+    stage.addEventListener('touchend', (event) => {
+      const start = docPageNav.swipe;
+      docPageNav.swipe = null;
+      const touch = event.changedTouches?.[0];
+      if (!start || !touch || event.touches.length || !docPageNavActive()) return;
+      if ((stage._docZoom?.getScale?.() || 1) > 1.02) return;
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      if (Date.now() - start.t > 800 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 2) return;
+      stepDocPage(dx < 0 ? 1 : -1);
+    }, { passive: true });
   }
 
   function setEditorMenuLabel(btn, text) {
@@ -20825,6 +21048,7 @@
     event.target.value = '';
   });
   document.getElementById('doc-close').addEventListener('click', closeDocPreview);
+  bindDocPageNav();
   document.getElementById('doc-immersive-close')?.addEventListener('click', closeDocPreview);
   document.getElementById('doc-immersive-share')?.addEventListener('click', () => {
     if (!previewingId) return;

@@ -3162,6 +3162,14 @@
     </div>
     <div id="doc-viewer-find-slot" class="doc-viewer-find-slot"></div>
     <div id="doc-stage" class="doc-stage"></div>
+    <nav id="doc-page-nav" class="doc-page-nav" hidden aria-label="Page navigation">
+      <button type="button" class="btn ghost doc-page-btn" id="doc-page-prev" aria-label="Previous page" title="Previous page">‹</button>
+      <label class="doc-page-indicator" for="doc-page-input">Page
+        <input type="text" id="doc-page-input" class="doc-page-input" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="go" value="1" aria-label="Page number">
+        of <span id="doc-page-total">1</span></label>
+      <button type="button" class="btn ghost doc-page-btn" id="doc-page-next" aria-label="Next page" title="Next page">›</button>
+    </nav>
+    <div id="doc-page-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     <button type="button" id="doc-immersive-share" class="doc-immersive-share" hidden aria-label="Download" title="Download">
       <svg class="ui-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
