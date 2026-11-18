@@ -2484,7 +2484,8 @@ def api_account_vault_keys_recover_commit():
         return jsonify({"error": problem}), 400
     uid = int(user["id"])
     status, data = db.commit_vault_recovery(
-        uid, keep_session_token=auth.current_session_token(), **fields,
+        uid, keep_session_token=auth.current_session_token(),
+        device_key=_recovery_notice_device_key(), **fields,
     )
     if status == "locked":
         return _vault_recovery_locked(data["retry_after"])
@@ -2506,6 +2507,37 @@ def api_account_vault_keys_recover_commit():
         "If this was not you, secure your account now.",
     )
     return _vault_keys_json({"ok": True, **data})
+
+
+def _recovery_notice_device_key() -> str:
+    """Per-device key for notice dismissals: the X-Device-Id, else the session itself."""
+    device = auth.request_device_id()
+    if device:
+        return device
+    row = db.get_session_by_token(auth.current_session_token())
+    return "session-" + str(int(row["id"])) if row else ""
+
+
+@app.get("/api/account/vault-recovery-notices")
+def api_account_vault_recovery_notices():
+    uid = auth.current_user_id()
+    key = _recovery_notice_device_key() if uid else ""
+    if not uid or not key:
+        return jsonify({"error": "not found"}), 404
+    return _vault_keys_json({"notices": db.list_recovery_notices(uid, key)})
+
+
+@app.post("/api/account/vault-recovery-notices/<int:event_id>/dismiss")
+def api_account_vault_recovery_notice_dismiss(event_id: int):
+    uid = auth.current_user_id()
+    key = _recovery_notice_device_key() if uid else ""
+    if not uid or not key:
+        return jsonify({"error": "not found"}), 404
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    if not db.dismiss_recovery_notice(uid, event_id, key):
+        return jsonify({"error": "not found"}), 404
+    return _vault_keys_json({"ok": True})
 
 
 @app.post("/api/account/vault-kdf")

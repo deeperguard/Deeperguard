@@ -950,6 +950,7 @@
       </footer>
       </div>
       <div class="list-pane list-toolbar">
+      <div id="recovery-notice" class="recovery-notice" hidden role="status" aria-live="polite"></div>
       <div id="device-start-banner" class="device-start-banner" hidden role="status" aria-live="polite">
         <p class="device-start-banner-copy">New device: check it has your latest notes.</p>
         <div class="device-start-banner-actions">
@@ -3036,6 +3037,7 @@
   {{ asset_script('js/idb.js') }}
   {{ asset_script('js/vendor/qrcode-generator.js') }}
   {{ asset_script('js/freshness.js') }}
+  {{ asset_script('js/recovery-notice.js') }}
   {{ asset_script('js/release-integrity.js') }}
   {{ asset_script('js/snimport.js') }}
   {{ asset_script('js/labels.js') }}

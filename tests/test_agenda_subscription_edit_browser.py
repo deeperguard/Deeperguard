@@ -215,3 +215,35 @@ def test_edit_feed_link(env):
     assert "SECRET" not in page.url
     leaked = page.evaluate("() => JSON.stringify([localStorage, sessionStorage]) + document.cookie")
     assert "SECRET" not in leaked and "example.invalid" not in leaked
+
+
+def test_edit_uses_current_mode_not_form_snapshot(env):
+    page, hits = env["page"], env["hits"]
+    # The previous test leaves the settings panel open; open it from the agenda only when it is closed.
+    if not page.locator("#agenda-calendar-settings").is_visible():
+        page.click("#app-tab-agenda")
+        page.wait_for_selector("#agenda-add-event", timeout=30_000)
+        page.click('[data-agenda-view="week"]')
+    page.evaluate("""(a) => {
+      const sub = NotesStore.addAgendaSubscription({ name: 'Mode probe', url: a });
+      NotesStore.updateAgendaSubscription(sub.id, { mode: 'relay', relay_consent: true });
+      NotesAgendaSubs.renderList();
+      NotesAgenda.render();
+    }""", FEED_A)
+    if not page.locator("#agenda-calendar-settings").is_visible():
+        page.locator("#agenda-calendar-settings-btn:visible").first.click()
+    page.wait_for_selector("#agenda-calendar-settings:not([hidden])", timeout=30_000)
+    page.locator(".agenda-subscription-row", has_text="Mode probe").get_by_role("button", name="Edit").click()
+
+    # The subscription switches to direct while the form is open: saving must use that, not the mode the form was opened with.
+    page.evaluate("""() => {
+      const s = NotesStore.listAgendaSubscriptions().find((x) => x.name === 'Mode probe');
+      NotesStore.updateAgendaSubscription(s.id, { mode: 'direct' });
+    }""")
+    direct_before, relay_before = hits["c"], hits["relay"]
+    _link(page).fill(FEED_C)
+    page.keyboard.press("Enter")
+    page.wait_for_selector(".agenda-subscription-edit .agenda-import-counts", timeout=30_000)
+    assert page.locator(".agenda-relay-consent").count() == 0
+    assert hits["c"] == direct_before + 1 and hits["relay"] == relay_before
+    page.get_by_role("button", name="Cancel").click()

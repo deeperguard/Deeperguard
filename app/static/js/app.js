@@ -26117,6 +26117,9 @@ async function showSettings() {
       if (!quiet) return handleLockedManualSync();
     }
     vaultReady = true;
+    if (typeof NotesRecoveryNotice !== 'undefined') {
+      NotesRecoveryNotice.refresh(NotesStore.api, document.getElementById('recovery-notice'));
+    }
     if (NotesStore.passwordChangeInFlight && NotesStore.passwordChangeInFlight()) {
       if (!quiet) toast('Password change is still saving…', true);
       return Promise.resolve();
