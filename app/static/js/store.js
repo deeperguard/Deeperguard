@@ -2410,6 +2410,8 @@ const NotesStore = (() => {
     // Doubles of this subscription (two devices refreshed the same feed) fold to one row first.
     const folded = foldSubscriptionDuplicates(events, deleted, opts.nowMs || Date.now())
       .filter(({ row }) => row.subscription_id === subId);
+    // A legacy row without ical_uid is not folded above. It is keyed by its own id here, which no
+    // feed uid matches, so it is pruned as doomed below rather than kept as a double.
     const mine = new Map();
     for (const [eid, ev] of Object.entries(events)) {
       if (ev && ev.subscription_id === subId) mine.set(String(ev.ical_uid || eid), eid);

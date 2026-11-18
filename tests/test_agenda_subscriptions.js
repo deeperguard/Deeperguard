@@ -239,7 +239,31 @@ const subEvents = (id) => Object.entries(pack.events).filter(([, e]) => e.subscr
     assert.ok(healed.content.events.own1 && healed.content.events.own2);
     const back = RealStore.mergeAgendaPacks(healed.content, dirty, Date.parse('2026-02-06T00:00:00Z'));
     assert.strictEqual(forSub(back).length, 2, 'removed double does not come back');
+
+    // A legacy row without ical_uid is not folded, but the refresh prunes it instead of keeping it.
+    const noUid = JSON.parse(JSON.stringify(dev1));
+    noUid.events = { ...dev1.events, nouid: { ...own, subscription_id: 'sd', source: 'Feed' } };
+    const pruned = RealStore.applySubscriptionRefresh(noUid, 'sd', feedRows, { nowMs: Date.parse('2026-02-05T00:00:00Z') });
+    assert.strictEqual(pruned.content.events.nouid, undefined);
+    assert.ok(pruned.content.deleted_events.nouid);
+    assert.strictEqual(forSub(pruned.content).length, 2);
     ok('ok duplicate folding');
+  }
+
+  // Feed event ids are pinned: a change would give every device a new id and bring the doubles back.
+  {
+    const pinned = [
+      ['sd', 'uid-a', 'c9d09d70-df8e-5a87-84f3-6f4649ca5d57'],
+      ['sd', 'uid-b', 'cb79ca49-f02f-5879-86a5-443a1ec3e272'],
+      ['cal1', 'abc@example.com', '52c6916c-6777-539b-85d0-6731942e8578'],
+      ['', '', 'eca75d31-7ee4-5e1b-81f6-94db932cbab0'],
+    ];
+    for (const [subId, uid, want] of pinned) {
+      assert.strictEqual(RealStore.subscriptionEventId(subId, uid), want, `id for ${subId}/${uid}`);
+    }
+    assert.notStrictEqual(RealStore.subscriptionEventId('sd', 'uid-a'), RealStore.subscriptionEventId('sd', 'uid-b'));
+    assert.notStrictEqual(RealStore.subscriptionEventId('sd', 'uid-a'), RealStore.subscriptionEventId('cal1', 'uid-a'));
+    ok('ok feed event id pinned');
   }
 
   // Relay: opt-in per subscription, never a silent fallback.
