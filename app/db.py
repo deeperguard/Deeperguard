@@ -296,6 +296,16 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS vault_recovery_event_dismissals (
+            event_id INTEGER NOT NULL REFERENCES vault_recovery_events(id) ON DELETE CASCADE,
+            device_key TEXT NOT NULL,
+            dismissed_at REAL NOT NULL,
+            PRIMARY KEY (event_id, device_key)
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS vault_recovery_wraps (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             key_id TEXT NOT NULL,
@@ -1637,6 +1647,7 @@ def commit_vault_recovery(
     wrap_version: int,
     proof_hash: str,
     keep_session_token: str = "",
+    device_key: str = "",
 ) -> tuple[str, dict]:
     """Recovery commit of VAULT_RECOVERY 3.2 step 7 in ONE transaction.
 
@@ -1709,10 +1720,16 @@ def commit_vault_recovery(
             """,
             (to_key_id, wrap_version, recovery_salt, wrap_json, proof_hash, ts, uid),
         )
-        conn.execute(
+        event_id = conn.execute(
             "INSERT INTO vault_recovery_events (user_id, kind, created_at) VALUES (?, 'recovery_key_used', ?)",
             (uid, ts),
-        )
+        ).lastrowid
+        if device_key:
+            # The device that used the key knows; it needs no notice about itself.
+            conn.execute(
+                "INSERT INTO vault_recovery_event_dismissals (event_id, device_key, dismissed_at) VALUES (?, ?, ?)",
+                (event_id, device_key, ts),
+            )
         keep_hash = _session_token_hash(keep_session_token) if keep_session_token else ""
         conn.execute(
             """
@@ -1725,6 +1742,46 @@ def commit_vault_recovery(
             "key_rev": int(user["vault_key_rev"]) + 1, "key_id": to_key_id,
             "password_changed_at": ts, "auth_security_at": ts,
         }
+
+
+RECOVERY_NOTICE_DAYS = 30
+
+
+def list_recovery_notices(user_id: int, device_key: str) -> list[dict]:
+    """'Recovery key used' events of the last 30 days this device has not dismissed yet."""
+    since = now() - RECOVERY_NOTICE_DAYS * 86400
+    rows = connection().execute(
+        """
+        SELECT e.id, e.created_at FROM vault_recovery_events e
+        WHERE e.user_id = ? AND e.kind = 'recovery_key_used' AND e.created_at >= ?
+          AND NOT EXISTS (
+            SELECT 1 FROM vault_recovery_event_dismissals d
+            WHERE d.event_id = e.id AND d.device_key = ?
+          )
+        ORDER BY e.id DESC
+        """,
+        (int(user_id), since, device_key),
+    ).fetchall()
+    return [
+        {"id": int(r["id"]), "kind": "recovery_key_used", "created_at": float(r["created_at"])}
+        for r in rows
+    ]
+
+
+def dismiss_recovery_notice(user_id: int, event_id: int, device_key: str) -> bool:
+    """Hide one event on this device only. False when the event is not this user's."""
+    with tx() as conn:
+        has = conn.execute(
+            "SELECT 1 FROM vault_recovery_events WHERE id = ? AND user_id = ?",
+            (int(event_id), int(user_id)),
+        ).fetchone()
+        if not has:
+            return False
+        conn.execute(
+            "INSERT OR IGNORE INTO vault_recovery_event_dismissals (event_id, device_key, dismissed_at) VALUES (?, ?, ?)",
+            (int(event_id), device_key, now()),
+        )
+        return True
 
 
 def delete_recovery_wrap(user_id: int, *, expected_key_rev: int) -> tuple[str, int, str]:
