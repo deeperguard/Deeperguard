@@ -1563,11 +1563,15 @@ def get_vault_keys_status(user_id: int) -> dict | None:
     ).fetchone()
     if not user:
         return None
-    with tx() as wconn:
-        _purge_expired_pending(wconn, int(user_id), now())
-    pending = conn.execute(
-        "SELECT 1 FROM vault_pending_rekey WHERE user_id = ?", (int(user_id),),
+    pending_row = conn.execute(
+        "SELECT expires_at FROM vault_pending_rekey WHERE user_id = ?", (int(user_id),),
     ).fetchone()
+    pending = pending_row
+    if pending_row is not None and float(pending_row["expires_at"]) <= now():
+        # Only an expired row needs a write; the common GET stays read-only.
+        with tx() as wconn:
+            _purge_expired_pending(wconn, int(user_id), now())
+        pending = None
     row = conn.execute(
         "SELECT wrap_version, created_at, last_used_at FROM vault_recovery_wraps WHERE user_id = ?",
         (int(user_id),),
