@@ -225,6 +225,17 @@ class VaultRecoveryWrapTests(unittest.TestCase):
         prove = self.client.post("/api/account/vault-keys/prove", json={"A": a_hex, "M1": m1}, headers=h)
         self.assertEqual(prove.status_code, 401)
 
+    def test_missing_status_row_gives_404_not_a_crash(self):
+        import db as notes_db
+        from unittest import mock
+
+        self._signed_in()
+        with mock.patch.object(notes_db, "get_vault_keys_status", return_value=None):
+            resp = self.client.get("/api/account/vault-keys")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.get_json(), {"error": "not found"})
+        self.assertEqual(resp.headers.get("Cache-Control"), "no-store")
+
     def test_requires_login(self):
         self.assertIn(self.client.get("/api/account/vault-keys").status_code, (401, 403))
 

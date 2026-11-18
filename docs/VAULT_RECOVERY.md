@@ -326,8 +326,8 @@ revoking therefore needs the password even on a passkey-unlocked device.
 | Method and path | Needs | Body | Effect / answer |
 | --- | --- | --- | --- |
 | `GET /api/account/vault-keys` | session | none | `{schema:1, account_id, key_id, key_rev, key_mode:"derived", recovery:{active, created_at, last_used_at, wrap_version}, prf_salt, prf:[{credential_id, created_at, current:bool}], pending_rekey:bool, invalidated_at, recovery_locked_until}`. **Never** returns a wrap |
-| `PUT /api/account/vault-keys/recovery` | token | `expected_key_rev, key_id, wrap_version, recovery_salt, wrap, proof_hash` | create or **replace** the single recovery wrap; the old row is overwritten (old key invalid at once). Resets the failure counter. Mail + `auth_security_at` bump. 200 `{key_rev, key_id, auth_security_at}` (the writing device acknowledges the bump, so only other devices show the notice) |
-| `DELETE /api/account/vault-keys/recovery` | token | `expected_key_rev` | **revoke**: deletes the row; mail + bump |
+| `PUT /api/account/vault-keys/recovery` | token | `expected_key_rev, key_id, wrap_version, recovery_salt, wrap, proof_hash` | create or **replace** the single recovery wrap; the old row is overwritten (old key invalid at once). Resets the failure counter. `auth_security_at` bump; the notice mail is **not sent yet** (follow-up, see 3.6). 200 `{key_rev, key_id, auth_security_at}` (the writing device acknowledges the bump, so only other devices show the notice) |
+| `DELETE /api/account/vault-keys/recovery` | token | `expected_key_rev` | **revoke**: deletes the row; `auth_security_at` bump; the notice mail is **not sent yet** (follow-up, see 3.6) |
 | `PUT /api/account/vault-keys/prf/<credential_id>` | token | `expected_key_rev, key_id, wrap_version, wrap, prf_salt` | upsert this passkey's wrap; `credential_id` must belong to the user. `prf_salt` is accepted only when the account has none (CAS) or equals the stored one |
 | `GET /api/account/vault-keys/prf` | session | none | `{prf_salt, wraps:[{credential_id, key_id, wrap_version, wrap}]}` for wraps with `key_id == vault_key_id`; used to unlock a locked vault in a signed-in session. Rate limit `vault-keys-prf` (existing limiter) |
 | `DELETE /api/account/vault-keys/prf/<credential_id>` | token | `expected_key_rev` | delete one wrap (passkey stays for sign-in) |
@@ -454,7 +454,10 @@ On recovery commit, replace, revoke, lockout and legacy invalidation (6.2):
   `app.js:7976`).
 * An email to `users.email` through `mailer.send_plain_email` that names the event
   and time and says what to do if it was not the owner. It never contains a
-  recovery key, token or proof.
+  recovery key, token or proof. Built today for recovery commit (`app.py`
+  `_vault_recovery_mail`) and lockout only. **Replace (`PUT .../recovery`) and revoke
+  (`DELETE .../recovery`) do not send it yet**: they only bump `auth_security_at`.
+  The mail for those two is a deliberate follow-up task, not part of task 334.
 * Recovery commit and password change end all other sessions through the same
   `_revoke_other_sessions` (reason `vault-recovery`), visible in `/api/sessions`.
 

@@ -2337,6 +2337,8 @@ def api_account_vault_keys():
     if err:
         return err
     status = db.get_vault_keys_status(int(user["id"]))
+    if status is None:
+        return _vault_keys_json({"error": "not found"}, 404)
     # account_id is the wrap AAD field of docs/VAULT_RECOVERY.md 1.2.
     return _vault_keys_json({"schema": 1, "key_mode": "derived", "account_id": str(int(user["id"])), **status})
 
