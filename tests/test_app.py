@@ -2187,6 +2187,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_readable_export_zip(self):
         self._run_node_script("test_readable_export.js")
 
+    def test_client_readable_export_agenda_ics(self):
+        self._run_node_script("test_readable_export_agenda.js")
+
     def test_client_markdown_import(self):
         self._run_node_script("test_md_import.js")
 

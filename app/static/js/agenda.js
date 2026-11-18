@@ -1140,7 +1140,7 @@
       }
       return;
     }
-    const icsText = Ics.buildIcsCalendarFromEvents(flattenEventsForIcsExport(rows));
+    const icsText = Ics.buildIcsCalendarFromEvents(Ics.flattenEventsForIcsExport(rows));
     const blob = new Blob([icsText], { type: 'text/calendar;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2830,33 +2830,6 @@
     const text = R.editorHint();
     hint.hidden = !text;
     hint.textContent = text;
-  }
-
-  function flattenEventsForIcsExport(rows) {
-    const out = [];
-    for (const ev of rows || []) {
-      out.push(ev);
-      const overrides = ev.ics_occurrence_overrides;
-      if (!overrides || typeof overrides !== 'object') continue;
-      Object.keys(overrides).forEach((rid) => {
-        const ov = overrides[rid];
-        if (!ov || ov.cancelled) return;
-        out.push({
-          ...ev,
-          rrule: '',
-          ics_exdates: [],
-          ics_occurrence_overrides: {},
-          ics_recurrence_id: rid,
-          title: ov.title || ev.title,
-          location: ov.location != null ? ov.location : ev.location,
-          notes: ov.notes != null ? ov.notes : ev.notes,
-          start: ov.start || ev.start,
-          end: ov.end || ev.end,
-          all_day: typeof ov.all_day === 'boolean' ? ov.all_day : ev.all_day,
-        });
-      });
-    }
-    return out;
   }
 
   function closeEditor() {

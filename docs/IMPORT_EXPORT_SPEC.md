@@ -37,7 +37,7 @@ left out).
 | Restore of a `.dgbackup` | `NotesStore.importBackup` (`app/static/js/store.js:7211`), UI handler on `#restore-backup-file` (`app.js:25354`) | Merge or "add missing only", then a freshness reset prompt. The same function also takes the Standard Notes file. |
 | Export of one note | `downloadNoteMarkdown` (`app.js:14039`), button `#btn-export-note` in Settings (`app.js:23955`, `app/templates/app.html:2148`), and the toolbar button through `downloadOpenNote` (`app.js:14051`) | Saves `# <title>\n\n<content>` as `<title>.md` (type `text/markdown`). The file name replaces every run of characters outside `[A-Za-z0-9_-]` by `-`. Observed: note "Layout plain note" downloaded as `Layout-plain-note.md` with content `# Layout plain note\n\nSynthetic body text for the layout test.` There is no front-matter, no tags, no dates and no attachments. A locked note is refused until it is unlocked. |
 | Export of one attachment | `downloadAttachment` (`app.js:14072`) | Decrypts one attachment and saves the original bytes under its stored `filename`. |
-| Export of the agenda | `exportAgendaToIcs` (`app/static/js/agenda.js:1119`), `flattenEventsForIcsExport` (`agenda.js:2835`), `NotesAgendaIcs.buildIcsCalendarFromEvents` (`app/static/js/agenda-ics.js:433`) | Saves `deeperguard-calendar[-<calendar>]-YYYY-MM-DD.ics`. Writes UID, SUMMARY, LOCATION, DESCRIPTION (notes plus an "Attendees:" line), URL (https only), RRULE, exceptions and time zones. It writes **no VALARM**: reminders are not exported. |
+| Export of the agenda | `exportAgendaToIcs` (`app/static/js/agenda.js:1119`), `NotesAgendaIcs.flattenEventsForIcsExport` (`app/static/js/agenda-ics.js:434`), `NotesAgendaIcs.buildIcsCalendarFromEvents` (`agenda-ics.js:461`) | Saves `deeperguard-calendar[-<calendar>]-YYYY-MM-DD.ics`. Writes UID, SUMMARY, LOCATION, DESCRIPTION (notes plus an "Attendees:" line), URL (https only), RRULE, exceptions and time zones. It writes **no VALARM**: reminders are not exported. |
 | Export of 2FA accounts | none | There is no export of 2FA secrets today. |
 
 ### 1.2 What is imported today
@@ -273,9 +273,13 @@ read is skipped and listed in `README.txt` under "Not exported".
 
 ### 2.3 `agenda/agenda.ics`
 
-One iCalendar file from `buildIcsCalendarFromEvents` for all calendars (the
-function already used by `exportAgendaToIcs`). It contains no reminders and no
-agenda tasks (1.6). Omitted when the agenda is empty.
+One iCalendar file from `buildIcsCalendarFromEvents(flattenEventsForIcsExport(…))`
+for all calendars (the same functions `exportAgendaToIcs` uses; both live in
+`agenda-ics.js`, so the export does not depend on the agenda view being
+loaded). Edited occurrences of a series become extra VEVENTs with
+RECURRENCE-ID. It contains no reminders and no agenda tasks (1.6). Omitted
+when the agenda is empty. If the iCalendar module is missing the export fails
+with an error and no ZIP is saved; it never silently leaves the agenda out.
 
 ### 2.4 `2fa/otpauth.txt` (opt-in only)
 

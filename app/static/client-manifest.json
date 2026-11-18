@@ -26,10 +26,10 @@
       "url": "/static/js/agenda-calendars.9f8974366154ec62.js"
     },
     "js/agenda-ics.js": {
-      "bytes": 30015,
-      "sha256": "d0e5a60081217f059a8673e9196ffcc4cc229f4f8768c35ad52f9a04009987b4",
-      "sri": "sha384-KNROEPWyJWVjbfpRLt9jJPtYFqu/eXqQvT5r/Mm0zO2ic0inmwuC/Sax3IfbJGYG",
-      "url": "/static/js/agenda-ics.d0e5a60081217f05.js"
+      "bytes": 31024,
+      "sha256": "9eb8428b93347d53efc6eb81c860f903f1744070b989917206f8249568b01cb4",
+      "sri": "sha384-L4lgM1Qk1OgQAkA/Tg/gTlwm8mzxCjDJYIn8r8IW3IJbFjpMJ9SRJHtbzSdA3gyp",
+      "url": "/static/js/agenda-ics.9eb8428b93347d53.js"
     },
     "js/agenda-local-reminders.js": {
       "bytes": 24330,
@@ -86,10 +86,10 @@
       "url": "/static/js/agenda-tz.57449e80ad590b0f.js"
     },
     "js/agenda.js": {
-      "bytes": 149947,
-      "sha256": "d35f2eb05976ce66c3db14e4bd4f75afa9dc1dd96b66bddc63dfdfef3526c68a",
-      "sri": "sha384-PPUfySrvSVKH3PEdjbhq5swzG38qr7oWaFzCQM3A5HpAMKGw8/Um1AKm5byS4qIM",
-      "url": "/static/js/agenda.d35f2eb05976ce66.js"
+      "bytes": 149067,
+      "sha256": "11a0d92de80343d6d1c6f7990e46298678609e2606f19f776a2739737e851731",
+      "sri": "sha384-+TCTGeFb+3ykpNX8Ics7u2VccKNKBLsof/9VieDB2NhZnlkPlOcxblEXg+jCXmR4",
+      "url": "/static/js/agenda.11a0d92de80343d6.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -98,10 +98,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1073617,
-      "sha256": "4cfbedddd2f401da5889cf1099662f3c0005f6f31eb75d5b9e9576b3c46cf1f9",
-      "sri": "sha384-pF4ocR1VJ2fRT0PZ5X1QBSaiXtS61uzXwHrOHTE1DkrqWrBcIgjZ6gwzE/3tLGwC",
-      "url": "/static/js/app.4cfbedddd2f401da.js"
+      "bytes": 1073840,
+      "sha256": "24b2c51085429991d5d9c1703fcd1a066a23798b6f97e5f877b86303e9fe1543",
+      "sri": "sha384-Kb1m+SZ35msweVvKlVXncTUYnObrn0PahEZ893B+v7f1uuW8yQCYf14yKVUg9hE0",
+      "url": "/static/js/app.24b2c51085429991.js"
     },
     "js/auth-pages.js": {
       "bytes": 43723,
@@ -338,10 +338,10 @@
       "url": "/static/js/quick-capture.2875d23bcc945722.js"
     },
     "js/readable-export.js": {
-      "bytes": 10411,
-      "sha256": "a6a32d83ef0bb36e0ab1f7e3b2476207187f3f4ffaa18780a4b95ab5bd003f5d",
-      "sri": "sha384-NEuKGxDxIOR2ZArz/eyfsD3jM2uJ+Ce9XRIqPWTt/aqWa15+1dImXd5rpVpRJOJL",
-      "url": "/static/js/readable-export.a6a32d83ef0bb36e.js"
+      "bytes": 11646,
+      "sha256": "b70b1becaba84a53e0c450e8cc7105574007f8509bae99358bccda4d9a5c3d31",
+      "sri": "sha384-cL4SRhy6bD9kG0UPHtnO/a2O4YHw9ZvMx/rE5pBta69urn+s2sYzJvx7WUwE6cbH",
+      "url": "/static/js/readable-export.b70b1becaba84a53.js"
     },
     "js/recovery-key-setup.js": {
       "bytes": 25587,
@@ -633,6 +633,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "dfc52c02ac6f6a147443c0f8d92dd43f3134409f2cea3c3b94ec6bd566616545",
+  "manifest_sha256": "d93c2e3d4d8c44d321c9cdadf3579d0a2143a7ac756da346c299411d0adaaa87",
   "version": 1
 }
