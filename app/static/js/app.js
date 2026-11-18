@@ -6976,6 +6976,7 @@
       toastEl.hidden = true;
       toastEl.textContent = '';
     }
+    refreshPasskeyUnlockButton().catch(() => {});
     unlockPassword.focus();
   }
 
@@ -8670,6 +8671,106 @@
       }
     }
   }
+
+  // Passkey unlock (docs/VAULT_RECOVERY.md 3.1): shown only when this account has at
+  // least one passkey with a stored vault key copy. Any failure leaves the password form as is.
+  const unlockPasskeyBtn = document.getElementById('unlock-passkey');
+  let passkeyUnlockBusy = false;
+
+  async function passkeyUnlockEntry() {
+    if (!window.NotesWebAuthn || !window.NotesCrypto?.derivePrfWrapKey || !NotesStore.unlockWithKey) return null;
+    if (await NotesWebAuthn.prfBrowserSupport() === 'unsupported') return null;
+    const status = await NotesStore.api('/api/account/vault-keys');
+    const entry = (Array.isArray(status?.prf) ? status.prf : []).find((r) => r.current);
+    return entry ? { status, credentialId: String(entry.credential_id) } : null;
+  }
+
+  async function refreshPasskeyUnlockButton() {
+    if (!unlockPasskeyBtn) return;
+    let entry = null;
+    try {
+      entry = await passkeyUnlockEntry();
+    } catch (err) {
+      entry = null; // offline or signed out: the password stays the way in
+    }
+    unlockPasskeyBtn.hidden = !entry || NotesStore.isUnlocked();
+  }
+
+  function passkeyUnlockFailureMessage(err) {
+    const fallback = ' Enter your vault password instead.';
+    if (err?.name === 'NotAllowedError' || /cancel/i.test(String(err?.message || ''))) {
+      return `Passkey unlock was cancelled.${fallback}`;
+    }
+    if (err?.code === 'PASSKEY_NO_PRF') {
+      return `This passkey did not return the secret that vault unlock needs.${fallback}`;
+    }
+    return `Could not unlock with the passkey.${fallback}`;
+  }
+
+  async function unlockWithPasskey() {
+    if (passkeyUnlockBusy || unlockInFlight || NotesStore.isUnlocked()) return;
+    passkeyUnlockBusy = true;
+    unlockPasskeyBtn.disabled = true;
+    showUnlockError('');
+    let prfOutput = null;
+    let wrapKey = null;
+    let vaultKey = null;
+    try {
+      const entry = await passkeyUnlockEntry();
+      if (!entry) throw new Error('No passkey with a vault copy.');
+      const { status, credentialId } = entry;
+      const opts = await NotesStore.api(
+        `/api/account/vault-keys/prf/${encodeURIComponent(credentialId)}/options`,
+        { method: 'POST', body: '{}' },
+      );
+      const salt = new Uint8Array(NotesWebAuthn.bufferFromBase64url(opts.prf_salt));
+      const got = await NotesWebAuthn.requestPrfOutput(NotesWebAuthn.prepareAuthenticationOptions(opts.options), salt);
+      if (got.status !== 'ok') {
+        const noPrf = new Error('No PRF output');
+        noPrf.code = 'PASSKEY_NO_PRF';
+        throw noPrf;
+      }
+      prfOutput = got.output;
+      if (got.credentialId !== credentialId) throw new Error('A different passkey answered.');
+      const data = await NotesStore.api(
+        `/api/account/vault-keys/prf/${encodeURIComponent(credentialId)}/unwrap`,
+        { method: 'POST', body: JSON.stringify({ credential: NotesWebAuthn.authenticationCredentialJson(got.credential) }) },
+      );
+      wrapKey = NotesCrypto.derivePrfWrapKey(prfOutput);
+      vaultKey = await NotesCrypto.unwrapVaultKey(
+        wrapKey,
+        { wrap_version: data.wrap_version, key_id: data.key_id, blob: data.wrap },
+        { accountId: String(status.account_id || ''), type: 'prf', binding: credentialId },
+      );
+      await NotesStore.unlockWithKey(vaultKey);
+      try {
+        await NotesStore.loadLocal();
+      } catch (err) {
+        /* an unreadable local cache is rebuilt by the sync that follows */
+      }
+      sessionExpiredHold = false;
+      await ensureServerSession({ prompt: false }).catch(() => false);
+      await finishUnlocked();
+      stopEmptyDeviceBackgroundRetry();
+      setEmptyDeviceUnlockUi('clear');
+      repairUnlockShellState();
+      if (vaultKeyProven() && !isVaultReadyForSync()) showApp();
+    } catch (err) {
+      if (NotesStore.isUnlocked() && !document.body.classList.contains('unlocked')) NotesStore.lock();
+      showUnlockError(passkeyUnlockFailureMessage(err));
+      try { unlockPassword?.focus(); } catch (focusErr) { /* ignore */ }
+    } finally {
+      if (prfOutput) prfOutput.fill(0);
+      if (wrapKey) wrapKey.raw.fill(0);
+      if (vaultKey) vaultKey.raw.fill(0);
+      passkeyUnlockBusy = false;
+      unlockPasskeyBtn.disabled = false;
+    }
+  }
+
+  unlockPasskeyBtn?.addEventListener('click', () => {
+    unlockWithPasskey().catch(() => {});
+  });
 
   unlockForm?.addEventListener('submit', (e) => {
     e.preventDefault();

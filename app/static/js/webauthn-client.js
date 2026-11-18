@@ -127,7 +127,7 @@
     if (!credential) throw new Error('Passkey request was cancelled');
     const output = prfOutputFromCredential(credential);
     if (!output) return { status: 'unsupported', reason: 'authenticator' };
-    return { status: 'ok', output, credentialId: credential.id };
+    return { status: 'ok', output, credentialId: credential.id, credential };
   }
 
   global.NotesWebAuthn = {

@@ -805,6 +805,27 @@ const NotesStore = (() => {
     }
   }
 
+  // Opens the vault with a key that was unwrapped from a stored copy (passkey unlock).
+  // The unwrap is authenticated and checked against the account's key id, so the key
+  // counts as verified; the password-derivation hints are left untouched.
+  async function unlockWithKey(vaultKey) {
+    const raw = vaultKey && vaultKey.raw;
+    if (!(raw instanceof Uint8Array) || raw.length !== 32) throw new Error('Missing encryption key');
+    state.cryptoKey = { raw: new Uint8Array(raw) };
+    state.altCryptoKey = null;
+    state.kdfProbeMixed = false;
+    state.keyVerified = true;
+    sessionStorage.setItem('notes_unlocked', '1');
+    if (typeof NotesFreshness !== 'undefined') {
+      NotesFreshness.setCryptoKey(state.cryptoKey);
+      try {
+        await NotesFreshness.load(state.cryptoKey);
+      } catch (err) {
+        /* bootstrap empty freshness */
+      }
+    }
+  }
+
   function isUnlocked() {
     return !!state.cryptoKey;
   }
@@ -7561,6 +7582,7 @@ const NotesStore = (() => {
     ackAuthSecurity,
     remoteAuthSecurityEvent,
     vaultKeyCopy,
+    unlockWithKey,
     prepareForRemotePasswordRotation,
     abandonLocalForPasswordRotation,
     passwordChangeInFlight: () => passwordChangeInFlight,
