@@ -17,6 +17,21 @@ from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 PASSWORD = "EmptyTitlePass1!abc"
 
+# Stand-in for the browser's Notification API, installed before the app scripts run, so the
+# permission state is under test control and no real permission prompt can block the run.
+# requestPermission() answers with window.__dgNextPermission (or keeps the current state).
+FAKE_NOTIFICATION = """(() => {
+  class FakeNotification { close() {} }
+  FakeNotification.permission = 'default';
+  FakeNotification.requests = 0;
+  FakeNotification.requestPermission = () => {
+    FakeNotification.requests += 1;
+    FakeNotification.permission = window.__dgNextPermission || FakeNotification.permission;
+    return Promise.resolve(FakeNotification.permission);
+  };
+  Object.defineProperty(window, 'Notification', { value: FakeNotification, configurable: true, writable: true });
+})();"""
+
 
 @pytest.fixture(scope="module")
 def page():
@@ -30,6 +45,7 @@ def page():
             except Exception as exc:
                 pytest.skip(f"Chromium not available: {exc}")
             pg = browser.new_page(viewport={"width": 1280, "height": 800})
+            pg.add_init_script(FAKE_NOTIFICATION)
             pg.goto(f"http://127.0.0.1:{port}/register", wait_until="domcontentloaded")
             pg.fill('input[name="email"]', "emptytitle@e2e.invalid")
             pg.fill("#register-password", PASSWORD)
@@ -176,3 +192,53 @@ def test_multiple_reminders_are_saved_and_shown_again(page):
     assert not page.is_checked('[data-agenda-reminder-offset="15"]')
     assert page.input_value("#agenda-edit-reminders-custom") == "20"
     _cancel_editor(page)
+
+
+def _permission_ui(pg):
+    status = pg.locator("#agenda-local-reminder-permission-status")
+    return status.inner_text().strip(), pg.locator("#agenda-local-reminder-allow").is_visible()
+
+
+def _wait_allow_hidden(pg):
+    pg.wait_for_function(
+        "() => document.getElementById('agenda-local-reminder-allow').hidden", timeout=5000)
+
+
+def test_notification_permission_status_and_allow_button(page):
+    """Agenda settings show the browser's notification permission and offer the Allow button only
+    while the browser has not decided; the button asks once and the status follows the answer."""
+    page.locator("#agenda-calendar-settings-btn:visible").first.click()
+    page.wait_for_selector("#agenda-calendar-settings:not([hidden])", timeout=30_000)
+    allow = page.locator("#agenda-local-reminder-allow")
+
+    # Undecided, as rendered when the app started: explain and offer the button.
+    text, shown = _permission_ui(page)
+    assert text.startswith("Reminders show inside Deeperguard. Allow browser notifications")
+    assert shown
+
+    # Allow by keyboard; the browser answers 'granted'.
+    requests = page.evaluate("() => Notification.requests")
+    page.evaluate("() => { window.__dgNextPermission = 'granted'; }")
+    allow.focus()
+    page.keyboard.press("Enter")
+    _wait_allow_hidden(page)
+    assert page.evaluate("() => Notification.requests") == requests + 1
+    assert _permission_ui(page) == ("Browser notifications are allowed on this device.", False)
+
+    # Undecided again; this time the browser answers 'denied'.
+    page.evaluate(
+        "() => { Notification.permission = 'default'; NotesAgendaLocalReminders.refreshPermissionUi(); }")
+    assert _permission_ui(page)[1]
+    page.evaluate("() => { window.__dgNextPermission = 'denied'; }")
+    allow.click()
+    _wait_allow_hidden(page)
+    text, shown = _permission_ui(page)
+    assert text.startswith("Browser notifications are blocked.")
+    assert not shown
+
+    # No Notification API at all: say so, no button.
+    page.evaluate(
+        "() => { delete window.Notification; NotesAgendaLocalReminders.refreshPermissionUi(); }")
+    text, shown = _permission_ui(page)
+    assert text.startswith("This browser does not support notifications.")
+    assert not shown
