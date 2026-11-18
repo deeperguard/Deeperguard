@@ -64,7 +64,6 @@ Be clear-eyed about this mode: it is an exception to "the server only sees ciphe
 - **It does not hide everything.** In direct mode the provider sees your IP address and when you refresh. In relay mode our server sees the link and the calendar while it fetches.
 - **It does not write back.** Subscriptions are read-only. There is no two-way sync with Google, Apple or other cloud calendars, and no shared calendars.
 - **It does not refresh while you're away.** If no device has the vault open, nothing is fetched.
-- **It does not send reminders for subscribed events by itself while the app is closed.** Reminders on events only fire while Deeperguard is open and your vault is unlocked; see [the Agenda post](/blog/vault-encrypted-agenda).
 
 One honest note on the design: to allow direct fetching, the worker may connect to any `https` host, while the main page stays limited to our own server. Our security documentation lists this as a known trade-off. If you never add a subscription, the worker never starts.
 
