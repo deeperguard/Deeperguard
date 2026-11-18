@@ -31,7 +31,7 @@ def _webauthn_env(wh, verify):
     stack.enter_context(patch.object(wh, "passkey_host_error", return_value=None))
     for name, value in (
         ("PublicKeyCredentialDescriptor", lambda id: {"id": id}),
-        ("UserVerificationRequirement", SimpleNamespace(PREFERRED="preferred")),
+        ("UserVerificationRequirement", SimpleNamespace(PREFERRED="preferred", REQUIRED="required")),
         ("generate_authentication_options", lambda **kw: SimpleNamespace(challenge=secrets.token_bytes(32))),
         ("options_to_json_dict", lambda options: {"challenge": "x"}),
         ("bytes_to_base64url", lambda b: base64.urlsafe_b64encode(b).decode().rstrip("=")),
@@ -159,6 +159,58 @@ class VaultPrfWrapTests(unittest.TestCase):
                 f"/api/account/vault-keys/prf/{cid}/unwrap", json={"credential": {"id": cid}}, headers=h,
             )
         self.assertEqual(again.status_code, 401)
+
+    def test_unwrap_requires_user_verification_in_the_assertion(self):
+        import webauthn_helper as wh
+
+        uid, email, password, csrf = self._signed_in()
+        cid = self._passkey(uid)
+        body = _prf_body(0, secrets.token_hex(16))
+        self.assertEqual(self._put_prf(email, password, csrf, cid, body).status_code, 200)
+        h = {"X-CSRF-Token": csrf}
+        asked = []
+        # The fake signature check mirrors the library: with the flag set, an assertion
+        # whose authenticator did not verify the user is refused.
+        user_verified = [False]
+
+        def verify(**kw):
+            asked.append(kw["require_user_verification"])
+            if kw["require_user_verification"] and not user_verified[0]:
+                raise ValueError("user verification required")
+            return SimpleNamespace(new_sign_count=1)
+
+        with _webauthn_env(wh, verify):
+            self.client.post(f"/api/account/vault-keys/prf/{cid}/options", json={}, headers=h)
+            no_uv = self.client.post(
+                f"/api/account/vault-keys/prf/{cid}/unwrap", json={"credential": {"id": cid}}, headers=h,
+            )
+        self.assertEqual(no_uv.status_code, 401)
+        self.assertNotIn(body["wrap"]["data"], no_uv.get_data(as_text=True))
+        self.assertEqual(asked, [True])
+        user_verified[0] = True
+        with _webauthn_env(wh, verify):
+            self.client.post(f"/api/account/vault-keys/prf/{cid}/options", json={}, headers=h)
+            with_uv = self.client.post(
+                f"/api/account/vault-keys/prf/{cid}/unwrap", json={"credential": {"id": cid}}, headers=h,
+            )
+        self.assertEqual(with_uv.status_code, 200, with_uv.get_json())
+        self.assertEqual(with_uv.get_json()["wrap"], body["wrap"])
+
+    def test_prf_challenge_does_not_replace_a_pending_login_challenge(self):
+        import webauthn_helper as wh
+
+        uid, _email, _password, csrf = self._signed_in()
+        cid = self._passkey(uid)
+        with self.client.session_transaction() as sess:
+            sess[wh.SESSION_WEBAUTHN_AUTH] = "pending-login-challenge"
+        with _webauthn_env(wh, lambda **kw: SimpleNamespace(new_sign_count=1)):
+            opts = self.client.post(
+                f"/api/account/vault-keys/prf/{cid}/options", json={}, headers={"X-CSRF-Token": csrf},
+            )
+        self.assertEqual(opts.status_code, 200, opts.get_json())
+        with self.client.session_transaction() as sess:
+            self.assertEqual(sess[wh.SESSION_WEBAUTHN_AUTH], "pending-login-challenge")
+            self.assertIn(wh.SESSION_WEBAUTHN_PRF, sess)
 
     def test_passkey_without_wrap_has_no_salt_and_nothing_to_unwrap(self):
         uid, _email, _password, csrf = self._signed_in()

@@ -31,6 +31,8 @@ except ImportError:  # pragma: no cover - optional dependency
 
 SESSION_WEBAUTHN_REG = "webauthn_reg"
 SESSION_WEBAUTHN_AUTH = "webauthn_auth"
+# PRF unlock keeps its own challenge so it cannot replace a pending login challenge.
+SESSION_WEBAUTHN_PRF = "webauthn_prf"
 
 
 def _request_host() -> str:
@@ -120,7 +122,12 @@ def verify_registration(credential: dict[str, Any], email: str) -> dict[str, Any
     }
 
 
-def authentication_options(credentials: list[dict[str, Any]]) -> dict[str, Any]:
+def authentication_options(
+    credentials: list[dict[str, Any]],
+    *,
+    session_key: str = SESSION_WEBAUTHN_AUTH,
+    require_user_verification: bool = False,
+) -> dict[str, Any]:
     if not WEBAUTHN_AVAILABLE:
         raise RuntimeError("webauthn package not installed")
     allow = [
@@ -131,9 +138,13 @@ def authentication_options(credentials: list[dict[str, Any]]) -> dict[str, Any]:
     options = generate_authentication_options(
         rp_id=_rp_id(),
         allow_credentials=allow,
-        user_verification=UserVerificationRequirement.PREFERRED,
+        user_verification=(
+            UserVerificationRequirement.REQUIRED
+            if require_user_verification
+            else UserVerificationRequirement.PREFERRED
+        ),
     )
-    session[SESSION_WEBAUTHN_AUTH] = bytes_to_base64url(options.challenge)
+    session[session_key] = bytes_to_base64url(options.challenge)
     return options_to_json_dict(options)
 
 
@@ -142,10 +153,16 @@ def authentication_options_empty() -> dict[str, Any]:
     return authentication_options([])
 
 
-def verify_authentication(credential: dict[str, Any], stored: dict[str, Any]) -> dict[str, Any]:
+def verify_authentication(
+    credential: dict[str, Any],
+    stored: dict[str, Any],
+    *,
+    session_key: str = SESSION_WEBAUTHN_AUTH,
+    require_user_verification: bool = False,
+) -> dict[str, Any]:
     if not WEBAUTHN_AVAILABLE:
         raise RuntimeError("webauthn package not installed")
-    challenge = session.pop(SESSION_WEBAUTHN_AUTH, None)
+    challenge = session.pop(session_key, None)
     if not challenge:
         raise ValueError("authentication expired")
     verification = verify_authentication_response(
@@ -155,6 +172,7 @@ def verify_authentication(credential: dict[str, Any], stored: dict[str, Any]) ->
         expected_origin=_rp_origin(),
         credential_public_key=base64url_to_bytes(str(stored["public_key"])),
         credential_current_sign_count=int(stored.get("sign_count") or 0),
+        require_user_verification=require_user_verification,
     )
     return {
         "credential_id": str(stored["credential_id"]),
