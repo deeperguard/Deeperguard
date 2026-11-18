@@ -85,6 +85,15 @@ class VaultRecoveryWrapTests(unittest.TestCase):
             ).fetchone()
         )
 
+    def test_status_names_account_and_put_returns_security_time(self):
+        uid, email, password, csrf = self._signed_in()
+        self.assertEqual(self._status()["account_id"], str(uid))
+        resp = self._put(email, password, csrf, _body(0, secrets.token_hex(16)))
+        self.assertEqual(resp.status_code, 200, resp.get_json())
+        at = resp.get_json()["auth_security_at"]
+        self.assertGreater(at, 0)
+        self.assertEqual(self.client.get("/api/account").get_json()["auth_security_at"], at)
+
     def test_store_replace_and_status_never_returns_wrap(self):
         uid, email, password, csrf = self._signed_in()
         kid = secrets.token_hex(16)

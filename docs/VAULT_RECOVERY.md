@@ -325,8 +325,8 @@ revoking therefore needs the password even on a passkey-unlocked device.
 
 | Method and path | Needs | Body | Effect / answer |
 | --- | --- | --- | --- |
-| `GET /api/account/vault-keys` | session | none | `{schema:1, key_id, key_rev, key_mode:"derived", recovery:{active, created_at, last_used_at, wrap_version}, prf_salt, prf:[{credential_id, created_at, current:bool}], pending_rekey:bool, invalidated_at, recovery_locked_until}`. **Never** returns a wrap |
-| `PUT /api/account/vault-keys/recovery` | token | `expected_key_rev, key_id, wrap_version, recovery_salt, wrap, proof_hash` | create or **replace** the single recovery wrap; the old row is overwritten (old key invalid at once). Resets the failure counter. Mail + `auth_security_at` bump. 200 `{key_rev, key_id}` |
+| `GET /api/account/vault-keys` | session | none | `{schema:1, account_id, key_id, key_rev, key_mode:"derived", recovery:{active, created_at, last_used_at, wrap_version}, prf_salt, prf:[{credential_id, created_at, current:bool}], pending_rekey:bool, invalidated_at, recovery_locked_until}`. **Never** returns a wrap |
+| `PUT /api/account/vault-keys/recovery` | token | `expected_key_rev, key_id, wrap_version, recovery_salt, wrap, proof_hash` | create or **replace** the single recovery wrap; the old row is overwritten (old key invalid at once). Resets the failure counter. Mail + `auth_security_at` bump. 200 `{key_rev, key_id, auth_security_at}` (the writing device acknowledges the bump, so only other devices show the notice) |
 | `DELETE /api/account/vault-keys/recovery` | token | `expected_key_rev` | **revoke**: deletes the row; mail + bump |
 | `PUT /api/account/vault-keys/prf/<credential_id>` | token | `expected_key_rev, key_id, wrap_version, wrap, prf_salt` | upsert this passkey's wrap; `credential_id` must belong to the user. `prf_salt` is accepted only when the account has none (CAS) or equals the stored one |
 | `GET /api/account/vault-keys/prf` | session | none | `{prf_salt, wraps:[{credential_id, key_id, wrap_version, wrap}]}` for wraps with `key_id == vault_key_id`; used to unlock a locked vault in a signed-in session. Rate limit `vault-keys-prf` (existing limiter) |
@@ -486,7 +486,12 @@ On recovery commit, replace, revoke, lockout and legacy invalidation (6.2):
 ### 5.1 New accounts
 
 Registration (`/api/auth/srp/register`, `app.py:1178`; client `NotesSrpAuth.register`, `srp-auth.js:372`) is unchanged on the server. The client
-(`auth-pages.js`) makes `VK` as today, then runs 3.1 with the confirm step. A new
+(`auth-pages.js`) makes `VK` as today and marks the step as pending on this device
+(`localStorage` `notes_recovery_key_pending:<email>`); after the vault unlocks,
+`recovery-key-setup.js` runs 3.1 with the confirm step (tick box plus typing one
+4-character group of the key) and checks that the key as shown opens the wrap before
+the `PUT`. A failed save offers to try again; the mark stays until the wrap is stored,
+so the step returns (with a new key) at the next unlock on that device. A new
 account that skips it is in the same state as an existing account.
 
 ### 5.2 Existing accounts
@@ -635,7 +640,7 @@ behaviour (DB rows, ciphertext bytes, HTTP status, visible UI), not on source te
 - [ ] N1 `recovery key` generator: 160 bits, 8x4+2 format, check group rejects wrong keys with a measured miss rate of about 1/1024 (over e.g. 200 000 random single-character mutations, assert a miss rate between 0.05 % and 0.2 %; the check is hash-based, so no error class is guaranteed); normalisation of `o/O/i/l`, spaces, hyphens.
 - [ ] N2 Wrap/unwrap round trip with the AAD of 1.2; fails when `account_id`, `type`, `key_id` or `binding` differ by one character; fails on `wrap_version != 1`.
 - [ ] N3 HKDF vectors for `deeperguard/recovery/v1`, `/recovery-proof/v1`, `/prf/v1`, `/keyid/v1` (fixed inputs, fixed outputs) so other implementations agree.
-- [ ] E1 Register: recovery key screen blocks continuing until the confirm box is ticked; server row exists with `key_id` equal to the client's; no request body contained the key or `VK` (capture all requests, search for the raw/base64/hex key bytes).
+- [x] E1 (`tests/test_e2e_recovery_key_setup.py`) Register: recovery key screen blocks continuing until the confirm box is ticked; server row exists with `key_id` equal to the client's; no request body contained the key or `VK` (capture all requests, search for the raw/base64/hex key bytes).
 - [ ] P1 Schema migration on a database made by the previous release: existing rows unchanged, new columns default, `items` byte-identical.
 
 ### 9.2 Existing account (derived key, no wraps)

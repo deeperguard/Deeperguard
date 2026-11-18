@@ -17,6 +17,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 sync_api = pytest.importorskip("playwright.sync_api")
 from run_agenda_editor_browser import free_port, start_server  # noqa: E402
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 PASSWORD = "FeedDupPass1!abcd"
 FEED = "https://feed-d.example.invalid/rooster.ics"
@@ -58,6 +59,7 @@ def page():
             pg.check("#register-recover-ack")
             pg.click("#register-submit")
             pg.wait_for_function(UNLOCKED_JS, timeout=120_000)
+            complete_recovery_key_step(pg)
             pg.evaluate("() => NotesStore.markKeyVerified?.()")
             yield pg
             browser.close()

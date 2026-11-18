@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from e2e_signup_autounlock import PASSWORD, free_port, start_server  # noqa: E402
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 WRONG = "definitely-not-the-password-1"
 
@@ -188,6 +189,7 @@ def smoke(browser, base, failures, width, theme):
     if busy and busy["disabled"] and busy["spinner"] in ("none", "normal"):
         failures.append(f"{tag} register busy button has no spinner")
     _wait_unlocked(page)
+    complete_recovery_key_step(page)
 
     # 2. Lock, then a wrong vault password, then the right one.
     page.evaluate("""() => { const b = [...document.querySelectorAll('.vault-lock-btn')]

@@ -37,6 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from e2e_signup_autounlock import PASSWORD, free_port, start_server  # noqa: E402
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 WIDTH, HEIGHT = 1440, 900
 
@@ -117,6 +118,7 @@ def register(page, base: str) -> None:
     )
     page.click("#register-submit")
     page.wait_for_function(UNLOCKED_JS, timeout=120000)
+    complete_recovery_key_step(page)
 
 
 def open_note(page, title: str) -> None:

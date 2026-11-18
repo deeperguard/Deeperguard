@@ -2324,7 +2324,8 @@ def api_account_vault_keys():
     if err:
         return err
     status = db.get_vault_keys_status(int(user["id"]))
-    return _vault_keys_json({"schema": 1, "key_mode": "derived", **status})
+    # account_id is the wrap AAD field of docs/VAULT_RECOVERY.md 1.2.
+    return _vault_keys_json({"schema": 1, "key_mode": "derived", "account_id": str(int(user["id"])), **status})
 
 
 @app.post("/api/account/vault-keys/challenge")
@@ -2403,7 +2404,12 @@ def api_account_vault_keys_recovery_put():
     auth.consume_vault_keys_token()
     if status == "ok":
         db.touch_auth_security(uid)
-    return _vault_keys_json({"ok": True, "key_rev": key_rev, "key_id": key_id})
+    # The writing device acknowledges this bump so only the other devices show the notice.
+    fresh = db.get_user_by_id(uid)
+    return _vault_keys_json({
+        "ok": True, "key_rev": key_rev, "key_id": key_id,
+        "auth_security_at": db.user_auth_security_at(fresh) if fresh else 0,
+    })
 
 
 @app.delete("/api/account/vault-keys/recovery")

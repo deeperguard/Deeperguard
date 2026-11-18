@@ -5891,6 +5891,86 @@ body.scan-dialog-open {
   z-index: 121;
   max-width: min(440px, 100%);
 }
+.recovery-key-backdrop {
+  z-index: 118;
+  background: rgba(0, 0, 0, 0.55);
+}
+#recovery-key-dialog.recovery-key-dialog {
+  z-index: 119;
+  max-width: min(520px, 100%);
+}
+.recovery-key-value {
+  display: block;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.recovery-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.recovery-key-actions .btn {
+  flex: 1 1 auto;
+  min-height: var(--touch);
+}
+.recovery-key-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.recovery-key-field {
+  font-size: 14px;
+}
+.recovery-key-group-input {
+  max-width: 12ch;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-transform: uppercase;
+}
+.recovery-key-password-row {
+  display: grid;
+  gap: 6px;
+}
+.recovery-key-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 14px;
+}
+.recovery-key-print-only { display: none; }
+@media print {
+  body.recovery-key-printing > * { display: none !important; }
+  body.recovery-key-printing > #recovery-key-dialog {
+    display: block !important;
+    position: static;
+    max-height: none;
+    border: 0;
+    box-shadow: none;
+    background: #fff;
+    color: #000;
+  }
+  body.recovery-key-printing #recovery-key-dialog .recovery-key-actions,
+  body.recovery-key-printing #recovery-key-dialog .recovery-key-check,
+  body.recovery-key-printing #recovery-key-dialog .recovery-key-field,
+  body.recovery-key-printing #recovery-key-dialog input,
+  body.recovery-key-printing #recovery-key-dialog .recovery-key-password-row,
+  body.recovery-key-printing #recovery-key-dialog .recovery-key-error,
+  body.recovery-key-printing #recovery-key-dialog .scan-dialog-foot { display: none !important; }
+  body.recovery-key-printing #recovery-key-dialog .recovery-key-print-only { display: block; }
+  body.recovery-key-printing #recovery-key-dialog .recovery-key-value {
+    border-color: #000;
+    background: #fff;
+    color: #000;
+    font-size: 18pt;
+  }
+}
 #server-copy-backdrop { z-index: 92; }
 #server-copy-dialog.server-copy-dialog {
   z-index: 93;

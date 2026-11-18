@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from e2e_signup_autounlock import PASSWORD, free_port, start_server  # noqa: E402
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 UNLOCKED_JS = """() => location.pathname === '/app'
   && window.NotesStore && NotesStore.isUnlocked && NotesStore.isUnlocked()
@@ -95,6 +96,7 @@ def main() -> int:
             )
             page.click("#register-submit")
             page.wait_for_function(UNLOCKED_JS, timeout=120000)
+            complete_recovery_key_step(page)
 
             # The "Not now" card appears by itself after unlock (no phrase set, not dismissed).
             page.wait_for_selector("#device-phrase-prompt:not([hidden])", timeout=10000)

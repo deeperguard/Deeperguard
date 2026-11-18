@@ -2466,6 +2466,33 @@
   <!-- File pickers live outside .sidebar so mobile editor-open (pointer-events:none) cannot block iOS/Safari. -->
   <input id="scan-camera" class="sr-file" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
   <input id="scan-input" class="sr-file" type="file" accept="image/*,.heic,.heif,image/heic,image/heif,.pdf,.txt,.md,application/pdf,text/plain" multiple tabindex="-1" aria-hidden="true">
+  <div id="recovery-key-backdrop" class="scan-backdrop recovery-key-backdrop" hidden aria-hidden="true"></div>
+  <div id="recovery-key-dialog" class="scan-dialog recovery-key-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="recovery-key-title" aria-describedby="recovery-key-lead">
+    <header class="scan-dialog-head">
+      <h2 id="recovery-key-title">Your recovery key</h2>
+    </header>
+    <div class="scan-dialog-body">
+      <p id="recovery-key-lead" class="scan-dialog-lead">This recovery key is a second way to open your vault. Store it somewhere safe, away from this device. We cannot read it and cannot show it to you again. Treat it like your password: anyone who has it and can sign in to your account can open your notes.</p>
+      <p id="recovery-key-print-date" class="recovery-key-print-only"></p>
+      <code id="recovery-key-value" class="recovery-key-value" aria-label="Recovery key"></code>
+      <div class="recovery-key-actions">
+        <button type="button" id="recovery-key-print" class="btn secondary">Print</button>
+        <button type="button" id="recovery-key-download" class="btn secondary">Download (.txt)</button>
+        <button type="button" id="recovery-key-copy" class="btn secondary">Copy</button>
+      </div>
+      <label class="recovery-key-check"><input type="checkbox" id="recovery-key-stored"> I stored my recovery key</label>
+      <label class="recovery-key-field" for="recovery-key-confirm-group">Type group <span id="recovery-key-group-number">1</span> of your recovery key (4 characters)</label>
+      <input type="text" id="recovery-key-confirm-group" class="recovery-key-group-input" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="recovery-key-error">
+      <div id="recovery-key-password-row" class="recovery-key-password-row" hidden>
+        <label class="recovery-key-field" for="recovery-key-password">Password (needed to save the recovery key)</label>
+        <input type="password" id="recovery-key-password" autocomplete="current-password">
+      </div>
+      <p id="recovery-key-error" class="recovery-key-error" role="alert" hidden></p>
+    </div>
+    <footer class="scan-dialog-foot">
+      <button type="button" id="recovery-key-save" class="btn primary block">Continue</button>
+    </footer>
+  </div>
   <div id="auth-security-notice-backdrop" class="scan-backdrop auth-security-notice-backdrop" hidden aria-hidden="true"></div>
   <div id="auth-security-notice" class="scan-dialog auth-security-notice" hidden role="alertdialog" aria-modal="true" aria-labelledby="auth-security-notice-title" aria-describedby="auth-security-notice-body">
     <header class="scan-dialog-head">
@@ -3005,6 +3032,7 @@
   {{ asset_script('js/device-phrase.js') }}
   {{ asset_script('js/secure-send.js') }}
   {{ asset_script('js/srp-auth.js') }}
+  {{ asset_script('js/recovery-key-setup.js') }}
   {{ asset_script('js/idb.js') }}
   {{ asset_script('js/vendor/qrcode-generator.js') }}
   {{ asset_script('js/freshness.js') }}

@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from e2e_signup_autounlock import PASSWORD, free_port, start_server  # noqa: E402
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 UNLOCKED_JS = """() => location.pathname === '/app'
   && window.NotesStore && NotesStore.isUnlocked && NotesStore.isUnlocked()
@@ -92,6 +93,7 @@ def main() -> int:
             )
             page.click("#register-submit")
             page.wait_for_function(UNLOCKED_JS, timeout=UNLOCKED_WAIT_MS)
+            complete_recovery_key_step(page)
 
             # The card is shown once after registering; it is not shown again after a
             # later unlock (see docs/bugs/2fa-tab-after-unlock.md), so "Not now" comes first.

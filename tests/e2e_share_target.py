@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from e2e_signup_autounlock import PASSWORD, free_port, start_server  # noqa: E402
+from e2e_recovery_key_step import complete_recovery_key_step  # noqa: E402
 
 # Cause of the flake: the share POST was sent before the service worker
 # controlled the page (clients.claim() lags under load), so it never got the
@@ -108,7 +109,8 @@ def launch(p):
         return p.chromium.launch(headless=True, executable_path=exe)
 
 
-def register(page, base: str) -> None:
+def register(page, base: str, *, recovery_key_step: bool = True) -> str:
+    """Register a new account; by default also finish the required recovery key step."""
     email = f"share-target-{int(time.time())}-{secrets.token_hex(3)}@home.local"
     page.goto(f"{base}/register", wait_until="domcontentloaded")
     page.wait_for_selector("#register-form")
@@ -132,6 +134,9 @@ def register(page, base: str) -> None:
     )
     page.click("#register-submit")
     page.wait_for_function(UNLOCKED_JS, timeout=120000)
+    if recovery_key_step:
+        complete_recovery_key_step(page)
+    return email
 
 
 def wait_sw_controls(page, base: str) -> None:
