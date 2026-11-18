@@ -986,6 +986,14 @@
       </div>
       <div class="list-pane list-toolbar">
       <div id="recovery-notice" class="recovery-notice" hidden role="status" aria-live="polite"></div>
+      <div id="recovery-key-offer" class="recovery-notice-row" hidden role="region" aria-labelledby="recovery-key-offer-copy">
+        <p id="recovery-key-offer-copy" class="recovery-notice-copy">Your vault has no recovery key. If you forget your password, your notes cannot be opened. Creating a recovery key only adds a second protected copy of your vault key; your notes are not changed.</p>
+        <div class="device-start-banner-actions">
+          <button type="button" id="btn-recovery-key-offer-now" class="btn primary sm">Create now</button>
+          <button type="button" id="btn-recovery-key-offer-later" class="btn ghost sm">Later</button>
+          <button type="button" id="btn-recovery-key-offer-postpone" class="btn ghost sm" title="Hide this reminder on this browser for 14 days">Remind me in 14 days</button>
+        </div>
+      </div>
       <div id="device-start-banner" class="device-start-banner" hidden role="status" aria-live="polite">
         <p class="device-start-banner-copy">New device: check it has your latest notes.</p>
         <div class="device-start-banner-actions">
