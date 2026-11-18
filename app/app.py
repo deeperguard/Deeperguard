@@ -105,6 +105,19 @@ class HostOnlySessionInterface(SecureCookieSessionInterface):
                 app.config["SESSION_COOKIE_NAME"] = previous or name
         return super().open_session(app, request)
 
+    def should_set_cookie(self, app, session) -> bool:  # type: ignore[override]
+        # The background health poll must not rewrite a permanent session: a poll that
+        # is in flight while another request changes the session (e.g. the vault-keys
+        # proof token) would write back the old copy and drop that change.
+        try:
+            from flask import request
+
+            if request.method == "GET" and request.path == "/api/health" and not session.modified:
+                return False
+        except RuntimeError:
+            pass
+        return super().should_set_cookie(app, session)
+
     def save_session(self, app, session, response):  # type: ignore[override]
         app.config["SESSION_COOKIE_DOMAIN"] = None
         super().save_session(app, session, response)
