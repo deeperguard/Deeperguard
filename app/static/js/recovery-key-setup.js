@@ -9,6 +9,9 @@
  * page. On a failed save the user can try again; if they leave, the pending
  * mark stays and the step returns (with a new key) at the next unlock.
  *
+ * Existing accounts get a non-blocking offer after unlock (maybeOffer): create now, later
+ * (back at the next unlock) or postpone for 14 days (kept in this browser only).
+ *
  * The same dialog serves Settings (begin / refreshSettings): it shows whether a
  * recovery key is active and since when (never the key), creates one, or
  * replaces the active one after a warning. Replacing uses compare-and-set; if
@@ -188,6 +191,7 @@
       zero(closing.salt);
     }
     session = null;
+    hideOffer();
     if (closing && closing.mode === 'settings' && closing.returnFocus && closing.returnFocus.isConnected) {
       try { closing.returnFocus.focus(); } catch (err) { /* ignore */ }
     }
@@ -553,6 +557,83 @@
     return true;
   }
 
+
+  // ---- Existing accounts: non-blocking offer after unlock (docs/VAULT_RECOVERY.md 4, 5.2) ----
+
+  const POSTPONE_PREFIX = 'notes_recovery_key_postponed:';
+  const POSTPONE_MS = 14 * 24 * 60 * 60 * 1000;
+
+  function postponeKey(email) {
+    return POSTPONE_PREFIX + String(email || '').trim().toLowerCase();
+  }
+
+  function isPostponed(email) {
+    try {
+      const at = Number(global.localStorage.getItem(postponeKey(email)));
+      return Number.isFinite(at) && at > 0 && Date.now() - at < POSTPONE_MS;
+    } catch (err) { return false; }
+  }
+
+  function hideOffer() {
+    const box = el('recovery-key-offer');
+    if (box) box.hidden = true;
+  }
+
+  function showOffer(email, deps) {
+    const box = el('recovery-key-offer');
+    if (!box) return false;
+    if (!offerBound) {
+      offerBound = true;
+      el('btn-recovery-key-offer-now')?.addEventListener('click', () => {
+        const d = offerDeps;
+        if (!d) return;
+        const reason = unavailableReason(d);
+        if (reason) {
+          if (d.toast) d.toast(reason, true);
+          return;
+        }
+        begin(d, false).then((opened) => { if (opened) hideOffer(); }).catch(() => {});
+      });
+      // "Later": hidden now, back at the next unlock.
+      el('btn-recovery-key-offer-later')?.addEventListener('click', hideOffer);
+      el('btn-recovery-key-offer-postpone')?.addEventListener('click', () => {
+        try { global.localStorage.setItem(postponeKey(offerEmail), String(Date.now())); } catch (err) { /* ignore */ }
+        hideOffer();
+      });
+    }
+    offerDeps = deps;
+    offerEmail = email;
+    box.hidden = false;
+    return true;
+  }
+
+  let offerBound = false;
+  let offerDeps = null;
+  let offerEmail = '';
+
+  /**
+   * After unlocking, offer a recovery key to an account that has none. Does nothing for a
+   * new account whose required step is pending, while the choice to postpone is recent,
+   * or when the server cannot tell. Nothing is re-encrypted; creating adds one wrapped copy.
+   * Resolves true when the offer is shown.
+   */
+  async function maybeOffer(deps) {
+    const email = String(deps?.email || '').trim().toLowerCase();
+    hideOffer();
+    if (!email || isPending(email) || isPostponed(email) || isOpen()) return false;
+    if (!deps.isUnlocked || !deps.isUnlocked()) return false;
+    if (!global.NotesCrypto?.generateRecoveryKey || !global.NotesSrpAuth?.vaultKeysProve) return false;
+    let status;
+    try {
+      status = await requestJson('GET', '/api/account/vault-keys');
+    } catch (err) {
+      return false;
+    }
+    if (status.recovery && status.recovery.active) return false;
+    if (!deps.isUnlocked() || isOpen() || isPostponed(email)) return false;
+    return showOffer(email, deps);
+  }
+
   // ---- Settings: status and the create / replace actions -------------------
 
   function setSettingsNote(message) {
@@ -667,7 +748,7 @@
   }
 
   const api = {
-    markPending, isPending, clearPending, maybeShow, close, isOpen, normalizeGroup,
+    markPending, isPending, clearPending, maybeShow, maybeOffer, isPostponed, close, isOpen, normalizeGroup,
     refreshSettings, begin, unavailableReason,
   };
   global.NotesRecoveryKeySetup = api;
