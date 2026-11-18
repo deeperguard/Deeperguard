@@ -21,7 +21,8 @@ PENDING_REKEY_TTL_SECONDS = 86400
 _KEY_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _PROOF_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 RECOVERY_PUT_FIELDS = frozenset(
-    {"expected_key_rev", "key_id", "wrap_version", "recovery_salt", "wrap", "proof_hash", "token", "csrf_token"}
+    {"expected_key_rev", "key_id", "wrap_version", "recovery_salt", "wrap", "proof_hash", "token", "csrf_token",
+     "password_changed_at"}
 )
 PRF_PUT_FIELDS = frozenset(
     {"expected_key_rev", "key_id", "wrap_version", "prf_salt", "wrap", "token", "csrf_token"}
@@ -132,9 +133,14 @@ def parse_recovery_put(body: dict) -> tuple[dict | None, str]:
     wrap_json, problem = _wrap_json(body.get("wrap"))
     if wrap_json is None:
         return None, problem
+    # Password-change time the writing device holds its vault key for (0 = not stated).
+    pca = body.get("password_changed_at", 0)
+    if isinstance(pca, bool) or not isinstance(pca, (int, float)) or not 0 <= pca < 1e11:
+        return None, "invalid password_changed_at"
     return {
         "expected_key_rev": rev,
         "key_id": key_id,
+        "key_password_changed_at": float(pca),
         "wrap_version": version,
         "recovery_salt": body["recovery_salt"],
         "wrap_json": wrap_json,
@@ -173,6 +179,7 @@ def parse_recovery_commit(body: dict) -> tuple[dict | None, str]:
     if fields is None:
         return None, problem
     fields.pop("key_id")
+    fields.pop("key_password_changed_at")
     return {
         **fields, "proof": proof, "from_key_id": from_key_id, "to_key_id": to_key_id,
         "srp_salt": srp_salt, "srp_verifier": srp_verifier,

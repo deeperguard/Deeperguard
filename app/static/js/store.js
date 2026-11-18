@@ -895,6 +895,10 @@ const NotesStore = (() => {
     if (typeof NotesAgendaSubs !== 'undefined' && typeof NotesAgendaSubs.stopAll === 'function') {
       NotesAgendaSubs.stopAll();
     }
+    // A recovery key that is still on screen must not outlive the vault key (VAULT_RECOVERY 1.3).
+    if (typeof NotesRecoveryKeySetup !== 'undefined' && typeof NotesRecoveryKeySetup.close === 'function') {
+      NotesRecoveryKeySetup.close();
+    }
     if (typeof NotesFreshness !== 'undefined') {
       NotesFreshness.clearMemory();
     }
@@ -7961,6 +7965,7 @@ const NotesStore = (() => {
     secureSendIdsForNote,
     saveSecureSendSentRecord,
     ackPasswordChanged,
+    passwordChangedAck: readPasswordAck,
     remotePasswordChanged,
     ackAuthSecurity,
     remoteAuthSecurityEvent,

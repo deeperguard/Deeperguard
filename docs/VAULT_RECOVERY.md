@@ -310,6 +310,16 @@ bump `vault_key_rev` in the same transaction.)
   gets the remote-password-change prompt on its next poll. Otherwise **409** `{"error":"key_id_mismatch", ...}`: the device holds a `VK`
   that is no longer the account's (another device changed the password) and must
   go through the remote-password-change flow instead of uploading a stale wrap.
+* Stale key on the first wrap: `PUT recovery` also carries `password_changed_at`, the
+  password-change time the writing device holds its vault key for (the client's
+  acknowledged value; omitted counts as 0). If `users.password_changed_at` is later,
+  the server answers **409** `key_id_mismatch` and writes nothing, also when no wrap
+  exists yet and there is therefore no stored `key_id` to compare. This closes the
+  residual described above for the recovery wrap. The client only wraps a key that
+  `isKeyVerified()` accepts (checked against items, or for an account without items
+  against the account password at unlock), re-checks that the vault is still unlocked
+  right before wrapping and right before saving, and clears the pending key when the
+  vault locks or the user signs out.
 * Idempotence: repeating an identical request after a lost response returns 200
   with the current state when the stored row equals the request body
   (same pattern as `unchanged` in `upsert_items_batch`).

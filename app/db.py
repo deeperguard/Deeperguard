@@ -1739,8 +1739,14 @@ def put_recovery_wrap(
     recovery_salt: str,
     wrap_json: str,
     proof_hash: str,
+    key_password_changed_at: float = 0.0,
 ) -> tuple[str, int, str]:
     """Create or replace the single recovery wrap with compare-and-set (VAULT_RECOVERY 2.2).
+
+    key_password_changed_at is the password-change time the writing device holds its vault
+    key for. If the password was changed later, that key is stale and the write is refused
+    with "key_id_mismatch" also when no wrap exists yet: a password change without wraps
+    clears the stored key_id, so a first wrap has nothing else to be compared with.
 
     Returns (status, key_rev, key_id); status is "ok", "unchanged", "key_rev_mismatch",
     "key_id_mismatch" or "not_found". On anything but ok/unchanged nothing was written.
@@ -1758,6 +1764,13 @@ def put_recovery_wrap(
         ).fetchone()
         if same:
             return "unchanged", int(same["rev"]), key_id
+        account = conn.execute(
+            "SELECT vault_key_id, vault_key_rev, password_changed_at FROM users WHERE id = ?", (uid,),
+        ).fetchone()
+        if not account:
+            return "not_found", 0, ""
+        if float(account["password_changed_at"] or 0) > float(key_password_changed_at) + 0.001:
+            return "key_id_mismatch", int(account["vault_key_rev"]), str(account["vault_key_id"])
         cur = conn.execute(
             """
             UPDATE users
