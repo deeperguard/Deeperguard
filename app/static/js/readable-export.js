@@ -7,7 +7,8 @@
  * NotesReadableExport.build({ notes, tags, getAttachment, getAttachmentBytes,
  *   onProgress, now, appBuild }) -> Promise<null | { bytes, filename, counts, notExported }>
  *   notes: vault items {uuid, content}; tags: tag items; getAttachment(uuid) -> item;
- *   getAttachmentBytes(uuid) -> Promise<Uint8Array>. Returns null when no note qualifies.
+ *   getAttachmentBytes(uuid) -> Promise<Uint8Array>. include2fa (default false) + totpAccounts
+ *   (vault items) add 2fa/otpauth.txt; without include2fa no secret is read or written. Returns null when no note qualifies.
  */
 const NotesReadableExport = (() => {
   const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
@@ -67,11 +68,29 @@ const NotesReadableExport = (() => {
     return path.split('/').map((seg) => encodeURIComponent(seg).replace(/[()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)).join('/');
   }
 
+  /** Standard otpauth URI (Key URI Format) for one 2FA vault item; null without a usable secret. */
+  function otpauthUri(content) {
+    const secret = String(content?.secret || '').replace(/[\s-]/g, '').replace(/=+$/g, '').toUpperCase();
+    if (!secret) return null;
+    const issuer = String(content.issuer || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+    const account = String(content.account || content.label || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim() || issuer || 'Account';
+    const algorithm = ['SHA1', 'SHA256', 'SHA512'].includes(String(content.algorithm || '').toUpperCase())
+      ? String(content.algorithm).toUpperCase() : 'SHA1';
+    const digits = [6, 7, 8].includes(Number(content.digits)) ? Number(content.digits) : 6;
+    const period = Number(content.period) > 0 ? Math.floor(Number(content.period)) : 30;
+    const label = issuer ? `${encodeURIComponent(issuer)}:${encodeURIComponent(account)}` : encodeURIComponent(account);
+    const query = [`secret=${secret}`];
+    if (issuer) query.push(`issuer=${encodeURIComponent(issuer)}`);
+    query.push(`algorithm=${algorithm}`, `digits=${digits}`, `period=${period}`);
+    return `otpauth://totp/${label}?${query.join('&')}`;
+  }
+
   const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
   const utcDate = (d) => d.toISOString().slice(0, 10);
 
   async function build({
     notes, tags = [], getAttachment, getAttachmentBytes, onProgress, now = new Date(), appBuild = '',
+    include2fa = false, totpAccounts = [],
   }) {
     const encoder = new TextEncoder();
     const tagTitles = new Map(tags.map((t) => [t.uuid, t.content?.title || '']));
@@ -162,7 +181,12 @@ const NotesReadableExport = (() => {
     if (locked) notExported.push(`${locked} locked note(s)`);
     if (trashed) notExported.push(`${trashed} trashed note(s)`);
     for (const name of unreadable) notExported.push(`unreadable attachment: ${String(name).replace(/[\u0000-\u001f]/g, ' ')}`);
-    notExported.push('folders, calendar and 2FA accounts');
+    let uris = [];
+    if (include2fa) {
+      uris = totpAccounts.filter((a) => !a.deleted && a.content?.type === 'totp').map((a) => otpauthUri(a.content)).filter(Boolean);
+      if (uris.length) entries.push({ name: '2fa/otpauth.txt', bytes: encoder.encode(`${uris.join('\n')}\n`) });
+    }
+    notExported.push(include2fa ? 'folders and calendar' : 'folders, calendar and 2FA accounts');
     const readme = [
       ...WARNING,
       '',
@@ -170,6 +194,8 @@ const NotesReadableExport = (() => {
       ...(appBuild ? [`App build: ${appBuild}`] : []),
       `Notes: ${counts.notes}`,
       `Attachments: ${counts.attachments}`,
+      ...(include2fa ? [`2FA accounts: ${uris.length}`] : []),
+      include2fa && uris.length ? '2fa/ included: yes, it contains live authenticator secrets.' : '2fa/ included: no.',
       '',
       'Not exported:',
       ...notExported.map((line) => `- ${line}`),
@@ -188,7 +214,7 @@ const NotesReadableExport = (() => {
     return require('./ziplib.js');
   }
 
-  return { build, safeName };
+  return { build, safeName, otpauthUri };
 })();
 if (typeof window !== 'undefined') window.NotesReadableExport = NotesReadableExport;
 if (typeof module !== 'undefined' && module.exports) module.exports = NotesReadableExport;
