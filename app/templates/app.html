@@ -1799,10 +1799,387 @@
         </div>
       </section>
 
-      <section class="settings-group" id="signed-in-devices-group">
-        <h3>Signed-in devices</h3>
+      <section class="settings-group" id="settings-security-overview" aria-labelledby="settings-security-overview-title">
+        <h3 id="settings-security-overview-title">Security overview</h3>
+        <div class="settings-card security-overview">
+          <p class="settings-hint"><strong>Two separate locks protect your notes.</strong></p>
+          <ol class="settings-hint security-steps">
+            <li><strong>Signing in</strong> proves to Deeperguard that the account is yours (account password, optional passkeys and 2FA).</li>
+            <li><strong>Unlocking the vault</strong> opens your notes on this device. Only your master password does that; Deeperguard cannot open your vault for you.</li>
+          </ol>
+          <p class="settings-hint"><strong>Which setting helps with which problem</strong></p>
+          <ul class="settings-hint security-steps">
+            <li><strong>Lost my phone:</strong> if it held a passkey, sign in with another passkey or a recovery code (group 3). If it held your 2FA app, you need that app's own backup; Deeperguard has no codes that replace it.</li>
+            <li><strong>Forgot my master password:</strong> only the vault recovery key (group 3) can open your vault again. Recovery codes cannot.</li>
+            <li><strong>Lost a device:</strong> sign it out under Devices and sessions (group 5).</li>
+          </ul>
+          <p class="settings-hint">The groups below follow the order you need them: 1 Sign in, 2 Open the vault, 3 If something goes wrong, 4 Keep a copy, 5 Devices and sessions.</p>
+        </div>
+      </section>
+
+      <section class="settings-group security-group" id="sec-group-signin" aria-labelledby="sec-group-signin-title">
+        <h3 id="sec-group-signin-title">1. Sign in</h3>
+        <p class="security-group-purpose">Signing in proves to Deeperguard that the account is yours. It does not open your notes; that is group 2.</p>
         <div class="settings-card">
-          <p class="settings-hint">Every device signed in to this account. A new sign-in is marked here until you approve or deny it; signing in never waits for approval. <strong>Deny</strong> or <strong>Sign out</strong> ends that device's session after you confirm — Cancel is selected first, and Escape also cancels.</p>
+<div class="security-block" role="group" aria-labelledby="sec-password-title">
+<div class="security-block-head"><h4 id="sec-password-title" class="settings-subtitle">Account password</h4><span id="sec-state-password" class="settings-state">On</span></div>
+<p class="settings-hint">Your account password signs you in to Deeperguard. You need it whenever you sign in on a device or after signing out, unless you use a passkey. It does not decrypt your notes: that is the master password in group 2 (the two start out the same). Deeperguard keeps only a proof of the password, never the password itself.</p>
+          <div id="device-phrase-settings" class="settings-nested stack">
+            <label class="settings-row stacked" for="device-phrase-input">Device phrase
+              <input id="device-phrase-input" type="text" maxlength="64" autocomplete="off" spellcheck="false" autocapitalize="off">
+            </label>
+            <p class="settings-hint">Shown on this device before you type your password. Stored only in this browser — never sent to the server. Helps you spot a fake sign-in page.</p>
+            <div class="settings-actions">
+              <button type="button" id="btn-device-phrase-save" class="btn primary">Save</button>
+              <button type="button" id="btn-device-phrase-clear" class="btn ghost">Clear</button>
+            </div>
+            <p id="device-phrase-settings-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
+          </div>
+<div id="passkey-signin-toggle-wrap" class="settings-nested stack" data-plan-feature="passkeys">
+            <label class="settings-row checkbox"><span>Disable password sign-in</span><input id="pref-disable-password-login" type="checkbox"></label>
+            <p id="passkey-signin-toggle-hint" class="settings-hint"></p>
+          </div>
+</div>
+<div class="security-block" role="group" aria-labelledby="sec-passkeys-title">
+<div class="security-block-head"><h4 id="sec-passkeys-title" class="settings-subtitle">Passkeys</h4><span id="sec-state-passkeys" class="settings-state">Not set up</span></div>
+<div id="passkey-settings" class="settings-nested stack" data-plan-feature="passkeys">
+            <p class="settings-hint">A passkey signs you in with your fingerprint, face or device PIN instead of typing your account password. Add one on each device you use often. A passkey does not open your vault unless you also turn on vault unlock for it (group 2); your master password keeps working either way.</p>
+            <p class="settings-hint">Use <a href="https://www.deeperguard.com/">https://www.deeperguard.com/</a> on iPhone. Passkeys require that hostname.</p>
+            <div id="passkey-list"></div>
+            <div id="passkey-vault-password-row" class="settings-row stacked" hidden>
+              <label for="passkey-vault-password">Account password (to change vault unlock)</label>
+              <input type="password" id="passkey-vault-password" autocomplete="current-password">
+            </div>
+            <div class="settings-actions">
+              <label class="settings-hint"><input type="checkbox" id="passkey-add-unlock"> Also open the vault with the new passkey</label>
+              <button type="button" id="btn-add-passkey" class="btn">Add passkey</button>
+            </div>
+            <p id="passkey-signin-passkey-count" class="settings-hint">—</p>
+          </div>
+</div>
+<div class="security-block" role="group" aria-labelledby="sec-2fa-title">
+<div class="security-block-head"><h4 id="sec-2fa-title" class="settings-subtitle">2FA for signing in to Deeperguard</h4><span id="totp-status" class="settings-state">Checking…</span></div>
+<p class="settings-hint">2FA adds a 6-digit code from an authenticator app to signing in to Deeperguard, so a stolen password alone is not enough. Turn it on if you want that extra step. It protects only your Deeperguard sign-in: the 2FA tab, which stores codes for your other websites and apps, is separate and unaffected. If you lose your authenticator app you may not be able to sign in, and turning 2FA off needs a current code, so keep a backup of the app.</p>
+          <div class="settings-actions" data-plan-feature="account_2fa">
+            <button type="button" id="btn-setup-totp" class="btn">Set up 2FA</button>
+            <button type="button" id="btn-disable-totp" class="btn danger" hidden>Disable 2FA</button>
+          </div>
+          <div id="totp-setup" class="settings-nested stack" hidden>
+            <img id="totp-qr" alt="TOTP QR code" class="qr">
+            <p class="hint">Scan with Authy, 1Password, or Apple Passwords.</p>
+            <label>Verification code
+              <input id="totp-enable-code" inputmode="numeric" maxlength="6">
+            </label>
+            <button type="button" id="btn-enable-totp" class="btn primary">Enable 2FA</button>
+          </div>
+          <div id="totp-disable" class="settings-nested stack" hidden>
+            <label id="totp-disable-password-wrap" class="settings-row stacked">Account password
+              <input id="totp-disable-password" type="password" autocomplete="current-password">
+            </label>
+            <p id="totp-disable-srp-hint" class="settings-hint" hidden>Signed in with zero-knowledge login — only your authenticator code is required.</p>
+            <label>Current authenticator code (required)
+              <input id="totp-disable-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required>
+            </label>
+            <button type="button" id="btn-confirm-disable-totp" class="btn danger">Confirm disable 2FA</button>
+          </div>
+</div>
+        </div>
+      </section>
+
+      <section class="settings-group security-group" id="sec-group-vault" aria-labelledby="sec-group-vault-title">
+        <h3 id="sec-group-vault-title">2. Open the vault</h3>
+        <p class="security-group-purpose">The vault is your encrypted notes. It opens on your device with your master password, which never leaves it.</p>
+        <div class="settings-card">
+<div class="security-block" role="group" aria-labelledby="sec-master-title">
+<div class="security-block-head"><h4 id="sec-master-title" class="settings-subtitle">Master password</h4><span id="sec-state-master" class="settings-state">Set</span></div>
+<p class="settings-hint">Your master password decrypts your notes on this device. You type it whenever the vault is locked and on each new device. Deeperguard cannot reset or recover it: if you forget it, only the vault recovery key (group 3) opens your vault again.</p>
+          <div id="password-change" class="settings-nested stack">
+            <label class="settings-row stacked" for="password-change-current">Current master password
+              <input id="password-change-current" type="password" autocomplete="off" required aria-required="true" readonly>
+            </label>
+            <label class="settings-row stacked">New master password
+              <span class="password-field-wrap">
+                <input id="password-change-new" type="password" autocomplete="new-password">
+                <button type="button" class="password-toggle btn ghost sm" data-target="password-change-new" aria-label="Show password">Show</button>
+              </span>
+            </label>
+            <label class="settings-row stacked">Confirm new password
+              <span class="password-field-wrap">
+                <input id="password-change-confirm" type="password" autocomplete="new-password">
+                <button type="button" class="password-toggle btn ghost sm" data-target="password-change-confirm" aria-label="Show password">Show</button>
+              </span>
+            </label>
+            <p id="password-change-error" class="settings-hint error" role="alert" hidden></p>
+            <button type="button" id="btn-change-password" class="btn primary">Change master password</button>
+            <p class="settings-hint">Re-encrypts every note on this device. Other devices need the new password to sync.</p>
+          </div>
+</div>
+<div class="security-block" role="group" aria-labelledby="sec-lock-title">
+<div class="security-block-head"><h4 id="sec-lock-title" class="settings-subtitle">Locking</h4><span id="sec-state-lock" class="settings-state">Auto-lock off</span></div>
+<p class="settings-hint">Locking removes the vault key and decrypted notes from this tab, as far as the browser allows; unlocking asks for your master password again. Lock when you step away; the automatic options cover the times you forget. Locking does not sign you out of your account.</p>
+          <label class="settings-row">Lock after idle
+            <select id="pref-auto-lock">
+              <option value="0">Off</option>
+              <option value="1">1 minute</option>
+              <option value="5">5 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="60">60 minutes</option>
+            </select>
+          </label>
+          <p class="settings-hint">After this long with no input, the vault locks. With Off, the vault key stays in memory until you lock or close the tab. Locking is best effort; it cannot clear everything from memory.</p>
+          <label class="settings-row">Lock when leaving the app
+            <select id="pref-lock-on-unfocus">
+              <option value="never">Never</option>
+              <option value="immediate">Immediately</option>
+              <option value="1min">After 1 minute</option>
+            </select>
+          </label>
+          <label class="settings-row checkbox"><span>Remember password on this device</span><input id="pref-remember-device" type="checkbox"></label>
+          <p class="settings-hint">Saves the master password on this device so offline unlock can use it after you type it. Opening Notes still asks for the password every time — it is not filled in for you. Disable on shared devices.</p>
+<div class="settings-actions">
+            <button type="button" id="btn-lock-now" class="btn">Lock vault now</button>
+          </div>
+</div>
+<div class="security-block" role="group" aria-labelledby="sec-passkey-unlock-title">
+<div class="security-block-head"><h4 id="sec-passkey-unlock-title" class="settings-subtitle">Open the vault with a passkey</h4><span id="sec-state-passkey-unlock" class="settings-state">Off</span></div>
+<p class="settings-hint">A passkey can open your vault instead of the master password, but only where your browser and that passkey support it. It is handy for quick unlocking on a phone. Your master password always keeps working. Turn it on or off for each passkey in the Passkeys list in group 1.</p>
+</div>
+        </div>
+      </section>
+
+      <section class="settings-group security-group" id="sec-group-recovery" aria-labelledby="sec-group-recovery-title">
+        <h3 id="sec-group-recovery-title">3. If something goes wrong</h3>
+        <p class="security-group-purpose">Two different safety nets, one for each lock: recovery codes help you sign in, the vault recovery key opens your vault. They are not interchangeable.</p>
+        <div class="settings-card">
+<div id="passkey-signin-settings" class="settings-nested stack security-block" data-plan-feature="passkeys" role="group" aria-labelledby="sec-codes-title">
+<div class="security-block-head"><h4 id="sec-codes-title" class="settings-subtitle">Recovery codes (account sign-in)</h4><span id="sec-state-recovery-codes" class="settings-state">Not set up</span></div>
+<p class="settings-hint"><strong>Recovery codes are for signing in to your account if you lose your passkeys. They do not open your vault and are not the vault recovery key below.</strong> Each code works once. A waiting period (at least 72 hours) applies before new codes work, requesting new codes restarts it, and any signed-in device can cancel a pending set. You need two passkeys before you can create codes. <a href="/help/recovery" target="_blank" rel="noopener noreferrer">Recovery help</a></p>
+            <p id="passkey-signin-status" class="settings-hint" role="status" aria-live="polite"></p>
+            <label class="settings-row">Waiting period before new recovery codes work
+              <select id="passkey-signin-wait"></select>
+            </label>
+            <div class="settings-actions">
+              <button type="button" id="btn-passkey-signin-generate-codes" class="btn">Generate recovery codes</button>
+              <button type="button" id="btn-passkey-signin-cancel-codes" class="btn ghost" hidden>Cancel pending codes</button>
+            </div>
+            <div id="passkey-signin-code-reveal" class="settings-nested stack" hidden></div>
+</div>
+          <div id="recovery-key-settings" class="settings-nested stack security-block" role="group" aria-labelledby="recovery-key-settings-title">
+            <div class="security-block-head"><h4 id="recovery-key-settings-title" class="settings-subtitle">Vault recovery key</h4><span id="recovery-key-settings-status" class="settings-state" role="status" aria-live="polite">Checking…</span></div>
+            <p class="settings-hint"><strong>The vault recovery key is for opening your vault if you forget your master password.</strong> It is not one of the account recovery codes above, which only help you sign in and never open your notes. Create it once and store it somewhere safe, away from this device. We keep only an encrypted copy of your vault key, so we cannot read the recovery key or show it again. <a href="/help/recovery" target="_blank" rel="noopener noreferrer">Recovery help</a></p>
+            <p id="recovery-key-settings-why" class="settings-hint" hidden></p>
+            <p id="recovery-key-settings-replace-hint" class="settings-hint" hidden>Creating a new recovery key makes the current one stop working as soon as the new one is saved.</p>
+            <div class="settings-actions">
+              <button type="button" id="btn-recovery-key-create" class="btn" hidden>Create recovery key</button>
+              <button type="button" id="btn-recovery-key-regenerate" class="btn" hidden>Create a new recovery key</button>
+            </div>
+            <p id="recovery-key-settings-note" class="settings-hint" role="status" aria-live="polite" hidden></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-group security-group" id="sec-group-copy" aria-labelledby="sec-group-copy-title">
+        <h3 id="sec-group-copy-title">4. Keep a copy</h3>
+        <p class="security-group-purpose">A backup is your own copy of your notes, kept outside Deeperguard, for when a device is lost or something is deleted. Recovery codes and the recovery key do not replace a backup.</p>
+      <div data-plan-feature="email_backup">
+        {% set google_drive_configured = (google_oauth_client_id|default('', true)|trim|length) > 0 %}
+        {% set dropbox_configured = (dropbox_app_key|default('', true)|trim|length) > 0 %}
+        <div class="settings-card settings-backup-card">
+          <h4 class="settings-subtitle">Back up</h4>
+          <p class="settings-hint">Backups are encrypted on this device with your vault key before they leave it, so the places below never see your notes or keys. Each choice below says whether it runs on its own.</p>
+
+          <div class="security-block-head"><h5 id="sec-backup-file-title" class="settings-subtitle">Backup file</h5><span id="sec-state-backup-file" class="settings-state">Manual: when you click</span></div>
+          <div class="settings-actions">
+            <button type="button" id="btn-save-backup-file" class="btn primary">Save backup file</button>
+            <button type="button" id="btn-download-backup" class="btn" hidden aria-hidden="true" tabindex="-1">Download encrypted vault</button>
+          </div>
+          <p id="backup-file-help" class="settings-hint">Downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code> (on iPhone: Save to Files → iCloud Drive).</p>
+
+          <div class="security-block-head"><h5 id="sec-readable-title" class="settings-subtitle">Readable export (not encrypted)</h5><span id="sec-state-readable" class="settings-state">Manual: when you click</span></div>
+          <div class="settings-actions">
+            <button type="button" id="btn-export-readable-zip" class="btn" aria-describedby="readable-export-help">Export everything readable (ZIP)</button>
+          </div>
+          <p id="readable-export-help" class="settings-hint">For a copy you can read without Deeperguard: Markdown notes plus attachments in one ZIP. <strong>Not encrypted</strong>: anyone with the file can read it. Built on this device; nothing is sent to the server.</p>
+
+          <div class="security-block-head"><h5 id="sec-drive-title" class="settings-subtitle">Google Drive</h5><span id="sec-state-drive" class="settings-state">Not connected</span></div>
+          <div class="settings-actions">
+            <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not set up yet"{% endif %}>Connect Google Drive</button>
+          </div>
+          <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not set up yet — add your own key</p>
+          <div id="google-drive-configure" class="settings-nested stack cloud-provider-configure">
+            <p id="google-key-configured" class="settings-hint cloud-configured-badge" hidden>Configured ✓</p>
+            <label class="settings-row stacked">Google OAuth Client ID
+              <input id="google-oauth-client-id-input" type="text" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com" inputmode="url">
+            </label>
+            <p id="google-key-error" class="settings-hint settings-field-error" role="alert" hidden></p>
+            <div class="settings-actions">
+              <button type="button" id="btn-google-key-save" class="btn">Save</button>
+              <button type="button" id="btn-google-key-remove" class="btn ghost" hidden>Remove</button>
+            </div>
+            <p id="google-key-status" class="settings-hint" role="status" aria-live="polite"></p>
+            <details class="cloud-howto">
+              <summary>How to get this</summary>
+              <ol class="settings-hint cloud-howto-steps">
+                <li>Open the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a> and create (or select) a project.</li>
+                <li>Configure the <strong>OAuth consent screen</strong> first (Google Auth Platform): app name, support email, Audience → <strong>External</strong>, and add yourself as a test user. Do this before creating a client.</li>
+                <li>Enable the <strong>Google Drive API</strong> for that project.</li>
+                <li>Create an OAuth client of type <strong>Web application</strong>. Leave redirect URIs empty.</li>
+                <li>Add authorized JavaScript origin: <code>https://www.deeperguard.com</code></li>
+                <li>The app requests only the <code>drive.file</code> scope. If the consent screen is in Testing, you must be listed as a test user.</li>
+                <li>Copy the Client ID (ends with <code>.apps.googleusercontent.com</code>). No client secret is used.</li>
+              </ol>
+            </details>
+          </div>
+          <p id="google-drive-status" class="settings-hint" role="status" aria-live="polite"{% if not google_drive_configured %} hidden{% endif %}></p>
+          <div id="google-drive-controls" class="settings-nested stack" hidden>
+            <p class="settings-hint">Uploads the same client-encrypted blob to a Drive folder you authorize in the browser.</p>
+            <label class="settings-row checkbox"><span>Automatic daily Google Drive backup when the app is open and online</span><input id="backup-drive-auto-daily" type="checkbox"></label>
+            <div class="settings-actions">
+              <button type="button" id="btn-drive-list" class="btn ghost sm">Show Drive backups</button>
+              <button type="button" id="btn-drive-disconnect" class="btn ghost sm">Disconnect Google</button>
+            </div>
+            <ul id="google-drive-backup-list" class="settings-hint" hidden></ul>
+          </div>
+
+          <div class="security-block-head"><h5 id="sec-dropbox-title" class="settings-subtitle">Dropbox</h5><span id="sec-state-dropbox" class="settings-state">Not connected</span></div>
+          <div class="settings-actions">
+            <button type="button" id="btn-backup-dropbox" class="btn"{% if not dropbox_configured %} disabled title="Not set up yet"{% endif %}>Connect Dropbox</button>
+          </div>
+          <p id="dropbox-not-configured" class="settings-hint"{% if dropbox_configured %} hidden{% endif %}>Dropbox: Not set up yet — add your own key</p>
+          <div id="dropbox-configure" class="settings-nested stack cloud-provider-configure">
+            <p id="dropbox-key-configured" class="settings-hint cloud-configured-badge" hidden>Configured ✓</p>
+            <label class="settings-row stacked">Dropbox App key
+              <input id="dropbox-app-key-input" type="text" autocomplete="off" spellcheck="false" placeholder="App key (not the secret)" inputmode="text">
+            </label>
+            <p id="dropbox-key-error" class="settings-hint settings-field-error" role="alert" hidden></p>
+            <div class="settings-actions">
+              <button type="button" id="btn-dropbox-key-save" class="btn">Save</button>
+              <button type="button" id="btn-dropbox-key-remove" class="btn ghost" hidden>Remove</button>
+            </div>
+            <p id="dropbox-key-status" class="settings-hint" role="status" aria-live="polite"></p>
+            <details class="cloud-howto">
+              <summary>How to get this</summary>
+              <ol class="settings-hint cloud-howto-steps">
+                <li>Open the <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">Dropbox App Console</a> and create an app.</li>
+                <li>Choose <strong>Scoped access</strong> and <strong>App folder</strong>.</li>
+                <li>Add redirect URI: <code>https://www.deeperguard.com/app</code></li>
+                <li>On the <strong>Permissions</strong> tab, tick <code>files.content.write</code> and <code>files.content.read</code>, then click <strong>Submit</strong> before first use (changing permissions later requires reconnecting).</li>
+                <li>Copy the <strong>App key</strong> only — never the app secret (browser PKCE does not use it).</li>
+              </ol>
+            </details>
+          </div>
+          <p id="dropbox-status" class="settings-hint" role="status" aria-live="polite"{% if not dropbox_configured %} hidden{% endif %}></p>
+          <div id="dropbox-controls" class="settings-nested stack" hidden>
+            <p class="settings-hint">Uploads the same client-encrypted blob to Apps/Deeperguard via OAuth 2 PKCE.</p>
+            <label class="settings-row checkbox"><span>Automatic daily Dropbox backup when the app is open and online</span><input id="backup-dropbox-auto-daily" type="checkbox"></label>
+            <div class="settings-actions">
+              <button type="button" id="btn-dropbox-list" class="btn ghost sm">Show Dropbox backups</button>
+              <button type="button" id="btn-dropbox-disconnect" class="btn ghost sm">Disconnect Dropbox</button>
+            </div>
+            <ul id="dropbox-backup-list" class="settings-hint" hidden></ul>
+          </div>
+
+          <div class="security-block-head"><h5 id="sec-email-backup-title" class="settings-subtitle">Email backup</h5><span id="sec-state-email-backup" class="settings-state">Off</span></div>
+          <div class="settings-actions">
+            <button type="button" id="btn-backup-now" class="btn">Email backup now</button>
+          </div>
+          <p class="settings-hint">Sends the same encrypted <code>.dgbackup</code> to your verified backup address.</p>
+          <label class="settings-row stacked">Backup email
+            <input id="backup-email" type="email" autocomplete="email">
+          </label>
+          <p id="backup-verify-status" class="settings-hint" hidden></p>
+          <div id="backup-verify-wrap" class="settings-nested stack" hidden>
+            <label class="settings-row stacked">Backup email verification code
+              <input id="backup-verify-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+            </label>
+            <div class="settings-actions">
+              <button type="button" id="btn-backup-verify" class="btn primary">Verify backup email</button>
+              <button type="button" id="btn-backup-verify-resend" class="btn">Resend code</button>
+            </div>
+            <p id="backup-verify-resend-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
+          </div>
+          <label class="settings-row checkbox"><span>Daily encrypted email backup</span><input id="backup-enabled" type="checkbox"></label>
+          <p id="backup-verified-hint" class="settings-hint">Email backups are sent only after this address is verified with a code.</p>
+          <div class="settings-actions">
+            <button type="button" id="btn-save-backup" class="btn">Save email backup settings</button>
+          </div>
+
+          <div class="security-block-head"><h4 class="settings-subtitle" id="sec-export-title">Export</h4><span class="settings-state">Manual: when you click</span></div>
+          <div class="settings-actions">
+            <button type="button" id="btn-export-note" class="btn">Export current note</button>
+          </div>
+          <p class="settings-hint">Saves only the open note as a file on this device; use a backup for everything.</p>
+        </div>
+        <div class="settings-card settings-backup-card">
+          <div class="security-block-head"><h4 class="settings-subtitle" id="sec-restore-title">Restore &amp; import</h4><span class="settings-state">Manual: when you choose a file</span></div>
+          <div class="settings-actions">
+            <label class="file-label btn primary">Restore Deeperguard backup
+              <input id="restore-backup-file" type="file" accept=".dgbackup,.json,.enc.json,.gz,.json.gz,.enc.json.gz,.zip,application/json,application/gzip,application/zip" hidden>
+            </label>
+            <label class="file-label btn">Import from Standard Notes
+              <input id="import-file" type="file" accept=".txt,.json,.enc.json,.dgbackup,.gz,.json.gz,.enc.json.gz,.zip,text/plain,application/json,application/gzip,application/zip" hidden>
+            </label>
+            <label class="file-label btn">Import from Markdown (.md or .zip)
+              <input id="import-markdown-file" type="file" multiple accept=".md,.markdown,.zip,text/markdown,application/zip" hidden>
+            </label>
+            <label class="file-label btn">Import from Evernote (.enex)
+              <input id="import-enex-file" type="file" multiple accept=".enex" hidden>
+            </label>
+          </div>
+          <p id="restore-result-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
+          <p class="settings-hint">Restore accepts <code>.dgbackup</code> (and legacy <code>.enc.json</code>) Deeperguard backups. Import from Standard Notes accepts encrypted or decrypted SN exports (zip or .txt). Import from Markdown accepts one or more <code>.md</code> files or a ZIP, including the readable export of this app; you see a summary before anything is saved. Images and files that a note links with a relative path inside the ZIP become its attachments. Web addresses are never fetched. Import from Evernote accepts one or more <code>.enex</code> exports: titles, text, tags, dates, to-do checkboxes and attachments are imported; scripts, styles and links other than http, https and mailto are dropped; files with a DOCTYPE or entity declaration are refused.</p>
+        </div>
+      </div>
+      <div data-plan-feature="pcloud_backup">
+        <div class="security-block-head"><h4 id="sec-pcloud-title" class="settings-subtitle">pCloud backup</h4><span id="sec-state-pcloud" class="settings-state">Off</span></div>
+        <div class="settings-card settings-backup-card">
+          <div id="pcloud-managed">
+            <label class="settings-row checkbox"><span>Automatic backup to pCloud</span><input id="managed-backup-enabled" type="checkbox" disabled></label>
+            <p id="managed-backup-unavailable" class="settings-hint" hidden>This backup option is not available on this server right now, so the switch is turned off.</p>
+            <p id="managed-backup-status" class="settings-hint" role="status" aria-live="polite"></p>
+            <label class="settings-row checkbox"><span>E-mail me only when a backup fails</span><input id="managed-backup-failures-only" type="checkbox"></label>
+            <p class="settings-hint">Off by default. When on, Deeperguard uploads your already encrypted vault data to the pCloud account of the Deeperguard service, into a folder that only belongs to you, once per day. Only encrypted data is stored. pCloud and the Deeperguard service cannot read its content, but they can see its size, the times of the backups and the number of files. After each run you get an e-mail with the result.</p>
+          </div>
+          <div id="pcloud-own-notice" hidden>
+            <p class="settings-hint">You back up with your own pCloud account. That backup keeps working unchanged until you switch. Switching does not delete your existing backups in your own pCloud.</p>
+            <div class="settings-actions"><button type="button" id="btn-managed-switch" class="btn">Switch to automatic backup</button></div>
+          </div>
+          <details id="pcloud-own" hidden>
+          <summary>Own pCloud account (advanced)</summary>
+          <label class="settings-row stacked">pCloud email / username
+            <input id="pcloud-username" type="email" autocomplete="username">
+          </label>
+          <label class="settings-row stacked">rclone OAuth token
+            <textarea id="pcloud-rclone-token" rows="3" spellcheck="false" placeholder="Paste JSON from: rclone authorize pcloud"></textarea>
+          </label>
+          <label class="settings-row stacked">Remote folder
+            <input id="pcloud-remote-path" type="text" placeholder="Deeperguard/backups">
+          </label>
+          <label class="settings-row stacked">pCloud region
+            <select id="pcloud-region">
+              <option value="eu">EU (eapi.pcloud.com)</option>
+              <option value="us">US (api.pcloud.com)</option>
+            </select>
+          </label>
+          <label class="settings-row checkbox"><span>Daily encrypted pCloud sync</span><input id="pcloud-enabled" type="checkbox"></label>
+          <p id="pcloud-status" class="settings-hint"></p>
+          <div class="settings-actions">
+            <button type="button" id="btn-save-pcloud" class="btn">Save pCloud settings</button>
+            <button type="button" id="btn-pcloud-sync" class="btn">Sync to pCloud now</button>
+          </div>
+          <p class="settings-hint">Uploads encrypted vault backups via rclone using an OAuth token (your pCloud account password is never stored on this server). On your computer run <code>rclone authorize pcloud</code> (EU: add <code>--pcloud-hostname eapi.pcloud.com</code>) and paste the JSON token here.</p>
+          </details>
+        </div>
+      </div>
+      </section>
+
+      <section class="settings-group security-group" id="signed-in-devices-group" aria-labelledby="sec-group-devices-title">
+        <h3 id="sec-group-devices-title">5. Devices and sessions</h3>
+        <p class="security-group-purpose">Every browser or app that is signed in to your account. Use this list if you lose a device or see one you do not recognise.</p>
+        <div class="settings-card">
+          <div class="security-block-head"><h4 id="sec-devices-title" class="settings-subtitle">Signed-in devices</h4><span id="sec-state-devices" class="settings-state">Checking…</span></div>
+          <p class="settings-hint">Choose <strong>Sign out</strong> on a device you lost or do not recognise, or <strong>Deny</strong> on a new sign-in you did not start: that ends the session after you confirm (Cancel is selected first, and Escape also cancels). A new sign-in is marked here until you approve or deny it; signing in never waits for approval. Ending a session does not change your passwords.</p>
           <div id="vault-freshness-panel" class="vault-freshness-panel" hidden>
             <p id="vault-freshness-chip" class="device-start-chip" hidden></p>
             <p class="settings-hint" id="vault-freshness-start-label" hidden>Unverified start</p>
@@ -1854,6 +2231,38 @@
             </div>
           </div>
           <div id="signed-in-devices" class="device-list" role="list"></div>
+        </div>
+      </section>
+
+      <section class="settings-group" id="settings-security-more" aria-labelledby="settings-security-more-title">
+        <h3 id="settings-security-more-title">More about security</h3>
+        <div class="settings-card">
+          <p class="settings-hint">Notes are encrypted on this device before sync. See <a href="/verify#verify-metadata-baseline" target="_blank" rel="noopener">what the server sees per action</a>, <a href="/verify" target="_blank" rel="noopener">how to verify in DevTools</a>, or use <strong>View on server</strong> on a note, file, 2FA entry, folder, or tag.</p>
+          <p class="settings-hint">Self-hosting? See the <a href="/self-host">self-host guide</a>.</p>
+          <details class="settings-advanced">
+            <summary>Advanced</summary>
+            <div class="settings-nested stack">
+              <div class="settings-actions">
+                <button type="button" id="btn-show-vault-password" class="btn ghost sm" hidden>Show saved vault password</button>
+              </div>
+              <p id="vault-password-reveal" class="settings-hint" hidden></p>
+              <div id="attachment-repair" class="settings-nested stack">
+                <label class="settings-row stacked">Previous vault password (for repair)
+                  <span class="password-field-wrap">
+                    <input id="attachment-repair-password" type="password" autocomplete="current-password">
+                    <button type="button" class="password-toggle btn ghost sm" data-target="attachment-repair-password" aria-label="Show password">Show</button>
+                  </span>
+                </label>
+                <p id="attachment-repair-error" class="settings-hint error" role="alert" hidden></p>
+                <button type="button" id="btn-repair-attachments" class="btn">Repair documents</button>
+              </div>
+              <p class="settings-hint">Re-OCR documents on this device (zero-knowledge). Regenerates PDF list thumbnails on iPhone.</p>
+              <div class="settings-actions">
+                <button type="button" id="btn-reindex-docs" class="btn">Reindex documents</button>
+                <button type="button" id="btn-reload-notes" class="btn">Reload notes from server</button>
+              </div>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -1934,346 +2343,6 @@
           <div class="settings-actions">
             <button type="button" id="btn-settings-open-secure-send" class="btn ghost sm">Open Secure Send →</button>
           </div>
-        </div>
-      </section>
-
-      <section class="settings-group">
-        <h3>Privacy &amp; security</h3>
-        <div class="settings-card">
-          <p class="settings-hint">Notes are encrypted on this device before sync. Your account password and vault password start as the same password. Sign-in proves who you are. The vault password decrypts notes on this device and never leaves it. You can change the vault password below. We cannot recover it. Account sign-in uses zero-knowledge SRP — the server stores only a proof, not your password.</p>
-          <p class="settings-hint">See <a href="/verify#verify-metadata-baseline" target="_blank" rel="noopener">what the server sees per action</a>, <a href="/verify" target="_blank" rel="noopener">how to verify in DevTools</a>, or use <strong>View on server</strong> on a note, file, 2FA entry, folder, or tag.</p>
-          <p class="settings-hint">Self-hosting? See the <a href="/self-host">self-host guide</a>.</p>
-          <p class="settings-hint">Use <a href="https://www.deeperguard.com/">https://www.deeperguard.com/</a> on iPhone. Passkeys require that hostname.</p>
-          <label class="settings-row">Lock after idle
-            <select id="pref-auto-lock">
-              <option value="0">Off</option>
-              <option value="1">1 minute</option>
-              <option value="5">5 minutes</option>
-              <option value="15">15 minutes</option>
-              <option value="30">30 minutes</option>
-              <option value="60">60 minutes</option>
-            </select>
-          </label>
-          <p class="settings-hint">After this long with no input, the vault locks. With Off, the vault key stays in memory until you lock or close the tab. Locking is best effort; it cannot clear everything from memory.</p>
-          <label class="settings-row">Lock when leaving the app
-            <select id="pref-lock-on-unfocus">
-              <option value="never">Never</option>
-              <option value="immediate">Immediately</option>
-              <option value="1min">After 1 minute</option>
-            </select>
-          </label>
-          <label class="settings-row checkbox"><span>Remember password on this device</span><input id="pref-remember-device" type="checkbox"></label>
-          <p class="settings-hint">Saves the vault password on this device so offline unlock can use it after you type it. Opening Notes still asks for the password every time — it is not filled in for you. Disable on shared devices.</p>
-          <div id="device-phrase-settings" class="settings-nested stack">
-            <label class="settings-row stacked" for="device-phrase-input">Device phrase
-              <input id="device-phrase-input" type="text" maxlength="64" autocomplete="off" spellcheck="false" autocapitalize="off">
-            </label>
-            <p class="settings-hint">Shown on this device before you type your password. Stored only in this browser — never sent to the server. Helps you spot a fake sign-in page.</p>
-            <div class="settings-actions">
-              <button type="button" id="btn-device-phrase-save" class="btn primary">Save</button>
-              <button type="button" id="btn-device-phrase-clear" class="btn ghost">Clear</button>
-            </div>
-            <p id="device-phrase-settings-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
-          </div>
-          <p id="totp-status" class="settings-hint" hidden></p>
-          <div id="passkey-settings" class="settings-nested stack" data-plan-feature="passkeys">
-            <p class="settings-hint">Passkeys sign you into your account without typing your account password. Your master password still opens the vault. If you want, you can also let a passkey open the vault; that works only when your browser and the passkey support it, and your master password keeps working either way.</p>
-            <div id="passkey-list"></div>
-            <div id="passkey-vault-password-row" class="settings-row stacked" hidden>
-              <label for="passkey-vault-password">Account password (to change vault unlock)</label>
-              <input type="password" id="passkey-vault-password" autocomplete="current-password">
-            </div>
-            <div class="settings-actions">
-              <label class="settings-hint"><input type="checkbox" id="passkey-add-unlock"> Also open the vault with the new passkey</label>
-              <button type="button" id="btn-add-passkey" class="btn">Add passkey</button>
-            </div>
-          </div>
-          <div id="passkey-signin-settings" class="settings-nested stack" data-plan-feature="passkeys">
-            <p class="settings-subtitle">Passkey-only account sign-in</p>
-            <p id="passkey-signin-passkey-count" class="settings-hint">—</p>
-            <p id="passkey-signin-status" class="settings-hint" role="status" aria-live="polite"></p>
-            <label class="settings-row">Waiting period before new recovery codes work
-              <select id="passkey-signin-wait"></select>
-            </label>
-            <p class="settings-hint">Recovery codes are a last resort for account sign-in. A waiting period always applies (at least 72 hours). Requesting new codes resets the wait. Any signed-in device can cancel a pending batch. <a href="/help/recovery" target="_blank" rel="noopener noreferrer">Recovery help</a></p>
-            <div class="settings-actions">
-              <button type="button" id="btn-passkey-signin-generate-codes" class="btn">Generate recovery codes</button>
-              <button type="button" id="btn-passkey-signin-cancel-codes" class="btn ghost" hidden>Cancel pending codes</button>
-            </div>
-            <div id="passkey-signin-code-reveal" class="settings-nested stack" hidden></div>
-            <label class="settings-row checkbox"><span>Disable password sign-in</span><input id="pref-disable-password-login" type="checkbox"></label>
-            <p id="passkey-signin-toggle-hint" class="settings-hint"></p>
-          </div>
-          <div id="recovery-key-settings" class="settings-nested stack" role="group" aria-labelledby="recovery-key-settings-title">
-            <p id="recovery-key-settings-title" class="settings-subtitle">Vault recovery key</p>
-            <p class="settings-hint">A recovery key opens your vault if you forget your master password. It is not one of the account recovery codes above, which only help you sign in to your account and do not open your notes. We store only an encrypted copy of your vault key; we cannot read the recovery key and cannot show it again.</p>
-            <p id="recovery-key-settings-status" class="settings-hint" role="status" aria-live="polite">Checking…</p>
-            <p id="recovery-key-settings-why" class="settings-hint" hidden></p>
-            <p id="recovery-key-settings-replace-hint" class="settings-hint" hidden>Creating a new recovery key makes the current one stop working as soon as the new one is saved.</p>
-            <div class="settings-actions">
-              <button type="button" id="btn-recovery-key-create" class="btn" hidden>Create recovery key</button>
-              <button type="button" id="btn-recovery-key-regenerate" class="btn" hidden>Create a new recovery key</button>
-            </div>
-            <p id="recovery-key-settings-note" class="settings-hint" role="status" aria-live="polite" hidden></p>
-          </div>
-          <div id="password-change" class="settings-nested stack">
-            <label class="settings-row stacked" for="password-change-current">Current vault password
-              <input id="password-change-current" type="password" autocomplete="off" required aria-required="true" readonly>
-            </label>
-            <label class="settings-row stacked">New vault password
-              <span class="password-field-wrap">
-                <input id="password-change-new" type="password" autocomplete="new-password">
-                <button type="button" class="password-toggle btn ghost sm" data-target="password-change-new" aria-label="Show password">Show</button>
-              </span>
-            </label>
-            <label class="settings-row stacked">Confirm new password
-              <span class="password-field-wrap">
-                <input id="password-change-confirm" type="password" autocomplete="new-password">
-                <button type="button" class="password-toggle btn ghost sm" data-target="password-change-confirm" aria-label="Show password">Show</button>
-              </span>
-            </label>
-            <p id="password-change-error" class="settings-hint error" role="alert" hidden></p>
-            <button type="button" id="btn-change-password" class="btn primary">Change vault password</button>
-            <p class="settings-hint">Re-encrypts every note on this device. Other devices need the new password to sync.</p>
-          </div>
-          <div class="settings-actions">
-            <button type="button" id="btn-lock-now" class="btn">Lock vault now</button>
-          </div>
-          <p class="settings-hint">Lock drops the vault key and decrypted notes from this tab, as far as the browser allows. Unlocking needs your vault password again. JavaScript cannot fully clear memory, so also lock your device when you step away.</p>
-          <div class="settings-actions" data-plan-feature="account_2fa">
-            <button type="button" id="btn-setup-totp" class="btn">Set up 2FA</button>
-            <button type="button" id="btn-disable-totp" class="btn danger" hidden>Disable 2FA</button>
-          </div>
-          <div id="totp-setup" class="settings-nested stack" hidden>
-            <img id="totp-qr" alt="TOTP QR code" class="qr">
-            <p class="hint">Scan with Authy, 1Password, or Apple Passwords.</p>
-            <label>Verification code
-              <input id="totp-enable-code" inputmode="numeric" maxlength="6">
-            </label>
-            <button type="button" id="btn-enable-totp" class="btn primary">Enable 2FA</button>
-          </div>
-          <div id="totp-disable" class="settings-nested stack" hidden>
-            <label id="totp-disable-password-wrap" class="settings-row stacked">Account password
-              <input id="totp-disable-password" type="password" autocomplete="current-password">
-            </label>
-            <p id="totp-disable-srp-hint" class="settings-hint" hidden>Signed in with zero-knowledge login — only your authenticator code is required.</p>
-            <label>Current authenticator code (required)
-              <input id="totp-disable-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required>
-            </label>
-            <button type="button" id="btn-confirm-disable-totp" class="btn danger">Confirm disable 2FA</button>
-          </div>
-          <details class="settings-advanced">
-            <summary>Advanced</summary>
-            <div class="settings-nested stack">
-              <div class="settings-actions">
-                <button type="button" id="btn-show-vault-password" class="btn ghost sm" hidden>Show saved vault password</button>
-              </div>
-              <p id="vault-password-reveal" class="settings-hint" hidden></p>
-              <div id="attachment-repair" class="settings-nested stack">
-                <label class="settings-row stacked">Previous vault password (for repair)
-                  <span class="password-field-wrap">
-                    <input id="attachment-repair-password" type="password" autocomplete="current-password">
-                    <button type="button" class="password-toggle btn ghost sm" data-target="attachment-repair-password" aria-label="Show password">Show</button>
-                  </span>
-                </label>
-                <p id="attachment-repair-error" class="settings-hint error" role="alert" hidden></p>
-                <button type="button" id="btn-repair-attachments" class="btn">Repair documents</button>
-              </div>
-              <p class="settings-hint">Re-OCR documents on this device (zero-knowledge). Regenerates PDF list thumbnails on iPhone.</p>
-              <div class="settings-actions">
-                <button type="button" id="btn-reindex-docs" class="btn">Reindex documents</button>
-                <button type="button" id="btn-reload-notes" class="btn">Reload notes from server</button>
-              </div>
-            </div>
-          </details>
-        </div>
-      </section>
-
-      <section class="settings-group" data-plan-feature="email_backup">
-        <h3>Backup &amp; import</h3>
-        {% set google_drive_configured = (google_oauth_client_id|default('', true)|trim|length) > 0 %}
-        {% set dropbox_configured = (dropbox_app_key|default('', true)|trim|length) > 0 %}
-        <div class="settings-card settings-backup-card">
-          <h4 class="settings-subtitle">Back up</h4>
-          <p class="settings-hint">Encrypted on this device with your vault key. Destinations never see plaintext or keys.</p>
-
-          <div class="settings-actions">
-            <button type="button" id="btn-save-backup-file" class="btn primary">Save backup file</button>
-            <button type="button" id="btn-download-backup" class="btn" hidden aria-hidden="true" tabindex="-1">Download encrypted vault</button>
-          </div>
-          <p id="backup-file-help" class="settings-hint">Downloads <code>deeperguard-backup-YYYY-MM-DD.dgbackup</code> (on iPhone: Save to Files → iCloud Drive).</p>
-
-          <div class="settings-actions">
-            <button type="button" id="btn-export-readable-zip" class="btn" aria-describedby="readable-export-help">Alles leesbaar exporteren (ZIP)</button>
-          </div>
-          <p id="readable-export-help" class="settings-hint">Markdown notes plus attachments in one ZIP. <strong>Not encrypted</strong>: anyone with the file can read it. Built on this device; nothing is sent to the server.</p>
-
-          <div class="settings-actions">
-            <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not set up yet"{% endif %}>Connect Google Drive</button>
-          </div>
-          <p id="google-drive-not-configured" class="settings-hint"{% if google_drive_configured %} hidden{% endif %}>Google Drive: Not set up yet — add your own key</p>
-          <div id="google-drive-configure" class="settings-nested stack cloud-provider-configure">
-            <p id="google-key-configured" class="settings-hint cloud-configured-badge" hidden>Configured ✓</p>
-            <label class="settings-row stacked">Google OAuth Client ID
-              <input id="google-oauth-client-id-input" type="text" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com" inputmode="url">
-            </label>
-            <p id="google-key-error" class="settings-hint settings-field-error" role="alert" hidden></p>
-            <div class="settings-actions">
-              <button type="button" id="btn-google-key-save" class="btn">Save</button>
-              <button type="button" id="btn-google-key-remove" class="btn ghost" hidden>Remove</button>
-            </div>
-            <p id="google-key-status" class="settings-hint" role="status" aria-live="polite"></p>
-            <details class="cloud-howto">
-              <summary>How to get this</summary>
-              <ol class="settings-hint cloud-howto-steps">
-                <li>Open the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a> and create (or select) a project.</li>
-                <li>Configure the <strong>OAuth consent screen</strong> first (Google Auth Platform): app name, support email, Audience → <strong>External</strong>, and add yourself as a test user. Do this before creating a client.</li>
-                <li>Enable the <strong>Google Drive API</strong> for that project.</li>
-                <li>Create an OAuth client of type <strong>Web application</strong>. Leave redirect URIs empty.</li>
-                <li>Add authorized JavaScript origin: <code>https://www.deeperguard.com</code></li>
-                <li>The app requests only the <code>drive.file</code> scope. If the consent screen is in Testing, you must be listed as a test user.</li>
-                <li>Copy the Client ID (ends with <code>.apps.googleusercontent.com</code>). No client secret is used.</li>
-              </ol>
-            </details>
-          </div>
-          <p id="google-drive-status" class="settings-hint" role="status" aria-live="polite"{% if not google_drive_configured %} hidden{% endif %}></p>
-          <div id="google-drive-controls" class="settings-nested stack" hidden>
-            <p class="settings-hint">Uploads the same client-encrypted blob to a Drive folder you authorize in the browser.</p>
-            <label class="settings-row checkbox"><span>Automatic daily Google Drive backup when the app is open and online</span><input id="backup-drive-auto-daily" type="checkbox"></label>
-            <div class="settings-actions">
-              <button type="button" id="btn-drive-list" class="btn ghost sm">Show Drive backups</button>
-              <button type="button" id="btn-drive-disconnect" class="btn ghost sm">Disconnect Google</button>
-            </div>
-            <ul id="google-drive-backup-list" class="settings-hint" hidden></ul>
-          </div>
-
-          <div class="settings-actions">
-            <button type="button" id="btn-backup-dropbox" class="btn"{% if not dropbox_configured %} disabled title="Not set up yet"{% endif %}>Connect Dropbox</button>
-          </div>
-          <p id="dropbox-not-configured" class="settings-hint"{% if dropbox_configured %} hidden{% endif %}>Dropbox: Not set up yet — add your own key</p>
-          <div id="dropbox-configure" class="settings-nested stack cloud-provider-configure">
-            <p id="dropbox-key-configured" class="settings-hint cloud-configured-badge" hidden>Configured ✓</p>
-            <label class="settings-row stacked">Dropbox App key
-              <input id="dropbox-app-key-input" type="text" autocomplete="off" spellcheck="false" placeholder="App key (not the secret)" inputmode="text">
-            </label>
-            <p id="dropbox-key-error" class="settings-hint settings-field-error" role="alert" hidden></p>
-            <div class="settings-actions">
-              <button type="button" id="btn-dropbox-key-save" class="btn">Save</button>
-              <button type="button" id="btn-dropbox-key-remove" class="btn ghost" hidden>Remove</button>
-            </div>
-            <p id="dropbox-key-status" class="settings-hint" role="status" aria-live="polite"></p>
-            <details class="cloud-howto">
-              <summary>How to get this</summary>
-              <ol class="settings-hint cloud-howto-steps">
-                <li>Open the <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">Dropbox App Console</a> and create an app.</li>
-                <li>Choose <strong>Scoped access</strong> and <strong>App folder</strong>.</li>
-                <li>Add redirect URI: <code>https://www.deeperguard.com/app</code></li>
-                <li>On the <strong>Permissions</strong> tab, tick <code>files.content.write</code> and <code>files.content.read</code>, then click <strong>Submit</strong> before first use (changing permissions later requires reconnecting).</li>
-                <li>Copy the <strong>App key</strong> only — never the app secret (browser PKCE does not use it).</li>
-              </ol>
-            </details>
-          </div>
-          <p id="dropbox-status" class="settings-hint" role="status" aria-live="polite"{% if not dropbox_configured %} hidden{% endif %}></p>
-          <div id="dropbox-controls" class="settings-nested stack" hidden>
-            <p class="settings-hint">Uploads the same client-encrypted blob to Apps/Deeperguard via OAuth 2 PKCE.</p>
-            <label class="settings-row checkbox"><span>Automatic daily Dropbox backup when the app is open and online</span><input id="backup-dropbox-auto-daily" type="checkbox"></label>
-            <div class="settings-actions">
-              <button type="button" id="btn-dropbox-list" class="btn ghost sm">Show Dropbox backups</button>
-              <button type="button" id="btn-dropbox-disconnect" class="btn ghost sm">Disconnect Dropbox</button>
-            </div>
-            <ul id="dropbox-backup-list" class="settings-hint" hidden></ul>
-          </div>
-
-          <div class="settings-actions">
-            <button type="button" id="btn-backup-now" class="btn">Email backup now</button>
-          </div>
-          <p class="settings-hint">Sends the same encrypted <code>.dgbackup</code> to your verified backup address.</p>
-          <label class="settings-row stacked">Backup email
-            <input id="backup-email" type="email" autocomplete="email">
-          </label>
-          <p id="backup-verify-status" class="settings-hint" hidden></p>
-          <div id="backup-verify-wrap" class="settings-nested stack" hidden>
-            <label class="settings-row stacked">Backup email verification code
-              <input id="backup-verify-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
-            </label>
-            <div class="settings-actions">
-              <button type="button" id="btn-backup-verify" class="btn primary">Verify backup email</button>
-              <button type="button" id="btn-backup-verify-resend" class="btn">Resend code</button>
-            </div>
-            <p id="backup-verify-resend-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
-          </div>
-          <label class="settings-row checkbox"><span>Daily encrypted email backup</span><input id="backup-enabled" type="checkbox"></label>
-          <p id="backup-verified-hint" class="settings-hint">Email backups are sent only after this address is verified with a code.</p>
-          <div class="settings-actions">
-            <button type="button" id="btn-save-backup" class="btn">Save email backup settings</button>
-          </div>
-
-          <h4 class="settings-subtitle">Export</h4>
-          <div class="settings-actions">
-            <button type="button" id="btn-export-note" class="btn">Export current note</button>
-          </div>
-          <p class="settings-hint">Saves the open note as a file on this device.</p>
-        </div>
-        <div class="settings-card settings-backup-card">
-          <h4 class="settings-subtitle">Restore &amp; import</h4>
-          <div class="settings-actions">
-            <label class="file-label btn primary">Restore Deeperguard backup
-              <input id="restore-backup-file" type="file" accept=".dgbackup,.json,.enc.json,.gz,.json.gz,.enc.json.gz,.zip,application/json,application/gzip,application/zip" hidden>
-            </label>
-            <label class="file-label btn">Import from Standard Notes
-              <input id="import-file" type="file" accept=".txt,.json,.enc.json,.dgbackup,.gz,.json.gz,.enc.json.gz,.zip,text/plain,application/json,application/gzip,application/zip" hidden>
-            </label>
-            <label class="file-label btn">Import from Markdown (.md or .zip)
-              <input id="import-markdown-file" type="file" multiple accept=".md,.markdown,.zip,text/markdown,application/zip" hidden>
-            </label>
-            <label class="file-label btn">Import from Evernote (.enex)
-              <input id="import-enex-file" type="file" multiple accept=".enex" hidden>
-            </label>
-          </div>
-          <p id="restore-result-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
-          <p class="settings-hint">Restore accepts <code>.dgbackup</code> (and legacy <code>.enc.json</code>) Deeperguard backups. Import from Standard Notes accepts encrypted or decrypted SN exports (zip or .txt). Import from Markdown accepts one or more <code>.md</code> files or a ZIP, including the readable export of this app; you see a summary before anything is saved. Images and files that a note links with a relative path inside the ZIP become its attachments. Web addresses are never fetched. Import from Evernote accepts one or more <code>.enex</code> exports: titles, text, tags, dates, to-do checkboxes and attachments are imported; scripts, styles and links other than http, https and mailto are dropped; files with a DOCTYPE or entity declaration are refused.</p>
-        </div>
-      </section>
-
-      <section class="settings-group" data-plan-feature="pcloud_backup">
-        <h3>pCloud backup</h3>
-        <div class="settings-card settings-backup-card">
-          <div id="pcloud-managed">
-            <label class="settings-row checkbox"><span>Automatic backup to pCloud</span><input id="managed-backup-enabled" type="checkbox" disabled></label>
-            <p id="managed-backup-unavailable" class="settings-hint" hidden>This backup option is not available on this server right now, so the switch is turned off.</p>
-            <p id="managed-backup-status" class="settings-hint" role="status" aria-live="polite"></p>
-            <label class="settings-row checkbox"><span>E-mail me only when a backup fails</span><input id="managed-backup-failures-only" type="checkbox"></label>
-            <p class="settings-hint">Off by default. When on, Deeperguard uploads your already encrypted vault data to the pCloud account of the Deeperguard service, into a folder that only belongs to you, once per day. Only encrypted data is stored. pCloud and the Deeperguard service cannot read its content, but they can see its size, the times of the backups and the number of files. After each run you get an e-mail with the result.</p>
-          </div>
-          <div id="pcloud-own-notice" hidden>
-            <p class="settings-hint">You back up with your own pCloud account. That backup keeps working unchanged until you switch. Switching does not delete your existing backups in your own pCloud.</p>
-            <div class="settings-actions"><button type="button" id="btn-managed-switch" class="btn">Switch to automatic backup</button></div>
-          </div>
-          <details id="pcloud-own" hidden>
-          <summary>Own pCloud account (advanced)</summary>
-          <label class="settings-row stacked">pCloud email / username
-            <input id="pcloud-username" type="email" autocomplete="username">
-          </label>
-          <label class="settings-row stacked">rclone OAuth token
-            <textarea id="pcloud-rclone-token" rows="3" spellcheck="false" placeholder="Paste JSON from: rclone authorize pcloud"></textarea>
-          </label>
-          <label class="settings-row stacked">Remote folder
-            <input id="pcloud-remote-path" type="text" placeholder="Deeperguard/backups">
-          </label>
-          <label class="settings-row stacked">pCloud region
-            <select id="pcloud-region">
-              <option value="eu">EU (eapi.pcloud.com)</option>
-              <option value="us">US (api.pcloud.com)</option>
-            </select>
-          </label>
-          <label class="settings-row checkbox"><span>Daily encrypted pCloud sync</span><input id="pcloud-enabled" type="checkbox"></label>
-          <p id="pcloud-status" class="settings-hint"></p>
-          <div class="settings-actions">
-            <button type="button" id="btn-save-pcloud" class="btn">Save pCloud settings</button>
-            <button type="button" id="btn-pcloud-sync" class="btn">Sync to pCloud now</button>
-          </div>
-          <p class="settings-hint">Uploads encrypted vault backups via rclone using an OAuth token (your pCloud account password is never stored on this server). On your computer run <code>rclone authorize pcloud</code> (EU: add <code>--pcloud-hostname eapi.pcloud.com</code>) and paste the JSON token here.</p>
-          </details>
         </div>
       </section>
 

@@ -36,7 +36,7 @@ assert.ok(appHtml.includes('>Export</h4>') || appHtml.includes('>Export<'));
 assert.ok(appHtml.includes('btn-export-note'));
 assert.ok(appHtml.indexOf('btn-export-note') < appHtml.indexOf('Restore &amp; import')
   || appHtml.indexOf('>Export<') < appHtml.indexOf('Restore'));
-assert.ok(appHtml.includes('<h3>pCloud backup</h3>'));
+assert.ok(appHtml.includes('>pCloud backup</h4>'));
 assert.ok(appHtml.includes('data-plan-feature="pcloud_backup"'));
 
 // 44px touch targets for backup buttons
