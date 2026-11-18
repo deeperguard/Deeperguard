@@ -15733,10 +15733,17 @@
     return suffix ? `${base} · ${suffix}` : base;
   }
 
+  // Short state word next to a security setting's heading (Settings → groups 1-5).
+  function setSettingState(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
   function renderSignedInDevices(sessions) {
     const el = document.getElementById('signed-in-devices');
     if (!el) return;
     const rows = Array.isArray(sessions) ? sessions : [];
+    setSettingState('sec-state-devices', rows.length === 1 ? '1 device signed in' : `${rows.length} devices signed in`);
     const next = JSON.stringify(rows);
     if (next === lastSignedInDevicesJson && el.children.length) return;
     lastSignedInDevicesJson = next;
@@ -16321,6 +16328,7 @@
       renderVaultFreshnessPanel();
     } catch (err) {
       lastSignedInDevicesJson = '';
+      setSettingState('sec-state-devices', 'Could not load');
       el.innerHTML = '<p class="settings-hint">Could not load signed-in devices.</p>';
     }
   }
@@ -16392,6 +16400,31 @@
     await initSettings();
   };
 
+  // Words for the state next to each security heading, from data the page already has.
+  function renderSecurityStates(account) {
+    const passwordLoginOff = !!account?.passkey_signin?.password_login_disabled;
+    setSettingState('sec-state-password', passwordLoginOff ? 'Password sign-in is off' : 'On');
+    updateLockState();
+    setSettingState('sec-state-email-backup', account?.backup_enabled ? 'On: daily' : 'Off');
+    const list = document.getElementById('passkey-list');
+    if (list && !list.dataset.stateWatch) {
+      list.dataset.stateWatch = '1';
+      new MutationObserver(updatePasskeyUnlockState).observe(list, { childList: true, subtree: true });
+    }
+    updatePasskeyUnlockState();
+  }
+
+  function updateLockState() {
+    const min = Number(prefs.autoLockMin) || 0;
+    setSettingState('sec-state-lock', min ? `Auto-lock after ${min} ${min === 1 ? 'minute' : 'minutes'}` : 'Auto-lock off');
+  }
+
+  function updatePasskeyUnlockState() {
+    const list = document.getElementById('passkey-list');
+    const on = list ? list.querySelectorAll('.passkey-unlock-status[data-unlock-state="on"]').length : 0;
+    setSettingState('sec-state-passkey-unlock', on ? `On for ${on} ${on === 1 ? 'passkey' : 'passkeys'}` : 'Off');
+  }
+
   async function initSettings() {
     let account;
     try {
@@ -16433,15 +16466,13 @@
       const totpEl = document.getElementById('totp-status');
       if (totpEl) {
         totpEl.hidden = false;
-        totpEl.textContent = account.totp_enabled
-          ? '2FA is enabled on this account.'
-          : '2FA is not enabled.';
+        totpEl.textContent = account.totp_enabled ? 'On' : 'Off';
       }
       document.getElementById('btn-disable-totp').hidden = !account.totp_enabled;
       document.getElementById('btn-setup-totp').hidden = account.totp_enabled;
     } else {
       const totpEl = document.getElementById('totp-status');
-      if (totpEl) totpEl.hidden = true;
+      if (totpEl) totpEl.textContent = 'Status unavailable';
       document.getElementById('btn-disable-totp').hidden = true;
       document.getElementById('btn-setup-totp').hidden = true;
     }
@@ -16473,6 +16504,7 @@
     if (window.NotesPasskeySignin) {
       NotesPasskeySignin.bindPasskeySigninSettings(account);
     }
+    renderSecurityStates(account);
     const totpDisablePw = document.getElementById('totp-disable-password-wrap');
     const totpDisableHint = document.getElementById('totp-disable-srp-hint');
     const srpAccount = String(account.auth_method || '') === 'srp';
@@ -22839,6 +22871,8 @@ async function refreshManagedBackup() {
   document.getElementById('managed-backup-unavailable').hidden = !!m.available;
   document.getElementById('managed-backup-failures-only').checked = !!m.failures_only;
   const own = !!m.own_token;
+  const pcloudState = document.getElementById('sec-state-pcloud');
+  if (pcloudState) pcloudState.textContent = own ? 'Your own pCloud account' : m.enabled ? 'On: daily' : 'Off';
   document.getElementById('pcloud-own-notice').hidden = !own;
   document.getElementById('btn-managed-switch').disabled = !m.available;
   document.getElementById('pcloud-own').hidden = !own;
@@ -23274,6 +23308,7 @@ async function showSettings() {
     prefs.autoLockMin = Number(e.target.value) || 0;
     savePrefs();
     bumpIdle();
+    updateLockState();
   });
   document.getElementById('pref-lock-on-unfocus')?.addEventListener('change', (e) => {
     const next = String(e.target.value || 'never');
@@ -24560,6 +24595,7 @@ async function showSettings() {
         method: 'POST',
         body: JSON.stringify({ email, enabled }),
       });
+      setSettingState('sec-state-email-backup', enabled ? 'On: daily' : 'Off');
       toast('Backup settings saved');
     } catch (err) {
       toast(err.message || 'Could not save backup settings', true);
@@ -24974,6 +25010,7 @@ async function showSettings() {
     const keyRemove = document.getElementById('btn-google-key-remove');
     const configured = !!(Cloud && Cloud.isGoogleConfigured && Cloud.isGoogleConfigured());
     const connected = configured && isGoogleDriveConnected(Cloud);
+    setSettingState('sec-state-drive', !configured ? 'Not set up' : connected ? 'Connected' : 'Not connected');
     const source = Cloud?.googleKeySource?.() || '';
     const hasUserKey = !!String(prefs.googleOauthClientId || '').trim();
     if (keyInput && document.activeElement !== keyInput) {
@@ -25290,6 +25327,7 @@ async function showSettings() {
     const keyRemove = document.getElementById('btn-dropbox-key-remove');
     const configured = !!(Cloud && Cloud.isDropboxConfigured && Cloud.isDropboxConfigured());
     const connected = configured && isDropboxConnected(Cloud);
+    setSettingState('sec-state-dropbox', !configured ? 'Not set up' : connected ? 'Connected' : 'Not connected');
     const source = Cloud?.dropboxKeySource?.() || '';
     const hasUserKey = !!String(prefs.dropboxAppKey || '').trim();
     if (keyInput && document.activeElement !== keyInput) {
