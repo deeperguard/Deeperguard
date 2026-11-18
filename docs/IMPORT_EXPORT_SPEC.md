@@ -49,7 +49,7 @@ left out).
 | 2FA import (Aegis, 2FAS, Google Authenticator, otpauth links) | `app/static/js/totp-import.js`, specified in `docs/2FA_IMPORT_SPEC.md` | Separate spec. Not changed here. |
 | Markdown (`.md` files and ZIP, including the section 2 export) | `NotesMdImport.parse` (`app/static/js/md-import.js`), `NotesStore.importMarkdownNotes` (`store.js`); UI handler on `#import-markdown-file` (`app.js`) | Implements 3.1 and the sanitising of 4.5 for Markdown. A summary is confirmed before saving and the result lists skipped files. |
 | ENEX (`.enex`) | `NotesEnexImport.parse` (`app/static/js/enex-import.js`), stored through `NotesStore.importMarkdownNotes`; UI handler on `#import-enex-file` (`app.js`) | Implements 3.2 and 4.3. Output is Markdown only. A note whose ENML is not well-formed is skipped and listed; a DOCTYPE or entity declaration refuses the whole file. Each ENEX is parsed whole by `DOMParser`; the 80 MiB limit is checked per note after parsing. |
-| Google Keep | none | Not present. Built by the next task, against sections 3 and 4. |
+| Google Keep | `keep-import.js` | Takeout ZIP (`Keep/*.json`), built against sections 3.3 and 4. |
 
 ### 1.3 How a note is stored
 
@@ -407,7 +407,8 @@ Only the JSON files are read; the HTML copies are ignored.
 | `createdTimestampUsec`, `userEditedTimestampUsec` | `created_at`, `updated_at` (microseconds since 1970 divided by 1000). |
 | `isPinned` | `pinned`. |
 | `isArchived` | `archived`. |
-| `isTrashed` | `trashed`. |
+| `isTrashed` | The note is skipped and listed in the result as "in the Keep trash". |
+| `textContentHtml` | Used only when the note has neither `textContent` nor `listContent`; then it goes through the allowlist of 4.5. |
 | `color`, `annotations` (`[{url, title}]`) | `color` is dropped. Each annotation becomes a final line `[title](url)` when the URL is `http` or `https`. |
 
 ## 4. Threat model and hard limits

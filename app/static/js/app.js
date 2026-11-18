@@ -25844,6 +25844,11 @@ async function showSettings() {
     title: 'Import from Evernote',
     note: 'Only text, tags, dates and attachments are imported; formatting is converted to Markdown.',
   }));
+  document.getElementById('import-keep-file').addEventListener('change', (e) => importParsedNotes(e, {
+    parse: (files) => NotesKeepImport.parse(files),
+    title: 'Import from Google Keep',
+    note: 'Notes in the Keep trash are skipped; colors are not imported.',
+  }));
 
   function markdownSkippedReport(head, skipped) {
     if (!skipped.length) return head;
