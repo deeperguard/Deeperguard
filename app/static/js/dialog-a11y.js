@@ -184,6 +184,7 @@
     danger = false,
     verifyPassword = null,
     maxAttempts = 3,
+    checkbox = null,
   } = {}) {
     const d = doc();
     const backdrop = d.getElementById('confirm-backdrop');
@@ -197,6 +198,12 @@
     const pwWrap = d.getElementById('confirm-password-wrap');
     const pwInput = d.getElementById('confirm-password');
     const pwError = d.getElementById('confirm-password-error');
+    const optWrap = d.getElementById('confirm-option-wrap');
+    const optInput = d.getElementById('confirm-option');
+    const optText = d.getElementById('confirm-option-text');
+    const optWarn = d.getElementById('confirm-option-warning');
+    // An opt-in checkbox cannot fall back to a plain confirm: without it, refuse.
+    if (checkbox && !(optWrap && optInput && optText && optWarn)) return null;
     if (!backdrop || !dialog || !titleEl || !messageEl || !okBtn || !cancelBtn) return null;
     // A password check cannot fall back to a plain confirm: without the field, refuse.
     if (verifyPassword && !(pwWrap && pwInput && pwError)) return null;
@@ -222,6 +229,23 @@
         pwError.hidden = true;
         pwError.textContent = '';
       }
+      let onOptChange = null;
+      if (optWrap) {
+        optWrap.hidden = !checkbox;
+        optInput.checked = false;
+        optWarn.hidden = true;
+        optWarn.textContent = '';
+        if (checkbox) {
+          optText.textContent = checkbox.label;
+          // The warning is shown only while the box is ticked.
+          onOptChange = () => {
+            optWarn.textContent = optInput.checked ? (checkbox.warning || '') : '';
+            optWarn.hidden = !optInput.checked || !checkbox.warning;
+            if (checkbox.confirmLabelChecked) okBtn.textContent = optInput.checked ? checkbox.confirmLabelChecked : confirmLabel;
+          };
+          optInput.addEventListener('change', onOptChange);
+        }
+      }
       backdrop.hidden = false;
       dialog.hidden = false;
       const unlock = d.getElementById('unlock-screen');
@@ -232,6 +256,13 @@
       const cleanup = (value) => {
         if (done) return;
         done = true;
+        if (checkbox) checkbox.checked = value === true && optInput.checked;
+        if (optWrap) {
+          optWrap.hidden = true;
+          optInput.checked = false;
+          optWarn.hidden = true;
+          if (onOptChange) optInput.removeEventListener('change', onOptChange);
+        }
         if (pwInput) pwInput.value = '';
         if (pwWrap) pwWrap.hidden = true;
         pwInput?.removeEventListener('keydown', onPwKey);

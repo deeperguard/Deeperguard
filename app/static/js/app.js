@@ -24840,6 +24840,14 @@ async function showSettings() {
       return;
     }
     const lockedCount = notes.filter((n) => !n.content?.trashed && n.content?.locked).length;
+    const twoFaOption = {
+      label: '2FA-geheimen meenemen (iedereen met dit bestand kan je codes maken)',
+      warning: 'Waarschuwing: 2fa/otpauth.txt bevat de echte geheimen van al je 2FA-accounts. '
+        + 'Wie dit bestand heeft, kan je inlogcodes maken, ook zonder je telefoon of wachtwoord. '
+        + 'Bewaar het alleen op een veilige plek en verwijder het zodra je het niet meer nodig hebt.',
+      confirmLabelChecked: 'Export with 2FA secrets',
+      checked: false,
+    };
     const confirmed = await confirmAction(
       'This ZIP is NOT encrypted. Anyone who gets the file can read your notes and attachments; '
         + 'your vault password does not protect it. For a safe backup use "Save backup file" instead. '
@@ -24851,6 +24859,7 @@ async function showSettings() {
         title: 'Export without encryption?',
         confirmLabel: 'Export unencrypted ZIP',
         danger: true,
+        checkbox: twoFaOption,
         verifyPassword: (typed) => NotesStore.verifyVaultPassword(typed),
       },
     );
@@ -24864,6 +24873,8 @@ async function showSettings() {
           const result = await NotesReadableExport.build({
             notes,
             tags: NotesStore.listTags(),
+            include2fa: twoFaOption.checked,
+            totpAccounts: twoFaOption.checked ? NotesStore.listTotpAccounts() : [],
             getAttachment: (id) => NotesStore.get(id),
             getAttachmentBytes: (id) => NotesStore.getAttachmentBytes(id),
             onProgress: ({ done, total, status }) => report({

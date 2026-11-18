@@ -6124,6 +6124,10 @@ body.scan-dialog-open {
 .confirm-dialog h2 { margin: 0 0 8px; font-size: 18px; }
 .confirm-dialog p { margin: 0 0 16px; color: var(--muted); line-height: 1.45; }
 #confirm-message { white-space: pre-line; }
+.confirm-option { margin-bottom: 16px; }
+.confirm-option-label { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer; }
+.confirm-option-label input { margin-top: 3px; flex: none; }
+.confirm-option p { margin: 6px 0 0; }
 #confirm-password-wrap { margin-bottom: 16px; }
 #confirm-password-wrap label { display: block; margin-bottom: 4px; font-size: 13px; color: var(--muted); }
 #confirm-password-wrap input { width: 100%; box-sizing: border-box; }
