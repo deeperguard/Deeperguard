@@ -2507,9 +2507,12 @@ def api_account_vault_keys_recover_commit():
     if status == "bad_proof":
         if data.get("locked_now"):
             _vault_recovery_mail(
-                user, "Recovery key locked",
-                "Too many wrong recovery key attempts on your account. Recovery is locked for a while. "
-                "If this was not you, change your account security settings.",
+                user, "Deeperguard: recovery key locked",
+                "Too many wrong recovery key attempts on your Deeperguard account.\n"
+                "Recovery with the recovery key is locked for a while. Your vault and password did not change.\n"
+                "\n"
+                "Wasn't you? Open deeperguard.com yourself (type it in your browser) "
+                "and go to Settings > Devices to sign out devices you do not recognise, then change your password.\n",
             )
             return _vault_recovery_locked(data["retry_after"])
         return _vault_keys_json({"error": "invalid proof"}, 403)
