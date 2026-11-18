@@ -214,10 +214,11 @@
     }
     let rows = [];
     let states = new Map();
+    let statusKnown = true;
     try {
       rows = await listPasskeys();
       if (rows.length && unlockDeps) {
-        try { states = unlockStates(await vaultKeysStatus()); } catch (err) { /* status stays unknown */ }
+        try { states = unlockStates(await vaultKeysStatus()); } catch (err) { statusKnown = false; }
       }
     } catch (err) {
       if (token !== passkeyListRenderToken) return;
@@ -250,14 +251,15 @@
       const label = document.createElement('span');
       label.textContent = formatPasskeyLabel(row, index);
       info.append(label);
-      const state = states.get(row.credential_id) || 'off';
+      const state = !statusKnown ? 'unknown' : (states.get(row.credential_id) || 'off');
       if (unlockDeps) {
         const status = document.createElement('span');
         status.className = 'settings-hint passkey-unlock-status';
         status.dataset.unlockState = state;
         status.textContent = state === 'on' ? 'Vault unlock: on'
           : state === 'stale' ? 'Vault unlock: out of date, turn it on again'
-            : 'Vault unlock: off';
+            : state === 'unknown' ? 'Vault unlock: status unknown'
+              : 'Vault unlock: off';
         info.append(document.createElement('br'), status);
       }
       const actions = document.createElement('span');
@@ -266,6 +268,7 @@
         const toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'btn ghost sm passkey-unlock-toggle';
+        toggle.disabled = state === 'unknown';
         toggle.textContent = state === 'on' ? 'Turn off vault unlock' : 'Turn on vault unlock';
         toggle.addEventListener('click', async () => {
           toggle.disabled = true;

@@ -1850,8 +1850,11 @@
               <label for="passkey-vault-password">Account password (to change vault unlock)</label>
               <input type="password" id="passkey-vault-password" autocomplete="current-password">
             </div>
+            <div class="settings-row">
+              <label for="passkey-add-unlock">Also open the vault with the new passkey</label>
+              <input type="checkbox" id="passkey-add-unlock">
+            </div>
             <div class="settings-actions">
-              <label class="settings-hint"><input type="checkbox" id="passkey-add-unlock"> Also open the vault with the new passkey</label>
               <button type="button" id="btn-add-passkey" class="btn">Add passkey</button>
             </div>
             <p id="passkey-signin-passkey-count" class="settings-hint">—</p>
