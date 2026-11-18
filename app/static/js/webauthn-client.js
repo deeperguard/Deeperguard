@@ -77,7 +77,64 @@
     };
   }
 
+  // ---- PRF extension (docs/VAULT_RECOVERY.md 1.4) ----
+  // Before a ceremony: 'unsupported' (browser has no WebAuthn, or reports no PRF),
+  // 'available' (browser reports PRF) or 'unknown' (WebAuthn present, browser cannot
+  // say; only a ceremony shows it). The authenticator can still return nothing.
+  async function prfBrowserSupport() {
+    const PKC = global.PublicKeyCredential;
+    if (typeof PKC === 'undefined') return 'unsupported';
+    if (typeof PKC.getClientCapabilities === 'function') {
+      try {
+        const caps = await PKC.getClientCapabilities();
+        if (caps && caps['extension:prf'] === true) return 'available';
+        if (caps && caps['extension:prf'] === false) return 'unsupported';
+      } catch (err) {
+        /* fall through to unknown */
+      }
+    }
+    return 'unknown';
+  }
+
+  function prfExtension(salt) {
+    if (!(salt instanceof Uint8Array) || !salt.length) throw new Error('Missing PRF salt');
+    return { prf: { eval: { first: salt } } };
+  }
+
+  // After a ceremony: the 32-byte PRF output, or null when browser/authenticator gave none.
+  function prfOutputFromCredential(credential) {
+    const results = credential && typeof credential.getClientExtensionResults === 'function'
+      ? credential.getClientExtensionResults()
+      : null;
+    const first = results && results.prf && results.prf.results && results.prf.results.first;
+    if (!first) return null;
+    let bytes = null;
+    if (first instanceof ArrayBuffer) bytes = new Uint8Array(first);
+    else if (ArrayBuffer.isView(first)) bytes = new Uint8Array(first.buffer, first.byteOffset, first.byteLength);
+    return bytes && bytes.length === 32 ? new Uint8Array(bytes) : null;
+  }
+
+  // Runs a get() ceremony asking for PRF output. Returns {status:'ok', output, credentialId}
+  // or {status:'unsupported', reason:'browser'|'authenticator'}. A cancelled ceremony throws.
+  async function requestPrfOutput(authOptions, salt) {
+    if (await prfBrowserSupport() === 'unsupported') return { status: 'unsupported', reason: 'browser' };
+    const publicKey = {
+      ...authOptions,
+      userVerification: 'required',
+      extensions: { ...(authOptions.extensions || {}), ...prfExtension(salt) },
+    };
+    const credential = await global.navigator.credentials.get({ publicKey });
+    if (!credential) throw new Error('Passkey request was cancelled');
+    const output = prfOutputFromCredential(credential);
+    if (!output) return { status: 'unsupported', reason: 'authenticator' };
+    return { status: 'ok', output, credentialId: credential.id };
+  }
+
   global.NotesWebAuthn = {
+    prfBrowserSupport,
+    prfExtension,
+    prfOutputFromCredential,
+    requestPrfOutput,
     bufferFromBase64url,
     bufferToBase64url,
     prepareRegistrationOptions,

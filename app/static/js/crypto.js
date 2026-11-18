@@ -305,6 +305,15 @@ const NotesCrypto = (() => {
     return { raw: hkdfSha256(recoveryKey, recoverySalt, 'deeperguard/recovery/v1', 32) };
   }
 
+  // WK_prf (docs/VAULT_RECOVERY.md 1.4). The authenticator already makes its output
+  // per credential and per salt, so every passkey gets its own wrap key.
+  function derivePrfWrapKey(prfOutput) {
+    if (!(prfOutput instanceof Uint8Array) || prfOutput.length !== 32) {
+      throw new Error('Invalid passkey PRF output');
+    }
+    return { raw: hkdfSha256(prfOutput, null, 'deeperguard/prf/v1', 32) };
+  }
+
   function vaultKeyId(vaultKey) {
     const raw = isRawKey(vaultKey) ? vaultKey.raw : null;
     if (!raw) throw new Error('Missing encryption key');
@@ -482,6 +491,7 @@ const NotesCrypto = (() => {
     encodeRecoveryKey,
     decodeRecoveryKey,
     deriveRecoveryWrapKey,
+    derivePrfWrapKey,
     vaultKeyId,
     wrapVaultKey,
     unwrapVaultKey,

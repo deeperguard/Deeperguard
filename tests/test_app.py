@@ -1993,6 +1993,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_recovery_key_crypto(self):
         self._run_node_script("test_recovery_key_crypto.js")
 
+    def test_client_webauthn_prf(self):
+        self._run_node_script("test_webauthn_prf.js")
+
     def test_client_attachment_encryption(self):
         self._run_node_script("test_store_attachments.js")
 

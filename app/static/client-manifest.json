@@ -158,10 +158,10 @@
       "url": "/static/js/crypto-worker.0f28b964f018c3fb.js"
     },
     "js/crypto.js": {
-      "bytes": 17128,
-      "sha256": "8e3578d2fca08a5c0847a66c81a9e95eee72a6541fee5b7dec971ba88511ef63",
-      "sri": "sha384-NcTGlGfJCzKl2nZghZYz1ptyY1CHTcC6X0E1YMXyw7QC0urKd970pdnBomzBbU/0",
-      "url": "/static/js/crypto.8e3578d2fca08a5c.js"
+      "bytes": 17562,
+      "sha256": "0e22a16b9b11efd7022b73d813fd57fa49c9dbfdf00bdd13991ce5a599984f78",
+      "sri": "sha384-cPW1JqhXETMEPRcUOi5xfYMIolItID9CtNgRcJgcEbOqRMJjFXZ1zDzhNC8Nxjjz",
+      "url": "/static/js/crypto.0e22a16b9b11efd7.js"
     },
     "js/deletion-sync-honesty.js": {
       "bytes": 2823,
@@ -602,13 +602,13 @@
       "url": "/static/js/verify-ask-ai-provider.98e9aaa9032db56f.js"
     },
     "js/webauthn-client.js": {
-      "bytes": 3587,
-      "sha256": "eabaca9a0a3681e4af92d2d870bd8ef7af70e3166d8cd86a9b82a06040642147",
-      "sri": "sha384-MhzbRLp7MnjbnIIIO238+h6APfJ9cKXk9LOr/KSzzcKXMDPY2IgBbpaFrNgRF1zh",
-      "url": "/static/js/webauthn-client.eabaca9a0a3681e4.js"
+      "bytes": 6252,
+      "sha256": "83875c33b2c3e80ffa3827da7d34c86391f32628420bde5cdc58c460d8a2e111",
+      "sri": "sha384-ljFBVE/YBimwCgI08APQ9frBQS7DFmEnMIcWuyk/nQD3K3n4Lxn5MQZFwM6m4TWD",
+      "url": "/static/js/webauthn-client.83875c33b2c3e80f.js"
     }
   },
   "created": 0,
-  "manifest_sha256": "9b36c617da3f615ae9567d62f115bd21b14ffb711f80c116b4fe224b060bb412",
+  "manifest_sha256": "e5bd9cd4ba013678c94f4776d4fd186eac2277d61dfa0bad648f21fe5520987e",
   "version": 1
 }
