@@ -2178,6 +2178,9 @@ class NotesAppTests(unittest.TestCase):
     def test_client_standard_notes_import(self):
         self._run_node_script("test_snimport.js")
 
+    def test_client_zip_reader_writer(self):
+        self._run_node_script("test_ziplib.js")
+
     def test_client_secure_send_note_attachments(self):
         self._run_node_script("test_secure_send_note_attachments.js")
 
