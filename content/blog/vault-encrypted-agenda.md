@@ -54,4 +54,10 @@ Agenda uses the same on-device AES-GCM and SRP design as notes — details on ou
 
 Updated 2026-11-14: Remote calendar subscriptions (feed links) are now available in Agenda, so they were removed from the out-of-scope list; see [calendar subscriptions in Agenda](/blog/agenda-calendar-subscriptions). Multi-user sharing and two-way cloud calendar sync are still not offered.
 
-Updated: 2026-11-18: Events can now carry reminders. In the event editor you tick offsets (at start, 5, 10, 15, 30 minutes, 1 hour, 1 day before, or your own number of minutes), and a calendar can have default reminders for new events. The offsets are stored inside the encrypted event. A scheduler in your browser shows each reminder once, as a banner in the app and, if you allowed it, as a browser notification. **These reminders only work while Deeperguard is open in a browser tab or the installed app and your vault is unlocked.** They send no email and no push message, and nothing about them goes to the server. A reminder that came due while the app was closed (up to 24 hours back) is shown once, marked "Missed", the next time you open it. Email and push reminders, which can reach you when the app is closed, are a separate, optional Pro feature; the server then sees when a reminder is due and its channel, never the title, location or notes.
+Updated: 2026-11-18: Events can now carry reminders.
+
+- **Setting them:** in the event editor you tick offsets (at start, 5, 10, 15, 30 minutes, 1 hour, 1 day before, or your own number of minutes). A calendar can have default reminders for new events.
+- **Where they live:** the offsets are stored inside the encrypted event. A scheduler in your browser shows each reminder once, as a banner in the app and, if you allowed it, as a browser notification. Nothing about them goes to the server.
+- **Limits:** **these reminders only work while Deeperguard is open in a browser tab or the installed app and your vault is unlocked.** They send no email and no push message.
+- **Missed ones:** a reminder that came due while the app was closed (up to 24 hours back) is shown once, marked "Missed", the next time you open it.
+- **Email and push:** these can reach you when the app is closed. They are a separate, optional Pro feature; the server then sees when a reminder is due and its channel, never the title, location or notes.

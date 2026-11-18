@@ -62,9 +62,10 @@ Be clear-eyed about this mode: it is an exception to "the server only sees ciphe
 
 - **It does not keep your edits to subscribed events.** The next refresh overwrites them. The preview says so before you subscribe. Put your own notes in a separate event or an encrypted note.
 - **It does not hide everything.** In direct mode the provider sees your IP address and when you refresh. In relay mode our server sees the link and the calendar while it fetches.
+- **It does not import reminders from the feed.** Alarms (VALARM) in a feed are skipped. Reminders you set yourself are for your own events; edits to subscribed events are overwritten on the next refresh.
 - **It does not write back.** Subscriptions are read-only. There is no two-way sync with Google, Apple or other cloud calendars, and no shared calendars.
 - **It does not refresh while you're away.** If no device has the vault open, nothing is fetched.
 
 One honest note on the design: to allow direct fetching, the worker may connect to any `https` host, while the main page stays limited to our own server. Our security documentation lists this as a known trade-off. If you never add a subscription, the worker never starts.
 
-Updated: 2026-11-18: Subscriptions now have a colour, a name you can edit together with the link, an on/off switch, and duplicate feed events are folded into one.
+Updated: 2026-11-18: Subscriptions now have a colour, a name you can edit together with the link, an on/off switch, and duplicate feed events are folded into one. Reminders (VALARM) in a feed are not imported.
