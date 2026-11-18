@@ -2451,6 +2451,84 @@ def api_account_vault_keys_recovery_delete():
     return _vault_keys_json({"ok": True, "key_rev": key_rev, "key_id": key_id})
 
 
+@app.put("/api/account/vault-keys/prf/<credential_id>")
+def api_account_vault_keys_prf_put(credential_id: str):
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid body"}), 400
+    gate = _vault_keys_write_gate(body)
+    if gate:
+        return gate
+    fields, problem = vault_keys.parse_prf_put(body)
+    if fields is None:
+        return jsonify({"error": problem}), 400
+    status, key_rev, key_id = db.put_prf_wrap(int(user["id"]), credential_id, **fields)
+    if status not in ("ok", "unchanged"):
+        return _vault_keys_write_conflict(status, key_rev, key_id)
+    auth.consume_vault_keys_token()
+    return _vault_keys_json({"ok": True, "key_rev": key_rev, "key_id": key_id})
+
+
+@app.post("/api/account/vault-keys/prf/<credential_id>/options")
+def api_account_vault_keys_prf_options(credential_id: str):
+    """WebAuthn assertion options for one passkey, plus the (non-secret) PRF salt it needs."""
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    if _auth_rate_limited("vault-keys-prf", str(user["email"] or "").strip().lower()):
+        return jsonify({"error": "too many attempts"}), 429
+    uid = int(user["id"])
+    stored = db.get_webauthn_credential(credential_id)
+    if not stored or int(stored["user_id"]) != uid:
+        return _vault_keys_json({"error": "not found"}, 404)
+    if not webauthn_mod.WEBAUTHN_AVAILABLE:
+        return jsonify({"error": "webauthn not available on server"}), 501
+    host_error = webauthn_mod.passkey_host_error()
+    if host_error:
+        return jsonify({"error": host_error}), 400
+    try:
+        options = webauthn_mod.authentication_options([dict(stored)])
+    except Exception as exc:
+        return _generic_client_error("vault-keys prf options failed", exc, status=400)
+    return _vault_keys_json({"ok": True, "options": options, "prf_salt": db.get_prf_salt(uid, credential_id)})
+
+
+@app.post("/api/account/vault-keys/prf/<credential_id>/unwrap")
+def api_account_vault_keys_prf_unwrap(credential_id: str):
+    """Release this passkey's wrapped vault key, only after a WebAuthn assertion with it."""
+    user, err = _vault_keys_user()
+    if err:
+        return err
+    if not auth.csrf_ok():
+        return jsonify({"error": "invalid CSRF token"}), 400
+    body = request.get_json(silent=True) or {}
+    credential = body.get("credential")
+    if not isinstance(credential, dict) or str(credential.get("id") or "") != credential_id:
+        return _vault_keys_json({"error": "invalid credentials"}, 400)
+    if _auth_rate_limited("vault-keys-prf", str(user["email"] or "").strip().lower()):
+        return jsonify({"error": "too many attempts"}), 429
+    uid = int(user["id"])
+    stored = db.get_webauthn_credential(credential_id)
+    if not stored or int(stored["user_id"]) != uid:
+        return _vault_keys_json({"error": "invalid credentials"}, 401)
+    if not webauthn_mod.WEBAUTHN_AVAILABLE:
+        return jsonify({"error": "webauthn not available on server"}), 501
+    try:
+        verified = webauthn_mod.verify_authentication(credential, dict(stored))
+        db.update_webauthn_sign_count(verified["credential_id"], verified["sign_count"])
+    except Exception as exc:
+        return _generic_client_error("vault-keys prf unwrap failed", exc, status=401)
+    data = db.get_prf_wrap(uid, credential_id)
+    if not data:
+        return _vault_keys_json({"error": "no_prf_wrap"}, 404)
+    return _vault_keys_json({"ok": True, **data})
+
+
 def _vault_recovery_locked(retry_after: int):
     resp = _vault_keys_json({"error": "recovery locked", "retry_after": int(retry_after)}, 429)
     resp.headers["Retry-After"] = str(int(retry_after))

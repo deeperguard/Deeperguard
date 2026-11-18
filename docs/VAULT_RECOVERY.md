@@ -335,6 +335,22 @@ revoking therefore needs the password even on a passkey-unlocked device.
 | `PUT /api/account/vault-keys/recover/pending` | session | `proof, expected_key_rev, from_key_id, to_key_id, wrap_version, wrap` | verify `proof` (counts a failure when wrong), store `vault_pending_rekey` (3.2 step 4) |
 | `POST /api/account/vault-keys/recover/commit` | session | `proof, expected_key_rev, from_key_id, to_key_id, srp_salt, srp_verifier, srp_kdf_version, new_recovery:{recovery_salt, wrap, wrap_version, proof_hash}` | the atomic commit of 3.2 step 7 |
 
+**Implemented storage for PRF wraps (deviates from the rows above).** The salt is
+stored **per passkey** next to its wrap, in `vault_prf_wraps(credential_id PK, user_id,
+key_id, wrap_version, prf_salt, wrap, created_at)` with `credential_id` referencing
+`webauthn_credentials ON DELETE CASCADE`; there is no `users.prf_salt`. The table is
+created with `CREATE TABLE IF NOT EXISTS`, so existing passkeys and accounts are not
+touched. `PUT /api/account/vault-keys/prf/<credential_id>` follows the CAS rules of 2.2
+(an unchanged retry answers 200). The `GET .../prf` row is replaced by two calls on one
+passkey: `POST .../prf/<credential_id>/options` (session + CSRF) returns assertion
+options and that passkey's `prf_salt` (not secret; `''` without a wrap), and
+`POST .../prf/<credential_id>/unwrap` verifies the WebAuthn assertion (single-use
+challenge, signature, sign count) made with exactly that passkey and only then returns
+its wrap, and only when `key_id` equals the account's current `vault_key_id`.
+`GET /api/account/vault-keys` lists `prf:[{credential_id, created_at, current}]`, never
+a wrap. Deleting a passkey deletes its wrap and bumps `vault_key_rev` in the same
+transaction; when no wrap of any kind is left, `vault_key_id` is freed.
+
 Changes to existing endpoints:
 
 * `POST /api/account/password/prove` (`app.py:2187`): see 6.2.

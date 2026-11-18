@@ -331,6 +331,17 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS vault_prf_wraps (
+            credential_id TEXT PRIMARY KEY
+                REFERENCES webauthn_credentials(credential_id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            key_id TEXT NOT NULL,
+            wrap_version INTEGER NOT NULL,
+            prf_salt TEXT NOT NULL,
+            wrap TEXT NOT NULL,
+            created_at REAL NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS user_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -910,15 +921,27 @@ def update_webauthn_sign_count(credential_id: str, sign_count: int) -> None:
 
 
 def delete_webauthn_credential(user_id: int, credential_id: str) -> bool:
+    """Delete a passkey together with its PRF-wrapped vault key copy, in one transaction."""
+    uid = int(user_id)
     with tx() as conn:
+        had_wrap = conn.execute(
+            "SELECT 1 FROM vault_prf_wraps WHERE user_id = ? AND credential_id = ?",
+            (uid, credential_id),
+        ).fetchone()
         cur = conn.execute(
             """
             DELETE FROM webauthn_credentials
             WHERE user_id = ? AND credential_id = ?
             """,
-            (user_id, credential_id),
+            (uid, credential_id),
         )
-        return int(cur.rowcount or 0) > 0
+        if int(cur.rowcount or 0) == 0:
+            return False
+        if had_wrap:
+            conn.execute("DELETE FROM vault_prf_wraps WHERE credential_id = ?", (credential_id,))
+            conn.execute("UPDATE users SET vault_key_rev = vault_key_rev + 1 WHERE id = ?", (uid,))
+            _free_key_id_without_wraps(conn, uid)
+        return True
 
 
 def user_password_login_disabled_by_id(user_id: int) -> bool:
@@ -1525,9 +1548,21 @@ def get_vault_keys_status(user_id: int) -> dict | None:
         "SELECT wrap_version, created_at, last_used_at FROM vault_recovery_wraps WHERE user_id = ?",
         (int(user_id),),
     ).fetchone()
+    prf = conn.execute(
+        "SELECT credential_id, created_at, key_id FROM vault_prf_wraps WHERE user_id = ? ORDER BY created_at",
+        (int(user_id),),
+    ).fetchall()
     return {
         "key_id": str(user["vault_key_id"]),
         "key_rev": int(user["vault_key_rev"]),
+        "prf": [
+            {
+                "credential_id": str(r["credential_id"]),
+                "created_at": float(r["created_at"]),
+                "current": str(r["key_id"]) == str(user["vault_key_id"]),
+            }
+            for r in prf
+        ],
         "recovery_locked_until": float(user["recovery_locked_until"] or 0),
         "recovery": {
             "active": row is not None,
@@ -1546,6 +1581,110 @@ def _vault_keys_conflict(conn: sqlite3.Connection, user_id: int, expected_rev: i
         return "not_found", 0, ""
     code = "key_rev_mismatch" if int(cur["vault_key_rev"]) != expected_rev else "key_id_mismatch"
     return code, int(cur["vault_key_rev"]), str(cur["vault_key_id"])
+
+
+def _free_key_id_without_wraps(conn: sqlite3.Connection, user_id: int) -> None:
+    """With no wrap left the key id is free again (VAULT_RECOVERY 2.2)."""
+    left = conn.execute(
+        """
+        SELECT 1 FROM vault_recovery_wraps WHERE user_id = ?
+        UNION ALL SELECT 1 FROM vault_prf_wraps WHERE user_id = ?
+        """,
+        (user_id, user_id),
+    ).fetchone()
+    if not left:
+        conn.execute("UPDATE users SET vault_key_id = '' WHERE id = ?", (user_id,))
+
+
+def put_prf_wrap(
+    user_id: int,
+    credential_id: str,
+    *,
+    expected_key_rev: int,
+    key_id: str,
+    wrap_version: int,
+    prf_salt: str,
+    wrap_json: str,
+) -> tuple[str, int, str]:
+    """Store or replace one passkey's wrapped vault key with compare-and-set (VAULT_RECOVERY 2.2).
+
+    Status: "ok", "unchanged", "key_rev_mismatch", "key_id_mismatch", "not_found"
+    (also for a credential that is not this user's). Nothing is written unless ok.
+    """
+    uid = int(user_id)
+    with tx() as conn:
+        owned = conn.execute(
+            "SELECT 1 FROM webauthn_credentials WHERE user_id = ? AND credential_id = ?",
+            (uid, credential_id),
+        ).fetchone()
+        if not owned:
+            return "not_found", 0, ""
+        same = conn.execute(
+            """
+            SELECT u.vault_key_rev AS rev FROM vault_prf_wraps w
+            JOIN users u ON u.id = w.user_id
+            WHERE w.credential_id = ? AND w.user_id = ? AND w.key_id = ? AND w.wrap_version = ?
+              AND w.prf_salt = ? AND w.wrap = ? AND u.vault_key_id = ?
+            """,
+            (credential_id, uid, key_id, wrap_version, prf_salt, wrap_json, key_id),
+        ).fetchone()
+        if same:
+            return "unchanged", int(same["rev"]), key_id
+        cur = conn.execute(
+            """
+            UPDATE users
+            SET vault_key_rev = vault_key_rev + 1, vault_key_id = ?
+            WHERE id = ? AND vault_key_rev = ?
+              AND (vault_key_id = ?
+                   OR (NOT EXISTS (SELECT 1 FROM vault_recovery_wraps WHERE user_id = ?)
+                       AND NOT EXISTS (SELECT 1 FROM vault_prf_wraps WHERE user_id = ?)))
+            """,
+            (key_id, uid, int(expected_key_rev), key_id, uid, uid),
+        )
+        if int(cur.rowcount or 0) == 0:
+            return _vault_keys_conflict(conn, uid, int(expected_key_rev))
+        conn.execute(
+            """
+            INSERT INTO vault_prf_wraps
+                (credential_id, user_id, key_id, wrap_version, prf_salt, wrap, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(credential_id) DO UPDATE SET
+                key_id = excluded.key_id, wrap_version = excluded.wrap_version,
+                prf_salt = excluded.prf_salt, wrap = excluded.wrap, created_at = excluded.created_at
+            """,
+            (credential_id, uid, key_id, wrap_version, prf_salt, wrap_json, now()),
+        )
+        row = conn.execute("SELECT vault_key_rev FROM users WHERE id = ?", (uid,)).fetchone()
+        return "ok", int(row["vault_key_rev"]), key_id
+
+
+def get_prf_salt(user_id: int, credential_id: str) -> str:
+    """The (non-secret) salt the passkey needs as PRF input; '' when it has no wrap."""
+    row = connection().execute(
+        "SELECT prf_salt FROM vault_prf_wraps WHERE user_id = ? AND credential_id = ?",
+        (int(user_id), credential_id),
+    ).fetchone()
+    return str(row["prf_salt"]) if row else ""
+
+
+def get_prf_wrap(user_id: int, credential_id: str) -> dict | None:
+    """The stored copy, only when it wraps the account's current key. Callers must have
+    verified a WebAuthn assertion with this credential first."""
+    row = connection().execute(
+        """
+        SELECT w.key_id, w.wrap_version, w.prf_salt, w.wrap, u.vault_key_rev
+        FROM vault_prf_wraps w JOIN users u ON u.id = w.user_id
+        WHERE w.user_id = ? AND w.credential_id = ? AND w.key_id = u.vault_key_id
+        """,
+        (int(user_id), credential_id),
+    ).fetchone()
+    if not row:
+        return None
+    return {
+        "key_id": str(row["key_id"]), "key_rev": int(row["vault_key_rev"]),
+        "wrap_version": int(row["wrap_version"]), "prf_salt": str(row["prf_salt"]),
+        "wrap": json.loads(row["wrap"]),
+    }
 
 
 def put_recovery_wrap(
@@ -1583,9 +1722,10 @@ def put_recovery_wrap(
                 recovery_failed_count = 0, recovery_locked_until = 0, recovery_lock_level = 0
             WHERE id = ? AND vault_key_rev = ?
               AND (vault_key_id = ?
-                   OR NOT EXISTS (SELECT 1 FROM vault_recovery_wraps WHERE user_id = ?))
+                   OR (NOT EXISTS (SELECT 1 FROM vault_recovery_wraps WHERE user_id = ?)
+                       AND NOT EXISTS (SELECT 1 FROM vault_prf_wraps WHERE user_id = ?)))
             """,
-            (key_id, uid, int(expected_key_rev), key_id, uid),
+            (key_id, uid, int(expected_key_rev), key_id, uid, uid),
         )
         if int(cur.rowcount or 0) == 0:
             return _vault_keys_conflict(conn, uid, int(expected_key_rev))
@@ -1802,12 +1942,9 @@ def delete_recovery_wrap(user_id: int, *, expected_key_rev: int) -> tuple[str, i
         ).fetchone()
         if not has:
             return "no_recovery_key", int(expected_key_rev), ""
-        # No other wraps exist yet, so the account is back to "no wraps": free the key id.
-        conn.execute(
-            "UPDATE users SET vault_key_rev = vault_key_rev + 1, vault_key_id = '' WHERE id = ?",
-            (uid,),
-        )
+        conn.execute("UPDATE users SET vault_key_rev = vault_key_rev + 1 WHERE id = ?", (uid,))
         conn.execute("DELETE FROM vault_recovery_wraps WHERE user_id = ?", (uid,))
+        _free_key_id_without_wraps(conn, uid)
         return "ok", int(expected_key_rev) + 1, ""
 
 
