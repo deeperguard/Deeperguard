@@ -2,10 +2,10 @@
   "asset_count": 105,
   "assets": {
     "css/app.css": {
-      "bytes": 364837,
-      "sha256": "f65a14724b81752c863106215ee2b7cf9146cd76afc304f4fb7189f796473060",
-      "sri": "sha384-kTznahEmojVIDR1u5zh+IOjqDoiuMaLZfnheoylVjn5X2qHcw3SD5HTmrdpps9h9",
-      "url": "/static/css/app.f65a14724b81752c.css"
+      "bytes": 365055,
+      "sha256": "e275e7cf62116fcadc231db4fdd965b2d3dfc28a1c6e16d01e3dd571533fd1cb",
+      "sri": "sha384-/ST/xsFqeN6SMgaIdwsyTGeAaTudnPAcz1QlA+bMQwU4UhR++hocZfwD5EkCMTba",
+      "url": "/static/css/app.e275e7cf62116fca.css"
     },
     "css/marketing.css": {
       "bytes": 55848,
@@ -98,10 +98,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1076086,
-      "sha256": "7b3caa7364506967bc02495bd15119c2372ac28ca889eb32dca23bea863cf335",
-      "sri": "sha384-cLcjv03HVZFZIpNua7LcK7gb1cm4GH60ahFgM89f0G6bJG7iHxrQofFrVeZ7Dk7Y",
-      "url": "/static/js/app.7b3caa7364506967.js"
+      "bytes": 1076920,
+      "sha256": "058927ecbdc3b35e6c5e684e1571b85d8a9b07c1765b11a86f879cb9a4a4d59d",
+      "sri": "sha384-YGt3cy3Kw5QWOwZuV8rX79cgLDwi7dUYxTq9Y0ZnJjoJDxkthP4hVcbxN1q0fAyJ",
+      "url": "/static/js/app.058927ecbdc3b35e.js"
     },
     "js/auth-pages.js": {
       "bytes": 43723,
@@ -326,10 +326,10 @@
       "url": "/static/js/photo-ocr-preprocess.ed3aeeb103df06bc.js"
     },
     "js/preview.js": {
-      "bytes": 69197,
-      "sha256": "39d722608d59a295ae83f10ea873effe4b6dbcd63de54beb20230c6883cb1c66",
-      "sri": "sha384-1RQ7NHIJrDzyGL1ww4Gwn4OOLgD0Frc6OqHthsXrma7jIIV06hfdjK58pAFdGZdh",
-      "url": "/static/js/preview.39d722608d59a295.js"
+      "bytes": 77447,
+      "sha256": "5a8421e9cd5ef82bbed3b65a721ea8ccaa7c770e5028e9c6b81036dc54cea080",
+      "sri": "sha384-vv8LdMOD+cWF0XU6u9UoEzzdzLt6HXPegmWo0G3UJwZdJsf901kOaGkrCHUa6DJR",
+      "url": "/static/js/preview.5a8421e9cd5ef82b.js"
     },
     "js/quick-capture.js": {
       "bytes": 4236,
@@ -633,6 +633,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "2ef5220ca1fd265e0f7bc57dee089f95e9fd34fe348d8153f391d76d9dd5c66f",
+  "manifest_sha256": "336edb1a7a41ad873e30f3fed252da76735f8872830a5da1a79fc54e89756d4d",
   "version": 1
 }

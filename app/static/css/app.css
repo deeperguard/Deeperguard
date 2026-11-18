@@ -7000,6 +7000,18 @@ mark.search-hit-current {
 .doc-page-wrap canvas.doc-page {
   image-rendering: auto;
 }
+.doc-page-wrap.doc-page-pending {
+  background: #fff;
+}
+.doc-too-large {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 16px;
+  text-align: center;
+  line-height: 1.4;
+}
 .doc-page-wrap canvas.doc-page-tile {
   position: absolute;
   pointer-events: none;
