@@ -397,7 +397,8 @@ recovery code never opens the vault; it only reaches this step.
 3. User chooses a new password. Client derives `VK_new = deriveKey(new, kdf_salt, v)`
    with the account's current `vault_kdf_version`, and the new SRP verifier
    (`NotesSrpAuth.makeVerifier`, `srp-auth.js:479`).
-4. `PUT recover/pending` with `proof`, `wrap = AES-GCM(VK_old, VK_new, type=pending-rekey, key_id=from_key_id)`.
+4. `PUT recover/pending` with `proof`, `wrap = AES-GCM(VK_old, VK_new, type=pending-rekey, key_id=to_key_id)`
+   (`key_id` in the AAD is the id of the wrapped key, as for every wrap in 1.2).
    Wrong proof: failure counted (3.3), nothing stored. This is the checkpoint that
    makes interruption recoverable (7.1).
 5. Client re-encrypts every item and attachment under `VK_new` using the existing
@@ -407,6 +408,8 @@ recovery code never opens the vault; it only reaches this step.
    `proof_hash2`) and shows it; the user must confirm they stored it **before** the
    commit (otherwise a lost `RK2` leaves no recovery path; if they cannot
    confirm, the commit is not sent and step 4's pending state is kept).
+   The client (`NotesStore.recoverWithRecoveryKey`) asks for this confirmation
+   before step 4, so cancelling it changes nothing on the server.
 7. `POST recover/commit` in **one transaction**: verify `proof`, `key_rev` and
    `from_key_id`; `update_user_srp_verifier` (bumps `password_changed_at` and
    `auth_security_at`, like `app.py:2271`); `vault_key_id = to_key_id`;
@@ -690,7 +693,7 @@ behaviour (DB rows, ciphertext bytes, HTTP status, visible UI), not on source te
 - [ ] N4 Existing sign-in-only passkey after password proof: PRF result -> wrap uploaded; no result -> "new passkey needed", nothing uploaded.
 
 ### 9.6 Interrupted migration
-- [ ] E8 Kill the page between `recover/pending` and the end of the re-encrypt push (abort the request after N rows): reload, sign in, `RK`, finish; every item readable; no row lost; final state equals E5.
+- [x] E8 (`tests/test_e2e_vault_recovery_flow.py`) Kill the page between `recover/pending` and the end of the re-encrypt push (abort the request after N rows): reload, sign in, `RK`, finish; every item readable; no row lost; final state equals E5.
 - [ ] E9 Enrollment request dropped before response: retry is idempotent (200, one row).
 - [ ] E10 Passkey created but PRF step cancelled: passkey signs in, list shows "no vault unlock yet", finishing works.
 - [ ] P11 Pending row expires after 24 h; expired row is ignored and cleaned; commit with a mismatching `to_key_id` is rejected.
