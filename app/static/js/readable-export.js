@@ -1,5 +1,5 @@
 /*
- * Readable (unencrypted) ZIP export of all notes and their attachments.
+ * Readable (unencrypted) ZIP export of all notes, their attachments and the agenda.
  * Layout, naming and front-matter: docs/IMPORT_EXPORT_SPEC.md section 2.
  * Pure function over data the caller already holds in memory: it makes no
  * network request and writes nothing to disk. The caller owns the download.
@@ -8,7 +8,10 @@
  *   onProgress, now, appBuild }) -> Promise<null | { bytes, filename, counts, notExported }>
  *   notes: vault items {uuid, content}; tags: tag items; getAttachment(uuid) -> item;
  *   getAttachmentBytes(uuid) -> Promise<Uint8Array>. include2fa (default false) + totpAccounts
- *   (vault items) add 2fa/otpauth.txt; without include2fa no secret is read or written. Returns null when no note qualifies.
+ *   (vault items) add 2fa/otpauth.txt; without include2fa no secret is read or written.
+ *   agendaEvents: decrypted agenda events (NotesStore.listAgendaEvents()) -> agenda/agenda.ics,
+ *   built with NotesAgendaIcs; throws when that module is missing. Returns null when no note
+ *   and no agenda event qualifies.
  */
 const NotesReadableExport = (() => {
   const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
@@ -90,7 +93,7 @@ const NotesReadableExport = (() => {
 
   async function build({
     notes, tags = [], getAttachment, getAttachmentBytes, onProgress, now = new Date(), appBuild = '',
-    include2fa = false, totpAccounts = [],
+    include2fa = false, totpAccounts = [], agendaEvents = [],
   }) {
     const encoder = new TextEncoder();
     const tagTitles = new Map(tags.map((t) => [t.uuid, t.content?.title || '']));
@@ -102,7 +105,8 @@ const NotesReadableExport = (() => {
       else if (note.content?.locked) locked += 1;
       else eligible.push(note);
     }
-    if (!eligible.length) return null;
+    const events = (agendaEvents || []).filter((ev) => ev && ev.start && ev.end);
+    if (!eligible.length && !events.length) return null;
     eligible.sort((a, b) => String(a.content.created_at || '').localeCompare(String(b.content.created_at || ''))
       || String(a.uuid).localeCompare(String(b.uuid)));
 
@@ -177,6 +181,12 @@ const NotesReadableExport = (() => {
     }
 
     const counts = { notes: eligible.length, attachments: attachmentCount };
+    if (events.length) {
+      const Ics = agendaIcsLib();
+      const icsText = Ics.buildIcsCalendarFromEvents(Ics.flattenEventsForIcsExport(events));
+      entries.push({ name: 'agenda/agenda.ics', bytes: encoder.encode(icsText) });
+      counts.events = events.length;
+    }
     const notExported = [];
     if (locked) notExported.push(`${locked} locked note(s)`);
     if (trashed) notExported.push(`${trashed} trashed note(s)`);
@@ -186,7 +196,8 @@ const NotesReadableExport = (() => {
       uris = totpAccounts.filter((a) => !a.deleted && a.content?.type === 'totp').map((a) => otpauthUri(a.content)).filter(Boolean);
       if (uris.length) entries.push({ name: '2fa/otpauth.txt', bytes: encoder.encode(`${uris.join('\n')}\n`) });
     }
-    notExported.push(include2fa ? 'folders and calendar' : 'folders, calendar and 2FA accounts');
+    notExported.push(include2fa ? 'folders' : 'folders and 2FA accounts');
+    if (events.length) notExported.push('agenda reminders and agenda tasks');
     const readme = [
       ...WARNING,
       '',
@@ -194,6 +205,7 @@ const NotesReadableExport = (() => {
       ...(appBuild ? [`App build: ${appBuild}`] : []),
       `Notes: ${counts.notes}`,
       `Attachments: ${counts.attachments}`,
+      ...(events.length ? [`Agenda events: ${events.length}`] : []),
       ...(include2fa ? [`2FA accounts: ${uris.length}`] : []),
       include2fa && uris.length ? '2fa/ included: yes, it contains live authenticator secrets.' : '2fa/ included: no.',
       '',
@@ -207,6 +219,18 @@ const NotesReadableExport = (() => {
     await tick();
     const bytes = await zipLib().writeZip(entries);
     return { bytes, filename: `deeperguard-export-${utcDate(now)}.zip`, counts, notExported };
+  }
+
+  function agendaIcsLib() {
+    let Ics = typeof NotesAgendaIcs !== 'undefined' ? NotesAgendaIcs : null;
+    if (!Ics && typeof module !== 'undefined' && module.exports) {
+      require('./agenda-ics.js');
+      Ics = globalThis.NotesAgendaIcs;
+    }
+    if (!Ics || typeof Ics.buildIcsCalendarFromEvents !== 'function' || typeof Ics.flattenEventsForIcsExport !== 'function') {
+      throw new Error('Agenda export unavailable: the calendar module is not loaded. Nothing was saved.');
+    }
+    return Ics;
   }
 
   function zipLib() {

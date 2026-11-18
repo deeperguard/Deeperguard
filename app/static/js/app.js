@@ -24838,8 +24838,9 @@ async function showSettings() {
     if (btn?.disabled || fileDownloadTaskActive) return;
     const notes = NotesStore.listNotes();
     const exportable = notes.filter((n) => !n.content?.trashed && !n.content?.locked).length;
-    if (!exportable) {
-      toast('No notes to export', true);
+    const agendaEvents = NotesStore.listAgendaEvents();
+    if (!exportable && !agendaEvents.length) {
+      toast('No notes or agenda events to export', true);
       return;
     }
     const lockedCount = notes.filter((n) => !n.content?.trashed && n.content?.locked).length;
@@ -24852,9 +24853,9 @@ async function showSettings() {
       checked: false,
     };
     const confirmed = await confirmAction(
-      'This ZIP is NOT encrypted. Anyone who gets the file can read your notes and attachments; '
+      'This ZIP is NOT encrypted. Anyone who gets the file can read your notes, attachments and agenda; '
         + 'your vault password does not protect it. For a safe backup use "Save backup file" instead. '
-        + `${exportable} note(s) will be exported`
+        + `${exportable} note(s)${agendaEvents.length ? ` and ${agendaEvents.length} agenda event(s)` : ''} will be exported`
         + `${lockedCount ? `; ${lockedCount} locked note(s) are skipped` : ''}. `
         + 'Trashed notes are never exported. Everything is built on this device; nothing is sent to the server. '
         + 'Type your vault password to continue.',
@@ -24878,6 +24879,7 @@ async function showSettings() {
             tags: NotesStore.listTags(),
             include2fa: twoFaOption.checked,
             totpAccounts: twoFaOption.checked ? NotesStore.listTotpAccounts() : [],
+            agendaEvents,
             getAttachment: (id) => NotesStore.get(id),
             getAttachmentBytes: (id) => NotesStore.getAttachmentBytes(id),
             onProgress: ({ done, total, status }) => report({
@@ -24886,7 +24888,7 @@ async function showSettings() {
               indeterminate: false,
             }),
           });
-          if (!result) throw new Error('No notes to export');
+          if (!result) throw new Error('No notes or agenda events to export');
           const url = URL.createObjectURL(new Blob([result.bytes], { type: 'application/zip' }));
           const a = document.createElement('a');
           a.href = url;
