@@ -1146,7 +1146,7 @@
     const a = document.createElement('a');
     const stamp = new Date().toISOString().slice(0, 10);
     a.href = url;
-    const slug = cal ? cal.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) : '';
+    const slug = cal ? cal.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) : '';
     a.download = `deeperguard-calendar${slug ? `-${slug}` : ''}-${stamp}.ics`;
     a.rel = 'noopener';
     document.body.appendChild(a);
