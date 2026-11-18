@@ -26118,7 +26118,7 @@ async function showSettings() {
     }
     vaultReady = true;
     if (typeof NotesRecoveryNotice !== 'undefined') {
-      NotesRecoveryNotice.refresh(NotesStore.api, document.getElementById('recovery-notice'));
+      NotesRecoveryNotice.refreshThrottled(NotesStore.api, document.getElementById('recovery-notice'));
     }
     if (NotesStore.passwordChangeInFlight && NotesStore.passwordChangeInFlight()) {
       if (!quiet) toast('Password change is still saving…', true);

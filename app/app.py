@@ -2528,7 +2528,11 @@ def api_account_vault_keys_recover_commit():
 
 
 def _recovery_notice_device_key() -> str:
-    """Per-device key for notice dismissals: the X-Device-Id, else the session itself."""
+    """Per-device key for notice dismissals: the X-Device-Id, else the session itself.
+
+    Without X-Device-Id (store.js always sends it) a dismissal is tied to this session only,
+    so the notice can come back after signing in again.
+    """
     device = auth.request_device_id()
     if device:
         return device
