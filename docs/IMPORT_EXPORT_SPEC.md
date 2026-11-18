@@ -48,7 +48,8 @@ left out).
 | ICS import | `NotesStore.importAgendaFromIcs` (`store.js:2334`), `NotesAgendaIcs.validateIcsFile` (`agenda-ics.js:527`) | Imports `.ics` into the agenda pack. |
 | 2FA import (Aegis, 2FAS, Google Authenticator, otpauth links) | `app/static/js/totp-import.js`, specified in `docs/2FA_IMPORT_SPEC.md` | Separate spec. Not changed here. |
 | Markdown (`.md` files and ZIP, including the section 2 export) | `NotesMdImport.parse` (`app/static/js/md-import.js`), `NotesStore.importMarkdownNotes` (`store.js`); UI handler on `#import-markdown-file` (`app.js`) | Implements 3.1 and the sanitising of 4.5 for Markdown. A summary is confirmed before saving and the result lists skipped files. |
-| ENEX, Google Keep | none | Not present. Built by the next tasks, against sections 3 and 4. |
+| ENEX (`.enex`) | `NotesEnexImport.parse` (`app/static/js/enex-import.js`), stored through `NotesStore.importMarkdownNotes`; UI handler on `#import-enex-file` (`app.js`) | Implements 3.2 and 4.3. Output is Markdown only. A note whose ENML is not well-formed is skipped and listed; a DOCTYPE or entity declaration refuses the whole file. Each ENEX is parsed whole by `DOMParser`; the 80 MiB limit is checked per note after parsing. |
+| Google Keep | none | Not present. Built by the next task, against sections 3 and 4. |
 
 ### 1.3 How a note is stored
 
@@ -384,7 +385,8 @@ ENML to Markdown (anything not listed becomes its text content):
 | `a href` | `[text](url)` only when the scheme is `http`, `https` or `mailto`; otherwise the text only |
 | `table`, `tr`, `td` | Markdown table when it is rectangular; else rows as lines |
 | `<en-crypt>` | text `[encrypted text not imported]`. Never decrypted. |
-| `font`, `span`, `style`, `class`, `script`, anything else | text content only |
+| `script`, `style`, `iframe`, `object`, `embed`, `svg` | dropped with their content |
+| `font`, `span`, `class`, anything else | text content only |
 
 ### 3.3 Google Keep (Takeout)
 
