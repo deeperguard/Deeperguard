@@ -253,8 +253,10 @@ Front-matter rules:
 - The body is `content` unchanged. For `checklist` and `super` notes this is
   already Markdown task syntax. `plain`, `superscript` and `code` notes are
   exported as they are; the editor type is not stored in the file.
-- Attachments are linked from the body only if the body already links them;
-  the export does not rewrite the body.
+- The body is not rewritten. When a note has readable attachments, a final
+  `Attachments:` list is appended after it, one relative link per file
+  (`[name](../attachments/<id>-<name>)`, `![name](…)` for images), with path
+  segments percent-encoded.
 - A note that is empty gets an empty body after the front-matter.
 
 ### 2.2 `attachments/<id>-<name>`
