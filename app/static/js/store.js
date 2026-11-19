@@ -5396,10 +5396,16 @@ const NotesStore = (() => {
 
   // Move a label (and thereby its sub-labels). Rejects cycles and too deep nesting.
   function moveTag(uuid, parentId) {
+    return moveTagResult(uuid, parentId).ok;
+  }
+
+  // Same move, but tells why it was refused: {ok:true} or {ok:false, error}
+  // ('cycle', 'unknown_parent', 'too_deep', 'duplicate', 'unknown_label').
+  function moveTagResult(uuid, parentId) {
     const plan = NotesLabels.planUpdate(uuid, { parent_id: parentId || '' }, tagIndex());
-    if (!plan.ok) return false;
+    if (!plan.ok) return { ok: false, error: plan.error };
     applyLabelUpdates(plan.updates);
-    return true;
+    return { ok: true };
   }
 
   // Idempotent: writes the nested shape for legacy flat labels, nothing else. Returns the count.
@@ -7894,6 +7900,7 @@ const NotesStore = (() => {
     renameTagPath,
     createTag,
     moveTag,
+    moveTagResult,
     migrateLabels,
     repairLabels,
     listTemplateItems,

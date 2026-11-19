@@ -314,10 +314,19 @@
     return capNoteKeys(out);
   }
 
+  // Sentence for the user when planUpdate refuses a move (`error` is its error code).
+  function moveErrorText(error) {
+    if (error === 'cycle') return 'A label cannot be moved into itself or one of its own sub-labels.';
+    if (error === 'unknown_parent') return 'The target label no longer exists.';
+    if (error === 'too_deep') return `Labels can be nested at most ${MAX_DEPTH} levels deep.`;
+    if (error === 'duplicate') return 'A label with this name already exists there.';
+    return 'This label cannot be moved here.';
+  }
+
   const api = {
     SEP, MAX_DEPTH, MAX_LABELS, MAX_NAME,
     indexOf, nameOf, parentOf, validateName, validateParent, ancestors, descendants,
-    depthOf, childrenOf, subtreeHeight, siblingNameTaken, pathOf, nextOrder, migrate, repair, planUpdate, planDelete,
+    depthOf, childrenOf, subtreeHeight, siblingNameTaken, moveErrorText, pathOf, nextOrder, migrate, repair, planUpdate, planDelete,
     MAX_NOTE_KEYS, orderNotes, moveNote, mergeNoteKeys,
   };
   if (typeof window !== 'undefined') window.NotesLabels = api;
