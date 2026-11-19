@@ -127,6 +127,24 @@ class RecoveryKeyOfferE2E(unittest.TestCase):
         # The stored notes are byte for byte what they were.
         self.assertEqual(self.ciphertexts(), before)
 
+    def test_cancelling_the_dialog_creates_nothing_and_the_offer_returns_at_next_unlock(self):
+        page = self.page
+        before = self.ciphertexts()
+        self.make_pre_feature_account()
+        self.unlock_again()
+        page.wait_for_selector(OFFER, state="visible", timeout=30000)
+        page.wait_for_function("() => NotesStore.isKeyVerified()", timeout=60000)
+        page.click("#btn-recovery-key-offer-now")
+        read_shown_key(page)
+        page.click("#recovery-key-cancel")
+        page.wait_for_selector("#recovery-key-dialog", state="hidden", timeout=30000)
+        # Closing without saving leaves no key and no notice until the next unlock.
+        self.assertFalse(page.is_visible(OFFER))
+        self.assertEqual(self.sql("SELECT 1 FROM vault_recovery_wraps"), [])
+        self.unlock_again()
+        page.wait_for_selector(OFFER, state="visible", timeout=30000)
+        self.assertEqual(self.ciphertexts(), before)
+
     def test_postponing_hides_the_offer_until_it_runs_out(self):
         page = self.page
         before = self.ciphertexts()

@@ -351,9 +351,9 @@
     },
     "js/recovery-key-setup.js": {
       "bytes": 28778,
-      "sha256": "22c625cd41c93e887dd950237ea37bd17c256e845860337947d831a2e5d39c53",
-      "sri": "sha384-5rNFqWYILxp0Aq2ir5w03fR6uoEFrpvFm5pzMCCMvtptbmPhBvhDD+VNMA71b1yD",
-      "url": "/static/js/recovery-key-setup.22c625cd41c93e88.js"
+      "sha256": "897607834ed16b8def95d7abf3dd7346aee4be9e2b8574a04bac7ab12e3b7d71",
+      "sri": "sha384-VcCvWP0O3RQRWXDm/QBp2NUz8neucIBDTD2+OO2WMvFxs5uUG6Ilpl5vCegfJCOf",
+      "url": "/static/js/recovery-key-setup.897607834ed16b8d.js"
     },
     "js/recovery-notice.js": {
       "bytes": 3292,
@@ -639,6 +639,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "e92379fb85ec97eaf8c7311a6578ccbf17cf06cc5eba94b00a07a9f14b1ffaa9",
+  "manifest_sha256": "6db5c0cba59d328cd65bad8c70b3022f0e20fa98c5e875dd380e4cfc8e902fac",
   "version": 1
 }
