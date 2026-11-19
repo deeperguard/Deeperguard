@@ -12,7 +12,7 @@ const css = fs.readFileSync(path.join(root, 'app/static/css/app.css'), 'utf8');
 const ocrJs = fs.readFileSync(path.join(root, 'app/static/js/client-ocr-engine.js'), 'utf8');
 const ocrPy = fs.readFileSync(path.join(root, 'app/ocr.py'), 'utf8');
 
-const { pageBitmapScale } = require('../app/static/js/preview.js');
+const { pageBitmapScale, wantedPdfPages } = require('../app/static/js/preview.js');
 
 global.devicePixelRatio = 1;
 assert.strictEqual(pageBitmapScale(), 2);
@@ -27,6 +27,15 @@ assert.ok(previewSrc.includes('const MAX_PAGE_DPR = 3'));
 assert.ok(previewSrc.includes('Math.max(2, dpr)'));
 assert.ok(!previewSrc.includes('img.src = canvas.toDataURL'));
 assert.ok(previewSrc.includes('paint.renderedWidth = paint.naturalWidth'));
+
+// Live-page window: visible pages plus neighbours, never more than MAX_LIVE_PAGES (5).
+const pagesOf = (total, visible, limits) => ({ wraps: new Array(total).fill(null), visible: new Set(visible), limits });
+const sorted = (set) => [...set].sort((a, b) => a - b);
+assert.deepStrictEqual(sorted(wantedPdfPages(pagesOf(20, [10], null))), [9, 10, 11]);
+assert.deepStrictEqual(sorted(wantedPdfPages(pagesOf(20, [10], { scale: 2 }))), [10]);
+assert.deepStrictEqual(sorted(wantedPdfPages(pagesOf(20, [1], null))), [1, 2]);
+assert.deepStrictEqual(sorted(wantedPdfPages(pagesOf(20, [10, 11, 12, 13, 14, 15, 16], null))), [10, 11, 12, 13, 14]);
+assert.strictEqual(wantedPdfPages(pagesOf(0, [], null)).size, 0);
 
 assert.ok(appJs.includes('const THUMB_CSS_PX = 72'));
 assert.ok(appJs.includes('Math.round(THUMB_CSS_PX * scale)'));

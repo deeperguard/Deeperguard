@@ -16,6 +16,8 @@ const NotesPreview = (() => {
   // Page canvases alive at once: the visible page(s) plus one on each side.
   const MAX_LIVE_PAGES = 5;
   // Above these a PDF is not rendered at all; the viewer offers a download.
+  // Hand-set limits, not derived from a measurement: no measurement of PDF size
+  // against memory or crashes is recorded in the repo for these values.
   const MAX_PDF_BYTES = IS_IOS ? 60 * 1024 * 1024 : 150 * 1024 * 1024;
   const MAX_PDF_VIEW_PAGES = 2000;
   const PDF_SRC = '/static/js/vendor/pdfjs/pdf.min.mjs?v=10';
@@ -2075,6 +2077,7 @@ const NotesPreview = (() => {
     releasePdf,
     releaseAllPdfs,
     livePdfHosts,
+    wantedPdfPages,
     upgradePdfQuality,
     upgradeImageQuality,
     rememberImagePaint,
