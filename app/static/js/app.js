@@ -9462,8 +9462,42 @@
     return NotesLabels.indexOf(NotesStore.listTags().map((t) => ({ uuid: t.uuid, content: t.content })));
   }
 
+  // "Include sublabels" is a per-device choice kept in localStorage (a plain 0/1, no names).
+  const LABEL_SUBS_KEY = 'notes_label_include_subs';
+  function includeSublabels() {
+    try { return localStorage.getItem(LABEL_SUBS_KEY) !== '0'; } catch (_) { return true; }
+  }
+  function setIncludeSublabels(on) {
+    try { localStorage.setItem(LABEL_SUBS_KEY, on ? '1' : '0'); } catch (_) { /* storage unavailable: choice lasts until reload */ }
+  }
+
   function currentTagScope() {
-    return currentTag ? NotesLabelTree.scope(currentTag, labelIndex()) : null;
+    if (!currentTag) return null;
+    return includeSublabels() ? NotesLabelTree.scope(currentTag, labelIndex()) : [currentTag];
+  }
+
+  // Folder view of the selected label: clickable path from the top level down, sublabel toggle, New note.
+  function renderLabelFolderBar() {
+    const bar = document.getElementById('label-folder-bar');
+    const crumbs = document.getElementById('label-crumbs');
+    if (!bar || !crumbs) return;
+    const byId = currentTag ? labelIndex() : null;
+    if (!byId || !byId.has(currentTag)) {
+      bar.hidden = true;
+      crumbs.textContent = '';
+      return;
+    }
+    const chain = [...NotesLabels.ancestors(currentTag, byId)].reverse().concat(currentTag);
+    const items = chain.map((id, i) => {
+      const name = escapeHtml(NotesLabels.nameOf(byId.get(id)) || 'Label');
+      return i === chain.length - 1
+        ? `<li><span class="label-crumb-current" aria-current="page">${name}</span></li>`
+        : `<li><button type="button" class="label-crumb" data-crumb="${escapeAttr(id)}">${name}</button><span class="label-crumb-sep" aria-hidden="true">/</span></li>`;
+    });
+    crumbs.innerHTML = `<ol class="label-crumb-list"><li><button type="button" class="label-crumb" data-crumb="">All notes</button><span class="label-crumb-sep" aria-hidden="true">/</span></li>${items.join('')}</ol>`;
+    document.getElementById('label-subs-wrap').hidden = NotesLabelTree.scope(currentTag, byId).length < 2;
+    document.getElementById('label-include-subs').checked = includeSublabels();
+    bar.hidden = false;
   }
 
   // Notes per label including sub-labels; each note counted once per label.
@@ -11584,6 +11618,7 @@
       const tag = currentTag ? tagMap().get(currentTag) : null;
       const folder = currentFolder ? NotesStore.get(currentFolder) : null;
       listHead.hidden = false;
+      renderLabelFolderBar();
       listTitle.textContent = folder
         ? (folder.content.title || 'Folder')
         : (tag ? tag.content.title || 'Tag' : (FILTER_TITLES[currentFilter] || 'Notes'));
@@ -20920,6 +20955,19 @@
 
   document.getElementById('btn-new').addEventListener('click', () => createNote());
   document.getElementById('btn-new-from-template')?.addEventListener('click', () => openTemplateDialog());
+  document.getElementById('label-crumbs')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-crumb]');
+    if (!btn) return;
+    // selectLabel toggles: "All notes" (empty id) toggles the current label off; a parent is selected after clearing.
+    if (btn.dataset.crumb) currentTag = null;
+    selectLabel(btn.dataset.crumb || currentTag);
+  });
+  document.getElementById('label-include-subs')?.addEventListener('change', (e) => {
+    setIncludeSublabels(e.target.checked);
+    renderNotes();
+    closeEditorIfNoteLeftView();
+  });
+  document.getElementById('label-folder-new')?.addEventListener('click', () => createNote());
   document.getElementById('btn-save-template')?.addEventListener('click', () => saveCurrentAsTemplate());
   document.getElementById('btn-new-list')?.addEventListener('click', () => createNote());
   document.getElementById('btn-list-sort')?.addEventListener('click', () => {
