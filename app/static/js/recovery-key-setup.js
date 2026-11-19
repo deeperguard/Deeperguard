@@ -583,6 +583,10 @@
     if (box) box.hidden = true;
   }
 
+  let offerBound = false;
+  let offerDeps = null;
+  let offerEmail = '';
+
   function showOffer(email, deps) {
     const box = el('recovery-key-offer');
     if (!box) return false;
@@ -610,10 +614,6 @@
     box.hidden = false;
     return true;
   }
-
-  let offerBound = false;
-  let offerDeps = null;
-  let offerEmail = '';
 
   /**
    * After unlocking, offer a recovery key to an account that has none. Does nothing for a
