@@ -147,6 +147,14 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             last_test_category TEXT NOT NULL DEFAULT ''
         );
 
+        CREATE TABLE IF NOT EXISTS pcloud_oauth_tokens (
+            user_id INTEGER PRIMARY KEY,
+            token_enc TEXT NOT NULL,
+            api_host TEXT NOT NULL,
+            connected_at REAL NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS reminder_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -2451,6 +2459,29 @@ def set_pcloud_mail_pref(user_id: int, failures_only: bool) -> None:
             "UPDATE users SET pcloud_mail_pref = ?, updated_at = ? WHERE id = ?",
             ("failures" if failures_only else "both", now(), int(user_id)),
         )
+
+
+def set_pcloud_oauth_token(user_id: int, token_enc: str, api_host: str) -> None:
+    """Store the already-encrypted pCloud OAuth token; connecting again replaces it."""
+    with tx() as conn:
+        conn.execute(
+            "INSERT INTO pcloud_oauth_tokens (user_id, token_enc, api_host, connected_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET token_enc = excluded.token_enc, "
+            "api_host = excluded.api_host, connected_at = excluded.connected_at",
+            (int(user_id), str(token_enc), str(api_host), now()),
+        )
+
+
+def get_pcloud_oauth_token(user_id: int):
+    return connection().execute(
+        "SELECT token_enc, api_host, connected_at FROM pcloud_oauth_tokens WHERE user_id = ?",
+        (int(user_id),),
+    ).fetchone()
+
+
+def delete_pcloud_oauth_token(user_id: int) -> None:
+    with tx() as conn:
+        conn.execute("DELETE FROM pcloud_oauth_tokens WHERE user_id = ?", (int(user_id),))
 
 
 def update_managed_backup_status(
