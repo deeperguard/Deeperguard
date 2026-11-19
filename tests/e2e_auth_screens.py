@@ -86,11 +86,17 @@ DESCRIBED_JS = """(id) => { const el = document.getElementById(id);
 
 
 SETTLE_JS = """async () => { await document.fonts.ready;
-  await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => null))); }"""
+  const finite = document.getAnimations().filter(
+    (a) => a.effect && a.effect.getComputedTiming().iterations !== Infinity);
+  await Promise.race([
+    Promise.all(finite.map((a) => a.finished.catch(() => null))),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ]); }"""
 
 
 def _settle(page):
-    """Web fonts loaded and CSS transitions finished, so layout and colours are final."""
+    """Web fonts loaded and finite CSS animations/transitions finished (infinite spinners
+    are ignored, and the wait is capped), so layout and colours are final."""
     page.evaluate(SETTLE_JS)
 
 
