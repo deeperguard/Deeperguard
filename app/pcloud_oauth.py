@@ -160,6 +160,15 @@ def stored_token(user_id: int) -> str:
         return ""
 
 
+def status(user_id: int) -> str:
+    """'connected', 'reconnect' (a token is stored but unusable) or 'not_connected'."""
+    import db
+
+    if not db.get_pcloud_oauth_token(int(user_id)):
+        return "not_connected"
+    return "connected" if stored_token(user_id) else "reconnect"
+
+
 def disconnect(user_id: int) -> bool:
     """Delete the stored token; revoke it at pCloud first when it is still readable.
 

@@ -16683,6 +16683,7 @@
       document.getElementById('backup-enabled').checked = !!account.backup_enabled;
     }
     refreshManagedBackup().catch(() => {});
+    refreshPcloudConnect().catch(() => {});
     if (account.pcloud_username !== undefined || account.pcloud_enabled !== undefined) {
       document.getElementById('pcloud-username').value = account.pcloud_username || '';
       const remotePath = String(account.pcloud_remote_path || '').trim();
@@ -23127,6 +23128,25 @@ async function refreshManagedBackup() {
     `${m.last_status === 'ok' ? 'OK' : 'Failed'} · ${formatManagedBytes(m.last_size)} · ${m.last_kept} kept`;
 }
 
+async function refreshPcloudConnect() {
+  const stateEl = document.getElementById('pcloud-connect-state');
+  if (!stateEl) return;
+  const r = await NotesStore.api('/api/backup/pcloud/oauth/status');
+  const connected = r.state === 'connected';
+  const reconnect = r.state === 'reconnect';
+  stateEl.textContent = connected ? 'Connected' : reconnect ? 'Reconnect needed' : 'Not connected';
+  const note = document.getElementById('pcloud-connect-note');
+  note.hidden = !(reconnect || !r.configured);
+  note.textContent = reconnect
+    ? 'The saved pCloud connection can no longer be used. Connect again to keep backing up.'
+    : r.configured ? '' : 'Connecting pCloud is not available on this server right now.';
+  const connectBtn = document.getElementById('btn-pcloud-connect');
+  connectBtn.textContent = reconnect ? 'Reconnect pCloud' : 'Connect pCloud';
+  connectBtn.hidden = connected;
+  connectBtn.disabled = !r.configured;
+  document.getElementById('btn-pcloud-disconnect').hidden = !(connected || reconnect);
+}
+
 async function setManagedBackup(body) {
   await NotesStore.api('/api/backup/managed', { method: 'POST', body: JSON.stringify(body) });
   await refreshManagedBackup();
@@ -24984,6 +25004,31 @@ async function showSettings() {
       await setManagedBackup({ failures_only: ev.target.checked });
     } catch (err) {
       toast(err.message || 'Could not save preference', true);
+    }
+  });
+  document.getElementById('btn-pcloud-connect').addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+      const r = await NotesStore.api('/api/backup/pcloud/oauth/start', { method: 'POST', body: '{}' });
+      window.location.assign(r.authorize_url);
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.message || 'Could not start pCloud connect', true);
+    }
+  });
+  document.getElementById('btn-pcloud-disconnect').addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    try {
+      const r = await NotesStore.api('/api/backup/pcloud/oauth/disconnect', { method: 'POST', body: '{}' });
+      toast(r.revoked ? 'pCloud disconnected' : 'pCloud disconnected here; access at pCloud could not be confirmed as revoked', !r.revoked);
+      await refreshPcloudConnect();
+    } catch (err) {
+      toast(err.message || 'Could not disconnect pCloud', true);
+    } finally {
+      btn.disabled = false;
     }
   });
   document.getElementById('btn-managed-switch').addEventListener('click', async () => {

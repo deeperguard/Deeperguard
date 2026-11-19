@@ -3444,6 +3444,18 @@ def api_backup_pcloud_settings():
 _PCLOUD_OAUTH_STATE = "pcloud_oauth_state"
 
 
+@app.get("/api/backup/pcloud/oauth/status")
+def api_backup_pcloud_oauth_status():
+    import pcloud_oauth
+
+    uid = auth.current_user_id()
+    if not uid or not db.get_user_by_id(uid):
+        return jsonify({"error": "not found"}), 404
+    response = jsonify({"state": pcloud_oauth.status(uid), "configured": pcloud_oauth.configured()})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.post("/api/backup/pcloud/oauth/start")
 def api_backup_pcloud_oauth_start():
     import pcloud_oauth

@@ -393,6 +393,18 @@ class PcloudOAuthTests(unittest.TestCase):
         self.assertEqual(again.get_json(), {"ok": True, "connected": False, "revoked": False})
         self.assertEqual(len(self.fake.calls("logout")), 1)
 
+    def test_status_not_connected_connected_and_reconnect(self):
+        status_url = "/api/backup/pcloud/oauth/status"
+        uid = self._user()
+        self._login(uid)
+        self.assertEqual(self.client.get(status_url).get_json(), {"state": "not_connected", "configured": True})
+        self.oauth.store_token(uid, ACCESS_TOKEN, "api.pcloud.com")
+        self.assertEqual(self.client.get(status_url).get_json()["state"], "connected")
+        # The env key changed or is gone: the stored token is unusable, so reconnecting is needed.
+        del os.environ["NOTES_PCLOUD_CREDENTIALS_KEY"]
+        self.assertEqual(self.client.get(status_url).get_json(), {"state": "reconnect", "configured": False})
+        self.assertEqual(self.app_mod.app.test_client().get(status_url).status_code, 401)
+
     def test_disconnect_requires_csrf_and_login(self):
         uid, _ = self._connect()
         self.assertEqual(self.client.post(DISCONNECT, json={}).status_code, 400)
