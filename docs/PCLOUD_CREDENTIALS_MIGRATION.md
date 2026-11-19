@@ -52,3 +52,34 @@ If `NOTES_PCLOUD_CREDENTIALS_KEY` is compromised:
 | OAuth token (encrypted) | `keys/pcloud-token-<user_id>` |
 | pCloud username, path, region | SQLite `users` table (not secret) |
 | rclone config during sync | Ephemeral file under `keys/`, deleted after each sync |
+
+## OAuth connect (server endpoints)
+
+The server has a "connect pCloud" flow next to the pasted rclone token. The scheduled backup job and
+the Settings screen do not use it yet; they still work with the rclone token above.
+
+Operator setup: register an OAuth app at pCloud with redirect URI
+`<NOTES_PUBLIC_URL>/api/backup/pcloud/oauth/callback`. pCloud's authorize URL has no scope parameter,
+so whether a token is limited to the app folder depends on the "Folder access" setting chosen for
+that pCloud app; choose the app-folder option there. (This is from pCloud's documentation as we know
+it; it has not been checked against a live pCloud app.) Then add to `config/deeperguard.env`:
+
+```
+NOTES_PCLOUD_OAUTH_CLIENT_ID=<client id of the pCloud app>
+NOTES_PCLOUD_OAUTH_CLIENT_SECRET=<client secret of the pCloud app>
+NOTES_PCLOUD_CREDENTIALS_KEY=<64-char hex, see step 1>
+```
+
+Without all three, the start endpoint answers 503.
+
+| Endpoint | What it does |
+|----------|--------------|
+| `POST /api/backup/pcloud/oauth/start` | Signed-in Pro user, CSRF token required. Puts a random `state` (valid 10 minutes) in the session and returns pCloud's authorize URL. |
+| `GET /api/backup/pcloud/oauth/callback` | Rejects a missing, wrong, expired or reused `state` and any API host other than `api.pcloud.com` / `eapi.pcloud.com`. Exchanges the code for a token and stores it. |
+| `POST /api/backup/pcloud/oauth/disconnect` | CSRF token required. Asks pCloud to invalidate the token (`logout`), then deletes the stored token. The answer has `revoked: false` when pCloud did not confirm; the user can then remove the app in their pCloud account settings. |
+
+The token is stored in SQLite table `pcloud_oauth_tokens` only as AES-256-GCM ciphertext
+(`dg-pcloud-v1:` envelope) under `NOTES_PCLOUD_CREDENTIALS_KEY`. After a key rotation these tokens
+can no longer be decrypted and users must connect again. Token, authorization code and client secret
+are not written to the app log. The authorization code is part of the callback URL, so a reverse
+proxy or access log that records query strings will record it; a code can be exchanged only once.
