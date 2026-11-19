@@ -14355,6 +14355,10 @@
       if (isTextEntryTarget(event.target)) return;
       const confirmDialog = document.getElementById('confirm-dialog');
       if (confirmDialog && !confirmDialog.hidden) return;
+      // Zoomed in and wider than the stage: Left and Right scroll sideways instead of turning the page.
+      if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+        && (ui.docStage._docZoom?.getScale?.() || 1) > 1.02
+        && ui.docStage.scrollWidth > ui.docStage.clientWidth) return;
       const total = docPageWraps().length;
       const steps = { ArrowLeft: -1, PageUp: -1, ArrowRight: 1, PageDown: 1 };
       if (Object.hasOwn(steps, event.key)) {

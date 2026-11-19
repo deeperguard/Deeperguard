@@ -243,6 +243,14 @@ def run_viewport(p, base, width, height, mobile) -> int:
     s = state(page)
     bad += not check(f"{tag}: zoom level kept after next page", before > 1.2 and abs(s["scale"] - before) < 0.01, (before, s["scale"]))
     bad += at_page(f"{tag} zoomed next", s, 6)
+    # Zoomed in and wider than the stage, ArrowRight/ArrowLeft scroll sideways and keep the page.
+    page.focus("#doc-page-prev")
+    page.keyboard.press("ArrowRight")
+    s = state(page)
+    bad += not check(f"{tag}: ArrowRight while zoomed does not turn the page", s["visiblePage"] == 6 and s["input"] == "6", s)
+    page.keyboard.press("ArrowLeft")
+    s = state(page)
+    bad += not check(f"{tag}: ArrowLeft while zoomed does not turn the page", s["visiblePage"] == 6 and s["input"] == "6", s)
     page.evaluate("() => document.getElementById('doc-zoom-reset').click()")
     page.wait_for_timeout(600)
 
