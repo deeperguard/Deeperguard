@@ -9,6 +9,8 @@
  *   Stored and deflate (DecompressionStream 'deflate-raw'). Limits are checked
  *   against the bytes actually produced while streaming; sizes in the headers
  *   are never trusted. Failures throw ZipError with a `code`.
+ *   Directory entries and entries under `__MACOSX/` (Mac resource forks, added
+ *   by Finder when zipping) are skipped without an error and are not returned.
  */
 const NotesZip = (() => {
   const MIB = 1024 * 1024;
@@ -181,6 +183,8 @@ const NotesZip = (() => {
     const count = u16(bytes, eocd + 10);
     const cdSize = u32(bytes, eocd + 12);
     const cdOff = u32(bytes, eocd + 16);
+    // 0xffff is the ZIP64 sentinel in the count field: a real archive with exactly 65535 entries is refused
+    // here as zip64 (it is above the default maxEntries of 10000 anyway).
     if (count === 0xffff || cdSize === 0xffffffff || cdOff === 0xffffffff) throw zip64Error();
     if (u16(bytes, eocd + 4) !== 0 || u16(bytes, eocd + 6) !== 0 || u16(bytes, eocd + 8) !== count) {
       throw new ZipError('multi-disk', 'Multi-disk ZIP archives are not supported.');

@@ -80,6 +80,15 @@ async function rejects(promise, code) {
     await rejects(Zip.readZip(renameInZip(base, 'aa/x.txt', bad)), 'unsafe-name');
   }
 
+  // Mac resource folder and directory entries are skipped silently; the note entry is returned.
+  const macos = await Zip.writeZip([
+    { name: '__MACOSX/', bytes: new Uint8Array(0) },
+    { name: '__MACOSX/notes/._a.md', bytes: enc('resource fork') },
+    { name: 'notes/a.md', bytes: enc('# a') },
+    { name: '__MACOSX/._b.md', bytes: enc('resource fork') },
+  ], { compress: false });
+  assert.deepStrictEqual((await Zip.readZip(macos)).map((e) => e.name), ['notes/a.md']);
+
   // Corrupt CRC (stored data flipped, and header CRC changed on a deflated entry).
   const flipped = Uint8Array.from(stored);
   flipped[30 + 'a.txt'.length + 5] ^= 0xff;
