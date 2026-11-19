@@ -304,6 +304,19 @@ class PcloudOAuthTests(unittest.TestCase):
         self.assertEqual(self.fake.requests, [])
         self.assertIsNone(self._row(uid))
 
+    def test_access_denied_at_pcloud_redirects_to_app(self):
+        uid = self._user()
+        _, state = self._start(self._login(uid))
+        query = {"error": "access_denied", "state": state}
+        res = self.client.get(CALLBACK, query_string=query)
+        self.assertEqual(res.status_code, 302, res.get_data(as_text=True))
+        self.assertTrue(res.headers["Location"].endswith("/app?pcloud=denied"), res.headers["Location"])
+        self.assertEqual(res.headers["Cache-Control"], "no-store")
+        self.assertEqual(self.fake.requests, [])
+        self.assertIsNone(self._row(uid))
+        # The state was used up; a denial with a forged state is still rejected.
+        self.assertEqual(self.client.get(CALLBACK, query_string=query).status_code, 400)
+
     def test_code_refused_by_pcloud_stores_nothing(self):
         uid = self._user()
         _, state = self._start(self._login(uid))
