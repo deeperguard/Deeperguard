@@ -789,6 +789,7 @@ if (registerForm) {
   let registerInFlight = 0;
   let registerRetryLock = false;
   let registerHangTimers = [];
+  let registerErrorTimer = 0;
   let registerSuccessOnce = false;
   let registerFinishPromise = null;
 
@@ -810,6 +811,10 @@ if (registerForm) {
       en: 'Please complete the security check and try again.',
       nl: 'Voltooi eerst de beveiligingscontrole en probeer het opnieuw.',
     },
+    inProgress: {
+      en: 'Your account is already being created. Please wait.',
+      nl: 'Je account wordt al aangemaakt. Even geduld.',
+    },
     softFailSignIn: {
       en: 'Already have an account? Sign in',
       nl: 'Heb je al een account? Inloggen',
@@ -825,6 +830,7 @@ if (registerForm) {
     clearRegisterHangMessage();
     if (submitBtn) {
       submitBtn.disabled = false;
+      submitBtn.removeAttribute('aria-busy');
       submitBtn.textContent = tCopy('submit');
     }
   }
@@ -853,15 +859,16 @@ if (registerForm) {
   function showRegisterError(message) {
     const el = document.getElementById('register-error');
     if (!el) return;
+    // Own timer: clearRegisterHangTimers() must not cancel a pending message.
+    clearTimeout(registerErrorTimer);
     el.hidden = true;
     el.textContent = '';
     if (!message) return;
-    const ariaTimer = window.setTimeout(() => {
+    registerErrorTimer = window.setTimeout(() => {
       if (!document.getElementById('register-error')) return;
       el.textContent = message;
       el.hidden = false;
     }, 20);
-    registerHangTimers.push(ariaTimer);
   }
 
   function tCopy(key) {
@@ -1022,8 +1029,10 @@ if (registerForm) {
   }
 
   async function runRegisterAttempt({ allowWhileInFlight = false, fromRetry = false } = {}) {
-    if (registerSuccessOnce) return;
-    if (registerInFlight > 0 && !allowWhileInFlight) return;
+    if (registerSuccessOnce || (registerInFlight > 0 && !allowWhileInFlight)) {
+      showRegisterError(tCopy('inProgress'));
+      return;
+    }
     if (fromRetry) {
       if (registerRetryLock) return;
       registerRetryLock = true;
@@ -1048,6 +1057,7 @@ if (registerForm) {
       const { slowMs, hangMs } = registerHangTiming();
       if (submitBtn) {
         submitBtn.disabled = true;
+        submitBtn.setAttribute('aria-busy', 'true');
         submitBtn.textContent = tCopy('creating');
       }
       const slowTimer = window.setTimeout(() => {
@@ -1090,7 +1100,6 @@ if (registerForm) {
   }
 
   async function submitRegisterForm() {
-    if (registerInFlight > 0) return;
     await runRegisterAttempt();
   }
 
