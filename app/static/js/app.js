@@ -169,6 +169,8 @@
     hidePreviews: false,
     compactList: true,
     sort: 'updated',
+    // Own order inside a label (extra sort choice; kept apart from the sort enum so older clients keep theirs).
+    notesManualOrder: false,
     autoPreview: false,
     // Opt-out: new and existing clients auto-open empty single-PDF notes in inline preview.
     autoOpenPdfOnly: true,
@@ -255,7 +257,7 @@
   // synced like notes, so "hide previews" on the phone also applies on the Mac.
   const GLOBAL_PREF_KEYS = [
     'theme', 'fontSize', 'monospace', 'richEditor', 'spellcheck', 'hidePreviews', 'compactList',
-    'sort', 'autoPreview', 'autoOpenPdfOnly', 'autoLockMin', 'lockOnUnfocus', 'aiChat',
+    'sort', 'notesManualOrder', 'autoPreview', 'autoOpenPdfOnly', 'autoLockMin', 'lockOnUnfocus', 'aiChat',
     'googleOauthClientId', 'dropboxAppKey',
     'dropboxRefreshToken', 'dropboxAccessToken', 'dropboxTokenExpiresAt', 'dropboxConnected',
   ];
@@ -343,16 +345,29 @@
   }
 
   const NOTE_SORT_ORDER = ['updated', 'created', 'title'];
+  const NOTE_SORT_CHOICES = [...NOTE_SORT_ORDER, 'manual'];
 
   function sortModeLabel(mode) {
     if (mode === 'created') return 'Date created';
     if (mode === 'title') return 'Title';
+    if (mode === 'manual') return 'Own order';
     return 'Recent';
   }
 
+  // The choice shown in the sort controls: 'manual' or one of NOTE_SORT_ORDER.
+  function noteSortChoice() {
+    if (prefs.notesManualOrder === true) return 'manual';
+    return NOTE_SORT_ORDER.includes(prefs.sort) ? prefs.sort : 'updated';
+  }
+
+  // Own order is only defined inside one real label; elsewhere the list stays on prefs.sort.
+  function manualOrderActive() {
+    return prefs.notesManualOrder === true && !!currentTag && currentTag !== '__untagged__' && currentFilter !== 'documents';
+  }
+
   function syncSortControls() {
-    const mode = NOTE_SORT_ORDER.includes(prefs.sort) ? prefs.sort : 'updated';
-    if (prefs.sort !== mode) prefs.sort = mode;
+    if (!NOTE_SORT_ORDER.includes(prefs.sort)) prefs.sort = 'updated';
+    const mode = noteSortChoice();
     ['sort-select', 'sort-select-sidebar'].forEach((id) => {
       const el = document.getElementById(id);
       if (el && el.value !== mode) el.value = mode;
@@ -368,12 +383,17 @@
   }
 
   function setNoteSort(mode, { toast: showToast = false } = {}) {
-    const next = NOTE_SORT_ORDER.includes(mode) ? mode : 'updated';
-    if (prefs.sort === next) {
+    const next = NOTE_SORT_CHOICES.includes(mode) ? mode : 'updated';
+    if (noteSortChoice() === next) {
       syncSortControls();
       return;
     }
-    prefs.sort = next;
+    if (next === 'manual') {
+      prefs.notesManualOrder = true;
+    } else {
+      prefs.notesManualOrder = false;
+      prefs.sort = next;
+    }
     savePrefs();
     if (showToast) toast(sortModeLabel(next));
   }
@@ -10711,7 +10731,7 @@
     const sf = searchFilterOptions();
     const sfKey = `${sf.titlesOnly ? 1 : 0}:${sf.includeArchived ? 1 : 0}:${sf.includeTrashed ? 1 : 0}:${sf.includeProtected ? 1 : 0}:${sf.tagIds.join(',')}`;
     const ids = notes.map((n) => `${n.uuid}:${n.content.updated_at || ''}:${(n.content.ocr_text || '').length}:${noteTitleFingerprint(n)}:${n.content.pinned ? 1 : 0}:${n.content.starred ? 1 : 0}:${n.content.warn_at || ''}:${noteReminderAt(n)}:${n.content.locked ? 1 : 0}:${n.content.prevent_edit ? 1 : 0}`).join('|');
-    return `${currentFilter}:${currentTag || ''}:${currentFolder || ''}:${query}:${sfKey}:${prefs.sort}:${activeListNoteId()}:${ids}`;
+    return `${currentFilter}:${currentTag || ''}:${currentFolder || ''}:${query}:${sfKey}:${prefs.sort}:${manualOrderActive() ? 'own' : ''}:${activeListNoteId()}:${ids}`;
   }
 
   function editorNoteOpen() {
@@ -11174,6 +11194,32 @@
     return `<button type="button" class="note-row-more" data-id="${id}" aria-label="More actions for ${title}" title="More actions" aria-haspopup="menu">⋯</button>`;
   }
 
+  // Own order: move up / down buttons, only while the list is in own order and not searched.
+  function noteRowOrderBtnsHtml(note) {
+    if (!manualOrderActive() || ui.search?.value?.trim()) return '';
+    const id = escapeAttr(note.uuid);
+    const title = escapeAttr(noteRowActionTitle(note));
+    return `<span class="note-row-order"><button type="button" class="note-row-move" data-id="${id}" data-dir="-1" aria-label="Move ${title} up" title="Move up (Alt+Up)">▲</button><button type="button" class="note-row-move" data-id="${id}" data-dir="1" aria-label="Move ${title} down" title="Move down (Alt+Down)">▼</button></span>`;
+  }
+
+  // Moves a note one place in the shown own order and keeps focus on the moved row.
+  function moveNoteInOwnOrder(noteId, dir) {
+    if (!manualOrderActive() || ui.search?.value?.trim()) return false;
+    const ids = [...ui.noteList.querySelectorAll('.note-row')].map((row) => row.dataset.id);
+    const at = ids.indexOf(noteId);
+    const to = at + dir;
+    if (at < 0 || to < 0 || to >= ids.length) {
+      if (at >= 0) toast(dir < 0 ? 'Already first' : 'Already last');
+      return false;
+    }
+    if (!NotesStore.moveNoteInLabel(currentTag, ids, noteId, to)) return false;
+    renderNotesNow(); // synchronous: focus goes to the re-rendered row below
+    const moved = ui.noteList.querySelector(`.note-row[data-id="${CSS.escape(noteId)}"] .note-item`);
+    if (moved) moved.focus();
+    toast(`Moved to position ${to + 1} of ${ids.length}`);
+    return true;
+  }
+
   function noteRowStatusGlyphs(note) {
     if (!note?.content) return '';
     const parts = [];
@@ -11343,6 +11389,7 @@
       ${noteRowRestoreBtnHtml(n)}
       ${noteRowMoreBtnHtml(n)}
       ${noteRowDeleteBtnHtml(n)}
+      ${noteRowOrderBtnsHtml(n)}
       <button type="button" class="note-item ${active}" data-id="${escapeAttr(n.uuid)}">
         ${showListThumb
     ? listThumbHtml(firstAtt, n.uuid, kind, firstAtt ? attachmentThumbLabel(thumbKind) : '')
@@ -11500,7 +11547,7 @@
       folderId: currentFolder,
       tagMap: tagMap(),
       folderMap: folderMap(),
-      sort: prefs.sort,
+      sort: manualOrderActive() ? 'manual' : prefs.sort,
       searchOptions,
     });
     const titlesOnlyFallback = !!filtered.titlesOnlyFallback;
@@ -11621,7 +11668,7 @@
       return;
     }
     const sortMode = NOTE_SORT_ORDER.includes(prefs.sort) ? prefs.sort : 'updated';
-    const useDateSections = !query && (NotesSearch.listUsesDateSections?.(sortMode) ?? sortMode === 'updated');
+    const useDateSections = !query && !manualOrderActive() && (NotesSearch.listUsesDateSections?.(sortMode) ?? sortMode === 'updated');
     const sections = [];
     if (listingFiles) {
       if (!useDateSections) {
@@ -20876,8 +20923,8 @@
   document.getElementById('btn-save-template')?.addEventListener('click', () => saveCurrentAsTemplate());
   document.getElementById('btn-new-list')?.addEventListener('click', () => createNote());
   document.getElementById('btn-list-sort')?.addEventListener('click', () => {
-    const idx = NOTE_SORT_ORDER.indexOf(prefs.sort);
-    const next = NOTE_SORT_ORDER[(idx < 0 ? 0 : idx + 1) % NOTE_SORT_ORDER.length];
+    const idx = NOTE_SORT_CHOICES.indexOf(noteSortChoice());
+    const next = NOTE_SORT_CHOICES[(idx + 1) % NOTE_SORT_CHOICES.length];
     setNoteSort(next, { toast: true });
   });
   document.getElementById('sort-select')?.addEventListener('change', (e) => {
@@ -22791,7 +22838,7 @@
 
     list.addEventListener('pointerdown', (event) => {
       if (event.button && event.button !== 0) return;
-      if (event.target.closest('.note-swipe-delete, .note-row-delete, .note-row-restore, .note-row-more')) return;
+      if (event.target.closest('.note-swipe-delete, .note-row-delete, .note-row-restore, .note-row-more, .note-row-move')) return;
       if (opened && !opened.isConnected) opened = null;
       const next = event.target.closest('.note-row');
       if (!next) return;
@@ -22894,6 +22941,15 @@
       if (longPressFired) {
         event.preventDefault();
         longPressFired = false;
+        return;
+      }
+      const moveBtn = event.target.closest('.note-row-move');
+      if (moveBtn?.dataset?.id) {
+        event.preventDefault();
+        event.stopPropagation();
+        moveNoteInOwnOrder(moveBtn.dataset.id, Number(moveBtn.dataset.dir) < 0 ? -1 : 1);
+        const again = ui.noteList.querySelector(`.note-row[data-id="${CSS.escape(moveBtn.dataset.id)}"] .note-row-move[data-dir="${moveBtn.dataset.dir}"]`);
+        if (again) again.focus();
         return;
       }
       const moreBtn = event.target.closest('.note-row-more');
@@ -27611,6 +27667,14 @@ async function showSettings() {
         if (currentId && ui.editor && !ui.editor.hidden && ui.editor.contains(e.target)) {
           e.preventDefault();
           showFindBar();
+        }
+      }
+      if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        const item = e.target.closest?.('.note-item');
+        if (item && ui.noteList.contains(item) && manualOrderActive()) {
+          e.preventDefault();
+          moveNoteInOwnOrder(item.dataset.id, e.key === 'ArrowUp' ? -1 : 1);
+          return;
         }
       }
       if (!typing(e.target) && (e.key === 'j' || e.key === 'k')) {

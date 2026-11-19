@@ -39,6 +39,7 @@ const factory = new Function('scope', `
   const unlockedNotes = new Set();
   let currentFilter = 'all';
   const NOTE_SORT_ORDER = ['updated', 'created', 'title'];
+  const manualOrderActive = () => false;
   const activeListNoteId = () => '';
   const isTwoFaListNote = () => false;
   const noteIndexingBadge = () => '';

@@ -155,9 +155,11 @@ const day = (y, m, d) => new Date(y, m - 1, d).getTime();
   // "Show tasks" off hides them everywhere.
   const fakeStore = { listAgendaTasks: () => tasks.filter((t) => t.type !== 'note'), listAgendaEvents: () => [] };
   global.NotesStore = fakeStore;
-  assert.strictEqual(A._placedTasksForRange({ start: weekStart, end: weekEnd }).length > 0, true);
+  // _placedTasksForRange uses the real clock: overdue task "b" is placed on the real today.
+  const realWeek = { start: new Date(Date.now() - 3 * 864e5), end: new Date(Date.now() + 4 * 864e5) };
+  assert.strictEqual(A._placedTasksForRange(realWeek).length > 0, true);
   localStorage.setItem('notes_agenda_show_tasks', '0');
-  assert.strictEqual(A._placedTasksForRange({ start: weekStart, end: weekEnd }).length, 0, 'Show tasks off');
+  assert.strictEqual(A._placedTasksForRange(realWeek).length, 0, 'Show tasks off');
   localStorage.removeItem('notes_agenda_show_tasks');
 
   console.log('test_agenda_tasks.js: ok');

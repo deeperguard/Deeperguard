@@ -234,10 +234,91 @@
     return { remove: [uuid], updates };
   }
 
+  // Own order of notes inside a label (docs/FOLDERS_SPEC.md section 4).
+  // label.note_keys = { <note uuid>: { k: fractional index, t: epoch ms } } lives
+  // only in the encrypted label record; the note records are never touched.
+  const MAX_NOTE_KEYS = 1000;
+  const MIN_GAP = 1e-6;
+
+  const keyOf = (keys, uuid) => {
+    const e = keys && Object.prototype.hasOwnProperty.call(keys, uuid) ? keys[uuid] : null;
+    return e && Number.isFinite(e.k) ? e.k : null;
+  };
+
+  // notes: [{uuid, content:{created_at}}]. Keyed notes first by k (tie: uuid);
+  // notes without a key (old data, new notes) follow, newest created_at first (tie: uuid).
+  // Every input note is returned exactly once.
+  function orderNotes(notes, keys) {
+    const created = (n) => Date.parse(n && n.content && n.content.created_at) || 0;
+    const byUuid = (a, b) => (a.uuid < b.uuid ? -1 : a.uuid > b.uuid ? 1 : 0);
+    const keyed = [];
+    const loose = [];
+    for (const n of notes || []) (keyOf(keys, n.uuid) === null ? loose : keyed).push(n);
+    keyed.sort((a, b) => keyOf(keys, a.uuid) - keyOf(keys, b.uuid) || byUuid(a, b));
+    loose.sort((a, b) => created(b) - created(a) || byUuid(a, b));
+    return keyed.concat(loose);
+  }
+
+  function capNoteKeys(keys) {
+    const ids = Object.keys(keys);
+    if (ids.length <= MAX_NOTE_KEYS) return keys;
+    ids.sort((a, b) => keys[b].t - keys[a].t || (a < b ? -1 : 1));
+    const out = {};
+    for (const id of ids.slice(0, MAX_NOTE_KEYS)) out[id] = keys[id];
+    return out;
+  }
+
+  // orderedIds: the uuids as currently shown. Moves `uuid` to index `toIndex` of the new
+  // list and returns the new note_keys (a copy). Only the moved note gets a new key,
+  // unless a neighbour has no key or the gap is below 1e-6: then the shown notes are
+  // renumbered in one write (step 1024). existing (optional Set) drops keys of gone notes.
+  function moveNote(keys, orderedIds, uuid, toIndex, now, existing) {
+    const out = {};
+    for (const [id, e] of Object.entries(keys || {})) {
+      if (e && Number.isFinite(e.k) && (!existing || existing.has(id))) out[id] = { k: e.k, t: Number(e.t) || 0 };
+    }
+    const list = (orderedIds || []).filter((id) => id !== uuid);
+    const at = Math.max(0, Math.min(list.length, toIndex | 0));
+    list.splice(at, 0, uuid);
+    const prev = at > 0 ? keyOf(out, list[at - 1]) : null;
+    const next = at < list.length - 1 ? keyOf(out, list[at + 1]) : null;
+    const prevOk = at === 0 || prev !== null;
+    const nextOk = at === list.length - 1 || next !== null;
+    let k = null;
+    if (prevOk && nextOk) {
+      if (prev !== null && next !== null) k = (next - prev) >= MIN_GAP * 2 ? (prev + next) / 2 : null;
+      else if (prev !== null) k = prev + ORDER_STEP;
+      else if (next !== null) k = next - ORDER_STEP;
+      else k = ORDER_STEP;
+    }
+    if (k !== null) {
+      out[uuid] = { k, t: now };
+    } else {
+      list.forEach((id, i) => { out[id] = { k: (i + 1) * ORDER_STEP, t: now }; });
+    }
+    return capNoteKeys(out);
+  }
+
+  // Sync conflict: two devices changed note_keys of the same label. Union per note,
+  // the entry with the later t wins (tie: higher k). No key and no note is dropped.
+  function mergeNoteKeys(a, b) {
+    const out = {};
+    for (const src of [a, b]) {
+      for (const [id, e] of Object.entries(src || {})) {
+        if (!e || !Number.isFinite(e.k)) continue;
+        const cur = out[id];
+        const t = Number(e.t) || 0;
+        if (!cur || t > cur.t || (t === cur.t && e.k > cur.k)) out[id] = { k: e.k, t };
+      }
+    }
+    return capNoteKeys(out);
+  }
+
   const api = {
     SEP, MAX_DEPTH, MAX_LABELS, MAX_NAME,
     indexOf, nameOf, parentOf, validateName, validateParent, ancestors, descendants,
     depthOf, childrenOf, subtreeHeight, siblingNameTaken, pathOf, nextOrder, migrate, repair, planUpdate, planDelete,
+    MAX_NOTE_KEYS, orderNotes, moveNote, mergeNoteKeys,
   };
   if (typeof window !== 'undefined') window.NotesLabels = api;
   if (typeof globalThis !== 'undefined') globalThis.NotesLabels = api;

@@ -18,7 +18,7 @@ Gaps found that are *not* privacy blockers, but the task text assumes them:
 | Task assumption | Reality in this tree |
 | --- | --- |
 | Labels in the tree *are* the folders (one concept) | **Two concepts today**: `type:'tag'` items (labels, many per note, `note.tags`) and `type:'folder'` items (one per note, `note.folder_id`). Both reuse the same tree helpers (section 1.3). Unifying them is not built. |
-| Own order of notes inside a label | **Not built.** Notes in a folder are sorted by title (`store.js:5233`); in a label view by the normal sort modes. No `note_order` / sort-key field exists in the code. Section 4 is the target format. |
+| Own order of notes inside a label | **Built** (section 4): sort choice "Own order", `note_keys` inside the encrypted label record. Notes in a folder are still sorted by title (`store.js:5233`). |
 | Folder view with optional sub-labels and breadcrumb | Sub-labels are **always** included (`labeltree.js:127`, no toggle); a breadcrumb path is not rendered (`grep -i crumb app.js` finds nothing). |
 | Keyboard indent / outdent / move up / move down | **Not built.** `app.js:9625` returns early for any Alt/Ctrl/Meta key, so these chords do nothing today. Section 7 lists what exists and the proposed chords. |
 | Last writer wins *per field* | Today it is **per record** (one label = one record). See section 6. |
@@ -122,31 +122,39 @@ Decision recorded for the roadmap, with the current state:
   (folder -> tag, `folder_id` -> an entry in `tags`), not a new tree. Not built.
 - Nothing in this spec adds a plaintext field to the server; see section 2.
 
-## 4. Own order of notes inside a label
+## 4. Own order of notes inside a label (built)
 
-**Not built.** Target storage, all inside the encrypted label record:
+Storage, inside the encrypted label record only (`labels.js` `orderNotes`,
+`moveNote`, `mergeNoteKeys`; `store.js` `moveNoteInLabel`):
 
 ```
 note_keys: { "<note uuid>": { k: <number>, t: <epoch ms> }, ... }   // max 1000 entries
 ```
 
-- `k` is a fractional index: append = max + 1024; insert between two notes =
-  midpoint of their keys; when the gap falls below `1e-6`, renumber the visible
-  notes in one write (step 1024).
+- `k` is a fractional index: append = last + 1024; prepend = first - 1024; insert
+  between two notes = midpoint. When a neighbour has no key yet, or the gap falls
+  below `1e-6`, the shown notes are renumbered in one write (step 1024).
 - The note record is not touched: reordering never changes the note's
-  `updated_at`, revisions or sync state.
+  `updated_at`, revisions or sync state. On the wire the keys only exist inside the
+  label's ciphertext (`tests/test_note_manual_order.js`).
 - Reading: sort listed notes by `k`, ties by note uuid. Notes of the label that
-  have no entry come first, newest `created_at` first. Entries for notes that no
-  longer carry the label (or are gone) are ignored and dropped on the next write.
+  have no entry (old notes, new notes) come **after** the keyed ones, newest
+  `created_at` first, then uuid, so they never jump around. Entries for notes that
+  are gone are dropped on the next write.
 - Why a map and not an array of uuids (the earlier design in
   `NESTED_FOLDERS_SPEC.md` 2.3): each reorder touches one key, so two devices
   can be merged per note (section 6) instead of one whole list winning.
-- It is a view option: the existing sort modes stay, manual order is an extra mode
-  stored as a new setting (do not extend the existing `sort` enum; see
-  `NESTED_FOLDERS_SPEC.md` 2.3 for why).
-- Sibling labels already have this today, as the plain number `order`
-  (`labels.js:112`), same step 1024; it is currently only changed by append on
-  create/move, there is no reorder action.
+- It is the sort choice "Own order" next to Recent / Date created / Title. The
+  choice is stored as the boolean setting `notesManualOrder`; the existing `sort`
+  enum is not extended, so older clients keep their own value. Own order applies
+  only while one label is selected (not "No label", not Files, not while searching);
+  elsewhere the list uses `sort`. Pinned notes follow the manual order there.
+- Moving: Alt+Up / Alt+Down on a note row, or the move-up / move-down buttons of
+  the row; focus stays on the moved row and a toast reports the new position.
+  Notes of sub-labels shown in the same view are ordered by the selected label's keys.
+- Folders (the separate `folder` type) have no own order; they stay sorted by title.
+- Sibling labels have the plain number `order` (`labels.js` `nextOrder`), same step
+  1024; it is only changed by append on create/move, there is no reorder action.
 
 ## 5. Rules against cycles (built)
 
@@ -185,9 +193,13 @@ What happens today (`store.js:3772` `resolvePushConflict`):
 - Invalid combinations from two valid edits are repaired by section 5.
 - Offline edits are queued and pushed later through the same path.
 
-Target (not built): *last writer wins per field*. A label's `name`, `parent_id`
-and `order` would be merged field by field, and `note_keys` per note uuid using
-`t`, so two devices that rename and move the same label both keep their change,
+Built for `note_keys` only (`store.js` `resolvePushConflict`, log `conflict-note-keys-merge`): two devices that reorder the same label are merged per note uuid using
+`t`, so a reorder on one device does not discard a reorder of other notes on
+another and no note disappears; the label's own `name`, `parent_id` and `order` stay
+whole-record last-writer-wins.
+
+Target (not built): *last writer wins per field* for `name`, `parent_id` and `order`
+too, so two devices that rename and move the same label both keep their change,
 and a reorder on one device does not discard a reorder of other notes on
 another. Order/move losing is the worst case; a note or label is never deleted
 by a merge.

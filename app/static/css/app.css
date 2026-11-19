@@ -13241,3 +13241,31 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .settings-hint.security-steps { margin: 0; padding-left: calc(var(--space-4) + 1.4em); }
 .security-steps li + li { margin-top: var(--space-1); }
 .settings-group.security-group > h3 { font-size: var(--text-md); }
+
+/* Own order inside a label: move up / down buttons on each row */
+.note-row-order {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: inline-flex;
+  gap: 2px;
+}
+.note-row:has(.note-row-order) .note-item-body { padding-right: 66px; }
+.note-row-move {
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.note-row-move:hover { opacity: 1; color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
+.note-row-move:focus-visible { opacity: 1; outline: 2px solid var(--focus-ring); outline-offset: 2px; }

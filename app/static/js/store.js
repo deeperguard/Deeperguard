@@ -3849,6 +3849,14 @@ const NotesStore = (() => {
       applySearchIndexEntries();
       return winLocal();
     }
+    if (type === 'tag' && remote.content?.type === 'tag' && (local.content.note_keys || remote.content.note_keys)) {
+      // Own note order: merge per note, so neither device's reorder (nor a note) is lost.
+      // Name, parent and order of the label itself stay last-writer-wins.
+      const base = (Number(local.updated_at) || 0) >= serverUpdated ? local.content : remote.content;
+      local.content = { ...base, note_keys: NotesLabels.mergeNoteKeys(local.content.note_keys, remote.content.note_keys) };
+      logSync('conflict-note-keys-merge', { uuid, rev: serverRev });
+      return winLocal(remote);
+    }
     if ((Number(local.updated_at) || 0) >= serverUpdated) return winLocal(remote);
     await adoptServerItem(uuid, serverRow, remote);
     return false;
@@ -5406,6 +5414,16 @@ const NotesStore = (() => {
     const updates = NotesLabels.repair([...state.items.entries()].map(([uuid, i]) => ({ uuid, content: i.content, deleted: i.deleted })));
     applyLabelUpdates(updates);
     return updates.length;
+  }
+
+  // Own order of notes in a label: moves one note and stores the keys in the encrypted label.
+  function moveNoteInLabel(labelUuid, orderedIds, noteUuid, toIndex) {
+    const tag = get(labelUuid);
+    if (!tag || tag.deleted || tag.content.type !== 'tag') return false;
+    const existing = new Set(listNotes().map((n) => n.uuid));
+    const note_keys = NotesLabels.moveNote(tag.content.note_keys, orderedIds, noteUuid, toIndex, Date.now(), existing);
+    upsert(labelUuid, { ...tag.content, note_keys });
+    return true;
   }
 
   function setTagColor(uuid, color) {
@@ -7872,6 +7890,7 @@ const NotesStore = (() => {
     listTags,
     noteCountForTag,
     renameTag,
+    moveNoteInLabel,
     renameTagPath,
     createTag,
     moveTag,

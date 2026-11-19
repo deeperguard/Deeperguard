@@ -863,6 +863,15 @@ const NotesSearch = (() => {
     return updatedStamp(b) - updatedStamp(a);
   }
 
+  // 'manual' (own order): only inside one label, using note_keys of that label's encrypted
+  // record. Without a label the list keeps the Recent order.
+  function applyManualOrder(notes, sort, tagId, tagMap) {
+    if (sort !== 'manual' || !tagId || tagId === '__untagged__') return notes;
+    const tag = tagMap?.get?.(tagId);
+    if (!tag?.content || typeof NotesLabels === 'undefined') return notes;
+    return NotesLabels.orderNotes(notes, tag.content.note_keys);
+  }
+
   function listUsesDateSections(sort) {
     return sort === 'updated' || sort === 'created';
   }
@@ -975,7 +984,8 @@ const NotesSearch = (() => {
 
         return matches(n, q, tagMap, { titlesOnly: opts.titlesOnly, folderMap });
       })
-      .sort((a, b) => compareNotesForSort(a, b, sort));
+      .sort((a, b) => compareNotesForSort(a, b, sort === 'manual' ? 'updated' : sort));
+      out = applyManualOrder(out, sort, tagId, tagMap);
     } catch (err) {
       if (err instanceof RangeError) {
         if (opts.titlesOnly) return [];
