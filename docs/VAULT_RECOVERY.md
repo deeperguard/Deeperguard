@@ -651,6 +651,18 @@ against `key_id` must first run Argon2id(password, `kdf_salt`) (same cost as
 testing it against an item's GCM tag, which the server already stores), so it
 adds no cheaper oracle. It is truncated to 128 bits.
 
+### 7.0 Known limitation: stale-key check trusts the client's password time
+
+`put_recovery_wrap` (`db.py`) refuses a first or replacement wrap when the account's
+`password_changed_at` is later than the value the writing device sends as
+`key_password_changed_at`. That value is read by the client from `localStorage`
+(`readPasswordAck`). `bootstrapServerSession` already confirms it when the page loads,
+before unlocking, but the server does not bind it to the unlock itself. A cleared
+`localStorage` yields 0, so the write is refused unnecessarily (`key_id_mismatch`); the
+user unlocks again and retries. This is safe: a client can only make the check stricter
+for itself, and a wrap made under a stale key could not open current data anyway. It is
+not a security boundary. A follow-up could bind the value to the unlock.
+
 ### 7.1 Interruption states
 
 | Stop point in 3.2 | Server state | What the user does |

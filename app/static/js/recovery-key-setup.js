@@ -472,8 +472,12 @@
     // The required step after registration cannot be dismissed. A key made from
     // Settings can be cancelled; nothing has been saved until the wrap is stored.
     // Capture on window so no other Escape handler (settings, menus) sees it first.
+    // Only events from inside the dialog (or with no focused element) are handled.
     global.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape' || !session) return;
+      const target = event.target;
+      const body = global.document.body;
+      if (target !== body && !el('recovery-key-dialog')?.contains(target)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (session.mode === 'settings' && !session.saving) close();
