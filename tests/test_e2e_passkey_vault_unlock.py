@@ -25,6 +25,12 @@ LIST = "#passkey-list"
 # Registration derives the vault key (slow KDF) and every passkey step is a server round trip;
 # on a loaded build server Playwright's 30 s default is too tight. Same budget register() uses.
 UI_TIMEOUT_MS = 120_000
+# The vault-keys write token lives in the Flask session cookie. Any other request still in flight
+# when the password proof is made can answer later with an older cookie and wipe the token, which
+# costs a 401 and a new (slow) proof; under load that window is wide. The test therefore lets
+# every pending request finish before it starts a passkey action.
+QUIET_POLLS = 4
+SETTLE_MAX_MS = 20_000
 # The installed webauthn package may lack options_to_json_dict (the app imports it); the
 # server's own option building and signature checks still run, only the dict conversion is bridged.
 SERVER_PRELUDE = """
@@ -58,6 +64,26 @@ def _add_authenticator(page, *, prf: bool):
     return cdp
 
 
+def _track_requests(page) -> set:
+    pending: set = set()
+    page.on("request", lambda r: pending.add(r))
+    page.on("requestfinished", lambda r: pending.discard(r))
+    page.on("requestfailed", lambda r: pending.discard(r))
+    return pending
+
+
+def _settle(page, pending: set) -> None:
+    """Return once no request has been in flight for several consecutive polls."""
+    quiet = 0
+    waited = 0
+    while quiet < QUIET_POLLS:
+        quiet = quiet + 1 if not pending else 0
+        page.wait_for_timeout(50)
+        waited += 50
+        if waited >= SETTLE_MAX_MS:  # a request that never ends must not hang the test
+            return
+
+
 class PasskeyVaultUnlockE2E(unittest.TestCase):
     def _run(self, prf: bool, body):
         from playwright.sync_api import sync_playwright
@@ -84,6 +110,7 @@ class PasskeyVaultUnlockE2E(unittest.TestCase):
                 browser = launch(p)
                 page = browser.new_context(viewport={"width": 1280, "height": 860}).new_page()
                 page.set_default_timeout(UI_TIMEOUT_MS)
+                self.pending = _track_requests(page)
                 _add_authenticator(page, prf=prf)
                 register(page, base)
                 page.evaluate(OPEN_SETTINGS_JS)
@@ -94,6 +121,9 @@ class PasskeyVaultUnlockE2E(unittest.TestCase):
             proc.terminate()
             proc.wait(timeout=10)
             shutil.rmtree(root, ignore_errors=True)
+
+    def _settle(self, page):
+        _settle(page, self.pending)
 
     def _add_passkey(self, page, *, with_unlock: bool):
         if with_unlock:
@@ -107,6 +137,7 @@ class PasskeyVaultUnlockE2E(unittest.TestCase):
             row = f"{LIST} .passkey-row"
             self.assertEqual(page.get_attribute(f"{row} .passkey-unlock-status", "data-unlock-state"), "off")
             self.assertEqual(wraps(), [])
+            self._settle(page)
             page.click(f"{row} .passkey-unlock-toggle")
             page.wait_for_selector(f"{row} .passkey-unlock-status[data-unlock-state='on']")
             self.assertIn("Vault unlock: on", page.text_content(f"{row} .passkey-unlock-status"))
@@ -115,6 +146,7 @@ class PasskeyVaultUnlockE2E(unittest.TestCase):
             self.assertEqual(len(stored), 1)
             self.assertEqual(page.get_attribute(row, "data-credential-id"), stored[0])
             # The stored copy opens with this passkey's PRF output and holds this vault's key.
+            self._settle(page)
             same = page.evaluate(
                 """async (cid) => {
                   const status = await NotesStore.api('/api/account/vault-keys');
@@ -142,14 +174,17 @@ class PasskeyVaultUnlockE2E(unittest.TestCase):
             )
             self.assertTrue(same)
             # Turn it off: the copy is gone, the passkey stays.
+            self._settle(page)
             page.click(f"{row} .passkey-unlock-toggle")
             page.wait_for_selector(f"{row} .passkey-unlock-status[data-unlock-state='off']")
             self.assertEqual(wraps(), [])
             self.assertEqual(page.locator(f"{LIST} .passkey-row").count(), 1)
             # Turn it on again, then removing the passkey removes the copy.
+            self._settle(page)
             page.click(f"{row} .passkey-unlock-toggle")
             page.wait_for_selector(f"{row} .passkey-unlock-status[data-unlock-state='on']")
             self.assertEqual(len(wraps()), 1)
+            self._settle(page)
             page.click(f"{row} >> text=Remove")
             page.wait_for_selector(f"{LIST} .passkey-row", state="detached")
             self.assertEqual(wraps(), [])
