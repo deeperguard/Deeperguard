@@ -190,6 +190,21 @@
     return { target: list[j], zone: dir < 0 ? 'before' : 'after' };
   }
 
+  // Target for Alt+Right (indent: last child of the previous sibling) and Alt+Left
+  // (outdent: right after the current parent) as dropPlan input, or null when impossible.
+  function levelStep(byId, uuid, dir) {
+    if (!byId.has(uuid)) return null;
+    const kids = childMap(byId);
+    const parent = L().parentOf(byId.get(uuid)) || '';
+    const realParent = byId.has(parent) ? parent : '';
+    if (dir > 0) {
+      const list = kids.get(realParent) || [];
+      const i = list.indexOf(uuid);
+      return i > 0 ? { target: list[i - 1], zone: 'into' } : null;
+    }
+    return realParent ? { target: realParent, zone: 'after' } : null;
+  }
+
   function loadOpen(storage) {
     try {
       const v = JSON.parse(storage.getItem(OPEN_KEY) || '[]');
@@ -203,7 +218,7 @@
     try { storage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch (err) { /* ignore */ }
   }
 
-  const api = { OPEN_KEY, childMap, visibleRows, html, navigate, scope, moveTargets, dropPlan, siblingStep, loadOpen, saveOpen };
+  const api = { OPEN_KEY, childMap, visibleRows, html, navigate, scope, moveTargets, dropPlan, siblingStep, levelStep, loadOpen, saveOpen };
   if (typeof window !== 'undefined') window.NotesLabelTree = api;
   if (typeof globalThis !== 'undefined') globalThis.NotesLabelTree = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

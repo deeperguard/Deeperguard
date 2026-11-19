@@ -20,7 +20,7 @@ Gaps found that are *not* privacy blockers, but the task text assumes them:
 | Labels in the tree *are* the folders (one concept) | **Two concepts today**: `type:'tag'` items (labels, many per note, `note.tags`) and `type:'folder'` items (one per note, `note.folder_id`). Both reuse the same tree helpers (section 1.3). Unifying them is not built. |
 | Own order of notes inside a label | **Built** (section 4): sort choice "Own order", `note_keys` inside the encrypted label record. Notes in a folder are still sorted by title (`store.js:5233`). |
 | Folder view with optional sub-labels and breadcrumb | Sub-labels are **always** included (`labeltree.js:127`, no toggle); a breadcrumb path is not rendered (`grep -i crumb app.js` finds nothing). |
-| Keyboard indent / outdent / move up / move down | **Not built.** `app.js:9625` returns early for any Alt/Ctrl/Meta key, so these chords do nothing today. Section 7 lists what exists and the proposed chords. |
+| Keyboard indent / outdent / move up / move down | **Built** (section 8): Alt+Up/Down/Right/Left on a label row, plus "Move to..." in the actions menu. |
 | Last writer wins *per field* | Today it is **per record** (one label = one record). See section 6. |
 
 ## 1. Inventory: where name, parent and order live
@@ -243,11 +243,10 @@ Built (focus is on a tree row):
 | Delete | delete folder (confirmation); labels via the menu |
 | Arrow keys, Esc, Tab in the menu | move through items, close (focus returns) |
 
-**Move up / move down / indent / outdent: not built.** Today the equivalent is
-"Move to..." in the menu (any valid parent, appended at the end). Proposed chords,
-chosen because they do not collide with the browser or with existing shortcuts
-(`app.js:27584-27604` uses `/`, Ctrl/Cmd+K, Ctrl/Cmd+N, Ctrl/Cmd+Alt+N), and
-matching `NESTED_FOLDERS_SPEC.md` 7.1:
+Move chords (`app.js` label tree `keydown`, `labeltree.js` `siblingStep` / `levelStep`).
+"Move to..." in the menu offers any valid parent (appended at the end). The chords
+do not collide with the browser or with existing shortcuts (`/`, Ctrl/Cmd+K,
+Ctrl/Cmd+N, Ctrl/Cmd+Alt+N), and match `NESTED_FOLDERS_SPEC.md` 7.1:
 
 | Chord | Action | Validation |
 | --- | --- | --- |
@@ -256,8 +255,8 @@ matching `NESTED_FOLDERS_SPEC.md` 7.1:
 | Alt+Right | indent: become the last child of the previous sibling | `validateParent` (cycle, depth 8, sibling name) |
 | Alt+Left | outdent: become the sibling after the current parent | no-op at top level |
 
-Each must keep focus on the moved row, announce the result in a polite live
-region (also the refusal reason), and have a menu entry so mouse and touch users
+Each keeps focus on the moved row and announces the result (or the refusal reason) in the
+polite toast live region (`#toast`, `role=status`). Each has a menu entry or equivalent so mouse and touch users
 reach it without a chord. Drag and drop (`bindLabelDrag` in `app.js`; mouse on the
 row, touch on the grip) and Alt+ArrowUp/Down are extras, not the only way. A drop
 between two labels writes only `order` (`labeltree.js` `dropPlan`), a drop on a
