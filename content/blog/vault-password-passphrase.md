@@ -39,7 +39,7 @@ A memorable passphrase can still be forgotten after a long holiday. Keep a backu
 
 Store your Deeperguard recovery code the same careful way, and separately from your passphrase if you can. Remember: Deeperguard will never ask you for your vault password, recovery key or recovery code by email, chat or phone. Anyone who does is trying to scam you.
 
-If you created your account recently, sign-up also showed you a recovery key. It is not the same thing as a recovery code: it is a second way to open your vault, so anyone who has it and can sign in to your account can open your notes. Keep it away from your device, and treat it like the passphrase itself. The app has no screen yet to reset a forgotten password with the recovery key, so it does not replace the backup above. Accounts created before this step have no recovery key.
+If you created your account recently, sign-up also showed you a recovery key. It is not the same thing as a recovery code: it is a second way to open your vault, so anyone who has it and can sign in to your account can open your notes. Keep it away from your device, and treat it like the passphrase itself. If you forget your password, you can use the recovery key on the unlock screen to choose a new password. The recovery key does not sign you in, so you first need a device that is still signed in, or a passkey or an account recovery code to sign in. Keep the backup above anyway: if you lose both the password and the recovery key, your notes cannot be opened. Accounts created before this step can create a recovery key in Settings after unlocking.
 
 ## What to avoid
 
@@ -58,3 +58,5 @@ If you created your account recently, sign-up also showed you a recovery key. It
 Want to see how your password and notes are protected? Our [security page](/security) explains the design, and Deeperguard's source is available for review on our [verify page](/verify). We'd rather you check than take our word for it.
 
 Updated: 2026-11-18. New accounts now create a recovery key during sign-up, so the vault password is no longer described as the only secret. Added how to store the recovery key and that the app cannot reset a password with it yet.
+
+Updated 2026-11-19: A forgotten password can now be reset with the recovery key on the unlock screen, from a signed-in session, and older accounts can create a recovery key in Settings. The sentence saying the app had no screen for this yet was replaced.
