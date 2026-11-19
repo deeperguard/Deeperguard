@@ -101,6 +101,7 @@ def main() -> int:
             # Outdent at top level is refused with a message and changes nothing.
             press("Gamma", "Alt+ArrowLeft")
             assert "top level" in page.locator("#toast").inner_text()
+            assert page.locator("#toast").get_attribute("role") == "status"
             assert page.evaluate(LAYOUT_JS) == "Alpha,-Alpha child,Beta,Gamma"
 
             # Move to...: Gamma under Beta via the menu; Alpha cannot go under its own child.
@@ -109,8 +110,11 @@ def main() -> int:
             options = page.locator("#label-move-select option").all_inner_texts()
             assert "Alpha / Alpha child" not in options and "Beta" in options, options
             page.keyboard.press("Escape")
+            # Escape leaves the first menu's pointerdown listener attached. A press inside the
+            # new Gamma menu must not close it through that stale listener (openLabelMenu `away`).
             press("Gamma", "Shift+F10")
             page.locator('#label-menu [data-act="move"]').click()
+            assert page.locator("#label-move-select").count() == 1, "press inside a newer label menu closed it"
             page.locator("#label-move-select").select_option(label="Beta")
             page.locator("[data-move-ok]").click()
             page.wait_for_function("() => document.querySelectorAll('#tag-list [aria-level=\\'2\\']').length === 2")

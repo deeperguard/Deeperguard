@@ -264,8 +264,12 @@ Ctrl/Cmd+N, Ctrl/Cmd+Alt+N), and match `NESTED_FOLDERS_SPEC.md` 7.1:
 | Alt+Left | outdent: become the sibling after the current parent | no-op at top level |
 
 Each keeps focus on the moved row and announces the result (or the refusal reason) in the
-polite toast live region (`#toast`, `role=status`). Each has a menu entry or equivalent so mouse and touch users
-reach it without a chord. Drag and drop (`bindLabelDrag` in `app.js`; mouse on the
+toast live region `#toast`, which is the one element for all toasts. A normal toast is
+`role=status` (polite). A toast shown with `toast(..., true)` is an error: `setToastRole`
+(`app.js:4431`) switches the same element to `role=alert` (`aria-live=assertive`) so it is
+read at once. The move refusals from `NotesLabels.moveErrorText` (`app.js:9576`, `9736`) are
+errors; the indent and outdent refusals (`app.js:9688`) are normal toasts, so they are polite.
+Each has a menu entry or equivalent so mouse and touch users reach it without a chord. Drag and drop (`bindLabelDrag` in `app.js`; mouse on the
 row, touch on the grip) and Alt+ArrowUp/Down are extras, not the only way. A drop
 between two labels writes only `order` (`labeltree.js` `dropPlan`), a drop on a
 label also writes `parent_id`; both stay inside the encrypted label record.
