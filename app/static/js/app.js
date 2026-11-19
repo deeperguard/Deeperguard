@@ -25141,6 +25141,7 @@ async function showSettings() {
         danger: true,
         checkbox: twoFaOption,
         verifyPassword: (typed) => NotesStore.verifyVaultPassword(typed),
+        wrongPasswordMessage: 'Wrong password. Nothing was exported.',
       },
     );
     if (confirmed !== true) return;

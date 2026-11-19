@@ -184,6 +184,7 @@
     danger = false,
     verifyPassword = null,
     maxAttempts = 3,
+    wrongPasswordMessage = 'Wrong password.',
     checkbox = null,
   } = {}) {
     const d = doc();
@@ -297,7 +298,7 @@
         if (ok) { cleanup(true); return; }
         attempts += 1;
         if (attempts >= maxAttempts) { cleanup(false); return; }
-        pwError.textContent = 'Wrong password. Nothing was exported.';
+        pwError.textContent = wrongPasswordMessage;
         pwError.hidden = false;
         pwInput.focus();
       };
