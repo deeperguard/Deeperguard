@@ -154,6 +154,14 @@ class EnexImportTests(unittest.TestCase):
         r = self.parse(enex(note("x", "<div>&nbsp;</div>")))
         self.assertTrue(r["ok"])
         self.assertEqual(r["notes"], [])
+        self.assertEqual(
+            r["skipped"][0]["reason"],
+            "content is not valid ENML (HTML entities such as &nbsp; are not allowed)",
+        )
+        r = self.parse(enex(note("x", "<div>caf&eacute;</div>")))
+        self.assertEqual(r["notes"], [])
+        self.assertIn("HTML entities", r["skipped"][0]["reason"])
+        r = self.parse(enex(note("x", "<div>a<b</div>")))
         self.assertEqual(r["skipped"][0]["reason"], "content is not valid ENML")
 
     def test_script_handlers_and_javascript_urls_removed(self):
