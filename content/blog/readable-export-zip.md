@@ -42,7 +42,7 @@ tags: ["travel", "2027"]
 ---
 ```
 
-The body follows as your note text. The tag names are written out as words, not as internal IDs. If a note has attachments, an `attachments:` line is added and a list of links is appended to the body. The links are relative, so they work when you unzip the folder and open the note next to its files. Images are linked as images. Attachment files get the first eight characters of their internal ID as a prefix, so two files with the same name do not overwrite each other.
+The body follows as your note text. The tag names are written out as words, not as internal IDs. If a note has attachments, an `attachments:` line is added and a list of links is appended to the body. The links are relative, so they work when you unzip the folder and open the note next to its files. Importing the ZIP back into Deeperguard reads these links as attachments again, as described in docs/IMPORT_EXPORT_SPEC.md (section 3.1). Images are linked as images. Attachment files get the first eight characters of their internal ID as a prefix, so two files with the same name do not overwrite each other.
 
 The body is written as stored, without conversion. A checklist note comes out as `- [ ]` and `- [x]` lines.
 
