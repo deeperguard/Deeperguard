@@ -19,7 +19,7 @@ Gaps found that are *not* privacy blockers, but the task text assumes them:
 | --- | --- |
 | Labels in the tree *are* the folders (one concept) | **Two concepts today**: `type:'tag'` items (labels, many per note, `note.tags`) and `type:'folder'` items (one per note, `note.folder_id`). Both reuse the same tree helpers (section 1.3). Unifying them is not built. |
 | Own order of notes inside a label | **Built** (section 4): sort choice "Own order", `note_keys` inside the encrypted label record. Notes in a folder are still sorted by title (`store.js:5233`). |
-| Folder view with optional sub-labels and breadcrumb | Sub-labels are **always** included (`labeltree.js:127`, no toggle); a breadcrumb path is not rendered (`grep -i crumb app.js` finds nothing). |
+| Folder view with optional sub-labels and breadcrumb | **Built** (section 7): breadcrumb `app.js:9480` `renderLabelFolderBar`, toggle "Include sublabels" `app.js:9466`-`9476` (per device, default on). |
 | Keyboard indent / outdent / move up / move down | **Built** (section 8): Alt+Up/Down/Right/Left on a label row, plus "Move to..." in the actions menu. |
 | Last writer wins *per field* | Today it is **per record** (one label = one record). See section 6. |
 
@@ -218,19 +218,28 @@ by a merge.
 
 ## 7. Folder view
 
-Today:
+Built:
 
-- Selecting a label (`app.js:9465`) filters the note list to notes with the label
-  **or any sub-label** (`labeltree.js:127` `scope`, `app.js:9445`); the count
-  shown per label includes sub-labels, each note once (`app.js:9450`).
+- Selecting a label (`app.js:9519` `selectLabel`) filters the note list. With
+  "Include sublabels" on (default) it matches the label **or any sub-label**
+  (`app.js:9474` `currentTagScope`, `labeltree.js` `scope`); with it off, only
+  notes that carry the label itself.
+- The header of the view (`#label-folder-bar`, `app.js:9480` `renderLabelFolderBar`)
+  shows the breadcrumb "All notes / A / B": each ancestor is a button that
+  navigates there (`app.js:21033`), the current label is `aria-current="page"`.
+  The sublabel checkbox is hidden when the label has no sublabels, and "New note"
+  creates a note with the current label.
+- The sublabel choice is stored per device in `localStorage` under
+  `notes_label_include_subs` as `1` or `0` (`app.js:9466`-`9476`). If storage
+  refuses the key, the toggle shows its default (on) and the choice is not kept:
+  the code reads storage on every check, so an unchecked box has no effect there.
 - Selecting a folder shows `notesInFolder(id)` (`store.js:5233`), direct notes
   only, sorted by title. "All notes" clears it.
-- No breadcrumb. The manage dialog and move dialog show the full path
+- The manage dialog and move dialog show the full path
   (`labels.js:pathOf`, `"A / B / C"`).
 
-Target (not built): header of the view shows the breadcrumb of ancestors
-(each a link), a toggle "include sub-labels" (default on, matches today), and the
-manual order of section 4 when that sort mode is on.
+Not built: a breadcrumb or toggle for folders (`type:'folder'` items); the
+folder view only covers labels.
 
 ## 8. Keyboard actions
 

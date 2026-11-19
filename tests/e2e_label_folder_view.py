@@ -1,9 +1,10 @@
 """E2E (Playwright): folder view of a label (breadcrumb, include-sublabels toggle, New note).
 
 Selecting a label shows a breadcrumb whose parents are clickable, a checkbox
-"Include sublabels" (remembered per device in localStorage) that adds or removes
-the notes of sublabels, and a "New note" button that gives the new note the
-current label. Any pageerror / console.error fails the test.
+"Include sublabels" (remembered per device in localStorage, also after a reload)
+that adds or removes the notes of sublabels, and a "New note" button that gives the
+new note the current label. If localStorage refuses the choice, the checkbox falls
+back to on. Any pageerror / console.error fails the test.
 
     python tests/e2e_label_folder_view.py
 """
@@ -20,6 +21,17 @@ from e2e_share_target import launch, register  # noqa: E402
 from e2e_signup_autounlock import free_port, start_server  # noqa: E402
 
 TITLES_JS = "() => [...document.querySelectorAll('.note-row')].map((r) => r.textContent).join('|')"
+# Makes localStorage throw for the sublabel key only, as a browser with storage blocked would.
+DENY_SUBS_KEY_JS = """(() => {
+  const key = 'notes_label_include_subs';
+  for (const name of ['getItem', 'setItem']) {
+    const original = Storage.prototype[name];
+    Storage.prototype[name] = function (k, ...rest) {
+      if (k === key) throw new DOMException('storage blocked', 'SecurityError');
+      return original.call(this, k, ...rest);
+    };
+  }
+})();"""
 
 
 def main() -> int:
@@ -77,6 +89,15 @@ def main() -> int:
             rows(1)
             assert "NoteInWork" in page.evaluate(TITLES_JS)
             assert page.evaluate("() => localStorage.getItem('notes_label_include_subs')") == "0"
+
+            # The unchecked choice survives a reload.
+            page.reload(wait_until="domcontentloaded")
+            unlock(page)
+            page.locator("#tag-section").evaluate("(el) => { el.open = true; }")
+            pick("Work")
+            page.wait_for_selector("#label-folder-bar:not([hidden])")
+            assert not page.locator("#label-include-subs").is_checked()
+            rows(1)
             page.locator("#label-include-subs").check()
             rows(2)
 
@@ -109,6 +130,19 @@ def main() -> int:
             # "All notes" in the breadcrumb leaves the label view.
             page.locator('#label-crumbs button:has-text("All notes")').click()
             page.wait_for_selector("#label-folder-bar", state="hidden")
+
+            # Storage that refuses the sublabel key: the view still works and the toggle
+            # falls back to its default (on).
+            page.add_init_script(DENY_SUBS_KEY_JS)
+            page.reload(wait_until="domcontentloaded")
+            unlock(page)
+            page.locator("#tag-section").evaluate("(el) => { el.open = true; }")
+            pick("Work")
+            page.wait_for_selector("#label-folder-bar:not([hidden])")
+            assert page.locator("#label-include-subs").is_checked()
+            # Work plus Projects: NoteInWork, NoteInProjects and the note made by "New note" above.
+            rows(3)
+            assert page.locator("#label-crumbs [aria-current=page]").inner_text() == "Work"
             browser.close()
     finally:
         proc.terminate()
