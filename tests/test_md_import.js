@@ -131,6 +131,13 @@ const NOW = new Date('2026-11-18T12:00:00Z');
   assert.ok(sn.includes('&lt;img src="x'), 'unterminated tag is escaped');
   assert.ok(sn.includes('<https://example.com/>') && sn.includes('1 &lt; 2'));
 
+  // The renderer is a second line of defence: the imported text goes through render() and no live handler survives.
+  const Markdown = require(path.join(jsRoot, 'markdown.js'));
+  const rendered = Markdown.render(sn);
+  assert.ok(rendered.length > 0);
+  assert.ok(!/<[^>]*\bon[a-z]+\s*=/i.test(rendered), `handler survived rendering: ${rendered}`);
+  assert.ok(!/<script|<iframe|javascript:/i.test(rendered), `active markup survived rendering: ${rendered}`);
+
   // The import allowlist is the NotesSanitize allowlist (minus button).
   for (const tag of NotesSanitize.RICH_ALLOWED_TAGS.filter((t) => t !== 'button' && !['br', 'hr', 'img'].includes(t))) {
     const out = (await Import.parse([{ name: 't.md', bytes: enc(`<${tag}>x</${tag}>`) }], { now: NOW })).notes[0].content;
