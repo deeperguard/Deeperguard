@@ -87,7 +87,7 @@ assert.strictEqual(ctl.getZoom(), 1);
 assert.notStrictEqual(f.stage.style.width, '');
 assert.strictEqual(parseFloat(f.stage.style.width), 100);
 const btns = ctl.bar.querySelectorAll('button');
-assert.strictEqual(btns.length, 4);
+assert.strictEqual(btns.length, 6); // zoom out/in, fit, previous, next, full screen
 btns.forEach((b) => {
   assert.ok(b.title && b.getAttribute('aria-label') === b.title);
   assert.strictEqual(b.type, 'button');
@@ -115,6 +115,28 @@ f.scroller.scrollHeight = 3600;
 f.scroller.scrollTop = 1250;
 fire(f.scroller, 'scroll');
 assert.strictEqual(page.textContent, '2 / 3');
+
+// Page navigation: shown for 2+ pages, ends disabled, clamped jumps, hidden for one page.
+const { clampPage } = require('../app/static/js/doc-inline-controls.js');
+assert.deepStrictEqual([clampPage(0, 3), clampPage(2.4, 3), clampPage(9, 3), clampPage('x', 3)], [1, 2, 3, 1]);
+const nav = ctl.bar.querySelector('.doc-inline-pagenav');
+assert.strictEqual(nav.hidden, false);
+assert.strictEqual(page.hidden, true, 'the passive text gives way to the page bar');
+assert.strictEqual(ctl.bar.querySelector('.doc-ctl-prev').getAttribute('aria-label'), 'Previous page');
+assert.strictEqual(ctl.bar.querySelector('.doc-inline-page-total').textContent, '3');
+ctl.goToPage(3);
+assert.strictEqual(ctl.getPage(), 3);
+assert.strictEqual(ctl.bar.querySelector('.doc-inline-page-input').value, '3');
+assert.ok(ctl.bar.querySelector('.doc-ctl-next').disabled);
+assert.ok(!ctl.bar.querySelector('.doc-ctl-prev').disabled);
+click(ctl.bar.querySelector('.doc-ctl-prev'));
+assert.strictEqual(ctl.getPage(), 2);
+ctl.goToPage(99);
+assert.strictEqual(ctl.getPage(), 3);
+const one = fixture();
+one.stage.children.splice(1);
+const oneCtl = attach({ card: one.card, stage: one.stage, scroller: one.scroller, doc: document });
+assert.strictEqual(oneCtl.bar.querySelector('.doc-inline-pagenav').hidden, true);
 
 (async () => {
   // Full screen opens and closes.

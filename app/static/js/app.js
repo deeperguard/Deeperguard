@@ -14408,7 +14408,7 @@
     const wraps = docPageWraps();
     const total = wraps.length;
     if (total < 2 || !ui.docStage) return;
-    const page = Math.min(total, Math.max(1, Math.round(Number(target)) || 1));
+    const page = NotesDocControls.clampPage(target, total);
     const stage = ui.docStage;
     // Only scrollTop changes, so the zoom level and horizontal position stay.
     stage.scrollTop += wraps[page - 1].getBoundingClientRect().top - stage.getBoundingClientRect().top;
