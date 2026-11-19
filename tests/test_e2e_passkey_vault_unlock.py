@@ -22,6 +22,9 @@ from e2e_share_target import launch, register  # noqa: E402
 from e2e_signup_autounlock import free_port, start_server  # noqa: E402
 
 LIST = "#passkey-list"
+# Registration derives the vault key (slow KDF) and every passkey step is a server round trip;
+# on a loaded build server Playwright's 30 s default is too tight. Same budget register() uses.
+UI_TIMEOUT_MS = 120_000
 # The installed webauthn package may lack options_to_json_dict (the app imports it); the
 # server's own option building and signature checks still run, only the dict conversion is bridged.
 SERVER_PRELUDE = """
@@ -80,6 +83,7 @@ class PasskeyVaultUnlockE2E(unittest.TestCase):
             with sync_playwright() as p:
                 browser = launch(p)
                 page = browser.new_context(viewport={"width": 1280, "height": 860}).new_page()
+                page.set_default_timeout(UI_TIMEOUT_MS)
                 _add_authenticator(page, prf=prf)
                 register(page, base)
                 page.evaluate(OPEN_SETTINGS_JS)
