@@ -106,6 +106,7 @@ const NotesReadableExport = (() => {
       else eligible.push(note);
     }
     const events = (agendaEvents || []).filter((ev) => ev && ev.start && ev.end);
+    const untimed = (agendaEvents || []).filter((ev) => ev && !(ev.start && ev.end)).length;
     if (!eligible.length && !events.length) return null;
     eligible.sort((a, b) => String(a.content.created_at || '').localeCompare(String(b.content.created_at || ''))
       || String(a.uuid).localeCompare(String(b.uuid)));
@@ -198,6 +199,7 @@ const NotesReadableExport = (() => {
     }
     notExported.push(include2fa ? 'folders' : 'folders and 2FA accounts');
     if (events.length) notExported.push('agenda reminders and agenda tasks');
+    if (untimed) notExported.push(`${untimed} agenda event(s) without a start or end time`);
     const readme = [
       ...WARNING,
       '',

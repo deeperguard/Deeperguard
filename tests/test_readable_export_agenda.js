@@ -145,6 +145,17 @@ const prop = (block, name) => block.filter((l) => l.startsWith(`${name}:`) || l.
   assert.deepStrictEqual([...agendaOnly.keys()].sort(), ['README.txt', 'agenda/agenda.ics']);
   assert.strictEqual(vevents(agendaOnly.get('agenda/agenda.ics')).length, 1);
 
+  // Agenda items without a start or end are left out of the calendar and named in README "Not exported".
+  const untimedEvents = [ev('ev-nodate', { title: 'Zonder tijd' }), ev('ev-nostart', { title: 'Half', end: events[0].end })];
+  const withUntimed = await unzip(await Export.build({ ...baseArgs, agendaEvents: [...events, ...untimedEvents] }));
+  assert.ok(withUntimed.get('README.txt').includes('- 2 agenda event(s) without a start or end time\n'));
+  assert.strictEqual(vevents(withUntimed.get('agenda/agenda.ics')).length, 4);
+  assert.ok(!withUntimed.get('agenda/agenda.ics').includes('Zonder tijd'));
+  const untimedOnly = await unzip(await Export.build({ ...baseArgs, agendaEvents: untimedEvents }));
+  assert.ok(![...untimedOnly.keys()].some((n) => n.startsWith('agenda/')), 'no agenda/ when every event is untimed');
+  assert.ok(untimedOnly.get('README.txt').includes('- 2 agenda event(s) without a start or end time\n'));
+  assert.ok(!readme.includes('without a start or end time'));
+
   // Without the iCalendar module the export fails loudly instead of dropping the agenda.
   const realIcs = global.NotesAgendaIcs;
   global.NotesAgendaIcs = {};

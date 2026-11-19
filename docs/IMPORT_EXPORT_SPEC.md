@@ -278,7 +278,8 @@ for all calendars (the same functions `exportAgendaToIcs` uses; both live in
 `agenda-ics.js`, so the export does not depend on the agenda view being
 loaded). Edited occurrences of a series become extra VEVENTs with
 RECURRENCE-ID. It contains no reminders and no agenda tasks (1.6). Omitted
-when the agenda is empty. If the iCalendar module is missing the export fails
+when the agenda is empty. Events without a start or end are not written; their count is listed
+under "Not exported" in `README.txt` (2.5). If the iCalendar module is missing the export fails
 with an error and no ZIP is saved; it never silently leaves the agenda out.
 
 ### 2.4 `2fa/otpauth.txt` (opt-in only)

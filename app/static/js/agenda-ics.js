@@ -424,12 +424,6 @@
     return lines;
   }
 
-  /**
-   * opts.timeZone: IANA zone for repeating timed events (default: this device's zone).
-   * Repeating events (and edited occurrences of them) are written as local time with TZID,
-   * so "every Monday 09:00" stays 09:00 in other calendar apps across clock changes.
-   * One-off timed events stay in UTC.
-   */
   /** One row per series plus one RECURRENCE-ID row per edited (not cancelled) occurrence. */
   function flattenEventsForIcsExport(rows) {
     const out = [];
@@ -458,6 +452,12 @@
     return out;
   }
 
+  /**
+   * opts.timeZone: IANA zone for repeating timed events (default: this device's zone).
+   * Repeating events (and edited occurrences of them) are written as local time with TZID,
+   * so "every Monday 09:00" stays 09:00 in other calendar apps across clock changes.
+   * One-off timed events stay in UTC.
+   */
   function buildIcsCalendarFromEvents(rows, opts) {
     const zoneOpt = opts && opts.timeZone != null ? resolveTimeZone(opts.timeZone) : deviceTimeZone();
     const zone = zoneOpt && zoneOpt !== 'UTC' && zoneOpt !== 'Etc/UTC' ? zoneOpt : '';
