@@ -26088,7 +26088,7 @@ async function showSettings() {
   document.getElementById('import-keep-file').addEventListener('change', (e) => importParsedNotes(e, {
     parse: (files) => NotesKeepImport.parse(files),
     title: 'Import from Google Keep',
-    note: 'Notes in the Keep trash are skipped; colors are not imported.',
+    note: 'Notes in the Keep trash are skipped; colors are not imported; nested checklist items are imported as one flat list.',
   }));
 
   function markdownSkippedReport(head, skipped) {
