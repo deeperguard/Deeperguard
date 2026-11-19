@@ -2,10 +2,10 @@
   "asset_count": 106,
   "assets": {
     "css/app.css": {
-      "bytes": 366998,
-      "sha256": "e455776637a93f470df4505f9ca7fef607237f5dbfeee6a38e0ae562ca76e2b5",
-      "sri": "sha384-ObbzcIktaQmykOVeWPD9VWQ93AyGIw1h9twp6tmBPcL4+3I5Mox/eCn/amr+YlbL",
-      "url": "/static/css/app.e455776637a93f47.css"
+      "bytes": 368117,
+      "sha256": "b3b12c5fd36be43437c6e5b9d54becd54e61a0a87818e4af151ce2c0d2aacb05",
+      "sri": "sha384-FZ0/+jiBny5t3aYPTieyweZU4uKJ2C4cgsK5mTfAQsrZInb0PmNkx+Xp6clCL0W8",
+      "url": "/static/css/app.b3b12c5fd36be434.css"
     },
     "css/marketing.css": {
       "bytes": 55848,
@@ -98,10 +98,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1090406,
-      "sha256": "3fc93ee517d42dfb486b6b58679265ef12a476fb1c7ea0df9115c29f8a200aad",
-      "sri": "sha384-ClF9WRq74GakuKXmPNkX6SIx8EYe4e43LbpYHgPyR6tr93hfoQHl9Tm63KKEKEbi",
-      "url": "/static/js/app.3fc93ee517d42dfb.js"
+      "bytes": 1093000,
+      "sha256": "e68ce30ad5024aa77ef8ba935ac3f9cec4690ff36ee8bf78b2e08e8ddaed5ec4",
+      "sri": "sha384-mC460qoIICx3OLBp/4uiD8XxkxS+iJ2MaIYk7hHsMrhnTDrl//Dbcdq81wIC4vZK",
+      "url": "/static/js/app.e68ce30ad5024aa7.js"
     },
     "js/auth-pages.js": {
       "bytes": 43723,
@@ -639,6 +639,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "f9943d9a669b08060631e2ec5662e96546f85f8fb36191cd2a27f57f4fb8dbbb",
+  "manifest_sha256": "e7a9a8d00ba91b6529181e521777279bafaa3b3b9fb0ca1be7c065c4544c8126",
   "version": 1
 }

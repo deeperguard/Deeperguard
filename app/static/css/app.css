@@ -13269,3 +13269,41 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 }
 .note-row-move:hover { opacity: 1; color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
 .note-row-move:focus-visible { opacity: 1; outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.label-folder-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 0 12px 8px;
+}
+.label-folder-bar[hidden] { display: none; }
+.label-crumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.label-crumb-list li { display: inline-flex; align-items: center; }
+.label-crumb {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.label-crumb:hover { text-decoration: underline; }
+.label-crumb:focus-visible,
+.label-folder-subs:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.label-crumb-sep { color: var(--muted); padding: 0 2px; }
+.label-crumb-current { font-weight: 600; padding: 2px 4px; }
+.label-folder-actions { display: flex; align-items: center; gap: 10px; }
+.label-folder-subs { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.label-folder-subs[hidden] { display: none; }
