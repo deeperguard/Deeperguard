@@ -1985,7 +1985,6 @@
       <section class="settings-group security-group" id="sec-group-copy" aria-labelledby="sec-group-copy-title">
         <h3 id="sec-group-copy-title">4. Keep a copy</h3>
         <p class="security-group-purpose">A backup is your own copy of your notes, kept outside Deeperguard, for when a device is lost or something is deleted. Recovery codes and the recovery key do not replace a backup.</p>
-      <div data-plan-feature="email_backup">
         {% set google_drive_configured = (google_oauth_client_id|default('', true)|trim|length) > 0 %}
         {% set dropbox_configured = (dropbox_app_key|default('', true)|trim|length) > 0 %}
         <div class="settings-card settings-backup-card">
@@ -2005,6 +2004,7 @@
           </div>
           <p id="readable-export-help" class="settings-hint">For a copy you can read without Deeperguard: Markdown notes plus attachments in one ZIP. <strong>Not encrypted</strong>: anyone with the file can read it. Built on this device; nothing is sent to the server.</p>
 
+          <div data-plan-feature="email_backup">
           <div class="security-block-head"><h5 id="sec-drive-title" class="settings-subtitle">Google Drive</h5><span id="sec-state-drive" class="settings-state">Not connected</span></div>
           <div class="settings-actions">
             <button type="button" id="btn-backup-google-drive" class="btn"{% if not google_drive_configured %} disabled title="Not set up yet"{% endif %}>Connect Google Drive</button>
@@ -2108,6 +2108,7 @@
             <button type="button" id="btn-save-backup" class="btn">Save email backup settings</button>
           </div>
 
+          </div>
           <div class="security-block-head"><h4 class="settings-subtitle" id="sec-export-title">Export</h4><span class="settings-state">Manual: when you click</span></div>
           <div class="settings-actions">
             <button type="button" id="btn-export-note" class="btn">Export current note</button>
@@ -2136,7 +2137,6 @@
           <p id="restore-result-status" class="settings-hint" role="status" aria-live="polite" hidden></p>
           <p class="settings-hint">Restore accepts <code>.dgbackup</code> (and legacy <code>.enc.json</code>) Deeperguard backups. Import from Standard Notes accepts encrypted or decrypted SN exports (zip or .txt). Import from Markdown accepts one or more <code>.md</code> files or a ZIP, including the readable export of this app; you see a summary before anything is saved. Images and files that a note links with a relative path inside the ZIP become its attachments. Web addresses are never fetched. Import from Evernote accepts one or more <code>.enex</code> exports: titles, text, tags, dates, to-do checkboxes and attachments are imported; scripts, styles and links other than http, https and mailto are dropped; files with a DOCTYPE or entity declaration are refused. Import from Google Keep accepts the Takeout ZIP: notes, checklists, labels (as tags), pinned and archived state, dates and attachments are imported from the <code>Keep/*.json</code> files; notes in the Keep trash are skipped, and the HTML copies are ignored.</p>
         </div>
-      </div>
       <div data-plan-feature="pcloud_backup">
         <div class="security-block-head"><h4 id="sec-pcloud-title" class="settings-subtitle">pCloud backup</h4><span id="sec-state-pcloud" class="settings-state">Off</span></div>
         <div class="settings-card settings-backup-card">
