@@ -341,7 +341,8 @@ revoking therefore needs the password even on a passkey-unlocked device.
 | `PUT /api/account/vault-keys/recovery` | token | `expected_key_rev, key_id, wrap_version, recovery_salt, wrap, proof_hash` | create or **replace** the single recovery wrap; the old row is overwritten (old key invalid at once). Resets the failure counter. `auth_security_at` bump; the notice mail is **not sent yet** (follow-up, see 3.6). 200 `{key_rev, key_id, auth_security_at}` (the writing device acknowledges the bump, so only other devices show the notice) |
 | `DELETE /api/account/vault-keys/recovery` | token | `expected_key_rev` | **revoke**: deletes the row; `auth_security_at` bump; the notice mail is **not sent yet** (follow-up, see 3.6) |
 | `PUT /api/account/vault-keys/prf/<credential_id>` | token | `expected_key_rev, key_id, wrap_version, wrap, prf_salt` | upsert this passkey's wrap; `credential_id` must belong to the user. `prf_salt` is accepted only when the account has none (CAS) or equals the stored one |
-| `GET /api/account/vault-keys/prf` | session | none | `{prf_salt, wraps:[{credential_id, key_id, wrap_version, wrap}]}` for wraps with `key_id == vault_key_id`; used to unlock a locked vault in a signed-in session. Rate limit `vault-keys-prf` (existing limiter) |
+| `POST /api/account/vault-keys/prf/<credential_id>/options` | session | none | `{ok, options, prf_salt}`: WebAuthn assertion options for this passkey only, and its `prf_salt` (not secret; `''` when the passkey has no copy). Releases no copy. Rate limit `vault-keys-prf` |
+| `POST /api/account/vault-keys/prf/<credential_id>/unwrap` | session | `credential` (the WebAuthn assertion of this passkey) | verifies the assertion (single-use challenge, signature, sign count, user verification) and returns `{ok, key_id, key_rev, wrap_version, prf_salt, wrap}` only when `key_id == vault_key_id`; otherwise 404 `no_prf_wrap`. Rate limit `vault-keys-prf` |
 | `DELETE /api/account/vault-keys/prf/<credential_id>` | token | `expected_key_rev` | delete one wrap (passkey stays for sign-in) |
 | `POST /api/account/vault-keys/recover/start` | session | none | locked-out check (3.3); returns `{key_id, key_rev, wrap_version, recovery_salt, wrap}`; 404 `no_recovery_key` if none; 429 with `retry_after` if locked. Does **not** count as a failed attempt |
 | `PUT /api/account/vault-keys/recover/pending` | session | `proof, expected_key_rev, from_key_id, to_key_id, wrap_version, wrap` | verify `proof` (counts a failure when wrong), store `vault_pending_rekey` (3.2 step 4) |
@@ -354,13 +355,8 @@ key_id, wrap_version, prf_salt, wrap, created_at)` with `credential_id` referenc
 `webauthn_credentials ON DELETE CASCADE`; there is no `users.prf_salt`. The table is
 created with `CREATE TABLE IF NOT EXISTS`, so existing passkeys and accounts are not
 touched. `PUT /api/account/vault-keys/prf/<credential_id>` follows the CAS rules of 2.2
-(an unchanged retry answers 200). The `GET .../prf` row is replaced by two calls on one
-passkey: `POST .../prf/<credential_id>/options` (session + CSRF) returns assertion
-options and that passkey's `prf_salt` (not secret; `''` without a wrap), and
-`POST .../prf/<credential_id>/unwrap` verifies the WebAuthn assertion (single-use
-challenge, signature, sign count) made with exactly that passkey and only then returns
-its wrap, and only when `key_id` equals the account's current `vault_key_id`.
-`GET /api/account/vault-keys` lists `prf:[{credential_id, created_at, current}]`, never
+(an unchanged retry answers 200). The options and unwrap rows above describe the
+per-passkey read path. `GET /api/account/vault-keys` lists `prf:[{credential_id, created_at, current}]`, never
 a wrap. Deleting a passkey deletes its wrap and bumps `vault_key_rev` in the same
 transaction; when no wrap of any kind is left, `vault_key_id` is freed.
 
@@ -695,7 +691,7 @@ behaviour (DB rows, ciphertext bytes, HTTP status, visible UI), not on source te
 - [ ] P4 Commit is atomic: inject a failure after the verifier update, assert verifier, `vault_key_id`, wraps and sessions all unchanged.
 - [ ] P5 Other sessions end with `revoke_reason='vault-recovery'`; the current one survives; `auth_security_at` advanced; a mail is queued (mock `send_plain_email`) containing no key material.
 - [ ] P6 Attempt limit: 4 wrong proofs ok, 5th returns lock; 6th request 429 with `retry_after` about 900; after the lock level doubles (1800); cap 86400; counter survives a server restart; success resets; local check-group errors never count.
-- [ ] P7 Stale password wraps: after recovery `vault_prf_wraps` is empty and `GET .../prf` returns none.
+- [ ] P7 Stale password wraps: after recovery `vault_prf_wraps` is empty and `POST .../prf/<credential_id>/unwrap` returns 404 `no_prf_wrap`.
 
 ### 9.4 Replace
 - [ ] E6 Replace the recovery key: old `RK` fails at `recover/start` flow (GCM tag error locally and proof mismatch server-side), new one works; settings show the new date, never the key.
