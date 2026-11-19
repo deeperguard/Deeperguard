@@ -29,7 +29,7 @@ UI_TIMEOUT_MS = 120_000
 # when the password proof is made can answer later with an older cookie and wipe the token, which
 # costs a 401 and a new (slow) proof; under load that window is wide. The test therefore lets
 # every pending request finish before it starts a passkey action. That only steers around the race:
-# a fast user can hit it in the app too, which is an app issue for a separate task.
+# a fast user can hit it in the app too. Follow-up: docs/bugs/vault-keys-token-session-race.md.
 QUIET_POLLS = 4
 SETTLE_MAX_MS = 20_000
 # The installed webauthn package may lack options_to_json_dict (the app imports it); the
@@ -65,11 +65,9 @@ def _add_authenticator(page, *, prf: bool):
     return cdp
 
 
-def _track_requests(page, base: str) -> set:
-    # Only the app's own requests carry the session cookie; third-party ones (the Turnstile
-    # widget keeps a blob: request open) would otherwise hold every settle at SETTLE_MAX_MS.
+def _track_requests(page) -> set:
     pending: set = set()
-    page.on("request", lambda r: pending.add(r) if r.url.startswith(base + "/") else None)
+    page.on("request", lambda r: pending.add(r))
     page.on("requestfinished", lambda r: pending.discard(r))
     page.on("requestfailed", lambda r: pending.discard(r))
     return pending
@@ -101,7 +99,7 @@ class PasskeyVaultUnlockE2E(unittest.TestCase):
                 browser = launch(p)
                 page = browser.new_context(viewport={"width": 1280, "height": 860}).new_page()
                 page.set_default_timeout(UI_TIMEOUT_MS)
-                self.pending = _track_requests(page, base)
+                self.pending = _track_requests(page)
                 _add_authenticator(page, prf=prf)
                 register(page, base)
                 page.evaluate(OPEN_SETTINGS_JS)
