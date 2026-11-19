@@ -253,7 +253,8 @@ class VaultRecoveryFlowE2E(unittest.TestCase):
         self.assertEqual(after_p2["proof_hash"], before["proof_hash"])
         unreadable = a.text_content("#recover-error")
         self.assertIn("If you no longer know it", unreadable)
-        self.assertIn("cannot be opened with your recovery key or your old password", unreadable)
+        self.assertIn("cannot be opened without that password", unreadable)
+        self.assertIn("a new recovery attempt with it restores them", unreadable)
 
         # The same recovery key with the earlier new password finishes the recovery.
         a.fill("#recover-new", P1)
