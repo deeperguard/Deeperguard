@@ -77,6 +77,8 @@ class HostOnlySessionInterface(SecureCookieSessionInterface):
 
     LEGACY_COOKIE = "session"
     HOST_COOKIE = "__Host-session"
+    # Read-only GETs the client fires in the background (see should_set_cookie).
+    NO_REFRESH_GET_PATHS = frozenset({"/api/health", "/api/account"})
 
     def get_cookie_domain(self, app: Flask) -> str | None:
         return None
@@ -106,13 +108,19 @@ class HostOnlySessionInterface(SecureCookieSessionInterface):
         return super().open_session(app, request)
 
     def should_set_cookie(self, app, session) -> bool:  # type: ignore[override]
-        # The background health poll must not rewrite a permanent session: a poll that
-        # is in flight while another request changes the session (e.g. the vault-keys
-        # proof token) would write back the old copy and drop that change.
+        # The background health poll and account refresh must not rewrite a permanent
+        # session: one that is in flight while another request changes the session
+        # (e.g. the vault-keys proof token) would write back the old copy and drop that
+        # change. Seen as prove 200 -> GET /api/account -> recovery PUT 401 right after
+        # registration. Every other request, including sync, still slides the expiry.
         try:
             from flask import request
 
-            if request.method == "GET" and request.path == "/api/health" and not session.modified:
+            if (
+                request.method == "GET"
+                and request.path in self.NO_REFRESH_GET_PATHS
+                and not session.modified
+            ):
                 return False
         except RuntimeError:
             pass
