@@ -258,5 +258,7 @@ matching `NESTED_FOLDERS_SPEC.md` 7.1:
 
 Each must keep focus on the moved row, announce the result in a polite live
 region (also the refusal reason), and have a menu entry so mouse and touch users
-reach it without a chord. Drag and drop stays an extra (`app.js:9663`), not the
-only way.
+reach it without a chord. Drag and drop (`bindLabelDrag` in `app.js`; mouse on the
+row, touch on the grip) and Alt+ArrowUp/Down are extras, not the only way. A drop
+between two labels writes only `order` (`labeltree.js` `dropPlan`), a drop on a
+label also writes `parent_id`; both stay inside the encrypted label record.

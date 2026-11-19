@@ -86,10 +86,11 @@
       return `<li role="none" class="label-node"><div role="treeitem" class="label-item${sel ? ' active' : ''}" data-label="${esc(id)}"`
         + ` aria-level="${level}" aria-posinset="${pos}" aria-setsize="${size}" aria-selected="${sel ? 'true' : 'false'}"${sel ? ' aria-current="true"' : ''}`
         + (sub.length ? ` aria-expanded="${expanded ? 'true' : 'false'}"` : '')
-        + ` aria-label="${esc(name)}, ${count}" tabindex="${id === tabbable ? '0' : '-1'}" draggable="true" style="--tag-color:${ctx.color(id)};--label-level:${level - 1}">`
+        + ` aria-label="${esc(name)}, ${count}" tabindex="${id === tabbable ? '0' : '-1'}" style="--tag-color:${ctx.color(id)};--label-level:${level - 1}">`
         + `<span class="label-twisty" data-label-toggle="${esc(id)}" aria-hidden="true">${sub.length ? (expanded ? '▾' : '▸') : ''}</span>`
         + `<span class="tag-dot" aria-hidden="true"></span><span class="tag-name label-name">${esc(name)}</span>`
         + `<span class="tag-count" aria-hidden="true">${count}</span>`
+        + `<span class="label-grip" data-label-grip title="Drag to reorder or nest" aria-hidden="true">⠿</span>`
         + `<button type="button" class="label-menu-btn" data-label-menu="${esc(id)}" tabindex="-1" aria-haspopup="menu" aria-label="Actions for ${esc(name)}">⋯</button></div>`
         + (sub.length ? `<ul role="group" class="label-group"${expanded ? '' : ' hidden'}>${expanded ? sub.map((s, i) => item(s, level + 1, i + 1, sub.length)).join('') : ''}</ul>` : '')
         + '</li>';
@@ -137,6 +138,58 @@
     return out.sort((a, b) => L().pathOf(a, byId).localeCompare(L().pathOf(b, byId)));
   }
 
+  const ORDER_GAP = 1024;
+
+  // Result of dropping `uuid` on `targetId`. zone: 'before' | 'after' (same parent as the
+  // target, next to it) or 'into' (last sub-label of the target). Pure.
+  // Returns {ok:true, parent, orders:{uuid: order}} (only labels whose order changes) or
+  // {ok:false, error} with the model's error ('cycle', 'too_deep', ...).
+  function dropPlan(byId, uuid, targetId, zone) {
+    if (!byId.has(uuid) || !byId.has(targetId) || uuid === targetId) return { ok: false, error: 'unknown_label' };
+    const kids = childMap(byId);
+    const parent = zone === 'into' ? targetId : (L().parentOf(byId.get(targetId)) || '');
+    const check = L().validateParent(uuid, parent, byId);
+    if (!check.ok) return check;
+    const siblings = (kids.get(parent) || []).filter((id) => id !== uuid);
+    let at = siblings.length;
+    if (zone !== 'into') at = siblings.indexOf(targetId) + (zone === 'after' ? 1 : 0);
+    const ord = (id) => byId.get(id).order;
+    const prev = at > 0 ? ord(siblings[at - 1]) : null;
+    const next = at < siblings.length ? ord(siblings[at]) : null;
+    const numeric = siblings.every((id) => Number.isFinite(ord(id)));
+    let value = null;
+    if (numeric) {
+      if (prev === null && next === null) value = ORDER_GAP;
+      else if (prev === null) value = next - ORDER_GAP;
+      else if (next === null) value = prev + ORDER_GAP;
+      else if (next - prev > 1e-6) value = (prev + next) / 2;
+    }
+    const orders = {};
+    if (value !== null) {
+      orders[uuid] = value;
+    } else {
+      // No room between the neighbours (or old labels without an order): renumber the siblings.
+      const list = siblings.slice();
+      list.splice(at, 0, uuid);
+      list.forEach((id, i) => {
+        const o = (i + 1) * ORDER_GAP;
+        if (id === uuid || ord(id) !== o) orders[id] = o;
+      });
+    }
+    return { ok: true, parent, orders };
+  }
+
+  // Neighbour a label moves next to for Alt+Arrow: {target, zone} or null at the edge.
+  function siblingStep(byId, uuid, dir) {
+    const kids = childMap(byId);
+    const parent = L().parentOf(byId.get(uuid)) || '';
+    const list = kids.get(byId.has(parent) ? parent : '') || [];
+    const i = list.indexOf(uuid);
+    const j = i + (dir < 0 ? -1 : 1);
+    if (i < 0 || j < 0 || j >= list.length) return null;
+    return { target: list[j], zone: dir < 0 ? 'before' : 'after' };
+  }
+
   function loadOpen(storage) {
     try {
       const v = JSON.parse(storage.getItem(OPEN_KEY) || '[]');
@@ -150,7 +203,7 @@
     try { storage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch (err) { /* ignore */ }
   }
 
-  const api = { OPEN_KEY, childMap, visibleRows, html, navigate, scope, moveTargets, loadOpen, saveOpen };
+  const api = { OPEN_KEY, childMap, visibleRows, html, navigate, scope, moveTargets, dropPlan, siblingStep, loadOpen, saveOpen };
   if (typeof window !== 'undefined') window.NotesLabelTree = api;
   if (typeof globalThis !== 'undefined') globalThis.NotesLabelTree = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

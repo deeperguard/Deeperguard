@@ -12179,8 +12179,38 @@ html.layout-compact #totp-pane #btn-totp-add {
 .label-item:hover .label-menu-btn,
 .label-item:focus-within .label-menu-btn,
 .label-menu-btn:focus-visible { opacity: 1; }
+.label-grip {
+  flex: 0 0 auto;
+  min-width: 20px;
+  text-align: center;
+  color: var(--sn-nav-muted, var(--muted));
+  cursor: grab;
+  opacity: 0;
+  touch-action: none;
+}
+.label-item:hover .label-grip,
+.label-item:focus-within .label-grip { opacity: 1; }
+body.label-dragging { cursor: grabbing; user-select: none; }
+.label-item.is-dragging { opacity: 0.5; }
+.label-item { position: relative; }
+.label-item.drop-before::before,
+.label-item.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.label-item.drop-before::before { top: -2px; }
+.label-item.drop-after::after { bottom: -2px; }
+.label-item.drop-into { background: color-mix(in srgb, var(--accent) 22%, transparent); outline: 2px solid var(--accent); outline-offset: -2px; }
+.label-item.drop-invalid { outline: 2px dashed var(--danger, #c0392b); outline-offset: -2px; cursor: not-allowed; }
 @media (hover: none), (max-width: 768px) {
   .label-item { min-height: 44px; }
+  .label-grip { opacity: 1; min-width: 32px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
   .label-menu-btn { opacity: 1; min-width: 44px; min-height: 44px; }
 }
 .label-menu {
