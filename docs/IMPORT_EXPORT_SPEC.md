@@ -561,7 +561,8 @@ cancels, aria-labelled, correct in light and dark and at phone width).
    authenticator secrets (2fa/otpauth.txt). Anyone with this file can
    generate my codes." It is never checked by default, is not remembered
    between exports and is not implied by step 1 or 2. The button label says
-   what will happen: "Export without 2FA" / "Export with 2FA secrets".
+   what will happen: "Export unencrypted ZIP" while the box is unchecked,
+   "Export with 2FA secrets" once it is ticked.
 
 Rules:
 
