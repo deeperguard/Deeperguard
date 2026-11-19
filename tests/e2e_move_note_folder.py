@@ -20,6 +20,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from e2e_share_target import launch, register  # noqa: E402
 from e2e_signup_autounlock import PASSWORD, free_port, start_server  # noqa: E402
 
+# NotesStore.state.dirty holds the notes with local changes that are not yet pushed
+# to the server. Waiting until it is empty means a reload cannot lose a change.
+SYNCED_JS = "() => NotesStore.state.dirty.size === 0"
+SYNC_TIMEOUT_MS = 30000
+
 UNLOCKED_JS = """() => location.pathname === '/app'
   && window.NotesStore && NotesStore.isUnlocked && NotesStore.isUnlocked()
   && document.body.classList.contains('unlocked')"""
@@ -85,7 +90,7 @@ def main() -> int:
             page.evaluate("() => { document.getElementById('folder-section').open = true; }")
 
             page.evaluate(SEED_JS)
-            page.wait_for_function("() => NotesStore.state.dirty.size === 0", timeout=30000)
+            page.wait_for_function(SYNCED_JS, timeout=SYNC_TIMEOUT_MS)
             page.reload(wait_until="domcontentloaded")
             unlock(page)
             page.locator("#folder-section").evaluate("(el) => { el.open = true; }")
@@ -150,7 +155,7 @@ def main() -> int:
             assert page.evaluate(PLACEMENT_JS) == {"Alpha": "Projects", "Beta": "Work"}
 
             # 3) Reload and unlock again: the notes are in their new folders.
-            page.wait_for_function("() => NotesStore.state.dirty.size === 0", timeout=30000)
+            page.wait_for_function(SYNCED_JS, timeout=SYNC_TIMEOUT_MS)
             page.reload(wait_until="domcontentloaded")
             unlock(page)
             page.wait_for_function("() => NotesStore.listNotes().length >= 2")
@@ -180,7 +185,7 @@ def main() -> int:
 
             # After a reload and unlock, neither note is in its old folder any more.
             # Wait until both moves have been saved (the sync queue is empty) before reloading.
-            page.wait_for_function("() => NotesStore.state.dirty.size === 0", timeout=30000)
+            page.wait_for_function(SYNCED_JS, timeout=SYNC_TIMEOUT_MS)
             page.reload(wait_until="domcontentloaded")
             unlock(page)
             page.wait_for_function("() => NotesStore.listNotes().length >= 2")
