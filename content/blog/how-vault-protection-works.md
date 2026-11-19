@@ -95,7 +95,7 @@ Sam deletes a folder by mistake, signs in, unlocks, and chooses **Restore Deeper
 
 One thing to know: restore opens the backup with the vault key you are using now. A backup made before a master password change or a recovery was encrypted with the old key, so it will not open in the vault afterwards. Make a fresh backup after either one.
 
-Passkeys, 2FA for signing in, Google Drive, Dropbox, email backup and pCloud backup are not part of every plan. The backup file and the readable export under **Keep a copy** are available on every plan. Settings marks the ones your plan does not include.
+Passkeys, 2FA for signing in, email backup and pCloud backup are not part of every plan. The backup file and the readable export under **Keep a copy** are available on every plan, and so are Google Drive and Dropbox; those two need a key from your own developer account if the server has none. Settings marks the ones your plan does not include.
 
 ## What to set up today
 
