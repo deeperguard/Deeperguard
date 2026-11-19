@@ -3477,6 +3477,12 @@ def api_backup_pcloud_oauth_callback():
     if not pcloud_oauth.state_matches(saved_state, request.args.get("state", "")):
         log.warning("pcloud oauth callback rejected: invalid state user_id=%s", uid)
         return jsonify({"error": "invalid state"}), 400
+    if request.args.get("error"):
+        # The user refused access at pCloud: back to the app, nothing stored.
+        log.info("pCloud OAuth access denied by user user_id=%s", uid)
+        response = redirect(f"{app_entry_path()}?pcloud=denied")
+        response.headers["Cache-Control"] = "no-store"
+        return response
     blocked = _plan_block(user, "pcloud_backup")
     if blocked:
         return blocked

@@ -75,7 +75,7 @@ Without all three, the start endpoint answers 503.
 | Endpoint | What it does |
 |----------|--------------|
 | `POST /api/backup/pcloud/oauth/start` | Signed-in Pro user, CSRF token required. Puts a random `state` (valid 10 minutes) in the session and returns pCloud's authorize URL. |
-| `GET /api/backup/pcloud/oauth/callback` | Rejects a missing, wrong, expired or reused `state` and any API host other than `api.pcloud.com` / `eapi.pcloud.com`. Exchanges the code for a token and stores it. |
+| `GET /api/backup/pcloud/oauth/callback` | Rejects a missing, wrong, expired or reused `state` and any API host other than `api.pcloud.com` / `eapi.pcloud.com`. When the user refused access at pCloud (`error` parameter) it redirects to the app with `?pcloud=denied` and stores nothing. Otherwise it exchanges the code for a token, stores it and redirects with `?pcloud=connected`. |
 | `POST /api/backup/pcloud/oauth/disconnect` | CSRF token required. Asks pCloud to invalidate the token (`logout`), then deletes the stored token. The answer has `revoked: false` when pCloud did not confirm; the user can then remove the app in their pCloud account settings. |
 
 The token is stored in SQLite table `pcloud_oauth_tokens` only as AES-256-GCM ciphertext
