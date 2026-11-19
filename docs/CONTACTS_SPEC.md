@@ -353,6 +353,23 @@ when two devices changed the same field differently.
 The merge function is pure (`NotesContacts.mergeContacts(local, remote)`) and
 unit-tested without a browser (test 3-3).
 
+**As built (data layer task), deviations from the text above:**
+
+- Step 4 needs to know whether both devices edited a field from the same
+  earlier state. The model therefore also keeps `fb[field]`: the value `fc[field]`
+  had before the edit. A scalar conflict (and a conflict copy) exists only when
+  both sides changed the field and both `fb` values are equal; if one side's
+  `fb` equals the other side's `fc`, that side edited after seeing the other and
+  simply wins. `fb` is inside the ciphertext like `fc`.
+- `favorite` never produces a conflict copy (the newer value wins).
+- The copy is the merged contact with the losing values put back; its structured
+  name parts are folded into `formatted` plus the ` (conflict copy)` suffix.
+- Removing a list entry on one device is not carried over when the other device
+  also changed that list in the same conflict: the entry is kept (a conflict
+  never deletes data), as the text allows when the removal cannot be proved.
+- Not built yet in this task: importers, import/export dialogs and the tab.
+  `contacts.js` has `encodePhoto` (3.4, 9.3) but nothing calls it yet.
+
 ### 3.4 The photo
 
 - **Source**: a file picker or camera (`<input type="file" accept="image/*">`,
