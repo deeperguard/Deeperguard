@@ -3842,6 +3842,18 @@ const NotesStore = (() => {
       // pre-merge ciphertext and persists.
       return winLocal(remote);
     }
+    if (type === 'contact' && remote.content?.type === 'contact' && typeof NotesContacts !== 'undefined') {
+      // Field-level merge: edits to different fields both survive; a field changed differently on both
+      // devices keeps the newer value and the other value becomes a "(conflict copy)" contact.
+      const merged = NotesContacts.mergeContacts(local.content, remote.content);
+      local.content = { ...merged.content, __fid: local.content.__fid, __fv: local.content.__fv };
+      if (merged.copy) {
+        const copyId = newUuid();
+        upsert(copyId, { ...merged.copy, conflict_of: uuid, conflict_source: 'sync', conflict_at: new Date().toISOString() });
+      }
+      logSync('conflict-contact-merge', { uuid, rev: serverRev, copy: !!merged.copy });
+      return winLocal(remote);
+    }
     if (type === 'search_index' && remote.content?.type === 'search_index') {
       const merged = mergeSearchEntries(local.content.entries, remote.content.entries);
       local.content = { ...local.content, type: 'search_index', version: OCR_INDEX, entries: merged };
@@ -5230,6 +5242,74 @@ const NotesStore = (() => {
     if (!item || item.content?.type !== 'totp') return false;
     remove(uuid);
     return true;
+  }
+
+  // --- Contacts (docs/CONTACTS_SPEC.md): one encrypted vault item per contact, type 'contact'. ---
+  function requireContacts() {
+    if (typeof NotesContacts === 'undefined') throw new Error('Contacts module is not loaded');
+    if (!state.cryptoKey) throw new Error('Unlock the vault first');
+    return NotesContacts;
+  }
+
+  function contactRecord(uuid) {
+    const item = get(uuid);
+    return item && !item.deleted && item.content?.type === 'contact' ? item : null;
+  }
+
+  // Live contacts as { uuid, ...content }, in display order.
+  function listContacts({ order = 'given' } = {}) {
+    const rows = [...state.items.values()]
+      .filter((item) => item.content?.type === 'contact' && !item.deleted)
+      .map((item) => ({ ...item.content, uuid: item.uuid }));
+    if (typeof NotesContacts === 'undefined') return rows;
+    return rows.sort((a, b) => NotesContacts.compareContacts(a, b, order));
+  }
+
+  function addContact(input) {
+    const C = requireContacts();
+    const { content, dropped } = C.buildContact(input, null);
+    const id = newUuid();
+    upsert(id, content);
+    return { uuid: id, item: get(id), dropped };
+  }
+
+  // Only the fields in `patch` change (and get a new edit clock); everything else, including keys this
+  // client does not know, is kept.
+  function updateContact(uuid, patch) {
+    const C = requireContacts();
+    const item = contactRecord(uuid);
+    if (!item) return null;
+    const { content, dropped } = C.buildContact(patch, item.content);
+    upsert(uuid, content);
+    return { uuid, item: get(uuid), dropped };
+  }
+
+  function removeContact(uuid) {
+    if (!contactRecord(uuid)) return false;
+    remove(uuid);
+    return true;
+  }
+
+  function searchContacts(query = '', { label = '', favouritesOnly = false, order = 'given' } = {}) {
+    if (typeof NotesContacts === 'undefined') return [];
+    return NotesContacts.filterContacts(listContacts({ order }), query, label, favouritesOnly, order);
+  }
+
+  function listContactLabels() {
+    return typeof NotesContacts === 'undefined' ? [] : NotesContacts.labelCounts(listContacts());
+  }
+
+  // Rename a contact group on every member; an empty `to` removes the group. Returns the members changed.
+  function renameContactLabel(from, to = '') {
+    const C = requireContacts();
+    let changed = 0;
+    for (const c of listContacts()) {
+      const next = C.renameLabelIn(c.labels, from, to);
+      if (!next) continue;
+      updateContact(c.uuid, { labels: next });
+      changed += 1;
+    }
+    return changed;
   }
 
   function listFolders() {
@@ -7899,6 +7979,13 @@ const NotesStore = (() => {
     updateTotpAccount,
     renameTotpTag,
     removeTotpAccount,
+    listContacts,
+    addContact,
+    updateContact,
+    removeContact,
+    searchContacts,
+    listContactLabels,
+    renameContactLabel,
     dedupeTotpAccounts,
     listFolders,
     notesInFolder,

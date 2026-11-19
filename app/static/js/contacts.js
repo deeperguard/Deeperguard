@@ -1,0 +1,530 @@
+// Contacts data model (docs/CONTACTS_SPEC.md sections 2, 3.3, 3.4 and 5.1): normalising a contact,
+// display name and sort key, the tab's own search, the field-level merge used on sync conflicts and
+// the photo re-encoder. Pure functions; NotesStore does the storing and the encryption.
+const NotesContacts = (() => {
+  const LIMITS = {
+    namePart: 200,
+    nickname: 200,
+    orgName: 200,
+    title: 200,
+    listEntries: 50,
+    label: 60,
+    value: 500,
+    note: 20000,
+    labels: 20,
+    labelName: 40,
+    extraBytes: 32 * 1024,
+    contactBytes: 128 * 1024,
+    photoBytes: 12288,
+    photoSide: 192,
+  };
+  const PHONE_TYPES = ['home', 'work', 'mobile', 'main', 'fax', 'pager', 'other', 'custom'];
+  const LIST_FIELDS = ['phones', 'emails', 'addresses', 'urls', 'ims', 'dates'];
+  // Top-level fields that carry an edit clock (`fc`) and take part in the merge.
+  const MERGE_FIELDS = ['name', 'nickname', 'org', 'title', ...LIST_FIELDS, 'note', 'photo', 'labels', 'favorite'];
+  const NAME_PARTS = ['prefix', 'given', 'additional', 'family', 'suffix', 'formatted', 'phonetic_given', 'phonetic_family'];
+  const ADDRESS_PARTS = ['street', 'extended', 'po_box', 'city', 'region', 'postal', 'country'];
+  const IM_SERVICES = ['xmpp', 'skype', 'signal', 'whatsapp', 'matrix', 'telegram', 'aim', 'icq', 'jabber', 'twitter', 'other'];
+  const DATE_TYPES = ['birthday', 'anniversary', 'other'];
+  const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+  const CONFLICT_SUFFIX = ' (conflict copy)';
+
+  function randomBytes(n) {
+    const bytes = new Uint8Array(n);
+    if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+      globalThis.crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < n; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    return bytes;
+  }
+
+  function newEntryId() {
+    return Array.from(randomBytes(8), (b) => BASE32[b % 32]).join('');
+  }
+
+  function newUid() {
+    const b = randomBytes(16);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+    return `urn:uuid:${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+
+  function text(value, max, { newlines = false } = {}) {
+    let s = value == null || typeof value === 'object' ? '' : String(value);
+    s = s.normalize('NFC');
+    // eslint-disable-next-line no-control-regex
+    s = newlines ? s.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '') : s.replace(/[\u0000-\u001f\u007f]/g, ' ');
+    s = s.trim();
+    return s.length > max ? s.slice(0, max) : s;
+  }
+
+  // Parsed from files and the network: drop keys that could pollute prototypes, copy into null-prototype maps.
+  function cleanTree(value, depth = 0) {
+    if (depth > 8) return null;
+    if (Array.isArray(value)) return value.slice(0, 500).map((v) => cleanTree(v, depth + 1));
+    if (value && typeof value === 'object') {
+      const out = Object.create(null);
+      for (const key of Object.keys(value)) {
+        if (FORBIDDEN_KEYS.has(key)) continue;
+        out[key] = cleanTree(value[key], depth + 1);
+      }
+      return out;
+    }
+    if (typeof value === 'string') return value.slice(0, 4096);
+    if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value;
+    return null;
+  }
+
+  function plain(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function normName(src) {
+    const out = {};
+    for (const key of NAME_PARTS) out[key] = text(src && src[key], LIMITS.namePart);
+    return out;
+  }
+
+  function normDate(value) {
+    const v = text(value, 40);
+    const m = /^(\d{4})-(\d{2})-(\d{2})$|^--(\d{2})-?(\d{2})$|^(\d{4})$/.exec(v.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3'));
+    if (!m) return '';
+    const month = Number(m[2] || m[4]);
+    const day = Number(m[3] || m[5]);
+    if (m[2] || m[4]) {
+      if (month < 1 || month > 12 || day < 1 || day > 31) return '';
+    }
+    if (m[1]) return v.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3');
+    if (m[4]) return `--${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return v;
+  }
+
+  // Entries get a stable id; at most one `pref`; list capped. `report.dropped` counts what was cut.
+  function normList(field, src, report) {
+    const list = Array.isArray(src) ? src : [];
+    const out = [];
+    const seen = new Set();
+    let pref = false;
+    for (const raw of list) {
+      if (!raw || typeof raw !== 'object') continue;
+      let entry;
+      if (field === 'addresses') {
+        entry = {};
+        for (const part of ADDRESS_PARTS) entry[part] = text(raw[part], LIMITS.value);
+        if (!ADDRESS_PARTS.some((part) => entry[part])) continue;
+      } else if (field === 'dates') {
+        const value = normDate(raw.value);
+        if (!value) { report.dropped.dates = (report.dropped.dates || 0) + 1; continue; }
+        entry = { value };
+        entry.type = DATE_TYPES.includes(raw.type) ? raw.type : 'other';
+        if (entry.type === 'birthday' && out.some((e) => e.type === 'birthday')) entry.type = 'other';
+      } else {
+        const value = text(raw.value, LIMITS.value);
+        if (!value) continue;
+        entry = { value };
+        if (field === 'ims') {
+          entry.service = IM_SERVICES.includes(raw.service) ? raw.service : 'other';
+        }
+      }
+      if (field !== 'ims' && field !== 'dates') entry.type = PHONE_TYPES.includes(raw.type) ? raw.type : 'other';
+      entry.label = text(raw.label, LIMITS.label);
+      if (entry.type === 'custom' && !entry.label) entry.type = 'other';
+      if (field === 'phones' || field === 'emails' || field === 'addresses') {
+        entry.pref = !pref && raw.pref === true;
+        pref = pref || entry.pref;
+      }
+      let id = text(raw.id, 16);
+      if (!id || seen.has(id)) id = newEntryId();
+      seen.add(id);
+      out.push({ id, ...entry });
+    }
+    if (out.length > LIMITS.listEntries) {
+      report.dropped[field] = (report.dropped[field] || 0) + out.length - LIMITS.listEntries;
+      out.length = LIMITS.listEntries;
+    }
+    return out;
+  }
+
+  function normLabels(src) {
+    const out = [];
+    const seen = new Set();
+    for (const raw of Array.isArray(src) ? src : []) {
+      const name = text(raw, LIMITS.labelName);
+      const key = name.toLowerCase();
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      out.push(name);
+      if (out.length >= LIMITS.labels) break;
+    }
+    return out;
+  }
+
+  function base64Bytes(data) {
+    if (typeof data !== 'string' || !data || data.length > 4 * LIMITS.photoBytes || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) return -1;
+    return Math.floor((data.length * 3) / 4) - (data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0);
+  }
+
+  // A stored photo is always a JPEG of at most 12 KiB (3.4); anything else is dropped, never kept as-is.
+  function normPhoto(src, report) {
+    if (!src || typeof src !== 'object') return null;
+    const size = base64Bytes(src.data);
+    if (src.mime !== 'image/jpeg' || size < 0 || size > LIMITS.photoBytes) {
+      report.dropped.photo = 1;
+      return null;
+    }
+    const side = (n) => Math.min(LIMITS.photoSide, Math.max(1, Math.floor(Number(n)) || LIMITS.photoSide));
+    return { mime: 'image/jpeg', data: src.data, w: side(src.w), h: side(src.h) };
+  }
+
+  function emptyContact() {
+    const out = { type: 'contact', schema: 1, uid: '', name: normName({}), nickname: '', org: { name: '', unit: '' }, title: '' };
+    for (const f of LIST_FIELDS) out[f] = [];
+    return Object.assign(out, { note: '', photo: null, labels: [], favorite: false, extra: {}, created_at: '', updated_at: '', fc: {}, fb: {} });
+  }
+
+  function normField(field, value, report) {
+    switch (field) {
+      case 'name': return normName(value);
+      case 'nickname': return text(value, LIMITS.nickname);
+      case 'org': return { name: text(value && value.name, LIMITS.orgName), unit: text(value && value.unit, LIMITS.orgName) };
+      case 'title': return text(value, LIMITS.title);
+      case 'note': return text(value, LIMITS.note, { newlines: true });
+      case 'photo': return normPhoto(value, report);
+      case 'labels': return normLabels(value);
+      case 'favorite': return value === true;
+      default: return normList(field, value, report);
+    }
+  }
+
+  function deepEqual(a, b) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  // Build the content to store: `prev` is the stored content (unknown top-level keys survive), `input`
+  // holds the fields to set. Returns { content, dropped } or throws when the contact exceeds 128 KiB.
+  function buildContact(input, prev = null, now = new Date().toISOString()) {
+    const src = input && typeof input === 'object' ? input : {};
+    const report = { dropped: {} };
+    const out = prev ? plain(prev) : emptyContact();
+    out.type = 'contact';
+    out.schema = 1;
+    out.fc = out.fc && typeof out.fc === 'object' ? out.fc : {};
+    out.fb = out.fb && typeof out.fb === 'object' ? out.fb : {};
+    const empty = emptyContact();
+    for (const field of MERGE_FIELDS) {
+      if (!prev && !Object.prototype.hasOwnProperty.call(src, field)) { out[field] = empty[field]; continue; }
+      if (!Object.prototype.hasOwnProperty.call(src, field)) continue;
+      const next = normField(field, src[field], report);
+      if (prev && deepEqual(next, prev[field])) continue;
+      out.fb[field] = out.fc[field] || '';
+      out.fc[field] = now;
+      out[field] = next;
+    }
+    if (!prev) for (const field of MERGE_FIELDS) { if (deepEqual(out[field], empty[field])) continue; out.fc[field] = now; out.fb[field] = ''; }
+    if (Object.prototype.hasOwnProperty.call(src, 'extra')) {
+      const extra = cleanTree(src.extra);
+      out.extra = extra && typeof extra === 'object' && !Array.isArray(extra) ? plain(extra) : {};
+    }
+    if (JSON.stringify(out.extra || {}).length > LIMITS.extraBytes) {
+      out.extra = {};
+      report.dropped.extra = 1;
+    }
+    if (typeof src.uid === 'string' && src.uid.trim() && !out.uid) out.uid = text(src.uid, 200);
+    if (!out.uid) out.uid = newUid();
+    if (!out.created_at) out.created_at = now;
+    out.updated_at = now;
+    if (JSON.stringify(out).length > LIMITS.contactBytes && out.extra && Object.keys(out.extra).length) {
+      out.extra = {};
+      report.dropped.extra = 1;
+    }
+    if (JSON.stringify(out).length > LIMITS.contactBytes && out.photo) {
+      out.photo = null;
+      report.dropped.photo = 1;
+    }
+    if (JSON.stringify(out).length > LIMITS.contactBytes) throw new Error('Contact is too large');
+    return { content: out, dropped: report.dropped };
+  }
+
+  // --- display, sort, initials (2.3, 4.3) ---------------------------------------------------------
+  function foldText(value) {
+    return String(value == null ? '' : value).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  }
+
+  function displayName(c, order = 'given') {
+    const n = (c && c.name) || {};
+    const parts = (list) => list.map((k) => n[k] || '').filter(Boolean).join(' ');
+    const structured = ['prefix', 'given', 'additional', 'family', 'suffix'].some((k) => n[k]);
+    if (!structured && n.formatted) return n.formatted;
+    if (structured) {
+      if (order === 'family' && n.family) {
+        const rest = parts(['prefix', 'given', 'additional', 'suffix']);
+        return rest ? `${n.family}, ${rest}` : n.family;
+      }
+      return parts(['prefix', 'given', 'additional', 'family', 'suffix']);
+    }
+    if (c && c.org && c.org.name) return c.org.name;
+    const email = c && c.emails && c.emails[0] && c.emails[0].value;
+    if (email) return email;
+    const phone = c && c.phones && c.phones[0] && c.phones[0].value;
+    return phone || 'No name';
+  }
+
+  function sortKey(c, order = 'given') {
+    return foldText(displayName(c, order));
+  }
+
+  // Letter used for grouping and avatar initials; `#` for digits, symbols and the empty name.
+  function initial(c, order = 'given') {
+    const ch = Array.from(String(displayName(c, order)).normalize('NFD').replace(/[̀-ͯ]/g, ''))[0] || '';
+    const up = ch.toUpperCase();
+    return up && up.toLowerCase() !== up ? up : '#';
+  }
+
+  function compareContacts(a, b, order = 'given') {
+    const ka = sortKey(a, order);
+    const kb = sortKey(b, order);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  }
+
+  // --- search (5.1) -----------------------------------------------------------------------------
+  function digitsOf(value) {
+    return String(value || '').replace(/\D/g, '').replace(/^00/, '');
+  }
+
+  function haystack(c) {
+    const out = [];
+    const n = c.name || {};
+    for (const k of NAME_PARTS) out.push(n[k]);
+    out.push(c.nickname, c.org && c.org.name, c.org && c.org.unit, c.title, c.note);
+    for (const f of ['phones', 'emails', 'urls', 'ims', 'dates']) for (const e of c[f] || []) out.push(e.value);
+    for (const a of c.addresses || []) for (const k of ADDRESS_PARTS) out.push(a[k]);
+    for (const l of c.labels || []) out.push(l);
+    const vcard = c.extra && Array.isArray(c.extra.vcard) ? c.extra.vcard : [];
+    for (const v of vcard) if (v && v.n === 'X-ABRELATEDNAMES') out.push(v.v);
+    return foldText(out.filter(Boolean).join('\n'));
+  }
+
+  // `list` holds contact contents. Every word must match (AND); `label:x` and `is:favorite` restrict.
+  function filterContacts(list, query = '', activeLabel = '', favouritesOnly = false, order = 'given') {
+    let label = foldText(activeLabel);
+    let fav = favouritesOnly === true;
+    const words = [];
+    for (const tok of foldText(query).split(/\s+/).filter(Boolean)) {
+      if (tok === 'is:favorite' || tok === 'is:favourite') fav = true;
+      else if (tok.startsWith('label:') && tok.length > 6) label = tok.slice(6);
+      else words.push(tok);
+    }
+    const phrase = words.join(' ');
+    const rows = [];
+    for (const c of list || []) {
+      if (fav && !c.favorite) continue;
+      if (label && !(c.labels || []).some((l) => foldText(l) === label)) continue;
+      if (words.length) {
+        const hay = haystack(c);
+        const phoneDigits = (c.phones || []).map((p) => digitsOf(p.value));
+        const ok = words.every((w) => {
+          if (hay.includes(w)) return true;
+          const d = digitsOf(w.replace(/^\+/, ''));
+          return /^[\d\s()+.-]+$/.test(w) && d.length >= 3 && phoneDigits.some((p) => p.includes(d));
+        });
+        if (!ok) continue;
+      }
+      rows.push(c);
+    }
+    rows.sort((a, b) => {
+      if (phrase) {
+        const pa = sortKey(a, order).startsWith(phrase) ? 0 : 1;
+        const pb = sortKey(b, order).startsWith(phrase) ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+      }
+      return compareContacts(a, b, order);
+    });
+    return rows;
+  }
+
+  function labelCounts(list) {
+    const map = new Map();
+    for (const c of list || []) {
+      for (const name of c.labels || []) {
+        const key = name.toLowerCase();
+        const cur = map.get(key);
+        if (cur) cur.count += 1; else map.set(key, { name, count: 1 });
+      }
+    }
+    return [...map.values()].sort((a, b) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1));
+  }
+
+  // Label rename/delete (`to` empty deletes); null when the contact does not carry the label.
+  function renameLabelIn(labels, from, to = '') {
+    const key = String(from || '').toLowerCase();
+    if (!(labels || []).some((l) => l.toLowerCase() === key)) return null;
+    return normLabels((labels || []).map((l) => (l.toLowerCase() === key ? to : l)));
+  }
+
+  // --- merge on sync conflict (3.3) ---------------------------------------------------------------
+  // Returns { content, copy }. `copy` is a contact holding the values that lost a real conflict (the
+  // same scalar field changed on both devices from the same earlier state), or null.
+  function mergeContacts(local, remote) {
+    const lf = (local && local.fc) || {};
+    const rf = (remote && remote.fc) || {};
+    const lb = (local && local.fb) || {};
+    const rb = (remote && remote.fb) || {};
+    const newer = String((local && local.updated_at) || '') >= String((remote && remote.updated_at) || '') ? local : remote;
+    const older = newer === local ? remote : local;
+    const merged = { ...older, ...newer };
+    const fc = { ...rf };
+    const fb = { ...rb };
+    const lost = {};
+    for (const field of MERGE_FIELDS) {
+      const lv = local[field];
+      const rv = remote[field];
+      const lt = lf[field] || '';
+      const rt = rf[field] || '';
+      if (deepEqual(lv, rv)) {
+        merged[field] = lv;
+        if (lt || rt) { fc[field] = lt > rt ? lt : rt; fb[field] = lt > rt ? (lb[field] || '') : (rb[field] || ''); }
+        continue;
+      }
+      if (LIST_FIELDS.includes(field)) {
+        const first = lt >= rt ? lv : rv;
+        const second = lt >= rt ? rv : lv;
+        const ids = new Set((first || []).map((e) => e.id));
+        merged[field] = [...(first || []), ...(second || []).filter((e) => !ids.has(e.id))];
+        fc[field] = lt > rt ? lt : rt;
+        fb[field] = lt > rt ? (lb[field] || '') : (rb[field] || '');
+        continue;
+      }
+      const localWins = lt >= rt;
+      const winnerTime = localWins ? lt : rt;
+      const loserTime = localWins ? rt : lt;
+      merged[field] = localWins ? lv : rv;
+      fc[field] = winnerTime;
+      fb[field] = localWins ? (lb[field] || '') : (rb[field] || '');
+      // Concurrent: the loser also changed the field, and from the same earlier state.
+      const winnerBase = localWins ? (lb[field] || '') : (rb[field] || '');
+      const loserBase = localWins ? (rb[field] || '') : (lb[field] || '');
+      const concurrent = loserTime && winnerBase !== loserTime && winnerBase === loserBase && field !== 'favorite';
+      if (concurrent) lost[field] = localWins ? rv : lv;
+    }
+    merged.fc = fc;
+    merged.fb = fb;
+    // Contact-wide bookkeeping follows the side that was edited last.
+    merged.updated_at = newer.updated_at;
+    let copy = null;
+    if (Object.keys(lost).length) {
+      copy = plain({ ...merged, ...lost });
+      // Named like a note conflict copy; the structured parts are folded into `formatted`.
+      copy.name = { ...plain(merged.name), prefix: '', given: '', additional: '', family: '', suffix: '', formatted: `${displayName(copy)}${CONFLICT_SUFFIX}` };
+      delete copy.__fid;
+      delete copy.__fv;
+      copy.uid = newUid();
+      copy.favorite = false;
+    }
+    return { content: merged, copy };
+  }
+
+  // --- photo re-encoder (3.4, 9.3); browser only ----------------------------------------------------
+  const MAX_PHOTO_INPUT_BYTES = 20 * 1024 * 1024;
+  const MAX_PHOTO_SIDE = 8192;
+  const MAX_PHOTO_PIXELS = 16 * 1000 * 1000;
+
+  function imageSize(bytes) {
+    const u = (i) => bytes[i];
+    if (bytes.length > 24 && u(0) === 0x89 && u(1) === 0x50 && u(2) === 0x4e && u(3) === 0x47) {
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      return { w: dv.getUint32(16), h: dv.getUint32(20) };
+    }
+    if (bytes.length > 10 && u(0) === 0x47 && u(1) === 0x49 && u(2) === 0x46) {
+      return { w: u(6) | (u(7) << 8), h: u(8) | (u(9) << 8) };
+    }
+    if (bytes.length > 4 && u(0) === 0xff && u(1) === 0xd8) {
+      let i = 2;
+      while (i + 9 < bytes.length) {
+        if (u(i) !== 0xff) { i += 1; continue; }
+        const marker = u(i + 1);
+        if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01 || marker === 0xff) { i += marker === 0xff ? 1 : 2; continue; }
+        const len = (u(i + 2) << 8) | u(i + 3);
+        if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+          return { h: (u(i + 5) << 8) | u(i + 6), w: (u(i + 7) << 8) | u(i + 8) };
+        }
+        i += 2 + len;
+      }
+      return null;
+    }
+    if (bytes.length > 30 && String.fromCharCode(u(0), u(1), u(2), u(3)) === 'RIFF' && String.fromCharCode(u(8), u(9), u(10), u(11)) === 'WEBP') {
+      const kind = String.fromCharCode(u(12), u(13), u(14), u(15));
+      if (kind === 'VP8X') return { w: 1 + (u(24) | (u(25) << 8) | (u(26) << 16)), h: 1 + (u(27) | (u(28) << 8) | (u(29) << 16)) };
+      if (kind === 'VP8L') {
+        const b = u(21) | (u(22) << 8) | (u(23) << 16) | (u(24) << 24);
+        return { w: 1 + (b & 0x3fff), h: 1 + ((b >>> 14) & 0x3fff) };
+      }
+      if (kind === 'VP8 ') return { w: (u(26) | (u(27) << 8)) & 0x3fff, h: (u(28) | (u(29) << 8)) & 0x3fff };
+    }
+    return null;
+  }
+
+  function bytesToBase64(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  // Blob -> { photo } (a 192 px JPEG of at most 12 KiB, pixels only: no EXIF, no alpha) or { error }.
+  async function encodePhoto(blob) {
+    if (!blob || blob.size > MAX_PHOTO_INPUT_BYTES) return { error: 'Photo file is too large' };
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const dims = imageSize(bytes);
+    if (!dims || !dims.w || !dims.h) return { error: 'Photo format not supported' };
+    if (dims.w > MAX_PHOTO_SIDE || dims.h > MAX_PHOTO_SIDE || dims.w * dims.h > MAX_PHOTO_PIXELS) return { error: 'Photo dimensions are too large' };
+    const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+    try {
+      const crop = Math.min(bitmap.width, bitmap.height);
+      const sx = Math.floor((bitmap.width - crop) / 2);
+      const sy = Math.floor((bitmap.height - crop) / 2);
+      for (const side of [LIMITS.photoSide, 144]) {
+        const canvas = document.createElement('canvas');
+        canvas.width = side;
+        canvas.height = side;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, side, side);
+        ctx.drawImage(bitmap, sx, sy, crop, crop, 0, 0, side, side);
+        for (const q of [0.78, 0.65, 0.5]) {
+          const out = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', q));
+          if (out && out.size <= LIMITS.photoBytes) {
+            return { photo: { mime: 'image/jpeg', data: bytesToBase64(new Uint8Array(await out.arrayBuffer())), w: side, h: side } };
+          }
+        }
+      }
+      return { error: 'Photo too complex' };
+    } finally {
+      if (bitmap.close) bitmap.close();
+    }
+  }
+
+  return {
+    LIMITS,
+    LIST_FIELDS,
+    MERGE_FIELDS,
+    CONFLICT_SUFFIX,
+    buildContact,
+    displayName,
+    sortKey,
+    initial,
+    compareContacts,
+    foldText,
+    filterContacts,
+    labelCounts,
+    renameLabelIn,
+    mergeContacts,
+    encodePhoto,
+    imageSize,
+    normLabels,
+  };
+})();
+
+if (typeof window !== 'undefined') window.NotesContacts = NotesContacts;
+if (typeof module !== 'undefined' && module.exports) module.exports = NotesContacts;
