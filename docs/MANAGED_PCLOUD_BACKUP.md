@@ -30,7 +30,11 @@ All of this stays and is reused.
   `pcloud_last_sync_status`, `pcloud_last_sync_detail` (`app/db.py:155-170`).
 - `rclone_remote_env` builds an rclone remote **in memory** through
   `RCLONE_CONFIG_DEEPERGUARD_*` environment variables and runs rclone with
-  `--config /dev/null`. No config file is written.
+  `--config /dev/null`. No config file is written. It uses only the encrypted OAuth
+  token from the "Connect pCloud" flow (`pcloud_oauth.stored_token`, table
+  `pcloud_oauth_tokens`) and the API host stored with it; the pasted
+  `keys/pcloud-token-<user_id>` file is no longer used for uploads and stays only for
+  the migration.
 - Passwords are no longer accepted (`docs/PCLOUD_CREDENTIALS_MIGRATION.md`);
   legacy password/config files are removed at startup
   (`pcloud_credentials.migrate_all_pcloud_secrets`, `app/app.py:4175`).
@@ -42,8 +46,10 @@ All of this stays and is reused.
   sends e-mail backups for `users_with_backup_enabled()` (only to verified
   recipients, `email_verify.recipient_verified`).
 - `run_pcloud_backups` loops over `db.users_with_pcloud_enabled()`
-  (`pcloud_enabled = 1 AND pcloud_username != ''`). Missing token → status `error`,
-  `log_backup`, failure mail, continue. Otherwise `sync_user_backup`; any exception
+  (`pcloud_enabled = 1 AND pcloud_username != ''`) and calls `sync_user_backup`.
+  No OAuth token, a token that cannot be decrypted, or a token pCloud refuses
+  (expired or revoked) → status `reconnect_needed`, `log_backup`, failure mail,
+  continue. Any exception
   is caught per user, logged, mailed, and the loop continues. So one user's failure
   does not stop the others (requirement 8 already holds for the token model).
 - `sync_user_backup`: `ensure_local_full_backup(user_id, max_age=7200)` reuses a
@@ -62,7 +68,7 @@ All of this stays and is reused.
 **Failure mail**: `notify_pcloud_backup_failure` sends via
 `mailer.send_plain_email` to `backup_email or email`. There is **no success mail**
 and **no verified-address check** on this path (the e-mail backup path does have
-one). The body tells the user to paste a new token, and includes `Detail:` with up to
+one). The body tells the user to connect pCloud again when access was refused, and includes `Detail:` with up to
 500 characters of raw rclone stderr (`_format_rclone_error`) — acceptable when the
 remote is the user's own account, **not acceptable** for a shared account (see §4).
 

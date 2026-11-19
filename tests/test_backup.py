@@ -1,5 +1,6 @@
 """Tests for encrypted email and pCloud backup helpers."""
 import importlib
+import json
 import os
 import sys
 import tempfile
@@ -220,12 +221,14 @@ class BackupHelperTests(unittest.TestCase):
         self.assertIn("access_token", out)
 
     def test_rclone_remote_env_uses_oauth_token(self):
-        token = '{"access_token":"abc","token_type":"bearer"}'
-        with patch.object(self.backup_pcloud, "pcloud_token", return_value=token):
-            env = self.backup_pcloud.rclone_remote_env(9, "eu")
+        import pcloud_credentials
+
+        row = {"token_enc": pcloud_credentials.encrypt_at_rest("abc"), "api_host": "eapi.pcloud.com"}
+        with patch.object(self.backup_pcloud.db, "get_pcloud_oauth_token", return_value=row):
+            env = self.backup_pcloud.rclone_remote_env(9)
         self.assertEqual(env["RCLONE_CONFIG_DEEPERGUARD_TYPE"], "pcloud")
         self.assertEqual(env["RCLONE_CONFIG_DEEPERGUARD_HOSTNAME"], "eapi.pcloud.com")
-        self.assertEqual(env["RCLONE_CONFIG_DEEPERGUARD_TOKEN"], token)
+        self.assertEqual(json.loads(env["RCLONE_CONFIG_DEEPERGUARD_TOKEN"])["access_token"], "abc")
 
     def test_run_pcloud_backups_emails_when_token_missing(self):
         sent = []
@@ -236,7 +239,11 @@ class BackupHelperTests(unittest.TestCase):
                 "backup_email": "",
                 "pcloud_remote_path": "Deeperguard/backups",
             }
-        ]), patch.object(self.backup_pcloud, "pcloud_credentials_configured", return_value=False), patch.object(
+        ]), patch.object(self.backup_pcloud.db, "get_user_by_id", return_value={
+            "id": 1,
+            "pcloud_username": "owner@home.local",
+            "pcloud_remote_path": "Deeperguard/backups",
+        }), patch.object(self.backup_pcloud.db, "get_pcloud_oauth_token", return_value=None), patch.object(
             self.backup_pcloud, "notify_pcloud_backup_failure", side_effect=lambda u, d: sent.append((u["email"], d))
         ), patch.object(self.backup_pcloud.db, "update_pcloud_sync_status"), patch.object(
             self.backup_pcloud.db, "log_backup"

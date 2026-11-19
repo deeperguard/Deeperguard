@@ -37,7 +37,7 @@ import promo as notes_promo
 from backup_mail import send_user_backup
 from admin_notify import log_signup_notify_config, notify_new_user_signup
 from mailer import send_contact_email, send_plain_email
-from backup_pcloud import pcloud_credentials_configured, save_pcloud_settings, sync_user_backup
+from backup_pcloud import STATUS_RECONNECT, PcloudReconnectNeeded, save_pcloud_settings, sync_user_backup
 from passwords import hash_password, new_kdf_salt, verify_password
 from srp_auth import (
     SRP_KDF_V2,
@@ -3612,10 +3612,10 @@ def api_backup_pcloud_sync():
         return blocked
     if not user["pcloud_username"]:
         return jsonify({"error": "pCloud username is not configured"}), 400
-    if not pcloud_credentials_configured(uid):
-        return jsonify({"error": "pCloud rclone OAuth token is not configured"}), 400
     try:
         meta = sync_user_backup(uid)
+    except PcloudReconnectNeeded as exc:
+        return jsonify({"error": str(exc), "code": STATUS_RECONNECT}), 409
     except Exception as exc:
         return _generic_client_error("pCloud sync failed", exc, status=502)
     return jsonify(meta)

@@ -17,7 +17,7 @@ import db
 import pcloud_credentials as pc
 from backup_mail import backups_dir, ensure_local_full_backup
 import config
-from config import KEYS_DIR, pcloud_token, pcloud_token_path, pcloud_token_set, write_pcloud_token
+from config import KEYS_DIR, pcloud_token_path, pcloud_token_set, write_pcloud_token
 from mailer import send_plain_email
 
 log = logging.getLogger("deeperguard.backup.pcloud")
@@ -32,6 +32,16 @@ PCLOUD_API_HOSTS = {
     "us": "api.pcloud.com",
     "eu": "eapi.pcloud.com",
 }
+# Sync status when the stored OAuth token is missing, unreadable or refused by pCloud.
+STATUS_RECONNECT = "reconnect_needed"
+NOT_CONNECTED_DETAIL = "pCloud is not connected (no OAuth token). Connect pCloud in Settings."
+RECONNECT_DETAIL = (
+    "pCloud refused the stored access (token expired or revoked). Reconnect pCloud in Settings."
+)
+
+
+class PcloudReconnectNeeded(RuntimeError):
+    """The user must connect pCloud again; the message is a fixed text without secrets."""
 
 
 def rclone_bin() -> str:
@@ -93,9 +103,9 @@ def notify_pcloud_backup_failure(user: Any, detail: str) -> None:
         "Your scheduled Deeperguard pCloud backup did not complete.\n\n"
         f"Account: {user['email']}\n"
         f"Detail: {detail}\n\n"
-        "Paste an rclone OAuth token in Settings → pCloud backup. On your computer run "
-        '"rclone authorize pcloud" (EU accounts: add --pcloud-hostname eapi.pcloud.com). '
-        "Check the EU/US region matches your account.\n"
+        "If pCloud refused the access you granted (expired or revoked), connect pCloud "
+        "again in Settings → pCloud backup. Otherwise the backup is retried at the next "
+        "scheduled run.\n"
     )
     try:
         send_plain_email(recipient, "Deeperguard: pCloud backup failed", body)
@@ -103,19 +113,33 @@ def notify_pcloud_backup_failure(user: Any, detail: str) -> None:
         log.error("pcloud failure email not sent user=%s: %s", user["email"], exc)
 
 
-def rclone_remote_env(user_id: int, region: str) -> dict[str, str]:
+def rclone_remote_env(user_id: int) -> dict[str, str]:
     """Environment for rclone with the remote defined in memory only.
 
-    No config file is written, so the OAuth token never touches disk in readable form.
+    Uses only the OAuth token from the connect flow (``pcloud_oauth``), decrypted just
+    before the call, and the API host pCloud named for the account. The legacy
+    ``keys/pcloud-token-*`` file is not read here. No config file is written, so the
+    token never touches disk in readable form. Remote paths are relative to the root
+    the token can see; for an app registered with app-folder access that is its folder.
     """
-    token = pcloud_token(user_id)
-    if not token:
-        raise RuntimeError("pCloud rclone OAuth token is not configured")
+    import pcloud_oauth
+
+    row = db.get_pcloud_oauth_token(int(user_id))
+    if not row:
+        raise PcloudReconnectNeeded(NOT_CONNECTED_DETAIL)
+    api_host = str(row["api_host"] or "")
+    token = pcloud_oauth.stored_token(int(user_id))
+    if not token or api_host not in pcloud_oauth.API_BASE_URLS:
+        raise PcloudReconnectNeeded(RECONNECT_DETAIL)
     prefix = f"RCLONE_CONFIG_{RCLONE_REMOTE.upper()}_"
     env = dict(os.environ)
     env[prefix + "TYPE"] = "pcloud"
-    env[prefix + "HOSTNAME"] = pcloud_hostname(region)
-    env[prefix + "TOKEN"] = token
+    env[prefix + "HOSTNAME"] = api_host
+    # pCloud OAuth tokens do not expire; the zero expiry tells rclone not to refresh.
+    env[prefix + "TOKEN"] = json.dumps(
+        {"access_token": token, "token_type": "bearer", "expiry": "0001-01-01T00:00:00Z"},
+        separators=(",", ":"),
+    )
     return env
 
 
@@ -146,7 +170,7 @@ def _run_rclone(cmd: list[str], *, timeout: int, env: dict[str, str]) -> subproc
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(
             "rclone timed out uploading the backup. Large vaults need a stable link; "
-            "try refreshing the rclone OAuth token in Settings."
+            "the backup is retried at the next scheduled run."
         ) from exc
 
 
@@ -211,7 +235,18 @@ def upload_backup_file(
     ]
     proc = _run_rclone(cmd, timeout=RCLONE_TIMEOUT_SECONDS, env=env)
     if proc.returncode != 0:
+        if _classify_rclone_failure(proc.stderr or proc.stdout or "") == ERR_AUTH:
+            raise PcloudReconnectNeeded(RECONNECT_DETAIL)
         raise RuntimeError(_format_rclone_error(proc))
+
+
+def _record_sync_failure(
+    user_id: int, remote_path: str, exc: RuntimeError, item_count: int, bytes_size: int
+) -> None:
+    detail = str(exc)
+    status = STATUS_RECONNECT if isinstance(exc, PcloudReconnectNeeded) else "error"
+    db.update_pcloud_sync_status(user_id, status, detail)
+    db.log_backup(user_id, remote_path, item_count, bytes_size, "error", f"pcloud:{detail}")
 
 
 def sync_user_backup(user_id: int) -> dict[str, Any]:
@@ -221,12 +256,13 @@ def sync_user_backup(user_id: int) -> dict[str, Any]:
     username = str(user["pcloud_username"] or "").strip()
     if not username:
         raise RuntimeError("pCloud username is not configured")
-    if not pcloud_credentials_configured(user_id):
-        raise RuntimeError("pCloud rclone OAuth token is not configured")
 
     remote_path = normalize_remote_path(str(user["pcloud_remote_path"] or ""))
-    region = normalize_pcloud_region(str(user["pcloud_region"] or ""))
-    env = rclone_remote_env(user_id, region)
+    try:
+        env = rclone_remote_env(user_id)
+    except PcloudReconnectNeeded as exc:
+        _record_sync_failure(user_id, remote_path, exc, 0, 0)
+        raise
 
     local_path, item_count, bytes_size = ensure_local_full_backup(user_id, max_age=PCLOUD_LOCAL_MAX_AGE)
     if item_count == 0 and local_path.is_file():
@@ -235,9 +271,7 @@ def sync_user_backup(user_id: int) -> dict[str, Any]:
     try:
         upload_backup_file(local_path, env, remote_path)
     except RuntimeError as exc:
-        detail = str(exc)
-        db.update_pcloud_sync_status(user_id, "error", detail)
-        db.log_backup(user_id, remote_path, item_count, bytes_size, "error", f"pcloud:{detail}")
+        _record_sync_failure(user_id, remote_path, exc, item_count, bytes_size)
         raise
 
     prune_error = ""
@@ -318,15 +352,7 @@ def run_pcloud_backups() -> int:
     for user in db.users_with_pcloud_enabled():
         uid = int(user["id"])
         if uid in managed_ids:
-            continue  # managed flag wins; the legacy token flow is for non-managed users
-        remote_path = normalize_remote_path(str(user["pcloud_remote_path"] or ""))
-        if not pcloud_credentials_configured(uid):
-            detail = "pCloud rclone OAuth token is not configured"
-            db.update_pcloud_sync_status(uid, "error", detail)
-            db.log_backup(uid, remote_path, 0, 0, "error", f"pcloud:{detail}")
-            log.error("pcloud backup skipped user=%s: %s", user["email"], detail)
-            notify_pcloud_backup_failure(user, detail)
-            continue
+            continue  # managed flag wins; the own-account flow is for non-managed users
         try:
             sync_user_backup(uid)
             synced += 1
@@ -366,6 +392,10 @@ def _classify_rclone_failure(stderr: str) -> str:
     if "quota" in low or "insufficient storage" in low or "over quota" in low:
         return ERR_QUOTA
     if "401" in low or "unauthorized" in low or "empty token" in low:
+        return ERR_AUTH
+    # pCloud API errors as rclone prints them: "Log in required. (1000)",
+    # "Log in failed. (2000)", "Invalid 'access_token' provided. (2094)".
+    if "log in required" in low or "log in failed" in low or "invalid 'access_token'" in low:
         return ERR_AUTH
     return ERR_UNAVAILABLE
 

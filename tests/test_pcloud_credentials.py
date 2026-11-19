@@ -81,16 +81,15 @@ class PcloudCredentialSecurityTests(unittest.TestCase):
         self.assertIn("no longer stored", str(ctx.exception))
 
     def test_rclone_remote_env_does_not_persist_token_file(self):
-        token = '{"access_token":"rclone-token-value","token_type":"bearer"}'
-        self.config.write_pcloud_token(9, token)
+        row = {"token_enc": self.pc.encrypt_at_rest("oauth-token-value"), "api_host": "eapi.pcloud.com"}
         before = sorted(p.name for p in self.config.KEYS_DIR.iterdir())
-        env = self.backup_pcloud.rclone_remote_env(9, "eu")
+        with mock.patch.object(self.backup_pcloud.db, "get_pcloud_oauth_token", return_value=row):
+            env = self.backup_pcloud.rclone_remote_env(9)
         self.assertEqual(env["RCLONE_CONFIG_DEEPERGUARD_TYPE"], "pcloud")
-        self.assertIn("rclone-token-value", env["RCLONE_CONFIG_DEEPERGUARD_TOKEN"])
+        self.assertIn("oauth-token-value", env["RCLONE_CONFIG_DEEPERGUARD_TOKEN"])
         self.assertEqual(before, sorted(p.name for p in self.config.KEYS_DIR.iterdir()))
         self.assertFalse(self.config.pcloud_rclone_config_path(9).is_file())
-        stored = self.config.pcloud_token_path(9).read_text(encoding="utf-8")
-        self.assertNotIn("rclone-token-value", stored)
+        self.assertFalse(self.config.pcloud_token_path(9).is_file())
 
 
 if __name__ == "__main__":

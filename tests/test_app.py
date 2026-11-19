@@ -4721,6 +4721,19 @@ class NotesAppTests(unittest.TestCase):
         if token_path.is_file():
             self.assertNotIn("pcloud-secret-token", token_path.read_text(encoding="utf-8"))
 
+        # The pasted rclone token is not used for uploads; only the OAuth connection is.
+        with patch("backup_pcloud.subprocess.run") as run_mock:
+            not_connected = self.client.post("/api/backup/pcloud/sync", headers=csrf, json={})
+        self.assertEqual(not_connected.status_code, 409)
+        self.assertEqual(not_connected.get_json()["code"], "reconnect_needed")
+        run_mock.assert_not_called()
+        account_rc = self.client.get("/api/account", headers=csrf).get_json()
+        self.assertEqual(account_rc["pcloud_last_sync_status"], "reconnect_needed")
+        self.assertIn("Connect pCloud", account_rc["pcloud_last_sync_detail"])
+
+        import pcloud_oauth
+
+        pcloud_oauth.store_token(1, "pcloud-oauth-token", "eapi.pcloud.com")
         with patch("backup_pcloud.subprocess.run") as run_mock, patch(
             "backup_pcloud.rclone_bin", return_value="/usr/bin/rclone"
         ):
