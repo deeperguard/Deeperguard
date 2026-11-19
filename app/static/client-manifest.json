@@ -320,10 +320,10 @@
       "url": "/static/js/passkey-signin.f0bee54409f23bf3.js"
     },
     "js/passkeys.js": {
-      "bytes": 13914,
-      "sha256": "d18468902d9940e7813a382d87f287dc56a4e2357992018c404a877e57b0eded",
-      "sri": "sha384-47Ts4bA0+XNwWNSigXnACk5VCOPVJ4/BoHObpFGzVJw9upwj1tjfzSyQ5QoEjYjf",
-      "url": "/static/js/passkeys.d18468902d9940e7.js"
+      "bytes": 14081,
+      "sha256": "df3821193f65ab0d8c94720614d54ef7a2467fb9b4bf5a915369c6ab5f2dac8b",
+      "sri": "sha384-BdlhRjJBmEYJBksu8J/0fI3ulKGb98SZmeT/WzdS2rJ9BTQrCXUUqeIfbrby/c2p",
+      "url": "/static/js/passkeys.df3821193f65ab0d.js"
     },
     "js/photo-ocr-preprocess.js": {
       "bytes": 25228,
@@ -632,13 +632,13 @@
       "url": "/static/js/webauthn-client.a2e6416a33c6387b.js"
     },
     "js/ziplib.js": {
-      "bytes": 14329,
-      "sha256": "7d7bbbb25f16684add63248e337c99608ba8a1fbcaa4b7ec045bbbe898cf5f2a",
-      "sri": "sha384-tvO1MpcbnRcxKl9rNbEuBMMsJSb6Og9PAXFgQZYTPai4fnkMTZPOfufwTh67976R",
-      "url": "/static/js/ziplib.7d7bbbb25f16684a.js"
+      "bytes": 14673,
+      "sha256": "3cd8c601768ab55fe3092c99a2b0546bf5f33b6656788b564437b8f91a964b76",
+      "sri": "sha384-aYEFitAUyCGAlfdufJDSOqqCFEt/971oTLuxgfsd7hjLXaE7UQYSPfU9UIMWMZIo",
+      "url": "/static/js/ziplib.3cd8c601768ab55f.js"
     }
   },
   "created": 0,
-  "manifest_sha256": "265448159377b7f832c76678e8f819559e4d0f8ae7eeff52e1060b3ddd211a99",
+  "manifest_sha256": "7506b3e407ad65296e5a3f1135f8d744750ed34358d71e518dfc1de83e941f1a",
   "version": 1
 }
