@@ -9624,7 +9624,7 @@
     });
     setTimeout(() => {
       const away = (event) => {
-        if (!document.getElementById('label-menu')) { document.removeEventListener('pointerdown', away, true); return; }
+        if (document.getElementById('label-menu') !== menu) { document.removeEventListener('pointerdown', away, true); return; }
         if (!menu.contains(event.target)) { document.removeEventListener('pointerdown', away, true); closeLabelMenu(false); }
       };
       document.addEventListener('pointerdown', away, true);
@@ -9678,6 +9678,14 @@
         const step = NotesLabelTree.siblingStep(labelIndex(), item.dataset.label, event.key === 'ArrowUp' ? -1 : 1);
         event.preventDefault();
         if (step) dropLabel(item.dataset.label, step.target, step.zone);
+        return;
+      }
+      if (event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
+        const indent = event.key === 'ArrowRight';
+        const step = NotesLabelTree.levelStep(labelIndex(), item.dataset.label, indent ? 1 : -1);
+        event.preventDefault();
+        if (step) dropLabel(item.dataset.label, step.target, step.zone);
+        else toast(indent ? 'Cannot indent: no label above to nest under' : 'Cannot outdent: already at the top level');
         return;
       }
       if (event.altKey || event.ctrlKey || event.metaKey) return;

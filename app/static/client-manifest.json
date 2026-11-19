@@ -98,10 +98,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1096784,
-      "sha256": "e4babfba8bf661851b9bb0c73562f51ef974c0eb1311368f793d184ffb6a0af7",
-      "sri": "sha384-nhkTQ5gAi9oRT95JGUZpWoM5UxVlmjKWmYA3ULMBdk8vMO9oa4ifih25Mdgb+0pA",
-      "url": "/static/js/app.e4babfba8bf66185.js"
+      "bytes": 1097314,
+      "sha256": "ac17ce2950bd3812ba636b0170c7093c43c67378325e776d280ee4dc5e91d1ba",
+      "sri": "sha384-6gL9rTTbTvTxm8i6HrFXQePF4FNTxAKcGROrzCdUjrd+X6GxcmJAHxVe4SJYzcs8",
+      "url": "/static/js/app.ac17ce2950bd3812.js"
     },
     "js/auth-pages.js": {
       "bytes": 43723,
@@ -242,10 +242,10 @@
       "url": "/static/js/labels.fcfff63e870c16d8.js"
     },
     "js/labeltree.js": {
-      "bytes": 9698,
-      "sha256": "5b30cb44b7a2a8e53d07cbfe0decb83c23759e7a40c2ef7912ec78d8ce2da951",
-      "sri": "sha384-FICLmpOPd96pUbk2gok9jsA5kQc/1h3TMrE2S2nykulRz23K/XnPbXNo1w3yr9gR",
-      "url": "/static/js/labeltree.5b30cb44b7a2a8e5.js"
+      "bytes": 10355,
+      "sha256": "bf1392bc24cf5c41288602f09555520b67e43074a5ce347cb561181a47c8e7cb",
+      "sri": "sha384-NJaHF67XhNUzK9r/pBSV/y0LB600j+UmRDoVUi3xHCmVQNO8LY5Zna47MutIHFqw",
+      "url": "/static/js/labeltree.bf1392bc24cf5c41.js"
     },
     "js/link-overlay.js": {
       "bytes": 2723,
@@ -639,6 +639,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "cb13d87ab31b4ef5b63c311efc3f89f9d22445e4748571a94d95705d3b8a31cb",
+  "manifest_sha256": "2f559cdf8f7bb054a44dfce14cbda7ed711fa2e1582a1dc4417e80bb00f47272",
   "version": 1
 }

@@ -67,6 +67,18 @@ assert.deepStrictEqual(T.siblingStep(tree(), 'b', 1), { target: 'c', zone: 'afte
 assert.strictEqual(T.siblingStep(tree(), 'a', -1), null);
 assert.strictEqual(T.siblingStep(tree(), 'c', 1), null);
 
+// Alt+Right / Alt+Left step (indent / outdent)
+assert.deepStrictEqual(T.levelStep(tree(), 'b', 1), { target: 'a', zone: 'into' });
+assert.strictEqual(T.levelStep(tree(), 'a', 1), null);
+assert.strictEqual(T.levelStep(tree(), 'b', -1), null);
+assert.deepStrictEqual(T.levelStep(tree(), 'a1', -1), { target: 'a', zone: 'after' });
+plan = T.dropPlan(tree(), 'a1', 'a', 'after');
+assert.deepStrictEqual(top(apply(tree(), 'a1', plan)), ['a', 'a1', 'b', 'c']);
+let step = T.levelStep(tree(), 'b', 1);
+plan = T.dropPlan(tree(), 'b', step.target, step.zone);
+assert.strictEqual(plan.parent, 'a');
+assert.deepStrictEqual(T.childMap(apply(tree(), 'b', plan)).get('a'), ['a1', 'b']);
+
 // planUpdate keeps an explicit order
 const pu = L.planUpdate('c', { parent_id: 'a', order: 77 }, tree());
 assert.strictEqual(pu.updates[0].content.order, 77);
