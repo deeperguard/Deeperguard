@@ -25170,7 +25170,7 @@ async function showSettings() {
           a.href = url;
           a.download = result.filename;
           a.click();
-          URL.revokeObjectURL(url);
+          window.setTimeout(() => URL.revokeObjectURL(url), 1000);
           report({ status: 'Download started', pct: 100, indeterminate: false });
         },
       });
