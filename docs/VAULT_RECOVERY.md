@@ -414,6 +414,13 @@ recovery code never opens the vault; it only reaches this step.
 5. Client re-encrypts every item and attachment under `VK_new` using the existing
    rekey code and pushes with the normal `base_rev` sync. Rows are readable with
    either key from here on.
+   Limit: this loop (`recoveryConverge` in `store.js`) makes at most 4 passes. Each
+   pass takes the server's current rows, so edits from other devices are kept. If
+   another device keeps writing rows under `VK_old` through all 4 passes, the
+   attempt stops with the generic error "Notes kept changing on another device
+   during the recovery." It then tries to put the rows back under `VK_old`. Either
+   way the password and `RK` are unchanged, and the attempt can be started again
+   with the same `RK`.
 6. Client makes a **new** recovery key (`RK2`, `recovery_salt2`, wrap of `VK_new`,
    `proof_hash2`) and shows it; the user must confirm they stored it **before** the
    commit (otherwise a lost `RK2` leaves no recovery path; if they cannot

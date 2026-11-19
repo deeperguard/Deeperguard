@@ -12,7 +12,9 @@ Real server and Chromium, two signed-in devices (browser contexts) on one accoun
   signed out;
 * a failed commit (403, 409, offline) rolls back without overwriting what the
   other device wrote in between, and a later attempt with another new password
-  finishes from the live checkpoint.
+  finishes from the live checkpoint;
+* a 429 with retry_after on recover/start (attempt lock, 3.3) shows the wait
+  and changes nothing.
 """
 from __future__ import annotations
 
@@ -249,6 +251,9 @@ class VaultRecoveryFlowE2E(unittest.TestCase):
         after_p2 = self._account(email)
         self.assertEqual(after_p2["verifier"], before["verifier"])
         self.assertEqual(after_p2["proof_hash"], before["proof_hash"])
+        unreadable = a.text_content("#recover-error")
+        self.assertIn("If you no longer know it", unreadable)
+        self.assertIn("cannot be opened with your recovery key or your old password", unreadable)
 
         # The same recovery key with the earlier new password finishes the recovery.
         a.fill("#recover-new", P1)
@@ -343,6 +348,41 @@ class VaultRecoveryFlowE2E(unittest.TestCase):
         self.assertTrue(all(rows[u] is not None for u in all_ids), rows)
         self.assertTrue(rows[alpha]["text"].endswith(" +B-403 +B-409 +B-offline"), rows[alpha])
         self.assertEqual(rows[seeded["att"]]["file"], ATTACHMENT_TEXT)
+
+    def test_recovery_locked_429_shows_the_wait_and_changes_nothing(self):
+        a = self.browser.new_context(viewport={"width": 1280, "height": 860}).new_page()
+        email = register(a, self.base, recovery_key_step=False)
+        key = complete_recovery_key_step(a)
+        before = self._account(email)
+
+        a.goto(f"{self.base}/login", wait_until="domcontentloaded")
+        a.click("#login-toggle-recoverkey")
+        a.fill('form#login-form input[name="email"]', email)
+        a.click("#login-recoverkey-submit")
+        a.wait_for_selector("#recover-form:not([hidden])", timeout=60000)
+
+        # The server is locked out of recovery (3.3): recover/start answers 429 with retry_after.
+        calls = {"n": 0}
+
+        def locked(route):
+            calls["n"] += 1
+            route.fulfill(status=429, content_type="application/json",
+                          body=json.dumps({"error": "recovery locked", "retry_after": 900}))
+
+        a.route("**/api/account/vault-keys/recover/start", locked)
+        a.fill("#recover-key", key)
+        a.fill("#recover-new", P1)
+        a.fill("#recover-new2", P1)
+        a.click("#recover-submit")
+        a.wait_for_function(
+            "() => /locked for about 15 minutes/.test(document.getElementById('recover-error').textContent)",
+            timeout=60000)
+        a.unroute("**/api/account/vault-keys/recover/start")
+        self.assertEqual(calls["n"], 1)
+        message = a.text_content("#recover-error")
+        self.assertIn("Too many wrong recovery key attempts", message)
+        self.assertIn("Your password still works if you remember it.", message)
+        self.assertEqual(self._account(email), before)
 
 
 if __name__ == "__main__":
