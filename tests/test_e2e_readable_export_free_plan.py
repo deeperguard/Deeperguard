@@ -57,6 +57,13 @@ class ReadableExportFreePlanE2E(unittest.TestCase):
                 self.assertTrue(page.is_checked("#confirm-option"))
                 self.assertTrue(page.is_visible("#confirm-option-warning"))
                 page.click("#confirm-cancel")
+                # The button's explanation is named by aria-describedby and is visible in Settings.
+                page.evaluate("() => window.notesShowSettings()")
+                page.wait_for_selector("#settings-panel:not([hidden])")
+                describedby = page.get_attribute("#btn-export-readable-zip", "aria-describedby")
+                self.assertIsNotNone(describedby)
+                self.assertTrue(page.is_visible(f"#{describedby}"), describedby)
+                self.assertTrue(page.inner_text(f"#{describedby}").strip())
                 browser.close()
         finally:
             proc.terminate()
