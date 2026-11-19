@@ -82,6 +82,14 @@ then in the page `NotesStore.createTag('ZQparentLabel')`,
 `/api/sync` calls, `/api/sync/pull` was called, and the SQLite file was read.
 Run date 2026-11-19. Nothing was changed in the repo.
 
+To repeat it: start a server and register as above, call the four `create*`
+functions in the page (`page.evaluate`), wait for the sync to finish, then run
+`sqlite3 <data dir>/notes.db "select item_uuid, length(ciphertext) from items"`
+and `grep -rlaF ZQparentLabel <data dir>`. The rows show only uuid and
+ciphertext length, and `grep` finds no file. This is a manual procedure; no
+script in the repo automates it. The existing `tests/e2e_folder_tree.py` covers
+the client side (tree behaviour) but does not read the server database.
+
 1. **In the client (decrypted)** the child label was:
    `{"type":"tag","title":"ZQparentLabel / ZQchildLabel","name":"ZQchildLabel",
    "parent_id":"bf522e32-72d5-4b5d-a690-497c11f70220","order":1024,
