@@ -724,7 +724,7 @@ behaviour (DB rows, ciphertext bytes, HTTP status, visible UI), not on source te
 
 ### 9.6 Interrupted migration
 - [x] E8 (`tests/test_e2e_vault_recovery_flow.py`) Kill the page between `recover/pending` and the end of the re-encrypt push (abort the request after N rows): reload, sign in, `RK`, finish; every item readable; no row lost; final state equals E5.
-- [x] E9 (`tests/test_vault_recovery_interrupted.py`) Enrollment request dropped before response: retry is idempotent (200, one row). Also covered: enrolment that never reaches the server leaves the account unchanged and the next attempt succeeds; recovery interrupted after the pending row keeps the old password and wrap and can finish.
+- [x] E9 (`tests/test_vault_recovery_interrupted.py`) Enrollment request dropped before response: retry is idempotent (200, one row). Also covered: a rejected enrolment (stale `key_rev` 409, bad wrap shape 400) leaves the account unchanged and the next attempt succeeds; recovery interrupted after the pending row keeps the old password and wrap and can finish.
 - [ ] E10 (not covered by a test yet) Passkey created but PRF step cancelled: passkey signs in, list shows "no vault unlock yet", finishing works.
 - [x] P11 (`tests/test_vault_recovery_pending.py`) Pending row expires after 24 h; expired row is ignored and cleaned; commit with a mismatching `to_key_id` is rejected.
 

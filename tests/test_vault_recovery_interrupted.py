@@ -94,13 +94,19 @@ class InterruptedMigrationTests(unittest.TestCase):
 
     # (a) interrupted migration -------------------------------------------------
 
-    def test_enrolment_that_never_reaches_the_server_leaves_the_account_working_and_retry_succeeds(self):
+    def test_rejected_attempts_leave_no_half_state_and_retry_succeeds(self):
         uid, email, password, csrf = self._signed_in()
-        # The client wrapped the key, then the network failed before the PUT: nothing was stored.
         st = self._status()
         self.assertEqual((st["recovery"]["active"], st["key_rev"], st["key_id"]), (False, 0, ""))
         self._assert_consistent(uid, email, password)
         self.assertEqual(self.client.get("/api/account").status_code, 200)
+        # A real failed attempt: the client's key_rev is stale, so the server refuses the PUT.
+        stale = self._put(email, password, csrf, wraps._body(3, secrets.token_hex(16)))
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(stale.get_json()["error"], "key_rev_mismatch")
+        self.assertEqual(self._wrap_rows(uid), ([], []))
+        st = self._status()
+        self.assertEqual((st["recovery"]["active"], st["key_rev"], st["key_id"]), (False, 0, ""))
         # A rejected attempt (bad shape) is not a half state either.
         bad = self._put(email, password, csrf, wraps._body(0, secrets.token_hex(16), wrap="not-a-wrap"))
         self.assertEqual(bad.status_code, 400)
