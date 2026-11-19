@@ -13381,3 +13381,138 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
 .label-folder-actions { display: flex; align-items: center; gap: 10px; }
 .label-folder-subs { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
 .label-folder-subs[hidden] { display: none; }
+
+/* Contacts tab (docs/CONTACTS_SPEC.md section 4). Reuses the 2FA pane header, toolbar and chips. */
+.contacts-title { margin: 0; font-size: 22px; letter-spacing: -0.02em; }
+.contacts-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.contacts-listcol { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.contacts-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.contacts-empty { flex: 0 0 auto; }
+.contacts-empty[hidden] { display: none; }
+.contacts-empty .btn { margin-top: var(--space-3); min-height: 44px; }
+.contacts-section {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--muted);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.contacts-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
+.contacts-row-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px 6px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.contacts-row-open:hover,
+.contacts-row-open[aria-current="true"] { background: var(--accent-soft); }
+.contacts-row-text { display: flex; flex-direction: column; min-width: 0; }
+.contacts-row-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contacts-row-sub { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contacts-star {
+  flex: 0 0 48px;
+  min-width: 48px;
+  min-height: 48px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  cursor: pointer;
+}
+.contacts-star.on { color: var(--accent); }
+.contact-avatar {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-weight: 650;
+  color: #fff;
+  background: hsl(var(--avatar-hue, 210) 45% 32%);
+}
+.contact-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.contact-avatar.big { flex-basis: 72px; width: 72px; height: 72px; font-size: 28px; }
+.contacts-detail { min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 12px 16px 32px; }
+.contacts-detail[hidden] { display: none; }
+.contacts-body[data-view="list"] > .contacts-detail,
+.contacts-body[data-view="detail"] > .contacts-listcol { display: none; }
+.contacts-detail-bar { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.contacts-detail-bar .btn,
+.contacts-detail .btn,
+.contacts-form select,
+.contacts-form input:not([type="checkbox"]):not([type="file"]) { min-height: 44px; }
+.contacts-detail-head { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; min-width: 0; }
+.contacts-detail-titles { min-width: 0; }
+.contacts-detail-titles p { margin: 2px 0 0; overflow-wrap: anywhere; }
+.contacts-detail-name { margin: 0; font-size: 22px; overflow-wrap: anywhere; }
+.contacts-detail-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.contacts-group { margin-bottom: 16px; }
+.contacts-value { display: flex; align-items: center; gap: 10px; min-height: 44px; border-bottom: 1px solid var(--border); }
+.contacts-value-type { flex: 0 0 72px; font-size: 13px; overflow-wrap: anywhere; }
+.contacts-value-main { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.contacts-address,
+.contacts-note { white-space: pre-wrap; }
+a.contacts-value-main { color: var(--accent); }
+.contacts-delete { margin-top: 16px; }
+.contacts-form { display: flex; flex-direction: column; gap: 12px; max-width: 640px; }
+.contacts-form input:not([type="checkbox"]):not([type="file"]),
+.contacts-form select,
+.contacts-form textarea { width: 100%; box-sizing: border-box; min-width: 0; }
+.contacts-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 8px; }
+.contacts-edit-row > select,
+.contacts-edit-row > .contacts-custom-label,
+.contacts-edit-row > input { grid-column: 1; }
+.contacts-edit-row > .contacts-custom-label[hidden] { display: none; }
+.contacts-edit-row > button { grid-column: 2; grid-row: 1; }
+.contacts-photo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.contacts-fav-label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.contacts-fav-label input { width: 24px; height: 24px; }
+.contacts-form-actions { display: flex; gap: 8px; justify-content: flex-end; position: sticky; bottom: 0; padding: 8px 0; background: var(--bg); }
+.contacts-form-actions .btn { min-width: 96px; }
+@media (max-width: 480px) {
+  .app-tab { padding: 10px 6px; }
+}
+@media (max-width: 339px) {
+  .app-tab { padding: 10px 4px; font-size: 14px; }
+}
+@media (min-width: 900px) {
+  .contacts-body { grid-template-columns: 340px minmax(0, 1fr); }
+  .contacts-body[data-view] > .contacts-listcol { display: flex; }
+  .contacts-body[data-view] > .contacts-detail:not([hidden]) { display: block; border-left: 1px solid var(--border); }
+  .contacts-back { display: none; }
+  .contacts-edit-row { grid-template-columns: 140px minmax(0, 1fr) auto; }
+  .contacts-edit-row > select { grid-column: 1; }
+  .contacts-edit-row > .contacts-custom-label,
+  .contacts-edit-row > input { grid-column: 2; }
+  .contacts-edit-row > button { grid-column: 3; }
+}
+@media (min-width: 1000px) {
+  .contacts-body { grid-column: 2; grid-row: 4; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .contacts-row-open { transition: background 0.15s ease; }
+}
