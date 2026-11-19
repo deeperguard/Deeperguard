@@ -13035,13 +13035,27 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   margin-inline: auto;
   border-left: 0;
 }
-.doc-inline-card:fullscreen {
+/* Full screen: the card is the one vertical scroll container (and the toolbar
+   sticks to its top). .doc-inline-main is a plain block with its own height
+   (no grid row to shrink it), so it never becomes a second, shorter scroller,
+   whether a browser computes its `overflow-y: clip` as clip or as hidden.
+   Zoomed in, .doc-inline-main still scrolls sideways. */
+.doc-inline-card:fullscreen,
+.editor.doc-preview-active .doc-inline-card:fullscreen {
+  display: block;
   overflow: auto;
   max-width: none;
   margin: 0;
   background: color-mix(in srgb, var(--text) 5%, var(--bg));
 }
-.doc-inline-card:fullscreen .doc-inline-main { overflow-x: auto; }
+.doc-inline-card:fullscreen .doc-inline-main,
+.editor.doc-preview-active .doc-inline-card:fullscreen .doc-inline-main {
+  display: block;
+  flex: none;
+  height: auto;
+  min-height: 0;
+  border-radius: 0;
+}
 
 /* 2FA account icons (docs/2FA_IMPORT_SPEC.md section 6): one fixed 36px rounded tile everywhere.
    Brand logos sit on a light tile in both themes so dark brand colours stay readable. */

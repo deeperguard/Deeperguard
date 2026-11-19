@@ -120,13 +120,33 @@
     function isFullscreen() {
       return doc.fullscreenElement === card;
     }
+    let fsMode = isFullscreen();
+    let restorePage = 0;
+    let restoreTimer = null;
     function view() {
-      const el = isFullscreen() || !scroller ? card : scroller;
+      const el = scrollEl();
       const rect = el.getBoundingClientRect();
-      return { top: rect.top, height: rect.height || el.clientHeight || 0 };
+      // Below the bar when that sits on top of the scrolling area.
+      const cover = el.contains && el.contains(bar) ? Math.max(0, bar.getBoundingClientRect().bottom - rect.top) : 0;
+      return { top: rect.top + cover, height: (rect.height || el.clientHeight || 0) - cover };
     }
+    /* The element that really scrolls the pages vertically: the nearest
+       ancestor of the stage (up to the card, and the inline scroller outside
+       full screen) with scrollable overflow and something to scroll. Browsers
+       differ in what `overflow-y: clip` next to `overflow-x: auto` computes
+       to, so this is measured instead of assumed. */
     function scrollEl() {
-      return isFullscreen() || !scroller ? card : scroller;
+      const full = isFullscreen();
+      const fallback = full || !scroller ? card : scroller;
+      const win = doc.defaultView || root;
+      if (typeof win.getComputedStyle !== 'function') return fallback;
+      const last = full || !scroller ? card : scroller;
+      for (let el = stage.parentNode; el && el.nodeType === 1; el = el.parentNode) {
+        const overflowY = win.getComputedStyle(el).overflowY;
+        if ((overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') && el.scrollHeight > el.clientHeight + 1) return el;
+        if (el === last) break;
+      }
+      return fallback;
     }
     function wrapsNow() {
       return [...stage.querySelectorAll('.doc-page-wrap')];
@@ -151,10 +171,19 @@
       if (wraps.length < 2) return;
       const n = clampPage(target, wraps.length);
       const el = scrollEl();
-      const barH = bar.getBoundingClientRect().height || 0;
-      el.scrollTop += wraps[n - 1].getBoundingClientRect().top - el.getBoundingClientRect().top - barH;
-      pinnedTop = el.scrollTop;
-      setPage(n, 0);
+      // The bar only covers the top of the page area when it sits inside it.
+      const barH = el.contains && el.contains(bar) ? bar.getBoundingClientRect().height || 0 : 0;
+      const gap = () => wraps[n - 1].getBoundingClientRect().top - el.getBoundingClientRect().top - barH;
+      el.scrollTop += gap();
+      const atEnd = el.scrollHeight > el.clientHeight + 1 && el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+      if (Math.abs(gap()) <= 2 || atEnd) {
+        pinnedTop = el.scrollTop;
+        setPage(n, 0);
+      } else {
+        // The page did not come to the top: show the page that is in view.
+        pinnedTop = null;
+        update();
+      }
     }
     function stepPage(delta) {
       goToPage((page || 1) + delta);
@@ -177,6 +206,14 @@
       if (card.isConnected === false) { destroy(); return; }
       const wraps = [...stage.querySelectorAll('.doc-page-wrap')];
       const total = wraps.length;
+      // Entering or leaving full screen swaps the scroll container: keep the
+      // page that was current instead of whatever the new container shows.
+      let restore = 0;
+      if (isFullscreen() !== fsMode) {
+        fsMode = isFullscreen();
+        pinnedTop = null;
+        restore = page;
+      }
       if (total) {
         const pages = wraps.map((w) => {
           const r = w.getBoundingClientRect();
@@ -184,7 +221,9 @@
         });
         // A jump to the last pages may not reach the top: keep the chosen page
         // until the user scrolls away from where the jump left the container.
-        if (pinnedTop !== null && Math.abs(scrollEl().scrollTop - pinnedTop) < 2 && page >= 1 && page <= total) {
+        if (restore) {
+          // keep page, restored below
+        } else if (pinnedTop !== null && Math.abs(scrollEl().scrollTop - pinnedTop) < 2 && page >= 1 && page <= total) {
           // keep page
         } else {
           pinnedTop = null;
@@ -222,6 +261,13 @@
       fsBtn.title = label;
       fsBtn.setAttribute('aria-label', label);
       fsBtn.textContent = label;
+      if (restore > 0 && total > 1) {
+        // The window may still resize after the change: repeat on resize for a moment.
+        restorePage = restore;
+        clearTimeout(restoreTimer);
+        restoreTimer = setTimeout(() => { restorePage = 0; }, 800);
+        goToPage(restore);
+      }
     }
     function setZoom(next) {
       zoom = clampZoom(next);
@@ -245,6 +291,7 @@
       listeners.forEach(([t, type, fn]) => t.removeEventListener && t.removeEventListener(type, fn));
       if (observer) observer.disconnect();
       clearTimeout(announceTimer);
+      clearTimeout(restoreTimer);
       if (isFullscreen() && doc.exitFullscreen) {
         try { Promise.resolve(doc.exitFullscreen()).catch(() => {}); } catch (err) { /* ignore */ }
       }
@@ -306,6 +353,8 @@
     });
     on(scroller, 'scroll', update);
     on(card, 'scroll', update);
+    on(stage.parentNode, 'scroll', update);
+    on(root, 'resize', () => { if (restorePage) goToPage(restorePage); });
     on(doc, 'fullscreenchange', update);
     let observer = null;
     if (typeof root.MutationObserver === 'function') {
