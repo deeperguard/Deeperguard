@@ -33,7 +33,7 @@ roadmap en is niet gedaan.
 |---|---|---|
 | rclone-OAuth-token (JSON met `access_token`) | `keys/pcloud-token-<user_id>`, geschreven door `write_pcloud_token` (`app/config.py:414-427`), geladen door `pcloud_token` (`app/config.py:430-439`) | AES-256-GCM, envelop `dg-pcloud-v1:` (`app/pcloud_credentials.py:19`, `:56-77`), bestandsmodus 0600 |
 | Sleutel | omgevingsvariabele `NOTES_PCLOUD_CREDENTIALS_KEY` (`app/pcloud_credentials.py:20`, `:38-41`), voorbeeld in `deploy/deeperguard.env.example:85` | Buiten de database en buiten `keys/`, maar op dezelfde server als het proces dat hem leest |
-| Token in het rclone-proces | `rclone_remote_env` (`app/backup_pcloud.py:106-119`) zet `RCLONE_CONFIG_DEEPERGUARD_TOKEN` in de omgeving van het kindproces; `--config` is `os.devnull` (`:122-134`) | Geen configbestand op schijf; wel zichtbaar voor root en voor het proces zolang rclone draait (tot `RCLONE_TIMEOUT_SECONDS`, standaard 7200 s, `:27`) |
+| Token in het rclone-proces | `rclone_remote_env` (`app/backup_pcloud.py:106-119`) zet `RCLONE_CONFIG_DEEPERGUARD_TOKEN` in de omgeving van het kindproces; `--config` is `os.devnull` (`:122-134`) | Geen configbestand op schijf; wel zichtbaar voor root en voor het proces zolang rclone draait (tot de time-out uit `NOTES_PCLOUD_RCLONE_TIMEOUT`, standaard 7200 s, `app/backup_pcloud.py:27`). Let op: `deploy/deeperguard.env.example:87` toont `NOTES_PCLOUD_RCLONE_TIMEOUT=3600` als uitgecommentarieerd voorbeeld. Dat is niet de standaard; de standaard in de code is 7200 s. Het voorbeeld corrigeren is een aparte opruimtaak (deploy/ valt buiten dit ontwerp) |
 | Metadata | tabel `users`: `pcloud_enabled`, `pcloud_username`, `pcloud_remote_path`, `pcloud_region`, `pcloud_last_sync_*` (`app/db.py:178-203`) | Niet geheim, wel gegevens over de gebruiker |
 | Plan-poort | `_plan_block(user, "pcloud_backup")` bij inschakelen (`app/app.py:3407`), plan `app/plans.py:119` | Alleen Pro |
 
@@ -65,6 +65,19 @@ van de gebruiker, en valt buiten dit ontwerp.
 Een volledige run met een lokale server en een echt pCloud-account is **niet** gedaan; de
 omgeving heeft geen pCloud-account en geen rclone-toegang tot pCloud. Bevindingen hierboven
 komen dus uit code en tests, niet uit een live upload.
+
+**Vervolgtaak (nog open, niet gedaan):** met een testaccount een echte run doen: lokale server,
+pCloud koppelen, `POST /api/backup/pcloud/sync` draaien en daarna per punt vastleggen (datum,
+versie, uitkomst):
+
+- of het token voorkomt in rclone-stderr bij een geslaagde run, bij een 401- of 409-fout en bij een
+  time-out. `_format_rclone_error` (`app/backup_pcloud.py:153-169`) geeft stderr tot 500 tekens door
+  aan `pcloud_last_sync_detail` (`app/db.py:2465`) en aan de foutmail (`:87-103`);
+- of rclone bij een uitgebreide logmodus (`-vv`) of bij een fout het token afdrukt;
+- of het token tijdens de run leesbaar is in de omgeving van het rclone-kindproces
+  (`/proc/<pid>/environ`, alleen voor root en de eigenaar van het proces).
+
+Tot die run is gedaan geldt: het token in rclone-uitvoer is **niet gecontroleerd**.
 
 **Het echte resterende gat, kort:**
 
