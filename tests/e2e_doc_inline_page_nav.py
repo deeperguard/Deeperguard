@@ -66,7 +66,7 @@ STATE_JS = """() => {
 
 SCROLL_TO_PAGE_5_JS = """() => {
   const card = document.querySelector('.doc-inline-card');
-  const sc = document.fullscreenElement === card ? card : document.getElementById('doc-inline');
+  const sc = document.fullscreenElement === card ? card :document.getElementById('doc-inline');
   const bar = card.querySelector('.doc-inline-toolbar').getBoundingClientRect().height;
   const w = card.querySelectorAll('.doc-page-wrap')[4].getBoundingClientRect();
   sc.scrollTop += w.top - sc.getBoundingClientRect().top - bar + 20;
@@ -169,6 +169,9 @@ def run_viewport(p, base, width, height) -> int:
     page.evaluate(SEED_JS, ["Doc image", base64.b64encode(png_bytes()).decode(), "photo.png", "image/png"])
     open_inline(page, "Doc pages")
     bad += exercise(page, f"{width}px inline", False)
+    # Full screen keeps the current page, so start it from page 1.
+    page.fill(".doc-inline-page-input", "1")
+    page.press(".doc-inline-page-input", "Enter")
     page.click(".doc-ctl-fullscreen")
     page.wait_for_function(
         "() => document.fullscreenElement && document.fullscreenElement.classList.contains('doc-inline-card')",
