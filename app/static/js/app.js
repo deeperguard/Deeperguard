@@ -9572,10 +9572,8 @@
   }
 
   function moveLabel(uuid, parentId) {
-    if (!NotesStore.moveTag(uuid, parentId || '')) {
-      toast('Cannot move here (a label cannot go inside itself, names must be unique, max depth 8)', true);
-      return false;
-    }
+    const moved = NotesStore.moveTagResult(uuid, parentId || '');
+    if (!moved.ok) { toast(NotesLabels.moveErrorText(moved.error), true); return false; }
     if (parentId) setLabelOpen(parentId, true);
     invalidateTagMap();
     renderTags();

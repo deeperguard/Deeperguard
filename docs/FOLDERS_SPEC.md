@@ -63,7 +63,7 @@ notes to the root and its subfolders up one level.
 | `app/static/js/tagsuggest.js` | Label suggestions for new notes (not part of the structure). |
 | `app/db.py:90` | Server table `items` (generic, no label columns). |
 
-Tests: `tests/test_nested_labels.js`, `test_label_tree.js`, `test_folder_model.js`,
+Tests: `tests/test_nested_labels.js`, `test_label_tree_integrity.js`, `test_label_tree.js`, `test_folder_model.js`,
 `test_backup_folders_labels_roundtrip.js`, `tests/e2e_folder_tree.py`.
 
 ### 1.4 Plaintext on the device
@@ -161,7 +161,11 @@ note_keys: { "<note uuid>": { k: <number>, t: <epoch ms> }, ... }   // max 1000 
 - Setting a parent is refused when the parent is the label itself or one of its
   descendants (`labels.js:97-105`, error `cycle`), when the parent is unknown, or
   when `parent depth + subtree height > 8` (`too_deep`). The move dialog only
-  offers valid targets (`labeltree.js:moveTargets`, `app.js:9582`).
+  offers valid targets (`labeltree.js:moveTargets`, `app.js:9582`). A refused
+  move (dropping a label on one of its own sub-labels, or a target that changed
+  meanwhile) shows the reason as an error toast: `NotesStore.moveTagResult`
+  returns the error code and `labels.js` `moveErrorText` gives the sentence, for
+  `cycle`: "A label cannot be moved into itself or one of its own sub-labels."
 - A sibling may not have the same name (case-insensitive, trimmed;
   `labels.js:siblingNameTaken`); same name in different branches is fine.
 - Concurrent edits can still produce a cycle that each device found valid. Two
