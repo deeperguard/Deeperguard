@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Readable export cover</title>
+  <desc id="desc">Abstract dark blue background with a closed vault shape, a dashed arrow and a stack of open pages</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e3a5f"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="960" cy="120" r="170" fill="#38bdf8" opacity="0.12"/>
+  <circle cx="240" cy="540" r="210" fill="#22c55e" opacity="0.08"/>
+  <g fill="none" stroke="#e2e8f0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="220" y="200" width="240" height="220" rx="28" fill="#1e293b" stroke="#94a3b8"/>
+    <circle cx="340" cy="310" r="34" fill="#0f172a" stroke="#38bdf8"/>
+    <path d="M340 290 v40 M320 310 h40" stroke="#38bdf8" stroke-width="6"/>
+    <path d="M520 310 H700" stroke="#94a3b8" stroke-width="10" stroke-dasharray="16 14"/>
+    <path d="M700 310 l-34 -26 v52 z" fill="#38bdf8" stroke="none" opacity="0.85"/>
+    <rect x="800" y="170" width="200" height="260" rx="14" fill="#1e293b" stroke="#64748b"/>
+    <rect x="830" y="150" width="200" height="260" rx="14" fill="#1e293b" stroke="#94a3b8"/>
+    <path d="M862 200 H998 M862 240 H998 M862 280 H970 M862 320 H998 M862 360 H950" stroke="#cbd5e1" stroke-width="6"/>
+  </g>
+</svg>
