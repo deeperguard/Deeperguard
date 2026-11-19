@@ -93,6 +93,30 @@ def test_wrong_password_shows_error_and_does_not_confirm(page):
     assert _result(page) is True
 
 
+def test_wrong_password_message_comes_from_caller(page):
+    page.keyboard.press("Escape")
+    _result(page)
+    page.evaluate("""() => {
+      window.result = 'pending';
+      DialogA11y.confirm('Export?', {
+        verifyPassword: async () => false,
+        wrongPasswordMessage: 'Custom failure text.',
+      }).then((v) => { window.result = v; });
+    }""")
+    page.wait_for_selector("#confirm-password-wrap:not([hidden])")
+    page.fill("#confirm-password", "bad")
+    page.click("#confirm-ok")
+    page.wait_for_selector("#confirm-password-error:not([hidden])")
+    assert page.inner_text("#confirm-password-error") == "Custom failure text."
+
+
+def test_wrong_password_default_message_is_generic(page):
+    page.fill("#confirm-password", "nope")
+    page.click("#confirm-ok")
+    page.wait_for_selector("#confirm-password-error:not([hidden])")
+    assert page.inner_text("#confirm-password-error") == "Wrong password."
+
+
 def test_empty_password_never_confirms(page):
     page.click("#confirm-ok")
     page.wait_for_selector("#confirm-password-error:not([hidden])")
