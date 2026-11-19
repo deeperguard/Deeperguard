@@ -16,6 +16,7 @@ import base64  # noqa: E402
 from contextlib import ExitStack  # noqa: E402
 
 import test_round63_security as r63  # noqa: E402
+import test_vault_recovery_reset as reset  # noqa: E402
 import test_vault_recovery_wraps as rec  # noqa: E402
 
 
@@ -68,6 +69,9 @@ class VaultPrfWrapTests(unittest.TestCase):
     _token = rec.VaultRecoveryWrapTests._token
     _put = rec.VaultRecoveryWrapTests._put
     _status = rec.VaultRecoveryWrapTests._status
+    _enrolled = reset.VaultRecoveryResetTests._enrolled
+    _commit_body = reset.VaultRecoveryResetTests._commit_body
+    _commit = reset.VaultRecoveryResetTests._commit
 
     def _passkey(self, uid):
         import db as notes_db
@@ -354,6 +358,23 @@ class VaultPrfWrapTests(unittest.TestCase):
         )
         self.assertEqual(no_token.status_code, 401)
         self.assertEqual(self._status()["key_rev"], 0)
+
+    def test_recovery_that_rotates_key_id_makes_old_passkey_copy_unusable(self):
+        import db as notes_db
+
+        uid, email, password, csrf, proof, old_kid = self._enrolled()
+        cid = self._passkey(uid)
+        body = _prf_body(1, old_kid)
+        self.assertEqual(self._put_prf(email, password, csrf, cid, body).status_code, 200)
+        self.assertIsNotNone(notes_db.get_prf_wrap(uid, cid))
+        commit = self._commit(csrf, self._commit_body(proof, email, "brand-new-password-1", old_kid, rev=2))
+        self.assertEqual(commit.status_code, 200, commit.get_json())
+        self.assertNotEqual(commit.get_json()["key_id"], old_kid)
+        # The copy wraps the previous key id, so it is released neither by the store nor by unwrap.
+        self.assertIsNone(notes_db.get_prf_wrap(uid, cid))
+        _opts, res = self._assert_with(csrf, cid)
+        self.assertEqual((res.status_code, res.get_json()["error"]), (404, "no_prf_wrap"))
+        self.assertNotIn(body["wrap"]["data"], res.get_data(as_text=True))
 
     def test_schema_upgrade_keeps_existing_passkeys(self):
         import db as notes_db
