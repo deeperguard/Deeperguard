@@ -5408,6 +5408,19 @@ const NotesStore = (() => {
     return { ok: true };
   }
 
+  // Drag and drop / Alt+Arrow: moves a label under `parentId` and writes the new sibling
+  // order (plan.orders from NotesLabelTree.dropPlan). Only encrypted label records change.
+  function moveTagTo(uuid, parentId, orders) {
+    const byId = tagIndex();
+    const plan = NotesLabels.planUpdate(uuid, { parent_id: parentId || '', order: orders[uuid] }, byId);
+    if (!plan.ok) return { ok: false, error: plan.error };
+    applyLabelUpdates(plan.updates);
+    for (const [id, order] of Object.entries(orders)) {
+      if (id !== uuid && byId.has(id)) upsert(id, { ...byId.get(id), order });
+    }
+    return { ok: true };
+  }
+
   // Idempotent: writes the nested shape for legacy flat labels, nothing else. Returns the count.
   function migrateLabels() {
     const updates = NotesLabels.migrate([...state.items.entries()].map(([uuid, i]) => ({ uuid, content: i.content, deleted: i.deleted })));
@@ -7901,6 +7914,7 @@ const NotesStore = (() => {
     createTag,
     moveTag,
     moveTagResult,
+    moveTagTo,
     migrateLabels,
     repairLabels,
     listTemplateItems,

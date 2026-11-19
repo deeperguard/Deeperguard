@@ -9674,6 +9674,12 @@
     ui.tagList.addEventListener('keydown', (event) => {
       const item = event.target.closest('[data-label]');
       if (!item || event.target !== item) return;
+      if (event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+        const step = NotesLabelTree.siblingStep(labelIndex(), item.dataset.label, event.key === 'ArrowUp' ? -1 : 1);
+        event.preventDefault();
+        if (step) dropLabel(item.dataset.label, step.target, step.zone);
+        return;
+      }
       if (event.altKey || event.ctrlKey || event.metaKey) return;
       const key = event.shiftKey && event.key === 'F10' ? 'ContextMenu' : event.key;
       const rows = NotesLabelTree.visibleRows(labelIndex(), openLabels());
@@ -9700,7 +9706,7 @@
     // Long press opens the same menu on touch screens.
     ui.tagList.addEventListener('pointerdown', (event) => {
       const item = event.target.closest('[data-label]');
-      if (!item || event.pointerType === 'mouse' || event.target.closest('[data-label-menu]')) return;
+      if (!item || event.pointerType === 'mouse' || event.target.closest('[data-label-menu], [data-label-grip]')) return;
       if (tagPressTimer) clearTimeout(tagPressTimer);
       tagPressTimer = setTimeout(() => {
         tagPressTimer = null;
@@ -9710,28 +9716,91 @@
     ['pointerup', 'pointerleave', 'pointercancel', 'pointermove'].forEach((name) => {
       ui.tagList.addEventListener(name, () => { if (tagPressTimer) { clearTimeout(tagPressTimer); tagPressTimer = null; } });
     });
-    // Drag and drop is a mouse extra; the menu above does the same without a mouse.
-    let dragged = null;
-    ui.tagList.addEventListener('dragstart', (event) => {
-      const item = event.target.closest('[data-label]');
-      if (!item) return;
-      dragged = item.dataset.label;
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', '');
-    });
-    ui.tagList.addEventListener('dragover', (event) => {
-      const item = event.target.closest('[data-label]');
-      if (dragged && item && item.dataset.label !== dragged) event.preventDefault();
-    });
-    ui.tagList.addEventListener('drop', (event) => {
-      const item = event.target.closest('[data-label]');
-      if (!dragged || !item) return;
+    bindLabelDrag();
+  }
+
+  // Drop a label next to (before/after) or onto (into) another one. Cycles and too deep
+  // nesting are refused with a message; nothing is written then.
+  function dropLabel(uuid, targetId, zone) {
+    const plan = NotesLabelTree.dropPlan(labelIndex(), uuid, targetId, zone);
+    if (!plan.ok) { toast(NotesLabels.moveErrorText(plan.error), true); return false; }
+    const moved = NotesStore.moveTagTo(uuid, plan.parent, plan.orders);
+    if (!moved.ok) { toast(NotesLabels.moveErrorText(moved.error), true); return false; }
+    if (plan.parent) setLabelOpen(plan.parent, true);
+    invalidateTagMap();
+    renderTags();
+    renderNotes();
+    if (currentId) renderTagBar(NotesStore.get(currentId));
+    focusLabel(uuid);
+    toast('Label moved');
+    return true;
+  }
+
+  // Pointer based drag (mouse, pen and touch). Mouse: drag the row. Touch: drag the grip
+  // (the row itself keeps scrolling). Top/bottom quarter of a row = before/after, middle = into.
+  function bindLabelDrag() {
+    const list = ui.tagList;
+    const clear = () => list.querySelectorAll('.drop-before, .drop-after, .drop-into, .drop-invalid, .is-dragging')
+      .forEach((el) => el.classList.remove('drop-before', 'drop-after', 'drop-into', 'drop-invalid', 'is-dragging'));
+    let drag = null;
+    const zoneAt = (item, y) => {
+      const r = item.getBoundingClientRect();
+      const f = (y - r.top) / Math.max(1, r.height);
+      return f < 0.25 ? 'before' : f > 0.75 ? 'after' : 'into';
+    };
+    const finish = (drop) => {
+      if (!drag) return;
+      const d = drag;
+      drag = null;
+      document.removeEventListener('pointermove', onMove, true);
+      document.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('pointercancel', onCancel, true);
+      document.body.classList.remove('label-dragging');
+      clear();
+      if (d.active) {
+        // The click that ends a drag must not select the label under the pointer.
+        const swallow = (e) => { e.stopPropagation(); e.preventDefault(); };
+        list.addEventListener('click', swallow, true);
+        setTimeout(() => list.removeEventListener('click', swallow, true), 0);
+      }
+      if (drop && d.active && d.target) dropLabel(d.id, d.target, d.zone);
+    };
+    function onMove(event) {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      if (!drag.active) {
+        if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 6) return;
+        drag.active = true;
+        document.body.classList.add('label-dragging');
+        drag.item.classList.add('is-dragging');
+      }
       event.preventDefault();
-      const id = dragged;
-      dragged = null;
-      if (item.dataset.label !== id) moveLabel(id, item.dataset.label);
+      list.querySelectorAll('.drop-before, .drop-after, .drop-into, .drop-invalid')
+        .forEach((el) => el.classList.remove('drop-before', 'drop-after', 'drop-into', 'drop-invalid'));
+      const over = document.elementFromPoint(event.clientX, event.clientY);
+      const item = over && over.closest ? over.closest('#tag-list [data-label]') : null;
+      drag.target = null;
+      if (!item || item.dataset.label === drag.id) return;
+      drag.target = item.dataset.label;
+      drag.zone = zoneAt(item, event.clientY);
+      const ok = NotesLabelTree.dropPlan(labelIndex(), drag.id, drag.target, drag.zone).ok;
+      item.classList.add(ok ? `drop-${drag.zone}` : 'drop-invalid');
+    }
+    function onUp(event) { if (drag && event.pointerId === drag.pointerId) finish(true); }
+    function onCancel(event) { if (drag && event.pointerId === drag.pointerId) finish(false); }
+    list.addEventListener('pointerdown', (event) => {
+      if (drag || event.button > 0) return;
+      const item = event.target.closest('[data-label]');
+      if (!item || event.target.closest('[data-label-menu], [data-label-toggle]')) return;
+      const grip = event.target.closest('[data-label-grip]');
+      if (event.pointerType !== 'mouse' && !grip) return;
+      drag = { id: item.dataset.label, item, pointerId: event.pointerId, x: event.clientX, y: event.clientY, active: false, target: null, zone: 'into' };
+      document.addEventListener('pointermove', onMove, true);
+      document.addEventListener('pointerup', onUp, true);
+      document.addEventListener('pointercancel', onCancel, true);
     });
-    ui.tagList.addEventListener('dragend', () => { dragged = null; });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && drag && drag.active) { event.stopPropagation(); finish(false); }
+    }, true);
   }
 
   function renderTags() {

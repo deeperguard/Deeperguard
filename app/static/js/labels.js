@@ -200,7 +200,8 @@
       ...cur,
       name: name.name,
       parent_id: parentId,
-      order: moved || typeof cur.order !== 'number' ? nextOrder(parentId, byId) : cur.order,
+      order: typeof patch.order === 'number' && Number.isFinite(patch.order) ? patch.order
+        : moved || typeof cur.order !== 'number' ? nextOrder(parentId, byId) : cur.order,
     });
     const updates = [];
     for (const id of [uuid, ...descendants(uuid, next)]) {
