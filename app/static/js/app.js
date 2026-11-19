@@ -4384,6 +4384,7 @@
     stopTotpClock();
     if (totpUi.search) totpUi.search.value = '';
     totpActiveTag = '';
+    clearContactsUi();
     const cached = NotesStore.cachedAccount?.() || {};
     showUnlock(cached.email || undefined);
     clearUnlockPasswordField({ force: true });
@@ -4549,9 +4550,698 @@
   const totpCamera = NotesTotpCamera.create(navigator.mediaDevices);
   let totpRenderToken = 0;
 
+  // --- Contacts tab (docs/CONTACTS_SPEC.md section 4) -------------------------------------------
+  // Decrypted contacts live only in these variables and in the DOM. Nothing is written to web
+  // storage, caches or URLs; lock clears all of it (clearContactsUi).
+  const contactsUi = {
+    pane: document.getElementById('contacts-pane'),
+    body: document.querySelector('#contacts-pane .contacts-body'),
+    list: document.getElementById('contacts-list'),
+    empty: document.getElementById('contacts-empty'),
+    emptyText: document.getElementById('contacts-empty-text'),
+    emptyAdd: document.getElementById('contacts-empty-add'),
+    search: document.getElementById('contacts-search'),
+    chips: document.getElementById('contacts-chips'),
+    count: document.getElementById('contacts-count'),
+    status: document.getElementById('contacts-status'),
+    detail: document.getElementById('contacts-detail'),
+    add: document.getElementById('btn-contacts-add'),
+  };
+  const CONTACTS_FAV = '\u0000fav';
+  let contactsAll = [];
+  let contactsActiveLabel = '';
+  let contactsSelectedId = '';
+  let contactsFormState = null; // { id, baseline, current, opener } while the edit form is open
+  let contactsUndo = null;
+  const CONTACT_TYPES = ['mobile', 'home', 'work', 'main', 'fax', 'pager', 'other', 'custom'];
+  const CONTACT_TYPE_NAMES = { mobile: 'Mobile', home: 'Home', work: 'Work', main: 'Main', fax: 'Fax', pager: 'Pager', other: 'Other', custom: 'Custom…' };
+
+  function cEl(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function contactName(c) {
+    return window.NotesContacts.displayName(c);
+  }
+
+  function contactTypeLabel(entry) {
+    if (!entry) return '';
+    if (entry.type === 'custom' && entry.label) return entry.label;
+    return CONTACT_TYPE_NAMES[entry.type] || 'Other';
+  }
+
+  // Digits, +, * and # only, so "ext. 12" is never dialled (spec 4.4). Nothing left: no link.
+  function contactTelHref(value) {
+    const number = String(value || '').split(/\s*(?:ext\.?|extension|;ext=)\s*\d|\s+x\s*\d/i)[0];
+    const dial = number.replace(/[^+\d*#]/g, '');
+    return /\d/.test(dial) ? `tel:${dial}` : '';
+  }
+
+  function contactMailHref(value) {
+    const v = String(value || '').trim();
+    const part = '[^\\s@<>()\\[\\]\\\\,;:"]+';
+    if (!new RegExp(`^${part}@${part}\\.${part}$`).test(v)) return '';
+    return `mailto:${encodeURIComponent(v).replace(/%40/g, '@')}`;
+  }
+
+  function contactWebHref(value) {
+    try {
+      const u = new URL(String(value || '').trim());
+      return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : '';
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function contactAvatar(c, big) {
+    const wrap = cEl('span', `contact-avatar${big ? ' big' : ''}`);
+    if (c.photo && /^image\/(jpeg|png|webp)$/.test(c.photo.mime) && /^[A-Za-z0-9+/=]+$/.test(c.photo.data || '')) {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.src = `data:${c.photo.mime};base64,${c.photo.data}`;
+      wrap.append(img);
+      return wrap;
+    }
+    wrap.setAttribute('aria-hidden', 'true');
+    wrap.textContent = window.NotesContacts.initial(c);
+    let h = 0;
+    for (const ch of String(c.uid || c.uuid || '')) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    wrap.style.setProperty('--avatar-hue', String(h));
+    return wrap;
+  }
+
+  function refreshContacts() {
+    if (!window.NotesContacts || !NotesStore.isUnlocked?.()) {
+      contactsAll = [];
+    } else {
+      try { contactsAll = NotesStore.listContacts(); } catch (err) { contactsAll = []; }
+    }
+    if (currentAppTab() === 'contacts') renderContactsList();
+  }
+
+  function filteredContacts() {
+    if (!contactsAll.length) return [];
+    const fav = contactsActiveLabel === CONTACTS_FAV;
+    return window.NotesContacts.filterContacts(contactsAll, contactsUi.search.value, fav ? '' : contactsActiveLabel, fav);
+  }
+
+  function renderContactChips() {
+    const labels = window.NotesContacts.labelCounts(contactsAll);
+    const favs = contactsAll.filter((c) => c.favorite).length;
+    contactsUi.chips.replaceChildren();
+    if (contactsActiveLabel === CONTACTS_FAV && !favs) contactsActiveLabel = '';
+    if (contactsActiveLabel && contactsActiveLabel !== CONTACTS_FAV
+      && !labels.some((l) => l.name.toLowerCase() === contactsActiveLabel.toLowerCase())) contactsActiveLabel = '';
+    if (!labels.length && !favs) {
+      contactsUi.chips.hidden = true;
+      return;
+    }
+    const add = (key, text, count) => {
+      const chip = cEl('button', 'tag-chip', `${text} (${count})`);
+      chip.type = 'button';
+      chip.dataset.contactsLabel = key;
+      chip.setAttribute('aria-pressed', contactsActiveLabel === key ? 'true' : 'false');
+      if (contactsActiveLabel === key) chip.classList.add('active');
+      contactsUi.chips.append(chip);
+    };
+    add('', 'All', contactsAll.length);
+    if (favs) add(CONTACTS_FAV, 'Favourites', favs);
+    for (const l of labels) add(l.name, l.name, l.count);
+    contactsUi.chips.hidden = false;
+  }
+
+  function renderContactsList() {
+    renderContactChips();
+    const rows = filteredContacts();
+    const query = contactsUi.search.value.trim();
+    const total = contactsAll.length;
+    const unlocked = !!NotesStore.isUnlocked?.();
+    contactsUi.count.textContent = total ? `${total} contact${total === 1 ? '' : 's'}` : (unlocked ? 'No contacts yet' : 'Unlock the vault to see your contacts');
+    contactsUi.list.replaceChildren();
+    contactsUi.empty.hidden = rows.length > 0;
+    contactsUi.emptyAdd.hidden = true;
+    if (!rows.length) {
+      if (!unlocked) contactsUi.emptyText.textContent = 'Unlock the vault to see your contacts.';
+      else if (!total) {
+        contactsUi.emptyText.textContent = 'No contacts yet. Add one with + or the button below.';
+        contactsUi.emptyAdd.hidden = false;
+      } else contactsUi.emptyText.textContent = query ? `No contacts match “${query}”.` : 'No contacts with this label.';
+    }
+    contactsUi.status.textContent = query || contactsActiveLabel ? `${rows.length} contact${rows.length === 1 ? '' : 's'} found` : '';
+    const showFavSection = !query && !contactsActiveLabel && rows.some((c) => c.favorite);
+    const frag = document.createDocumentFragment();
+    const group = (title) => {
+      const h = cEl('h3', 'contacts-section', title);
+      frag.append(h);
+    };
+    const addRow = (c, pos, size) => {
+      const name = contactName(c);
+      const row = cEl('div', 'contacts-row');
+      row.setAttribute('role', 'listitem');
+      row.setAttribute('aria-setsize', String(size));
+      row.setAttribute('aria-posinset', String(pos));
+      const open = cEl('button', 'contacts-row-open');
+      open.type = 'button';
+      open.dataset.contactId = c.uuid;
+      if (c.uuid === contactsSelectedId) open.setAttribute('aria-current', 'true');
+      const second = (c.org && c.org.name) || (c.phones[0] && c.phones[0].value) || (c.emails[0] && c.emails[0].value) || '';
+      const text = cEl('span', 'contacts-row-text');
+      text.append(cEl('span', 'contacts-row-name', name));
+      if (second && second !== name) text.append(cEl('span', 'contacts-row-sub muted', second));
+      open.append(contactAvatar(c), text);
+      const star = cEl('button', `contacts-star${c.favorite ? ' on' : ''}`, c.favorite ? '★' : '☆');
+      star.type = 'button';
+      star.dataset.contactFav = c.uuid;
+      star.setAttribute('aria-pressed', c.favorite ? 'true' : 'false');
+      star.setAttribute('aria-label', `Favourite: ${name}`);
+      row.append(open, star);
+      frag.append(row);
+    };
+    if (showFavSection) {
+      const favs = rows.filter((c) => c.favorite);
+      group('Favourites');
+      favs.forEach((c, i) => addRow(c, i + 1, favs.length));
+    }
+    // With a Favourites section on top, each contact is listed once: favourites there, the rest by letter.
+    const rest = showFavSection ? rows.filter((c) => !c.favorite) : rows;
+    let lastLetter = null;
+    rest.forEach((c, i) => {
+      const letter = window.NotesContacts.initial(c);
+      if (letter !== lastLetter) { group(letter); lastLetter = letter; }
+      addRow(c, i + 1, rest.length);
+    });
+    contactsUi.list.append(frag);
+    if (contactsSelectedId && !contactsFormState && !contactsAll.some((c) => c.uuid === contactsSelectedId)) {
+      closeContactDetail();
+    }
+  }
+
+  function closeContactDetail({ focusRow = false } = {}) {
+    const id = contactsSelectedId;
+    contactsSelectedId = '';
+    contactsFormState = null;
+    contactsUi.detail.hidden = true;
+    contactsUi.detail.replaceChildren();
+    contactsUi.body.dataset.view = 'list';
+    contactsUi.list.querySelectorAll('[aria-current]').forEach((b) => b.removeAttribute('aria-current'));
+    if (focusRow && id) {
+      const row = [...contactsUi.list.querySelectorAll('[data-contact-id]')].find((b) => b.dataset.contactId === id);
+      (row || contactsUi.search).focus();
+    }
+  }
+
+  function contactCopyButton(label, value) {
+    const btn = cEl('button', 'btn ghost contact-copy', 'Copy');
+    btn.type = 'button';
+    btn.setAttribute('aria-label', label);
+    btn.addEventListener('click', async () => {
+      try {
+        if (window.NotesClipboardSensitive?.writeClipboardText) await NotesClipboardSensitive.writeClipboardText(value);
+        else await navigator.clipboard.writeText(value);
+        toast('Copied');
+      } catch (err) {
+        toast('Could not copy', true);
+      }
+    });
+    return btn;
+  }
+
+  function renderContactDetail(id) {
+    const c = contactsAll.find((x) => x.uuid === id);
+    if (!c) { closeContactDetail(); return; }
+    contactsSelectedId = id;
+    contactsFormState = null;
+    const name = contactName(c);
+    const d = contactsUi.detail;
+    d.hidden = false;
+    d.replaceChildren();
+    contactsUi.body.dataset.view = 'detail';
+    const bar = cEl('div', 'contacts-detail-bar');
+    const back = cEl('button', 'btn ghost contacts-back', '‹ Back');
+    back.type = 'button';
+    back.setAttribute('aria-label', 'Back to contacts');
+    back.addEventListener('click', () => closeContactDetail({ focusRow: true }));
+    const edit = cEl('button', 'btn', 'Edit');
+    edit.type = 'button';
+    edit.setAttribute('aria-label', `Edit ${name}`);
+    edit.addEventListener('click', () => openContactForm(id, edit));
+    bar.append(back, edit);
+    const head = cEl('div', 'contacts-detail-head');
+    const titles = cEl('div', 'contacts-detail-titles');
+    const h = cEl('h2', 'contacts-detail-name', name);
+    h.tabIndex = -1;
+    titles.append(h);
+    if (c.nickname) titles.append(cEl('p', 'muted', `“${c.nickname}”`));
+    const job = [c.title, c.org && c.org.name].filter(Boolean).join(' at ');
+    if (job) titles.append(cEl('p', 'muted', job));
+    head.append(contactAvatar(c, true), titles);
+    d.append(bar, head);
+    const section = (title, items) => {
+      if (!items.length) return;
+      const sec = cEl('section', 'contacts-group');
+      const hid = `contacts-group-${title.toLowerCase()}`;
+      sec.setAttribute('aria-labelledby', hid);
+      const sh = cEl('h3', 'section-label', title);
+      sh.id = hid;
+      sec.append(sh, ...items);
+      d.append(sec);
+    };
+    const valueRow = (entry, kind, index, count, href, external) => {
+      const row = cEl('div', 'contacts-value');
+      const type = contactTypeLabel(entry);
+      row.append(cEl('span', 'contacts-value-type muted', type));
+      let main;
+      if (href) {
+        main = cEl('a', 'contacts-value-main', entry.value);
+        main.href = href;
+        if (external) { main.target = '_blank'; main.rel = 'noopener noreferrer'; }
+        main.setAttribute('aria-label', `${kind === 'phone' ? 'Call' : kind === 'email' ? 'Write to' : 'Open'} ${name}, ${type}: ${entry.value}`);
+      } else {
+        main = cEl('span', 'contacts-value-main', entry.value);
+      }
+      row.append(main, contactCopyButton(`Copy ${kind}${count > 1 ? ` ${index + 1}` : ''} of ${name}`, entry.value));
+      return row;
+    };
+    section('Phone', c.phones.map((e, i) => valueRow(e, 'phone', i, c.phones.length, contactTelHref(e.value))));
+    section('Email', c.emails.map((e, i) => valueRow(e, 'email', i, c.emails.length, contactMailHref(e.value))));
+    section('Address', c.addresses.map((a, i) => {
+      const lines = [a.po_box, a.extended, a.street, [a.postal, a.city].filter(Boolean).join(' '), a.region, a.country].filter(Boolean);
+      const row = cEl('div', 'contacts-value');
+      row.append(cEl('span', 'contacts-value-type muted', contactTypeLabel(a)));
+      row.append(cEl('span', 'contacts-value-main contacts-address', lines.join('\n')));
+      row.append(contactCopyButton(`Copy address${c.addresses.length > 1 ? ` ${i + 1}` : ''} of ${name}`, lines.join('\n')));
+      return row;
+    }));
+    section('Website', c.urls.map((e, i) => valueRow(e, 'website', i, c.urls.length, contactWebHref(e.value), true)));
+    section('Messaging', c.ims.map((e, i) => valueRow({ ...e, type: 'custom', label: e.service }, 'messaging address', i, c.ims.length, '')));
+    section('Dates', c.dates.map((e) => {
+      const row = cEl('div', 'contacts-value');
+      row.append(cEl('span', 'contacts-value-type muted', e.label || e.type[0].toUpperCase() + e.type.slice(1)));
+      row.append(cEl('span', 'contacts-value-main', e.value));
+      return row;
+    }));
+    section('Groups', c.labels.length ? [cEl('p', 'contacts-value-main', c.labels.join(', '))] : []);
+    section('Notes', c.note ? [cEl('p', 'contacts-note', c.note)] : []);
+    const del = cEl('button', 'btn danger contacts-delete', 'Delete contact');
+    del.type = 'button';
+    del.setAttribute('aria-label', `Delete contact ${name}`);
+    del.addEventListener('click', () => deleteContact(id));
+    d.append(del);
+    contactsUi.list.querySelectorAll('[data-contact-id]').forEach((b) => {
+      if (b.dataset.contactId === id) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+    });
+  }
+
+  async function deleteContact(id) {
+    const c = contactsAll.find((x) => x.uuid === id);
+    if (!c) return;
+    const name = contactName(c);
+    const ok = await confirmAction(`Delete ${name}? This removes the contact from all your devices.`, { title: 'Delete contact', confirmLabel: 'Delete', danger: true });
+    if (!ok) return;
+    const snapshot = JSON.parse(JSON.stringify(c));
+    delete snapshot.uuid;
+    if (!NotesStore.removeContact(id)) return;
+    contactsUndo = snapshot;
+    closeContactDetail();
+    refreshContacts();
+    contactsUi.search.focus();
+    toastWithUndo(`Deleted ${name}`, () => {
+      const saved = contactsUndo;
+      contactsUndo = null;
+      if (!saved || !NotesStore.isUnlocked?.()) return;
+      try {
+        NotesStore.addContact(saved);
+        refreshContacts();
+      } catch (err) {
+        toast('Could not restore contact', true);
+      }
+    });
+  }
+
+  // --- edit form ---
+  function contactFormField(labelText, input, id) {
+    const wrap = cEl('div', 'contacts-field');
+    const label = cEl('label', 'agenda-field-label', labelText);
+    input.id = id;
+    label.htmlFor = id;
+    wrap.append(label, input);
+    return wrap;
+  }
+
+  function contactInput(type, value, opts = {}) {
+    const input = document.createElement('input');
+    input.type = type;
+    input.value = value || '';
+    input.autocomplete = 'off';
+    input.maxLength = opts.maxLength || 200;
+    if (opts.inputMode) input.inputMode = opts.inputMode;
+    input.setAttribute('autocapitalize', opts.autocapitalize || 'none');
+    input.spellcheck = false;
+    return input;
+  }
+
+  // One repeatable row: type select (+ custom label), value input(s), Remove.
+  function contactListRow(kind, noun, entry, index, addressParts) {
+    const row = cEl('div', 'contacts-edit-row');
+    row.dataset.entryId = entry.id || '';
+    const sel = document.createElement('select');
+    sel.className = 'contacts-type';
+    for (const t of CONTACT_TYPES) {
+      const o = document.createElement('option');
+      o.value = t;
+      o.textContent = CONTACT_TYPE_NAMES[t];
+      sel.append(o);
+    }
+    sel.value = CONTACT_TYPES.includes(entry.type) ? entry.type : 'mobile';
+    const custom = contactInput('text', entry.label, { maxLength: 60 });
+    custom.className = 'contacts-custom-label';
+    custom.hidden = sel.value !== 'custom';
+    sel.addEventListener('change', () => { custom.hidden = sel.value !== 'custom'; if (!custom.hidden) custom.focus(); });
+    row.append(sel, custom);
+    if (addressParts) {
+      for (const [key, label] of [['street', 'Street'], ['postal', 'Postal code'], ['city', 'City'], ['country', 'Country']]) {
+        const input = contactInput('text', entry[key], { autocapitalize: 'words' });
+        input.dataset.part = key;
+        input.placeholder = label;
+        row.append(input);
+      }
+    } else {
+      const mode = kind === 'emails' ? 'email' : kind === 'phones' ? 'tel' : 'url';
+      const input = contactInput(mode, entry.value, { inputMode: mode, maxLength: 500 });
+      input.dataset.part = 'value';
+      row.append(input);
+    }
+    const rm = cEl('button', 'btn ghost', 'Remove');
+    rm.type = 'button';
+    rm.addEventListener('click', () => {
+      const group = row.parentElement;
+      const sibling = row.nextElementSibling || row.previousElementSibling;
+      row.remove();
+      renumberContactRows(group, noun);
+      (sibling ? sibling.querySelector('input:not([hidden])') : group.parentElement.querySelector('.contacts-add-row'))?.focus();
+    });
+    row.append(rm);
+    return row;
+  }
+
+  // Accessible names carry the position, so they are rebuilt after every add or remove.
+  function renumberContactRows(group, noun) {
+    [...group.children].forEach((row, i) => {
+      const n = i + 1;
+      row.querySelector('select').setAttribute('aria-label', `${noun} ${n} type`);
+      row.querySelector('.contacts-custom-label').setAttribute('aria-label', `${noun} ${n} custom label`);
+      row.querySelectorAll('[data-part]').forEach((inp) => {
+        inp.setAttribute('aria-label', inp.dataset.part === 'value' ? `${noun} ${n}` : `${noun} ${n} ${inp.placeholder.toLowerCase()}`);
+      });
+      row.querySelector('button').setAttribute('aria-label', `Remove ${noun.toLowerCase()} ${n}`);
+    });
+  }
+
+  function collectContactRows(group, base) {
+    return [...group.children].map((row) => {
+      const type = row.querySelector('select').value;
+      const out = { ...(base.find((e) => e.id === row.dataset.entryId) || {}) };
+      out.type = type;
+      out.label = type === 'custom' ? row.querySelector('.contacts-custom-label').value : '';
+      row.querySelectorAll('[data-part]').forEach((inp) => { out[inp.dataset.part] = inp.value; });
+      return out;
+    });
+  }
+
+  function openContactForm(id, opener) {
+    const existing = id ? contactsAll.find((x) => x.uuid === id) : null;
+    const c = existing || { name: {}, org: {}, phones: [], emails: [], addresses: [], urls: [], labels: [], favorite: false, note: '', nickname: '', title: '', photo: null };
+    const d = contactsUi.detail;
+    d.hidden = false;
+    d.replaceChildren();
+    contactsUi.body.dataset.view = 'detail';
+    const form = cEl('form', 'contacts-form');
+    form.noValidate = true;
+    form.autocomplete = 'off';
+    form.setAttribute('aria-label', existing ? `Edit ${contactName(existing)}` : 'New contact');
+    const heading = cEl('h2', 'contacts-detail-name', existing ? 'Edit contact' : 'New contact');
+    const err = cEl('p', 'field-error contacts-form-error');
+    err.id = 'contacts-form-error';
+    err.setAttribute('role', 'alert');
+    err.hidden = true;
+
+    const given = contactInput('text', c.name.given, { autocapitalize: 'words' });
+    const family = contactInput('text', c.name.family, { autocapitalize: 'words' });
+    const org = contactInput('text', c.org && c.org.name, { autocapitalize: 'words' });
+    const title = contactInput('text', c.title);
+    const nick = contactInput('text', c.nickname, { maxLength: 120 });
+    const note = document.createElement('textarea');
+    note.value = c.note || '';
+    note.rows = 4;
+    note.maxLength = 20000;
+    const labels = contactInput('text', (c.labels || []).join(', '), { maxLength: 800 });
+    const labelList = document.createElement('datalist');
+    labelList.id = 'contacts-label-suggestions';
+    for (const l of window.NotesContacts.labelCounts(contactsAll)) {
+      const o = document.createElement('option');
+      o.value = l.name;
+      labelList.append(o);
+    }
+    labels.setAttribute('list', labelList.id);
+    const fav = document.createElement('input');
+    fav.type = 'checkbox';
+    fav.checked = !!c.favorite;
+
+    function showError(msg, field) {
+      err.textContent = msg;
+      err.hidden = false;
+      for (const el of form.querySelectorAll('[aria-invalid]')) { el.removeAttribute('aria-invalid'); el.removeAttribute('aria-describedby'); }
+      if (field) { field.setAttribute('aria-invalid', 'true'); field.setAttribute('aria-describedby', err.id); field.focus(); }
+    }
+
+    let photo = c.photo || null;
+    const photoBox = cEl('div', 'contacts-photo');
+    const photoPreview = cEl('span', 'contacts-photo-preview');
+    const photoFile = document.createElement('input');
+    photoFile.type = 'file';
+    photoFile.accept = 'image/jpeg,image/png,image/webp';
+    photoFile.className = 'sr-file';
+    photoFile.tabIndex = -1;
+    photoFile.setAttribute('aria-hidden', 'true');
+    const photoChoose = cEl('button', 'btn', 'Choose photo');
+    photoChoose.type = 'button';
+    const photoRemove = cEl('button', 'btn ghost', 'Remove photo');
+    photoRemove.type = 'button';
+    const renderPhoto = () => {
+      photoPreview.replaceChildren(contactAvatar({ photo, uid: c.uid || 'new', name: { given: given.value, family: family.value } }, true));
+      photoRemove.hidden = !photo;
+    };
+    photoChoose.addEventListener('click', () => photoFile.click());
+    photoRemove.addEventListener('click', () => { photo = null; renderPhoto(); photoChoose.focus(); });
+    photoFile.addEventListener('change', async () => {
+      const file = photoFile.files && photoFile.files[0];
+      photoFile.value = '';
+      if (!file) return;
+      let res;
+      try { res = await window.NotesContacts.encodePhoto(file); } catch (e) { res = { error: 'Photo could not be read' }; }
+      if (res.error) { showError(res.error); return; }
+      photo = res.photo;
+      renderPhoto();
+    });
+    photoBox.append(photoPreview, photoChoose, photoRemove, photoFile);
+
+    const makeGroup = (kind, noun, addLabel, addressParts) => {
+      const sec = cEl('div', 'contacts-edit-group');
+      const group = cEl('div', 'contacts-edit-rows');
+      c[kind].forEach((e, i) => group.append(contactListRow(kind, noun, e, i + 1, addressParts)));
+      renumberContactRows(group, noun);
+      const add = cEl('button', 'btn ghost contacts-add-row', addLabel);
+      add.type = 'button';
+      add.addEventListener('click', () => {
+        group.append(contactListRow(kind, noun, { type: kind === 'phones' ? 'mobile' : kind === 'urls' ? 'other' : 'home' }, group.children.length + 1, addressParts));
+        renumberContactRows(group, noun);
+        group.lastElementChild.querySelector('input:not([hidden])').focus();
+      });
+      sec.append(cEl('h3', 'section-label', `${noun}s`), group, add);
+      return { sec, group };
+    };
+    const phones = makeGroup('phones', 'Phone', 'Add phone');
+    const emails = makeGroup('emails', 'Email', 'Add email');
+    const addrs = makeGroup('addresses', 'Address', 'Add address', true);
+    const urls = makeGroup('urls', 'Website', 'Add website');
+
+    const cancel = cEl('button', 'btn ghost', 'Cancel');
+    cancel.type = 'button';
+    const save = cEl('button', 'btn primary', 'Save');
+    save.type = 'submit';
+    const actions = cEl('div', 'contacts-form-actions');
+    actions.append(cancel, save);
+
+    function snapshot() {
+      return JSON.stringify([given.value, family.value, org.value, title.value, nick.value, note.value, labels.value, fav.checked,
+        photo ? photo.data : '', collectContactRows(phones.group, c.phones), collectContactRows(emails.group, c.emails),
+        collectContactRows(addrs.group, c.addresses), collectContactRows(urls.group, c.urls)]);
+    }
+
+    let saving = false;
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (saving) return;
+      const name = { ...(c.name || {}), given: given.value, family: family.value };
+      // The imported "formatted name" is only a fallback for contacts without name parts.
+      if (name.given.trim() || name.family.trim()) name.formatted = '';
+      const patch = {
+        name,
+        org: { ...(c.org || {}), name: org.value },
+        title: title.value,
+        nickname: nick.value,
+        note: note.value,
+        labels: labels.value.split(',').map((s) => s.trim()).filter(Boolean),
+        favorite: fav.checked,
+        photo,
+        phones: collectContactRows(phones.group, c.phones),
+        emails: collectContactRows(emails.group, c.emails),
+        addresses: collectContactRows(addrs.group, c.addresses),
+        urls: collectContactRows(urls.group, c.urls),
+      };
+      const filled = (list) => list.some((e) => String(e.value || '').trim());
+      const hasName = ['given', 'family', 'prefix', 'additional', 'suffix', 'formatted'].some((k) => String(name[k] || '').trim());
+      if (!hasName && !org.value.trim() && !filled(patch.emails) && !filled(patch.phones)) {
+        showError('Enter a name, an organisation, an email address or a phone number.', given);
+        return;
+      }
+      saving = true;
+      save.disabled = true;
+      try {
+        const res = existing ? NotesStore.updateContact(id, patch) : NotesStore.addContact(patch);
+        if (!res) throw new Error('This contact no longer exists');
+        if (res.dropped && (res.dropped.photo || res.dropped.extra)) toast('The contact is too large: the photo or extra data was dropped.', true);
+        contactsFormState = null;
+        refreshContacts();
+        renderContactDetail(res.uuid);
+        contactsUi.detail.querySelector('.contacts-detail-name').focus();
+      } catch (e) {
+        saving = false;
+        save.disabled = false;
+        showError(e && e.message ? e.message : 'Could not save the contact');
+      }
+    });
+    cancel.addEventListener('click', () => requestCloseContactForm());
+
+    const favLabel = cEl('label', 'contacts-fav-label');
+    favLabel.append(fav, document.createTextNode(' Favourite'));
+    form.append(heading, err, photoBox,
+      contactFormField('Given name', given, 'contacts-f-given'), contactFormField('Family name', family, 'contacts-f-family'),
+      contactFormField('Nickname', nick, 'contacts-f-nick'),
+      contactFormField('Organisation', org, 'contacts-f-org'), contactFormField('Job title', title, 'contacts-f-title'),
+      phones.sec, emails.sec, addrs.sec, urls.sec,
+      contactFormField('Groups (comma separated)', labels, 'contacts-f-labels'), labelList,
+      contactFormField('Notes', note, 'contacts-f-note'), favLabel, actions);
+    d.append(form);
+    renderPhoto();
+    contactsFormState = { id: id || '', baseline: snapshot(), current: snapshot, opener: opener || contactsUi.add };
+    given.focus();
+  }
+
+  async function requestCloseContactForm() {
+    const st = contactsFormState;
+    if (!st) return true;
+    if (st.current() !== st.baseline) {
+      const ok = await confirmAction('Discard your changes to this contact?', { title: 'Discard changes?', confirmLabel: 'Discard', danger: true });
+      if (!ok) return false;
+    }
+    contactsFormState = null;
+    const opener = st.opener;
+    if (st.id && contactsAll.some((c) => c.uuid === st.id)) {
+      renderContactDetail(st.id);
+      if (opener && opener.isConnected) opener.focus();
+      else contactsUi.detail.querySelector('.contacts-detail-name')?.focus();
+    } else {
+      closeContactDetail();
+      (opener && opener.isConnected ? opener : contactsUi.search).focus();
+    }
+    return true;
+  }
+
+  function clearContactsUi() {
+    contactsAll = [];
+    contactsSelectedId = '';
+    contactsFormState = null;
+    contactsUndo = null;
+    contactsActiveLabel = '';
+    if (!contactsUi.pane) return;
+    contactsUi.search.value = '';
+    contactsUi.list.replaceChildren();
+    contactsUi.chips.replaceChildren();
+    contactsUi.chips.hidden = true;
+    contactsUi.detail.replaceChildren();
+    contactsUi.detail.hidden = true;
+    contactsUi.body.dataset.view = 'list';
+    contactsUi.count.textContent = 'Unlock the vault to see your contacts';
+    contactsUi.status.textContent = '';
+    contactsUi.empty.hidden = true;
+  }
+
+  function initContactsTab() {
+    if (!contactsUi.pane) return;
+    contactsUi.add.addEventListener('click', () => {
+      if (!NotesStore.isUnlocked?.()) { toast('Unlock the vault first', true); return; }
+      openContactForm('', contactsUi.add);
+    });
+    contactsUi.emptyAdd.addEventListener('click', () => openContactForm('', contactsUi.emptyAdd));
+    contactsUi.search.addEventListener('input', renderContactsList);
+    contactsUi.search.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && contactsUi.search.value) {
+        event.preventDefault();
+        contactsUi.search.value = '';
+        renderContactsList();
+      }
+    });
+    contactsUi.chips.addEventListener('click', (event) => {
+      const chip = event.target.closest('[data-contacts-label]');
+      if (!chip) return;
+      contactsActiveLabel = chip.dataset.contactsLabel;
+      renderContactsList();
+      const again = [...contactsUi.chips.children].find((b) => b.dataset.contactsLabel === contactsActiveLabel);
+      (again || contactsUi.search).focus();
+    });
+    contactsUi.list.addEventListener('click', async (event) => {
+      const star = event.target.closest('[data-contact-fav]');
+      if (star) {
+        const c = contactsAll.find((x) => x.uuid === star.dataset.contactFav);
+        if (!c) return;
+        NotesStore.updateContact(c.uuid, { favorite: !c.favorite });
+        refreshContacts();
+        [...contactsUi.list.querySelectorAll('[data-contact-fav]')].find((b) => b.dataset.contactFav === c.uuid)?.focus();
+        return;
+      }
+      const open = event.target.closest('[data-contact-id]');
+      if (!open) return;
+      if (contactsFormState && !(await requestCloseContactForm())) return;
+      renderContactDetail(open.dataset.contactId);
+      if (window.matchMedia('(max-width: 899px)').matches) contactsUi.detail.querySelector('.contacts-detail-name')?.focus();
+    });
+    contactsUi.pane.addEventListener('keydown', (event) => {
+      if (event.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        contactsUi.search.focus();
+        return;
+      }
+      if (event.key !== 'Escape' || event.defaultPrevented || event.target === contactsUi.search) return;
+      if (contactsFormState) { event.preventDefault(); requestCloseContactForm(); return; }
+      if (contactsSelectedId && window.matchMedia('(max-width: 899px)').matches) {
+        event.preventDefault();
+        closeContactDetail({ focusRow: true });
+      }
+    });
+    document.getElementById('btn-contacts-lock')?.addEventListener('click', () => lockVault('Vault locked.'));
+    document.getElementById('btn-contacts-settings')?.addEventListener('click', (event) => {
+      if (typeof window.__notesOpenSettings === 'function') window.__notesOpenSettings(event);
+    });
+  }
+  initContactsTab();
+
   function normalizeAppTab(name) {
     if (name === 'files') return 'notes';
-    if (name === '2fa' || name === 'agenda') return name;
+    if (name === '2fa' || name === 'agenda' || name === 'contacts') return name;
     return 'notes';
   }
 
@@ -4581,8 +5271,10 @@
     syncAppTabButtons(appTab);
     const on2fa = appTab === '2fa';
     const onAgenda = appTab === 'agenda';
-    if (ui.shell) ui.shell.hidden = on2fa || onAgenda;
+    const onContacts = appTab === 'contacts';
+    if (ui.shell) ui.shell.hidden = on2fa || onAgenda || onContacts;
     if (totpUi.pane) totpUi.pane.hidden = !on2fa;
+    if (contactsUi.pane) contactsUi.pane.hidden = !onContacts;
     if (agendaPane) agendaPane.hidden = !onAgenda;
     if (!onAgenda && typeof globalThis.__notesCloseAgendaCalendarSettings === 'function') {
       try {
@@ -4611,6 +5303,11 @@
       closeDocPreview();
       refreshTotpVault({ migrate: true });
       startTotpClock();
+    } else if (onContacts) {
+      stopTotpClock();
+      resetNoteTransientChrome();
+      closeDocPreview();
+      refreshContacts();
     } else if (onAgenda) {
       stopTotpClock();
       resetNoteTransientChrome();
@@ -4655,6 +5352,9 @@
     if (tab === '2fa') {
       fab.setAttribute('aria-label', 'Add 2FA account');
       fab.title = 'Add account';
+    } else if (tab === 'contacts') {
+      fab.setAttribute('aria-label', 'Add contact');
+      fab.title = 'Add contact';
     } else if (tab === 'agenda') {
       fab.setAttribute('aria-label', 'New event');
       fab.title = 'New event';
@@ -7126,6 +7826,7 @@
     updateEmptyStateVisibility();
     renderVaultStats();
     refreshTotpVault({ migrate: false });
+    refreshContacts();
     renderPlanUi(NotesStore.cachedAccount());
     vaultHydrated = true;
     // Stay on the note list overview after unlock/hydrate — do not auto-open last note.
@@ -7340,6 +8041,7 @@
     updateEmptyStateVisibility();
     renderVaultStats();
     refreshTotpVault({ migrate: false });
+    refreshContacts();
     renderPlanUi(NotesStore.cachedAccount());
     vaultHydrated = true;
     // Stay on the note list overview after unlock/hydrate — do not auto-open last note.
@@ -21063,6 +21765,7 @@
   document.getElementById('fab-add')?.addEventListener('click', () => {
     const t = currentAppTab();
     if (t === '2fa') showTotpAddDialog();
+    else if (t === 'contacts') contactsUi.add.click();
     else if (t === 'agenda' && typeof globalThis.NotesAgenda !== 'undefined' && NotesAgenda.openNewEvent) {
       NotesAgenda.openNewEvent();
     } else createNote();

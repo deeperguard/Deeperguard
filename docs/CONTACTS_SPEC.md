@@ -1827,6 +1827,21 @@ is stored as text and shown as text.
 7. Exports and the password step (8).
 8. `PRIVACY.md`, help text, backup description updates (3.6).
 
+Status of the tab shell (step 2): built are the tab between Agenda and 2FA, the
+list with alphabet sections and a Favourites section, label chips, search (4.3,
+4.6, 5.1), detail with `tel:`/`mailto:` links and copy (4.4), the edit form
+with phone, email, address and website rows, photo, labels, favourite (4.5),
+delete with confirmation and undo, and clearing on lock. Not built yet, and
+deliberately left to the follow-up tasks: the Import and Export buttons and the
+empty-state "Import" (steps 3 to 7: there are no parsers yet, so a button would
+do nothing), the windowed list, the letter rail and "Jump to letter" dialog,
+selection mode, label rename/delete, the browser Back key (the detail view
+closes with the Back button and Escape; the other tabs do not use history
+either), and the form rows for messaging addresses, dates and the extra name
+fields (the form leaves those stored values untouched). The list refreshes when
+the tab is shown, after unlock and after the user's own changes; changes pulled
+from another device appear the next time the tab is shown.
+
 Open decision for the owner, not blocking the build: whether Contacts should
 be limited to a plan (this spec says no, 4.1).
 
