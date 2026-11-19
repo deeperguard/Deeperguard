@@ -47,6 +47,29 @@ def covering(page, selector: str) -> str | None:
     return page.evaluate(TOP_JS, selector)
 
 
+def click(page, selector: str) -> None:
+    """Normal click; when it times out, report which element covers the button."""
+    try:
+        page.click(selector, timeout=6000)
+    except Exception as exc:
+        raise AssertionError(f"click on {selector} failed, covered by {covering(page, selector)}: {exc}") from exc
+
+
+def dialog_part(page, selector: str) -> str | None:
+    """'#confirm-backdrop' or '#confirm-dialog' when that element (or a child) is on top of the button."""
+    return page.evaluate(
+        """(sel) => {
+  const el = document.querySelector(sel);
+  el.scrollIntoView({ block: 'center' });
+  const r = el.getBoundingClientRect();
+  const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  const hit = top && top.closest('#confirm-backdrop, #confirm-dialog');
+  return hit ? '#' + hit.id : null;
+}""",
+        selector,
+    )
+
+
 def assert_all_on_top(page, where: str) -> None:
     for name, selector in BUTTONS.items():
         cover = covering(page, selector)
@@ -73,30 +96,30 @@ def run(playwright, url: str, viewport: tuple[int, int], opener: str) -> None:
         assert_all_on_top(page, f"{where} after opening Settings")
 
         # Help click, then export-note click (a toast appears), then the ZIP dialog.
-        page.click(BUTTONS["how to get this"], timeout=6000)
+        click(page, BUTTONS["how to get this"])
         assert_all_on_top(page, f"{where} after 'How to get this'")
-        page.click(BUTTONS["export note"], timeout=6000)
+        click(page, BUTTONS["export note"])
         page.wait_for_function("() => document.getElementById('toast') && !document.getElementById('toast').hidden")
         assert_all_on_top(page, f"{where} after 'Export current note' with a toast open")
 
-        page.click(BUTTONS["export zip"], timeout=6000)
+        click(page, BUTTONS["export zip"])
         page.wait_for_selector("#confirm-dialog:not([hidden])", timeout=10000)
         for name, selector in BUTTONS.items():
-            cover = covering(page, selector)
-            assert cover and "confirm" in cover, (
-                f"{where}: while the ZIP password dialog is open '{name}' should sit under the dialog or its backdrop, got {cover}"
+            assert dialog_part(page, selector), (
+                f"{where}: while the ZIP password dialog is open '{name}' should sit under "
+                f"#confirm-dialog or #confirm-backdrop, got {covering(page, selector)}"
             )
         page.keyboard.press("Escape")
         page.wait_for_selector("#confirm-dialog", state="hidden", timeout=10000)
         assert_all_on_top(page, f"{where} after cancelling the ZIP dialog with Escape")
 
         # Same action twice: both buttons still take a normal click, no force.
-        page.click(BUTTONS["export zip"], timeout=6000)
+        click(page, BUTTONS["export zip"])
         page.wait_for_selector("#confirm-dialog:not([hidden])", timeout=10000)
         page.keyboard.press("Escape")
         page.wait_for_selector("#confirm-dialog", state="hidden", timeout=10000)
-        page.click(BUTTONS["export note"], timeout=6000)
-        page.click(BUTTONS["how to get this"], timeout=6000)
+        click(page, BUTTONS["export note"])
+        click(page, BUTTONS["how to get this"])
         assert_all_on_top(page, f"{where} after repeating the clicks")
     finally:
         browser.close()

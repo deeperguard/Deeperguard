@@ -43,4 +43,5 @@ dialog open, send the `elementFromPoint` result.
 `tests/e2e_settings_export_click.py` checks that each button is the topmost element at
 its centre, clicks it without `force`, repeats this after help/export clicks and after
 cancelling the ZIP dialog with Escape, and asserts that the dialog's backdrop (or sheet)
-is what covers the buttons while it is open and is gone afterwards.
+is what covers the buttons while it is open and is gone afterwards. When a click
+times out, the test reports the covering element (`elementFromPoint`) in its failure message.
