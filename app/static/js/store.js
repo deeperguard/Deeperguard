@@ -7165,7 +7165,9 @@ const NotesStore = (() => {
       throw recoveryKeyError(
         'RECOVERY_UNREADABLE',
         `${state.undecryptable.size} item${state.undecryptable.size === 1 ? '' : 's'} were re-encrypted by an earlier `
-        + 'unfinished recovery with a different new password. Enter the new password you chose then. Nothing was changed.',
+        + 'unfinished recovery with a different new password. Enter the new password you chose then. '
+        + 'If you no longer know it, these items cannot be opened without that password, and a new recovery '
+        + 'attempt with it restores them. Nothing was changed.',
       );
     }
   }
