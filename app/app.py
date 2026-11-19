@@ -106,13 +106,19 @@ class HostOnlySessionInterface(SecureCookieSessionInterface):
         return super().open_session(app, request)
 
     def should_set_cookie(self, app, session) -> bool:  # type: ignore[override]
-        # The background health poll must not rewrite a permanent session: a poll that
-        # is in flight while another request changes the session (e.g. the vault-keys
-        # proof token) would write back the old copy and drop that change.
+        # A read-only API call must not rewrite a permanent session it did not change:
+        # the client fires these in the background (health poll, GET /api/account, ...),
+        # and one that is in flight while another request changes the session (e.g. the
+        # vault-keys proof token) would write back the old copy and drop that change.
+        # Page loads and POSTs (sync) still slide the session expiry.
         try:
             from flask import request
 
-            if request.method == "GET" and request.path == "/api/health" and not session.modified:
+            if (
+                request.method in {"GET", "HEAD"}
+                and request.path.startswith("/api/")
+                and not session.modified
+            ):
                 return False
         except RuntimeError:
             pass
