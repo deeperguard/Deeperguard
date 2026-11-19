@@ -29,6 +29,7 @@ const NotesEnexImport = (() => {
   const ENEX_DOCTYPE = /<!DOCTYPE\s+en-export\s+SYSTEM\s+(?:"http:\/\/xml\.evernote\.com\/pub\/evernote-export[34]\.dtd"|'http:\/\/xml\.evernote\.com\/pub\/evernote-export[34]\.dtd')\s*>/g;
   const ENML_DOCTYPE = /<!DOCTYPE\s+en-note\s+SYSTEM\s+(?:"http:\/\/xml\.evernote\.com\/pub\/enml2\.dtd"|'http:\/\/xml\.evernote\.com\/pub\/enml2\.dtd')\s*>/g;
   const FORBIDDEN_DECL = /<!(?:DOCTYPE|ENTITY|ELEMENT|ATTLIST|NOTATION)/i;
+  const NAMED_ENTITY = /&(?!(?:amp|lt|gt|quot|apos);)[A-Za-z][A-Za-z0-9]*;/;
   const DROP_ELEMENTS = new Set(['script', 'style', 'head', 'title', 'template', 'noscript', 'iframe', 'object', 'embed', 'svg', 'math']);
 
   const stripControl = (s) => String(s).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '');
@@ -341,6 +342,9 @@ const NotesEnexImport = (() => {
         content = convertEnml(contentEl.textContent, resources, source);
       } catch (err) {
         if (/DOCTYPE or entity/.test(err.message) || /nested deeper/.test(err.message)) throw err;
+        if (NAMED_ENTITY.test(contentEl.textContent)) {
+          return { skip: 'content is not valid ENML (HTML entities such as &nbsp; are not allowed)' };
+        }
         return { skip: 'content is not valid ENML' };
       }
     }

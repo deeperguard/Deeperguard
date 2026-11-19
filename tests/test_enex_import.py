@@ -154,6 +154,14 @@ class EnexImportTests(unittest.TestCase):
         r = self.parse(enex(note("x", "<div>&nbsp;</div>")))
         self.assertTrue(r["ok"])
         self.assertEqual(r["notes"], [])
+        self.assertEqual(
+            r["skipped"][0]["reason"],
+            "content is not valid ENML (HTML entities such as &nbsp; are not allowed)",
+        )
+        r = self.parse(enex(note("x", "<div>caf&eacute;</div>")))
+        self.assertEqual(r["notes"], [])
+        self.assertIn("HTML entities", r["skipped"][0]["reason"])
+        r = self.parse(enex(note("x", "<div>a<b</div>")))
         self.assertEqual(r["skipped"][0]["reason"], "content is not valid ENML")
 
     def test_script_handlers_and_javascript_urls_removed(self):
@@ -203,6 +211,20 @@ class EnexImportTests(unittest.TestCase):
         r = self.parse("x", name="notes.txt")
         self.assertTrue(r["ok"])
         self.assertEqual(r["skipped"][0]["reason"], "not an .enex file")
+
+    def test_note_over_80_mib_skipped_and_others_kept(self):
+        r = self.page.evaluate("""async () => {
+          const limit = 80 * 1024 * 1024;
+          const big = '<note><title>' + 'a'.repeat(limit + 1) + '</title><content><![CDATA[<en-note><div>x</div></en-note>]]></content></note>';
+          const small = '<note><title>small</title><content><![CDATA[<en-note><div>kept</div></en-note>]]></content></note>';
+          const text = '<?xml version="1.0" encoding="UTF-8"?><en-export>' + big + small + '</en-export>';
+          const bytes = new TextEncoder().encode(text);
+          const res = await NotesEnexImport.parse([{ name: 'big.enex', bytes }], { now: new Date('2024-06-01T00:00:00Z') });
+          return { titles: res.notes.map((n) => n.title), contents: res.notes.map((n) => n.content), skipped: res.skipped };
+        }""")
+        self.assertEqual(r["titles"], ["small"])
+        self.assertEqual(r["contents"], ["kept"])
+        self.assertEqual(r["skipped"], [{"name": "big.enex: note 1", "reason": "note larger than 80 MiB"}])
 
     def test_md5_matches_reference(self):
         for size in (0, 1, 55, 56, 63, 64, 65, 119, 120, 1000):
