@@ -12983,6 +12983,36 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   color: var(--muted);
 }
 .doc-inline-page[hidden] { display: none; }
+/* Page navigation of the inline viewer (and its full screen): same controls as the full preview's page bar. */
+.doc-inline-pagenav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.doc-inline-pagenav[hidden] { display: none; }
+.doc-inline-pagenav .btn:disabled { opacity: 0.4; cursor: default; }
+.doc-inline-pagenav .btn:focus-visible,
+.doc-inline-page-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.doc-inline-pagenav .btn { min-width: 36px; min-height: 36px; font-size: 20px; line-height: 1; justify-content: center; }
+.doc-inline-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.doc-inline-page-input {
+  width: 4.5ch;
+  min-height: 36px;
+  padding: 0 4px;
+  text-align: center;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
 /* Root cause of the cut-off / off-centre page: the phone and desktop
    `.editor.doc-preview-active` rules make the stage a transparent, left-aligned
    block with overflow:visible, so a page wider than the column was clipped and
