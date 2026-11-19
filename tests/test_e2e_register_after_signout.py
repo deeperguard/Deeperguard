@@ -26,10 +26,8 @@ class RegisterAfterSignOutE2E(unittest.TestCase):
 
         self.assertEqual(run("stub"), "recovery-dialog")
 
-    # Confirmed app bug, repair follows in a separate task: with the Turnstile script
-    # unreachable, 'Create account' shows no message at all.
+    # With the Turnstile script unreachable, 'Create account' must say so.
     # See docs/findings/register-after-signout.md.
-    @unittest.expectedFailure
     def test_sign_out_then_create_account_without_turnstile_shows_error(self):
         from e2e_register_after_signout import run
 

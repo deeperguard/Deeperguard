@@ -1,8 +1,11 @@
 # Register after 'Sign out and create a new account' stays silent
 
 Idea #224 (task #460), reported by the beta tester in runs 241 and 243 at code
-`4d4a5b4`. This is diagnosis only. No app code was changed; the repair follows in
-a separate task.
+`4d4a5b4`.
+
+**Status: opgelost (resolved) in task #461.** The sections "Summary" and "Cause"
+describe the code as it was before the repair, and their line numbers refer to
+that code. See "Repair" below for what changed.
 
 ## Summary
 
@@ -42,6 +45,26 @@ dialog, no message, no failed API call, only `ERR_FAILED` in the console.
 The field errors (email, password, checkboxes) are not affected: `setFieldError()`
 shows them synchronously.
 
+## Repair
+
+Task #461 changed `app/static/js/auth-pages.js`:
+
+- `showRegisterError()` keeps its 20 ms timer in its own variable
+  (`registerErrorTimer`) instead of in `registerHangTimers`, so
+  `clearRegisterHangTimers()` no longer cancels a pending message. With a
+  Turnstile widget and no token, 'Create account' now shows "Please complete the
+  security check and try again." on every click.
+- A submit that arrives while an attempt is still running, or after the sign-up
+  already succeeded and the vault is being prepared, used to return without any
+  feedback. It now shows "Your account is already being created. Please wait." in
+  `#register-error`.
+- While an attempt runs, the button was already disabled with the text
+  'Creating account…'; it now also carries `aria-busy="true"`, removed again when
+  the attempt fails.
+
+Key derivation, crypto parameters, the SRP protocol and the recovery key step are
+unchanged.
+
 ## Where `ERR_FAILED` comes from
 
 On the register page the only cross-origin request is the Turnstile script
@@ -75,10 +98,14 @@ aborted.
   script URL is answered with a small stub that supplies a token. Passes: the
   'Your recovery key' dialog appears. Stays as a regression test.
 - `test_sign_out_then_create_account_without_turnstile_shows_error`: the Turnstile
-  script is aborted (`net::ERR_FAILED`). Marked `@unittest.expectedFailure`: no
-  register API call is made and no message appears within 30 s. It expects
-  `#register-error` to show a message; when the repair lands, remove the marker.
+  script is aborted (`net::ERR_FAILED`). Passes since the repair: no register API
+  call is made and `#register-error` shows the security check message. Before
+  the repair it was marked `@unittest.expectedFailure`.
+
+`tests/test_register_signup_hang.js` covers the same message without a browser,
+plus the busy state of the button and the message for a second submit while an
+attempt runs.
 
 Run it alone with `python3 -m unittest tests/test_e2e_register_after_signout.py -v`
-(about 90 s), or `python3 tests/e2e_register_after_signout.py` to print the
+(about 45 s), or `python3 tests/e2e_register_after_signout.py` to print the
 outcome of both scenarios.

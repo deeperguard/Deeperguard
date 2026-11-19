@@ -250,6 +250,60 @@ function softFailError() {
   assert.strictEqual(sb7.getEl('register-error').textContent, 'Please try again.');
   assert.ok(authPagesCode.includes('Date.now() + 60000'));
 
+  // Turnstile widget without a token: 'Create account' shows the message, sends nothing.
+  for (const [lang, expected] of [
+    ['en', 'Please complete the security check and try again.'],
+    ['nl', 'Voltooi eerst de beveiligingscontrole en probeer het opnieuw.'],
+  ]) {
+    const sb8 = buildSandbox(lang);
+    let sent = 0;
+    sb8.NotesSrpAuth.register = async () => { sent += 1; return { kdf_salt: 'x', vault_kdf_version: 2 }; };
+    sb8.document.querySelector = (sel) => (sel === '.cf-turnstile' ? { tagName: 'DIV', id: 'w3' } : null);
+    runAuthPages(sb8);
+    for (let click = 0; click < 2; click += 1) {
+      sb8.__notesSubmitRegister();
+      await new Promise((r) => setTimeout(r, 60));
+      assert.strictEqual(sb8.getEl('register-error').hidden, false, `missing token, click ${click + 1}: error visible`);
+      assert.strictEqual(sb8.getEl('register-error').textContent, expected);
+      assert.strictEqual(sb8.getEl('register-submit').disabled, false);
+    }
+    assert.strictEqual(sent, 0, 'missing token: no register call');
+  }
+
+  // Busy state on the button while the attempt runs; a second submit says so.
+  const sb9 = buildSandbox();
+  const busyAttrs = {};
+  const sb9Btn = sb9.getEl('register-submit');
+  sb9Btn.setAttribute = (name, value) => { busyAttrs[name] = String(value); };
+  sb9Btn.removeAttribute = (name) => { delete busyAttrs[name]; };
+  let sb9Calls = 0;
+  let failFirst;
+  sb9.NotesSrpAuth.register = () => {
+    sb9Calls += 1;
+    return new Promise((resolve, reject) => { failFirst = reject; });
+  };
+  runAuthPages(sb9);
+  sb9.__notesSubmitRegister();
+  await new Promise((r) => setTimeout(r, 40));
+  assert.strictEqual(sb9Btn.disabled, true);
+  assert.strictEqual(sb9Btn.textContent, 'Creating account…');
+  assert.strictEqual(busyAttrs['aria-busy'], 'true');
+  assert.strictEqual(sb9.getEl('register-error').hidden, true, 'one submit: no message');
+  sb9.__notesSubmitRegister();
+  await new Promise((r) => setTimeout(r, 40));
+  assert.strictEqual(sb9Calls, 1, 'second submit while in flight: no second register call');
+  assert.strictEqual(sb9.getEl('register-error').hidden, false);
+  assert.strictEqual(
+    sb9.getEl('register-error').textContent,
+    'Your account is already being created. Please wait.',
+  );
+  failFirst(new Error('Network error'));
+  await new Promise((r) => setTimeout(r, 40));
+  assert.strictEqual(sb9Btn.disabled, false);
+  assert.strictEqual(sb9Btn.textContent, 'Create account');
+  assert.strictEqual('aria-busy' in busyAttrs, false, 'failure clears the busy state');
+  assert.strictEqual(sb9.getEl('register-error').textContent, 'Network error');
+
   assert.ok(authPagesCode.includes('register-hang-live'));
   const srp = fs.readFileSync(path.join(jsRoot, 'srp-auth.js'), 'utf8');
   assert.ok(srp.includes('timeoutMs: 180000'));
