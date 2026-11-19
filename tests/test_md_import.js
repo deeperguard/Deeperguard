@@ -131,12 +131,26 @@ const NOW = new Date('2026-11-18T12:00:00Z');
   assert.ok(sn.includes('&lt;img src="x'), 'unterminated tag is escaped');
   assert.ok(sn.includes('<https://example.com/>') && sn.includes('1 &lt; 2'));
 
-  // The renderer is a second line of defence: the imported text goes through render() and no live handler survives.
+  // Plain node has no DOM, so render() uses the escape-only fallback renderer here; that is all this part checks.
   const Markdown = require(path.join(jsRoot, 'markdown.js'));
   const rendered = Markdown.render(sn);
   assert.ok(rendered.length > 0);
   assert.ok(!/<[^>]*\bon[a-z]+\s*=/i.test(rendered), `handler survived rendering: ${rendered}`);
   assert.ok(!/<script|<iframe|javascript:/i.test(rendered), `active markup survived rendering: ${rendered}`);
+  // The DOMPurify route needs a real DOM. It runs when jsdom is installed and is reported as skipped otherwise.
+  let JSDOM = null;
+  try { ({ JSDOM } = require('jsdom')); } catch (_) { JSDOM = null; }
+  if (JSDOM) {
+    const win = new JSDOM('<!doctype html><body></body>').window;
+    for (const text of [sn, body]) {
+      const clean = NotesSanitize.sanitizeRichHtml(Markdown.render(text), win);
+      assert.notStrictEqual(clean, null, 'DOMPurify route is not active');
+      assert.ok(!/<[^>]*\bon[a-z]+\s*=/i.test(clean), `handler survived DOMPurify: ${clean}`);
+      assert.ok(!/<script|<iframe|<svg|<style|javascript:/i.test(clean), `active markup survived DOMPurify: ${clean}`);
+    }
+  } else {
+    console.warn('WARNING: jsdom is not installed, so the NotesSanitize/DOMPurify check of imported text was SKIPPED');
+  }
 
   // The import allowlist is the NotesSanitize allowlist (minus button).
   for (const tag of NotesSanitize.RICH_ALLOWED_TAGS.filter((t) => t !== 'button' && !['br', 'hr', 'img'].includes(t))) {
