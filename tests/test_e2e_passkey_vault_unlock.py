@@ -28,7 +28,8 @@ UI_TIMEOUT_MS = 120_000
 # The vault-keys write token lives in the Flask session cookie. Any other request still in flight
 # when the password proof is made can answer later with an older cookie and wipe the token, which
 # costs a 401 and a new (slow) proof; under load that window is wide. The test therefore lets
-# every pending request finish before it starts a passkey action.
+# every pending request finish before it starts a passkey action. That only steers around the race:
+# a fast user can hit it in the app too, which is an app issue for a separate task.
 QUIET_POLLS = 4
 SETTLE_MAX_MS = 20_000
 # The installed webauthn package may lack options_to_json_dict (the app imports it); the
@@ -64,24 +65,14 @@ def _add_authenticator(page, *, prf: bool):
     return cdp
 
 
-def _track_requests(page) -> set:
+def _track_requests(page, base: str) -> set:
+    # Only the app's own requests carry the session cookie; third-party ones (the Turnstile
+    # widget keeps a blob: request open) would otherwise hold every settle at SETTLE_MAX_MS.
     pending: set = set()
-    page.on("request", lambda r: pending.add(r))
+    page.on("request", lambda r: pending.add(r) if r.url.startswith(base + "/") else None)
     page.on("requestfinished", lambda r: pending.discard(r))
     page.on("requestfailed", lambda r: pending.discard(r))
     return pending
-
-
-def _settle(page, pending: set) -> None:
-    """Return once no request has been in flight for several consecutive polls."""
-    quiet = 0
-    waited = 0
-    while quiet < QUIET_POLLS:
-        quiet = quiet + 1 if not pending else 0
-        page.wait_for_timeout(50)
-        waited += 50
-        if waited >= SETTLE_MAX_MS:  # a request that never ends must not hang the test
-            return
 
 
 class PasskeyVaultUnlockE2E(unittest.TestCase):
@@ -110,7 +101,7 @@ class PasskeyVaultUnlockE2E(unittest.TestCase):
                 browser = launch(p)
                 page = browser.new_context(viewport={"width": 1280, "height": 860}).new_page()
                 page.set_default_timeout(UI_TIMEOUT_MS)
-                self.pending = _track_requests(page)
+                self.pending = _track_requests(page, base)
                 _add_authenticator(page, prf=prf)
                 register(page, base)
                 page.evaluate(OPEN_SETTINGS_JS)
@@ -123,7 +114,17 @@ class PasskeyVaultUnlockE2E(unittest.TestCase):
             shutil.rmtree(root, ignore_errors=True)
 
     def _settle(self, page):
-        _settle(page, self.pending)
+        """Return once no request has been in flight for several consecutive polls."""
+        quiet = 0
+        waited = 0
+        while quiet < QUIET_POLLS:
+            quiet = quiet + 1 if not self.pending else 0
+            page.wait_for_timeout(50)
+            waited += 50
+            if waited >= SETTLE_MAX_MS:  # a request that never ends must not hang the test
+                print(f"_settle: still {len(self.pending)} request(s) in flight after {SETTLE_MAX_MS} ms, "
+                      f"continuing: {sorted(r.url for r in self.pending)}", file=sys.stderr)
+                return
 
     def _add_passkey(self, page, *, with_unlock: bool):
         if with_unlock:
