@@ -85,6 +85,31 @@ DESCRIBED_JS = """(id) => { const el = document.getElementById(id);
            describedby: (el.getAttribute('aria-describedby') || '').split(/\\s+/) }; }"""
 
 
+SETTLE_JS = """async () => { await document.fonts.ready;
+  const finite = document.getAnimations().filter(
+    (a) => a.effect && a.effect.getComputedTiming().iterations !== Infinity);
+  await Promise.race([
+    Promise.all(finite.map((a) => a.finished.catch(() => null))),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ]); }"""
+
+
+def _settle(page):
+    """Web fonts loaded and finite CSS animations/transitions finished (infinite spinners
+    are ignored, and the wait is capped), so layout and colours are final."""
+    page.evaluate(SETTLE_JS)
+
+
+def _wait_attr_absent(page, sel, attr, timeout=5000):
+    """Wait until the attribute is gone; return False if it never went away."""
+    try:
+        page.wait_for_function("([s, a]) => !document.querySelector(s).hasAttribute(a)",
+                               arg=[sel, attr], timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
 def _ctx(browser, width, theme):
     ctx = browser.new_context(viewport={"width": width, "height": 900})
     ctx.add_init_script(
@@ -100,7 +125,8 @@ def check_pages(browser, base, failures):
             ctx = _ctx(browser, width, theme)
             page = ctx.new_page()
             for path, fields in PROTECTED.items():
-                page.goto(base + path, wait_until="domcontentloaded")
+                page.goto(base + path, wait_until="load")
+                _settle(page)
                 assert page.evaluate("document.documentElement.dataset.theme") == theme, tag
                 for sel, want in fields.items():
                     got = page.evaluate(ATTRS_JS, sel)
@@ -113,8 +139,10 @@ def check_pages(browser, base, failures):
                     failures.append(f"{tag} {path} overflow: {bad[:3]}")
 
             # Register: submit empty -> each field error is linked and readable.
-            page.goto(base + "/register", wait_until="domcontentloaded")
+            page.goto(base + "/register", wait_until="load")
             page.click("#register-submit")
+            page.wait_for_selector("#register-email-error", state="visible")
+            _settle(page)
             pairs = [("register-email", "register-email-error"),
                      ("register-password", "register-password-error"),
                      ("register-terms", "register-terms-error"),
@@ -128,21 +156,23 @@ def check_pages(browser, base, failures):
                 ratio = page.evaluate(CONTRAST_JS, err)
                 if ratio < 4.5:
                     failures.append(f"{tag} {err} contrast {ratio:.2f}")
+            _settle(page)
             bad = page.evaluate(OVERFLOW_JS)
             if bad:
                 failures.append(f"{tag} /register with errors overflow: {bad[:3]}")
             # Fixing a field removes aria-invalid instead of leaving "false".
             page.fill('input[autocomplete="email"]', "fixed@home.local")
             page.check("#register-terms")
-            if page.get_attribute("#register-email", "aria-invalid") is not None:
+            if not _wait_attr_absent(page, "#register-email", "aria-invalid"):
                 failures.append(f"{tag} register-email keeps aria-invalid after fix")
-            if page.get_attribute("#register-terms", "aria-invalid") is not None:
+            if not _wait_attr_absent(page, "#register-terms", "aria-invalid"):
                 failures.append(f"{tag} register-terms keeps aria-invalid after fix")
 
             # Login: empty submit -> error linked to the email and password fields.
-            page.goto(base + "/login", wait_until="domcontentloaded")
+            page.goto(base + "/login", wait_until="load")
             page.click("#login-submit")
             page.wait_for_selector("#login-error:not([hidden])")
+            _settle(page)
             for sel in ('input[name="email"]', "#login-password", "#login-recovery-code"):
                 ids = (page.get_attribute(sel, "aria-describedby") or "").split()
                 if "login-error" not in ids:
@@ -169,7 +199,7 @@ def smoke(browser, base, failures, width, theme):
     email = f"auth-polish-{width}-{theme}-{int(time.time())}@home.local"
 
     # 1. Register, filling by autocomplete token like autofill does.
-    page.goto(base + "/register", wait_until="domcontentloaded")
+    page.goto(base + "/register", wait_until="load")
     page.fill('#register-form input[autocomplete="email"]', email)
     for el in page.query_selector_all('#register-form input[autocomplete="new-password"]'):
         el.fill(PASSWORD)
@@ -182,11 +212,20 @@ def smoke(browser, base, failures, width, theme):
         input.name = 'cf-turnstile-response'; document.getElementById('register-form').appendChild(input); }
       input.value = 'e2e-dummy-turnstile-token';
     }""")
+    # Visible loading state while the key is derived: disabled + spinner. A
+    # MutationObserver records the spinner the moment the button turns disabled,
+    # so a fast derivation cannot slip between the click and the check.
+    page.evaluate("""() => { const b = document.getElementById('register-submit');
+      window.__busy = null;
+      const snap = () => { if (b.disabled && !window.__busy)
+        window.__busy = { spinner: getComputedStyle(b, '::before').content }; };
+      new MutationObserver(snap).observe(b, { attributes: true });
+      snap(); }""")
     page.click("#register-submit")
-    # Visible loading state while the key is derived: disabled + spinner.
-    busy = page.evaluate("""() => { const b = document.getElementById('register-submit');
-      return b ? { disabled: b.disabled, spinner: getComputedStyle(b, '::before').content } : null; }""")
-    if busy and busy["disabled"] and busy["spinner"] in ("none", "normal"):
+    page.wait_for_function("window.__busy !== null || location.pathname === '/app'",
+                           timeout=120000)
+    busy = page.evaluate("window.__busy")
+    if busy and busy["spinner"] in ("none", "normal"):
         failures.append(f"{tag} register busy button has no spinner")
     _wait_unlocked(page)
     complete_recovery_key_step(page)
@@ -195,6 +234,7 @@ def smoke(browser, base, failures, width, theme):
     page.evaluate("""() => { const b = [...document.querySelectorAll('.vault-lock-btn')]
       .find((x) => x.offsetParent !== null); b.click(); }""")
     page.wait_for_selector("#unlock-screen", state="visible")
+    _settle(page)
     if "unlock-error" not in (page.get_attribute("#unlock-password", "aria-describedby") or "").split():
         failures.append(f"{tag} unlock-password not described by unlock-error")
     bad = page.evaluate(OVERFLOW_JS)
@@ -203,6 +243,7 @@ def smoke(browser, base, failures, width, theme):
     page.fill('#unlock-form input[autocomplete="current-password"]', WRONG)
     page.click("#unlock-submit")
     page.wait_for_selector("#unlock-error:not([hidden])", timeout=120000)
+    _settle(page)
     if not page.inner_text("#unlock-error").strip():
         failures.append(f"{tag} empty unlock error")
     ratio = page.evaluate(CONTRAST_JS, "unlock-error")
@@ -218,7 +259,7 @@ def smoke(browser, base, failures, width, theme):
     ctx.close()
     ctx = _ctx(browser, width, theme)
     page = ctx.new_page()
-    page.goto(base + "/login", wait_until="domcontentloaded")
+    page.goto(base + "/login", wait_until="load")
     page.fill('#login-form input[autocomplete="username"]', email)
     page.fill('#login-form input[autocomplete="current-password"]', WRONG)
     page.click("#login-submit")
