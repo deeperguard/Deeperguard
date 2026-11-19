@@ -87,15 +87,15 @@ Recovery codes and the recovery key protect access. They do not protect against 
 
 - **Backup file**: **Save backup file** downloads a `.dgbackup` file, encrypted on your device with your vault key.
 - **Readable export (not encrypted)**: a ZIP with your notes as Markdown plus attachments, built on your device. Anyone who has the file can read it, so store it carefully.
-- **Google Drive** and **Dropbox**: the same encrypted backup, uploaded from your browser to your own account. You can also let it run once a day while the app is open and online. If the server has no key set up for Google Drive or Dropbox, Settings asks for one from your own developer account and explains how to get it.
-- **Email backup**: the same encrypted file, sent to a backup address you have verified with a code, now or daily.
-- **pCloud backup**: when it is turned on, Deeperguard uploads your already encrypted vault data once a day to a folder for your account in the pCloud account of the Deeperguard service, and e-mails you the result. It is off by default, and the switch stays off if this option is not available on the server. pCloud and Deeperguard cannot read the content, but they can see its size, the times of the backups and the number of files.
+- **Google Drive** and **Dropbox**: the same encrypted backup, uploaded from your browser to your own account. You can also let it run once a day while the app is open, online and unlocked. If the server has no key set up for Google Drive or Dropbox, Settings asks for one from your own developer account and explains how to get it.
+- **Email backup**: an encrypted archive (`deeperguard-backup.enc.json.gz`) built by our server from the encrypted data it stores for you, sent to a backup address you have verified with a code, now or daily. If the archive is too large to e-mail, the mail leaves out the largest attachments.
+- **pCloud backup**: when it is turned on, Deeperguard uploads your already encrypted vault data once a day to a folder for your account in the pCloud account of the Deeperguard service, and e-mails you the result (or only when a run fails, if you choose that). It is off by default, and the switch stays off if this option is not available on the server. pCloud and Deeperguard cannot read the content, but they can see its size, the times of the backups and the number of files.
 
 Sam deletes a folder by mistake, signs in, unlocks, and chooses **Restore Deeperguard backup**. The app asks whether to **Merge** (add new items and update changed ones) or **Add missing only** (never change existing notes), and then restores.
 
 One thing to know: restore opens the backup with the vault key you are using now. A backup made before a master password change or a recovery was encrypted with the old key, so it will not open in the vault afterwards. Make a fresh backup after either one.
 
-Passkeys, 2FA for signing in and the options under **Keep a copy** are not part of every plan. Settings marks the ones your plan does not include.
+Passkeys, 2FA for signing in, Google Drive, Dropbox, email backup and pCloud backup are not part of every plan. The backup file and the readable export under **Keep a copy** are available on every plan. Settings marks the ones your plan does not include.
 
 ## What to set up today
 
@@ -103,7 +103,7 @@ In the same order as Settings:
 
 1. **Sign in.** Check your **Account password**. Under **Passkeys**, add one on each device you use often. Turn on **2FA for signing in to Deeperguard**, and turn on the backup in your authenticator app.
 2. **Open the vault.** Choose a strong **Master password**. Under **Locking**, pick **Lock after idle** and **Lock when leaving the app** settings that suit you. If you like, turn on **Open the vault with a passkey** for your phone.
-3. **If something goes wrong.** Create **Recovery codes (account sign-in)** once you have two passkeys. Create your **Vault recovery key** and store it away from your devices.
+3. **If something goes wrong.** Under **Recovery codes (account sign-in)**, choose **Generate recovery codes** once you have two passkeys. Create your **Vault recovery key** and store it away from your devices.
 4. **Keep a copy.** Save a **Backup file** now, and set up one automatic option if your plan includes it. Make a new backup after you change your master password.
 5. **Devices and sessions.** Look through **Signed-in devices** and sign out anything you do not recognise.
 
