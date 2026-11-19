@@ -2,7 +2,7 @@ Deeperguard support will never ask for your password, recovery codes, or 2FA cod
 
 ## Two locks, two ways back
 
-Deeperguard has two locks. Signing in proves the account is yours. Unlocking the vault opens your notes on your device, and only your master password does that. Each lock has its own way back, and they are not interchangeable. Find both in Settings → group 3, "If something goes wrong".
+Deeperguard has two locks. Signing in proves the account is yours. Unlocking the vault opens your notes on your device, and only your master password does that. Each lock has its own way back, and they are not interchangeable. Find both in Settings → "If something goes wrong".
 
 ### Recovery codes (account sign-in)
 
