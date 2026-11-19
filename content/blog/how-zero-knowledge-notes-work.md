@@ -51,7 +51,7 @@ Secure Send is different: it encrypts in the browser and keeps the decryption ke
 
 If someone claiming to be support asks for your vault password, recovery material (including your recovery key), or 2FA codes, that is a scam. We cannot restore a vault or reset a vault password for you.
 
-New accounts create a recovery key during sign-up. It is made in your browser and shown only there; we store a copy of your vault key encrypted with it and cannot read the recovery key or that copy. The app has no screen yet to open a vault or reset a password with the recovery key, so today a forgotten vault password still means the ciphertext stays unreadable. Accounts created before this step have no recovery key.
+New accounts create a recovery key during sign-up. It is made in your browser and shown only there; we store a copy of your vault key encrypted with it and cannot read the recovery key or that copy. If you forget your vault password, you need a signed-in session first (a device that is still signed in, or a sign-in with a passkey or an account recovery code; the recovery key does not sign you in) and then use the recovery key on the unlock screen to open the vault and choose a new password. Without your password and without your recovery key, the ciphertext stays unreadable. Accounts created before this step can create a recovery key in Settings after unlocking.
 
 During the public beta, Free, Basic, and Pro plan limits apply. Billing is not active yet — see the homepage pricing table for current caps.
 
@@ -64,3 +64,5 @@ During the public beta, Free, Basic, and Pro plan limits apply. Billing is not a
 Security reports: notes@deeperguard.com with subject “Vulnerability report”.
 
 Updated: 2026-11-18. The support section now mentions the recovery key that new accounts create during sign-up. It replaces the sentence that said there is no restore that bypasses the vault password and that a lost password is unreadable by design. The app cannot reset a password with the recovery key yet.
+
+Updated 2026-11-19: A forgotten vault password can now be reset with the recovery key on the unlock screen, from a signed-in session, and older accounts can create a recovery key in Settings. The sentence saying the app had no screen for this yet was replaced.
