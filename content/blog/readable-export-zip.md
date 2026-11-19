@@ -8,7 +8,7 @@ cover_alt: "Abstract dark blue background with a closed vault shape, a dashed ar
 draft: false
 ---
 
-An encrypted backup is the right default, but it has one limit: you need Deeperguard and your vault password to open it. Sometimes you want the opposite, a plain copy that any text editor can read, whatever happens to the app or to us. For that, Settings has a **Readable export (not encrypted)**. This post explains what it produces, how to use it safely and where it stops.
+An encrypted backup is the right default, but it has one limit: you need Deeperguard and your vault password to open it. Sometimes you want the opposite, a plain copy in standard formats, Markdown and `.ics`, that any text editor can open. For that, Settings has a **Readable export (not encrypted)**. This post explains what it produces, how to use it safely and where it stops.
 
 ## Where it is and what it does
 
