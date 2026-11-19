@@ -117,5 +117,19 @@ const PNG = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
   assert.strictEqual(again.notes.length, r.notes.length);
   assert.strictEqual(again.attachmentCount, 1);
 
+  // nested checklist items (parentId) are not kept as nesting: each item is one top-level line, in order
+  const nestedZip = await zip([
+    ['Keep/Nested.json', json({
+      title: 'Nested', listContent: [
+        { text: 'parent', isChecked: false },
+        { text: 'child', isChecked: true, parentId: 'p1' },
+        { text: 'sibling', isChecked: false },
+      ],
+    })],
+  ]);
+  const nested = await Import.parse([{ name: 'nested.zip', bytes: nestedZip }], { now: NOW });
+  assert.strictEqual(nested.notes[0].content, '- [ ] parent\n- [x] child\n- [ ] sibling');
+  assert.strictEqual(nested.notes[0].editor, 'checklist');
+
   console.log('keep import ok');
 })().catch((err) => { console.error(err); process.exit(1); });

@@ -402,7 +402,7 @@ Only the JSON files are read; the HTML copies are ignored.
 | --- | --- |
 | `title` | `title`. |
 | `textContent` | `content`, `editor: "plain"`. |
-| `listContent` (`[{text, isChecked}]`) | `content` = one line per item, `- [x] text` / `- [ ] text`, `editor: "checklist"`. If `textContent` is also present it goes first, then a blank line. |
+| `listContent` (`[{text, isChecked}]`) | `content` = one line per item, `- [x] text` / `- [ ] text`, `editor: "checklist"`. Nested items (`parentId`) are not nested: every item is one top-level line, in order. If `textContent` is also present it goes first, then a blank line. |
 | `labels` (`[{name}]`) | tag items by title. |
 | `attachments` (`[{filePath, mimetype}]`) | the file named `filePath` in the ZIP (matched by base name, case-insensitive) becomes an attachment with `mime` from `mimetype`. A missing file is counted and shown in the result. |
 | `createdTimestampUsec`, `userEditedTimestampUsec` | `created_at`, `updated_at` (microseconds since 1970 divided by 1000). |
