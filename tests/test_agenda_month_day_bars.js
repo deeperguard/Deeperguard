@@ -37,12 +37,12 @@ const events = [meet, night, oneDay, enRoute];
 
 A._state.view = 'month';
 /** Day list for the picked day, with the month grid of `gridMonth` (0-based) as the visible range. */
-function render(y, m, d, gridMonth) {
+function render(y, m, d, gridMonth, nowMs) {
   A._state.anchor = new Date(y, gridMonth, 15);
   A._state.monthPickDay = new Date(y, m, d).getTime();
   const range = A.rangeForView();
   const occ = events.flatMap((ev) => A.expandEventOccurrences(ev, range.start, range.end));
-  return A._renderMonthDayList(occ, []);
+  return A._renderMonthDayList(occ, [], nowMs);
 }
 /** Text of the bar button of one event, or null. */
 const bar = (html, id) => {
@@ -73,7 +73,24 @@ assert.strictEqual(bar(html, 'night'), 'Night shift 1/2');
 // Bars come before the time rows; the plain timed event stays a row that opens the event.
 assert.ok(!bar(html, 'meet'), 'timed single-day event is not a bar');
 assert.ok(html.lastIndexOf('agenda-month-bar"') < html.indexOf('agenda-list-row'), 'bars above rows');
-assert.ok(/class="agenda-list-row" data-agenda-id="meet"/.test(html), 'row keeps data-agenda-id to open the event');
+assert.ok(/class="agenda-list-row[^"]*" data-agenda-id="meet"/.test(html), 'row keeps data-agenda-id to open the event');
+
+// Timed rows: colour dot, "from – to", sorted by start, past ones dimmed (fixed "now" 2026-11-30 12:00).
+events.push(
+  { id: 'late', title: 'Dinner', color: '#8b5cf6', all_day: false, start: iso(2026, 10, 30, 18), end: iso(2026, 10, 30, 20) },
+  { id: 'noon', title: 'Lunch', color: '#14b8a6', all_day: false, start: iso(2026, 10, 30, 11), end: iso(2026, 10, 30, 13) },
+);
+html = render(2026, 10, 30, 10, new Date(2026, 10, 30, 12).getTime());
+const rowOf = (id) => new RegExp(`<button type="button" class="([^"]*)" data-agenda-id="${id}"[^>]*aria-label="([^"]*)"[^>]*--agenda-dot:([^"]*)">(.*?)</button>`).exec(html);
+const order = ['meet', 'noon', 'late'].map((id) => html.indexOf(`data-agenda-id="${id}"`));
+assert.ok(order[0] > 0 && order[0] < order[1] && order[1] < order[2], 'rows sorted by start time');
+const r = rowOf('meet');
+assert.ok(r[1].includes('agenda-list-row') && r[1].includes('is-past'), 'ended event is dimmed');
+assert.strictEqual(r[2], 'Meeting, 09:00 to 10:00');
+assert.strictEqual(r[3], '#ef4444', 'dot takes the event colour');
+assert.ok(r[4].includes('agenda-month-dot') && r[4].includes('09:00 – 10:00') && r[4].includes('Meeting'));
+assert.ok(!rowOf('noon')[1].includes('is-past'), 'event still running is not dimmed');
+assert.ok(!rowOf('late')[1].includes('is-past'), 'future event is not dimmed');
 
 // The day after the event has no bar for it.
 assert.strictEqual(bar(render(2026, 11, 2, 11), 'route'), null);
