@@ -233,6 +233,12 @@ class PcloudOAuthTests(unittest.TestCase):
         self.assertEqual(self.oauth.stored_token(uid), ACCESS_TOKEN)
         self.assertEqual(self._row(uid)["api_host"], "eapi.pcloud.com")
 
+    def assertFailedRedirect(self, res, outcome="failed"):
+        """A failed callback lands in the app with a readable message, never bare JSON."""
+        self.assertEqual(res.status_code, 302, res.get_data(as_text=True))
+        self.assertTrue(res.headers["Location"].endswith(f"/app?pcloud={outcome}"), res.headers["Location"])
+        self.assertEqual(res.headers["Cache-Control"], "no-store")
+
     def test_callback_redirects_to_app_without_leaking_token(self):
         uid = self._user()
         _, state = self._start(self._login(uid))
@@ -248,10 +254,9 @@ class PcloudOAuthTests(unittest.TestCase):
         _, state = self._start(csrf)
         for bad in ("", "not-the-state", state + "x", state[:-1]):
             res = self._callback(bad)
-            self.assertEqual(res.status_code, 400, bad)
-            self.assertEqual(res.get_json(), {"error": "invalid state"})
+            self.assertFailedRedirect(res)
             # A failed attempt also uses up the state: start again for the next one.
-            self.assertEqual(self._callback(state).status_code, 400)
+            self.assertFailedRedirect(self._callback(state))
             _, state = self._start(csrf)
         self.assertEqual(self.fake.requests, [])
         self.assertIsNone(self._row(uid))
@@ -259,7 +264,7 @@ class PcloudOAuthTests(unittest.TestCase):
     def test_callback_without_start_is_rejected(self):
         uid = self._user()
         self._login(uid)
-        self.assertEqual(self._callback("anything").status_code, 400)
+        self.assertFailedRedirect(self._callback("anything"))
         self.assertEqual(self.fake.requests, [])
         self.assertIsNone(self._row(uid))
 
@@ -271,12 +276,11 @@ class PcloudOAuthTests(unittest.TestCase):
         other = self.app_mod.app.test_client()
         other_uid = self._user("other@home.local")
         self._login(other_uid, other)
-        self.assertEqual(self._callback(state, client=other).status_code, 400)
+        self.assertFailedRedirect(self._callback(state, client=other))
         self.assertIsNone(self._row(other_uid))
 
         self.assertEqual(self._callback(state).status_code, 302)
-        replay = self._callback(state)
-        self.assertEqual(replay.status_code, 400)
+        self.assertFailedRedirect(self._callback(state))
         self.assertEqual(len(self.fake.calls("oauth2_token")), 1)
 
     def test_expired_state_is_rejected(self):
@@ -286,7 +290,7 @@ class PcloudOAuthTests(unittest.TestCase):
             saved = dict(sess["pcloud_oauth_state"])
             saved["exp"] = saved["exp"] - self.oauth.STATE_TTL_SECONDS - 1
             sess["pcloud_oauth_state"] = saved
-        self.assertEqual(self._callback(state).status_code, 400)
+        self.assertFailedRedirect(self._callback(state))
         self.assertIsNone(self._row(uid))
 
     def test_callback_requires_login(self):
@@ -300,7 +304,7 @@ class PcloudOAuthTests(unittest.TestCase):
         for kwargs in ({"hostname": "evil.example"}, {"hostname": ""}, {"code": ""}):
             _, state = self._start(csrf)
             res = self._callback(state, **kwargs)
-            self.assertEqual(res.status_code, 400, kwargs)
+            self.assertFailedRedirect(res)
         self.assertEqual(self.fake.requests, [])
         self.assertIsNone(self._row(uid))
 
@@ -315,22 +319,60 @@ class PcloudOAuthTests(unittest.TestCase):
         self.assertEqual(self.fake.requests, [])
         self.assertIsNone(self._row(uid))
         # The state was used up; a denial with a forged state is still rejected.
-        self.assertEqual(self.client.get(CALLBACK, query_string=query).status_code, 400)
+        self.assertFailedRedirect(self.client.get(CALLBACK, query_string=query))
 
     def test_code_refused_by_pcloud_stores_nothing(self):
         uid = self._user()
         _, state = self._start(self._login(uid))
         res = self._callback(state, code="wrong-code")
-        self.assertEqual(res.status_code, 502)
-        self.assertEqual(res.get_json(), {"error": "pCloud connect failed"})
+        self.assertFailedRedirect(res)
         self.assertIsNone(self._row(uid))
 
     def test_unreachable_pcloud_stores_nothing(self):
         uid = self._user()
         _, state = self._start(self._login(uid))
         self.fake.close()
-        self.assertEqual(self._callback(state).status_code, 502)
+        self.assertFailedRedirect(self._callback(state))
         self.assertIsNone(self._row(uid))
+
+    def test_callback_after_downgrade_or_without_server_config_lands_in_the_app(self):
+        uid = self._user()
+        csrf = self._login(uid)
+        _, state = self._start(csrf)
+        self.notes_db.connection().execute("UPDATE users SET plan = 'free' WHERE id = ?", (uid,))
+        self.notes_db.connection().commit()
+        self.assertFailedRedirect(self._callback(state), "plan")
+        self.assertIsNone(self._row(uid))
+        self.notes_db.connection().execute("UPDATE users SET plan = 'pro' WHERE id = ?", (uid,))
+        self.notes_db.connection().commit()
+        _, state = self._start(csrf)
+        saved = os.environ.pop(ENV_KEYS[0])
+        try:
+            self.assertFailedRedirect(self._callback(state), "unavailable")
+        finally:
+            os.environ[ENV_KEYS[0]] = saved
+        self.assertEqual(self.fake.requests, [])
+
+    def test_account_reports_none_connected_and_relink_needed(self):
+        uid = self._user()
+        csrf = self._login(uid)
+        status = lambda: self.client.get("/api/account").get_json()["pcloud_oauth"]
+        self.assertEqual(status(), {"state": "none", "available": True})
+        _, state = self._start(csrf)
+        self._callback(state)
+        self.assertEqual(status()["state"], "connected")
+        # The server key changed: the stored token is unusable, the user must connect again.
+        saved = os.environ.pop("NOTES_PCLOUD_CREDENTIALS_KEY", None)
+        os.environ["NOTES_PCLOUD_CREDENTIALS_KEY"] = "0" * 64
+        try:
+            self.assertEqual(status()["state"], "relink")
+        finally:
+            if saved is None:
+                os.environ.pop("NOTES_PCLOUD_CREDENTIALS_KEY", None)
+            else:
+                os.environ["NOTES_PCLOUD_CREDENTIALS_KEY"] = saved
+        self.client.post(DISCONNECT, json={}, headers={"X-CSRF-Token": csrf})
+        self.assertEqual(status()["state"], "none")
 
     def test_connecting_twice_keeps_only_the_latest_token(self):
         uid, csrf = self._connect()
@@ -446,16 +488,16 @@ class PcloudOAuthTests(unittest.TestCase):
         uid, csrf = self._connect()
         # Failure paths log too: refused code, bad state, unknown host, failed revoke.
         _, state = self._start(csrf)
-        self.assertEqual(self._callback(state, code=CODE + "-refused").status_code, 502)
-        self.assertEqual(self._callback("bad-state").status_code, 400)
+        self.assertFailedRedirect(self._callback(state, code=CODE + "-refused"))
+        self.assertFailedRedirect(self._callback("bad-state"))
         _, state = self._start(csrf)
-        self.assertEqual(self._callback(state, hostname="evil.example").status_code, 400)
+        self.assertFailedRedirect(self._callback(state, hostname="evil.example"))
         self.client.post(DISCONNECT, json={}, headers={"X-CSRF-Token": csrf})
         _, state = self._start(csrf)
         self.assertEqual(self._callback(state).status_code, 302)
         self.fake.close()
         _, state = self._start(csrf)
-        self.assertEqual(self._callback(state).status_code, 502)
+        self.assertFailedRedirect(self._callback(state))
         self.client.post(DISCONNECT, json={}, headers={"X-CSRF-Token": csrf})
 
         logged = "\n".join(self.log_capture.lines)

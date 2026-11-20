@@ -2784,6 +2784,12 @@ def _pcloud_path_for_client(user) -> str:
     return path
 
 
+def _pcloud_oauth_status(uid: int) -> dict:
+    import pcloud_oauth
+
+    return {"state": pcloud_oauth.connection_state(uid), "available": pcloud_oauth.configured()}
+
+
 @app.get("/api/boot-account")
 def api_boot_account():
     """Account payload for the shell, or a quiet signed-out marker."""
@@ -2829,6 +2835,7 @@ def api_account():
             "pcloud_region": user["pcloud_region"] or "eu",
             "pcloud_password_set": pcloud_password_set(uid),
             "pcloud_token_set": pcloud_token_set(uid),
+            "pcloud_oauth": _pcloud_oauth_status(uid),
             "pcloud_last_sync_at": float(user["pcloud_last_sync_at"] or 0),
             "pcloud_last_sync_status": user["pcloud_last_sync_status"] or "",
             "pcloud_last_sync_detail": user["pcloud_last_sync_detail"] or "",
@@ -3472,6 +3479,13 @@ def api_backup_pcloud_oauth_start():
     return response
 
 
+def _pcloud_callback_redirect(outcome: str):
+    """Send the browser back into the app; the app shows the outcome as a readable message."""
+    response = redirect(f"{app_entry_path()}?pcloud={outcome}")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.get("/api/backup/pcloud/oauth/callback")
 def api_backup_pcloud_oauth_callback():
     import pcloud_oauth
@@ -3484,33 +3498,28 @@ def api_backup_pcloud_oauth_callback():
     saved_state = session.pop(_PCLOUD_OAUTH_STATE, None)
     if not pcloud_oauth.state_matches(saved_state, request.args.get("state", "")):
         log.warning("pcloud oauth callback rejected: invalid state user_id=%s", uid)
-        return jsonify({"error": "invalid state"}), 400
+        return _pcloud_callback_redirect("failed")
     if request.args.get("error"):
         # The user refused access at pCloud: back to the app, nothing stored.
         log.info("pCloud OAuth access denied by user user_id=%s", uid)
-        response = redirect(f"{app_entry_path()}?pcloud=denied")
-        response.headers["Cache-Control"] = "no-store"
-        return response
-    blocked = _plan_block(user, "pcloud_backup")
-    if blocked:
-        return blocked
+        return _pcloud_callback_redirect("denied")
+    if not plan_has(db.user_plan(user), "pcloud_backup"):
+        return _pcloud_callback_redirect("plan")
     if not pcloud_oauth.configured():
-        return jsonify({"error": "pCloud connect is not configured"}), 503
+        return _pcloud_callback_redirect("unavailable")
     code = request.args.get("code", "")
     api_host = request.args.get("hostname", "").strip().lower()
     if not code or api_host not in pcloud_oauth.API_BASE_URLS:
         log.warning("pcloud oauth callback rejected: no code or unknown API host user_id=%s", uid)
-        return jsonify({"error": "pCloud did not grant access"}), 400
+        return _pcloud_callback_redirect("failed")
     try:
         token = pcloud_oauth.exchange_code(code, api_host)
         pcloud_oauth.store_token(uid, token, api_host)
     except pcloud_oauth.PcloudOAuthError as exc:
         log.warning("pcloud oauth code exchange failed (%s) user_id=%s", exc, uid)
-        return jsonify({"error": "pCloud connect failed"}), 502
+        return _pcloud_callback_redirect("failed")
     log.info("pCloud OAuth connected user_id=%s", uid)
-    response = redirect(f"{app_entry_path()}?pcloud=connected")
-    response.headers["Cache-Control"] = "no-store"
-    return response
+    return _pcloud_callback_redirect("connected")
 
 
 @app.post("/api/backup/pcloud/oauth/disconnect")

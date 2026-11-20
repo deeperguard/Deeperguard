@@ -2219,6 +2219,20 @@
             <label class="settings-row checkbox"><span>E-mail me only when a backup fails</span><input id="managed-backup-failures-only" type="checkbox"></label>
             <p class="settings-hint">Off by default. When on, Deeperguard uploads your already encrypted vault data to the pCloud account of the Deeperguard service, into a folder that only belongs to you, once per day. Only encrypted data is stored. pCloud and the Deeperguard service cannot read its content, but they can see its size, the times of the backups and the number of files. After each run you get an e-mail with the result.</p>
           </div>
+          <div id="pcloud-connect" role="group" aria-labelledby="pcloud-connect-title">
+            <h5 id="pcloud-connect-title" class="settings-subtitle">Connect your pCloud</h5>
+            <p id="pcloud-connect-state" class="settings-hint" role="status" aria-live="polite">Checking…</p>
+            <p id="pcloud-connect-result" class="settings-hint" role="status" aria-live="polite" tabindex="-1" hidden></p>
+            <div class="settings-actions">
+              <button type="button" id="btn-pcloud-connect" class="btn primary" aria-describedby="pcloud-connect-notice" disabled>Connect pCloud</button>
+              <button type="button" id="btn-pcloud-disconnect" class="btn" hidden>Disconnect</button>
+            </div>
+            <p id="pcloud-connect-unavailable" class="settings-hint" hidden>Connecting pCloud is not set up on this server.</p>
+            <div id="pcloud-connect-notice">
+              <p class="settings-hint">When you connect, the Deeperguard server stores a pCloud access token for your account. The server encrypts that token with a key that the server itself holds. This protects the token if the database leaks; it is not end-to-end encryption, and the server can decrypt the token whenever it needs it. With the token the server can use your pCloud account as far as pCloud allows this app. pCloud has no scope setting for this, so that limit comes from how the app is registered at pCloud, not from Deeperguard. You can revoke access at any time in your pCloud account settings, or choose Disconnect here: that deletes the token from the server and asks pCloud to revoke it.</p>
+              <p id="pcloud-connect-schedule" class="settings-hint">Scheduled backups do not use this connection yet.</p>
+            </div>
+          </div>
           <div id="pcloud-own-notice" hidden>
             <p class="settings-hint">You back up with your own pCloud account. That backup keeps working unchanged until you switch. Switching does not delete your existing backups in your own pCloud.</p>
             <div class="settings-actions"><button type="button" id="btn-managed-switch" class="btn">Switch to automatic backup</button></div>
