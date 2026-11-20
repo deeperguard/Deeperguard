@@ -1355,6 +1355,36 @@ html:not([data-theme="dark"]) .agenda-chip-time {
   .agenda-month-split:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
   body.agenda-split-dragging { user-select: none; -webkit-user-select: none; cursor: row-resize; }
   .agenda-month-date { margin-bottom: 1px; }
+  /* Selected day: filled accent pill. Today (when not selected): accent number with a ring;
+     today and selected: the filled pill gets the ring as well. */
+  .agenda-month-cell.is-pick { outline: 0; }
+  .agenda-month-cell .agenda-month-date {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0 4px;
+    border-radius: 999px;
+    font-size: 13px;
+    color: inherit;
+  }
+  .agenda-month-cell.is-today .agenda-month-date {
+    background: transparent;
+    color: var(--accent);
+    font-weight: 750;
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+  .agenda-month-cell.is-pick .agenda-month-date {
+    background: var(--accent-fill);
+    color: var(--on-accent);
+    font-weight: 750;
+    box-shadow: none;
+  }
+  .agenda-month-cell.is-pick.is-today .agenda-month-date {
+    box-shadow: 0 0 0 2px var(--bg, transparent), 0 0 0 3.5px var(--accent);
+  }
   .agenda-month-events { flex: 0 0 auto; }
   .agenda-month-week { margin-top: 4px; }
   .agenda-month-dow { padding: 4px 0; }
