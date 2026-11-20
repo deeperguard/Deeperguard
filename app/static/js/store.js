@@ -5312,6 +5312,50 @@ const NotesStore = (() => {
     return changed;
   }
 
+  // Import parsed contacts (docs/CONTACTS_SPEC.md 7.5, 7.6). Every contact is built and stored like an added
+  // one (encrypted, dirty, pushed by the normal sync). Returns the undo record: only the uuids this import
+  // created and its end time; the caller keeps it in memory and never stores it.
+  async function importContacts(list, { batch = '', source = null, onProgress = null } = {}) {
+    const C = requireContacts();
+    const created = [];
+    const failed = [];
+    const dropped = {};
+    let stopped = false;
+    const importedAt = new Date().toISOString();
+    for (let i = 0; i < list.length; i += 1) {
+      if (!state.cryptoKey) { stopped = true; break; }
+      try {
+        const input = { ...list[i] };
+        input.extra = { ...(input.extra || {}), source: { ...((input.extra && input.extra.source) || {}), ...(source || {}), imported_at: importedAt, batch } };
+        const { content, dropped: d } = C.buildContact(input, null);
+        const id = newUuid();
+        upsert(id, content);
+        created.push(id);
+        for (const key of Object.keys(d)) dropped[key] = (dropped[key] || 0) + d[key];
+      } catch (err) {
+        failed.push({ index: i, reason: /too large/i.test(String(err && err.message)) ? 'the contact is larger than 128 KiB' : 'the contact could not be saved' });
+      }
+      if (onProgress) onProgress(i + 1, list.length);
+      if (i % 100 === 99) await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    return { created, failed, dropped, stopped, endedAt: new Date().toISOString() };
+  }
+
+  // Undo of the last import: removes the contacts it created, except those edited since (kept and counted).
+  function restoreContacts(record) {
+    requireContacts();
+    let removed = 0;
+    let kept = 0;
+    for (const uuid of (record && record.created) || []) {
+      const item = contactRecord(uuid);
+      if (!item) continue;
+      if (String(item.content.updated_at || '') > String(record.endedAt || '')) { kept += 1; continue; }
+      remove(uuid);
+      removed += 1;
+    }
+    return { removed, kept };
+  }
+
   function listFolders() {
     return [...state.items.values()]
       .filter((i) => i.content?.type === 'folder' && !i.deleted)
@@ -7986,6 +8030,8 @@ const NotesStore = (() => {
     searchContacts,
     listContactLabels,
     renameContactLabel,
+    importContacts,
+    restoreContacts,
     dedupeTotpAccounts,
     listFolders,
     notesInFolder,

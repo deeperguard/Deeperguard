@@ -4788,7 +4788,13 @@
     edit.type = 'button';
     edit.setAttribute('aria-label', `Edit ${name}`);
     edit.addEventListener('click', () => openContactForm(id, edit));
-    bar.append(back, edit);
+    const share = cEl('button', 'btn ghost', 'Share as vCard');
+    share.type = 'button';
+    share.setAttribute('aria-label', `Share ${name} as vCard`);
+    share.addEventListener('click', () => exportContacts(c));
+    const actions = cEl('div', 'contacts-detail-actions');
+    actions.append(share, edit);
+    bar.append(back, actions);
     const head = cEl('div', 'contacts-detail-head');
     const titles = cEl('div', 'contacts-detail-titles');
     const h = cEl('h2', 'contacts-detail-name', name);
@@ -5162,6 +5168,7 @@
   }
 
   function clearContactsUi() {
+    window.NotesContactsImport?.reset();
     contactsAll = [];
     contactsSelectedId = '';
     contactsFormState = null;
@@ -5180,6 +5187,62 @@
     contactsUi.empty.hidden = true;
   }
 
+  // --- vCard import and export (docs/CONTACTS_SPEC.md sections 7 and 8) ---
+  function openContactsImport() {
+    if (!NotesStore.isUnlocked?.()) { toast('Unlock the vault first', true); return; }
+    window.NotesContactsImport.init();
+    window.NotesContactsImport.open({
+      isUnlocked: () => !!NotesStore.isUnlocked?.(),
+      listContacts: () => NotesStore.listContacts(),
+      importContacts: (list, options) => NotesStore.importContacts(list, options),
+      restoreContacts: (record) => NotesStore.restoreContacts(record),
+      done: (result, undoFn) => {
+        refreshContacts();
+        const message = `Imported ${result.created.length} contact${result.created.length === 1 ? '' : 's'}`;
+        if (undoFn) toastWithUndo(message, undoFn); else toast(message);
+      },
+      undone: (message) => { refreshContacts(); toast(message); },
+    });
+  }
+
+  // Exports `only` (one contact, from its detail's "Share as vCard") or else the contacts shown in the list
+  // (all of them when no search or label is active).
+  async function exportContacts(only) {
+    if (!NotesStore.isUnlocked?.()) { toast('Unlock the vault first', true); return; }
+    const list = only ? [only] : filteredContacts();
+    if (!list.length) { toast('No contacts to export', true); return; }
+    const v4 = {
+      label: 'Write vCard 4.0 (default is 3.0, which more programs read)',
+      warning: 'In vCard 3.0 a birthday without a year is written as --MMDD, which a few programs do not understand.',
+      confirmLabelChecked: 'Export vCard 4.0',
+      checked: false,
+    };
+    const confirmed = await confirmAction(
+      'This file is not encrypted. Anyone who gets it can read your contacts; your vault password does not protect it. '
+        + `${list.length} contact${list.length === 1 ? '' : 's'} will be exported. `
+        + 'Everything is built on this device; nothing is sent to the server. Type your vault password to continue.',
+      {
+        title: 'Export contacts without encryption?',
+        confirmLabel: 'Export unencrypted vCard',
+        danger: true,
+        checkbox: v4,
+        verifyPassword: (typed) => NotesStore.verifyVaultPassword(typed),
+        wrongPasswordMessage: 'Wrong password. Nothing was exported.',
+      },
+    );
+    if (confirmed !== true) return;
+    const text = window.NotesContactsVcard.write(list, { version: v4.checked ? '4.0' : '3.0' });
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/vcard;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = only
+      ? `${window.NotesReadableExport.safeName(contactName(only))}.vcf`
+      : `deeperguard-contacts-${new Date().toISOString().slice(0, 10)}.vcf`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Unencrypted export saved. Delete it when you are done.');
+  }
+
   function initContactsTab() {
     if (!contactsUi.pane) return;
     contactsUi.add.addEventListener('click', () => {
@@ -5187,6 +5250,8 @@
       openContactForm('', contactsUi.add);
     });
     contactsUi.emptyAdd.addEventListener('click', () => openContactForm('', contactsUi.emptyAdd));
+    document.getElementById('btn-contacts-import')?.addEventListener('click', openContactsImport);
+    document.getElementById('btn-contacts-export')?.addEventListener('click', () => exportContacts());
     contactsUi.search.addEventListener('input', renderContactsList);
     contactsUi.search.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && contactsUi.search.value) {

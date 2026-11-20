@@ -187,9 +187,9 @@ Rules per field, each with the reason:
 | `phones`, `emails`, `addresses`, `urls`, `ims` | Arrays, each at most 50 entries. Entry `type` is one of `home`, `work`, `mobile`, `main`, `fax`, `pager`, `other`, `custom`. `custom` uses `label` (at most 60 characters) as free text. `pref` is `true` on at most one entry per list (the vCard `PREF`/`TYPE=pref` entry). Phone `value` is kept as typed (spaces, brackets), because `tel:` normalises it on use and an import must not reformat a number. | Multiple values with a type label, as asked. Apple, Google and Outlook allow custom labels. |
 | `addresses.*` | Seven vCard `ADR` components (`po_box`, `extended`, `street`, `city`, `region`, `postal`, `country`). A free-form formatted address (Google "Address 1 - Formatted", vCard 4.0 `LABEL` parameter) with no parts is put in `street`. | Lossless for vCard; structured for sorting and display. |
 | `ims` | `service` is a lower-case slug (`xmpp`, `skype`, `signal`, `whatsapp`, `matrix`, `telegram`, `aim`, `icq`, `jabber`, `twitter`, `other`). | Imports carry the service as `X-AIM`, `IMPP:xmpp:`, `X-SOCIALPROFILE`, Thunderbird "Screen Name". |
-| `dates` | `type` is `birthday`, `anniversary` or `other` (with `label`). `value` is `YYYY-MM-DD`, `--MM-DD` (no year) or `YYYY`. Time and zone parts of a vCard date-time are dropped; the original text is kept in `extra` when anything was dropped. At most one `birthday`. | The two dates every program has, plus Apple/Google "other" dates. A year-less birthday is common (Apple uses year 1604 or `X-APPLE-OMIT-YEAR`, section 6.1.5). |
+| `dates` | `type` is `birthday`, `anniversary` or `other` (with `label`). `value` is `YYYY-MM-DD`, `--MM-DD` (no year) or `YYYY`. Time and zone parts of a vCard date-time are dropped and not kept. At most one `birthday`. | The two dates every program has, plus Apple/Google "other" dates. A year-less birthday is common (Apple uses year 1604 or `X-APPLE-OMIT-YEAR`, section 6.1.5). |
 | `note` | At most 20,000 characters. Plain text only. | Notes are text; HTML in it is shown as text (section 9). |
-| `photo` | One image, re-encoded in the browser (section 3.4). `null` when absent. A `PHOTO` given as a URL is **not fetched** (section 9); the URL is kept in `extra`. | Offline and no-network rules. |
+| `photo` | One image, re-encoded in the browser (section 3.4). `null` when absent. A `PHOTO` given as a URL is **not fetched** (section 9); the URL is kept in `extra` and written back unchanged on export. | Offline and no-network rules. |
 | `labels` | Group names, at most 20 per contact, each at most 40 characters, de-duplicated case-insensitively. Stored as names inside the contact, not as separate items. | Same as 2FA tags (`renameTotpTag`, `store.js:5215`): no group item to conflict, orphan or leak into a shared index. Cost: renaming a group rewrites its members (section 4.6). Considered: separate `contact_group` items holding ids, as notes do with `tag` items. Rejected for v1 because a deleted or concurrently renamed group item creates orphan ids, and the import of 10,000 contacts would also have to create and de-duplicate group items first. |
 | `favorite` | Boolean. | Favourites as asked; a filter and a pinned section. |
 | `uid` | See 3.5. | vCard `UID` is how other programs recognise a contact on re-import. |
@@ -745,15 +745,15 @@ defaults. A file with no `VERSION` is read as 3.0. A file may hold many cards.
 | vCard | Model | Details |
 | --- | --- | --- |
 | `N` | `name.family; given; additional; prefix; suffix` | Five components in that order. Missing components are empty. Commas in a component (several given names) are joined with a space. |
-| `FN` | `name.formatted` | If there is no `N`, the parts are guessed from `FN` only when it has exactly two words ("Given Family"); otherwise `formatted` alone is kept and the display name uses it. |
+| `FN` | `name.formatted` | If there is no `N`, the parts are guessed from `FN` only when it has exactly two words ("Given Family"); otherwise `formatted` alone is kept and the display name uses it. With no `FN` at all, `formatted` is built the way the exporter builds `FN` (name parts, else organisation, first email, first phone), so that import, export, import is stable. |
 | `NICKNAME` | `nickname` | |
 | `ORG`, `TITLE` | `org.name`, `org.unit`, `title` | `ROLE` goes to `extra`. |
 | `TEL` | `phones[]` | `TYPE` words: `cell`, `iphone`, `mobile`, `x-mobile` give `mobile`; `home`; `work`; `fax`, `homefax`, `workfax` give `fax`; `pager`; `main`; `voice`, `text`, `msg`, `video` are ignored; `pref` sets `pref`. In 4.0 the value `tel:+31-6-1234` has its `tel:` removed and `;ext=` kept as text. An unknown type word becomes `custom` with the word as `label`. |
 | `EMAIL` | `emails[]` | `TYPE`: `home`, `work`, `internet` (ignored), `pref`. A 3.0 `TYPE=INTERNET;TYPE=HOME` is two `TYPE` parameters; they are merged. |
-| `ADR` | `addresses[]` | Seven components: PO box, extended, street, city (locality), region, postal code, country, in that order. Outlook also writes a `LABEL` line with the same type: it is not a second address, it goes to `extra.vcard`. A 4.0 `LABEL=` parameter on `ADR` is used for `street` only if all components are empty. |
+| `ADR` | `addresses[]` | Seven components: PO box, extended, street, city (locality), region, postal code, country, in that order. Outlook also writes a `LABEL` line with the same type: it is not a second address, it goes to `extra.vcard`. A 4.0 `LABEL=` parameter on `ADR` is used for `street` only if all components are empty, otherwise it is dropped. |
 | `URL` | `urls[]` | `TYPE` as for phones. |
 | `IMPP`, `X-AIM`, `X-ICQ`, `X-JABBER`, `X-SKYPE`, `X-MSN`, `X-YAHOO`, `X-GOOGLE-TALK`, `X-GADUGADU`, `X-SOCIALPROFILE` | `ims[]` | `IMPP:xmpp:a@b` gives service `xmpp`, value `a@b` (scheme stripped). `X-SOCIALPROFILE;type=twitter;x-user=sannev:http://twitter.com/sannev` gives service `twitter`, value `sannev`; the URL is kept in `extra`. |
-| `BDAY` | `dates[]` birthday | Accepted: `1984-03-09`, `19840309`, `--0309`, `--03-09`, `1984-03-09T10:00:00Z` (time dropped, original in `extra`), `1984`. Apple writes an unknown year as `1604` (`BDAY;X-APPLE-OMIT-YEAR=1604:1604-03-09`): year 1604 or the parameter means "no year" and the value becomes `--03-09`. An impossible date (`1984-13-40`) is kept as text in `extra` and the contact gets a warning. |
+| `BDAY` | `dates[]` birthday | Accepted: `1984-03-09`, `19840309`, `--0309`, `--03-09`, `1984-03-09T10:00:00Z` (time dropped; the dropped time is not kept), `1984`. Apple writes an unknown year as `1604` (`BDAY;X-APPLE-OMIT-YEAR=1604:1604-03-09`): year 1604 or the parameter means "no year" and the value becomes `--03-09`. An impossible date (`1984-13-40`) is kept as text in `extra` and the contact gets a warning. |
 | `ANNIVERSARY`, `item.X-ABDATE` + label | `dates[]` | `X-ABDATE` label `_$!<Anniversary>!$_` gives `anniversary`, other labels give `other` with that label. |
 | `NOTE` | `note` | Several `NOTE` lines are joined with a blank line. |
 | `PHOTO`, `LOGO` | `photo` (`PHOTO` only) | Inline data only: 2.1/3.0 `ENCODING=b` (or `BASE64`) with a bare or `TYPE=` image type, 4.0 `data:image/png;base64,...`. **Decided by the bytes, not by `TYPE`**: the first bytes are checked against PNG, JPEG, GIF, WebP, BMP signatures; a `TYPE=JPEG` over PNG bytes is read as PNG; no match: the photo is dropped with a warning. A `PHOTO;VALUE=uri:http...` is **not fetched**; the URL goes to `extra`. `LOGO` goes to `extra`. |
@@ -1598,6 +1598,20 @@ Measured values (section 1.5): a typical contact is **0.4 KB** of JSON and
 
 The first limit hit is shown in the preview before anything is written
 (the same convention as `docs/IMPORT_EXPORT_SPEC.md` section 5, last bullet).
+
+### 7.9 What the first implementation does and does not do
+
+The vCard import (6.1) with preview, result summary and undo is built; the dialog takes other formats through
+`NotesContactsImport.registerFormat` (sniff, parse, describe), so CSV, LDIF and jCard only add a parser. Not built yet,
+and therefore not claimed by the app: the CSV, LDIF and jCard readers and the column mapping step; the Merge and
+Keep both choices of 7.4 (a contact that matches one in the vault by email, phone or UID is left out by default, and
+the owner can untick that); duplicates inside one file and name-only matches; the quota estimate of 7.3; the progress
+and 60 s watchdog of 7.2 (the parse is synchronous; only writing reports "Importing N of M"); the "Imported on"
+filter and "Delete these" of 7.6. The undo record is kept until the vault locks; the dialog's Undo button and the
+toast's Undo both use it. Export (8) writes vCard 3.0 or 4.0 for the contacts shown in the list (all of them when no
+search or label is active), always with photos, and "Share as vCard" in a contact's detail writes that one contact to
+`<display name>.vcf` after the same password step. The selection mode of 4.3 (and so bulk export of ticked rows), the
+CSV format and the photo checkbox are not built.
 
 ## 8. Export
 
