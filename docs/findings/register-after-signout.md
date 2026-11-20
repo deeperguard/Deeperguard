@@ -106,6 +106,6 @@ aborted.
 plus the busy state of the button and the message for a second submit while an
 attempt runs.
 
-Run it alone with `python3 -m unittest tests/test_e2e_register_after_signout.py -v`
-(about 45 s), or `python3 tests/e2e_register_after_signout.py` to print the
+Run it alone with `python3 -m unittest tests/test_e2e_register_after_signout.py -v`,
+or `python3 tests/e2e_register_after_signout.py` to print the
 outcome of both scenarios.
