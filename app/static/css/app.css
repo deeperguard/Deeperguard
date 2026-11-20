@@ -1153,6 +1153,24 @@ html:not([data-theme="dark"]) .agenda-chip-time {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
+.agenda-month-grid--weeks .agenda-month-head, .agenda-month-grid--weeks .agenda-month-row {
+  grid-template-columns: 24px repeat(7, minmax(0, 1fr));
+}
+.agenda-month-week {
+  align-self: start;
+  justify-self: center;
+  margin-top: 8px;
+  min-width: 20px;
+  padding: 2px 3px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: color-mix(in srgb, var(--text) 35%, var(--muted));
+  font-size: 10px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-align: center;
+}
 .agenda-month-dow { text-align: center; font-size: 11px; font-weight: 650; padding: 6px 0; }
 .agenda-month-cell {
   min-height: 96px;
