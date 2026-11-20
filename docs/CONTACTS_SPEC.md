@@ -368,12 +368,22 @@ unit-tested without a browser (test 3-3).
   also changed that list in the same conflict: the entry is kept (a conflict
   never deletes data), as the text allows when the removal cannot be proved.
 - Not built yet in this task: importers, import/export dialogs and the tab.
-  `contacts.js` has `encodePhoto` (3.4, 9.3) but nothing calls it yet.
+  The edit form calls `encodePhoto` (3.4, 4.5).
 
 ### 3.4 The photo
 
 - **Source**: a file picker or camera (`<input type="file" accept="image/*">`,
-  not `capture`), or the `PHOTO` of an imported card.
+  not `capture`), a file dropped on the picture area of the edit form on
+  desktop, or the `PHOTO` of an imported card. Before decoding, `inspectPhoto`
+  reads the header: a file over 20 MB, of an unknown format or over 8192 px /
+  16 megapixels is refused with a message and the contact is left unchanged.
+- **Square crop**: the user moves and zooms the picked image inside a square
+  frame (drag with mouse or touch, pinch or slider or wheel to zoom, arrow keys
+  and plus/minus). The default is the centred largest square. The crop is passed
+  to `encodePhoto(blob, { cx, cy, zoom })` (centre as a fraction of the image,
+  zoom 1 to 4); without it the centred square is used, as for imports. The
+  original file is shown only from a `blob:` URL that is revoked when the step
+  ends and is never stored or sent.
 - **Re-encode in the browser, always**, also when the imported photo is already
   small: decode with `createImageBitmap(blob, {imageOrientation:
   'from-image'})`, centre-crop to a square, scale to **192 x 192 px**, draw on
@@ -552,7 +562,7 @@ aria-controls="contacts-list">`.
   form takes the detail pane; on phone it is a full screen with Cancel and
   Save in a sticky bar. Not a modal dialog, so the generic dialog trap does not
   apply; focus moves to the first field on open and back to the opener on close.
-- Sections: Photo (Choose, Remove), Name (given, family always visible; prefix,
+- Sections: Picture (the current picture or the initials circle, "Choose picture", "Remove picture", drop an image file on the area on desktop, then the crop step of 3.4 with "Use picture" and "Cancel crop"; the file input has no `capture`, so phones offer camera or library), Name (given, family always visible; prefix,
   additional, suffix, nickname, phonetic behind "More name fields"), Organisation and
   title, then repeatable rows for phone/email/address/website/messaging/date:
   each row has a type `<select>` (with "Custom..." that reveals a label input),
@@ -570,7 +580,9 @@ aria-controls="contacts-list">`.
 - Unsaved changes: Back, Escape or tab switch with changes asks with
   `confirmAction` ("Discard changes?"). Save writes with `updateContact` and
   closes; the same Save pressed twice quickly writes once (the button is
-  disabled while saving).
+  disabled while saving). Save is disabled until something differs from the
+  stored contact (also while a crop step is open); a chosen or removed picture
+  counts as a change, and Cancel discards it.
 - Delete: button at the bottom of the detail, `confirmAction`, then a toast
   with Undo (`toastWithUndo`).
 

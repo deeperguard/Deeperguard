@@ -835,18 +835,32 @@ const NotesContacts = (() => {
     return btoa(bin);
   }
 
-  // Blob -> { photo } (a 192 px JPEG of at most 12 KiB, pixels only: no EXIF, no alpha) or { error }.
-  async function encodePhoto(blob) {
-    if (!blob || blob.size > MAX_PHOTO_INPUT_BYTES) return { error: 'Photo file is too large' };
+  // Checks a picked file before anything is decoded: { w, h } or { error } with a message for the user.
+  async function inspectPhoto(blob) {
+    if (!blob || blob.size > MAX_PHOTO_INPUT_BYTES) return { error: 'Picture file is too large (20 MB at most)' };
     const bytes = new Uint8Array(await blob.arrayBuffer());
     const dims = imageSize(bytes);
-    if (!dims || !dims.w || !dims.h) return { error: 'Photo format not supported' };
-    if (dims.w > MAX_PHOTO_SIDE || dims.h > MAX_PHOTO_SIDE || dims.w * dims.h > MAX_PHOTO_PIXELS) return { error: 'Photo dimensions are too large' };
+    if (!dims || !dims.w || !dims.h) return { error: 'Picture format not supported. Use a JPEG, PNG, GIF or WebP image' };
+    if (dims.w > MAX_PHOTO_SIDE || dims.h > MAX_PHOTO_SIDE || dims.w * dims.h > MAX_PHOTO_PIXELS) return { error: 'Picture dimensions are too large' };
+    return dims;
+  }
+
+  // Square crop in image fractions: the centre (cx, cy) and zoom >= 1 (1 = the largest centred square).
+  // Returns the source square in pixels, always inside the image.
+  function cropSquare(w, h, crop) {
+    const zoom = Math.max(1, Number(crop && crop.zoom) || 1);
+    const side = Math.max(1, Math.floor(Math.min(w, h) / zoom));
+    const at = (c, len) => Math.min(len - side, Math.max(0, Math.round((Number.isFinite(c) ? c : 0.5) * len - side / 2)));
+    return { sx: at(crop && crop.cx, w), sy: at(crop && crop.cy, h), side };
+  }
+
+  // Blob (+ optional crop) -> { photo } (a 192 px JPEG of at most 12 KiB, pixels only: no EXIF, no alpha) or { error }.
+  async function encodePhoto(blob, crop) {
+    const dims = await inspectPhoto(blob);
+    if (dims.error) return dims;
     const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
     try {
-      const crop = Math.min(bitmap.width, bitmap.height);
-      const sx = Math.floor((bitmap.width - crop) / 2);
-      const sy = Math.floor((bitmap.height - crop) / 2);
+      const { sx, sy, side: crop2 } = cropSquare(bitmap.width, bitmap.height, crop);
       for (const side of [LIMITS.photoSide, 144]) {
         const canvas = document.createElement('canvas');
         canvas.width = side;
@@ -854,7 +868,7 @@ const NotesContacts = (() => {
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, side, side);
-        ctx.drawImage(bitmap, sx, sy, crop, crop, 0, 0, side, side);
+        ctx.drawImage(bitmap, sx, sy, crop2, crop2, 0, 0, side, side);
         for (const q of [0.78, 0.65, 0.5]) {
           const out = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', q));
           if (out && out.size <= LIMITS.photoBytes) {
@@ -862,7 +876,7 @@ const NotesContacts = (() => {
           }
         }
       }
-      return { error: 'Photo too complex' };
+      return { error: 'Picture too complex' };
     } finally {
       if (bitmap.close) bitmap.close();
     }
@@ -895,6 +909,8 @@ const NotesContacts = (() => {
     planMerge,
     restorePatch,
     encodePhoto,
+    inspectPhoto,
+    cropSquare,
     imageSize,
     normLabels,
   };
