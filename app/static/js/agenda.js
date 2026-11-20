@@ -1879,7 +1879,7 @@
         html += `<div class="agenda-month-cell ${inMonth ? '' : 'is-out'} ${isToday ? 'is-today' : ''} ${pickActive ? 'is-pick' : ''}" data-agenda-month-day="${ds.getTime()}">`;
         const taskCount = dayTasks.length ? `, ${dayTasks.length === 1 ? '1 task' : `${dayTasks.length} tasks`}` : '';
         const dayLabel = `${formatLongDate(day)}, ${sorted.length === 1 ? '1 event' : `${sorted.length} events`}${taskCount}`;
-        html += `<button type="button" class="agenda-month-date" data-agenda-month-pick="${ds.getTime()}" aria-label="${esc(dayLabel)}"${phoneMonth ? ` aria-pressed="${pickActive ? 'true' : 'false'}"` : ''}>${day.getDate()}</button>`;
+        html += `<button type="button" class="agenda-month-date" data-agenda-month-pick="${ds.getTime()}" aria-label="${esc(dayLabel)}"${phoneMonth ? ` aria-pressed="${pickActive ? 'true' : 'false'}"${isToday ? ' aria-current="date"' : ''}` : ''}>${day.getDate()}</button>`;
         html += '<div class="agenda-month-events">';
         if (phoneMonth) {
           // Phone: at most 3 dots per day (tasks first, then events in month order); a '+' marks the rest.
