@@ -1472,14 +1472,21 @@
 
   function renderPhoneHeader(range) {
     const menuOpen = document.body.classList.contains('agenda-phone-menu-open');
+    const today = startOfDay(new Date());
+    const monthView = state.view === 'month';
+    const pick = new Date(state.monthPickDay || today.getTime());
+    const addLabel = monthView ? `New event on ${formatLongDate(pick)}` : 'New event';
     return (
       '<header class="agenda-top agenda-top-phone">'
       + '<div class="agenda-top-row-phone">'
-      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-prev" aria-label="Previous">‹</button>'
-      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-next" aria-label="Next">›</button>'
-      + renderTitleHtml(range)
-      + '<button type="button" class="btn sm agenda-today" id="agenda-today">Today</button>'
       + `<button type="button" class="btn icon agenda-icon-btn agenda-phone-more" id="agenda-phone-more" aria-label="Agenda menu" aria-expanded="${menuOpen ? 'true' : 'false'}" aria-controls="agenda-phone-menu">⋯</button>`
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-prev" aria-label="Previous">‹</button>'
+      + renderTitleHtml(range)
+      + '<button type="button" class="btn icon agenda-icon-btn" id="agenda-next" aria-label="Next">›</button>'
+      + `<button type="button" class="btn icon agenda-icon-btn agenda-today agenda-today-ico" id="agenda-today" aria-label="${esc(`Go to today, ${formatLongDate(today)}`)}">`
+      + '<svg class="ui-icon" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="17" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 9h18" fill="none" stroke="currentColor" stroke-width="1.8"/>'
+      + `<text x="12" y="18" text-anchor="middle" font-size="9" font-weight="700" fill="currentColor" class="agenda-today-num">${today.getDate()}</text></svg></button>`
+      + `<button type="button" class="btn icon agenda-icon-btn agenda-phone-add-event" id="agenda-phone-add-event" aria-label="${esc(addLabel)}">+</button>`
       + '</div></header>'
       + renderPhoneMenuPanel()
     );
@@ -1988,7 +1995,24 @@
     const todayB = rootEl.querySelector('#agenda-today');
     if (prev) prev.onclick = () => { shiftAnchor(-1); render(); };
     if (next) next.onclick = () => { shiftAnchor(1); render(); };
-    if (todayB) todayB.onclick = () => { state.anchor = new Date(); render(); };
+    if (todayB) {
+      todayB.onclick = () => {
+        state.anchor = new Date();
+        if (phone) state.monthPickDay = startOfDay(state.anchor).getTime();
+        render();
+      };
+    }
+    rootEl.querySelector('#agenda-phone-add-event')?.addEventListener('click', (ev) => {
+      const btn = ev.currentTarget;
+      rememberEditorReturnFocus(btn instanceof HTMLElement ? btn : null, '', 0);
+      if (state.view !== 'month') {
+        openEditor(null);
+        return;
+      }
+      const day = new Date(state.monthPickDay || startOfDay(new Date()).getTime());
+      const s = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 9, 0, 0, 0);
+      openEditor(null, { draftStart: s, draftEnd: new Date(s.getTime() + 3600000) });
+    });
     rootEl.querySelectorAll('[data-agenda-goto]').forEach((btn) => {
       btn.addEventListener('click', () => openAgendaSheet('goto'));
     });
