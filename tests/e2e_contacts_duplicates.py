@@ -14,7 +14,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from e2e_contacts_sync import PASSWORD, UNLOCKED, free_port, login, register
+from e2e_contacts_sync import PASSWORD, UNLOCKED, contacts_action, free_port, login, register
 from e2e_signup_autounlock import start_server
 
 SEED = """() => {
@@ -48,7 +48,7 @@ def group_titles(page) -> list[str]:
 
 
 def open_dialog(page) -> None:
-    page.click("#btn-contacts-duplicates")
+    contacts_action(page, "#btn-contacts-duplicates")
     page.wait_for_selector("#contacts-dup-dialog:not([hidden])")
 
 
