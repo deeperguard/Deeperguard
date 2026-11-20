@@ -164,6 +164,23 @@ def run_flow(page, width: int) -> None:
     assert text.count("BEGIN:VCARD") == 2 and "VERSION:3.0" in text and "FN:Lotte de Boer" in text, text
     assert b"\r\nTEL;TYPE=CELL,PREF:" in raw, raw
 
+    # CSV: same password step, the format is chosen in the dialog; the file has a BOM, the Google header and no vCard.
+    page.set_default_timeout(10000)
+    page.click("#btn-contacts-export")
+    page.wait_for_selector("#confirm-password-wrap:not([hidden])")
+    page.select_option("#confirm-choice", "csv")
+    assert "CSV loses some fields" in page.inner_text("#confirm-choice-note")
+    assert page.inner_text("#confirm-ok").strip() == "Export unencrypted CSV"
+    page.fill("#confirm-password", PASSWORD)
+    with page.expect_download() as dl:
+        page.click("#confirm-ok")
+    assert dl.value.suggested_filename.startswith("deeperguard-contacts-") and dl.value.suggested_filename.endswith(".csv")
+    csv_raw = Path(dl.value.path()).read_bytes()
+    assert csv_raw.startswith(b"\xef\xbb\xbfName,First Name,"), csv_raw[:60]
+    csv_text = csv_raw.decode("utf-8")
+    assert b"BEGIN:VCARD" not in csv_raw and "Lotte" in csv_text and "\r\n" in csv_text, csv_text
+    page.wait_for_selector("#confirm-dialog", state="hidden")
+
     # Share as vCard from the detail exports only that contact, after the same password step.
     page.locator("#contacts-list .contacts-row-open", has_text="Lotte de Boer").click()
     page.wait_for_selector('[aria-label="Share Lotte de Boer as vCard"]')

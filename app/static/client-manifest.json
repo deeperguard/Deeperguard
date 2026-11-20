@@ -98,10 +98,10 @@
       "url": "/static/js/ai-chat.fdeb5bab33761b05.js"
     },
     "js/app.js": {
-      "bytes": 1142119,
-      "sha256": "9c4e6aa356ed893e5e32e599adc7ae57217c46c906dbd6c32e125eaf02c79563",
-      "sri": "sha384-EsQWJRV8a68g1Tq+R6xOI61X9cmXOkuUzUOeSXSoCv2aTR+oK807ZCMV5np5PIZ2",
-      "url": "/static/js/app.9c4e6aa356ed893e.js"
+      "bytes": 1142770,
+      "sha256": "5dc6b877291856ca02dbe0f220b5a094291f083b379ce138ff5305b146c5cc9f",
+      "sri": "sha384-Eug6XWVnEkxQ1a79i0Beg7eaCetnLMebWYwzSjBt42mea+g4VeXEBBFKkBrLY/C1",
+      "url": "/static/js/app.5dc6b877291856ca.js"
     },
     "js/auth-pages.js": {
       "bytes": 44090,
@@ -152,10 +152,10 @@
       "url": "/static/js/conflict-copy.b8dc7a91c94051a9.js"
     },
     "js/contacts-csv.js": {
-      "bytes": 36611,
-      "sha256": "a12589fc0b233169039e780a0db3770dc24e8f1b331b7544016f1e09d01a2b35",
-      "sri": "sha384-EbFkoCkBr2cYlHdJgot7QNBbwJJdZarepMHl6oFt05FCgefV6Z1RYKq1SQ/ktbox",
-      "url": "/static/js/contacts-csv.a12589fc0b233169.js"
+      "bytes": 40521,
+      "sha256": "96643f3352c30182e96443eb5daffd3279bc31ed66455ea4543f6126d10fae76",
+      "sri": "sha384-3bXmvbKJWe0rQwHV/iwQ/i95Fd+3Y3auiZTXeO85SfMypMlo0qVLT7Pd9H4FgMr8",
+      "url": "/static/js/contacts-csv.96643f3352c30182.js"
     },
     "js/contacts-duplicates.js": {
       "bytes": 18265,
@@ -218,10 +218,10 @@
       "url": "/static/js/device-phrase.3890e32ba9f7ddd4.js"
     },
     "js/dialog-a11y.js": {
-      "bytes": 13159,
-      "sha256": "7cd177c3a718ae3ca9edfd8f89db14b0ef5a25d7a46bee5fccce92950da70f83",
-      "sri": "sha384-7AmVp/NEnvvlEhM8TattX7F3Yr/HyYNd9hmltt/uEYF72kNo2I1Oyw9I8AXA/gpR",
-      "url": "/static/js/dialog-a11y.7cd177c3a718ae3c.js"
+      "bytes": 14645,
+      "sha256": "302699090c7f96eba1ec9062f322a3041f4edb907d852b3763d43623b28362b2",
+      "sri": "sha384-nzzq66Iq0P7fBVPf3yXmLD18oSEOdwGiAgnwHYAwWX0ACbWtS1kkhOyJURy2RLge",
+      "url": "/static/js/dialog-a11y.302699090c7f96eb.js"
     },
     "js/doc-inline-controls.js": {
       "bytes": 15822,
@@ -681,6 +681,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "4f72595c1ce71504156af9f9b66adb3cacfd66602c94eb6d84d4c3abe31f7a71",
+  "manifest_sha256": "aa19b5d328d63f057c76260d44dd038822dcfc70a252478d5d8ca38a0b5960bc",
   "version": 1
 }

@@ -186,6 +186,7 @@
     maxAttempts = 3,
     wrongPasswordMessage = 'Wrong password.',
     checkbox = null,
+    choice = null,
   } = {}) {
     const d = doc();
     const backdrop = d.getElementById('confirm-backdrop');
@@ -203,8 +204,14 @@
     const optInput = d.getElementById('confirm-option');
     const optText = d.getElementById('confirm-option-text');
     const optWarn = d.getElementById('confirm-option-warning');
+    const chWrap = d.getElementById('confirm-choice-wrap');
+    const chLabel = d.getElementById('confirm-choice-label');
+    const chSelect = d.getElementById('confirm-choice');
+    const chNote = d.getElementById('confirm-choice-note');
     // An opt-in checkbox cannot fall back to a plain confirm: without it, refuse.
     if (checkbox && !(optWrap && optInput && optText && optWarn)) return null;
+    // A format choice cannot fall back to a plain confirm either.
+    if (choice && !(chWrap && chLabel && chSelect && chNote)) return null;
     if (!backdrop || !dialog || !titleEl || !messageEl || !okBtn || !cancelBtn) return null;
     // A password check cannot fall back to a plain confirm: without the field, refuse.
     if (verifyPassword && !(pwWrap && pwInput && pwError)) return null;
@@ -247,6 +254,29 @@
           optInput.addEventListener('change', onOptChange);
         }
       }
+      let onChoiceChange = null;
+      if (chWrap) {
+        chWrap.hidden = !choice;
+        chSelect.textContent = '';
+        chNote.textContent = '';
+        if (choice) {
+          chLabel.textContent = choice.label;
+          for (const opt of choice.options) {
+            const el = d.createElement('option');
+            el.value = opt.value;
+            el.textContent = opt.label;
+            chSelect.appendChild(el);
+          }
+          chSelect.value = choice.value;
+          onChoiceChange = () => {
+            const opt = choice.options.find((o) => o.value === chSelect.value);
+            chNote.textContent = (opt && opt.note) || '';
+            okBtn.textContent = (opt && opt.confirmLabel) || confirmLabel;
+          };
+          onChoiceChange();
+          chSelect.addEventListener('change', onChoiceChange);
+        }
+      }
       backdrop.hidden = false;
       dialog.hidden = false;
       const unlock = d.getElementById('unlock-screen');
@@ -263,6 +293,11 @@
           optInput.checked = false;
           optWarn.hidden = true;
           if (onOptChange) optInput.removeEventListener('change', onOptChange);
+        }
+        if (choice) choice.value = value === true ? chSelect.value : choice.value;
+        if (chWrap) {
+          chWrap.hidden = true;
+          if (onChoiceChange) chSelect.removeEventListener('change', onChoiceChange);
         }
         if (pwInput) pwInput.value = '';
         if (pwWrap) pwWrap.hidden = true;

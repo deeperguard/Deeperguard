@@ -406,5 +406,97 @@ test('pathological: a file of only delimiters', () => {
   assert.ok(/record 1 has more than 500 columns/.test(r.warnings[0]), r.warnings[0]);
 });
 
+// --- 8.3 / 8.4 export ---------------------------------------------------------------------------------
+const Model = require(path.join(__dirname, '..', 'app', 'static', 'js', 'contacts.js'));
+const made = (c) => Model.buildContact(c, null, '2026-11-20T00:00:00.000Z').content;
+const entry = (type, value, label = '') => ({ type, value, label, pref: false });
+const exportRows = (list) => C.readCsv(C.write(list)).rows;
+
+test('write: BOM, CRLF, Google header with one group per kind when empty', () => {
+  const text = C.write([]);
+  assert.strictEqual(Buffer.from(text, 'utf8').subarray(0, 3).toString('hex'), 'efbbbf');
+  const header = C.readCsv(C.decodeBytes(new Uint8Array(Buffer.from(text, 'utf8'))).text).rows[0];
+  assert.strictEqual(C.detectDialect(header), 'google');
+  assert.ok(header.includes('Phone 1 - Value') && !header.includes('Phone 2 - Value'));
+  assert.ok(text.endsWith('\r\n') && !/[^\r]\n/.test(text));
+});
+
+test('write: cells starting with = + - @ TAB CR get a leading quote, in every kind of field', () => {
+  const evil = ['=HYPERLINK("http://x","y")', '+31 6 12345678', '-2+3', '@SUM(A1)', '\tcmd', '\rcmd'];
+  const c = made({
+    name: { given: evil[0], family: evil[2], formatted: evil[3] },
+    nickname: evil[4],
+    org: { name: evil[1], unit: evil[5] },
+    note: evil[0],
+    phones: [entry('mobile', evil[1])],
+    emails: [entry('custom', 'a@b.example', evil[3])],
+    urls: [entry('other', evil[0])],
+    labels: [evil[2]],
+  });
+  // The model trims TAB and CR from stored values; the writer must still hold if one gets through.
+  c.nickname = evil[4];
+  c.org.unit = evil[5];
+  const raw = C.write([c]);
+  // The file itself carries the quote before every trigger character ...
+  for (const v of ["'" + evil[0].replace(/"/g, '""'), ",'+31 6 12345678,", ",'-2+3,", ",'@SUM(A1),", ",'\tcmd,", ",\"'\rcmd\""]) {
+    assert.ok(raw.includes(v), v + ' missing in ' + JSON.stringify(raw));
+  }
+  // ... and the reader gives the original text back.
+  const [header, row] = exportRows([c]);
+  const cells = Object.fromEntries(header.map((h, i) => [h, row[i]]));
+  assert.strictEqual(cells['First Name'], evil[0]);
+  assert.strictEqual(cells['Phone 1 - Value'], evil[1]);
+  assert.strictEqual(cells.Nickname, evil[4]);
+  // In the raw text no field of the data row starts with a trigger character.
+  const dataRow = raw.split('\r\n')[1];
+  assert.ok(!/(^|,)"?[=+\-@\t\r]/.test(dataRow), dataRow);
+});
+
+test('write: a trigger character that is not the first one is left alone', () => {
+  const [header, row] = exportRows([made({ name: { given: 'A=B', family: 'x+y' }, phones: [entry('home', '020 +1')] })]);
+  assert.strictEqual(row[header.indexOf('First Name')], 'A=B');
+  assert.strictEqual(row[header.indexOf('Phone 1 - Value')], '020 +1');
+});
+
+test('write: RFC 4180 quoting of comma, quote and newline; other cells stay bare', () => {
+  const text = C.write([made({ name: { given: 'Ann', family: 'O"Neil, Jr' }, note: 'one\ntwo' })]);
+  const line = text.split('\r\n').slice(1).join('\r\n');
+  assert.ok(line.includes('"O""Neil, Jr"') && line.includes('"one\ntwo"'), line);
+  assert.ok(line.includes(',Ann,'));
+});
+
+test('write: header grows to the busiest contact', () => {
+  const rows = exportRows([
+    made({ name: { given: 'A' }, phones: [entry('home', '1'), entry('work', '2'), entry('mobile', '3')] }),
+    made({ name: { given: 'B' }, phones: [entry('home', '4')] }),
+  ]);
+  assert.ok(rows[0].includes('Phone 3 - Value') && !rows[0].includes('Phone 4 - Value'));
+  assert.strictEqual(rows[2][rows[0].indexOf('Phone 3 - Value')], '');
+});
+
+test('write then read: names, emails and phones come back unchanged, also the ones that start with + = - @', () => {
+  const list = [
+    made({ name: { given: 'Marieke', family: 'Smit' }, phones: [entry('mobile', '+31 6 55512345'), entry('custom', '020 5550000', 'Thuis kantoor')], emails: [entry('work', 'marieke@smit.example'), entry('home', 'm@x.example')], labels: ['Klanten'], note: 'Eerste\nTweede' }),
+    made({ name: { given: '=cmd|calc', family: '-Dash' }, phones: [entry('home', '+1 (555) 0100')], emails: [entry('other', '@weird@x.example')] }),
+    made({ name: { given: 'Ünï', family: 'Çode, "quoted"' }, phones: [entry('work', '12')], org: { name: '@Org', unit: '' } }),
+  ];
+  const { rows } = C.readCsv(C.decodeBytes(new Uint8Array(Buffer.from(C.write(list), 'utf8'))).text);
+  const back = C.mapRows(rows, C.detectDialect(rows[0])).contacts;
+  assert.strictEqual(back.length, 3);
+  const pick = (c) => ({
+    given: c.name.given, family: c.name.family,
+    emails: c.emails.map((e) => e.value), phones: c.phones.map((p) => p.value),
+  });
+  list.forEach((c, i) => assert.deepStrictEqual(pick(back[i]), pick(c)));
+  assert.deepStrictEqual(back[0].phones.map((p) => [p.type, p.label]), [['mobile', ''], ['custom', 'Thuis kantoor']]);
+  assert.strictEqual(back[0].note, 'Eerste\nTweede');
+  assert.strictEqual(back[2].org.name, '@Org');
+});
+
+test('read: only a leading quote before a trigger character is removed', () => {
+  const { rows } = C.readCsv("a,b,c,d\r\n'=x,'plain,''=y,'-1\r\n");
+  assert.deepStrictEqual(rows[1], ['=x', "'plain", "''=y", '-1']);
+});
+
 if (failures) { console.log(failures + ' test(s) failed'); process.exit(1); }
 console.log('all passed');

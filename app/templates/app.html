@@ -1726,7 +1726,7 @@
           <button type="button" id="btn-contacts-duplicates" class="btn ghost" title="Find contacts that are probably the same person, then merge or remove them">Find duplicates</button>
           <button type="button" id="btn-contacts-import" class="btn ghost" title="Import contacts from vCard, CSV, LDIF or jCard files">Import</button>
           <button type="button" id="btn-contacts-select" class="btn ghost" title="Tick contacts to export only those" aria-pressed="false">Select</button>
-          <button type="button" id="btn-contacts-export" class="btn ghost" title="Export contacts as a vCard file">Export</button>
+          <button type="button" id="btn-contacts-export" class="btn ghost" title="Export contacts as a vCard or CSV file">Export</button>
           <button type="button" id="btn-contacts-add" class="btn icon" title="Add contact" aria-label="Add contact">+</button>
         </div>
         <div class="totp-side-foot">
@@ -3248,6 +3248,11 @@
     </div>
     <div class="dialog-body">
       <p id="confirm-message"></p>
+      <div id="confirm-choice-wrap" class="confirm-option" hidden>
+        <label for="confirm-choice" id="confirm-choice-label"></label>
+        <select id="confirm-choice" aria-describedby="confirm-choice-note"></select>
+        <p id="confirm-choice-note"></p>
+      </div>
       <div id="confirm-option-wrap" class="confirm-option" hidden>
         <label class="confirm-option-label"><input id="confirm-option" type="checkbox" aria-describedby="confirm-option-warning"> <span id="confirm-option-text"></span></label>
         <p id="confirm-option-warning" class="error" role="alert" hidden></p>
