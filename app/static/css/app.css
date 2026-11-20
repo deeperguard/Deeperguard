@@ -13441,6 +13441,8 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   cursor: pointer;
 }
 .contacts-star.on { color: var(--accent); }
+.contacts-row-check { display: flex; align-items: center; justify-content: center; min-width: 44px; cursor: pointer; }
+.contacts-row-check input { width: 20px; height: 20px; margin: 0; }
 .contact-avatar {
   flex: 0 0 40px;
   width: 40px;

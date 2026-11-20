@@ -181,10 +181,35 @@ def run_flow(page, width: int) -> None:
     if width < 900:  # the phone layout shows the detail instead of the list
         page.click('[aria-label="Back to contacts"]')
 
+    # Selection mode: tick one contact and Export writes only that one; Done removes the ticks.
+    assert page.locator("[data-contact-tick]").count() == 0
+    page.click("#btn-contacts-select")
+    assert page.get_attribute("#btn-contacts-select", "aria-pressed") == "true"
+    assert page.locator("[data-contact-tick]").count() == 2
+    page.check('[aria-label="Select Lotte de Boer"]')
+    assert page.inner_text("#btn-contacts-export").strip() == "Export 1 selected"
+    no_hscroll(page, f"{where} selection")
+    page.click("#btn-contacts-export")
+    page.wait_for_selector("#confirm-password-wrap:not([hidden])")
+    assert "1 contact will be exported" in page.inner_text("#confirm-dialog")
+    page.fill("#confirm-password", PASSWORD)
+    with page.expect_download() as dl:
+        page.click("#confirm-ok")
+    assert dl.value.suggested_filename.startswith("deeperguard-contacts-")
+    picked = Path(dl.value.path()).read_text("utf-8")
+    assert picked.count("BEGIN:VCARD") == 1 and "FN:Lotte de Boer" in picked, picked
+    page.click("#btn-contacts-select")
+    assert page.locator("[data-contact-tick]").count() == 0
+    assert page.inner_text("#btn-contacts-export").strip() == "Export"
+    page.click("#btn-contacts-select")  # left on, so lock must clear it
+    page.check('[aria-label="Select Lotte de Boer"]')
+
     # Lock: nothing of the contacts stays in the page.
     page.click("#btn-contacts-lock")
     page.wait_for_function("document.querySelectorAll('#contacts-list .contacts-row-name').length === 0")
     assert page.evaluate("document.getElementById('contacts-import-dialog').hidden")
+    assert page.inner_text("#btn-contacts-export").strip() == "Export"
+    assert page.get_attribute("#btn-contacts-select", "aria-pressed") == "false"
     stored = page.evaluate("JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)])")
     assert "Lotte" not in stored and "Mallory" not in stored, stored
 

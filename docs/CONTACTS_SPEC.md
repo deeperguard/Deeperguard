@@ -1608,10 +1608,14 @@ Keep both choices of 7.4 (a contact that matches one in the vault by email, phon
 the owner can untick that); duplicates inside one file and name-only matches; the quota estimate of 7.3; the progress
 and 60 s watchdog of 7.2 (the parse is synchronous; only writing reports "Importing N of M"); the "Imported on"
 filter and "Delete these" of 7.6. The undo record is kept until the vault locks; the dialog's Undo button and the
-toast's Undo both use it. Export (8) writes vCard 3.0 or 4.0 for the contacts shown in the list (all of them when no
-search or label is active), always with photos, and "Share as vCard" in a contact's detail writes that one contact to
-`<display name>.vcf` after the same password step. The selection mode of 4.3 (and so bulk export of ticked rows), the
-CSV format and the photo checkbox are not built.
+toast's Undo both use it. Export (8) writes vCard 3.0 or 4.0, always with photos: the ticked contacts when the
+selection mode has any, else the contacts shown in the list (all of them when no search or label is active); "Share
+as vCard" in a contact's detail writes that one contact to `<display name>.vcf` after the same password step. The
+selection mode of 4.3 is a **Select** toggle button in the pane header (on phone and desktop alike, instead of a
+long-press, which has no keyboard or screen-reader route) that adds a checkbox (`aria-label="Select <name>"`) to every
+row; the Export button then reads "Export N selected". The ticks are kept in memory only and are cleared by "Done",
+lock and sign-out. Bulk delete and bulk label on that selection, the CSV format and the photo checkbox are not built:
+they are outside the import/export task.
 
 ## 8. Export
 
