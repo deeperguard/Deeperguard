@@ -174,6 +174,7 @@ const NotesContactsCsv = (() => {
   // text -> { rows, delimiter, warnings }. rows[0] is the header (trimmed, unique); shorter rows are padded with ''
   // to the header width, longer rows keep their surplus cells (the mapping step decides what to do with them).
   // opts.delimiter overrides detection.
+  const FORMULA_QUOTED = /^'[=+\-@\t\r]/;
   function readCsv(text, opts = {}) {
     const warnings = [];
     let body = String(text);
@@ -189,6 +190,10 @@ const NotesContactsCsv = (() => {
     const rows = scanned.records;
     if (!rows.length) return { rows, delimiter, warnings };
     rows[0] = uniqueHeaders(rows[0]);
+    // 6.3.1: a leading ' our own export put before = + - @ TAB CR (8.4) is removed; every other cell stays as typed.
+    for (let r = 1; r < rows.length; r += 1) {
+      rows[r] = rows[r].map((value) => (FORMULA_QUOTED.test(value) ? value.slice(1) : value));
+    }
     const width = rows[0].length;
     let padded = 0;
     let wide = 0;
@@ -669,7 +674,70 @@ const NotesContactsCsv = (() => {
     return mapRows(rows, mapper, { ...opts, dateColumns });
   }
 
-  return { LIMITS, DIALECTS, TARGETS, decodeBytes, cleanText, readCsv, detectDialect, mapRows, suggestTarget, checkMapping, mapGeneric };
+  // --- 8.3 / 8.4 the writer --------------------------------------------------------------------------
+  // Google Contacts dialect, UTF-8 with BOM, CRLF. Lossy by design: `extra` and IM handles are not written.
+  const FORMULA_START = /^[=+\-@\t\r]/;
+  // 8.4: a text cell that a spreadsheet would run as a formula gets a leading ' (phone numbers starting with + too).
+  const neutralise = (value) => (FORMULA_START.test(value) ? "'" + value : value);
+  const quoteCell = (value) => (/[",\r\n]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value);
+  const cell = (value) => quoteCell(neutralise(String(value === undefined || value === null ? '' : value)));
+  const WRITE_GROUPS = [
+    ['E-mail', 'emails', ['Label', 'Value']],
+    ['Phone', 'phones', ['Label', 'Value']],
+    ['Address', 'addresses', ['Label', 'Formatted', 'Street', 'City', 'PO Box', 'Region', 'Postal Code', 'Country', 'Extended Address']],
+    ['Website', 'urls', ['Label', 'Value']],
+    ['Event', 'events', ['Label', 'Value']],
+  ];
+  const FIXED_COLUMNS = ['Name', 'First Name', 'Middle Name', 'Last Name', 'Name Prefix', 'Name Suffix', 'Nickname', 'Phonetic First Name', 'Phonetic Last Name',
+    'Organization Name', 'Organization Title', 'Organization Department', 'Birthday', 'Notes', 'Labels'];
+
+  function typeLabel(entry) {
+    const word = entry.type === 'custom' ? String(entry.label || '') : String(entry.type || '').replace(/^./, (ch) => ch.toUpperCase());
+    return (entry.pref && word ? '* ' : '') + word;
+  }
+
+  function writeCsv(contacts) {
+    const list = Array.isArray(contacts) ? contacts : [];
+    const views = list.map((c) => {
+      const dates = c.dates || [];
+      const birthday = dates.find((d) => d.type === 'birthday');
+      return {
+        c,
+        birthday,
+        events: dates.filter((d) => d !== birthday).map((d) => ({ label: d.type === 'anniversary' ? 'Anniversary' : (d.label || 'Other'), value: d.value })),
+      };
+    });
+    const entriesOf = (v, key) => (key === 'events' ? v.events : (v.c[key] || []));
+    const counts = WRITE_GROUPS.map(([, key]) => Math.max(1, ...views.map((v) => entriesOf(v, key).length)));
+    const header = [...FIXED_COLUMNS];
+    WRITE_GROUPS.forEach(([name, , fields], gi) => {
+      for (let n = 1; n <= counts[gi]; n += 1) for (const f of fields) header.push(name + ' ' + n + ' - ' + f);
+    });
+    const lines = [header.map(quoteCell).join(',')];
+    for (const v of views) {
+      const c = v.c;
+      const name = c.name || {};
+      const org = c.org || {};
+      const row = [name.formatted, name.given, name.additional, name.family, name.prefix, name.suffix, c.nickname, name.phonetic_given, name.phonetic_family,
+        org.name, c.title, org.unit, v.birthday ? v.birthday.value : '', c.note, (c.labels || []).join(MULTI)];
+      WRITE_GROUPS.forEach(([, key, fields], gi) => {
+        const entries = entriesOf(v, key);
+        for (let n = 0; n < counts[gi]; n += 1) {
+          const e = entries[n];
+          if (!e) { for (let k = 0; k < fields.length; k += 1) row.push(''); continue; }
+          if (key === 'events') row.push(e.label, e.value);
+          else if (key === 'addresses') {
+            const formatted = [e.street, [e.postal, e.city].filter(Boolean).join(' '), e.country].filter(Boolean).join('\n');
+            row.push(typeLabel(e), formatted, e.street, e.city, e.po_box, e.region, e.postal, e.country, e.extended);
+          } else row.push(typeLabel(e), e.value);
+        }
+      });
+      lines.push(row.map(cell).join(','));
+    }
+    return '﻿' + lines.join('\r\n') + '\r\n';
+  }
+
+  return { write: writeCsv, LIMITS, DIALECTS, TARGETS, decodeBytes, cleanText, readCsv, detectDialect, mapRows, suggestTarget, checkMapping, mapGeneric };
 })();
 
 if (typeof window !== 'undefined') window.NotesContactsCsv = NotesContactsCsv;

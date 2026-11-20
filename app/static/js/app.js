@@ -5273,11 +5273,14 @@
     const ticked = contactsTicked && contactsTicked.size ? contactsAll.filter((c) => contactsTicked.has(c.uuid)) : null;
     const list = only ? [only] : (ticked || filteredContacts());
     if (!list.length) { toast('No contacts to export', true); return; }
-    const v4 = {
-      label: 'Write vCard 4.0 (default is 3.0, which more programs read)',
-      warning: 'In vCard 3.0 a birthday without a year is written as --MMDD, which a few programs do not understand.',
-      confirmLabelChecked: 'Export vCard 4.0',
-      checked: false,
+    const format = {
+      label: 'Format',
+      value: 'vcard3',
+      options: [
+        { value: 'vcard3', label: 'vCard 3.0 (most programs read it)', confirmLabel: 'Export unencrypted vCard', note: 'In vCard 3.0 a birthday without a year is written as --MMDD, which a few programs do not understand.' },
+        { value: 'vcard4', label: 'vCard 4.0', confirmLabel: 'Export unencrypted vCard', note: 'In vCard 4.0 a birthday without a year is written as --MM-DD.' },
+        { value: 'csv', label: 'CSV (Google Contacts columns)', confirmLabel: 'Export unencrypted CSV', note: 'CSV loses some fields; use vCard for a complete export. Cells that start with = + - @ get a leading \' so a spreadsheet does not run them.' },
+      ],
     };
     const confirmed = await confirmAction(
       'This file is not encrypted. Anyone who gets it can read your contacts; your vault password does not protect it. '
@@ -5287,19 +5290,23 @@
         title: 'Export contacts without encryption?',
         confirmLabel: 'Export unencrypted vCard',
         danger: true,
-        checkbox: v4,
+        choice: format,
         verifyPassword: (typed) => NotesStore.verifyVaultPassword(typed),
         wrongPasswordMessage: 'Wrong password. Nothing was exported.',
       },
     );
     if (confirmed !== true) return;
-    const text = window.NotesContactsVcard.write(list, { version: v4.checked ? '4.0' : '3.0' });
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/vcard;charset=utf-8' }));
+    const asCsv = format.value === 'csv';
+    const text = asCsv
+      ? window.NotesContactsCsv.write(list)
+      : window.NotesContactsVcard.write(list, { version: format.value === 'vcard4' ? '4.0' : '3.0' });
+    const url = URL.createObjectURL(new Blob([text], { type: asCsv ? 'text/csv;charset=utf-8' : 'text/vcard;charset=utf-8' }));
     const a = document.createElement('a');
     a.href = url;
+    const ext = asCsv ? 'csv' : 'vcf';
     a.download = only
-      ? `${window.NotesReadableExport.safeName(contactName(only))}.vcf`
-      : `deeperguard-contacts-${new Date().toISOString().slice(0, 10)}.vcf`;
+      ? `${window.NotesReadableExport.safeName(contactName(only))}.${ext}`
+      : `deeperguard-contacts-${new Date().toISOString().slice(0, 10)}.${ext}`;
     a.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast('Unencrypted export saved. Delete it when you are done.');
