@@ -73,7 +73,9 @@ NOTICE = (
     "your pCloud account settings, or choose Disconnect here: that deletes the token from the "
     "server and asks pCloud to revoke it."
 )
-SCHEDULE = "Scheduled backups do not use this connection yet."
+SCHEDULE = (
+    'Connecting also switches on the daily backup to your own pCloud (unless the automatic backup is on), which uploads your encrypted backup with this connection. If you saved a legacy token before, it keeps being used until you connect. If pCloud refuses the connection, the status changes to reconnect needed and you get one e-mail. Backups go to the folder Deeperguard/backups, counted from the folder pCloud gives this app. If the app is limited to its own folder, that is inside it, not where earlier backups made with a pasted token may be.'
+)
 
 
 def env(base: str, plan: str) -> dict:

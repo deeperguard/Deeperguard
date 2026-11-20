@@ -17958,11 +17958,14 @@
       return;
     }
     const state = info.state;
+    const legacy = info.mode === 'legacy';
     stateEl.textContent = state === 'connected'
       ? 'Status: connected.'
       : state === 'relink'
-        ? 'Status: reconnect needed. The saved connection can no longer be used.'
-        : 'Status: not connected.';
+        ? 'Status: reconnect needed. The saved connection can no longer be used.' +
+          (legacy ? ' Scheduled backups use your legacy token for now.' : '')
+        : 'Status: not connected.' +
+          (legacy ? ' Scheduled backups still use the legacy token you pasted. Connect pCloud to replace it.' : '');
     connectBtn.textContent = state === 'relink' ? 'Reconnect pCloud' : 'Connect pCloud';
     connectBtn.hidden = state === 'connected';
     connectBtn.disabled = !info.available || !planHas('pcloud_backup', account);
@@ -18035,8 +18038,12 @@
       if (tokenEl) tokenEl.value = '';
       const statusEl = document.getElementById('pcloud-status');
       const parts = [];
-      if (account.pcloud_token_set) parts.push('OAuth token saved on server');
-      else parts.push('OAuth token not set');
+      const mode = account.pcloud_oauth && account.pcloud_oauth.mode;
+      if (mode === 'oauth') parts.push('Connected via OAuth');
+      else if (mode === 'legacy') parts.push('Legacy token in use (pasted rclone token)');
+      else if (mode === 'reconnect_needed') parts.push('Reconnect needed');
+      else parts.push('No pCloud token saved');
+      if (mode === 'legacy' && account.pcloud_oauth.oauth_refused) parts.push('OAuth connection refused: reconnect pCloud');
       if (account.pcloud_last_sync_at > 0) {
         const when = new Date(account.pcloud_last_sync_at * 1000).toLocaleString();
         const outcome = account.pcloud_last_sync_status === 'ok' ? 'OK' : 'Failed';
@@ -24574,11 +24581,16 @@ async function refreshManagedBackup() {
   document.getElementById('managed-backup-failures-only').checked = !!m.failures_only;
   const own = !!m.own_token;
   const pcloudState = document.getElementById('sec-state-pcloud');
-  if (pcloudState) pcloudState.textContent = own ? 'Your own pCloud account' : m.enabled ? 'On: daily' : 'Off';
-  document.getElementById('pcloud-own-notice').hidden = !own;
+  const ownConn = m.own_connection && m.own_connection !== 'none';
+  if (pcloudState) {
+    pcloudState.textContent = ownConn
+      ? (m.own_connection === 'reconnect_needed' ? 'Reconnect needed' : 'Your own pCloud account')
+      : m.enabled ? 'On: daily' : 'Off';
+  }
+  document.getElementById('pcloud-own-notice').hidden = !ownConn;
   document.getElementById('btn-managed-switch').disabled = !m.available;
   document.getElementById('pcloud-own').hidden = !own;
-  document.getElementById('pcloud-managed').hidden = own;
+  document.getElementById('pcloud-managed').hidden = !!ownConn;
   const el = document.getElementById('managed-backup-status');
   if (!m.enabled) { el.textContent = ''; return; }
   if (!(m.last_at > 0)) { el.textContent = 'No backup yet. The first one runs at the next scheduled backup.'; return; }

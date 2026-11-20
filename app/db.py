@@ -152,6 +152,7 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
             token_enc TEXT NOT NULL,
             api_host TEXT NOT NULL,
             connected_at REAL NOT NULL,
+            refused_at REAL NOT NULL DEFAULT 0,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
@@ -199,6 +200,9 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN pcloud_last_sync_status TEXT NOT NULL DEFAULT ''")
     if "pcloud_last_sync_detail" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN pcloud_last_sync_detail TEXT NOT NULL DEFAULT ''")
+    oauth_cols = {r[1] for r in conn.execute("PRAGMA table_info(pcloud_oauth_tokens)").fetchall()}
+    if "refused_at" not in oauth_cols:
+        conn.execute("ALTER TABLE pcloud_oauth_tokens ADD COLUMN refused_at REAL NOT NULL DEFAULT 0")
     if "managed_backup_enabled" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN managed_backup_enabled INTEGER NOT NULL DEFAULT 0")
     if "pcloud_dir_id" not in cols:
@@ -2467,16 +2471,34 @@ def set_pcloud_oauth_token(user_id: int, token_enc: str, api_host: str) -> None:
         conn.execute(
             "INSERT INTO pcloud_oauth_tokens (user_id, token_enc, api_host, connected_at) VALUES (?, ?, ?, ?) "
             "ON CONFLICT(user_id) DO UPDATE SET token_enc = excluded.token_enc, "
-            "api_host = excluded.api_host, connected_at = excluded.connected_at",
+            "api_host = excluded.api_host, connected_at = excluded.connected_at, refused_at = 0",
             (int(user_id), str(token_enc), str(api_host), now()),
         )
 
 
 def get_pcloud_oauth_token(user_id: int):
     return connection().execute(
-        "SELECT token_enc, api_host, connected_at FROM pcloud_oauth_tokens WHERE user_id = ?",
+        "SELECT token_enc, api_host, connected_at, refused_at FROM pcloud_oauth_tokens WHERE user_id = ?",
         (int(user_id),),
     ).fetchone()
+
+
+def mark_pcloud_oauth_refused(user_id: int) -> bool:
+    """Record that pCloud refused the stored token. True only the first time (until reconnected)."""
+    with tx() as conn:
+        cur = conn.execute(
+            "UPDATE pcloud_oauth_tokens SET refused_at = ? WHERE user_id = ? AND refused_at = 0",
+            (now(), int(user_id)),
+        )
+        return cur.rowcount > 0
+
+
+def set_pcloud_enabled(user_id: int, enabled: bool) -> None:
+    with tx() as conn:
+        conn.execute(
+            "UPDATE users SET pcloud_enabled = ?, updated_at = ? WHERE id = ?",
+            (1 if enabled else 0, now(), int(user_id)),
+        )
 
 
 def delete_pcloud_oauth_token(user_id: int) -> None:
@@ -3313,7 +3335,9 @@ def users_with_pcloud_enabled() -> list[sqlite3.Row]:
         connection().execute(
             """
             SELECT * FROM users
-            WHERE pcloud_enabled = 1 AND pcloud_username != ''
+            WHERE pcloud_enabled = 1
+              AND (pcloud_username != ''
+                   OR EXISTS (SELECT 1 FROM pcloud_oauth_tokens t WHERE t.user_id = users.id))
             """
         ).fetchall()
     )

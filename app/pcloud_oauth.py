@@ -161,11 +161,14 @@ def stored_token(user_id: int) -> str:
 
 
 def connection_state(user_id: int) -> str:
-    """'connected', 'relink' (a token is stored but cannot be used any more) or 'none'."""
+    """'connected', 'relink' (a token is stored but pCloud refused it or it cannot be decrypted) or 'none'."""
     import db
 
-    if not db.get_pcloud_oauth_token(int(user_id)):
+    row = db.get_pcloud_oauth_token(int(user_id))
+    if not row:
         return "none"
+    if float(row["refused_at"] or 0) > 0:
+        return "relink"
     return "connected" if stored_token(user_id) else "relink"
 
 

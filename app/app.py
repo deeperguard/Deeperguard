@@ -37,7 +37,7 @@ import promo as notes_promo
 from backup_mail import send_user_backup
 from admin_notify import log_signup_notify_config, notify_new_user_signup
 from mailer import send_contact_email, send_plain_email
-from backup_pcloud import pcloud_credentials_configured, save_pcloud_settings, sync_user_backup
+from backup_pcloud import ReconnectNeeded, pcloud_credentials_configured, save_pcloud_settings, sync_user_backup
 from passwords import hash_password, new_kdf_salt, verify_password
 from srp_auth import (
     SRP_KDF_V2,
@@ -2784,10 +2784,22 @@ def _pcloud_path_for_client(user) -> str:
     return path
 
 
-def _pcloud_oauth_status(uid: int) -> dict:
+def _pcloud_oauth_status(uid: int, user=None) -> dict:
+    """state: the OAuth connection. mode: the token the scheduled backup really uses
+    (oauth / legacy / reconnect_needed / none). oauth_refused: a saved OAuth connection is not usable."""
     import pcloud_oauth
 
-    return {"state": pcloud_oauth.connection_state(uid), "available": pcloud_oauth.configured()}
+    return {
+        "state": pcloud_oauth.connection_state(uid),
+        "available": pcloud_oauth.configured(),
+        **_bp_connection_info(uid, user),
+    }
+
+
+def _bp_connection_info(uid: int, user=None) -> dict:
+    import backup_pcloud as _bp
+
+    return _bp.connection_info(uid, user)
 
 
 @app.get("/api/boot-account")
@@ -2835,7 +2847,7 @@ def api_account():
             "pcloud_region": user["pcloud_region"] or "eu",
             "pcloud_password_set": pcloud_password_set(uid),
             "pcloud_token_set": pcloud_token_set(uid),
-            "pcloud_oauth": _pcloud_oauth_status(uid),
+            "pcloud_oauth": _pcloud_oauth_status(uid, user),
             "pcloud_last_sync_at": float(user["pcloud_last_sync_at"] or 0),
             "pcloud_last_sync_status": user["pcloud_last_sync_status"] or "",
             "pcloud_last_sync_detail": user["pcloud_last_sync_detail"] or "",
@@ -3518,6 +3530,8 @@ def api_backup_pcloud_oauth_callback():
     except pcloud_oauth.PcloudOAuthError as exc:
         log.warning("pcloud oauth code exchange failed (%s) user_id=%s", exc, uid)
         return _pcloud_callback_redirect("failed")
+    if not user["managed_backup_enabled"]:
+        db.set_pcloud_enabled(uid, True)  # the scheduled backup now uploads with this connection
     log.info("pCloud OAuth connected user_id=%s", uid)
     return _pcloud_callback_redirect("connected")
 
@@ -3531,6 +3545,8 @@ def api_backup_pcloud_oauth_disconnect():
         return jsonify({"error": "not found"}), 404
     session.pop(_PCLOUD_OAUTH_STATE, None)
     revoked = pcloud_oauth.disconnect(uid)
+    if not pcloud_token_set(uid):
+        db.set_pcloud_enabled(uid, False)  # nothing left to upload with
     return jsonify({"ok": True, "connected": False, "revoked": revoked})
 
 
@@ -3557,13 +3573,18 @@ def _managed_status_payload(user) -> dict:
     """Never contains remote name, root, config path, directory id or any path."""
     avail = _managed_availability()
     enabled = bool(user["managed_backup_enabled"])
-    own = (
+    uid = int(user["id"])
+    info = _bp_connection_info(uid, user)
+    own_oauth = not enabled and bool(user["pcloud_enabled"]) and info["mode"] in ("oauth", "reconnect_needed")
+    own_legacy = (
         not enabled
         and bool(user["pcloud_enabled"])
         and bool(user["pcloud_username"])
-        and pcloud_token_set(int(user["id"]))
+        and pcloud_token_set(uid)
     )
+    own = own_legacy
     return {
+        "own_connection": info["mode"] if (own_oauth or own_legacy) else "none",
         "available": avail["available"],
         "reason_code": avail["reason_code"],
         "enabled": enabled,
@@ -3619,12 +3640,14 @@ def api_backup_pcloud_sync():
     blocked = _plan_block(user, "pcloud_backup")
     if blocked:
         return blocked
-    if not user["pcloud_username"]:
-        return jsonify({"error": "pCloud username is not configured"}), 400
     if not pcloud_credentials_configured(uid):
-        return jsonify({"error": "pCloud rclone OAuth token is not configured"}), 400
+        return jsonify({"error": "No usable pCloud token is saved", "reconnect_needed": True}), 400
+    if not user["pcloud_username"] and _bp_connection_info(uid)["mode"] != "oauth":
+        return jsonify({"error": "pCloud username is not configured"}), 400
     try:
         meta = sync_user_backup(uid)
+    except ReconnectNeeded:
+        return jsonify({"error": "pCloud refused the connection. Reconnect pCloud.", "reconnect_needed": True}), 409
     except Exception as exc:
         return _generic_client_error("pCloud sync failed", exc, status=502)
     return jsonify(meta)
