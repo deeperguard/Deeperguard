@@ -2743,7 +2743,9 @@
 
   function enableRememberDevice({ auto = false } = {}) {
     prefs.rememberDevice = true;
-    persistDevicePassword((typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword()) || '');
+    // A passkey session has no password: keep what is already saved instead of overwriting it with ''.
+    const sessionVaultPassword = (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword()) || '';
+    if (sessionVaultPassword) persistDevicePassword(sessionVaultPassword);
     savePrefs();
     const rememberDevice = document.getElementById('pref-remember-device');
     if (rememberDevice) rememberDevice.checked = true;
@@ -2755,9 +2757,11 @@
     } catch (err) {
       /* ignore quota */
     }
-    toast(auto
-      ? 'Remember password enabled — you can unlock offline on this device (vault still locks on restart)'
-      : 'Password remembered — unlock still required each time you open Notes');
+    toast(!sessionVaultPassword && !savedDevicePassword()
+      ? 'Remember password is on — your password is saved the next time you unlock with it'
+      : auto
+        ? 'Remember password enabled — you can unlock offline on this device (vault still locks on restart)'
+        : 'Password remembered — unlock still required each time you open Notes');
     try {
       localStorage.setItem('notes_pending_device_report', '1');
     } catch (err) {
@@ -7818,6 +7822,7 @@
     closeSettings(true);
     updateSecureContextHint();
     refreshUnlockEmail().catch(() => {});
+    refreshPasskeyUnlockButton().catch(() => {});
     refreshDevicePasswordCache().then(() => refreshClearSavedButton()).catch(() => refreshClearSavedButton());
     if (email) document.getElementById('unlock-email').textContent = email;
     const firstHint = document.getElementById('unlock-first-hint');
@@ -9544,6 +9549,73 @@
       }
     }
   }
+
+  // Unlock with a passkey (docs/VAULT_RECOVERY.md 1.4). The master password stays the way in:
+  // the button only shows while a current passkey copy exists, and any failure or cancel leaves the
+  // password field as it was, with nothing changed.
+  const unlockPasskeyBtn = document.getElementById('unlock-passkey');
+  let passkeyUnlockKnownStale = false;
+
+  async function refreshPasskeyUnlockButton() {
+    if (!unlockPasskeyBtn) return;
+    let show = false;
+    try {
+      if (window.NotesPasskeys && window.NotesWebAuthn?.supported() && !passkeyUnlockKnownStale) {
+        const info = await NotesPasskeys.passkeyUnlockStatus();
+        show = !!info.credentialId;
+        if (info.stale) {
+          passkeyUnlockKnownStale = true;
+          showUnlockError(NotesPasskeys.STALE_COPY_MESSAGE);
+        }
+      }
+    } catch (err) {
+      show = false; // signed out or offline: the password form is all there is
+    }
+    unlockPasskeyBtn.hidden = !show || NotesStore.isUnlocked();
+  }
+
+  async function unlockWithPasskey() {
+    if (unlockInFlight || NotesStore.isUnlocked()) return;
+    showUnlockError('');
+    unlockPasskeyBtn.disabled = true;
+    unlockPasskeyBtn.setAttribute('aria-busy', 'true');
+    let unwrapped = null;
+    unlockInFlight = (async () => {
+      try {
+        const account = await bootstrapServerSession(NotesStore.cachedAccount());
+        unwrapped = await NotesPasskeys.unwrapVaultKeyWithPasskey();
+        const key = unwrapped.key;
+        const ids = { wrapKeyId: unwrapped.wrapKeyId, accountKeyId: unwrapped.accountKeyId };
+        unwrapped = null;
+        await NotesStore.unlockWithVaultKey(key, {
+          ...ids,
+          kdfVersion: account.vault_kdf_version,
+          salt: account.kdf_salt,
+        });
+        await finishUnlocked();
+      } catch (err) {
+        if (unwrapped?.key?.raw) unwrapped.key.raw.fill(0);
+        if (NotesStore.isUnlocked() && !vaultKeyProven()) NotesStore.lock();
+        throw err;
+      }
+    })();
+    try {
+      await unlockInFlight;
+    } catch (err) {
+      if (err?.code === 'STALE' || err?.code === 'VAULT_KEY_STALE') passkeyUnlockKnownStale = true;
+      let message = err?.message || 'Passkey unlock did not work. Use your master password.';
+      if (isLoginRequiredError(err)) message = SESSION_EXPIRED_MESSAGE;
+      else if (err?.offline || (!err?.code && NotesStore.isProbablyOffline(err))) message = 'Passkey unlock needs a connection to the server. Use your master password instead.';
+      showUnlockError(message);
+      unlockPasskeyBtn.hidden = passkeyUnlockKnownStale;
+      unlockPassword?.focus();
+    } finally {
+      unlockInFlight = null;
+      unlockPasskeyBtn.disabled = false;
+      unlockPasskeyBtn.removeAttribute('aria-busy');
+    }
+  }
+  unlockPasskeyBtn?.addEventListener('click', () => { unlockWithPasskey().catch(() => {}); });
 
   unlockForm?.addEventListener('submit', (e) => {
     e.preventDefault();

@@ -180,6 +180,83 @@
     }
   }
 
+  // ---- Unlock from the lock screen (docs/VAULT_RECOVERY.md 1.4, 3.1) ----
+  const STALE_COPY_MESSAGE = 'The passkey copy of your vault key is out of date (your password or vault encryption changed after it was made). Unlock with your master password, then turn passkey unlock on again in Settings.';
+
+  function unlockFailure(code, message, extra = {}) {
+    const err = new Error(message);
+    err.code = code;
+    return Object.assign(err, extra);
+  }
+
+  // Which passkey could open the vault: {credentialId, stale}. Needs the server session; it
+  // reads status only (no wrap). `stale` is true when copies exist but none names the current key.
+  async function passkeyUnlockStatus() {
+    const status = await vaultKeysStatus();
+    const rows = Array.isArray(status?.prf) ? status.prf : [];
+    const current = rows.filter((r) => r.current);
+    return {
+      accountId: String(status?.account_id || ''),
+      keyId: String(status?.key_id || ''),
+      credentialId: current.length ? current[0].credential_id : '',
+      stale: !current.length && rows.length > 0,
+    };
+  }
+
+  // Runs the PRF ceremony for the first current copy and returns the unwrapped key bytes with the
+  // ids the caller must still check. Never marks anything verified; throws errors with a `code`:
+  // UNSUPPORTED, CANCELLED, STALE, OFFLINE, FAILED. The caller zeroes `key.raw`.
+  async function unwrapVaultKeyWithPasskey() {
+    const C = global.NotesCrypto;
+    const info = await passkeyUnlockStatus();
+    if (!info.credentialId) {
+      throw info.stale ? unlockFailure('STALE', STALE_COPY_MESSAGE) : unlockFailure('NONE', 'No passkey can unlock this vault.');
+    }
+    const cid = info.credentialId;
+    let prfOutput = null;
+    let wrapKey = null;
+    try {
+      const opts = await NotesStore.api(
+        `/api/account/vault-keys/prf/${encodeURIComponent(cid)}/options`, { method: 'POST', body: '{}' },
+      );
+      if (!opts.prf_salt) throw unlockFailure('STALE', STALE_COPY_MESSAGE);
+      const salt = new Uint8Array(NotesWebAuthn.bufferFromBase64url(opts.prf_salt));
+      const got = await NotesWebAuthn.requestPrfOutput(NotesWebAuthn.prepareAuthenticationOptions(opts.options), salt);
+      if (got.status !== 'ok') {
+        throw unlockFailure('UNSUPPORTED', got.reason === 'browser' ? NO_PRF_BROWSER : NO_PRF_PASSKEY);
+      }
+      prfOutput = got.output;
+      let copy;
+      try {
+        copy = await NotesStore.api(`/api/account/vault-keys/prf/${encodeURIComponent(cid)}/unwrap`, {
+          method: 'POST', body: JSON.stringify({ credential: NotesWebAuthn.authenticationCredentialJson(got.assertion) }),
+        });
+      } catch (err) {
+        if (err.status === 404) throw unlockFailure('STALE', STALE_COPY_MESSAGE);
+        throw err;
+      }
+      wrapKey = global.NotesCrypto.derivePrfWrapKey(prfOutput);
+      const key = await C.unwrapVaultKey(
+        wrapKey,
+        { wrap_version: copy.wrap_version, key_id: copy.key_id, blob: copy.wrap },
+        { accountId: info.accountId, type: 'prf', binding: cid },
+      );
+      return { key, wrapKeyId: String(copy.key_id || ''), accountKeyId: info.keyId };
+    } catch (err) {
+      if (err.code) throw err;
+      if (err.name === 'NotAllowedError' || /cancel/i.test(String(err.message))) {
+        throw unlockFailure('CANCELLED', 'Passkey unlock was cancelled. Use your master password instead.');
+      }
+      if (err.status === undefined && NotesStore.isProbablyOffline(err)) {
+        throw unlockFailure('OFFLINE', 'Passkey unlock needs a connection to the server. Use your master password instead.');
+      }
+      throw unlockFailure('FAILED', `Passkey unlock did not work. Use your master password instead. (${err.message || 'unknown error'})`);
+    } finally {
+      if (prfOutput) prfOutput.fill(0);
+      if (wrapKey) wrapKey.raw.fill(0);
+    }
+  }
+
   function formatPasskeyLabel(row, index) {
     const when = row.created_at
       ? new Date(row.created_at * 1000).toLocaleString()
@@ -330,5 +407,8 @@
     enableVaultUnlock,
     disableVaultUnlock,
     enableVaultUnlockForNew,
+    passkeyUnlockStatus,
+    unwrapVaultKeyWithPasskey,
+    STALE_COPY_MESSAGE,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

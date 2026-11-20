@@ -496,6 +496,47 @@ On recovery commit, replace, revoke, lockout and legacy invalidation (6.2):
 * Recovery commit and password change end all other sessions through the same
   `_revoke_other_sessions` (reason `vault-recovery`), visible in `/api/sessions`.
 
+### 3.7 Unlock from the lock screen with a passkey
+
+The lock screen shows "Unlock with passkey" only while the server status
+(`GET /api/account/vault-keys`) lists a passkey copy with `current: true`; the master password
+field and the recovery key link stay as they are. The button runs `options`, one `get()` with the
+PRF extension, `unwrap`, and unwraps the copy in the browser (`NotesStore.unlockWithVaultKey`):
+
+1. The id of the unwrapped key must equal the `key_id` inside the wrap **and** the `key_id` of the
+   account status. A mismatch is refused before any server read.
+2. `state.kdfVersion` is the account's `vault_kdf_version` (never the default 1), and the session
+   is marked `keySource = 'passkey'`: it holds no password and no derived KDF key.
+3. The key is **not** verified from the server's key id alone. `keyVerified` becomes true only
+   after the key decrypted real ciphertext from the server (the same probe the password route
+   uses, `probeServerKey`). Until then every write and sync is refused (`unverifiedKeyError`).
+   **Empty vault:** when the server holds no notes (`total_undeleted == 0`) nothing can contradict
+   the key; the proof is then the AEAD-authenticated copy plus the current key id, which the
+   server only releases because password change and KDF upgrade remove all copies in the same
+   transaction that stores the new key. A vault that has notes but returned only tombstones in
+   the probe window is refused ("use your master password"). A refused key is zeroed and the vault
+   stays locked.
+4. A stale copy (`no_prf_wrap`, or copies exist but none is current) shows a clear message, hides
+   the button for the rest of the page's life and leaves the password field to the user. Cancel, a
+   missing PRF result, being signed out or offline also fall back to the password, with no change.
+5. Everything that needs the password skips explicitly in a passkey session: the KDF upgrade
+   (`migrateVaultKdfIfNeeded`), `retryPendingVaultKdfUpgrade` (leaves a pending flag untouched),
+   the other-KDF retry in sync and in `probeServerKey`, `markKeyVerified` (writes no KDF hint), and
+   "remember this device" (keeps the saved password instead of overwriting it with an empty one;
+   with nothing saved it says the password is saved at the next password unlock). There is no
+   offline passkey unlock: the copy is never kept on the device and the key check needs the
+   server, so offline the attempt is refused, the vault stays locked and the offline-unlock marker
+   (`notes_offline_unlock_verified`) is not set; the saved password route works as before.
+   A pending KDF upgrade of an account that only unlocks with a passkey therefore waits and is
+   finished by the next password unlock, which runs the normal migration.
+
+**New key, copies removed.** A password change and a KDF upgrade (`POST /api/account/vault-kdf`)
+each create a new vault key. Both delete all recovery and passkey copies and free `vault_key_id`
+(`''`) in the same transaction that stores the change, so no copy of an old key is ever current.
+Re-wrapping for the new key is not done in the same session: a passkey copy needs a PRF ceremony
+and the recovery copy needs the recovery key, neither is available to the changing client. The
+user turns passkey unlock on again in Settings.
+
 ## 4. UI contract (for the build tasks; wording must stay true to this document)
 
 * New account: recovery key shown after registration and **must be confirmed** (checkbox

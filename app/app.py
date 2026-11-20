@@ -2767,7 +2767,8 @@ def api_account_vault_kdf():
     current = db.user_vault_kdf_version(user)
     if current >= version:
         return jsonify({"ok": True, "vault_kdf_version": current})
-    db.update_user_vault_kdf_version(uid, version)
+    # The upgrade re-encrypts under a new vault key: copies of the old key must not stay current.
+    db.update_user_vault_kdf_version(uid, version, drop_vault_wraps=True)
     return jsonify({"ok": True, "vault_kdf_version": version})
 
 
