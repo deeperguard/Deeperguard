@@ -2917,7 +2917,18 @@
         <label id="contacts-import-encoding-row" class="scan-name-field">Wrong characters?
           <select id="contacts-import-encoding"></select>
         </label>
-        <label class="contacts-import-check"><input type="checkbox" id="contacts-import-skip-existing" checked> Leave out contacts I already have (same email, phone or UID)</label>
+        <fieldset id="contacts-import-dups" class="contacts-import-dups" hidden>
+          <legend>Duplicates</legend>
+          <p class="muted">These match a contact you already have, or occur twice in the files, by email address, phone number (spaces, dashes and brackets ignored) or name. Nothing is saved until you press Import.</p>
+          <div class="contacts-import-dup-all">
+            <label><input type="radio" name="contacts-import-dup-all" id="contacts-import-dup-all-skip" value="skip" checked> Skip</label>
+            <label><input type="radio" name="contacts-import-dup-all" id="contacts-import-dup-all-merge" value="merge"> Merge</label>
+            <label><input type="radio" name="contacts-import-dup-all" id="contacts-import-dup-all-both" value="both"> Keep both</label>
+          </div>
+          <p class="muted">Skip does not import it. Merge adds what is missing to the other contact and keeps its existing values; nothing is deleted. Keep both imports it as a new contact. Matches on the name alone are kept as new contacts unless you choose here. Choosing here replaces the choices made below.</p>
+          <ul id="contacts-import-dup-list" class="totp-import-list"></ul>
+          <p id="contacts-import-dup-note" class="muted"></p>
+        </fieldset>
         <h3 class="scan-dialog-lead">Problems</h3>
         <ul id="contacts-import-problems" class="totp-import-list"></ul>
         <h3 class="scan-dialog-lead">Contacts</h3>

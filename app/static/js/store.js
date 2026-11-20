@@ -5313,13 +5313,21 @@ const NotesStore = (() => {
   }
 
   // Import parsed contacts (docs/CONTACTS_SPEC.md 7.5, 7.6). Every contact is built and stored like an added
-  // one (encrypted, dirty, pushed by the normal sync). Returns the undo record: only the uuids this import
-  // created and its end time; the caller keeps it in memory and never stores it.
-  async function importContacts(list, { batch = '', source = null, onProgress = null } = {}) {
+  // one (encrypted, dirty, pushed by the normal sync). `merges` is a Map from a position in `list` to the contact
+  // that entry is merged into instead of being added: { id } (a contact of the vault) or { index } (an earlier
+  // position in `list`). A merge is NotesContacts.planMerge with the target as the contact to keep, so nothing is
+  // dropped and existing values win; when the target is gone or the result would not fit, the entry is added as a
+  // new contact. Returns the undo record: the uuids created, for each merged vault contact its content from before
+  // the first merge, and the end time; the caller keeps it in memory and never stores it.
+  async function importContacts(list, { batch = '', source = null, onProgress = null, merges = null } = {}) {
     const C = requireContacts();
     const created = [];
+    const createdAt = new Map();
+    const createdIds = new Set();
+    const before = new Map();
     const failed = [];
     const dropped = {};
+    let mergedCount = 0;
     let stopped = false;
     const importedAt = new Date().toISOString();
     for (let i = 0; i < list.length; i += 1) {
@@ -5328,32 +5336,61 @@ const NotesStore = (() => {
         const input = { ...list[i] };
         input.extra = { ...(input.extra || {}), source: { ...((input.extra && input.extra.source) || {}), ...(source || {}), imported_at: importedAt, batch } };
         const { content, dropped: d } = C.buildContact(input, null);
-        const id = newUuid();
-        upsert(id, content);
-        created.push(id);
         for (const key of Object.keys(d)) dropped[key] = (dropped[key] || 0) + d[key];
+        const into = merges && merges.get(i);
+        const targetId = into && (into.id !== undefined ? into.id : createdAt.get(into.index));
+        const target = targetId ? contactRecord(targetId) : null;
+        let done = false;
+        if (target) {
+          const current = { ...target.content, uuid: targetId };
+          const plan = C.planMerge([current, { ...content, uuid: 'incoming' }], targetId);
+          if (!plan.error) {
+            if (!createdIds.has(targetId) && !before.has(targetId)) before.set(targetId, C.restorePatch(current));
+            updateContact(targetId, plan.patch);
+            mergedCount += 1;
+            done = true;
+          }
+        }
+        if (!done) {
+          const id = newUuid();
+          upsert(id, content);
+          created.push(id);
+          createdIds.add(id);
+          createdAt.set(i, id);
+        }
       } catch (err) {
         failed.push({ index: i, reason: /too large/i.test(String(err && err.message)) ? 'the contact is larger than 128 KiB' : 'the contact could not be saved' });
       }
       if (onProgress) onProgress(i + 1, list.length);
       if (i % 100 === 99) await new Promise((resolve) => setTimeout(resolve, 0));
     }
-    return { created, failed, dropped, stopped, endedAt: new Date().toISOString() };
+    const merged = [...before].map(([id, patch]) => ({ id, before: patch }));
+    return { created, merged, mergedCount, failed, dropped, stopped, endedAt: new Date().toISOString() };
   }
 
-  // Undo of the last import: removes the contacts it created, except those edited since (kept and counted).
+  // Undo of the last import: removes the contacts it created and puts back the vault contacts it merged into,
+  // except those edited since (kept and counted).
   function restoreContacts(record) {
     requireContacts();
     let removed = 0;
+    let restored = 0;
     let kept = 0;
+    const since = (item) => String(item.content.updated_at || '') > String((record && record.endedAt) || '');
     for (const uuid of (record && record.created) || []) {
       const item = contactRecord(uuid);
       if (!item) continue;
-      if (String(item.content.updated_at || '') > String(record.endedAt || '')) { kept += 1; continue; }
+      if (since(item)) { kept += 1; continue; }
       remove(uuid);
       removed += 1;
     }
-    return { removed, kept };
+    for (const m of (record && record.merged) || []) {
+      const item = contactRecord(m.id);
+      if (!item) continue;
+      if (since(item)) { kept += 1; continue; }
+      updateContact(m.id, m.before);
+      restored += 1;
+    }
+    return { removed, restored, kept };
   }
 
   function listFolders() {

@@ -279,8 +279,8 @@ function stored(c) {
     const existing = NotesStore.addContact({ name: { given: 'Sanne', family: 'Oud' }, emails: [{ type: 'work', value: 'sanne@visserbouw.example' }] });
     const fileA = await I.readFiles([fakeFile('a.vcf', Buffer.concat([fixture('apple-3.0.vcf'), fixture('proton-4.0.vcf')]))]);
     assert.strictEqual(fileA.contacts.length, 2);
-    const hits = I.findExisting(fileA.contacts, NotesStore.listContacts());
-    assert.deepStrictEqual([...hits], [0]); // same email as the contact already in the vault
+    const hits = C.matchIncoming(fileA.contacts, NotesStore.listContacts()).map((m) => !!m);
+    assert.deepStrictEqual(hits, [true, false]); // the first has the same email as the contact already in the vault
     const first = await NotesStore.importContacts([fileA.contacts[1]], { batch: 'b-1' });
     assert.strictEqual(first.created.length, 1);
     const fileB = await I.readFiles([fakeFile('b.vcf', Buffer.concat([fixture('android-3.0.vcf'), fixture('google-3.0.vcf'), fixture('nextcloud-4.0.vcf')]))]);
@@ -296,11 +296,11 @@ function stored(c) {
     await new Promise((r) => setTimeout(r, 5));
     NotesStore.updateContact(edited.uuid, { title: 'Baas' });
     const undone = NotesStore.restoreContacts(second);
-    assert.deepStrictEqual(undone, { removed: 2, kept: 1 });
+    assert.deepStrictEqual(undone, { removed: 2, restored: 0, kept: 1 });
     const left = NotesStore.listContacts().map((c) => c.name.family).sort();
     assert.deepStrictEqual(left, ['Hendriks', 'Oud', 'van Dam']);
     assert.ok(NotesStore.listContacts().some((c) => c.uuid === existing.uuid));
-    assert.deepStrictEqual(NotesStore.restoreContacts(second), { removed: 0, kept: 1 }); // twice: nothing more to remove
+    assert.deepStrictEqual(NotesStore.restoreContacts(second), { removed: 0, restored: 0, kept: 1 }); // twice: nothing more to remove
     // the server only ever saw ciphertext
     h.stopPushTimer();
     await NotesStore.pushDirty({ quiet: true });
