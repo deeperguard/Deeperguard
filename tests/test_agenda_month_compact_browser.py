@@ -60,6 +60,22 @@ MEASURE = """() => {
     minDotGap: Math.min(...dots),
     weekNums: document.querySelectorAll('#agenda-root .agenda-month-week').length,
     dotCount: document.querySelectorAll('#agenda-root .agenda-month-dot').length,
+    plus: [...document.querySelectorAll('#agenda-root .agenda-month-dot-more')].map((el) => {
+      const r = el.getBoundingClientRect();
+      const cell = el.closest('.agenda-month-cell').getBoundingClientRect();
+      const dot = el.previousElementSibling.getBoundingClientRect();
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--muted)';
+      el.parentNode.appendChild(probe);
+      const muted = getComputedStyle(probe).color;
+      probe.remove();
+      return {
+        text: el.textContent, width: r.width,
+        inCell: r.left >= cell.left && r.right <= cell.right + 0.5 && r.top >= cell.top && r.bottom <= cell.bottom + 0.5,
+        afterDots: r.left >= dot.right && r.top < dot.bottom && r.bottom > dot.top,
+        isMuted: getComputedStyle(el).color === muted,
+      };
+    }),
   };
 }"""
 
@@ -126,7 +142,13 @@ def test_phone_month_is_compact(session, width, height):
     assert m["rows"] == 6
     assert 44 <= m["rowH"] <= 56, m
     assert m["minCellH"] >= 44 and m["minCellW"] >= 40, m
-    assert m["weekNums"] == 6 and m["dotCount"] >= 6, m
+    assert m["weekNums"] == 6, m
+    assert m["dotCount"] == 3, "six events on one day show at most 3 dots"
+    assert len(m["plus"]) == 1, m["plus"]
+    plus = m["plus"][0]
+    assert plus["text"] == "+" and plus["width"] > 0, plus
+    assert plus["inCell"] and plus["afterDots"], "the '+' sits on the dot row, inside its day cell"
+    assert plus["isMuted"], "the '+' uses the secondary text colour"
     assert m["minDotGap"] >= 0, "dots must not overlap the day number"
     assert m["docScroll"] <= 1, m
     assert m["listTop"] <= m["gridBottom"] + 2, "day list directly follows the grid"

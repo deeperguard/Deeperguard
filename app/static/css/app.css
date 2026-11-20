@@ -775,6 +775,13 @@ body.agenda-phone-menu-open .agenda-phone-menu {
   background: var(--agenda-dot, var(--accent));
   flex-shrink: 0;
 }
+.agenda-month-dot-more {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 7px;
+}
 .agenda-month-cell.is-pick {
   outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: -2px;

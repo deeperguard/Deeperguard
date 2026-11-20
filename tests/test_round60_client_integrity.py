@@ -493,6 +493,18 @@ class Round60ClientIntegrityTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
         self.assertIn("test_agenda_month_week_numbers.js: ok", proc.stdout)
 
+    def test_agenda_month_dot_limit(self):
+        proc = subprocess.run(
+            ["node", str(REPO / "tests" / "test_agenda_month_dot_limit.js")],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        self.assertIn("test_agenda_month_dot_limit.js: ok", proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
