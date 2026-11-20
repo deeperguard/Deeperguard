@@ -1882,13 +1882,18 @@
         html += `<button type="button" class="agenda-month-date" data-agenda-month-pick="${ds.getTime()}" aria-label="${esc(dayLabel)}"${phoneMonth ? ` aria-pressed="${pickActive ? 'true' : 'false'}"` : ''}>${day.getDate()}</button>`;
         html += '<div class="agenda-month-events">';
         if (phoneMonth) {
-          dayTasks.slice(0, 3).forEach(() => {
+          // Phone: at most 3 dots per day (tasks first, then events in month order); a '+' marks the rest.
+          const dotTasks = dayTasks.slice(0, MAX_CHIPS);
+          dotTasks.forEach(() => {
             html += '<span class="agenda-month-dot agenda-month-dot--task" aria-hidden="true"></span>';
           });
-          sorted.slice(0, 6).forEach((o) => {
+          sorted.slice(0, MAX_CHIPS - dotTasks.length).forEach((o) => {
             const clr = eventAccentColor(o.ev);
             html += `<span class="agenda-month-dot" style="--agenda-dot:${clr}" aria-hidden="true"></span>`;
           });
+          if (dayTasks.length + sorted.length > MAX_CHIPS) {
+            html += '<span class="agenda-month-dot-more" aria-hidden="true">+</span>';
+          }
         } else {
           html += renderDayTasks(taskShow, 'chip');
           show.forEach((o) => {
