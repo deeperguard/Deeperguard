@@ -38,7 +38,7 @@
           <li>Argon2id derives your vault key on this device.</li>
           <li>SRP-6a signs you in with proofs — the vault password is not posted as a readable field.</li>
           <li>Unlocking the vault happens on your device. We do not offer a “forgot vault password” reset that recovers your notes.</li>
-          <li>New accounts create a recovery key during sign-up. It is made in your browser and shown only there; we store a copy of your vault key encrypted with it and cannot read the recovery key or that copy. The app has no screen yet to open a vault or reset a password with the recovery key, so today a forgotten vault password still means your notes cannot be opened. Accounts created before this step have no recovery key.</li>
+          <li>New accounts create a recovery key during sign-up. It is made in your browser and shown only there; we store a copy of your vault key encrypted with it and cannot read the recovery key or that copy. If you forget your vault password, you need a signed-in session first (a device that is still signed in, or a sign-in with a passkey or an account recovery code; the recovery key does not sign you in) and then use the recovery key on the unlock screen to open the vault and choose a new password; your notes are re-encrypted on your device, your other devices are signed out and you get a new recovery key. Without your password and without your recovery key, your notes cannot be opened. Accounts created before this step can create a recovery key in Settings after unlocking.</li>
         </ul>
       </article>
 
@@ -76,7 +76,7 @@
         <h2>Backups</h2>
         <ul>
           <li>Daily encrypted email backups (ciphertext archives).</li>
-          <li>pCloud: connect with an rclone OAuth token — your pCloud account password is never stored on this server.</li>
+          <li>pCloud: when you turn it on, your already encrypted vault data is uploaded once a day to the pCloud account of the Deeperguard service, into a folder for your account only. pCloud and Deeperguard cannot read the content, but they can see its size, the times of the backups and the number of files. Accounts that already back up to their own pCloud account keep doing so with an rclone OAuth token — your pCloud account password is never stored on this server.</li>
         </ul>
         <p>Archives stay encrypted; you still need your vault password to open them.</p>
       </article>
