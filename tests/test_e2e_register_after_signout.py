@@ -32,7 +32,10 @@ class RegisterAfterSignOutE2E(unittest.TestCase):
         from e2e_register_after_signout import run
 
         feedback = run("blocked")
-        self.assertTrue(feedback.startswith("register-error: "), feedback)
+        self.assertEqual(
+            feedback,
+            "register-error: Please complete the security check and try again.",
+        )
 
 
 if __name__ == "__main__":
