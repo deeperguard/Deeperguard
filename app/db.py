@@ -184,6 +184,19 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN password_changed_at REAL NOT NULL DEFAULT 0")
     if "auth_security_at" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN auth_security_at REAL NOT NULL DEFAULT 0")
+    if "pcloud_password" in cols:
+        # Stored pCloud account passwords are gone for good: flag every connection that
+        # still relied on one so the owner reconnects with OAuth, overwrite the values
+        # (secure_delete zeroes freed pages) and drop the column.
+        conn.execute("PRAGMA secure_delete = ON")
+        conn.execute(
+            "UPDATE users SET pcloud_last_sync_status = 'reconnect_needed', "
+            "pcloud_last_sync_detail = ? WHERE pcloud_password != '' OR pcloud_username != ''",
+            ("pCloud no longer stores account passwords. Reconnect pCloud with OAuth in Settings.",),
+        )
+        conn.execute("UPDATE users SET pcloud_password = ''")
+        conn.execute("ALTER TABLE users DROP COLUMN pcloud_password")
+        cols.discard("pcloud_password")
     if "pcloud_enabled" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN pcloud_enabled INTEGER NOT NULL DEFAULT 0")
     if "pcloud_username" not in cols:

@@ -34,6 +34,10 @@ PCLOUD_API_HOSTS = {
     "eu": "eapi.pcloud.com",
 }
 STATUS_RECONNECT = "reconnect_needed"
+PASSWORD_REJECTED_DETAIL = (
+    "pCloud account passwords are no longer accepted or stored. "
+    "Connect pCloud with OAuth in Settings, in the pCloud backup section."
+)
 OAUTH_REFUSED_DETAIL = (
     "pCloud refused the saved connection. Reconnect pCloud in Settings, "
     "in the pCloud backup section."
@@ -396,7 +400,6 @@ def save_pcloud_settings(
     remote_path: str,
     region: str,
     enabled: bool,
-    password: str | None = None,
     rclone_token: str | None = None,
 ) -> None:
     username = username.strip()
@@ -404,11 +407,6 @@ def save_pcloud_settings(
     region = normalize_pcloud_region(region)
     if enabled and not username:
         raise ValueError("pCloud username is required when backup is enabled")
-    if password:
-        raise ValueError(
-            "pCloud account passwords are no longer stored on the server. "
-            "Run rclone authorize pcloud on your computer and paste the OAuth token JSON."
-        )
     pc.migrate_user_pcloud_secrets(user_id, KEYS_DIR)
     if rclone_token is not None:
         token = normalize_pcloud_token(rclone_token)

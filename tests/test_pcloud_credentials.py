@@ -68,18 +68,6 @@ class PcloudCredentialSecurityTests(unittest.TestCase):
         self.assertFalse(legacy.is_file())
         self.pc.assert_keys_dir_has_no_plaintext_passwords(keys)
 
-    def test_password_in_settings_rejected(self):
-        with self.assertRaises(ValueError) as ctx:
-            self.backup_pcloud.save_pcloud_settings(
-                1,
-                username="u@pcloud.test",
-                remote_path="Deeperguard/backups",
-                region="eu",
-                enabled=True,
-                password="no-store",
-            )
-        self.assertIn("no longer stored", str(ctx.exception))
-
     def test_rclone_remote_env_does_not_persist_token_file(self):
         token = '{"access_token":"rclone-token-value","token_type":"bearer"}'
         self.config.write_pcloud_token(9, token)

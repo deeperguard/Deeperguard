@@ -4677,6 +4677,22 @@ class NotesAppTests(unittest.TestCase):
             )
         self.assertEqual(bad.status_code, 400)
 
+    def test_pcloud_settings_password_rejected_and_not_stored(self):
+        self._register_user("pcloud-pw@home.local", "pcloud-secure-pass")
+        csrf = {"X-CSRF-Token": self._csrf()}
+        res = self.client.post(
+            "/api/backup/pcloud/settings",
+            headers=csrf,
+            json={"username": "u@pcloud.test", "password": "hunter2-pcloud", "enabled": False},
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("OAuth", res.get_json()["error"])
+        self.assertNotIn("hunter2-pcloud", res.get_data(as_text=True))
+        account = self.client.get("/api/account", headers=csrf).get_json()
+        self.assertEqual(account["pcloud_username"], "")
+        keys = Path(os.environ["NOTES_KEYS"])
+        self.assertEqual([], list(keys.glob("pcloud-password-*")))
+
     def test_pcloud_settings_and_sync(self):
         from unittest.mock import patch
 
@@ -4686,7 +4702,7 @@ class NotesAppTests(unittest.TestCase):
         self.assertEqual(account.status_code, 200)
         data = account.get_json()
         self.assertFalse(data["pcloud_enabled"])
-        self.assertFalse(data["pcloud_password_set"])
+        self.assertNotIn("pcloud_password_set", data)
         self.assertEqual(data["pcloud_remote_path"], "")
 
         missing = self.client.post(
@@ -4709,14 +4725,12 @@ class NotesAppTests(unittest.TestCase):
         )
         self.assertEqual(saved.status_code, 200)
         self.assertTrue(saved.get_json()["token_set"])
-        self.assertFalse(saved.get_json()["password_set"])
 
         account2 = self.client.get("/api/account", headers=csrf)
         self.assertTrue(account2.get_json()["pcloud_enabled"])
         self.assertEqual(account2.get_json()["pcloud_username"], "user@pcloud.test")
         self.assertEqual(account2.get_json()["pcloud_remote_path"], "Backups/notes")
         self.assertTrue(account2.get_json()["pcloud_token_set"])
-        self.assertFalse(account2.get_json()["pcloud_password_set"])
         token_path = Path(os.environ["NOTES_KEYS"]) / "pcloud-token-1"
         if token_path.is_file():
             self.assertNotIn("pcloud-secret-token", token_path.read_text(encoding="utf-8"))
