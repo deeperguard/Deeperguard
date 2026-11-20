@@ -5468,7 +5468,8 @@
       restoreContacts: (record) => NotesStore.restoreContacts(record),
       done: (result, undoFn) => {
         refreshContacts();
-        const message = `Imported ${result.created.length} contact${result.created.length === 1 ? '' : 's'}`;
+        const added = `Imported ${result.created.length} contact${result.created.length === 1 ? '' : 's'}`;
+        const message = result.mergedCount ? `${added}, ${result.mergedCount} merged` : added;
         if (undoFn) toastWithUndo(message, undoFn); else toast(message);
       },
       undone: (message) => { refreshContacts(); toast(message); },

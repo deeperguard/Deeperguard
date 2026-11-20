@@ -95,7 +95,7 @@ def run_flow(page, width: int) -> None:
     result = page.inner_text("#contacts-import-result-summary")
     assert "Imported 3 new contacts" in result and "0 not imported" in result and "2 photos stored" in result, result
     assert "They were not uploaded." in page.inner_text("#contacts-import-result")
-    page.wait_for_function("document.querySelectorAll('#contacts-list .contacts-row-name').length === 3")
+    page.wait_for_function("() => document.querySelectorAll('#contacts-list .contacts-row-name').length === 3")
     assert len(names(page)) == 3, names(page)
     # The sync that follows carries ciphertext only: no name or number in any request.
     time.sleep(2.5)
@@ -144,7 +144,54 @@ def run_flow(page, width: int) -> None:
     page.wait_for_selector("#contacts-import-preview:not([hidden])")
     assert "1 look like contacts you already have" in page.inner_text("#contacts-import-summary")
     assert page.is_disabled("#contacts-import-run")
+    # The duplicate is shown with its reason before anything is saved; Keep both adds it, undo removes it again.
+    assert page.is_visible("#contacts-import-dups")
+    assert "same contact imported before as Lotte de Boer (in your vault)" in page.inner_text("#contacts-import-dup-list")
+    page.check("#contacts-import-dup-all-both")
+    assert page.inner_text("#contacts-import-run").strip() == "Import 1 contact"
+    page.click("#contacts-import-run")
+    page.wait_for_function("() => document.querySelectorAll('#contacts-list .contacts-row-name').length === 3")
+    assert "Imported 1 new contact" in page.inner_text("#contacts-import-result-summary")
+    page.click("#contacts-import-undo")
+    page.wait_for_function("() => document.querySelectorAll('#contacts-list .contacts-row-name').length === 2")
     page.click("#contacts-import-close")
+
+    # Merge: the same person with the number written differently, one new email and one new number. The existing
+    # values stay, the new ones are added, no contact is added; undo takes the additions out again.
+    merge_card = (
+        "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Lotte de Boer\r\nTEL:0031 6 2233 4455\r\nTEL:06 9999 8888\r\n"
+        "EMAIL:lotte.prive@example.nl\r\nEND:VCARD\r\n"
+    )
+
+    def merge_import() -> None:
+        page.click("#btn-contacts-import")
+        page.set_input_files("#contacts-import-file", files=[{"name": "again.vcf", "mimeType": "text/vcard", "buffer": merge_card.encode()}])
+        page.wait_for_selector("#contacts-import-preview:not([hidden])")
+        assert "1 look like contacts you already have" in page.inner_text("#contacts-import-summary")
+        page.select_option("#contacts-import-dup-list select", "merge")
+        page.click("#contacts-import-run")
+        page.wait_for_selector("#contacts-import-result:not([hidden])")
+        assert "1 merged into other contacts" in page.inner_text("#contacts-import-result-summary")
+        assert len(names(page)) == 2
+
+    def lotte_detail() -> str:
+        if not page.is_visible("#contacts-list") and page.is_visible("#contacts-detail .contacts-back"):
+            page.click("#contacts-detail .contacts-back")
+        page.click("#contacts-list .contacts-row-name >> text=Lotte de Boer")
+        return page.inner_text("#contacts-detail")
+
+    merge_import()
+    page.click("#contacts-import-undo")
+    page.wait_for_function("() => document.getElementById('contacts-import-result-summary').textContent.includes('1 merge undone')")
+    page.click("#contacts-import-close")
+    assert "lotte.prive@example.nl" not in lotte_detail()
+    merge_import()
+    page.click("#contacts-import-close")
+    detail = lotte_detail()
+    assert "lotte@deboer.example" in detail and "lotte.prive@example.nl" in detail and "06 9999 8888" in detail, detail
+    assert detail.count("22334455") + detail.count("2233 4455") == 1, detail
+    if not page.is_visible("#contacts-list"):
+        page.click("#contacts-detail .contacts-back")
     assert page.evaluate("window.__xss") is None
     no_hscroll(page, f"{where} list")
 

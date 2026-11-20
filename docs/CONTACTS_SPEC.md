@@ -1518,6 +1518,19 @@ and the reason, with a per-pair choice, default taken from a global radio:
 The global choice applies to all pairs not set individually. The preview
 states what each choice did in the result.
 
+**As built (the import step reuses 7.10, it has no matcher of its own).** `NotesContacts.matchIncoming` runs
+`findDuplicateGroups` over the vault's contacts and the file's contacts together, so phone and email rules are those
+of 7.10 (formatting ignored, `00` = `+`); a UID equal to a vault contact's counts as an exact match. A match inside
+the file alone only counts when the names agree or one has none (the family-landline rule above); against the vault
+it counts without that check. Targets: the best filled vault contact of the group, else the earlier contact of the
+file. Defaults: Skip for email, phone and UID matches, Keep both for name-only matches; the three radio buttons
+choose for all at once and replace the per-contact choices, each listed duplicate (first 50) has its own select.
+Merge is `NotesContacts.planMerge` with the existing contact as the one to keep, so values already there win and
+nothing is dropped; when the result would not fit one contact, or the target has been deleted, the contact is added
+as a new one instead. A national number (`0612345678`) and an international one (`+31612345678`) are different
+entries in a merge: both are kept. The undo record (7.6) also holds each merged vault contact as it was before the
+first merge of that import; Undo puts it back unless it was edited since.
+
 ### 7.5 Step 4: import and result summary
 
 On **Import**: contacts are written through `NotesStore.importContacts(parsed,
@@ -1618,9 +1631,7 @@ The first limit hit is shown in the preview before anything is written
 
 The vCard import (6.1) with preview, result summary and undo is built; the dialog takes other formats through
 `NotesContactsImport.registerFormat` (sniff, parse, describe), so CSV, LDIF and jCard only add a parser. Not built yet,
-and therefore not claimed by the app: the CSV, LDIF and jCard readers and the column mapping step; the Merge and
-Keep both choices of 7.4 (a contact that matches one in the vault by email, phone or UID is left out by default, and
-the owner can untick that); duplicates inside one file and name-only matches; the quota estimate of 7.3; the progress
+and therefore not claimed by the app: the CSV, LDIF and jCard readers and the column mapping step; the quota estimate of 7.3; the progress
 and 60 s watchdog of 7.2 (the parse is synchronous; only writing reports "Importing N of M"); the "Imported on"
 filter and "Delete these" of 7.6. The undo record is kept until the vault locks; the dialog's Undo button and the
 toast's Undo both use it. Export (8) writes vCard 3.0 or 4.0, always with photos: the ticked contacts when the

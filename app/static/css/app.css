@@ -13602,7 +13602,11 @@ a.contacts-value-main { color: var(--accent); }
 #contacts-import-dialog ul { margin: 0 0 12px; padding-left: 20px; overflow-wrap: anywhere; }
 #contacts-import-dialog ul[hidden] { display: none; }
 #contacts-import-dialog.dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
-#contacts-import-dialog .contacts-import-check { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; }
+#contacts-import-dialog .contacts-import-dups { margin: 8px 0 12px; padding: 8px 12px; border: 1px solid var(--border, currentColor); border-radius: 8px; min-width: 0; }
+#contacts-import-dialog .contacts-import-dups[hidden] { display: none; }
+#contacts-import-dialog .contacts-import-dup-all { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0; }
+#contacts-import-dialog .contacts-import-dups li label { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+#contacts-import-dialog .contacts-import-dups select { max-width: 100%; }
 #contacts-import-dialog .contacts-map-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 12px; }
 #contacts-import-dialog .contacts-map-table th, #contacts-import-dialog .contacts-map-table td { text-align: left; vertical-align: top; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--border, currentColor); overflow-wrap: anywhere; font-weight: normal; }
 #contacts-import-dialog .contacts-map-table thead th, #contacts-import-dialog .contacts-map-table tbody th { font-weight: 600; }
