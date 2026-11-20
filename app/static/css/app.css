@@ -13631,6 +13631,95 @@ a.contacts-value-main { color: var(--accent); }
 #contacts-dup-dialog .contacts-dup-pick-btn { width: 100%; justify-content: flex-start; gap: 10px; min-height: 44px; text-align: left; }
 .contacts-merge-with { margin-bottom: 8px; }
 .contacts-pane .totp-head-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+/* Contacts header on phones and tablets: one row (title with the count under it, lock,
+   settings, + and a "more" menu for the other actions). From 1000px the actions are plain
+   buttons again and the "more" button and the menu-only sidebar toggle are hidden. */
+@media (min-width: 1000px) {
+  .contacts-pane .contacts-more-menu { display: contents; }
+  .contacts-pane .contacts-more-btn,
+  .contacts-pane .contacts-menu-nav-toggle { display: none; }
+}
+@media (max-width: 999px) {
+  .contacts-pane .contacts-head {
+    position: relative;
+    flex-wrap: nowrap;
+    row-gap: 0;
+    gap: var(--space-1);
+    padding: var(--space-1) calc(var(--space-3) + var(--safe-right)) 0 calc(var(--space-3) + var(--safe-left));
+  }
+  .contacts-pane .contacts-head-copy { flex: 1 1 0; min-width: 0; }
+  .contacts-pane .contacts-title { font-size: 20px; line-height: 1.15; }
+  .contacts-pane #contacts-count {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .contacts-pane .totp-side-foot { order: 1; flex: 0 0 auto; gap: var(--space-1); }
+  .contacts-pane #btn-contacts-nav-toggle { display: none; }
+  .contacts-pane .totp-head-actions { order: 2; flex: 0 0 auto; flex-wrap: nowrap; gap: var(--space-1); }
+  .contacts-pane .contacts-more-menu {
+    display: none;
+    position: absolute;
+    right: calc(var(--space-3) + var(--safe-right));
+    top: calc(100% - 2px);
+    z-index: 6;
+    min-width: 220px;
+    max-width: calc(100% - 2 * var(--space-3));
+    box-sizing: border-box;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    box-shadow: 0 12px 40px color-mix(in srgb, var(--text) 18%, transparent);
+  }
+  .contacts-pane .contacts-more-menu.is-open { display: flex; }
+  .contacts-pane .contacts-more-menu .btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: flex-start;
+    border-color: transparent;
+    background: transparent;
+    text-align: left;
+  }
+  .contacts-pane .contacts-more-menu .btn:hover { background: var(--bg-hover); }
+  .contacts-pane .contacts-more-menu .btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .contacts-pane .contacts-section { padding: 3px var(--space-4); font-size: 12px; }
+  .contacts-pane .contacts-row-open { min-height: 52px; }
+}
+/* Single column (phone): the pane scrolls, so the header, the label chips and the list
+   move up together while the search bar stays pinned at the top. */
+@media (max-width: 899px) {
+  .contacts-pane { overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
+  .contacts-pane .contacts-toolbar { display: contents; }
+  .contacts-pane .search-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    order: 0;
+    padding: 2px calc(var(--space-3) + var(--safe-right)) 2px calc(var(--space-3) + var(--safe-left));
+    background: var(--bg);
+  }
+  .contacts-pane .totp-tag-chips {
+    margin: 0;
+    padding: 0 calc(var(--space-3) + var(--safe-right)) 0 calc(var(--space-3) + var(--safe-left));
+    flex-shrink: 0;
+  }
+  .contacts-pane .contacts-body[data-view="list"] { flex: 0 0 auto; }
+  .contacts-pane .contacts-body[data-view="list"] .contacts-list {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding-bottom: calc(88px + var(--safe-bottom));
+  }
+  .contacts-pane .contacts-section { position: static; }
+  .contacts-pane .search-row { height: var(--touch); min-height: var(--touch); }
+  .contacts-pane .search-wrap input[type="search"] { height: 100%; min-height: 0; }
+  .contacts-pane .totp-tag-chips .tag-chip { min-height: var(--touch); }
+}
 @media (min-width: 1000px) {
   #contacts-dup-dialog { width: min(920px, calc(100% - 24px)); max-height: min(88vh, 760px); }
 }

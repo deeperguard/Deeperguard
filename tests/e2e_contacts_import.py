@@ -13,7 +13,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from e2e_contacts_sync import PASSWORD, free_port, register
+from e2e_contacts_sync import PASSWORD, contacts_action, free_port, open_contacts_menu, register, select_mode_on
 from e2e_signup_autounlock import start_server
 
 FIXTURES = Path(__file__).parent / "fixtures" / "contacts"
@@ -47,10 +47,12 @@ def run_flow(page, width: int) -> None:
     page.wait_for_selector("#contacts-pane:not([hidden])")
 
     # Keyboard: the Import button opens the dialog, focus lands inside it.
+    open_contacts_menu(page)
     page.focus("#btn-contacts-import")
     page.keyboard.press("Enter")
     page.wait_for_selector("#contacts-import-dialog:not([hidden])")
-    assert page.evaluate("document.getElementById('contacts-import-dialog').contains(document.activeElement)")
+    # dialog-a11y.js moves focus into the dialog in a 0 ms timer after it opens.
+    page.wait_for_function("() => document.getElementById('contacts-import-dialog').contains(document.activeElement)", timeout=2000)
     assert page.get_attribute("#contacts-import-dialog", "aria-labelledby") == "contacts-import-title"
     no_hscroll(page, f"{where} dialog")
 
@@ -109,17 +111,17 @@ def run_flow(page, width: int) -> None:
     assert "Import undone: 3 contacts removed." in page.inner_text("#contacts-import-result-summary")
     page.click("#contacts-import-close")
     page.wait_for_selector("#contacts-import-dialog", state="hidden")
-    assert page.evaluate("document.activeElement.id") == "btn-contacts-import"
+    assert page.evaluate("document.activeElement.id") == ("btn-contacts-more" if width < 1000 else "btn-contacts-import")
 
     # Two imports: the undo of the second leaves the first alone. Drop a file this time.
-    page.click("#btn-contacts-import")
+    contacts_action(page, "#btn-contacts-import")
     page.set_input_files("#contacts-import-file", files=[fixture("nextcloud-4.0.vcf")])
     page.wait_for_selector("#contacts-import-run:not([hidden])")
     page.click("#contacts-import-run")
     page.wait_for_selector("#contacts-import-result:not([hidden])")
     page.click("#contacts-import-close")
     page.wait_for_function("document.querySelectorAll('#contacts-list .contacts-row-name').length === 1")
-    page.click("#btn-contacts-import")
+    contacts_action(page, "#btn-contacts-import")
     page.evaluate(
         """(text) => {
           const dt = new DataTransfer();
@@ -137,7 +139,7 @@ def run_flow(page, width: int) -> None:
     page.wait_for_function("document.querySelectorAll('#contacts-list .contacts-row-name').length === 2")
     # Importing the same file again leaves the existing contact out by default (same phone).
     page.click("#contacts-import-close")
-    page.click("#btn-contacts-import")
+    contacts_action(page, "#btn-contacts-import")
     page.set_input_files("#contacts-import-file", files=[fixture("nextcloud-4.0.vcf")])
     page.wait_for_selector("#contacts-import-preview:not([hidden])")
     assert "1 look like contacts you already have" in page.inner_text("#contacts-import-summary")
@@ -194,7 +196,7 @@ def run_flow(page, width: int) -> None:
     no_hscroll(page, f"{where} list")
 
     # Export: a wrong password makes no file; the right one downloads a vCard that reads back.
-    page.click("#btn-contacts-export")
+    contacts_action(page, "#btn-contacts-export")
     page.wait_for_selector("#confirm-password-wrap:not([hidden])")
     page.fill("#confirm-password", "not the password")
     page.click("#confirm-ok")
@@ -213,7 +215,7 @@ def run_flow(page, width: int) -> None:
 
     # CSV: same password step, the format is chosen in the dialog; the file has a BOM, the Google header and no vCard.
     page.set_default_timeout(10000)
-    page.click("#btn-contacts-export")
+    contacts_action(page, "#btn-contacts-export")
     page.wait_for_selector("#confirm-password-wrap:not([hidden])")
     page.select_option("#confirm-choice", "csv")
     assert "CSV loses some fields" in page.inner_text("#confirm-choice-note")
@@ -247,13 +249,13 @@ def run_flow(page, width: int) -> None:
 
     # Selection mode: tick one contact and Export writes only that one; Done removes the ticks.
     assert page.locator("[data-contact-tick]").count() == 0
-    page.click("#btn-contacts-select")
-    assert page.get_attribute("#btn-contacts-select", "aria-pressed") == "true"
+    contacts_action(page, "#btn-contacts-select")
+    assert select_mode_on(page)
     assert page.locator("[data-contact-tick]").count() == 2
     page.check('[aria-label="Select Lotte de Boer"]')
     assert page.inner_text("#btn-contacts-export").strip() == "Export 1 selected"
     no_hscroll(page, f"{where} selection")
-    page.click("#btn-contacts-export")
+    contacts_action(page, "#btn-contacts-export")
     page.wait_for_selector("#confirm-password-wrap:not([hidden])")
     assert "1 contact will be exported" in page.inner_text("#confirm-dialog")
     page.fill("#confirm-password", PASSWORD)
@@ -262,10 +264,10 @@ def run_flow(page, width: int) -> None:
     assert dl.value.suggested_filename.startswith("deeperguard-contacts-")
     picked = Path(dl.value.path()).read_text("utf-8")
     assert picked.count("BEGIN:VCARD") == 1 and "FN:Lotte de Boer" in picked, picked
-    page.click("#btn-contacts-select")
+    contacts_action(page, "#btn-contacts-select")
     assert page.locator("[data-contact-tick]").count() == 0
     assert page.inner_text("#btn-contacts-export").strip() == "Export"
-    page.click("#btn-contacts-select")  # left on, so lock must clear it
+    contacts_action(page, "#btn-contacts-select")  # left on, so lock must clear it
     page.check('[aria-label="Select Lotte de Boer"]')
 
     # Lock: nothing of the contacts stays in the page.
@@ -273,13 +275,13 @@ def run_flow(page, width: int) -> None:
     page.wait_for_function("document.querySelectorAll('#contacts-list .contacts-row-name').length === 0")
     assert page.evaluate("document.getElementById('contacts-import-dialog').hidden")
     assert page.inner_text("#btn-contacts-export").strip() == "Export"
-    assert page.get_attribute("#btn-contacts-select", "aria-pressed") == "false"
+    assert not select_mode_on(page)
     stored = page.evaluate("JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage)])")
     assert "Lotte" not in stored and "Mallory" not in stored, stored
 
 
 def open_import(page) -> None:
-    page.click("#btn-contacts-import")
+    contacts_action(page, "#btn-contacts-import")
     page.wait_for_selector("#contacts-import-dialog:not([hidden])")
 
 
