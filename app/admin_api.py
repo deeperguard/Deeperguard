@@ -242,6 +242,32 @@ def register_admin_routes(app, build_id: str) -> None:
             **_site_nav(build_id),
         )
 
+    @app.get("/help")
+    def help_index_page():
+        body = (
+            "# Help\n\n"
+            "- [Account recovery](/help/recovery): recovery codes, the vault recovery key and backups.\n"
+            "- [Contacts](/help/contacts): add contacts, import them from other programs, duplicates, export and what the server can see.\n"
+        )
+        return render_template(
+            "doc-page.html",
+            title="Help",
+            body_html=render_simple_markdown(body),
+            **_site_nav(build_id),
+        )
+
+    @app.get("/help/contacts")
+    def help_contacts_page():
+        from pathlib import Path
+        doc = Path(__file__).resolve().parent.parent / "docs" / "HELP_CONTACTS.md"
+        body = doc.read_text(encoding="utf-8") if doc.is_file() else "Contacts help not found."
+        return render_template(
+            "doc-page.html",
+            title="Contacts help",
+            body_html=render_simple_markdown(body),
+            **_site_nav(build_id),
+        )
+
     @app.get("/api/admin/overview")
     def api_admin_overview():
         _, err = admin_required_json()

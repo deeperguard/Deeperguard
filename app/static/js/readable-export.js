@@ -1,5 +1,5 @@
 /*
- * Readable (unencrypted) ZIP export of all notes, their attachments and the agenda.
+ * Readable (unencrypted) ZIP export of all notes, their attachments, the agenda and the contacts.
  * Layout, naming and front-matter: docs/IMPORT_EXPORT_SPEC.md section 2.
  * Pure function over data the caller already holds in memory: it makes no
  * network request and writes nothing to disk. The caller owns the download.
@@ -10,15 +10,17 @@
  *   getAttachmentBytes(uuid) -> Promise<Uint8Array>. include2fa (default false) + totpAccounts
  *   (vault items) add 2fa/otpauth.txt; without include2fa no secret is read or written.
  *   agendaEvents: decrypted agenda events (NotesStore.listAgendaEvents()) -> agenda/agenda.ics,
- *   built with NotesAgendaIcs; throws when that module is missing. Returns null when no note
- *   and no agenda event qualifies.
+ *   built with NotesAgendaIcs; throws when that module is missing. contacts: decrypted contacts
+ *   (NotesStore.listContacts()) -> contacts/contacts.vcf (vCard 3.0, photos included), built with
+ *   NotesContactsVcard; throws when that module is missing. Returns null when no note, no agenda
+ *   event and no contact qualifies.
  */
 const NotesReadableExport = (() => {
   const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
   const WARNING = [
     'WARNING: THIS ARCHIVE IS NOT ENCRYPTED.',
     'Everything in it is readable by anyone who has this file: notes, attachments,',
-    'your calendar and, if present, the 2fa/ folder with authenticator secrets.',
+    'your calendar, your contacts and, if present, the 2fa/ folder with authenticator secrets.',
     'Store it somewhere private and delete it when you no longer need it.',
     'The encrypted .dgbackup file from Settings is the safe way to keep a backup.',
   ];
@@ -93,7 +95,7 @@ const NotesReadableExport = (() => {
 
   async function build({
     notes, tags = [], getAttachment, getAttachmentBytes, onProgress, now = new Date(), appBuild = '',
-    include2fa = false, totpAccounts = [], agendaEvents = [],
+    include2fa = false, totpAccounts = [], agendaEvents = [], contacts = [],
   }) {
     const encoder = new TextEncoder();
     const tagTitles = new Map(tags.map((t) => [t.uuid, t.content?.title || '']));
@@ -107,7 +109,8 @@ const NotesReadableExport = (() => {
     }
     const events = (agendaEvents || []).filter((ev) => ev && ev.start && ev.end);
     const untimed = (agendaEvents || []).filter((ev) => ev && !(ev.start && ev.end)).length;
-    if (!eligible.length && !events.length) return null;
+    const contactList = (contacts || []).filter((c) => c && c.type === 'contact');
+    if (!eligible.length && !events.length && !contactList.length) return null;
     eligible.sort((a, b) => String(a.content.created_at || '').localeCompare(String(b.content.created_at || ''))
       || String(a.uuid).localeCompare(String(b.uuid)));
 
@@ -188,6 +191,10 @@ const NotesReadableExport = (() => {
       entries.push({ name: 'agenda/agenda.ics', bytes: encoder.encode(icsText) });
       counts.events = events.length;
     }
+    if (contactList.length) {
+      entries.push({ name: 'contacts/contacts.vcf', bytes: encoder.encode(contactsVcardLib().write(contactList, { version: '3.0', photos: true })) });
+      counts.contacts = contactList.length;
+    }
     const notExported = [];
     if (locked) notExported.push(`${locked} locked note(s)`);
     if (trashed) notExported.push(`${trashed} trashed note(s)`);
@@ -208,6 +215,7 @@ const NotesReadableExport = (() => {
       `Notes: ${counts.notes}`,
       `Attachments: ${counts.attachments}`,
       ...(events.length ? [`Agenda events: ${events.length}`] : []),
+      ...(contactList.length ? [`Contacts: ${contactList.length} (contacts/contacts.vcf, vCard 3.0)`] : []),
       ...(include2fa ? [`2FA accounts: ${uris.length}`] : []),
       include2fa && uris.length ? '2fa/ included: yes, it contains live authenticator secrets.' : '2fa/ included: no.',
       '',
@@ -233,6 +241,15 @@ const NotesReadableExport = (() => {
       throw new Error('Agenda export unavailable: the calendar module is not loaded. Nothing was saved.');
     }
     return Ics;
+  }
+
+  function contactsVcardLib() {
+    let V = typeof NotesContactsVcard !== 'undefined' ? NotesContactsVcard : null;
+    if (!V && typeof module !== 'undefined' && module.exports) V = require('./contacts-vcard.js');
+    if (!V || typeof V.write !== 'function') {
+      throw new Error('Contacts export unavailable: the vCard module is not loaded. Nothing was saved.');
+    }
+    return V;
   }
 
   function zipLib() {
