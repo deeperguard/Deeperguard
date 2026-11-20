@@ -723,6 +723,17 @@ body.agenda-editor-open #toast {
   flex: 1;
   min-width: 0;
 }
+.agenda-top-row-phone { gap: 4px; }
+.agenda-top-row-phone .agenda-title {
+  align-items: center;
+  text-align: center;
+}
+.agenda-top-row-phone .agenda-today-ico { color: var(--accent, currentColor); }
+.agenda-top-row-phone .agenda-phone-add-event {
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--accent, currentColor);
+}
 .agenda-top-row-phone .agenda-title-primary {
   white-space: nowrap;
   overflow: hidden;
