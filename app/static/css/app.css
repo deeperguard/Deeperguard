@@ -1490,6 +1490,11 @@ html:not([data-theme="dark"]) .agenda-list-when { color: #334155; }
   flex: 1;
 }
 .agenda-list-date { font-size: 12px; color: var(--muted); }
+.agenda-list-row--timed { align-items: center; }
+.agenda-list-row--timed .agenda-month-dot { width: 10px; height: 10px; }
+.agenda-list-row--timed .agenda-list-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Past events: lower opacity, still readable (about 0.75 keeps text contrast above 4.5:1 in both themes). */
+.agenda-list-row--timed.is-past { opacity: 0.75; }
 .agenda-list-title { font-weight: 700; font-size: 14px; }
 .agenda-list-loc { font-size: 12px; }
 .agenda-list-title .agenda-rec-glyph { margin-right: 3px; }

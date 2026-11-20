@@ -1848,7 +1848,9 @@
     return n >= 1 && n <= days ? `${n}/${days}` : null;
   }
 
-  function renderMonthDayList(occ, placed) {
+  /** `nowMs` is injectable so the "already past" dimming can be tested with a fixed clock. */
+  function renderMonthDayList(occ, placed, nowMs) {
+    const now = Number.isFinite(nowMs) ? nowMs : Date.now();
     const pickMs = state.monthPickDay || startOfDay(new Date()).getTime();
     const pick = new Date(pickMs);
     const ds = startOfDay(pick);
@@ -1880,10 +1882,13 @@
       html += '<p class="muted agenda-month-daylist-empty">No events this day.</p>';
     } else if (rows.length) {
       html += '<ul class="agenda-list">';
-      rows.forEach((o) => {
+      rows.slice().sort((a, b) => a.start - b.start).forEach((o) => {
         const tlabel = `${formatTime(o.start)} – ${formatTime(o.end)}`;
+        const past = o.end.getTime() <= now;
         html += (
-          `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
+          `<li><button type="button" class="agenda-list-row agenda-list-row--timed${past ? ' is-past' : ''}" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}`
+          + ` aria-label="${esc(`${occDisplayTitle(o)}, ${formatTime(o.start)} to ${formatTime(o.end)}`)}" style="--agenda-dot:${eventAccentColor(o.ev)}">`
+          + '<span class="agenda-month-dot" aria-hidden="true"></span>'
           + `<span class="agenda-list-date">${esc(tlabel)}</span>`
           + `<span class="agenda-list-title">${esc(occDisplayTitle(o))}</span>`
           + calendarLabelHtml(o.ev)
