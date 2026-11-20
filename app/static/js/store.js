@@ -124,6 +124,8 @@ const NotesStore = (() => {
     // True only after ciphertext decrypts, or an empty vault's account
     // password is proven. A derived key alone is not proof.
     keyVerified: false,
+    // 'password' (derived here) or 'passkey' (unwrapped copy: no password or salt in this session).
+    keySource: 'password',
     // Light vault: keep note text local, download attachment files only when a note is opened.
     lightVault: false,
   };
@@ -700,6 +702,9 @@ const NotesStore = (() => {
 
   async function retryPendingVaultKdfUpgrade() {
     if (!state.cryptoKey) return false;
+    // A passkey session cannot tell whether a pending upgrade is real (it has no password to
+    // probe with): leave the flag alone; the next password unlock finishes it.
+    if (state.keySource === 'passkey') return false;
     if (state.kdfVersion < 2) {
       if (vaultKdfUpgradePending()) {
         try {
@@ -769,6 +774,7 @@ const NotesStore = (() => {
     state.saltEncoding = derived.encoding || 'hex';
     state.kdfVersion = derived.version || kdfVersion;
     state.altCryptoKey = null;
+    state.keySource = 'password';
     if (state.kdfProbeMixed) {
       const altVersion = kdfVersion >= 2 ? 1 : 2;
       try {
@@ -805,6 +811,66 @@ const NotesStore = (() => {
     }
   }
 
+  function vaultKeyError(code, message) {
+    const err = new Error(message);
+    err.code = code;
+    return err;
+  }
+
+  // Opens the vault with a key that was not derived here (a passkey copy). The key may only be
+  // used for writes once it has decrypted real data from the server:
+  //   - its id must equal the id inside the wrap AND the account's current key id;
+  //   - an existing item must decrypt with it (probeServerKey), or
+  //   - the account holds no notes at all (empty vault): nothing can contradict the key, and the
+  //     server only releases a copy whose key id is current (changing the password or upgrading
+  //     the KDF removes the copies in the same request). This is the documented empty-vault proof.
+  // Until then keyVerified stays false, so nothing is written or synced; on refusal the key is
+  // zeroed and the vault is locked again. kdfVersion comes from the account, never a default.
+  async function unlockWithVaultKey(key, { wrapKeyId, accountKeyId, kdfVersion, salt }) {
+    if (!(key && key.raw instanceof Uint8Array && key.raw.length === 32)) {
+      throw vaultKeyError('VAULT_KEY_INVALID', 'The passkey copy does not hold a valid vault key.');
+    }
+    const actual = NotesCrypto.vaultKeyId(key);
+    if (!actual || actual !== wrapKeyId || actual !== accountKeyId) {
+      key.raw.fill(0);
+      throw vaultKeyError('VAULT_KEY_STALE', 'The passkey copy belongs to an earlier vault key. Unlock with your master password.');
+    }
+    const version = Number(kdfVersion) >= 2 ? 2 : 1;
+    state.cryptoKey = key;
+    state.altCryptoKey = null;
+    state.kdfProbeMixed = false;
+    state.kdfVersion = version;
+    state.keySource = 'passkey';
+    state.keyVerified = false;
+    sessionStorage.setItem('notes_unlocked', '1');
+    if (salt) sessionStorage.setItem('notes_salt', salt);
+    if (typeof NotesFreshness !== 'undefined') {
+      NotesFreshness.setCryptoKey(state.cryptoKey);
+      try {
+        await NotesFreshness.load(state.cryptoKey);
+      } catch (err) {
+        /* bootstrap empty freshness */
+      }
+    }
+    let probe;
+    try {
+      probe = await probeServerKey();
+    } catch (err) {
+      lock();
+      throw err;
+    }
+    if (probe.ok) return { via: 'decrypt' };
+    if (probe.empty) {
+      state.keyVerified = true;
+      return { via: 'empty' };
+    }
+    lock();
+    if (probe.noSample) {
+      throw vaultKeyError('PROBE_NO_SAMPLE', 'Could not check the passkey copy against your notes yet. Use your master password.');
+    }
+    throw vaultKeyError('VAULT_KEY_STALE', 'The passkey copy does not open your notes (it belongs to an earlier vault key). Unlock with your master password.');
+  }
+
   function isUnlocked() {
     return !!state.cryptoKey;
   }
@@ -824,7 +890,9 @@ const NotesStore = (() => {
   function markKeyVerified() {
     if (!state.cryptoKey) return;
     state.keyVerified = true;
-    persistVaultKdfServerVersion(state.kdfVersion);
+    // A passkey session never derived a key, so its kdfVersion is the account's value, not
+    // a proof; the local hint and a pending upgrade stay as they are.
+    if (state.keySource !== 'passkey') persistVaultKdfServerVersion(state.kdfVersion);
   }
 
   function unverifiedKeyError() {
@@ -863,6 +931,7 @@ const NotesStore = (() => {
     state.altCryptoKey = null;
     state.kdfProbeMixed = false;
     state.keyVerified = false;
+    state.keySource = 'password';
     state.kdfVersion = 1;
     attachmentDecryptInFlight = null;
     lastDerivedKdf = null;
@@ -3430,7 +3499,7 @@ const NotesStore = (() => {
       || '';
     const salt = sessionStorage.getItem('notes_salt') || cachedAccount().kdf_salt || '';
     const altVersion = state.kdfVersion >= 2 ? 1 : 2;
-    if (password && salt) {
+    if (state.keySource !== 'passkey' && password && salt) {
       const prevKey = state.cryptoKey;
       const prevAlt = state.altCryptoKey;
       const prevVer = state.kdfVersion;
@@ -4914,7 +4983,8 @@ const NotesStore = (() => {
         const password = (typeof NotesVaultSecrets !== 'undefined' && NotesVaultSecrets.getVaultPassword())
       || '';
         const salt = sessionStorage.getItem('notes_salt') || cachedAccount().kdf_salt;
-        if (password && salt) {
+        // A passkey session has no password to derive the other KDF's key from.
+        if (state.keySource !== 'passkey' && password && salt) {
           const altVersion = state.kdfVersion >= 2 ? 1 : 2;
           logSync('kdf-retry', { from: state.kdfVersion, to: altVersion, decryptSkipped: pull.decryptSkipped });
           await unlock(password, salt, { kdfVersion: altVersion });
@@ -6935,6 +7005,8 @@ const NotesStore = (() => {
 
   async function migrateVaultKdfIfNeeded(password, salt) {
     if (!state.cryptoKey) return { migrated: false };
+    // The upgrade derives a new key from the password; a passkey session has none.
+    if (state.keySource === 'passkey') return { migrated: false };
     if (state.kdfVersion >= 2) {
       await retryPendingVaultKdfUpgrade();
       return { migrated: false };
@@ -7985,6 +8057,7 @@ const NotesStore = (() => {
     isKeyVerified,
     markKeyVerified,
     probeServerKey,
+    unlockWithVaultKey,
     lock,
     newUuid,
     defaultNote,
@@ -8116,6 +8189,7 @@ const NotesStore = (() => {
     getAttachmentPreviewBytes,
     refreshVaultHead,
     migrateVaultKdfIfNeeded,
+    retryPendingVaultKdfUpgrade,
     changePassword,
     recoverWithRecoveryKey,
     repairAttachmentsWithPreviousPassword,

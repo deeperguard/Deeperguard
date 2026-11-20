@@ -16,6 +16,7 @@ import base64  # noqa: E402
 from contextlib import ExitStack  # noqa: E402
 
 import test_round63_security as r63  # noqa: E402
+import test_vault_recovery_interrupted as interrupted  # noqa: E402
 import test_vault_recovery_reset as reset  # noqa: E402
 import test_vault_recovery_wraps as rec  # noqa: E402
 
@@ -72,6 +73,7 @@ class VaultPrfWrapTests(unittest.TestCase):
     _enrolled = reset.VaultRecoveryResetTests._enrolled
     _commit_body = reset.VaultRecoveryResetTests._commit_body
     _commit = reset.VaultRecoveryResetTests._commit
+    _change_password = interrupted.InterruptedMigrationTests._change_password
 
     def _passkey(self, uid):
         import db as notes_db
@@ -386,6 +388,52 @@ class VaultPrfWrapTests(unittest.TestCase):
         notes_db.init_schema(conn)
         self.assertIsNotNone(notes_db.get_webauthn_credential(cid))
         self.assertEqual(notes_db.get_vault_keys_status(uid)["prf"], [])
+
+
+    def _enable_passkey_copy(self):
+        import db as notes_db
+
+        uid, email, password, csrf = self._signed_in()
+        notes_db.update_user_vault_kdf_version(uid, 1)  # an account that still has the v1 vault KDF
+        cid = self._passkey(uid)
+        kid = secrets.token_hex(16)
+        self.assertEqual(self._put_prf(email, password, csrf, cid, _prf_body(0, kid)).status_code, 200)
+        return uid, email, password, csrf, cid, kid
+
+    def test_kdf_upgrade_leaves_no_current_passkey_copy(self):
+        import db as notes_db
+
+        uid, _email, _password, csrf, cid, kid = self._enable_passkey_copy()
+        self.assertEqual(self._status()["key_id"], kid)
+        resp = self.client.post("/api/account/vault-kdf", json={"vault_kdf_version": 2}, headers={"X-CSRF-Token": csrf})
+        self.assertEqual(resp.status_code, 200, resp.get_json())
+        # The upgrade made a new vault key: the old copy is gone and no key id is reported as current.
+        self.assertIsNone(notes_db.get_prf_wrap(uid, cid))
+        st = self._status()
+        self.assertEqual((st["key_id"], st["prf"]), ("", []))
+        self.assertEqual(st["key_rev"], 2)
+        _opts, res = self._assert_with(csrf, cid)
+        self.assertEqual((res.status_code, res.get_json()["error"]), (404, "no_prf_wrap"))
+
+    def test_kdf_upgrade_repeat_changes_nothing_more(self):
+        _uid, _email, _password, csrf, _cid, _kid = self._enable_passkey_copy()
+        h = {"X-CSRF-Token": csrf}
+        self.client.post("/api/account/vault-kdf", json={"vault_kdf_version": 2}, headers=h)
+        rev = self._status()["key_rev"]
+        self.assertEqual(self.client.post("/api/account/vault-kdf", json={"vault_kdf_version": 2}, headers=h).status_code, 200)
+        self.assertEqual(self._status()["key_rev"], rev)
+
+    def test_password_change_leaves_no_current_passkey_copy(self):
+        import db as notes_db
+
+        uid, email, password, csrf, cid, _kid = self._enable_passkey_copy()
+        resp = self._change_password(email, password, "another-password-9", csrf)
+        self.assertEqual(resp.status_code, 200, resp.get_json())
+        self.assertIsNone(notes_db.get_prf_wrap(uid, cid))
+        st = self._status()
+        self.assertEqual((st["key_id"], st["prf"]), ("", []))
+        _opts, res = self._assert_with(csrf, cid)
+        self.assertEqual((res.status_code, res.get_json()["error"]), (404, "no_prf_wrap"))
 
 
 if __name__ == "__main__":
