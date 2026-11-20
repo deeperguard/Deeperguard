@@ -1467,6 +1467,9 @@ A `role="status" aria-live="polite"` summary and a table:
 
 ### 7.4 Duplicate detection
 
+> The matching of the Contacts tab's "Find duplicates" (7.10) is implemented in `contacts.js` and is the matcher the
+> import step is to reuse; where its phone and name rules differ from the text below, 7.10 is what the code does.
+
 Run in the browser against the contacts already in the vault **and** among
 the contacts of this import. A pair is a duplicate when, after normalisation
 (NFKC, lower-case, accents removed, whitespace collapsed):
@@ -1616,6 +1619,71 @@ long-press, which has no keyboard or screen-reader route) that adds a checkbox (
 row; the Export button then reads "Export N selected". The ticks are kept in memory only and are cleared by "Done",
 lock and sign-out. Bulk delete and bulk label on that selection, the CSV format and the photo checkbox are not built:
 they are outside the import/export task.
+
+### 7.10 Find duplicates in the Contacts tab (built; the import step must reuse it)
+
+Independent of the import. The **Find duplicates** button in the pane header opens a dialog (`contacts-duplicates.js`);
+the matching and the merge result are pure functions in `contacts.js` (`findDuplicateGroups`, `mergeChoices`,
+`planMerge`, `restorePatch`), so the import-time step of 7.4 calls the same code instead of its own.
+
+**Matching** (everything is hashed, so 2000 contacts take tens of milliseconds). Where this differs from 7.4, this
+section is what the code does, and the import step should adopt it:
+
+| Match | Rule | Group kind |
+| --- | --- | --- |
+| Email | NFKC, trimmed, `mailto:` removed, lower-cased; equal. No Gmail dot or `+tag` folding. | exact |
+| Phone, same form | Spaces, dashes, dots, brackets and every other non-digit are ignored; at least 6 digits; a leading `00` counts as `+`. `+31 6 1234 5678` = `0031(6)12345678`. A number without `+`, `00` or a leading `0` (no country information) matches only the same digits. | exact |
+| Phone, national against international | `0612345678` matches `+31612345678` only when it is unambiguous: the national number without its single leading `0` must be what an international number has behind a country code of 1 to 3 digits, **and exactly one** such international number exists among the contacts. With two candidates (`+31612345678` and `+32612345678`) the national number matches neither. This is stricter than the "last 9 digits" rule of 7.4, which would link both. | exact |
+| Name | Given, additional and family name (or the formatted name when there are no parts), NFKC, case and accents removed, whitespace collapsed, words sorted so `Jan Visser` = `Visser, Jan`. A contact without a name of its own has none. | possible |
+
+Groups are connected components: A and B sharing an email and B and C sharing a phone make one group of three. A
+contact that is in an exact group is not offered again in a name-only group (after merging, run Find duplicates
+again). Unlike 7.4 inside one file, contacts in the vault that share only a family landline are grouped (as exact) and
+the owner decides in the review.
+
+**Review.** Per group: heading with the names, the reason ("Matched on same email address: ...", or "Possible
+duplicate, same name only"; name-only groups have a dashed border), the contacts side by side as cards (picture or
+initials, name, organisation, phones, emails, number of filled fields), a radio per card "Keep this one" (default: most
+filled fields, then oldest), and the buttons **Merge**, **Remove duplicates**, **Not duplicates**, **Skip**. At most 20
+groups are drawn at once; the next appear as these are dealt with. A name-only group is never pre-selected for
+anything: it is not part of **Merge all exact matches**, and no choice is made for it before the owner presses a button.
+
+| Action | Effect |
+| --- | --- |
+| Merge | The kept contact is updated with the merge result and the others are deleted through `NotesStore.removeContact` (the normal delete path, so sync and other devices follow). |
+| Remove duplicates | The selected contact is not touched; the others are deleted. |
+| Not duplicates | The group key (the sorted uuids) is remembered in memory until lock or sign-out; the group is not shown again, also after closing and reopening the dialog. A group with a new member is a new group. |
+| Skip | Hidden until the dialog is closed. |
+| Merge all exact matches | Only email and phone groups, each with its default keeper and default choices, behind a confirmation that states the number of groups and contacts ("4 contacts ... become 2"). A group whose result would not fit in one contact is left alone and counted. |
+
+**Merge result** (`planMerge`; nothing is lost, or the merge is refused). Every distinct phone, email, address, URL, IM
+handle, date, group label and unknown imported field (2.4) of all contacts is kept. "Distinct" means: phones by the
+normalised number above (so a number written two ways is kept once, as the kept contact wrote it), emails
+case-insensitively, URLs by scheme, host (case-insensitive), path without trailing slash, query and hash, addresses by
+their folded parts, IM handles by service and value, dates by type and value, labels case-insensitively. Notes of all
+contacts are joined with a blank line, an identical note once. `favorite` is true when any contact was a favourite.
+Single-value fields (name, organisation, job title, nickname, birthday, picture): when the contacts hold different
+non-empty values, the screen shows a select per field (each option says which contact it comes from) and the kept
+contact's value is the default; an empty value is filled from another contact. A birthday that lost stays as a date of
+type "other". `extra`: `vcard` lines are appended, identical lines once, and a property group (`item5`) that clashes with
+another contact's gets a new name so label pairs stay together; `csv` and `ldif` keys are added, a key with a different
+value is kept as `key (2)`; other keys: the kept contact's wins. If the result would exceed a limit (more than 50 entries
+in a list, more than 20 labels, `extra` or the contact over its size, the photo) the merge is refused with a message
+and nothing is saved or deleted.
+
+**Undo.** One level: the last merge, remove or merge-all. It restores the kept contact's fields and recreates the
+deleted contacts with the same content (they get new vault ids, as with Undo of a delete). It is kept in memory only,
+and dropped when the dialog is closed, on lock and on sign-out; the Undo button is in the dialog footer. Edit clocks
+(`fc`) of restored fields are new, so on other devices the restored state wins over the merge.
+
+**"Merge with..."** on a contact's detail opens the same dialog with a search field for the second contact, then shows
+that pair as one group with the same choices (no detection involved).
+
+**Accessibility and layout.** A modal dialog like the others (focus moves to the first group heading, Escape and the
+backdrop close it, focus returns to the opener); every group is a `section` labelled by its heading; the radios are
+native radios in a `radiogroup`; each button's accessible name includes the group's names; results are announced in a
+`role="status"` line. The cards wrap, so the layout holds at 390 px and at 1280 px. All contact text is set with
+`textContent`.
 
 ## 8. Export
 

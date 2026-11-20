@@ -4885,6 +4885,11 @@
     }));
     section('Groups', c.labels.length ? [cEl('p', 'contacts-value-main', c.labels.join(', '))] : []);
     section('Notes', c.note ? [cEl('p', 'contacts-note', c.note)] : []);
+    const mergeWith = cEl('button', 'btn ghost contacts-merge-with', 'Merge with…');
+    mergeWith.type = 'button';
+    mergeWith.setAttribute('aria-label', `Merge ${name} with another contact`);
+    mergeWith.addEventListener('click', () => openContactsDuplicates(null, id));
+    d.append(mergeWith);
     const del = cEl('button', 'btn danger contacts-delete', 'Delete contact');
     del.type = 'button';
     del.setAttribute('aria-label', `Delete contact ${name}`);
@@ -5203,6 +5208,7 @@
 
   function clearContactsUi() {
     window.NotesContactsImport?.reset();
+    window.NotesContactsDuplicates?.reset();
     contactsAll = [];
     contactsSelectedId = '';
     contactsFormState = null;
@@ -5221,6 +5227,25 @@
     contactsUi.count.textContent = 'Unlock the vault to see your contacts';
     contactsUi.status.textContent = '';
     contactsUi.empty.hidden = true;
+  }
+
+  // Duplicates screen (docs/CONTACTS_SPEC.md 7.10): `withId` opens "Merge with..." for that contact.
+  function openContactsDuplicates(event, withId = '') {
+    if (!NotesStore.isUnlocked?.()) { toast('Unlock the vault first', true); return; }
+    window.NotesContactsDuplicates.open({
+      isUnlocked: () => !!NotesStore.isUnlocked?.(),
+      listContacts: () => NotesStore.listContacts(),
+      updateContact: (id, patch) => NotesStore.updateContact(id, patch),
+      addContact: (input) => NotesStore.addContact(input),
+      removeContact: (id) => NotesStore.removeContact(id),
+      avatar: (c) => contactAvatar(c, false),
+      name: (c) => contactName(c),
+      confirm: (message, options) => confirmAction(message, options),
+      changed: () => {
+        refreshContacts();
+        if (contactsSelectedId && !contactsFormState && contactsAll.some((c) => c.uuid === contactsSelectedId)) renderContactDetail(contactsSelectedId);
+      },
+    }, { withId });
   }
 
   // --- vCard import and export (docs/CONTACTS_SPEC.md sections 7 and 8) ---
@@ -5288,6 +5313,7 @@
     });
     contactsUi.emptyAdd.addEventListener('click', () => openContactForm('', contactsUi.emptyAdd));
     document.getElementById('btn-contacts-import')?.addEventListener('click', openContactsImport);
+    document.getElementById('btn-contacts-duplicates')?.addEventListener('click', (event) => openContactsDuplicates(event));
     document.getElementById('btn-contacts-export')?.addEventListener('click', () => exportContacts());
     contactsUi.select?.addEventListener('click', toggleContactsSelection);
     contactsUi.list.addEventListener('change', (event) => {

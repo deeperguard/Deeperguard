@@ -364,6 +364,325 @@ const NotesContacts = (() => {
     return normLabels((labels || []).map((l) => (l.toLowerCase() === key ? to : l)));
   }
 
+  // --- duplicates: detection and merge (docs/CONTACTS_SPEC.md 7.4 and 7.10) -----------------------
+  const PHONE_MIN_DIGITS = 6;
+
+  function emailKey(value) {
+    return String(value == null ? '' : value).normalize('NFKC').trim().replace(/^mailto:/i, '').trim().toLowerCase();
+  }
+
+  // { kind: 'intl' | 'national' | 'plain', digits } or null. `00` counts as `+`; a single leading `0` marks a national
+  // number (the trunk prefix is dropped from `digits`); anything else has no country information.
+  function phoneKey(value) {
+    const s = String(value == null ? '' : value).normalize('NFKC').trim();
+    const digits = s.replace(/\D/g, '');
+    if (s.startsWith('+')) return digits.length >= PHONE_MIN_DIGITS ? { kind: 'intl', digits } : null;
+    if (digits.startsWith('00')) return digits.length - 2 >= PHONE_MIN_DIGITS ? { kind: 'intl', digits: digits.slice(2) } : null;
+    if (digits.startsWith('0')) return digits.length - 1 >= PHONE_MIN_DIGITS ? { kind: 'national', digits: digits.slice(1) } : null;
+    return digits.length >= PHONE_MIN_DIGITS ? { kind: 'plain', digits } : null;
+  }
+
+  // Name key: given/additional/family folded (case, accents, whitespace), words sorted so "Jan Visser" = "Visser, Jan".
+  // A contact without a name of its own (display name taken from organisation, email or phone) has none.
+  function nameKey(c) {
+    const n = (c && c.name) || {};
+    const structured = ['prefix', 'given', 'additional', 'family', 'suffix'].some((k) => n[k]);
+    const raw = structured ? ['given', 'additional', 'family'].map((k) => n[k] || '').join(' ') : (n.formatted || '');
+    const words = foldText(String(raw).normalize('NFKC')).split(/[\s,]+/).filter(Boolean);
+    return words.length ? words.sort().join(' ') : '';
+  }
+
+  // Number of filled fields: used to pick the contact to keep by default.
+  function filledCount(c) {
+    let n = 0;
+    const nm = (c && c.name) || {};
+    for (const k of NAME_PARTS) if (nm[k]) n += 1;
+    for (const k of ['nickname', 'title', 'note']) if (c && c[k]) n += 1;
+    if (c && c.org) { if (c.org.name) n += 1; if (c.org.unit) n += 1; }
+    for (const f of LIST_FIELDS) n += ((c && c[f]) || []).length;
+    n += ((c && c.labels) || []).length;
+    if (c && c.photo) n += 1;
+    if (c && c.favorite) n += 1;
+    return n;
+  }
+
+  // The contact to keep: most filled fields; on a tie the oldest, then the first in the list.
+  function pickKeeper(contacts) {
+    let best = null;
+    for (const c of contacts) {
+      if (!best) { best = c; continue; }
+      const a = filledCount(c);
+      const b = filledCount(best);
+      if (a > b || (a === b && c.created_at && best.created_at && c.created_at < best.created_at)) best = c;
+    }
+    return best;
+  }
+
+  function groupKey(ids) {
+    return [...ids].sort().join('|');
+  }
+
+  // Groups of contacts that are probably the same person.
+  //   kind 'exact':    linked by an equal email or an equal phone number (group.reasons says which, group.via the values);
+  //   kind 'possible': linked only by the same name; contacts of an exact group are not offered again here.
+  // Phones: spaces, dashes, dots and brackets are ignored, `00` = `+`, at least 6 digits. A national number
+  // (`0612345678`) matches an international one (`+31612345678`) only when exactly one international number in
+  // the list ends in the same digits behind a 1 to 3 digit country code; with two candidates it is ambiguous and
+  // matches none. `ignore` is a Set of group keys (groupKey) the user marked "Not duplicates".
+  // Linear in the number of contacts: everything goes through hash maps.
+  function findDuplicateGroups(contacts, { ignore = null } = {}) {
+    const list = Array.isArray(contacts) ? contacts : [];
+    const parent = list.map((_, i) => i);
+    const find = (i) => { let x = i; while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+    const union = (a, b) => { const ra = find(a); const rb = find(b); if (ra !== rb) parent[rb] = ra; };
+    const byEmail = new Map();
+    const byIntl = new Map();
+    const byPlain = new Map();
+    const byNational = new Map();
+    const add = (map, key, i) => { const set = map.get(key); if (set) set.add(i); else map.set(key, new Set([i])); };
+    list.forEach((c, i) => {
+      for (const e of c.emails || []) { const k = emailKey(e.value); if (k) add(byEmail, k, i); }
+      for (const p of c.phones || []) {
+        const k = phoneKey(p.value);
+        if (!k) continue;
+        add(k.kind === 'intl' ? byIntl : k.kind === 'national' ? byNational : byPlain, k.digits, i);
+      }
+    });
+    // Per link: the reason and the shared value, to show why contacts are grouped.
+    const links = [];
+    const link = (set, reason, value) => {
+      if (set.size < 2) return;
+      const idx = [...set];
+      for (let j = 1; j < idx.length; j += 1) union(idx[0], idx[j]);
+      links.push({ at: idx[0], reason, value });
+    };
+    for (const [k, set] of byEmail) link(set, 'email', k);
+    for (const [k, set] of byIntl) link(set, 'phone', `+${k}`);
+    for (const [k, set] of byPlain) link(set, 'phone', k);
+    for (const [k, set] of byNational) link(set, 'phone', `0${k}`);
+    // National with international: only when exactly one international number fits.
+    const intlBySuffix = new Map();
+    for (const digits of byIntl.keys()) {
+      for (let cc = 1; cc <= 3; cc += 1) if (digits.length - cc >= PHONE_MIN_DIGITS) add(intlBySuffix, digits.slice(cc), digits);
+    }
+    for (const [national, owners] of byNational) {
+      const fits = intlBySuffix.get(national);
+      if (!fits || fits.size !== 1) continue;
+      const intl = [...fits][0];
+      link(new Set([...owners, ...byIntl.get(intl)]), 'phone', `0${national} = +${intl}`);
+    }
+    const buckets = new Map();
+    list.forEach((c, i) => {
+      const r = find(i);
+      if (!buckets.has(r)) buckets.set(r, []);
+      buckets.get(r).push(i);
+    });
+    const reasonsOf = new Map();
+    for (const l of links) {
+      const r = find(l.at);
+      if (!reasonsOf.has(r)) reasonsOf.set(r, { reasons: new Set(), via: [] });
+      const entry = reasonsOf.get(r);
+      entry.reasons.add(l.reason);
+      if (entry.via.length < 6 && !entry.via.includes(l.value)) entry.via.push(l.value);
+    }
+    const out = [];
+    const grouped = new Set();
+    for (const [root, members] of buckets) {
+      if (members.length < 2) continue;
+      const info = reasonsOf.get(root) || { reasons: new Set(), via: [] };
+      const ids = members.map((i) => list[i].uuid);
+      for (const i of members) grouped.add(i);
+      out.push({ kind: 'exact', key: groupKey(ids), ids, reasons: [...info.reasons].sort(), via: info.via });
+    }
+    const byName = new Map();
+    list.forEach((c, i) => {
+      if (grouped.has(i)) return;
+      const k = nameKey(c);
+      if (k) add(byName, k, i);
+    });
+    for (const [k, set] of byName) {
+      if (set.size < 2) continue;
+      const ids = [...set].map((i) => list[i].uuid);
+      out.push({ kind: 'possible', key: groupKey(ids), ids, reasons: ['name'], via: [k] });
+    }
+    return out.filter((g) => !(ignore && ignore.has(g.key)));
+  }
+
+  // --- merging ---
+  const SINGLE_FIELDS = ['name', 'nickname', 'org', 'title', 'birthday', 'photo', 'favorite'];
+
+  function singleValue(c, field) {
+    if (field === 'birthday') {
+      const b = (c.dates || []).find((d) => d.type === 'birthday');
+      return b ? b.value : '';
+    }
+    if (field === 'favorite') return c.favorite === true;
+    if (field === 'photo') return c.photo || null;
+    return c[field];
+  }
+
+  function isEmptySingle(field, value) {
+    if (field === 'name') return !NAME_PARTS.some((k) => value && value[k]);
+    if (field === 'org') return !(value && (value.name || value.unit));
+    if (field === 'favorite') return value !== true;
+    return !value;
+  }
+
+  // For each single-value field where the contacts hold different non-empty values: the options (each with the
+  // ids of the contacts that have it) and the default. Returns [{ field, options: [{ value, from }], chosen }].
+  // The default is the value of `keepId` when it has one, otherwise the first contact that has one. A favourite
+  // is never a choice: the merged contact is a favourite when any of them was.
+  function mergeChoices(contacts, keepId) {
+    const ordered = [...contacts].sort((a, b) => (a.uuid === keepId ? -1 : b.uuid === keepId ? 1 : 0));
+    const out = [];
+    for (const field of SINGLE_FIELDS) {
+      if (field === 'favorite') continue;
+      const options = [];
+      for (const c of ordered) {
+        const value = singleValue(c, field);
+        if (isEmptySingle(field, value)) continue;
+        const key = JSON.stringify(value);
+        const found = options.find((o) => o.key === key);
+        if (found) found.from.push(c.uuid); else options.push({ key, value, from: [c.uuid] });
+      }
+      if (options.length > 1) out.push({ field, options: options.map(({ value, from }) => ({ value, from })), chosen: 0 });
+    }
+    return out;
+  }
+
+  function listKey(field, e) {
+    if (field === 'phones') { const k = phoneKey(e.value); return k ? `${k.kind}:${k.digits}` : `raw:${String(e.value).replace(/[\s\-.()]/g, '')}`; }
+    if (field === 'emails') return emailKey(e.value);
+    if (field === 'addresses') return ADDRESS_PARTS.map((p) => foldText(e[p]).replace(/\s+/g, ' ').trim()).join('|');
+    if (field === 'urls') {
+      // Scheme and host are case-insensitive and a trailing slash adds nothing; the path is compared as written.
+      try { const u = new URL(String(e.value).trim()); return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '')}${u.search}${u.hash}`; } catch (err) { return String(e.value).trim(); }
+    }
+    if (field === 'ims') return `${e.service}|${String(e.value).trim().toLowerCase()}`;
+    return `${e.type}|${e.value}`;
+  }
+
+  // Unknown imported fields (2.4) of all contacts: `vcard` lines are appended (identical ones once; a property
+  // group such as item5 that clashes with another contact's gets a new name so the pairs stay apart), `csv`
+  // and `ldif` keys are added (the same key with a different value is kept as "key (2)"); other keys: first wins.
+  function mergeExtra(contacts) {
+    const out = {};
+    const seen = new Set();
+    const groupsTaken = new Set();
+    contacts.forEach((c, n) => {
+      const x = c.extra && typeof c.extra === 'object' ? c.extra : {};
+      for (const key of Object.keys(x)) {
+        if (FORBIDDEN_KEYS.has(key)) continue;
+        const v = x[key];
+        if (key === 'vcard' && Array.isArray(v)) {
+          out.vcard = out.vcard || [];
+          const rename = new Map();
+          for (const entry of v) {
+            if (!entry || typeof entry !== 'object') continue;
+            const sig = JSON.stringify(entry);
+            if (seen.has(sig)) continue;
+            seen.add(sig);
+            let g = entry.g || '';
+            if (g && n > 0) {
+              if (!rename.has(g)) {
+                let candidate = g;
+                let i = 2;
+                while (groupsTaken.has(candidate)) { candidate = `${g}-${i}`; i += 1; }
+                rename.set(g, candidate);
+              }
+              g = rename.get(g);
+            }
+            if (g) groupsTaken.add(g);
+            out.vcard.push({ ...entry, g });
+          }
+        } else if ((key === 'csv' || key === 'ldif') && v && typeof v === 'object' && !Array.isArray(v)) {
+          out[key] = out[key] || {};
+          for (const k of Object.keys(v)) {
+            if (FORBIDDEN_KEYS.has(k)) continue;
+            const same = (name) => JSON.stringify(out[key][name]) === JSON.stringify(v[k]);
+            if (!(k in out[key])) { out[key][k] = v[k]; continue; }
+            if (same(k)) continue;
+            let i = 2;
+            while (`${k} (${i})` in out[key] && !same(`${k} (${i})`)) i += 1;
+            out[key][`${k} (${i})`] = v[k];
+          }
+        } else if (!(key in out)) out[key] = plain(v);
+      }
+    });
+    return out;
+  }
+
+  // The result of merging `contacts` into the one with `keepId`: { patch, removeIds, error }.
+  // `picks` maps a field of mergeChoices to the index of the chosen option (default 0).
+  // Nothing is lost: every distinct phone, email, address, URL, IM handle, date, label and imported field is kept
+  // (a birthday that lost stays as a plain date); notes are joined with a blank line; identical values are not
+  // doubled. `error` is set when the result would not fit the limits, so that data would be cut: save nothing then.
+  function planMerge(contacts, keepId, picks = {}) {
+    const keep = contacts.find((c) => c.uuid === keepId);
+    if (!keep) return { patch: null, removeIds: [], error: 'The contact to keep was not found' };
+    const ordered = [keep, ...contacts.filter((c) => c.uuid !== keepId)];
+    const choices = mergeChoices(contacts, keepId);
+    const winner = (field) => {
+      const choice = choices.find((ch) => ch.field === field);
+      if (choice) return choice.options[Math.min(Math.max(Number(picks[field]) || 0, 0), choice.options.length - 1)].value;
+      const holder = ordered.find((c) => !isEmptySingle(field, singleValue(c, field)));
+      return singleValue(holder || keep, field);
+    };
+    const patch = {
+      name: plain(winner('name')),
+      nickname: winner('nickname'),
+      org: plain(winner('org')),
+      title: winner('title'),
+      photo: plain(winner('photo')),
+      favorite: ordered.some((c) => c.favorite === true),
+    };
+    const birthday = winner('birthday');
+    for (const field of LIST_FIELDS) {
+      const seen = new Set();
+      const merged = [];
+      const take = (entry) => {
+        const key = listKey(field, entry);
+        if (seen.has(key)) return;
+        seen.add(key);
+        merged.push(plain(entry));
+      };
+      if (field === 'dates' && birthday) take({ type: 'birthday', value: birthday });
+      for (const c of ordered) {
+        for (const entry of c[field] || []) {
+          if (field === 'dates' && entry.type === 'birthday') { if (entry.value !== birthday) take({ ...entry, type: 'other' }); continue; }
+          take(entry);
+        }
+      }
+      patch[field] = merged;
+    }
+    const notes = [];
+    for (const c of ordered) { const n = String(c.note || '').trim(); if (n && !notes.includes(n)) notes.push(n); }
+    patch.note = notes.join('\n\n');
+    patch.labels = normLabels(ordered.flatMap((c) => c.labels || []));
+    patch.extra = mergeExtra(ordered);
+    const wanted = new Set(ordered.flatMap((c) => c.labels || []).map((l) => String(l).trim().toLowerCase()).filter(Boolean));
+    let error = '';
+    if (patch.labels.length < wanted.size) error = 'The merged contact would have more groups than a contact can hold';
+    if (!error) {
+      try {
+        const { dropped } = buildContact(patch, keep);
+        const lost = Object.keys(dropped).filter((k) => dropped[k]);
+        if (lost.length) error = `The merged contact would be too large (${lost.join(', ')})`;
+      } catch (err) {
+        error = 'The merged contact would be too large';
+      }
+    }
+    return { patch, removeIds: ordered.slice(1).map((c) => c.uuid), error };
+  }
+
+  // The patch that puts `contact` (as it was listed) back: used by Undo.
+  function restorePatch(contact) {
+    const patch = {};
+    for (const field of MERGE_FIELDS) patch[field] = plain(contact[field]);
+    patch.extra = plain(contact.extra || {});
+    return patch;
+  }
+
   // --- merge on sync conflict (3.3) ---------------------------------------------------------------
   // Returns { content, copy }. `copy` is a contact holding the values that lost a real conflict (the
   // same scalar field changed on both devices from the same earlier state), or null.
@@ -520,6 +839,16 @@ const NotesContacts = (() => {
     labelCounts,
     renameLabelIn,
     mergeContacts,
+    emailKey,
+    phoneKey,
+    nameKey,
+    filledCount,
+    pickKeeper,
+    groupKey,
+    findDuplicateGroups,
+    mergeChoices,
+    planMerge,
+    restorePatch,
     encodePhoto,
     imageSize,
     normLabels,
