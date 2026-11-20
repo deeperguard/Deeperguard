@@ -22,6 +22,12 @@ from e2e_signup_autounlock import free_port, start_server  # noqa: E402
 
 def new_note(page) -> None:
     page.locator("#btn-new, #btn-empty-new, #btn-new-list, #fab-add").locator("visible=true").first.click()
+    # The title field is visible in the empty state too, so wait for what
+    # createNote() does last: open the note and focus its title.
+    page.wait_for_function(
+        "() => NotesStore.isUnlocked() && document.activeElement === document.getElementById('note-title')",
+        timeout=10000,
+    )
 
 
 def main() -> int:
@@ -49,14 +55,12 @@ def main() -> int:
 
             # Note A with a known title.
             new_note(page)
-            page.wait_for_selector("#note-title", state="visible")
             page.fill("#note-title", "Boodschappen")
             page.fill("#note-body", "melk en brood")
             page.evaluate("() => NotesStore.flush && NotesStore.flush()")
 
             # Second note: type [[Bo.
             new_note(page)
-            page.wait_for_selector("#note-title", state="visible")
             page.fill("#note-title", "Tweede")
             page.click("#note-body")
             page.keyboard.type("Zie ook [[Bo")
