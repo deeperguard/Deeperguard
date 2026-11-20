@@ -111,7 +111,7 @@
           <li>
             <div>
               <strong>Automated Encrypted Backups</strong>
-              <span class="desc">Daily ciphertext archives delivered directly to your inbox or synced straight to your personal pCloud.</span>
+              <span class="desc">Daily ciphertext archives delivered directly to your inbox or uploaded to pCloud storage of the Deeperguard service.</span>
             </div>
           </li>
           <li>
@@ -323,7 +323,7 @@
         <article class="mk-card">
           <div class="mk-icon" aria-hidden="true">💾</div>
           <h3>Resilient Backups</h3>
-          <p>Sleep soundly with daily encrypted email snapshots or automated backups pushed directly to your personal pCloud drive—always encrypted with your keys.</p>
+          <p>Sleep soundly with daily encrypted email snapshots or an automatic daily backup to pCloud storage of the Deeperguard service—always encrypted with your keys.</p>
         </article>
       </div>
     </section>
@@ -523,13 +523,13 @@
       <details>
         <summary>What happens if I lose my password?</summary>
         <p>Because Deeperguard is zero-knowledge, we <strong>cannot reset or recover your master vault password</strong>. Without it, ciphertext on our servers cannot be decrypted — there is no “forgot password” email that restores access.</p>
-        <p>New accounts create a <strong>recovery key</strong> during sign-up and are asked to store it somewhere safe. It is made in your browser and we cannot read it. The app has no screen yet to reset a password with that key, so for now keep treating your password as the only way in. Accounts created before this step have no recovery key.</p>
+        <p>New accounts create a <strong>recovery key</strong> during sign-up and are asked to store it somewhere safe. It is made in your browser and we cannot read it. The recovery key opens your vault but does not sign you in. If you forget your password, you first need a signed-in session: a device that is still signed in, or a new sign-in with a passkey or an account recovery code. Then choose <strong>Forgot your password? Use your recovery key</strong> on the unlock screen and set a new password. Your notes are re-encrypted on your device, your other devices are signed out and you get a new recovery key. Without your password and without your recovery key, nobody can open your notes, including us. Accounts created before this step can create a recovery key in Settings after unlocking.</p>
         <p><strong>Set up protection early:</strong> On Pro, turn on <strong>daily encrypted email backups</strong> and/or <strong>pCloud encrypted backups</strong> in Settings as soon as your vault is ready. Archives stay encrypted; you still need the vault password to open them, but you will not lose the only copy if a device fails.</p>
         <p>If sign-in credentials drift but you still know your vault password, the app can guide you through vault login recovery using encrypted samples on the server — that is not a master-password reset.</p>
       </details>
       <details>
         <summary>Can I import my existing notes from Standard Notes?</summary>
-        <p>Yes. Deeperguard provides built-in Standard Notes backup import. You can upload your decrypted or encrypted Standard Notes export file directly in Settings.</p>
+        <p>Yes. Deeperguard provides built-in Standard Notes backup import. You can upload your decrypted or encrypted Standard Notes export file directly in Settings. Settings can also import Markdown files (.md or .zip), Evernote exports (.enex) and a Google Keep Takeout ZIP.</p>
       </details>
       <details>
         <summary>Where do I open my notes app?</summary>

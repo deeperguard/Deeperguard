@@ -59,7 +59,7 @@ Folders are included in the encrypted backup and its import, and a test (`tests/
 
 ## What it does not do
 
-- **No manual ordering.** Sibling folders are ordered by when they were created, then by name. There is no drag-to-reorder for folders or notes.
+- **No manual ordering of folders or of the notes in a folder.** Sibling folders are ordered by when they were created, then by name, and there is no drag-to-reorder for them. You can put notes in your own order (drag, Alt+Up and Alt+Down, or the move buttons on a row), but only while a label is selected and the sort is set to **Own order**; that order is stored inside the label's encrypted record.
 - **No moving folders in the interface.** You can create, rename and delete folders in the tree, and move notes between them. The data layer can re-parent a folder, but the sidebar has no control for it yet.
 - **One folder per note.** No multi-folder membership.
 - **No rolled-up counts or filtering by branch.** Selecting a folder shows the notes directly inside it.
@@ -69,3 +69,5 @@ Folders are included in the encrypted backup and its import, and a test (`tests/
 ## A practical way to start
 
 Keep the tree shallow: two or three levels are usually enough. Create the top-level folders first, drag in the notes you open most, and use the **Move to folder…** dialog for the rest.
+
+Updated 2026-11-20: Notes can now be put in your own order inside a label (sort **Own order**), so the line saying there is no drag-to-reorder for notes was corrected. Folders and the notes in a folder still have no manual order.
