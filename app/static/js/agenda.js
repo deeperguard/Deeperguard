@@ -332,6 +332,7 @@
   let rootEl = null;
   let fileInput = null;
   let searchDebounce = 0;
+  let splitResize = null;
   let editorWired = false;
   let calendarSettingsWired = false;
   let agendaSwipeWired = false;
@@ -1676,6 +1677,138 @@
     return false;
   }
 
+  // ---- phone month: draggable divider between the grid and the day list ----
+  // The position is the week-row height in px. It is a layout preference without user
+  // content, kept per device in localStorage (like the task display prefs), not synced.
+  const SPLIT_KEY = 'notes_agenda_month_row_h';
+  const SPLIT_MIN = 44; // touch target per day cell
+  const SPLIT_DEFAULT = 44; // the compact layout, as before the divider existed
+  const SPLIT_STEP = 4;
+  const SPLIT_DBL_MS = 350;
+
+  function renderMonthSplit() {
+    return (
+      '<div class="agenda-month-split-wrap"><div class="agenda-month-split" id="agenda-month-split" role="separator" '
+      + 'aria-orientation="horizontal" tabindex="0" aria-label="Resize month grid and day list" '
+      + `aria-valuemin="${SPLIT_MIN}" aria-valuemax="${SPLIT_MIN}" aria-valuenow="${SPLIT_DEFAULT}">`
+      + '<span class="agenda-month-split-bar" aria-hidden="true"></span></div></div>'
+    );
+  }
+
+  function storedSplit() {
+    try {
+      const n = parseInt(localStorage.getItem(SPLIT_KEY) || '', 10);
+      return Number.isFinite(n) ? n : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveSplit(h) {
+    try {
+      if (h == null) localStorage.removeItem(SPLIT_KEY);
+      else localStorage.setItem(SPLIT_KEY, String(h));
+    } catch (e) { /* ignore */ }
+  }
+
+  // Largest row height that still leaves the day list its CSS minimum (one event row).
+  function splitMax(body, grid, handle) {
+    const rows = grid.querySelectorAll('.agenda-month-row').length || 1;
+    const cell = grid.querySelector('.agenda-month-cell');
+    const list = body.querySelector('.agenda-month-daylist');
+    if (!cell || !list) return SPLIT_MIN;
+    const cs = getComputedStyle(body);
+    const inner = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const chrome = grid.getBoundingClientRect().height - rows * cell.getBoundingClientRect().height;
+    const listMin = parseFloat(getComputedStyle(list).minHeight) || 0;
+    const max = Math.floor((inner - chrome - listMin) / rows);
+    handle.setAttribute('aria-valuemax', String(Math.max(SPLIT_MIN, max)));
+    return Math.max(SPLIT_MIN, max);
+  }
+
+  function wireMonthSplit() {
+    const handle = rootEl.querySelector('#agenda-month-split');
+    const body = rootEl.querySelector('.agenda-body');
+    const grid = rootEl.querySelector('.agenda-month-grid');
+    if (!handle || !body || !grid) return;
+    const rows = grid.querySelectorAll('.agenda-month-row').length || 1;
+    let pref = storedSplit();
+    let cur = SPLIT_DEFAULT;
+    // Sets the CSS variable only; nothing is re-rendered while dragging.
+    const apply = (h) => {
+      const max = splitMax(body, grid, handle);
+      cur = Math.round(Math.min(max, Math.max(SPLIT_MIN, h)));
+      body.style.setProperty('--agenda-month-row-h', `${cur}px`);
+      handle.setAttribute('aria-valuenow', String(cur));
+    };
+    const commit = (h) => { apply(h); pref = cur; saveSplit(cur); };
+    apply(pref == null ? SPLIT_DEFAULT : pref);
+    // Re-clamp the stored (not the clamped) value when the screen size changes.
+    if (splitResize) global.removeEventListener('resize', splitResize);
+    splitResize = () => { if (handle.isConnected) apply(pref == null ? SPLIT_DEFAULT : pref); };
+    global.addEventListener('resize', splitResize);
+
+    let drag = null;
+    let lastTap = 0;
+    handle.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      ev.preventDefault();
+      drag = { id: ev.pointerId, y: ev.clientY, h: cur, moved: false };
+      try { handle.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+      handle.classList.add('is-dragging');
+      document.body.classList.add('agenda-split-dragging');
+    });
+    handle.addEventListener('pointermove', (ev) => {
+      if (!drag || ev.pointerId !== drag.id) return;
+      const dy = ev.clientY - drag.y;
+      if (Math.abs(dy) > 4) drag.moved = true;
+      // The grid grows by dy in total, so each of its rows grows by dy / rows.
+      if (drag.moved) apply(drag.h + dy / rows);
+    });
+    const end = (ev) => {
+      if (!drag || ev.pointerId !== drag.id) return;
+      const { moved } = drag;
+      drag = null;
+      handle.classList.remove('is-dragging');
+      document.body.classList.remove('agenda-split-dragging');
+      try { handle.releasePointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+      if (ev.type === 'pointerup') {
+        // The click that follows a release is aimed at whatever is under the pointer once
+        // the divider has moved (an event row, a day cell): swallow it.
+        const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+        document.addEventListener('click', swallow, { capture: true, once: true });
+        setTimeout(() => document.removeEventListener('click', swallow, true), 400);
+      }
+      if (moved) {
+        if (ev.type === 'pointerup') commit(cur); else apply(pref == null ? SPLIT_DEFAULT : pref);
+        lastTap = 0;
+        return;
+      }
+      if (ev.type !== 'pointerup') return;
+      const now = Date.now();
+      if (now - lastTap < SPLIT_DBL_MS) {
+        lastTap = 0;
+        pref = null;
+        saveSplit(null);
+        apply(SPLIT_DEFAULT);
+      } else {
+        lastTap = now;
+      }
+    };
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+    handle.addEventListener('keydown', (ev) => {
+      let next = null;
+      if (ev.key === 'ArrowUp') next = cur - SPLIT_STEP;
+      else if (ev.key === 'ArrowDown') next = cur + SPLIT_STEP;
+      else if (ev.key === 'Home') next = SPLIT_MIN;
+      else if (ev.key === 'End') next = Infinity;
+      if (next == null) return;
+      ev.preventDefault();
+      commit(next);
+    });
+  }
+
   function renderMonthDayList(occ, placed) {
     const pickMs = state.monthPickDay || startOfDay(new Date()).getTime();
     const pick = new Date(pickMs);
@@ -1818,7 +1951,7 @@
       main = renderAgendaList(occ, range, placed);
     } else if (state.view === 'month') {
       main = renderMonthGrid(days, occ, placed);
-      if (isAgendaPhoneLayout()) main += renderMonthDayList(occ, placed);
+      if (isAgendaPhoneLayout()) main += renderMonthSplit() + renderMonthDayList(occ, placed);
     } else {
       main = (
         '<div class="agenda-week-layout">'
@@ -1839,6 +1972,7 @@
       header
       + `<div class="agenda-body agenda-view-${esc(state.view)}">${main}</div>`
     );
+    wireMonthSplit();
     const prev = rootEl.querySelector('#agenda-prev');
     const next = rootEl.querySelector('#agenda-next');
     const todayB = rootEl.querySelector('#agenda-today');

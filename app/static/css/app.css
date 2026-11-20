@@ -1308,7 +1308,45 @@ html:not([data-theme="dark"]) .agenda-chip-time {
      the selected day's list takes the remaining height and scrolls on its own. */
   .agenda-body.agenda-view-month { padding-bottom: 0; }
   .agenda-month-grid { flex: 0 0 auto; padding-bottom: 4px; }
-  .agenda-month-cell { min-height: 44px; padding: 2px 3px; box-sizing: border-box; }
+  .agenda-month-cell {
+    min-height: 44px;
+    height: var(--agenda-month-row-h, 44px);
+    padding: 2px 3px;
+    box-sizing: border-box;
+  }
+  /* Draggable divider: no layout height (the list starts right below the grid); the 44px
+     hit area sits on the list's top padding. touch-action none only here, so the list
+     and the page keep scrolling normally. Side margins keep the iOS edge swipe free. */
+  .agenda-month-split-wrap { position: relative; height: 0; flex: 0 0 auto; z-index: 3; }
+  .agenda-month-split {
+    position: absolute;
+    top: -4px;
+    height: 44px;
+    left: calc(28px + var(--safe-left, 0px));
+    right: calc(28px + var(--safe-right, 0px));
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    box-sizing: border-box;
+    padding-top: 6px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    cursor: row-resize;
+  }
+  .agenda-month-split-bar {
+    width: 44px;
+    height: 5px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--muted) 55%, transparent);
+  }
+  .agenda-month-split:hover .agenda-month-split-bar,
+  .agenda-month-split.is-dragging .agenda-month-split-bar {
+    background: var(--accent);
+  }
+  .agenda-month-split:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
+  body.agenda-split-dragging { user-select: none; -webkit-user-select: none; cursor: row-resize; }
   .agenda-month-date { margin-bottom: 1px; }
   .agenda-month-events { flex: 0 0 auto; }
   .agenda-month-week { margin-top: 4px; }
