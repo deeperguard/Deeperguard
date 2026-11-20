@@ -149,6 +149,10 @@ note_keys: { "<note uuid>": { k: <number>, t: <epoch ms> }, ... }   // max 1000 
   have no entry (old notes, new notes) come **after** the keyed ones, newest
   `created_at` first, then uuid, so they never jump around. Entries for notes that
   are gone are dropped on the next write.
+- Limit: a label keeps at most 1000 entries (`labels.js` `MAX_NOTE_KEYS`,
+  `capNoteKeys`). When a write would exceed that, the entries with the oldest `t`
+  (least recently placed) are dropped. Those notes lose their own place and fall
+  back to the unkeyed group after the keyed notes, newest `created_at` first.
 - Why a map and not an array of uuids (the earlier design in
   `NESTED_FOLDERS_SPEC.md` 2.3): each reorder touches one key, so two devices
   can be merged per note (section 6) instead of one whole list winning.
