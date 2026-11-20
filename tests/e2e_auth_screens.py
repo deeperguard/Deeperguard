@@ -110,8 +110,52 @@ def _wait_attr_absent(page, sel, attr, timeout=5000):
         return False
 
 
-def _ctx(browser, width, theme):
+# /register loads Cloudflare's Turnstile api.js. Fetched for real, the page "load"
+# event, the widget's size and the moment its token appears depended on the network
+# and on Cloudflare's challenge scripts, which made the run flaky on a busy build host.
+# The stub renders a box of the real widget's normal size (300x65) and sets the token
+# the way the widget does once its check passes.
+TURNSTILE_SCRIPT = "challenges.cloudflare.com/turnstile/v0/api.js"
+TURNSTILE_STUB_JS = """(function () {
+  function fill(el) {
+    if (!el.querySelector('.e2e-turnstile-box')) {
+      const box = document.createElement('div');
+      box.className = 'e2e-turnstile-box';
+      box.style.cssText = 'width:300px;height:65px';
+      el.appendChild(box);
+    }
+    let input = el.querySelector('input[name="cf-turnstile-response"]');
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'cf-turnstile-response';
+      el.appendChild(input);
+    }
+    input.value = 'e2e-stub-turnstile-token';
+  }
+  window.turnstile = {
+    render: function (el) { fill(typeof el === 'string' ? document.querySelector(el) : el); return 'stub'; },
+    reset: function () { document.querySelectorAll('.cf-turnstile').forEach(fill); },
+    getResponse: function () { return 'e2e-stub-turnstile-token'; },
+  };
+  document.querySelectorAll('.cf-turnstile').forEach(fill);
+})();"""
+
+
+def _ctx(browser, base, width, theme):
     ctx = browser.new_context(viewport={"width": width, "height": 900})
+
+    def route(r):
+        # Only the test server is reached over the wire.
+        url = r.request.url
+        if url == base or url.startswith(base + "/"):
+            r.continue_()
+        elif TURNSTILE_SCRIPT in url:
+            r.fulfill(status=200, content_type="text/javascript", body=TURNSTILE_STUB_JS)
+        else:
+            r.abort("failed")
+
+    ctx.route("**/*", route)
     ctx.add_init_script(
         "try { localStorage.setItem('deeperguard-prefs', JSON.stringify({theme: '%s'})); } catch (e) {}"
         % theme)
@@ -122,7 +166,7 @@ def check_pages(browser, base, failures):
     for width in (390, 1280):
         for theme in ("light", "dark"):
             tag = f"{width}px/{theme}"
-            ctx = _ctx(browser, width, theme)
+            ctx = _ctx(browser, base, width, theme)
             page = ctx.new_page()
             for path, fields in PROTECTED.items():
                 page.goto(base + path, wait_until="load")
@@ -194,7 +238,7 @@ def _wait_unlocked(page):
 
 def smoke(browser, base, failures, width, theme):
     tag = f"smoke {width}px/{theme}"
-    ctx = _ctx(browser, width, theme)
+    ctx = _ctx(browser, base, width, theme)
     page = ctx.new_page()
     email = f"auth-polish-{width}-{theme}-{int(time.time())}@home.local"
 
@@ -257,7 +301,7 @@ def smoke(browser, base, failures, width, theme):
 
     # 3. Sign in again in a fresh context: wrong password first, then the right one.
     ctx.close()
-    ctx = _ctx(browser, width, theme)
+    ctx = _ctx(browser, base, width, theme)
     page = ctx.new_page()
     page.goto(base + "/login", wait_until="load")
     page.fill('#login-form input[autocomplete="username"]', email)
