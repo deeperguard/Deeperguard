@@ -11,6 +11,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -58,6 +59,33 @@ COMPETING_WRITE_JS = """async (password) => {
   return res.status;
 }"""
 
+# Background calls (Settings polls /api/account and /api/sessions, sync asks /api/sync/watermark)
+# race with the password proof. The session is a cookie that is refreshed on every response, so
+# a call answered around the proof drops the proof token: the save then gets 401, proves again
+# and sends one PUT too many. Only the vault-keys calls of the dialog itself go through.
+HOLD_POLLS_JS = """async () => {
+  const orig = window.fetch;
+  const gate = { release: null, orig };
+  const open = new Promise((resolve) => { gate.release = resolve; });
+  const isPoll = (args) => {
+    const path = new URL(String((args[0] && args[0].url) || args[0]), location.href).pathname;
+    return path.startsWith('/api/') && !path.startsWith('/api/account/vault-keys');
+  };
+  window.fetch = async (...args) => {
+    if (!isPoll(args)) return orig(...args);
+    await open;
+    return orig(...args);
+  };
+  window.__pollGate = gate;
+}"""
+RELEASE_POLLS_JS = """() => {
+  const gate = window.__pollGate;
+  if (!gate) return;
+  window.fetch = gate.orig;
+  gate.release();
+  window.__pollGate = null;
+}"""
+
 
 class RecoveryKeySettingsE2E(unittest.TestCase):
     @classmethod
@@ -91,6 +119,17 @@ class RecoveryKeySettingsE2E(unittest.TestCase):
             shutil.rmtree(cls.root, ignore_errors=True)
 
     # -- helpers ---------------------------------------------------------
+
+    @contextmanager
+    def background_polls_held(self):
+        """Hold background /api calls until the block ends, so the proof token survives until the save."""
+        self.page.evaluate(HOLD_POLLS_JS)
+        try:
+            # A call sent just before the hold is answered within this time.
+            self.page.wait_for_timeout(500)
+            yield
+        finally:
+            self.page.evaluate(RELEASE_POLLS_JS)
 
     def sql(self, query, args=()):
         con = sqlite3.connect(self.db_file)
@@ -298,9 +337,10 @@ class RecoveryKeySettingsE2E(unittest.TestCase):
 
         page.route(f"**{PUT_PATH}", handler)
         before = self.wrap_row()
-        key, group = self.start_replace()
-        self.confirm_and_save(key, group)
-        page.wait_for_selector("#recovery-key-dialog", state="hidden", timeout=60000)
+        with self.background_polls_held():
+            key, group = self.start_replace()
+            self.confirm_and_save(key, group)
+            page.wait_for_selector("#recovery-key-dialog", state="hidden", timeout=60000)
         self.assertEqual(len(seen), 2)
         self.assertNotEqual(self.wrap_row()[3], before[3])
 
