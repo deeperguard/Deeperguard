@@ -12,6 +12,7 @@ from __future__ import annotations
 import shutil
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -143,6 +144,32 @@ CONTRAST = "() => {" + UTILS + """
 }"""
 
 
+MONTH_WEEKS = "() => {" + UTILS + """
+  const rows = [...document.querySelectorAll('#agenda-root .agenda-month-row')];
+  return rows.map(row => {
+    const wk = row.querySelectorAll('.agenda-month-week');
+    const cell = row.querySelector('.agenda-month-cell');
+    const out = { count: wk.length, firstDay: Number(cell.dataset.agendaMonthDay) };
+    if (!wk.length) return out;
+    const el = wk[0], r = el.getBoundingClientRect(), c = cell.getBoundingClientRect();
+    const layers = [];
+    for (let n = el; n; n = n.parentElement) {
+      const bg = parseCssColor(getComputedStyle(n).backgroundColor);
+      if (bg && bg.a > 0) { layers.push(bg); if (bg.a >= 0.999) break; }
+    }
+    let base = layers.pop() || { r: 0, g: 0, b: 0, a: 1 };
+    while (layers.length) base = compositeOver(layers.pop(), base);
+    const own = parseCssColor(getComputedStyle(el).backgroundColor);
+    return Object.assign(out, {
+      text: el.textContent.trim(), hidden: el.getAttribute('aria-hidden'), tag: el.tagName,
+      width: r.width, leftOfCell: r.right <= c.left + 0.5, radius: parseFloat(getComputedStyle(el).borderTopLeftRadius),
+      boxed: !!(own && own.a > 0),
+      ratio: contrastRatio(compositeOver(parseCssColor(getComputedStyle(el).color), base), base),
+    });
+  });
+}"""
+
+
 @pytest.fixture(scope="module")
 def session():
     data = Path(tempfile.mkdtemp(prefix="dg-views-polish-"))
@@ -221,3 +248,24 @@ def test_dark_text_contrast(session, view, width):
     assert ratios, "no text measured"
     low = [r for r in ratios if r["ratio"] is not None and r["ratio"] < 4.5]
     assert low == []
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("width", [390, 1280])
+def test_month_week_numbers(session, width, theme):
+    page = session
+    _show(page, "month", width, theme)
+    rows = page.evaluate(MONTH_WEEKS)
+    assert len(rows) >= 4, "month grid rows must render"
+    if width > 768:
+        assert all(r["count"] == 0 for r in rows), "desktop month grid has no week column"
+        return
+    for r in rows:
+        monday = datetime.fromtimestamp(r["firstDay"] / 1000)
+        assert monday.weekday() == 0, "rows start on Monday"
+        assert r["count"] == 1, "one week number per row"
+        assert r["text"] == str(monday.isocalendar()[1]), f"row of {monday:%Y-%m-%d}: {r['text']}"
+        assert r["tag"] == "SPAN" and r["hidden"] == "true", "week number is decorative, not a day button"
+        assert r["width"] > 0 and r["leftOfCell"], "week number sits left of the row's first day"
+        assert r["boxed"] and r["radius"] > 0, "week number is a rounded tinted box"
+        assert r["ratio"] >= 4.5, f"week number contrast {r['ratio']:.2f} in {theme}"

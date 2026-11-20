@@ -1718,14 +1718,18 @@
     }
     const rs = startOfDay(days[0]).getTime();
     const re = addDays(startOfDay(days[days.length - 1]), 1).getTime();
-    let html = `<div class="agenda-month-grid" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
+    let html = `<div class="agenda-month-grid${phoneMonth ? ' agenda-month-grid--weeks' : ''}" data-agenda-range-start="${rs}" data-agenda-range-end="${re}">`;
     const weekRow = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     html += '<div class="agenda-month-head">';
+    if (phoneMonth) html += '<div class="agenda-month-week-head" aria-hidden="true"></div>';
     weekRow.forEach((w) => { html += `<div class="agenda-month-dow muted">${w}</div>`; });
     html += '</div>';
     const MAX_CHIPS = 3;
     for (let r = 0; r < nWeeks; r += 1) {
       html += '<div class="agenda-month-row">';
+      if (phoneMonth) {
+        html += `<span class="agenda-month-week" aria-hidden="true">${isoWeekNumber(days[r * 7])}</span>`;
+      }
       for (let c = 0; c < 7; c += 1) {
         const day = days[r * 7 + c];
         const ds = startOfDay(day);
