@@ -4764,6 +4764,8 @@ def sitemap_xml():
         "/contact",
         "/download",
         "/self-host",
+        "/help",
+        "/help/contacts",
         "/help/recovery",
         "/verify",
         "/blog",

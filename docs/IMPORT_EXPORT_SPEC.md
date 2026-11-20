@@ -215,6 +215,8 @@ deeperguard-export-2026-11-18.zip
 │   └── 030c46d3-layout-test.pdf
 ├── agenda/
 │   └── agenda.ics
+├── contacts/
+│   └── contacts.vcf
 └── 2fa/                     only when the user ticked the 2FA checkbox
     └── otpauth.txt
 ```
@@ -281,6 +283,14 @@ RECURRENCE-ID. It contains no reminders and no agenda tasks (1.6). Omitted
 when the agenda is empty. Events without a start or end are not written; their count is listed
 under "Not exported" in `README.txt` (2.5). If the iCalendar module is missing the export fails
 with an error and no ZIP is saved; it never silently leaves the agenda out.
+
+### 2.3a `contacts/contacts.vcf`
+
+All live contacts as one vCard 3.0 file with photos, written by `NotesContactsVcard.write`
+(the writer of docs/CONTACTS_SPEC.md 8.2, also used by the Contacts tab's Export). Omitted when
+there are no contacts; a vault with only contacts still exports. `README.txt` lists the count.
+If the vCard module is missing the export fails with an error and no ZIP is saved. Test:
+`tests/test_readable_export_contacts.js`, `tests/test_e2e_readable_export_contacts.py`.
 
 ### 2.4 `2fa/otpauth.txt` (opt-in only)
 
