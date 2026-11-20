@@ -15,8 +15,14 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_JS = (ROOT / "app/static/js/app.js").read_text(encoding="utf-8")
 LABELS_JS = ROOT / "app/static/js/labels.js"
 
-MOVE_SRC = "function moveLabel(" + APP_JS.split("function moveLabel(", 1)[1].split(
-    "function openLabelMenu(", 1)[0]
+def _source_between(source: str, start: str, end: str) -> str:
+    """Return the text from `start` up to (not including) `end`, failing clearly if either anchor is gone."""
+    assert start in source, f"app.js no longer defines '{start}'; update this test's anchors"
+    assert end in source, f"app.js no longer defines '{end}'; update this test's anchors"
+    return source.split(start, 1)[1].split(end, 1)[0]
+
+
+MOVE_SRC = "function moveLabel(" + _source_between(APP_JS, "function moveLabel(", "function openLabelMenu(")
 
 STORE_JS = """
 window.toasts = [];
