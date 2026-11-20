@@ -2234,7 +2234,7 @@
             <p id="pcloud-connect-unavailable" class="settings-hint" hidden>Connecting pCloud is not set up on this server.</p>
             <div id="pcloud-connect-notice">
               <p class="settings-hint">When you connect, the Deeperguard server stores a pCloud access token for your account. The server encrypts that token with a key that the server itself holds. This protects the token if the database leaks; it is not end-to-end encryption, and the server can decrypt the token whenever it needs it. With the token the server can use your pCloud account as far as pCloud allows this app. pCloud has no scope setting for this, so that limit comes from how the app is registered at pCloud, not from Deeperguard. You can revoke access at any time in your pCloud account settings, or choose Disconnect here: that deletes the token from the server and asks pCloud to revoke it.</p>
-              <p id="pcloud-connect-schedule" class="settings-hint">Scheduled backups do not use this connection yet.</p>
+              <p id="pcloud-connect-schedule" class="settings-hint">Connecting also switches on the daily backup to your own pCloud (unless the automatic backup is on), which uploads your encrypted backup with this connection. If you saved a legacy token before, it keeps being used until you connect. If pCloud refuses the connection, the status changes to reconnect needed and you get one e-mail. Backups go to the folder Deeperguard/backups, counted from the folder pCloud gives this app. If the app is limited to its own folder, that is inside it, not where earlier backups made with a pasted token may be.</p>
             </div>
           </div>
           <div id="pcloud-own-notice" hidden>

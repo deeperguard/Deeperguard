@@ -357,7 +357,9 @@ class PcloudOAuthTests(unittest.TestCase):
         uid = self._user()
         csrf = self._login(uid)
         status = lambda: self.client.get("/api/account").get_json()["pcloud_oauth"]
-        self.assertEqual(status(), {"state": "none", "available": True})
+        self.assertEqual(
+            status(), {"state": "none", "available": True, "mode": "none", "oauth_refused": False}
+        )
         _, state = self._start(csrf)
         self._callback(state)
         self.assertEqual(status()["state"], "connected")
