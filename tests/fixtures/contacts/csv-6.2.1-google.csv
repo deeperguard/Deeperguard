@@ -1,0 +1,4 @@
+First Name,Middle Name,Last Name,Name Prefix,Name Suffix,Nickname,Organization Name,Organization Title,Birthday,Notes,Labels,E-mail 1 - Label,E-mail 1 - Value,Phone 1 - Label,Phone 1 - Value,Phone 2 - Label,Phone 2 - Value,Address 1 - Label,Address 1 - Formatted,Address 1 - Street,Address 1 - City,Address 1 - Postal Code,Address 1 - Country,Website 1 - Label,Website 1 - Value
+Marieke,,Smit,,,Mies,Smit & Zn,Eigenaar,1990-04-21,"Eerste regel
+Tweede regel",myContacts ::: Klanten,Work,marieke@smit.example ::: m.smit@smit.example,Mobile,+31 6 55512345,Home,+31 20 5550000,Home,"Damrak 1
+1012 LG Amsterdam",Damrak 1,Amsterdam,1012 LG,Netherlands,Homepage,https://smit.example

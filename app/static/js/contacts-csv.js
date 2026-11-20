@@ -1,4 +1,4 @@
-// CSV byte decoding and RFC 4180 reader for contacts (docs/CONTACTS_SPEC.md sections 6.0, 6.3.1 and 7.8).
+// CSV byte decoding, RFC 4180 reader and named-dialect mapping for contacts (docs/CONTACTS_SPEC.md sections 6.0, 6.2, 6.3.1 and 7.8).
 // Pure functions of bytes/text to plain arrays: no DOM, no network, no store. Written here on purpose (no library).
 // Everything read from a file is data: values are never interpreted as HTML and never as formulas.
 const NotesContactsCsv = (() => {
@@ -201,7 +201,361 @@ const NotesContactsCsv = (() => {
     return { rows, delimiter, warnings };
   }
 
-  return { LIMITS, decodeBytes, cleanText, readCsv };
+  // --- 6.2 named dialects --------------------------------------------------------------------------
+  // Outlook writes localised headers. Only the translations the spec names are known (nl); a header in another
+  // language is not recognised and goes to the mapping step.
+  const OUTLOOK_ALIASES = { voornaam: 'first name', achternaam: 'last name', 'e-mailadres': 'e-mail address' };
+  const DIALECTS = ['google', 'google-old', 'outlook', 'outlook-com', 'thunderbird', 'yahoo'];
+  const MULTI = ' ::: ';
+  const MAX_EXTRA_VALUE = 4096;
+  const MAX_EXTRA_BYTES = 32 * 1024;
+  const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+  const TYPE_WORDS = { home: 'home', work: 'work', business: 'work', mobile: 'mobile', cell: 'mobile', main: 'main', fax: 'fax', pager: 'pager', other: 'other' };
+  const DAY_FIRST = 'dmy';
+  const MONTH_FIRST = 'mdy';
+
+  const lower = (h) => String(h).replace(/^﻿/, '').trim().toLowerCase();
+  const outlookKey = (h) => OUTLOOK_ALIASES[lower(h)] || lower(h);
+
+  // headers -> dialect name or null. Case-insensitive, trimmed (and a stray BOM ignored).
+  // outlook and outlook-com share one column set in the spec; the sample of outlook.com has no Business Phone,
+  // so a file with Business Phone is called outlook and one without it outlook-com. Both map the same way.
+  function detectDialect(headers) {
+    if (!Array.isArray(headers)) return null;
+    const plain = new Set(headers.map(lower));
+    const has = (...names) => names.every((n) => plain.has(n));
+    if (has('first name', 'organization name', 'e-mail 1 - value')) return 'google';
+    if (has('given name', 'family name', 'group membership')) return 'google-old';
+    if (has('primary email', 'display name')) return 'thunderbird';
+    if (has('first', 'last', 'email', 'messenger id')) return 'yahoo';
+    const out = new Set(headers.map(outlookKey));
+    if (out.has('first name') && out.has('e-mail address')) return out.has('business phone') ? 'outlook' : 'outlook-com';
+    return null;
+  }
+
+  const split = (value, sep = MULTI) => String(value).split(sep).map((s) => s.trim()).filter(Boolean);
+
+  function typed(label) {
+    let s = String(label).trim();
+    let pref = false;
+    if (s.startsWith('* ')) { pref = true; s = s.slice(2).trim(); }
+    const type = TYPE_WORDS[s.toLowerCase()];
+    if (type) return { type, label: '', pref };
+    return s ? { type: 'custom', label: s, pref } : { type: 'other', label: '', pref };
+  }
+
+  const daysIn = (y, m) => {
+    const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+    return [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+  };
+  function ymd(y, m, d) {
+    const year = Number(y);
+    const month = Number(m);
+    const day = Number(d);
+    if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysIn(year, month)) return null;
+    return String(year).padStart(4, '0') + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  }
+  const LOCALE_DATE = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/;
+
+  // { iso } ('' when the cell holds no date) or { bad: true }. `order` decides a local date such as 2/3/1970.
+  function parseDate(raw, order) {
+    const v = String(raw).trim().slice(0, 40);
+    if (!v) return { iso: '' };
+    let m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ].*)?$/.exec(v);
+    if (m) { const iso = ymd(m[1], m[2], m[3]); return iso ? { iso } : { bad: true }; }
+    m = /^--(\d{2})-?(\d{2})$/.exec(v);
+    if (m) return ymd(2000, m[1], m[2]) ? { iso: '--' + m[1] + '-' + m[2] } : { bad: true };
+    m = LOCALE_DATE.exec(v);
+    if (!m) return { bad: true };
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (a === 0 && b === 0) return { iso: '' }; // Outlook's "no date" is 0/0/00
+    if (m[3].length !== 4) return { bad: true };
+    const iso = order === MONTH_FIRST ? ymd(m[3], a, b) : ymd(m[3], b, a);
+    return iso ? { iso } : { bad: true };
+  }
+
+  // 6.2-3: the order is decided per file. A first number above 12 means day first, a second one above 12 month first.
+  function dateEvidence(values) {
+    let day = false;
+    let month = false;
+    let sample = '';
+    for (const raw of values) {
+      const m = LOCALE_DATE.exec(String(raw).trim());
+      if (!m) continue;
+      const a = Number(m[1]);
+      const b = Number(m[2]);
+      if (a === 0 && b === 0) continue;
+      if (a > 12 && b <= 12) day = true;
+      else if (b > 12 && a <= 12) month = true;
+      else if (a <= 12 && b <= 12 && a !== b && !sample) sample = String(raw).trim();
+    }
+    return { day, month, sample };
+  }
+
+  function ensureModel() {
+    if (typeof NotesContacts !== 'undefined') return NotesContacts;
+    if (typeof module !== 'undefined' && module.exports) return require('./contacts.js');
+    throw new Error('contacts.js must be loaded before mapRows');
+  }
+
+  // A cursor over one row: take() reads a column by header (case-insensitive) and marks it as mapped.
+  function makeCursor(index, cells, used, ctx) {
+    const take = (name) => {
+      const i = index[name.toLowerCase()];
+      if (i === undefined) return '';
+      used.add(i);
+      return String(cells[i] === undefined ? '' : cells[i]).trim();
+    };
+    const first = (...names) => names.map(take).find(Boolean) || '';
+    const add = (list, type, value) => { if (value) list.push({ type, value, label: '', pref: false }); };
+    const date = (raw, type, label = '') => {
+      const res = parseDate(raw, ctx.order);
+      if (res.bad) ctx.badDates += 1;
+      else if (res.iso) ctx.c.dates.push({ type, label, value: res.iso });
+    };
+    const address = (type, parts, label = '') => {
+      const a = { street: '', extended: '', po_box: '', city: '', region: '', postal: '', country: '', ...parts };
+      if (Object.values(a).some(Boolean)) ctx.c.addresses.push({ type, label, pref: false, ...a });
+    };
+    const im = (service, value) => { if (value) ctx.c.ims.push({ service, label: '', value }); };
+    return { take, first, add, date, address, im, c: ctx.c };
+  }
+
+  // Google: "X n - Label|Type" with "X n - Value"; a value cell may hold several values separated by ' ::: '.
+  function labelled(r, kind, n, list) {
+    const t = split(r.first(kind + ' ' + n + ' - Label', kind + ' ' + n + ' - Type'));
+    split(r.take(kind + ' ' + n + ' - Value')).forEach((v, j) => {
+      const x = typed(t[j] !== undefined ? t[j] : (t[0] || ''));
+      list.push({ type: x.type, value: v, label: x.label, pref: x.pref });
+    });
+  }
+
+  function mapGoogle(r, ctx) {
+    const c = r.c;
+    Object.assign(c.name, {
+      formatted: r.take('Name'),
+      given: r.first('First Name', 'Given Name'),
+      additional: r.first('Middle Name', 'Additional Name'),
+      family: r.first('Last Name', 'Family Name'),
+      prefix: r.take('Name Prefix'),
+      suffix: r.take('Name Suffix'),
+      phonetic_given: r.take('Phonetic First Name'),
+      phonetic_family: r.take('Phonetic Last Name'),
+    });
+    c.nickname = r.take('Nickname');
+    c.org = { name: r.take('Organization Name'), unit: r.take('Organization Department') };
+    c.title = r.take('Organization Title');
+    c.note = r.take('Notes');
+    r.date(r.take('Birthday'), 'birthday');
+    for (const col of ['Labels', 'Group Membership']) {
+      for (const g of split(r.take(col))) c.labels.push(g.replace(/^\* /, ''));
+    }
+    c.labels = c.labels.filter((g) => g.toLowerCase() !== 'mycontacts');
+    for (const n of ctx.nums['e-mail'] || []) labelled(r, 'E-mail', n, c.emails);
+    for (const n of ctx.nums.phone || []) labelled(r, 'Phone', n, c.phones);
+    for (const n of ctx.nums.website || []) labelled(r, 'Website', n, c.urls);
+    for (const n of ctx.nums.address || []) {
+      const p = 'Address ' + n + ' - ';
+      const x = typed(r.first(p + 'Label', p + 'Type'));
+      const parts = { street: r.take(p + 'Street'), city: r.take(p + 'City'), po_box: r.take(p + 'PO Box'), region: r.take(p + 'Region'), postal: r.take(p + 'Postal Code'), country: r.take(p + 'Country'), extended: r.take(p + 'Extended Address') };
+      const formatted = r.take(p + 'Formatted');
+      if (!Object.values(parts).some(Boolean)) parts.street = formatted;
+      r.address(x.type, parts, x.label);
+    }
+    for (const n of ctx.nums.event || []) {
+      const label = r.take('Event ' + n + ' - Label');
+      const anniversary = label.toLowerCase() === 'anniversary';
+      r.date(r.take('Event ' + n + ' - Value'), anniversary ? 'anniversary' : 'other', anniversary ? '' : label);
+    }
+    const org = (ctx.nums.organization || [])[0];
+    if (org !== undefined) {
+      const p = 'Organization ' + org + ' - ';
+      c.org = { name: c.org.name || r.take(p + 'Name'), unit: c.org.unit || r.take(p + 'Department') };
+      c.title = c.title || r.take(p + 'Title');
+    }
+  }
+
+  function mapOutlook(r) {
+    const c = r.c;
+    Object.assign(c.name, { prefix: r.take('Title'), given: r.take('First Name'), additional: r.take('Middle Name'), family: r.take('Last Name'), suffix: r.take('Suffix') });
+    c.nickname = r.take('Nickname');
+    for (const h of ['E-mail Address', 'E-mail 2 Address', 'E-mail 3 Address']) r.add(c.emails, 'other', r.take(h));
+    const phones = [['Home Phone', 'home'], ['Home Phone 2', 'home'], ['Business Phone', 'work'], ['Business Phone 2', 'work'], ['Mobile Phone', 'mobile'],
+      ['Primary Phone', 'main'], ['Business Fax', 'fax'], ['Home Fax', 'fax'], ['Other Fax', 'fax'], ['Pager', 'pager'], ['Car Phone', 'other'],
+      ['Other Phone', 'other'], ['Company Main Phone', 'main']];
+    for (const [h, type] of phones) r.add(c.phones, type, r.take(h));
+    c.org = { name: r.take('Company'), unit: r.take('Department') };
+    c.title = r.take('Job Title');
+    for (const [p, type] of [['Business', 'work'], ['Home', 'home'], ['Other', 'other']]) {
+      const street = [r.take(p + ' Street'), r.take(p + ' Street 2'), r.take(p + ' Street 3')].filter(Boolean).join('\n');
+      r.address(type, { street, city: r.take(p + ' City'), region: r.take(p + ' State'), postal: r.take(p + ' Postal Code'), country: r.take(p + ' Country/Region') });
+    }
+    r.date(r.take('Birthday'), 'birthday');
+    r.date(r.take('Anniversary'), 'anniversary');
+    c.note = r.take('Notes');
+    r.add(c.urls, 'other', r.take('Web Page'));
+    c.labels = split(r.take('Categories'), ';');
+    r.im('other', r.take('IMAddress'));
+  }
+
+  function mapThunderbird(r) {
+    const c = r.c;
+    Object.assign(c.name, { given: r.take('First Name'), family: r.take('Last Name'), formatted: r.take('Display Name') });
+    c.nickname = r.take('Nickname');
+    r.add(c.emails, 'other', r.take('Primary Email'));
+    r.add(c.emails, 'other', r.take('Secondary Email'));
+    r.im('aim', r.take('Screen Name'));
+    for (const [h, type] of [['Work Phone', 'work'], ['Home Phone', 'home'], ['Fax Number', 'fax'], ['Pager Number', 'pager'], ['Mobile Number', 'mobile']]) r.add(c.phones, type, r.take(h));
+    for (const [p, type] of [['Home', 'home'], ['Work', 'work']]) {
+      const street = [r.take(p + ' Address'), r.take(p + ' Address 2')].filter(Boolean).join('\n');
+      r.address(type, { street, city: r.take(p + ' City'), region: r.take(p + ' State'), postal: r.take(p + ' ZipCode'), country: r.take(p + ' Country') });
+    }
+    c.title = r.take('Job Title');
+    c.org = { name: r.take('Organization'), unit: r.take('Department') };
+    r.add(c.urls, 'work', r.take('Web Page 1'));
+    r.add(c.urls, 'home', r.take('Web Page 2'));
+    // Three separate columns; without a year the birthday is year-less ("--MM-DD").
+    const year = r.take('Birth Year');
+    const month = r.take('Birth Month');
+    const day = r.take('Birth Day');
+    if (month && day) {
+      const withYear = /^\d{4}$/.test(year);
+      const iso = ymd(withYear ? year : 2000, month, day);
+      r.date(iso ? (withYear ? iso : '--' + iso.slice(5)) : 'invalid', 'birthday');
+    } else if (year || month || day) {
+      r.date('invalid', 'birthday');
+    }
+    c.note = r.take('Notes');
+  }
+
+  function mapYahoo(r) {
+    const c = r.c;
+    Object.assign(c.name, { given: r.take('First'), additional: r.take('Middle'), family: r.take('Last') });
+    c.nickname = r.take('Nickname');
+    for (const h of ['Email', 'Alternate Email 1', 'Alternate Email 2']) r.add(c.emails, 'other', r.take(h));
+    for (const [h, type] of [['Home', 'home'], ['Work', 'work'], ['Pager', 'pager'], ['Fax', 'fax'], ['Mobile', 'mobile'], ['Other', 'other']]) r.add(c.phones, type, r.take(h));
+    r.im('other', r.take('Messenger ID'));
+    r.im('other', r.take('Yahoo ID'));
+    r.add(c.urls, 'home', r.take('Personal Website'));
+    r.add(c.urls, 'work', r.take('Business Website'));
+    c.title = r.take('Title');
+    c.org = { name: r.take('Company'), unit: '' };
+    for (const [p, type] of [['Work', 'work'], ['Home', 'home']]) {
+      r.address(type, { street: r.take(p + ' Address'), city: r.take(p + ' City'), region: r.take(p + ' State'), postal: r.take(p + ' ZIP'), country: r.take(p + ' Country') });
+    }
+    r.date(r.take('Birthday'), 'birthday');
+    r.date(r.take('Anniversary'), 'anniversary');
+    const category = r.take('Category');
+    if (category) c.labels.push(category);
+    c.note = r.take('Comments');
+  }
+
+  const MAPPERS = { google: mapGoogle, 'google-old': mapGoogle, outlook: mapOutlook, 'outlook-com': mapOutlook, thunderbird: mapThunderbird, yahoo: mapYahoo };
+  const LOCALE_DATE_COLUMNS = { outlook: ['birthday', 'anniversary'], 'outlook-com': ['birthday', 'anniversary'], yahoo: ['birthday', 'anniversary'] };
+
+  function hasData(c, extraCount) {
+    return extraCount > 0 || Object.values(c.name).some(Boolean) || c.nickname || c.org.name || c.org.unit || c.title || c.note
+      || c.labels.length || ['phones', 'emails', 'addresses', 'urls', 'ims', 'dates'].some((f) => c[f].length);
+  }
+
+  // rows (from readCsv) + dialect name -> { contacts, warnings, dateOrder, dateOrderAsk }. `contacts` are stored-shape
+  // contact contents (NotesContacts.buildContact). opts.dateOrder ('dmy' or 'mdy') is used when the file does not
+  // decide; `dateOrderAsk` then holds a sample date for the "day first or month first?" question (6.2-3).
+  function mapRows(rows, dialect, opts = {}) {
+    const mapper = MAPPERS[dialect];
+    const warnings = [];
+    if (!mapper) return { contacts: [], warnings: ['Unknown CSV dialect'], dateOrder: null, dateOrderAsk: '' };
+    if (!Array.isArray(rows) || rows.length < 2) return { contacts: [], warnings, dateOrder: null, dateOrderAsk: '' };
+    const model = ensureModel();
+    const headers = rows[0].map((h) => String(h));
+    const keyOf = dialect.startsWith('outlook') ? outlookKey : lower;
+    const index = Object.create(null);
+    const nums = Object.create(null);
+    headers.forEach((h, i) => {
+      const key = keyOf(h);
+      if (!(key in index)) index[key] = i;
+      const m = /^(e-mail|phone|address|website|event|organization) (\d+) - /.exec(key);
+      if (m) {
+        if (!nums[m[1]]) nums[m[1]] = [];
+        if (!nums[m[1]].includes(m[2])) nums[m[1]].push(m[2]);
+      }
+    });
+    const dateCols = (LOCALE_DATE_COLUMNS[dialect] || []).map((n) => index[n]).filter((i) => i !== undefined);
+    let order = opts.dateOrder === MONTH_FIRST ? MONTH_FIRST : DAY_FIRST;
+    let dateOrder = null;
+    let dateOrderAsk = '';
+    if (dateCols.length) {
+      const ev = dateEvidence(rows.slice(1).flatMap((row) => dateCols.map((i) => row[i] || '')));
+      if (ev.day && ev.month) {
+        warnings.push('Dates mix day-first and month-first; day-first was used and the others were not kept');
+        dateOrder = DAY_FIRST;
+        order = DAY_FIRST;
+      } else if (ev.day || ev.month) {
+        dateOrder = ev.month ? MONTH_FIRST : DAY_FIRST;
+        order = dateOrder;
+      } else if (ev.sample) {
+        dateOrderAsk = ev.sample;
+        dateOrder = order;
+      }
+    }
+
+    const now = new Date().toISOString();
+    const limits = model.LIMITS;
+    const contacts = [];
+    const tally = { empty: 0, headerless: 0, badDates: 0, tooLarge: 0, extraKept: 0, extraDropped: 0 };
+    const overList = Object.create(null);
+    let overLabels = 0;
+    for (let ri = 1; ri < rows.length; ri += 1) {
+      const cells = rows[ri];
+      if (cells.length > headers.length) tally.headerless += cells.length - headers.length;
+      const ctx = { order, nums, badDates: 0, c: { name: {}, org: { name: '', unit: '' }, phones: [], emails: [], addresses: [], urls: [], ims: [], dates: [], labels: [] } };
+      const used = new Set();
+      mapper(makeCursor(index, cells, used, ctx), ctx);
+      tally.badDates += ctx.badDates;
+      const c = ctx.c;
+
+      // 2.4: every non-empty column nobody mapped, by its original header, on a null-prototype object.
+      const csv = Object.create(null);
+      let bytes = 0;
+      for (let i = 0; i < headers.length; i += 1) {
+        const value = String(cells[i] === undefined ? '' : cells[i]);
+        if (used.has(i) || !value.trim()) continue;
+        const key = headers[i] || '(column ' + (i + 1) + ')';
+        const cost = key.length + Math.min(value.length, MAX_EXTRA_VALUE) + 6;
+        if (FORBIDDEN_KEYS.has(key.toLowerCase()) || bytes + cost > MAX_EXTRA_BYTES) { tally.extraDropped += 1; continue; }
+        csv[key] = value.slice(0, MAX_EXTRA_VALUE);
+        bytes += cost;
+        tally.extraKept += 1;
+      }
+      const extraCount = Object.keys(csv).length;
+      if (!hasData(c, extraCount)) { tally.empty += 1; continue; }
+
+      for (const f of model.LIST_FIELDS) {
+        if (c[f].length > limits.listEntries) { overList[f] = (overList[f] || 0) + c[f].length - limits.listEntries; c[f].length = limits.listEntries; }
+      }
+      if (c.labels.length > limits.labels) { overLabels += c.labels.length - limits.labels; c.labels.length = limits.labels; }
+      try {
+        const { content } = model.buildContact(c, null, now);
+        content.extra = { source: { format: 'csv', flavour: dialect } };
+        if (extraCount) content.extra.csv = csv;
+        contacts.push(content);
+      } catch (err) {
+        tally.tooLarge += 1;
+      }
+    }
+    if (tally.empty) warnings.push(tally.empty + ' empty record(s) skipped');
+    if (tally.tooLarge) warnings.push(tally.tooLarge + ' record(s) were too large and skipped');
+    if (tally.badDates) warnings.push(tally.badDates + ' date(s) could not be read and were not kept');
+    if (tally.headerless) warnings.push(tally.headerless + ' cell(s) beyond the header were not kept');
+    if (tally.extraDropped) warnings.push('kept ' + tally.extraKept + ', dropped ' + tally.extraDropped + ' unmapped field(s)');
+    for (const f of Object.keys(overList)) warnings.push(overList[f] + ' ' + f + ' entries over the limit of ' + limits.listEntries + ' per contact were not kept');
+    if (overLabels) warnings.push(overLabels + ' labels over the limit of ' + limits.labels + ' per contact were not kept');
+    if (dateOrderAsk) warnings.push('Dates look like ' + dateOrderAsk + ': read as ' + (order === MONTH_FIRST ? 'month' : 'day') + ' first; the file does not decide the order');
+    return { contacts, warnings, dateOrder, dateOrderAsk };
+  }
+
+  return { LIMITS, DIALECTS, decodeBytes, cleanText, readCsv, detectDialect, mapRows };
 })();
 
 if (typeof window !== 'undefined') window.NotesContactsCsv = NotesContactsCsv;
