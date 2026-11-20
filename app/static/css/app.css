@@ -13573,3 +13573,30 @@ a.contacts-value-main { color: var(--accent); }
 #contacts-import-dialog.dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
 #contacts-import-dialog .contacts-import-check { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; }
 #contacts-import-dialog li label { display: flex; gap: 8px; align-items: center; min-height: 32px; }
+
+/* Contacts duplicates screen (docs/CONTACTS_SPEC.md 7.10) */
+#contacts-dup-dialog .contacts-dup-group { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin: 0 0 12px; display: grid; gap: 8px; }
+#contacts-dup-dialog .contacts-dup-group.possible { border-style: dashed; }
+#contacts-dup-dialog .contacts-dup-title { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
+#contacts-dup-dialog .contacts-dup-reason { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+#contacts-dup-dialog .contacts-dup-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 8px; }
+#contacts-dup-dialog .contacts-dup-card { display: grid; gap: 6px; border: 1px solid var(--border); border-radius: 10px; padding: 10px; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+#contacts-dup-dialog .contacts-dup-card:has(input:checked) { border-color: var(--accent); }
+#contacts-dup-dialog .contacts-dup-card input { flex: 0 0 auto; width: 20px; height: 20px; margin: 0; }
+#contacts-dup-dialog .contacts-dup-card-head { display: flex; gap: 8px; align-items: center; min-width: 0; }
+#contacts-dup-dialog .contacts-dup-line { margin: 0; font-size: 13px; }
+#contacts-dup-dialog .contacts-dup-keep-tag { font-size: 12px; color: var(--muted, inherit); }
+#contacts-dup-dialog .contacts-dup-card:has(input:checked) .contacts-dup-keep-tag::before { content: "\2713  "; }
+#contacts-dup-dialog .contacts-dup-card:not(:has(input:checked)) .contacts-dup-keep-tag { visibility: hidden; }
+#contacts-dup-dialog .contacts-dup-choices { display: grid; gap: 8px; }
+#contacts-dup-dialog .contacts-dup-choice { display: grid; gap: 4px; font-size: 13px; }
+#contacts-dup-dialog .contacts-dup-choice select { width: 100%; min-height: 44px; }
+#contacts-dup-dialog .contacts-dup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#contacts-dup-dialog .contacts-dup-actions .btn { min-height: 44px; }
+#contacts-dup-dialog .contacts-dup-pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+#contacts-dup-dialog .contacts-dup-pick-btn { width: 100%; justify-content: flex-start; gap: 10px; min-height: 44px; text-align: left; }
+.contacts-merge-with { margin-bottom: 8px; }
+.contacts-pane .totp-head-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+@media (min-width: 1000px) {
+  #contacts-dup-dialog { width: min(920px, calc(100% - 24px)); max-height: min(88vh, 760px); }
+}

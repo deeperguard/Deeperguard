@@ -1723,6 +1723,7 @@
           <p id="contacts-count" class="muted">Unlock the vault to see your contacts</p>
         </div>
         <div class="totp-head-actions">
+          <button type="button" id="btn-contacts-duplicates" class="btn ghost" title="Find contacts that are probably the same person, then merge or remove them">Find duplicates</button>
           <button type="button" id="btn-contacts-import" class="btn ghost" title="Import contacts from vCard files">Import</button>
           <button type="button" id="btn-contacts-select" class="btn ghost" title="Tick contacts to export only those" aria-pressed="false">Select</button>
           <button type="button" id="btn-contacts-export" class="btn ghost" title="Export contacts as a vCard file">Export</button>
@@ -2910,6 +2911,34 @@
       <button type="button" class="btn ghost" id="contacts-import-close">Close</button>
     </footer>
   </div>
+  <div id="contacts-dup-backdrop" class="scan-backdrop" hidden></div>
+  <div id="contacts-dup-dialog" class="scan-dialog totp-add-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="contacts-dup-title">
+    <div class="scan-dialog-handle" aria-hidden="true"></div>
+    <header class="scan-dialog-head">
+      <h2 id="contacts-dup-title">Find duplicates</h2>
+    </header>
+    <div class="scan-dialog-body">
+      <p id="contacts-dup-status" class="scan-status" role="status" aria-live="polite"></p>
+      <div id="contacts-dup-review">
+        <p class="scan-dialog-lead muted">Contacts with the same email address, the same phone number or the same name are grouped. Pick the contact to keep, then merge the group or remove the others. Everything happens on this device and is saved encrypted in your vault.</p>
+        <button type="button" class="btn" id="contacts-dup-merge-all" hidden>Merge all exact matches</button>
+        <p id="contacts-dup-empty" class="muted" hidden></p>
+        <div id="contacts-dup-list"></div>
+        <p id="contacts-dup-more" class="muted" hidden></p>
+      </div>
+      <div id="contacts-dup-pick" hidden>
+        <label class="scan-name-field" for="contacts-dup-search">Search for the contact to merge with
+          <input type="search" id="contacts-dup-search" autocomplete="off" spellcheck="false">
+        </label>
+        <ul id="contacts-dup-pick-list" class="contacts-dup-pick-list"></ul>
+        <p id="contacts-dup-pick-empty" class="muted" hidden>No contacts match.</p>
+      </div>
+    </div>
+    <footer class="scan-dialog-foot">
+      <button type="button" class="btn ghost" id="contacts-dup-undo" hidden>Undo</button>
+      <button type="button" class="btn ghost" id="contacts-dup-close">Close</button>
+    </footer>
+  </div>
   <div id="totp-import-backdrop" class="scan-backdrop" hidden></div>
   <div id="totp-import-dialog" class="scan-dialog totp-add-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="totp-import-title">
     <div class="scan-dialog-handle" aria-hidden="true"></div>
@@ -3342,6 +3371,7 @@
   {{ asset_script('js/contacts.js') }}
   {{ asset_script('js/contacts-vcard.js') }}
   {{ asset_script('js/contacts-import.js') }}
+  {{ asset_script('js/contacts-duplicates.js') }}
   {{ asset_script('js/totp.js') }}
   {{ asset_script('js/totp-icons.js') }}
   {{ asset_script('js/totp-import.js') }}
