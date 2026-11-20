@@ -65,4 +65,4 @@ Security reports: notes@deeperguard.com with subject “Vulnerability report”.
 
 Updated: 2026-11-18. The support section now mentions the recovery key that new accounts create during sign-up. It replaces the sentence that said there is no restore that bypasses the vault password and that a lost password is unreadable by design. The app cannot reset a password with the recovery key yet.
 
-Updated 2026-11-20: A forgotten vault password can now be reset with the recovery key on the unlock screen, from a signed-in session, and older accounts can create a recovery key in Settings. The sentence saying the app had no screen for this yet was replaced.
+Updated: 2026-11-20. A forgotten vault password can now be reset with the recovery key on the unlock screen, from a signed-in session, and older accounts can create a recovery key in Settings. The sentence saying the app had no screen for this yet was replaced.
