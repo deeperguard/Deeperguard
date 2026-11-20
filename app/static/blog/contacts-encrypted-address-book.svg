@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Contacts cover</title>
+  <desc id="desc">Abstract dark blue background with a rounded card holding a round avatar shape and three lines, beside a small vault shape</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e3a5f"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="940" cy="130" r="175" fill="#38bdf8" opacity="0.12"/>
+  <circle cx="250" cy="530" r="215" fill="#22c55e" opacity="0.08"/>
+  <g fill="none" stroke="#e2e8f0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="300" y="170" width="460" height="290" rx="28" fill="#1e293b" stroke="#94a3b8"/>
+    <circle cx="420" cy="290" r="62" fill="#0f172a" stroke="#38bdf8"/>
+    <circle cx="420" cy="272" r="20" stroke="#38bdf8" stroke-width="6"/>
+    <path d="M386 326 a34 30 0 0 1 68 0" stroke="#38bdf8" stroke-width="6"/>
+    <path d="M520 250 H700 M520 300 H670 M520 350 H690" stroke="#cbd5e1" stroke-width="6"/>
+    <path d="M360 410 H700" stroke="#64748b" stroke-width="6" stroke-dasharray="14 12"/>
+    <rect x="830" y="300" width="150" height="130" rx="20" fill="#1e293b" stroke="#94a3b8"/>
+    <path d="M870 300 V280 a35 35 0 0 1 70 0 v20"/>
+    <circle cx="905" cy="365" r="18" fill="#0f172a" stroke="#38bdf8" stroke-width="6"/>
+  </g>
+</svg>
