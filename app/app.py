@@ -31,13 +31,13 @@ import totp as totp_mod
 from flask.sessions import SecureCookieSessionInterface
 from datetime import timedelta
 
-from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, log_server_ocr_startup_warning, log_turnstile_startup_warning, log_wan_secure_cookies_startup_warning, normalize_host, ocr_ephemeral, pcloud_password_set, pcloud_token_set, repair_login_password_enabled, register_ip_hourly_cap, serve_ca_crt, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, turnstile_required, turnstile_secret_key, turnstile_site_key, turnstile_unpaired, webauthn_preferred_host, user_is_admin
+from config import CONTACT_EMAIL, DATA_DIR, INDEXNOW_KEY, NOTES_PUBLIC_HOST, NOTES_PUBLIC_URL, SESSION_SECONDS, app_entry_path, ensure_flask_secret, is_ip_host, log_server_ocr_startup_warning, log_turnstile_startup_warning, log_wan_secure_cookies_startup_warning, normalize_host, ocr_ephemeral, pcloud_token_set, repair_login_password_enabled, register_ip_hourly_cap, serve_ca_crt, server_ocr_enabled, session_cookie_domain, skip_login, strict_zk, allow_register, min_password_length, turnstile_required, turnstile_secret_key, turnstile_site_key, turnstile_unpaired, webauthn_preferred_host, user_is_admin
 from uploads import ensure_user_upload_dir, user_upload_dir
 import promo as notes_promo
 from backup_mail import send_user_backup
 from admin_notify import log_signup_notify_config, notify_new_user_signup
 from mailer import send_contact_email, send_plain_email
-from backup_pcloud import ReconnectNeeded, pcloud_credentials_configured, save_pcloud_settings, sync_user_backup
+from backup_pcloud import PASSWORD_REJECTED_DETAIL, ReconnectNeeded, pcloud_credentials_configured, save_pcloud_settings, sync_user_backup
 from passwords import hash_password, new_kdf_salt, verify_password
 from srp_auth import (
     SRP_KDF_V2,
@@ -2845,7 +2845,6 @@ def api_account():
             "pcloud_username": user["pcloud_username"] or "",
             "pcloud_remote_path": _pcloud_path_for_client(user),
             "pcloud_region": user["pcloud_region"] or "eu",
-            "pcloud_password_set": pcloud_password_set(uid),
             "pcloud_token_set": pcloud_token_set(uid),
             "pcloud_oauth": _pcloud_oauth_status(uid, user),
             "pcloud_last_sync_at": float(user["pcloud_last_sync_at"] or 0),
@@ -3434,10 +3433,8 @@ def api_backup_pcloud_settings():
         blocked = _plan_block(user, "pcloud_backup")
         if blocked:
             return blocked
-    password_raw = body.get("password")
-    password = str(password_raw).strip() if password_raw is not None else None
-    if password == "":
-        password = None
+    if str(body.get("password") or "").strip():
+        return jsonify({"error": PASSWORD_REJECTED_DETAIL}), 400
     rclone_token = body.get("rclone_token")
     if rclone_token is not None:
         rclone_token = str(rclone_token).strip()
@@ -3448,7 +3445,6 @@ def api_backup_pcloud_settings():
             remote_path=remote_path,
             region=region,
             enabled=enabled,
-            password=password,
             rclone_token=rclone_token,
         )
     except ValueError as exc:
@@ -3462,7 +3458,6 @@ def api_backup_pcloud_settings():
             "username": username,
             "remote_path": user["pcloud_remote_path"] if user else remote_path,
             "region": user["pcloud_region"] if user else region,
-            "password_set": pcloud_password_set(uid),
             "token_set": pcloud_token_set(uid),
         }
     )

@@ -443,11 +443,6 @@ def pcloud_token_set(user_id: int) -> bool:
     return bool(read_secret(pcloud_token_path(user_id)))
 
 
-def pcloud_password_set(user_id: int) -> bool:
-    """Legacy WebDAV password storage is disabled (always false)."""
-    return False
-
-
 _HOSTNAME_RE = re.compile(
     r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$"
 )
