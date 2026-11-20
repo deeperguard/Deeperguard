@@ -237,7 +237,7 @@ class BackupHelperTests(unittest.TestCase):
                 "pcloud_remote_path": "Deeperguard/backups",
             }
         ]), patch.object(self.backup_pcloud, "pcloud_credentials_configured", return_value=False), patch.object(
-            self.backup_pcloud, "notify_pcloud_backup_failure", side_effect=lambda u, d: sent.append((u["email"], d))
+            self.backup_pcloud, "notify_pcloud_reconnect_needed", side_effect=lambda u, d: sent.append((u["email"], d))
         ), patch.object(self.backup_pcloud.db, "update_pcloud_sync_status"), patch.object(
             self.backup_pcloud.db, "log_backup"
         ):

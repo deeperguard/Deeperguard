@@ -83,3 +83,10 @@ The token is stored in SQLite table `pcloud_oauth_tokens` only as AES-256-GCM ci
 can no longer be decrypted and users must connect again. Token, authorization code and client secret
 are not written to the app log. The authorization code is part of the callback URL, so a reverse
 proxy or access log that records query strings will record it; a code can be exchanged only once.
+
+## Scheduled backup: which token is used, and where it uploads
+
+- The job uses the OAuth token from **Connect pCloud** when it exists and pCloud accepts it. Without one it keeps using the legacy pasted rclone token, unchanged, until the user has connected. Removing the legacy path is a later step, after users were asked to reconnect.
+- If pCloud refuses the OAuth token the connection gets the status **reconnect_needed** (shown in Settings → pCloud backup) and the user gets one e-mail. When a legacy token is also saved, that run still uploads with it. Accounts with neither token also get `reconnect_needed` and one e-mail. Connecting again resets this.
+- Both tokens upload to the same relative folder (`Deeperguard/backups` unless changed). For an OAuth token that path is counted from the folder pCloud gives the app. If the pCloud app is registered with app-folder access, the files land inside `Apps/<app name>/Deeperguard/backups`, not in the account root where backups made with a pasted token are. The test `tests/test_pcloud_scheduled_oauth.py` checks that the same remote path is passed to rclone; it cannot check where pCloud puts it.
+- Manual check after the first OAuth backup of a test account: in pCloud, look for the newest `user-<id>-*.enc.json.gz` and note which folder it is in. If it is not next to the earlier backups, tell the user (the Settings text says so) and copy or keep the old ones; retention only prunes the folder the job uploads to.
