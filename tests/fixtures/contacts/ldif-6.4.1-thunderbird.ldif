@@ -1,0 +1,41 @@
+dn:cn=Anne Veldhuis,mail=anne@example.nl
+objectclass:top
+objectclass:person
+objectclass:organizationalPerson
+objectclass:inetOrgPerson
+objectclass:mozillaAbPersonAlpha
+givenName:Anne
+sn:Veldhuis
+cn:Anne Veldhuis
+mozillaNickname:Annie
+mail:anne@example.nl
+mozillaSecondEmail:anne.v@work.example
+telephoneNumber:+31 30 5550101
+homePhone:+31 30 5550102
+mobile:+31 6 44556677
+mozillaHomeStreet:Lange Nieuwstraat 7
+mozillaHomeLocalityName:Utrecht
+mozillaHomePostalCode:3512 PA
+mozillaHomeCountryName:Nederland
+o:Veldhuis Advies
+title:Adviseur
+birthyear:1988
+birthmonth:09
+birthday:23
+description:Regel een van de notitie, die zo lang is dat Thunderbird hem op 
+ een nieuwe regel voortzet.
+mozillaCustom1:VIP
+modifytimestamp:0
+
+dn:: Y249Wm/DqyDDhWtlcnN0csO2bSxtYWlsPXpvZUBleGFtcGxlLnNl
+objectclass:top
+objectclass:person
+cn:: Wm/DqyDDhWtlcnN0csO2bQ==
+sn:: w4VrZXJzdHLDtm0=
+givenName:: Wm/Dqw==
+mail:zoe@example.se
+
+dn:cn=Familie,mail=familie@example.nl
+objectclass:top
+objectclass:groupOfNames
+cn:Familie
