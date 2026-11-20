@@ -1858,6 +1858,11 @@
     weekRow.forEach((w) => { html += `<div class="agenda-month-dow muted">${w}</div>`; });
     html += '</div>';
     const MAX_CHIPS = 3;
+    // Phone: roving tabindex, so the grid is one tab stop (selected day, else today, else the 1st).
+    const shown = days.slice(0, nWeeks * 7).map((d) => startOfDay(d).getTime());
+    const todayStart = startOfDay(new Date()).getTime();
+    const firstOfMonth = new Date(anchorYear, anchorMonth, 1).getTime();
+    const tabStop = [state.monthPickDay, todayStart, firstOfMonth].find((t) => shown.includes(t));
     for (let r = 0; r < nWeeks; r += 1) {
       html += '<div class="agenda-month-row">';
       if (phoneMonth) {
@@ -1879,7 +1884,7 @@
         html += `<div class="agenda-month-cell ${inMonth ? '' : 'is-out'} ${isToday ? 'is-today' : ''} ${pickActive ? 'is-pick' : ''}" data-agenda-month-day="${ds.getTime()}">`;
         const taskCount = dayTasks.length ? `, ${dayTasks.length === 1 ? '1 task' : `${dayTasks.length} tasks`}` : '';
         const dayLabel = `${formatLongDate(day)}, ${sorted.length === 1 ? '1 event' : `${sorted.length} events`}${taskCount}`;
-        html += `<button type="button" class="agenda-month-date" data-agenda-month-pick="${ds.getTime()}" aria-label="${esc(dayLabel)}"${phoneMonth ? ` aria-pressed="${pickActive ? 'true' : 'false'}"${isToday ? ' aria-current="date"' : ''}` : ''}>${day.getDate()}</button>`;
+        html += `<button type="button" class="agenda-month-date" data-agenda-month-pick="${ds.getTime()}" aria-label="${esc(dayLabel)}"${phoneMonth ? ` tabindex="${ds.getTime() === tabStop ? 0 : -1}" aria-pressed="${pickActive ? 'true' : 'false'}"${isToday ? ' aria-current="date"' : ''}` : ''}>${day.getDate()}</button>`;
         html += '<div class="agenda-month-events">';
         if (phoneMonth) {
           // Phone: at most 3 dots per day (tasks first, then events in month order); a '+' marks the rest.
@@ -2058,6 +2063,24 @@
         state.view = 'day';
         try { sessionStorage.setItem('notes_agenda_view', state.view); } catch (e) { /* ignore */ }
         render();
+      });
+    });
+    rootEl.querySelectorAll('[data-agenda-month-pick][tabindex]').forEach((btn) => {
+      btn.addEventListener('keydown', (ev) => {
+        if (!isAgendaPhoneLayout() || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+        const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[ev.key];
+        if (!step) return;
+        ev.preventDefault();
+        ev.stopPropagation(); // the global agenda shortcuts also use ArrowLeft/Right for prev/next
+        const from = new Date(Number(btn.getAttribute('data-agenda-month-pick')));
+        const to = startOfDay(addDays(from, step));
+        state.monthPickDay = to.getTime();
+        // Crossing the month border shows the neighbouring month with the new day kept.
+        if (to.getMonth() !== state.anchor.getMonth() || to.getFullYear() !== state.anchor.getFullYear()) {
+          state.anchor = new Date(to);
+        }
+        render();
+        rootEl.querySelector(`[data-agenda-month-pick="${to.getTime()}"]`)?.focus({ preventScroll: true });
       });
     });
     rootEl.querySelectorAll('[data-agenda-month-day]').forEach((cell) => {
