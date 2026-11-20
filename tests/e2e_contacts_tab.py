@@ -80,7 +80,9 @@ def run_flow(page, width: int) -> None:
     page.wait_for_selector("#contacts-f-given")
     assert page.evaluate("document.activeElement.id") == "contacts-f-given"
 
-    # Saving an empty form is refused with an alert.
+    # Save waits for a change; a form holding only a blank is refused with an alert.
+    assert page.is_disabled(SUBMIT)
+    page.fill("#contacts-f-given", " ")
     page.click(SUBMIT)
     assert "Enter a name" in page.inner_text("#contacts-form-error")
     assert page.get_attribute("#contacts-f-given", "aria-invalid") == "true"

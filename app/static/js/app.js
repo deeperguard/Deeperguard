@@ -4577,7 +4577,7 @@
   let contactsAll = [];
   let contactsActiveLabel = '';
   let contactsSelectedId = '';
-  let contactsFormState = null; // { id, baseline, current, opener } while the edit form is open
+  let contactsFormState = null; // { id, baseline, current, opener, cleanup } while the edit form is open
   let contactsUndo = null;
   // Selection mode (spec 4.3): null when off, else the set of ticked contact uuids. Export uses it.
   let contactsTicked = null;
@@ -4814,6 +4814,7 @@
   function closeContactDetail({ focusRow = false } = {}) {
     const id = contactsSelectedId;
     contactsSelectedId = '';
+    contactsFormState?.cleanup?.();
     contactsFormState = null;
     contactsUi.detail.hidden = true;
     contactsUi.detail.replaceChildren();
@@ -4845,6 +4846,7 @@
     const c = contactsAll.find((x) => x.uuid === id);
     if (!c) { closeContactDetail(); return; }
     contactsSelectedId = id;
+    contactsFormState?.cleanup?.();
     contactsFormState = null;
     const name = contactName(c);
     const d = contactsUi.detail;
@@ -5105,31 +5107,189 @@
     const photoPreview = cEl('span', 'contacts-photo-preview');
     const photoFile = document.createElement('input');
     photoFile.type = 'file';
-    photoFile.accept = 'image/jpeg,image/png,image/webp';
+    photoFile.accept = 'image/*';
     photoFile.className = 'sr-file';
     photoFile.tabIndex = -1;
     photoFile.setAttribute('aria-hidden', 'true');
-    const photoChoose = cEl('button', 'btn', 'Choose photo');
+    const photoChoose = cEl('button', 'btn', 'Choose picture');
     photoChoose.type = 'button';
-    const photoRemove = cEl('button', 'btn ghost', 'Remove photo');
+    const photoRemove = cEl('button', 'btn ghost', 'Remove picture');
     photoRemove.type = 'button';
+    const photoNote = cEl('p', 'contacts-photo-note muted');
+    photoNote.setAttribute('role', 'status');
+    const photoRow = cEl('div', 'contacts-photo-row');
+    photoRow.append(photoPreview, photoChoose, photoRemove);
+    const cropHost = cEl('div', 'contacts-crop-host');
+    cropHost.hidden = true;
+    let cropOpen = false;
+    let closeCrop = () => {};
     const renderPhoto = () => {
       photoPreview.replaceChildren(contactAvatar({ photo, uid: c.uid || 'new', name: { given: given.value, family: family.value } }, true));
       photoRemove.hidden = !photo;
+      updateSave();
     };
     photoChoose.addEventListener('click', () => photoFile.click());
-    photoRemove.addEventListener('click', () => { photo = null; renderPhoto(); photoChoose.focus(); });
-    photoFile.addEventListener('change', async () => {
+    photoRemove.addEventListener('click', () => {
+      photo = null;
+      photoNote.textContent = 'Picture removed. Save to keep this change.';
+      renderPhoto();
+      photoChoose.focus();
+    });
+
+    // The square crop step. The chosen file is only shown from a blob: URL in this page; only the 192 px JPEG
+    // that encodePhoto makes from the cropped square is ever kept.
+    function startCrop(file, dims) {
+      closeCrop();
+      const url = URL.createObjectURL(file);
+      const frame = cEl('div', 'contacts-crop-frame');
+      frame.tabIndex = 0;
+      frame.setAttribute('role', 'group');
+      frame.setAttribute('aria-label', 'Crop area. Arrow keys move the crop, plus and minus zoom.');
+      const img = document.createElement('img');
+      img.alt = '';
+      img.draggable = false;
+      img.src = url;
+      frame.append(img);
+      const zoom = document.createElement('input');
+      zoom.type = 'range';
+      zoom.id = 'contacts-crop-zoom';
+      zoom.min = '1';
+      zoom.max = '4';
+      zoom.step = '0.05';
+      zoom.value = '1';
+      const zoomLabel = cEl('label', 'contacts-crop-zoomlabel', 'Zoom');
+      zoomLabel.htmlFor = zoom.id;
+      const use = cEl('button', 'btn primary', 'Use picture');
+      use.type = 'button';
+      const dismiss = cEl('button', 'btn ghost', 'Cancel crop');
+      dismiss.type = 'button';
+      const acts = cEl('div', 'contacts-crop-actions');
+      acts.append(dismiss, use);
+      const zoomRow = cEl('div', 'contacts-crop-zoomrow');
+      zoomRow.append(zoomLabel, zoom);
+      cropHost.replaceChildren(cEl('p', 'contacts-crop-help muted', 'Drag the picture to move it, pinch or use the zoom slider to zoom.'), frame, zoomRow, acts);
+      cropHost.hidden = false;
+      cropOpen = true;
+      photoRow.hidden = true;
+      updateSave();
+
+      // Centred, largest square by default.
+      const view = { cx: 0.5, cy: 0.5, zoom: 1 };
+      const nat = { w: dims.w, h: dims.h };
+      const place = () => {
+        const F = frame.clientWidth || 240;
+        if (img.naturalWidth) { nat.w = img.naturalWidth; nat.h = img.naturalHeight; }
+        view.zoom = Math.min(4, Math.max(1, view.zoom));
+        const side = Math.min(nat.w, nat.h) / view.zoom;
+        view.cx = Math.min(1 - side / 2 / nat.w, Math.max(side / 2 / nat.w, view.cx));
+        view.cy = Math.min(1 - side / 2 / nat.h, Math.max(side / 2 / nat.h, view.cy));
+        const scale = F / side;
+        img.style.width = `${nat.w * scale}px`;
+        img.style.height = `${nat.h * scale}px`;
+        img.style.left = `${F / 2 - view.cx * nat.w * scale}px`;
+        img.style.top = `${F / 2 - view.cy * nat.h * scale}px`;
+        zoom.value = String(view.zoom);
+        frame.dataset.cx = view.cx.toFixed(3);
+        frame.dataset.cy = view.cy.toFixed(3);
+        frame.dataset.zoom = view.zoom.toFixed(2);
+      };
+      const moveBy = (dx, dy) => {
+        const F = frame.clientWidth || 240;
+        const side = Math.min(nat.w, nat.h) / view.zoom;
+        view.cx -= (dx / F) * side / nat.w;
+        view.cy -= (dy / F) * side / nat.h;
+        place();
+      };
+      img.addEventListener('load', place);
+      img.addEventListener('error', () => {
+        closeCrop();
+        showError('That file could not be read as a picture. Choose another one.');
+      });
+      zoom.addEventListener('input', () => { view.zoom = Number(zoom.value) || 1; place(); });
+      const pointers = new Map();
+      let pinch = 0;
+      const pinchDistance = () => {
+        const [p, q] = [...pointers.values()];
+        return Math.hypot(p.x - q.x, p.y - q.y);
+      };
+      frame.addEventListener('pointerdown', (e) => {
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        try { frame.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
+        pinch = pointers.size === 2 ? pinchDistance() : 0;
+      });
+      frame.addEventListener('pointermove', (e) => {
+        const prev = pointers.get(e.pointerId);
+        if (!prev) return;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointers.size === 2) {
+          const dist = pinchDistance();
+          if (pinch > 0 && dist > 0) { view.zoom *= dist / pinch; place(); }
+          pinch = dist;
+        } else if (pointers.size === 1) {
+          moveBy(e.clientX - prev.x, e.clientY - prev.y);
+        }
+      });
+      const endPointer = (e) => { pointers.delete(e.pointerId); pinch = 0; };
+      frame.addEventListener('pointerup', endPointer);
+      frame.addEventListener('pointercancel', endPointer);
+      frame.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        view.zoom *= e.deltaY < 0 ? 1.1 : 1 / 1.1;
+        place();
+      }, { passive: false });
+      frame.addEventListener('keydown', (e) => {
+        const moves = { ArrowLeft: [12, 0], ArrowRight: [-12, 0], ArrowUp: [0, 12], ArrowDown: [0, -12] };
+        if (moves[e.key]) { e.preventDefault(); moveBy(...moves[e.key]); return; }
+        if (e.key === '+' || e.key === '=') { e.preventDefault(); view.zoom += 0.2; place(); }
+        if (e.key === '-' || e.key === '_') { e.preventDefault(); view.zoom -= 0.2; place(); }
+      });
+      closeCrop = () => {
+        URL.revokeObjectURL(url);
+        cropHost.replaceChildren();
+        cropHost.hidden = true;
+        photoRow.hidden = false;
+        cropOpen = false;
+        closeCrop = () => {};
+        updateSave();
+      };
+      dismiss.addEventListener('click', () => { closeCrop(); photoChoose.focus(); });
+      use.addEventListener('click', async () => {
+        use.disabled = true;
+        let res;
+        try { res = await window.NotesContacts.encodePhoto(file, { ...view }); } catch (e) { res = { error: 'That file could not be read as a picture. Choose another one.' }; }
+        closeCrop();
+        if (res.error) { showError(res.error); photoChoose.focus(); return; }
+        photo = res.photo;
+        photoNote.textContent = 'New picture ready. Save to keep it.';
+        renderPhoto();
+        photoChoose.focus();
+      });
+      place();
+      frame.focus();
+    }
+    async function pickPhoto(file) {
+      if (!file) return;
+      err.hidden = true;
+      let dims;
+      try { dims = await window.NotesContacts.inspectPhoto(file); } catch (e) { dims = { error: 'That file could not be read as a picture.' }; }
+      if (dims.error) { showError(dims.error); return; }
+      startCrop(file, dims);
+    }
+    photoFile.addEventListener('change', () => {
       const file = photoFile.files && photoFile.files[0];
       photoFile.value = '';
-      if (!file) return;
-      let res;
-      try { res = await window.NotesContacts.encodePhoto(file); } catch (e) { res = { error: 'Photo could not be read' }; }
-      if (res.error) { showError(res.error); return; }
-      photo = res.photo;
-      renderPhoto();
+      pickPhoto(file);
     });
-    photoBox.append(photoPreview, photoChoose, photoRemove, photoFile);
+    const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+    photoBox.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); photoBox.classList.add('is-drop'); } });
+    photoBox.addEventListener('dragleave', (e) => { if (!photoBox.contains(e.relatedTarget)) photoBox.classList.remove('is-drop'); });
+    photoBox.addEventListener('drop', (e) => {
+      photoBox.classList.remove('is-drop');
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      pickPhoto(e.dataTransfer.files && e.dataTransfer.files[0]);
+    });
+    photoBox.append(photoRow, photoNote, cropHost, photoFile);
 
     const makeGroup = (kind, noun, addLabel, addressParts) => {
       const sec = cEl('div', 'contacts-edit-group');
@@ -5165,6 +5325,13 @@
     }
 
     let saving = false;
+    let baseline = '';
+    function updateSave() {
+      save.disabled = saving || cropOpen || (baseline !== '' && snapshot() === baseline);
+    }
+    form.addEventListener('input', updateSave);
+    form.addEventListener('change', updateSave);
+    form.addEventListener('click', updateSave);
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       if (saving) return;
@@ -5192,18 +5359,19 @@
         return;
       }
       saving = true;
-      save.disabled = true;
+      updateSave();
       try {
         const res = existing ? NotesStore.updateContact(id, patch) : NotesStore.addContact(patch);
         if (!res) throw new Error('This contact no longer exists');
         if (res.dropped && (res.dropped.photo || res.dropped.extra)) toast('The contact is too large: the photo or extra data was dropped.', true);
+        closeCrop();
         contactsFormState = null;
         refreshContacts();
         renderContactDetail(res.uuid);
         contactsUi.detail.querySelector('.contacts-detail-name').focus();
       } catch (e) {
         saving = false;
-        save.disabled = false;
+        updateSave();
         showError(e && e.message ? e.message : 'Could not save the contact');
       }
     });
@@ -5219,8 +5387,9 @@
       contactFormField('Groups (comma separated)', labels, 'contacts-f-labels'), labelList,
       contactFormField('Notes', note, 'contacts-f-note'), favLabel, actions);
     d.append(form);
+    baseline = snapshot();
     renderPhoto();
-    contactsFormState = { id: id || '', baseline: snapshot(), current: snapshot, opener: opener || contactsUi.add };
+    contactsFormState = { id: id || '', baseline, current: snapshot, opener: opener || contactsUi.add, cleanup: () => closeCrop() };
     given.focus();
   }
 
@@ -5231,6 +5400,7 @@
       const ok = await confirmAction('Discard your changes to this contact?', { title: 'Discard changes?', confirmLabel: 'Discard', danger: true });
       if (!ok) return false;
     }
+    st.cleanup?.();
     contactsFormState = null;
     const opener = st.opener;
     if (st.id && contactsAll.some((c) => c.uuid === st.id)) {
@@ -5249,6 +5419,7 @@
     window.NotesContactsDuplicates?.reset();
     contactsAll = [];
     contactsSelectedId = '';
+    contactsFormState?.cleanup?.();
     contactsFormState = null;
     contactsUndo = null;
     contactsActiveLabel = '';

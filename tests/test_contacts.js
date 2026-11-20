@@ -144,6 +144,12 @@ function jpegB64(bytes) {
   const pngHeader = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x0b, 0xb8, 0, 0, 0x07, 0xd0, 0, 0]);
   assert.deepStrictEqual(C.imageSize(pngHeader), { w: 3000, h: 2000 });
 
+  // The square crop: centred by default, zoom shrinks it, and it never leaves the image.
+  assert.deepStrictEqual(C.cropSquare(3000, 2000), { sx: 500, sy: 0, side: 2000 });
+  assert.deepStrictEqual(C.cropSquare(3000, 2000, { cx: 0.5, cy: 0.5, zoom: 2 }), { sx: 1000, sy: 500, side: 1000 });
+  assert.deepStrictEqual(C.cropSquare(3000, 2000, { cx: 0, cy: 1, zoom: 4 }), { sx: 0, sy: 1500, side: 500 });
+  assert.deepStrictEqual(C.cropSquare(3000, 2000, { cx: 9, cy: -9, zoom: 0.1 }), { sx: 1000, sy: 0, side: 2000 });
+
   // --- push: nothing readable leaves the device ---------------------------------------------------
   const secret = NotesStore.addContact({
     name: { given: 'Wilhelmina', family: 'Zonnebloem' },
