@@ -101,46 +101,16 @@ const NotesContactsImport = (() => {
     collectProblems(out);
   }
 
-  const digits = (v) => String(v || '').replace(/\D/g, '');
-  function phoneKeys(c) {
-    const keys = new Set();
-    for (const p of c.phones || []) {
-      let d = digits(p.value).replace(/^00/, '');
-      if (d.length < 6) continue;
-      keys.add(d);
-      keys.add(`~${d.slice(-9)}`);
-    }
-    return keys;
-  }
-
-  // Index of incoming contacts that match one already in the vault by email, phone or UID (7.4, 1 to 2 and 4).
-  function findExisting(incoming, existing) {
-    const emails = new Set();
-    const phones = new Set();
-    const uids = new Set();
-    for (const e of existing) {
-      for (const m of e.emails || []) emails.add(String(m.value).toLowerCase());
-      for (const k of phoneKeys(e)) phones.add(k);
-      if (e.uid) uids.add(e.uid);
-    }
-    const hits = new Set();
-    incoming.forEach((c, i) => {
-      if ((c.uid && uids.has(c.uid))
-        || (c.emails || []).some((m) => emails.has(String(m.value).toLowerCase()))
-        || [...phoneKeys(c)].some((k) => phones.has(k))) hits.add(i);
-    });
-    return hits;
-  }
-
   const plural = (n, one, many) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
 
-  function previewSummary(state, existingCount) {
+  function previewSummary(state, existingCount, fileCount = 0) {
     const n = state.contacts.length;
     const skipped = state.files.reduce((a, f) => a + f.skipped.length, 0);
     const photos = state.contacts.filter((c) => c.photoSource).length;
     const refused = state.files.filter((f) => !f.ok).length;
     const parts = [`Found ${plural(n, 'contact', 'contacts')} in ${plural(state.files.length, 'file', 'files')}`];
     if (existingCount) parts.push(`${existingCount.toLocaleString('en')} look like contacts you already have`);
+    if (fileCount) parts.push(`${fileCount.toLocaleString('en')} occur more than once in the file`);
     if (skipped) parts.push(`${skipped.toLocaleString('en')} skipped`);
     if (refused) parts.push(`${plural(refused, 'file', 'files')} not read`);
     parts.push(`${state.problems.length.toLocaleString('en')} ${state.problems.length === 1 ? 'problem' : 'problems'} found`);
@@ -173,7 +143,10 @@ const NotesContactsImport = (() => {
   const el = (id) => document.getElementById(id);
   let ui = null;
   let state = null;
-  let existingHits = new Set();
+  let matches = []; // per parsed contact: null or a duplicate match (NotesContacts.matchIncoming)
+  let existingList = []; // the vault's contacts the matches point at (names for the preview only)
+  let choiceAll = null; // 'skip' | 'merge' | 'both' once the user picked one for all duplicates
+  let choiceEach = new Map(); // parsed contact index -> choice set on that contact
   let selected = new Set();
   let busy = false;
   let undoRecord = null;
@@ -194,7 +167,10 @@ const NotesContactsImport = (() => {
   function resetView() {
     state = null;
     currentFiles = [];
-    existingHits = new Set();
+    matches = [];
+    existingList = [];
+    choiceAll = null;
+    choiceEach = new Map();
     selected = new Set();
     showError('');
     show('contacts-import-preview', false);
@@ -232,10 +208,74 @@ const NotesContactsImport = (() => {
     close();
   }
 
+  const REASON = { email: 'same email address', phone: 'same phone number', name: 'same name only', uid: 'same contact imported before' };
+  const CHOICES = [['skip', 'Skip'], ['merge', 'Merge'], ['both', 'Keep both']];
+
+  // What happens to parsed contact i: a contact without a match is added; a duplicate follows its own choice, else
+  // the one for all, else Skip (Keep both when only the name matches).
+  function actionFor(i) {
+    const m = matches[i];
+    if (!m) return 'new';
+    return choiceEach.get(i) || choiceAll || (m.kind === 'possible' ? 'both' : 'skip');
+  }
+
+  function importableIndexes() {
+    const out = [];
+    state.contacts.forEach((c, i) => { if (selected.has(i) && actionFor(i) !== 'skip') out.push(i); });
+    return out;
+  }
+
+  function updateRunButton() {
+    const n = importableIndexes().length;
+    const run = el('contacts-import-run');
+    run.hidden = false;
+    run.disabled = n === 0;
+    run.textContent = n ? `Import ${plural(n, 'contact', 'contacts')}` : 'Nothing to import';
+  }
+
+  function matchText(i) {
+    const m = matches[i];
+    const why = m.kind === 'possible' ? REASON.name : m.reasons.map((r) => REASON[r] || r).join(' and ');
+    let other;
+    if (m.target.id !== undefined) {
+      const found = existingList.find((c) => c.uuid === m.target.id);
+      other = `${found ? displayOf(found) : 'a contact'} (in your vault)`;
+    } else other = `${displayOf(state.contacts[m.target.index])} (earlier in this file)`;
+    return `${displayOf(state.contacts[i])}: ${why} as ${other}`;
+  }
+
+  function renderDuplicates() {
+    const dupIdx = [];
+    matches.forEach((m, i) => { if (m && selected.has(i)) dupIdx.push(i); });
+    show('contacts-import-dups', matches.some((m) => m));
+    const all = choiceAll || 'skip';
+    for (const [value] of CHOICES) el(`contacts-import-dup-all-${value}`).checked = value === all;
+    const list = el('contacts-import-dup-list');
+    list.replaceChildren();
+    dupIdx.slice(0, LIMITS.listed).forEach((i) => {
+      const li = document.createElement('li');
+      const label = document.createElement('label');
+      const text = document.createElement('span');
+      text.textContent = `${matchText(i)} `;
+      const select = document.createElement('select');
+      select.setAttribute('aria-label', `What to do with ${displayOf(state.contacts[i])}`);
+      for (const [value, name] of CHOICES) {
+        const o = document.createElement('option');
+        o.value = value;
+        o.textContent = name;
+        select.append(o);
+      }
+      select.value = actionFor(i);
+      select.addEventListener('change', () => { choiceEach.set(i, select.value); updateRunButton(); });
+      label.append(text, select);
+      li.append(label);
+      list.append(li);
+    });
+    setText('contacts-import-dup-note', dupIdx.length > LIMITS.listed ? `Showing the first ${LIMITS.listed} of ${dupIdx.length.toLocaleString('en')} duplicates. The others follow the choice above.` : '');
+  }
+
   function renderPreview() {
-    const keepExisting = el('contacts-import-skip-existing').checked;
-    const importable = state.contacts.filter((c, i) => selected.has(i) && !(keepExisting && existingHits.has(i)));
-    setText('contacts-import-summary', previewSummary(state, existingHits.size));
+    setText('contacts-import-summary', previewSummary(state, matches.filter((m) => m && m.existing).length, matches.filter((m) => m && !m.existing).length));
     fill('contacts-import-files', state.files.map((f) => (f.ok ? `${f.name}: ${f.label}, ${plural(f.found, 'entry', 'entries')}` : `${f.name}: not read`)));
     fill('contacts-import-problems', state.problems);
     const list = el('contacts-import-list');
@@ -248,19 +288,16 @@ const NotesContactsImport = (() => {
       box.checked = selected.has(i);
       box.addEventListener('change', () => { if (box.checked) selected.add(i); else selected.delete(i); renderPreview(); });
       const name = document.createElement('span');
-      name.textContent = ` ${displayOf(c)}${existingHits.has(i) ? ' (already in your vault)' : ''}`;
+      name.textContent = ` ${displayOf(c)}${matches[i] ? (matches[i].existing ? ' (already in your vault)' : ' (twice in this file)') : ''}`;
       label.append(box, name);
       li.append(label);
       list.append(li);
     });
     setText('contacts-import-list-note', state.contacts.length > LIMITS.listed ? `Showing the first ${LIMITS.listed} of ${state.contacts.length.toLocaleString('en')}. The others are imported too.` : '');
+    renderDuplicates();
     show('contacts-import-preview', true);
     show('contacts-import-encoding-row', state.files.some((f) => f.ok));
-    const run = el('contacts-import-run');
-    run.hidden = false;
-    run.disabled = importable.length === 0;
-    run.textContent = importable.length ? `Import ${plural(importable.length, 'contact', 'contacts')}` : 'Nothing to import';
-    return importable;
+    updateRunButton();
   }
 
   function truncate(v) { return v.length > 80 ? `${v.slice(0, 80)}…` : v; }
@@ -334,8 +371,10 @@ const NotesContactsImport = (() => {
   }
 
   function enterPreview() {
-    const existing = hooks.listContacts();
-    existingHits = findExisting(state.contacts, existing);
+    existingList = hooks.listContacts();
+    matches = NotesContacts.matchIncoming(state.contacts, existingList);
+    choiceAll = null;
+    choiceEach = new Map();
     selected = new Set(state.contacts.map((c, i) => i));
     renderPreview();
     if (!state.contacts.length) showError(state.problems[0] || 'No contacts were found.');
@@ -361,14 +400,22 @@ const NotesContactsImport = (() => {
   async function run() {
     if (busy || !state) return;
     if (!hooks.isUnlocked()) { showError('Vault locked. Nothing was imported.'); return; }
-    const keepExisting = el('contacts-import-skip-existing').checked;
-    const chosen = state.contacts.filter((c, i) => selected.has(i) && !(keepExisting && existingHits.has(i)));
-    if (!chosen.length) return;
+    const plan = importableIndexes();
+    if (!plan.length) return;
+    const chosen = plan.map((i) => state.contacts[i]);
+    const place = new Map(plan.map((i, pos) => [i, pos]));
+    const merges = new Map();
+    plan.forEach((i, pos) => {
+      const m = matches[i];
+      if (!m || actionFor(i) !== 'merge') return;
+      if (m.target.id !== undefined) merges.set(pos, { id: m.target.id });
+      else if (place.has(m.target.index)) merges.set(pos, { index: place.get(m.target.index) });
+    });
     busy = true;
     el('contacts-import-dialog').setAttribute('aria-busy', 'true');
     el('contacts-import-run').disabled = true;
     const summaryState = state;
-    const skippedExisting = state.contacts.filter((c, i) => selected.has(i) && keepExisting && existingHits.has(i)).length;
+    const skippedDuplicates = state.contacts.filter((c, i) => selected.has(i) && actionFor(i) === 'skip').length;
     let result;
     let photoProblems = [];
     let photosStored = 0;
@@ -379,6 +426,7 @@ const NotesContactsImport = (() => {
       const batch = `b-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).slice(2, 6)}`;
       result = await hooks.importContacts(chosen, {
         batch,
+        merges,
         onProgress: (done, total) => setText('contacts-import-status', `Importing ${done} of ${total}`),
       });
     } catch (err) {
@@ -391,10 +439,11 @@ const NotesContactsImport = (() => {
     busy = false;
     el('contacts-import-dialog').removeAttribute('aria-busy');
     setText('contacts-import-status', '');
-    undoRecord = result.created.length ? result : null;
+    undoRecord = result.created.length || result.merged.length ? result : null;
     const lines = [
       `Imported ${plural(result.created.length, 'new contact', 'new contacts')}`
-      + (skippedExisting ? `, ${skippedExisting.toLocaleString('en')} left out because you already have them` : '')
+      + (result.mergedCount ? `, ${result.mergedCount.toLocaleString('en')} merged into other contacts` : '')
+      + (skippedDuplicates ? `, ${skippedDuplicates.toLocaleString('en')} skipped as duplicates` : '')
       + `, ${(summaryState.files.reduce((a, f) => a + f.skipped.length, 0) + result.failed.length).toLocaleString('en')} not imported`
       + (photosStored ? `, ${photosStored.toLocaleString('en')} photos stored` : '') + '.',
     ];
@@ -416,9 +465,9 @@ const NotesContactsImport = (() => {
     if (!undoRecord || !hooks.isUnlocked()) return;
     const record = undoRecord;
     undoRecord = null;
-    const { removed, kept } = hooks.restoreContacts(record);
+    const { removed, restored, kept } = hooks.restoreContacts(record);
     show('contacts-import-undo', false);
-    const msg = `Import undone: ${plural(removed, 'contact', 'contacts')} removed${kept ? `, ${plural(kept, 'contact was', 'contacts were')} edited since and kept` : ''}.`;
+    const msg = `Import undone: ${plural(removed, 'contact', 'contacts')} removed${restored ? `, ${plural(restored, 'merge', 'merges')} undone` : ''}${kept ? `, ${plural(kept, 'contact was', 'contacts were')} edited since and kept` : ''}.`;
     setText('contacts-import-result-summary', msg);
     hooks.undone(msg);
   }
@@ -446,7 +495,9 @@ const NotesContactsImport = (() => {
     el('contacts-import-map-confirm').addEventListener('click', confirmMapping);
     el('contacts-import-map-cancel').addEventListener('click', resetView);
     el('contacts-import-undo').addEventListener('click', undo);
-    el('contacts-import-skip-existing').addEventListener('change', () => { if (state) renderPreview(); });
+    for (const [value] of CHOICES) {
+      el(`contacts-import-dup-all-${value}`).addEventListener('change', () => { choiceAll = value; choiceEach = new Map(); if (state) renderPreview(); });
+    }
     el('contacts-import-dialog').addEventListener('keydown', (event) => { if (event.key === 'Escape') { event.preventDefault(); close(); } });
     const encSelect = el('contacts-import-encoding');
     for (const label of ['', ...NotesContactsVcard.ENCODINGS]) {
@@ -525,7 +576,7 @@ const NotesContactsImport = (() => {
     describe: (stats, enc) => `CSV, ${stats.dialect || 'columns mapped by you'}, ${enc}`,
   });
 
-  return { LIMITS, registerFormat, readFiles, finishMapping, findExisting, previewSummary, attachPhotos, init, open, close, reset, dropUndo };
+  return { LIMITS, registerFormat, readFiles, finishMapping, previewSummary, attachPhotos, init, open, close, reset, dropUndo };
 })();
 
 if (typeof window !== 'undefined') window.NotesContactsImport = NotesContactsImport;

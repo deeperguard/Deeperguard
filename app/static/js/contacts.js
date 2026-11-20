@@ -508,6 +508,50 @@ const NotesContacts = (() => {
     return out.filter((g) => !(ignore && ignore.has(g.key)));
   }
 
+  // Which of the contacts of an import (parsed, not stored yet) are duplicates: of a contact in `existing` or of an
+  // earlier one in the same file. One entry per incoming contact: null, or
+  // { kind: 'exact' | 'possible', reasons, via, existing, target }, where `target` is { id } (a contact of the vault,
+  // the best filled one of its group) or { index } (the earlier incoming contact that is kept). It is the matcher of
+  // findDuplicateGroups run over both lists, so phone and email rules are the same as in "Find duplicates"; a
+  // contact with the UID of an existing one counts as exact too. Inside a file alone, two contacts count as the same
+  // only when their names agree or one has no name (people who share a landline are not duplicates of each other).
+  const INCOMING_PREFIX = 'incoming:';
+  function matchIncoming(incoming, existing) {
+    const inc = Array.isArray(incoming) ? incoming : [];
+    const own = Array.isArray(existing) ? existing : [];
+    const out = new Array(inc.length).fill(null);
+    const uidOwner = new Map();
+    for (const c of own) if (c.uid && !uidOwner.has(c.uid)) uidOwner.set(c.uid, c.uuid);
+    inc.forEach((c, i) => {
+      if (c && c.uid && uidOwner.has(c.uid)) out[i] = { kind: 'exact', reasons: ['uid'], via: [], existing: true, target: { id: uidOwner.get(c.uid) } };
+    });
+    const byUuid = new Map(own.map((c) => [c.uuid, c]));
+    const all = own.concat(inc.map((c, i) => ({ ...c, uuid: `${INCOMING_PREFIX}${i}` })));
+    for (const group of findDuplicateGroups(all)) {
+      const owned = [];
+      const mine = [];
+      for (const id of group.ids) {
+        if (id.startsWith(INCOMING_PREFIX)) mine.push(Number(id.slice(INCOMING_PREFIX.length)));
+        else owned.push(byUuid.get(id));
+      }
+      const info = { kind: group.kind, reasons: group.reasons, via: group.via };
+      mine.sort((a, b) => a - b);
+      if (owned.length) {
+        const target = { id: pickKeeper(owned).uuid };
+        for (const i of mine) if (!out[i]) out[i] = { ...info, existing: true, target };
+        continue;
+      }
+      const kept = [];
+      for (const i of mine) {
+        if (out[i]) continue;
+        const key = nameKey(inc[i]);
+        const first = kept.find((j) => !key || !nameKey(inc[j]) || nameKey(inc[j]) === key);
+        if (first === undefined) kept.push(i); else out[i] = { ...info, existing: false, target: { index: first } };
+      }
+    }
+    return out;
+  }
+
   // --- merging ---
   const SINGLE_FIELDS = ['name', 'nickname', 'org', 'title', 'birthday', 'photo', 'favorite'];
 
@@ -846,6 +890,7 @@ const NotesContacts = (() => {
     pickKeeper,
     groupKey,
     findDuplicateGroups,
+    matchIncoming,
     mergeChoices,
     planMerge,
     restorePatch,
