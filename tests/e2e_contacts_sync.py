@@ -28,6 +28,24 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+def open_contacts_menu(page) -> None:
+    """Below 1000px the Import / Select / Export / Find duplicates buttons sit in the "more" menu."""
+    if page.is_visible("#btn-contacts-more") and page.get_attribute("#btn-contacts-more", "aria-expanded") != "true":
+        page.click("#btn-contacts-more")
+        page.wait_for_selector("#contacts-more-menu.is-open")
+
+
+def contacts_action(page, selector: str) -> None:
+    open_contacts_menu(page)
+    page.click(selector)
+
+
+def select_mode_on(page) -> bool:
+    """The Select button is aria-pressed as a toolbar button and aria-checked as a menu item."""
+    attr = "aria-checked" if page.get_attribute("#btn-contacts-select", "role") else "aria-pressed"
+    return page.get_attribute("#btn-contacts-select", attr) == "true"
+
+
 def register(page, base: str, email: str) -> None:
     page.goto(f"{base}/register", wait_until="domcontentloaded")
     page.wait_for_selector("#register-form")

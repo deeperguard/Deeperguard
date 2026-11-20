@@ -4570,6 +4570,8 @@
     add: document.getElementById('btn-contacts-add'),
     select: document.getElementById('btn-contacts-select'),
     exportBtn: document.getElementById('btn-contacts-export'),
+    more: document.getElementById('btn-contacts-more'),
+    menu: document.getElementById('contacts-more-menu'),
   };
   const CONTACTS_FAV = '\u0000fav';
   let contactsAll = [];
@@ -4766,6 +4768,40 @@
       contactsUi.select.textContent = contactsTicked ? 'Done' : 'Select';
     }
     if (contactsUi.exportBtn) contactsUi.exportBtn.textContent = n ? `Export ${n} selected` : 'Export';
+    applyContactsMenuSemantics();
+  }
+
+  // Below 1000px the secondary actions live in the "more" menu (role menu); on wide screens they
+  // are plain toolbar buttons, so the roles are only set while the menu layout is active.
+  const contactsMenuMq = window.matchMedia('(max-width: 999px)');
+
+  function contactsMenuItems() {
+    return [...contactsUi.menu.querySelectorAll('button')].filter((b) => b.offsetParent !== null);
+  }
+
+  function applyContactsMenuSemantics() {
+    if (!contactsUi.menu) return;
+    const asMenu = contactsMenuMq.matches;
+    if (asMenu) contactsUi.menu.setAttribute('role', 'menu'); else contactsUi.menu.removeAttribute('role');
+    for (const btn of contactsUi.menu.querySelectorAll('button')) {
+      const checkable = btn === contactsUi.select;
+      if (asMenu) btn.setAttribute('role', checkable ? 'menuitemcheckbox' : 'menuitem'); else btn.removeAttribute('role');
+      if (checkable) {
+        const on = contactsTicked ? 'true' : 'false';
+        btn.removeAttribute(asMenu ? 'aria-pressed' : 'aria-checked');
+        btn.setAttribute(asMenu ? 'aria-checked' : 'aria-pressed', on);
+      }
+    }
+    if (!asMenu) setContactsMenuOpen(false);
+  }
+
+  function setContactsMenuOpen(open, { focus = '' } = {}) {
+    if (!contactsUi.menu) return;
+    const was = contactsUi.menu.classList.contains('is-open');
+    contactsUi.menu.classList.toggle('is-open', open);
+    contactsUi.more.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open && focus) contactsMenuItems()[focus === 'last' ? contactsMenuItems().length - 1 : 0]?.focus();
+    if (!open && was && focus === 'more') contactsUi.more.focus();
   }
 
   function toggleContactsSelection() {
@@ -5325,6 +5361,37 @@
     document.getElementById('btn-contacts-duplicates')?.addEventListener('click', (event) => openContactsDuplicates(event));
     document.getElementById('btn-contacts-export')?.addEventListener('click', () => exportContacts());
     contactsUi.select?.addEventListener('click', toggleContactsSelection);
+    // "More" menu (below 1000px): focus goes back to the button before an action runs, so a dialog
+    // opened from the menu returns focus to a visible button when it closes.
+    contactsUi.more.addEventListener('click', () => {
+      setContactsMenuOpen(!contactsUi.menu.classList.contains('is-open'), { focus: 'first' });
+    });
+    contactsUi.more.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setContactsMenuOpen(true, { focus: event.key === 'ArrowUp' ? 'last' : 'first' });
+      }
+    });
+    contactsUi.menu.addEventListener('click', (event) => {
+      if (event.target.closest('button') && contactsMenuMq.matches) setContactsMenuOpen(false, { focus: 'more' });
+    }, true);
+    contactsUi.menu.addEventListener('keydown', (event) => {
+      if (!contactsMenuMq.matches) return;
+      const items = contactsMenuItems();
+      const at = items.indexOf(document.activeElement);
+      let next = null;
+      if (event.key === 'ArrowDown') next = items[(at + 1) % items.length];
+      else if (event.key === 'ArrowUp') next = items[(at - 1 + items.length) % items.length];
+      else if (event.key === 'Home') next = items[0];
+      else if (event.key === 'End') next = items[items.length - 1];
+      else if (event.key === 'Tab') { setContactsMenuOpen(false); return; }
+      if (next) { event.preventDefault(); next.focus(); }
+    });
+    document.addEventListener('pointerdown', (event) => {
+      if (contactsUi.menu.classList.contains('is-open') && !event.target.closest('#contacts-more-menu, #btn-contacts-more')) setContactsMenuOpen(false);
+    });
+    contactsMenuMq.addEventListener?.('change', applyContactsMenuSemantics);
+    applyContactsMenuSemantics();
     contactsUi.list.addEventListener('change', (event) => {
       const box = event.target.closest('[data-contact-tick]');
       if (!box || !contactsTicked) return;
@@ -28680,6 +28747,11 @@ async function showSettings() {
       }
       const confirmDialog = document.getElementById('confirm-dialog');
       if (confirmDialog && !confirmDialog.hidden) return;
+      if (contactsUi.menu?.classList.contains('is-open')) {
+        setContactsMenuOpen(false, { focus: 'more' });
+        stop();
+        return;
+      }
       if (ui.settings && !ui.settings.hidden) {
         closeSettings(true);
         stop();
