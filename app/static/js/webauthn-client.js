@@ -114,7 +114,7 @@
     return bytes && bytes.length === 32 ? new Uint8Array(bytes) : null;
   }
 
-  // Runs a get() ceremony asking for PRF output. Returns {status:'ok', output, credentialId}
+  // Runs a get() ceremony asking for PRF output. Returns {status:'ok', output, credentialId, assertion (the raw credential, for authenticationCredentialJson)}
   // or {status:'unsupported', reason:'browser'|'authenticator'}. A cancelled ceremony, or an answer from a passkey outside allowCredentials, throws.
   async function requestPrfOutput(authOptions, salt) {
     if (await prfBrowserSupport() === 'unsupported') return { status: 'unsupported', reason: 'browser' };
@@ -131,7 +131,7 @@
     }
     const output = prfOutputFromCredential(credential);
     if (!output) return { status: 'unsupported', reason: 'authenticator' };
-    return { status: 'ok', output, credentialId: credential.id };
+    return { status: 'ok', output, credentialId: credential.id, assertion: credential };
   }
 
   global.NotesWebAuthn = {

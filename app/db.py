@@ -1077,7 +1077,10 @@ def user_vault_kdf_version(user) -> int:
     return 2 if value >= 2 else 1
 
 
-def update_user_vault_kdf_version(user_id: int, version: int) -> None:
+def update_user_vault_kdf_version(user_id: int, version: int, *, drop_vault_wraps: bool = False) -> None:
+    """Set the vault KDF version. A KDF upgrade creates a new vault key, so with
+    drop_vault_wraps=True every recovery/passkey copy of the old key is removed in the same
+    transaction and vault_key_id is freed (docs/VAULT_RECOVERY.md 3.5, 6.2)."""
     if version not in (1, 2):
         raise ValueError("invalid vault_kdf_version")
     ts = now()
@@ -1086,6 +1089,8 @@ def update_user_vault_kdf_version(user_id: int, version: int) -> None:
             "UPDATE users SET vault_kdf_version = ?, updated_at = ? WHERE id = ?",
             (int(version), ts, user_id),
         )
+        if drop_vault_wraps:
+            _drop_vault_wraps(conn, user_id)
 
 
 def user_kdf_iterations(user) -> int:
