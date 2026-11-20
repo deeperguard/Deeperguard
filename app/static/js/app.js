@@ -1179,6 +1179,7 @@
         }
         el.querySelectorAll('input, button, select, textarea').forEach((input) => {
           if (input.id === 'btn-disable-totp' && account.totp_enabled) return;
+          if (input.id === 'btn-pcloud-disconnect') return;
           input.disabled = true;
         });
       } else if (lock) {
@@ -4010,6 +4011,7 @@
   }
 
   function handleLaunchAction() {
+    handlePcloudReturn();
     let action = '';
     try {
       action = new URLSearchParams(location.search).get('action') || '';
@@ -17760,6 +17762,79 @@
     setSettingState('sec-state-passkey-unlock', on ? `On for ${on} ${on === 1 ? 'passkey' : 'passkeys'}` : 'Off');
   }
 
+  const PCLOUD_RETURN_MESSAGES = {
+    connected: ['pCloud is connected.', false],
+    denied: ['pCloud access was not granted. Nothing was connected.', true],
+    failed: ['Connecting pCloud did not work. Nothing was saved. You can try again.', true],
+    plan: ['Connecting pCloud is included with Pro. Nothing was connected.', true],
+    unavailable: ['Connecting pCloud is not set up on this server. Nothing was connected.', true],
+  };
+
+  function renderPcloudConnect(account) {
+    const stateEl = document.getElementById('pcloud-connect-state');
+    const connectBtn = document.getElementById('btn-pcloud-connect');
+    const disconnectBtn = document.getElementById('btn-pcloud-disconnect');
+    const unavailableEl = document.getElementById('pcloud-connect-unavailable');
+    if (!stateEl || !connectBtn || !disconnectBtn) return;
+    const info = account && account.pcloud_oauth;
+    if (!info) {
+      stateEl.textContent = 'Status unavailable right now.';
+      connectBtn.hidden = false;
+      connectBtn.disabled = true;
+      disconnectBtn.hidden = true;
+      if (unavailableEl) unavailableEl.hidden = true;
+      return;
+    }
+    const state = info.state;
+    stateEl.textContent = state === 'connected'
+      ? 'Status: connected.'
+      : state === 'relink'
+        ? 'Status: reconnect needed. The saved connection can no longer be used.'
+        : 'Status: not connected.';
+    connectBtn.textContent = state === 'relink' ? 'Reconnect pCloud' : 'Connect pCloud';
+    connectBtn.hidden = state === 'connected';
+    connectBtn.disabled = !info.available || !planHas('pcloud_backup', account);
+    disconnectBtn.hidden = state === 'none';
+    if (unavailableEl) unavailableEl.hidden = !!info.available;
+  }
+
+  async function reloadPcloudConnect() {
+    renderPcloudConnect(await NotesStore.loadAccount({ force: true }));
+  }
+
+  function showPcloudResult(text) {
+    const el = document.getElementById('pcloud-connect-result');
+    if (!el) return;
+    el.textContent = text;
+    el.hidden = !text;
+  }
+
+  // The OAuth callback sends the browser to /app?pcloud=<outcome>. Runs once the
+  // vault is open: show the outcome in the backup settings and drop the parameter.
+  function handlePcloudReturn() {
+    let outcome = '';
+    try {
+      const url = new URL(location.href);
+      outcome = url.searchParams.get('pcloud') || '';
+      if (!url.searchParams.has('pcloud')) return;
+      if (!vaultReady) return;
+      url.searchParams.delete('pcloud');
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    } catch (err) {
+      return;
+    }
+    const entry = Object.prototype.hasOwnProperty.call(PCLOUD_RETURN_MESSAGES, outcome)
+      ? PCLOUD_RETURN_MESSAGES[outcome]
+      : PCLOUD_RETURN_MESSAGES.failed;
+    showSettings().catch(() => openSettings()).then(() => {
+      showPcloudResult(entry[0]);
+      toast(entry[0], entry[1]);
+      const box = document.getElementById('pcloud-connect');
+      box?.scrollIntoView({ block: 'center' });
+      document.getElementById('pcloud-connect-result')?.focus();
+    });
+  }
+
   async function initSettings() {
     let account;
     try {
@@ -17776,6 +17851,7 @@
       document.getElementById('backup-enabled').checked = !!account.backup_enabled;
     }
     refreshManagedBackup().catch(() => {});
+    renderPcloudConnect(account);
     if (account.pcloud_username !== undefined || account.pcloud_enabled !== undefined) {
       document.getElementById('pcloud-username').value = account.pcloud_username || '';
       const remotePath = String(account.pcloud_remote_path || '').trim();
@@ -26206,6 +26282,35 @@ async function showSettings() {
     }
   });
 
+  document.getElementById('btn-pcloud-connect')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    showPcloudResult('');
+    try {
+      const res = await NotesStore.api('/api/backup/pcloud/oauth/start', { method: 'POST', body: JSON.stringify({}) });
+      if (!res || typeof res.authorize_url !== 'string') throw new Error('pCloud connect is not available');
+      window.location.assign(res.authorize_url);
+    } catch (err) {
+      toast(err.message || 'Could not start connecting pCloud', true);
+      btn.disabled = false;
+    }
+  });
+  document.getElementById('btn-pcloud-disconnect')?.addEventListener('click', async (event) => {
+    const btn = event.currentTarget;
+    if (!window.confirm('Disconnect pCloud? The token is deleted from the server and pCloud is asked to revoke it.')) return;
+    btn.disabled = true;
+    try {
+      const res = await NotesStore.api('/api/backup/pcloud/oauth/disconnect', { method: 'POST', body: JSON.stringify({}) });
+      showPcloudResult(res && res.revoked
+        ? 'pCloud is disconnected and pCloud confirmed the revocation.'
+        : 'pCloud is disconnected here. pCloud did not confirm the revocation, so also remove this app in your pCloud account settings.');
+      await reloadPcloudConnect();
+    } catch (err) {
+      toast(err.message || 'Could not disconnect pCloud', true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
   document.getElementById('btn-save-pcloud').addEventListener('click', async () => {
     const username = document.getElementById('pcloud-username').value.trim();
     const rclone_token = document.getElementById('pcloud-rclone-token').value.trim();

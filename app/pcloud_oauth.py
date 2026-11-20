@@ -160,6 +160,15 @@ def stored_token(user_id: int) -> str:
         return ""
 
 
+def connection_state(user_id: int) -> str:
+    """'connected', 'relink' (a token is stored but cannot be used any more) or 'none'."""
+    import db
+
+    if not db.get_pcloud_oauth_token(int(user_id)):
+        return "none"
+    return "connected" if stored_token(user_id) else "relink"
+
+
 def disconnect(user_id: int) -> bool:
     """Delete the stored token; revoke it at pCloud first when it is still readable.
 
