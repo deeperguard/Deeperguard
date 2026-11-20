@@ -25,6 +25,10 @@ const ids = (list) => list.map((n) => n.uuid);
   assert.deepStrictEqual(ids(L.orderNotes([...old].reverse(), {})), ['y', 'z', 'x'], 'input order does not matter');
   assert.deepStrictEqual(ids(L.orderNotes([], keys)), []);
   assert.deepStrictEqual(ids(L.orderNotes([old[0]], keys)), ['x']);
+  // a note without created_at counts as oldest: it comes after every dated note, ties by uuid
+  const undated = (uuid) => ({ uuid, content: { type: 'note', title: uuid, content: '', tags: ['L'] } });
+  assert.deepStrictEqual(ids(L.orderNotes([undated('w'), old[0], undated('u'), old[1]], undefined)), ['y', 'x', 'u', 'w'], 'missing created_at sorts last');
+  assert.deepStrictEqual(ids(L.orderNotes([undated('u'), old[0]], {})), ['x', 'u']);
 
   // --- move: append, prepend, midpoint, renumber on a tiny gap, unkeyed neighbours ---
   let k = L.moveNote({}, ['a', 'b', 'c'], 'c', 0, 10);
