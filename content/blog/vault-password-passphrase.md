@@ -57,6 +57,6 @@ If you created your account recently, sign-up also showed you a recovery key. It
 
 Want to see how your password and notes are protected? Our [security page](/security) explains the design, and Deeperguard's source is available for review on our [verify page](/verify). We'd rather you check than take our word for it.
 
-Updated: 2026-11-18. New accounts now create a recovery key during sign-up, so the vault password is no longer described as the only secret. Added how to store the recovery key and that the app cannot reset a password with it yet.
+Updated: 2026-11-18. New accounts now create a recovery key during sign-up, so the vault password is no longer described as the only secret. Added how to store the recovery key. At that date the app could not yet reset a password with it.
 
 Updated: 2026-11-20. A forgotten password can now be reset with the recovery key on the unlock screen, from a signed-in session, and older accounts can create a recovery key in Settings. The sentence saying the app had no screen for this yet was replaced.
