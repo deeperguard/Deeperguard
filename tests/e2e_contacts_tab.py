@@ -80,6 +80,15 @@ def run_flow(page, width: int) -> None:
     page.wait_for_selector("#contacts-f-given")
     assert page.evaluate("document.activeElement.id") == "contacts-f-given"
 
+    # Tab walks the fields in reading order; Shift+Tab walks back.
+    order = []
+    for _ in range(4):
+        page.keyboard.press("Tab")
+        order.append(page.evaluate("document.activeElement.id"))
+    assert order == ["contacts-f-family", "contacts-f-nick", "contacts-f-org", "contacts-f-title"], order
+    page.keyboard.press("Shift+Tab")
+    assert page.evaluate("document.activeElement.id") == "contacts-f-org"
+
     # Save waits for a change; a form holding only a blank is refused with an alert.
     assert page.is_disabled(SUBMIT)
     page.fill("#contacts-f-given", " ")
@@ -171,6 +180,19 @@ def run_flow(page, width: int) -> None:
     assert page.get_attribute('[aria-label="Favourite: Anna Jansen"]', "aria-pressed") == "true"
     assert page.inner_text("#contacts-list .contacts-section >> nth=0") == "Favourites"
 
+    # A failing save shows an error toast and leaves the star as it was.
+    page.evaluate(
+        """() => { window.__realUpdate = NotesStore.updateContact;
+          NotesStore.updateContact = () => { throw new Error('Test write failed'); }; }"""
+    )
+    page.click('[aria-label="Favourite: Anna Jansen"]')
+    page.wait_for_function("() => document.getElementById('toast')?.textContent === 'Test write failed'")
+    assert "error" in page.get_attribute("#toast", "class")
+    assert page.get_attribute('[aria-label="Favourite: Anna Jansen"]', "aria-pressed") == "true"
+    page.evaluate("() => { NotesStore.updateContact = window.__realUpdate; }")
+    page.click('[aria-label="Favourite: Anna Jansen"]')
+    assert page.get_attribute('[aria-label="Favourite: Anna Jansen"]', "aria-pressed") == "false"
+
     # Delete with confirmation, cancel first.
     page.click("#contacts-list [data-contact-id] >> text=Willemijn Zonnebloem")
     page.click('[aria-label="Delete contact Willemijn Zonnebloem"]')
@@ -181,6 +203,27 @@ def run_flow(page, width: int) -> None:
     page.wait_for_selector("#confirm-dialog:not([hidden])")
     page.click("#confirm-ok")
     page.wait_for_function("() => document.getElementById('contacts-detail').hidden")
+    assert names_in_list(page) == ["Anna Jansen"], names_in_list(page)
+    assert page.evaluate("NotesStore.listContacts().length") == 1
+
+    # "/" from a list row moves focus to the search field without typing a slash into it.
+    page.focus("#contacts-list .contacts-row-open")
+    page.keyboard.press("/")
+    assert page.evaluate("document.activeElement.id") == "contacts-search"
+    assert page.input_value("#contacts-search") == ""
+
+    # Escape in a changed form asks first: Cancel keeps the draft, Discard drops it unsaved.
+    page.click("#btn-contacts-add")
+    page.fill("#contacts-f-given", "Draft")
+    page.press("#contacts-f-given", "Escape")
+    page.wait_for_selector("#confirm-dialog:not([hidden])")
+    page.click("#confirm-cancel")
+    page.wait_for_selector("#confirm-dialog", state="hidden")
+    assert page.input_value("#contacts-f-given") == "Draft"
+    page.press("#contacts-f-given", "Escape")
+    page.wait_for_selector("#confirm-dialog:not([hidden])")
+    page.click("#confirm-ok")
+    page.wait_for_selector("#contacts-f-given", state="detached")
     assert names_in_list(page) == ["Anna Jansen"], names_in_list(page)
     assert page.evaluate("NotesStore.listContacts().length") == 1
 

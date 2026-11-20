@@ -5593,7 +5593,12 @@
       if (star) {
         const c = contactsAll.find((x) => x.uuid === star.dataset.contactFav);
         if (!c) return;
-        NotesStore.updateContact(c.uuid, { favorite: !c.favorite });
+        try {
+          if (!NotesStore.updateContact(c.uuid, { favorite: !c.favorite })) throw new Error('This contact no longer exists');
+        } catch (err) {
+          toast(err && err.message ? err.message : 'Could not update the favourite', true);
+          return;
+        }
         refreshContacts();
         [...contactsUi.list.querySelectorAll('[data-contact-fav]')].find((b) => b.dataset.contactFav === c.uuid)?.focus();
         return;
@@ -28911,6 +28916,8 @@ async function showSettings() {
         return;
       }
       if (event.key !== 'Escape') return;
+      // The Contacts tab handles Escape in its open edit form (it asks before discarding changes).
+      if (currentAppTab() === 'contacts' && contactsFormState) return;
       suppressToolbarTips();
       const stop = () => {
         event.preventDefault();
