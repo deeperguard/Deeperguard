@@ -10163,30 +10163,49 @@
     clearPreviewCache();
     clearScanPageUrls();
     NotesBlobUrls.revokeAll();
+    const withinMs = (promise, ms) => Promise.race([
+      promise,
+      new Promise((resolve) => { window.setTimeout(resolve, ms); }),
+    ]);
     try {
-      await NotesStore.flush();
+      await withinMs(NotesStore.flush(), 5000);
     } catch (err) {
       /* still leave */
     }
-    // /app is a cacheable shell with an empty CSRF attribute. A locked reload
-    // still has the session cookie, so logout must use the token from /api/account.
-    await refreshCsrfFromAccount();
-    let loggedOut = false;
-    for (let attempt = 0; attempt < 2 && !loggedOut; attempt += 1) {
-      try {
-        await NotesStore.api('/api/auth/logout', { method: 'POST', body: '{}' });
-        loggedOut = true;
-      } catch (err) {
-        if (attempt === 0 && err && (err.status === 400 || err.status === 403)) {
-          try { NotesStore.setCsrf(''); } catch (e) { /* ignore */ }
-          window.__notesCsrf = '';
-          await refreshCsrfFromAccount();
-          continue;
-        }
-        break;
-      }
+    // Drop the key and decrypted data first: a failing or hanging logout call
+    // must not leave the unlocked app on screen.
+    try {
+      NotesStore.lock();
+    } catch (err) {
+      /* ignore */
     }
-    await clearLocalVaultAndLeave('/login');
+    currentId = null;
+    listSelectionId = null;
+    unlockedNotes.clear();
+    if (ui.noteList) ui.noteList.replaceChildren();
+    showUnlock();
+    try {
+      // /app is a cacheable shell with an empty CSRF attribute. A locked reload
+      // still has the session cookie, so logout must use the token from /api/account.
+      await withinMs(refreshCsrfFromAccount(), 4000);
+      let loggedOut = false;
+      for (let attempt = 0; attempt < 2 && !loggedOut; attempt += 1) {
+        try {
+          await NotesStore.api('/api/auth/logout', { method: 'POST', body: '{}', timeoutMs: 8000 });
+          loggedOut = true;
+        } catch (err) {
+          if (attempt === 0 && err && (err.status === 400 || err.status === 403)) {
+            try { NotesStore.setCsrf(''); } catch (e) { /* ignore */ }
+            window.__notesCsrf = '';
+            await withinMs(refreshCsrfFromAccount(), 4000);
+            continue;
+          }
+          break;
+        }
+      }
+    } finally {
+      await clearLocalVaultAndLeave('/login');
+    }
   }
 
   let remoteWipeStarted = false;
