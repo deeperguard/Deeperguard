@@ -463,13 +463,14 @@ const NotesContactsCsv = (() => {
   // contact contents (NotesContacts.buildContact). opts.dateOrder ('dmy' or 'mdy') is used when the file does not
   // decide; `dateOrderAsk` then holds a sample date for the "day first or month first?" question (6.2-3).
   function mapRows(rows, dialect, opts = {}) {
-    const mapper = MAPPERS[dialect];
+    const custom = typeof dialect === 'function';
+    const mapper = custom ? dialect : MAPPERS[dialect];
     const warnings = [];
     if (!mapper) return { contacts: [], warnings: ['Unknown CSV dialect'], dateOrder: null, dateOrderAsk: '' };
     if (!Array.isArray(rows) || rows.length < 2) return { contacts: [], warnings, dateOrder: null, dateOrderAsk: '' };
     const model = ensureModel();
     const headers = rows[0].map((h) => String(h));
-    const keyOf = dialect.startsWith('outlook') ? outlookKey : lower;
+    const keyOf = !custom && dialect.startsWith('outlook') ? outlookKey : lower;
     const index = Object.create(null);
     const nums = Object.create(null);
     headers.forEach((h, i) => {
@@ -481,7 +482,7 @@ const NotesContactsCsv = (() => {
         if (!nums[m[1]].includes(m[2])) nums[m[1]].push(m[2]);
       }
     });
-    const dateCols = (LOCALE_DATE_COLUMNS[dialect] || []).map((n) => index[n]).filter((i) => i !== undefined);
+    const dateCols = (opts.dateColumns || (custom ? [] : LOCALE_DATE_COLUMNS[dialect]) || []).map((n) => index[n]).filter((i) => i !== undefined);
     let order = opts.dateOrder === MONTH_FIRST ? MONTH_FIRST : DAY_FIRST;
     let dateOrder = null;
     let dateOrderAsk = '';
@@ -537,7 +538,7 @@ const NotesContactsCsv = (() => {
       if (c.labels.length > limits.labels) { overLabels += c.labels.length - limits.labels; c.labels.length = limits.labels; }
       try {
         const { content } = model.buildContact(c, null, now);
-        content.extra = { source: { format: 'csv', flavour: dialect } };
+        content.extra = { source: { format: 'csv', flavour: custom ? 'generic' : dialect } };
         if (extraCount) content.extra.csv = csv;
         contacts.push(content);
       } catch (err) {
@@ -555,7 +556,120 @@ const NotesContactsCsv = (() => {
     return { contacts, warnings, dateOrder, dateOrderAsk };
   }
 
-  return { LIMITS, DIALECTS, decodeBytes, cleanText, readCsv, detectDialect, mapRows };
+  // --- 6.3.2 the mapping step for a CSV that is not a named dialect --------------------------------
+  const SYNONYMS = {
+    given: ['first name', 'given name', 'first', 'given', 'voornaam', 'vorname', 'prenom', 'nombre', 'nome proprio', 'primo nome'],
+    additional: ['middle name', 'additional name', 'tussenvoegsel', 'zweiter vorname', 'segundo nombre', 'secondo nome'],
+    family: ['last name', 'family name', 'surname', 'last', 'achternaam', 'nachname', 'familienname', 'nom', 'nom de famille', 'apellido', 'apellidos', 'cognome', 'sobrenome'],
+    prefix: ['name prefix', 'prefix', 'aanhef', 'anrede'],
+    suffix: ['name suffix', 'suffix', 'achtervoegsel', 'namenszusatz'],
+    formatted: ['name', 'full name', 'display name', 'naam', 'volledige naam', 'anzeigename', 'vollstandiger name', 'nom complet', 'nombre completo', 'nome completo', 'nome'],
+    nickname: ['nickname', 'nick name', 'bijnaam', 'spitzname', 'surnom', 'apodo', 'soprannome', 'apelido'],
+    org: ['company', 'organization', 'organisation', 'organization name', 'firma', 'bedrijf', 'organisatie', 'unternehmen', 'societe', 'entreprise', 'empresa', 'azienda'],
+    unit: ['department', 'afdeling', 'abteilung', 'departement', 'departamento', 'reparto'],
+    title: ['job title', 'title', 'position', 'functie', 'berufsbezeichnung', 'titre', 'puesto', 'cargo', 'posizione'],
+    'phone:mobile': ['mobile', 'mobile phone', 'cell', 'cell phone', 'mobiel', 'mobiele telefoon', 'handy', 'mobil', 'portable', 'movil', 'cellulare', 'telemovel', 'celular', 'gsm'],
+    'phone:home': ['home phone', 'telefoon thuis', 'telefon privat', 'tel prive', 'telefono casa', 'telefone residencial'],
+    'phone:work': ['work phone', 'business phone', 'telefoon werk', 'telefon geschaftlich', 'tel pro', 'telefono trabajo', 'telefone comercial'],
+    'phone:fax': ['fax'],
+    'phone:main': ['phone', 'telephone', 'tel', 'phone number', 'telefoon', 'telefoonnummer', 'telefon', 'rufnummer', 'telefono', 'telefone'],
+    'email:other': ['email', 'e mail', 'email address', 'e mail address', 'mail', 'e mail adres', 'emailadres', 'courriel', 'correo', 'correo electronico', 'posta elettronica'],
+    url: ['website', 'web', 'url', 'homepage', 'webseite', 'site web', 'sitio web', 'sito web', 'pagina web'],
+    im: ['messenger', 'im', 'skype', 'whatsapp'],
+    street: ['street', 'street address', 'address', 'adres', 'straat', 'strasse', 'adresse', 'rue', 'calle', 'direccion', 'via', 'indirizzo', 'rua'],
+    city: ['city', 'plaats', 'woonplaats', 'stad', 'ort', 'stadt', 'ville', 'ciudad', 'citta', 'cidade'],
+    region: ['state', 'province', 'region', 'provincie', 'bundesland', 'estado', 'provincia'],
+    postal: ['zip', 'zip code', 'postal code', 'postcode', 'postleitzahl', 'plz', 'code postal', 'codigo postal', 'cap', 'cep'],
+    country: ['country', 'land', 'pays', 'pais', 'paese'],
+    birthday: ['birthday', 'birth date', 'date of birth', 'geboortedatum', 'verjaardag', 'geburtstag', 'geburtsdatum', 'date de naissance', 'anniversaire', 'cumpleanos', 'fecha de nacimiento', 'compleanno', 'data di nascita', 'aniversario', 'data de nascimento'],
+    anniversary: ['anniversary', 'trouwdatum', 'hochzeitstag'],
+    note: ['note', 'notes', 'comments', 'comment', 'memo', 'notitie', 'notities', 'opmerking', 'opmerkingen', 'bemerkung', 'bemerkungen', 'notiz', 'remarque', 'nota', 'notas'],
+    labels: ['label', 'labels', 'group', 'groups', 'category', 'categories', 'groep', 'groepen', 'categorie', 'gruppe', 'kategorie', 'groupe', 'categoria', 'grupo'],
+    favourite: ['favorite', 'favourite', 'starred', 'favoriet', 'favorit', 'favori', 'favorito', 'preferito'],
+  };
+  const SYNONYM_TARGET = Object.create(null);
+  for (const t of Object.keys(SYNONYMS)) for (const w of SYNONYMS[t]) SYNONYM_TARGET[w] = t;
+
+  // [value, label] of every target a column can be mapped to. 'extra' keeps the column under extra.csv.
+  const TARGETS = [
+    ['extra', 'Keep as other field'], ['ignore', 'Ignore'],
+    ['prefix', 'Name: prefix'], ['given', 'Name: given'], ['additional', 'Name: additional'], ['family', 'Name: family'], ['suffix', 'Name: suffix'],
+    ['formatted', 'Name: full name'], ['nickname', 'Nickname'],
+    ['org', 'Organisation'], ['unit', 'Department'], ['title', 'Job title'],
+    ['phone:mobile', 'Phone: mobile'], ['phone:home', 'Phone: home'], ['phone:work', 'Phone: work'], ['phone:main', 'Phone: main'], ['phone:fax', 'Phone: fax'], ['phone:pager', 'Phone: pager'], ['phone:other', 'Phone: other'],
+    ['email:home', 'Email: home'], ['email:work', 'Email: work'], ['email:other', 'Email: other'],
+    ['street', 'Address: street'], ['extended', 'Address: extended'], ['city', 'Address: city'], ['region', 'Address: region'], ['postal', 'Address: postal code'], ['country', 'Address: country'],
+    ['url', 'Website'], ['im', 'Messenger'],
+    ['birthday', 'Date: birthday'], ['anniversary', 'Date: anniversary'], ['date', 'Date: other'],
+    ['note', 'Note'], ['labels', 'Labels'], ['favourite', 'Favourite'],
+  ];
+  const REPEATABLE = (t) => t === 'extra' || t === 'ignore' || t === 'url' || t === 'im' || t === 'labels' || t.startsWith('phone:') || t.startsWith('email:');
+  const NEEDS_ONE = (t) => ['given', 'family', 'formatted', 'additional', 'org'].includes(t) || t.startsWith('phone:') || t.startsWith('email:');
+
+  function fold(header) {
+    return String(header).replace(/^\ufeff/, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+  // The suggested target for a header ('extra' when nothing in the synonym table matches).
+  function suggestTarget(header) {
+    return SYNONYM_TARGET[fold(header)] || 'extra';
+  }
+
+  // targets: one value of TARGETS per column. Returns '' when the mapping can be used, else the reason it cannot.
+  function checkMapping(targets) {
+    const seen = new Set();
+    for (const t of targets) {
+      if (!REPEATABLE(t)) {
+        if (seen.has(t)) return 'Two columns are mapped to "' + (TARGETS.find((x) => x[0] === t) || [t, t])[1] + '". Choose it for one column only.';
+        seen.add(t);
+      }
+    }
+    if (!targets.some(NEEDS_ONE)) return 'Map at least one column to a name, organisation, email or phone.';
+    return '';
+  }
+
+  const TRUE_WORDS = new Set(['1', 'true', 'yes', 'x', 'star']);
+  const LABEL_SEPARATOR = /\s*(?: ::: |;|,)\s*/;
+
+  // rows (from readCsv, header first) + targets (one per column) -> the result of mapRows.
+  function mapGeneric(rows, targets, opts = {}) {
+    if (checkMapping(targets)) return { contacts: [], warnings: [checkMapping(targets)], dateOrder: null, dateOrderAsk: '' };
+    const headers = rows[0].map((h) => String(h));
+    const mapper = (r, ctx) => {
+      const c = ctx.c;
+      const address = {};
+      headers.forEach((h, i) => {
+        const t = targets[i];
+        if (t === undefined || t === 'extra') return;
+        const v = r.take(h);
+        if (!v || t === 'ignore') return;
+        if (['prefix', 'given', 'additional', 'family', 'suffix', 'formatted'].includes(t)) { if (!c.name[t]) c.name[t] = v; }
+        else if (t === 'nickname' || t === 'title' || t === 'note') { if (!c[t]) c[t] = v; }
+        else if (t === 'org') c.org.name = c.org.name || v;
+        else if (t === 'unit') c.org.unit = c.org.unit || v;
+        else if (t.startsWith('phone:')) r.add(c.phones, t.slice(6), v);
+        else if (t.startsWith('email:')) r.add(c.emails, t.slice(6), v);
+        else if (t === 'url') r.add(c.urls, 'other', v);
+        else if (t === 'im') r.im('other', v);
+        else if (t === 'birthday' || t === 'anniversary') r.date(v, t);
+        else if (t === 'date') r.date(v, 'other');
+        else if (t === 'labels') { for (const l of v.split(LABEL_SEPARATOR)) if (l && !c.labels.includes(l)) c.labels.push(l); }
+        else if (t === 'favourite') { if (TRUE_WORDS.has(v.toLowerCase())) c.favorite = true; }
+        else address[t] = address[t] || v;
+      });
+      r.address('other', address);
+      const n = c.name;
+      if (n.formatted && !n.given && !n.family) {
+        const comma = n.formatted.split(',');
+        const words = n.formatted.split(/\s+/);
+        if (comma.length === 2 && comma[0].trim() && comma[1].trim()) { n.family = comma[0].trim(); n.given = comma[1].trim(); }
+        else if (words.length === 2) [n.given, n.family] = words;
+      }
+    };
+    const dateColumns = headers.filter((h, i) => ['birthday', 'anniversary', 'date'].includes(targets[i])).map((h) => lower(h));
+    return mapRows(rows, mapper, { ...opts, dateColumns });
+  }
+
+  return { LIMITS, DIALECTS, TARGETS, decodeBytes, cleanText, readCsv, detectDialect, mapRows, suggestTarget, checkMapping, mapGeneric };
 })();
 
 if (typeof window !== 'undefined') window.NotesContactsCsv = NotesContactsCsv;

@@ -13591,6 +13591,17 @@ a.contacts-value-main { color: var(--accent); }
 #contacts-import-dialog ul[hidden] { display: none; }
 #contacts-import-dialog.dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
 #contacts-import-dialog .contacts-import-check { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0; }
+#contacts-import-dialog .contacts-map-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 12px; }
+#contacts-import-dialog .contacts-map-table th, #contacts-import-dialog .contacts-map-table td { text-align: left; vertical-align: top; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--border, currentColor); overflow-wrap: anywhere; font-weight: normal; }
+#contacts-import-dialog .contacts-map-table thead th, #contacts-import-dialog .contacts-map-table tbody th { font-weight: 600; }
+#contacts-import-dialog .contacts-map-sample { white-space: pre-wrap; }
+#contacts-import-dialog .contacts-map-table select { max-width: 100%; }
+@media (max-width: 600px) {
+  #contacts-import-dialog .contacts-map-table, #contacts-import-dialog .contacts-map-table tbody, #contacts-import-dialog .contacts-map-table tr, #contacts-import-dialog .contacts-map-table th, #contacts-import-dialog .contacts-map-table td { display: block; width: 100%; }
+  #contacts-import-dialog .contacts-map-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  #contacts-import-dialog .contacts-map-table tr { padding: 6px 0; border-bottom: 1px solid var(--border, currentColor); }
+  #contacts-import-dialog .contacts-map-table th, #contacts-import-dialog .contacts-map-table td { border-bottom: 0; padding: 2px 0; }
+}
 #contacts-import-dialog li label { display: flex; gap: 8px; align-items: center; min-height: 32px; }
 
 /* Contacts duplicates screen (docs/CONTACTS_SPEC.md 7.10) */

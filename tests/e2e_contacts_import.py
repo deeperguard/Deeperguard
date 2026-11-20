@@ -214,6 +214,128 @@ def run_flow(page, width: int) -> None:
     assert "Lotte" not in stored and "Mallory" not in stored, stored
 
 
+def open_import(page) -> None:
+    page.click("#btn-contacts-import")
+    page.wait_for_selector("#contacts-import-dialog:not([hidden])")
+
+
+def wait_quiet(requests: list[str], seconds: float = 3.0) -> None:
+    """Wait until the sync that follows an import has finished: no new request for `seconds`."""
+    seen, since = len(requests), time.time()
+    while time.time() - since < seconds:
+        time.sleep(0.25)
+        if len(requests) != seen:
+            seen, since = len(requests), time.time()
+
+
+def run_format_flow(page) -> None:
+    """CSV through the mapping step, content sniffing for a wrong extension, an unsupported file, and lock."""
+    page.set_default_timeout(15000)
+    requests: list[str] = []
+    # The app itself polls GET /api/account in the background; every other request counts.
+    page.on("request", lambda r: None if r.method == "GET" and r.url.endswith("/api/account") else requests.append(f"{r.method} {r.url}"))
+    page.click("#app-tab-contacts")
+    page.wait_for_selector("#contacts-pane:not([hidden])")
+
+    # 1. A generic CSV: semicolons, Windows-1252, a quoted newline, doubled quotes, a cell starting with "=".
+    raw = (FIXTURES / "csv-6.3.3-semicolon-cp1252.csv").read_bytes()
+    assert b"\xdc" in raw, "fixture must hold Windows-1252 bytes"
+    open_import(page)
+    before = len(requests)
+    page.set_input_files("#contacts-import-file", files=[{"name": "people.csv", "mimeType": "text/csv", "buffer": raw}])
+    page.wait_for_selector("#contacts-import-mapping:not([hidden])")
+    assert page.is_hidden("#contacts-import-preview") and page.is_hidden("#contacts-import-run")
+    headers = page.eval_on_selector_all("#contacts-import-map-body th", "els => els.map(e => e.textContent)")
+    assert headers == ["Voornaam", "Achternaam", "Mobiel", "E-mail", "Adres", "Opmerking"], headers
+    suggested = page.eval_on_selector_all("#contacts-import-map-body select", "els => els.map(e => e.value)")
+    assert suggested == ["given", "family", "phone:mobile", "email:other", "street", "note"], suggested
+    assert page.eval_on_selector("#contacts-import-map-0", "e => e.options[e.selectedIndex].textContent") == "Name: given"
+    assert page.eval_on_selector("#contacts-import-map-0", "e => [...e.options].some(o => o.textContent === 'Keep as other field')")
+    assert page.get_attribute("#contacts-import-map-0", "id") == page.eval_on_selector(
+        "#contacts-import-map-body tr:first-child label", "l => l.htmlFor")
+    rows = page.eval_on_selector_all(
+        "#contacts-import-map-body tr", "trs => trs.map(tr => [...tr.querySelectorAll('.contacts-map-sample')].map(d => d.textContent))")
+    assert rows[0] == ["Ünal", "Fieke"], rows[0]  # decoded from Windows-1252, as text
+    assert rows[2] == ["06-12345678", "=+31 6 11"], rows[2]  # a leading "=" stays text
+    assert rows[4] == ["Kerkstraat 1\n3511 AB Utrecht"], rows[4]  # the quoted newline survived
+    assert rows[5] == ['zei: "bel mij"'], rows[5]
+    assert page.query_selector("#contacts-import-map-body img, #contacts-import-map-body script") is None
+
+    # Two columns on one single-value target are refused and Continue stays disabled.
+    page.select_option("#contacts-import-map-1", "given")
+    assert "Two columns are mapped" in page.inner_text("#contacts-import-map-error")
+    assert page.is_disabled("#contacts-import-map-confirm")
+    page.select_option("#contacts-import-map-1", "family")
+    assert page.is_hidden("#contacts-import-map-error") and page.is_enabled("#contacts-import-map-confirm")
+    # Nothing that identifies a contact left: refused too.
+    page.select_option("#contacts-import-map-0", "extra")
+    page.select_option("#contacts-import-map-1", "extra")
+    page.select_option("#contacts-import-map-2", "extra")
+    page.select_option("#contacts-import-map-3", "extra")
+    assert "at least one column" in page.inner_text("#contacts-import-map-error")
+    assert page.is_disabled("#contacts-import-map-confirm")
+    page.select_option("#contacts-import-map-0", "given")
+    page.select_option("#contacts-import-map-1", "family")
+    page.select_option("#contacts-import-map-2", "phone:mobile")
+    page.select_option("#contacts-import-map-3", "email:other")
+    page.click("#contacts-import-map-confirm")
+    page.wait_for_selector("#contacts-import-preview:not([hidden])")
+    assert page.is_hidden("#contacts-import-mapping")
+    assert "Found 2 contacts in 1 file" in page.inner_text("#contacts-import-summary"), page.inner_text("#contacts-import-summary")
+    assert page.inner_text("#contacts-import-files").startswith("people.csv: CSV, columns mapped by you, windows-1252")
+    assert page.eval_on_selector_all("#contacts-import-list li", "els => els.map(e => e.textContent.trim())") == ["Ünal Çelik", "Fieke Bos"]
+    assert page.inner_text("#contacts-import-run") == "Import 2 contacts"
+    # Choosing, parsing, mapping and previewing sent nothing at all.
+    assert requests[before:] == [], requests[before:]
+
+    page.click("#contacts-import-run")
+    page.wait_for_selector("#contacts-import-result:not([hidden])")
+    assert "Imported 2 new contacts" in page.inner_text("#contacts-import-result-summary")
+    page.wait_for_function("document.querySelectorAll('#contacts-list .contacts-row-name').length === 2")
+    assert sorted(names(page)) == ["Fieke Bos", "Ünal Çelik"], names(page)
+    page.click("#contacts-import-close")
+    page.locator("#contacts-list .contacts-row-open", has_text="Ünal Çelik").click()
+    page.wait_for_selector("#contacts-detail:not([hidden])")
+    detail = page.inner_text("#contacts-detail")
+    assert "Kerkstraat 1" in detail and "3511 AB Utrecht" in detail and "unal@example.nl" in detail and "bel mij" in detail, detail
+
+    # 2. A vCard saved as .txt is recognised by its content and goes straight to the preview.
+    wait_quiet(requests)  # the import's own sync is not what the checks below are about
+    open_import(page)
+    before = len(requests)
+    page.set_input_files("#contacts-import-file", files=[{"name": "contacts.txt", "mimeType": "text/plain", "buffer": (FIXTURES / "apple-3.0.vcf").read_bytes()}])
+    page.wait_for_selector("#contacts-import-preview:not([hidden])")
+    assert page.is_hidden("#contacts-import-mapping")
+    assert "vCard 3.0" in page.inner_text("#contacts-import-files")
+    assert "Found 1 contact in 1 file" in page.inner_text("#contacts-import-summary"), page.inner_text("#contacts-import-summary")
+    assert requests[before:] == [], requests[before:]
+    page.click("#contacts-import-close")
+
+    # 3. An unsupported file named like a CSV: a message that lists what is supported, shown as text.
+    open_import(page)
+    before = len(requests)
+    page.set_input_files("#contacts-import-file", files=[{"name": "list.csv", "mimeType": "text/csv", "buffer": b"<b>just some words</b>\nno columns here\n"}])
+    page.wait_for_selector("#contacts-import-error:not([hidden])")
+    message = page.inner_text("#contacts-import-error")
+    for word in ("vCard", "CSV", "LDIF", "jCard"):
+        assert word in message, message
+    assert "list.csv:" in message and "<b>" not in message
+    assert page.query_selector("#contacts-import-dialog b") is None
+    assert page.is_hidden("#contacts-import-mapping") and page.is_disabled("#contacts-import-run")
+    assert requests[before:] == [], requests[before:]
+
+    # Lock while the mapping step is open: the parsed rows are gone from the page.
+    page.set_input_files("#contacts-import-file", files=[{"name": "people.csv", "mimeType": "text/csv", "buffer": raw}])
+    page.wait_for_selector("#contacts-import-mapping:not([hidden])")
+    assert page.locator("#contacts-import-map-body tr").count() == 6
+    # The dialog's backdrop covers the lock button, so lock the way the auto-lock does: through the same handler.
+    page.evaluate("document.getElementById('btn-contacts-lock').click()")
+    page.wait_for_function("() => document.getElementById('contacts-import-dialog').hidden")
+    assert page.locator("#contacts-import-map-body tr").count() == 0
+    stored = page.evaluate("JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), location.href])")
+    assert "Kerkstraat" not in stored and "Çelik" not in stored and "unal" not in stored, stored
+
+
 def main() -> int:
     try:
         from playwright.sync_api import sync_playwright
@@ -234,6 +356,11 @@ def main() -> int:
                 register(page, base, f"contacts-import-{width}-{int(time.time())}@home.local")
                 run_flow(page, width)
                 context.close()
+            context = browser.new_context(viewport={"width": 1280, "height": 800})
+            page = context.new_page()
+            register(page, base, f"contacts-formats-{int(time.time())}@home.local")
+            run_format_flow(page)
+            context.close()
             browser.close()
         print("ok")
         return 0
