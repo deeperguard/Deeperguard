@@ -1,5 +1,5 @@
 {
-  "asset_count": 111,
+  "asset_count": 113,
   "assets": {
     "css/app.css": {
       "bytes": 382170,
@@ -168,6 +168,18 @@
       "sha256": "7658414e6dfaa4867104ace6846fa14f3ddf6b69542383aedbd0c0060a6ecec2",
       "sri": "sha384-oPibxw/tD9/6r2C5wDg+cNo/dvgxKlUBzN3Vn5eZvJjxVUwaIBQ/sIBz/bZXOKMQ",
       "url": "/static/js/contacts-import.7658414e6dfaa486.js"
+    },
+    "js/contacts-jcard.js": {
+      "bytes": 16536,
+      "sha256": "f7545b2ea6ce956d618409c4306a30ec872375657de81f8685c8042761007972",
+      "sri": "sha384-E0Ro3IOgdHvC6L3ctGxMf/gKItoH22pSWBZVPEM0Vk8dQW+ucbWvBtD75QWOX3Vq",
+      "url": "/static/js/contacts-jcard.f7545b2ea6ce956d.js"
+    },
+    "js/contacts-ldif.js": {
+      "bytes": 15699,
+      "sha256": "e453848e201e968e9b253295de948b7b78955e9359be2e64f544463ae38bb760",
+      "sri": "sha384-VHUpakAEEQpWUvJQbeaYMHst2Ldcz3nisP3q5zyZu3uYNWaETQ9KzSbQWyhioPzS",
+      "url": "/static/js/contacts-ldif.e453848e201e968e.js"
     },
     "js/contacts-vcard.js": {
       "bytes": 32126,
@@ -669,6 +681,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "1426ffdac3f67141334fe3afbf601680a7b2ecdb7815c0aa6220f5b80cb6ebe0",
+  "manifest_sha256": "26ab3b9409643d3f379b2050dde7f0e619f0ee4ea4f041e13e7c8befe90e4808",
   "version": 1
 }

@@ -1,0 +1,11 @@
+["vcard", [
+  ["version", {}, "text", "4.0"],
+  ["fn", {}, "text", "Dr. Eva Bakker"],
+  ["n", {}, "text", ["Bakker", "Eva", "", "Dr.", ""]],
+  ["tel", {"type": ["cell"], "pref": "1"}, "uri", "tel:+31-6-1234-5678;ext=12"],
+  ["tel", {"type": "work", "__proto__": {"polluted": true}}, "text", "+31 20 5550000"],
+  ["email", {"type": "work", "constructor": {"prototype": {"x": 1}}}, "text", "eva@bakker.example"],
+  ["adr", {"type": "home"}, "text", ["", "", "Keizersgracht 1", "Amsterdam", "", "1015 AA", "Netherlands"]],
+  ["bday", {}, "date", "--03-09"],
+  ["x-hobby", {}, "unknown", "zeilen"]
+]]
