@@ -1401,6 +1401,31 @@ html:not([data-theme="dark"]) .agenda-chip-time {
   }
   .agenda-month-split:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
   body.agenda-split-dragging { user-select: none; -webkit-user-select: none; cursor: row-resize; }
+  /* Vertical pans stay with the browser; horizontal swipes reach the pane's swipe handler
+     (otherwise the browser cancels the pointer and the swipe is lost). */
+  .agenda-month-grid--weeks { touch-action: pan-y; }
+  /* Grip between grid and day list: a real button (tap, Enter/Space, or drag up/down). */
+  .agenda-month-grip-row { display: flex; justify-content: center; flex: 0 0 auto; }
+  .agenda-month-grip {
+    width: 96px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .agenda-month-grip-bar {
+    width: 44px;
+    height: 5px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--muted) 55%, transparent);
+  }
+  .agenda-month-grip:hover .agenda-month-grip-bar { background: var(--accent); }
+  .agenda-month-grip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
   .agenda-month-date { margin-bottom: 1px; }
   /* Selected day: filled accent pill. Today (when not selected): accent number with a ring;
      today and selected: the filled pill gets the ring as well. */

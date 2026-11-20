@@ -316,6 +316,7 @@
     view: 'week',
     anchor: new Date(),
     monthPickDay: 0,
+    monthCollapsed: false, // phone month grid folded to the selected day's week; memory only
     search: '',
     selectedId: '',
     editorScope: 'series',
@@ -1816,6 +1817,50 @@
     });
   }
 
+  const GRIP_DRAG_PX = 24;
+
+  function renderMonthGrip() {
+    const open = !state.monthCollapsed;
+    return (
+      '<div class="agenda-month-grip-row"><button type="button" class="agenda-month-grip" id="agenda-month-grip" '
+      + `aria-expanded="${open}" aria-label="${open ? 'Collapse month' : 'Expand month'}">`
+      + '<span class="agenda-month-grip-bar" aria-hidden="true"></span></button></div>'
+    );
+  }
+
+  function setMonthCollapsed(collapsed) {
+    if (state.monthCollapsed === collapsed) return;
+    state.monthCollapsed = collapsed;
+    render();
+    rootEl.querySelector('#agenda-month-grip')?.focus({ preventScroll: true });
+  }
+
+  /** Tap (or Enter/Space) toggles; dragging down unfolds, dragging up folds. */
+  function wireMonthGrip() {
+    const grip = rootEl.querySelector('#agenda-month-grip');
+    if (!grip) return;
+    let startY = null;
+    let dragged = false;
+    grip.addEventListener('pointerdown', (ev) => {
+      startY = ev.clientY;
+      dragged = false;
+      try { grip.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
+    });
+    grip.addEventListener('pointerup', (ev) => {
+      if (startY == null) return;
+      const dy = ev.clientY - startY;
+      startY = null;
+      if (Math.abs(dy) < GRIP_DRAG_PX) return;
+      dragged = true;
+      setMonthCollapsed(dy < 0);
+    });
+    grip.addEventListener('pointercancel', () => { startY = null; });
+    grip.addEventListener('click', () => {
+      if (dragged) { dragged = false; return; }
+      setMonthCollapsed(!state.monthCollapsed);
+    });
+  }
+
   /** Whole calendar days between two local midnights (DST-safe). */
   function calendarDaysBetween(a, b) {
     return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate())
@@ -1919,11 +1964,14 @@
     html += '</div>';
     const MAX_CHIPS = 3;
     // Phone: roving tabindex, so the grid is one tab stop (selected day, else today, else the 1st).
-    const shown = days.slice(0, nWeeks * 7).map((d) => startOfDay(d).getTime());
+    const shown = (state.monthCollapsed && phoneMonth ? days : days.slice(0, nWeeks * 7)).map((d) => startOfDay(d).getTime());
     const todayStart = startOfDay(new Date()).getTime();
     const firstOfMonth = new Date(anchorYear, anchorMonth, 1).getTime();
     const tabStop = [state.monthPickDay, todayStart, firstOfMonth].find((t) => shown.includes(t));
-    for (let r = 0; r < nWeeks; r += 1) {
+    // Folded (phone): only the week of the selected day.
+    const pickIdx = days.findIndex((d) => startOfDay(d).getTime() === state.monthPickDay);
+    const foldedWeek = phoneMonth && state.monthCollapsed ? Math.max(0, Math.floor(pickIdx / 7)) : -1;
+    for (let r = foldedWeek >= 0 ? foldedWeek : 0; r < (foldedWeek >= 0 ? foldedWeek + 1 : nWeeks); r += 1) {
       html += '<div class="agenda-month-row">';
       if (phoneMonth) {
         html += `<span class="agenda-month-week" aria-hidden="true">${isoWeekNumber(days[r * 7])}</span>`;
@@ -2021,7 +2069,7 @@
       main = renderAgendaList(occ, range, placed);
     } else if (state.view === 'month') {
       main = renderMonthGrid(days, occ, placed);
-      if (isAgendaPhoneLayout()) main += renderMonthSplit() + renderMonthDayList(occ, placed);
+      if (isAgendaPhoneLayout()) main += renderMonthGrip() + renderMonthSplit() + renderMonthDayList(occ, placed);
     } else {
       main = (
         '<div class="agenda-week-layout">'
@@ -2043,6 +2091,7 @@
       + `<div class="agenda-body agenda-view-${esc(state.view)}">${main}</div>`
     );
     wireMonthSplit();
+    wireMonthGrip();
     const prev = rootEl.querySelector('#agenda-prev');
     const next = rootEl.querySelector('#agenda-next');
     const todayB = rootEl.querySelector('#agenda-today');
@@ -2241,6 +2290,18 @@
 
   function shiftAnchor(dir) {
     const v = state.view;
+    if (v === 'month' && isAgendaPhoneLayout()) {
+      // Phone: the selected day travels with the grid (a week back/forward when folded,
+      // else the same day of the month, clipped to the month's last day).
+      let pick = startOfDay(new Date(state.monthPickDay || Date.now()));
+      if (!state.monthCollapsed && (pick.getMonth() !== state.anchor.getMonth() || pick.getFullYear() !== state.anchor.getFullYear())) {
+        pick = startOfDay(state.anchor);
+      }
+      const to = state.monthCollapsed ? addDays(pick, dir * 7) : startOfDay(addMonthsAnchor(pick, dir));
+      state.monthPickDay = to.getTime();
+      state.anchor = new Date(to);
+      return;
+    }
     if (v === 'month') {
       state.anchor = addMonthsAnchor(state.anchor, dir);
       return;
@@ -3890,6 +3951,7 @@
     _placedTasksForRange: (range) => placedTasksForRange(range),
     _renderAgendaList: renderAgendaList,
     _renderMonthGrid: renderMonthGrid,
+    _shiftAnchor: shiftAnchor,
     _renderMonthDayList: renderMonthDayList,
     _renderTaskStrip: renderTaskStrip,
     expandEventOccurrences,
