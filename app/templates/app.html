@@ -1723,6 +1723,9 @@
           <p id="contacts-count" class="muted">Unlock the vault to see your contacts</p>
         </div>
         <div class="totp-head-actions">
+          <button type="button" id="btn-contacts-import" class="btn ghost" title="Import contacts from vCard files">Import</button>
+          <button type="button" id="btn-contacts-select" class="btn ghost" title="Tick contacts to export only those" aria-pressed="false">Select</button>
+          <button type="button" id="btn-contacts-export" class="btn ghost" title="Export contacts as a vCard file">Export</button>
           <button type="button" id="btn-contacts-add" class="btn icon" title="Add contact" aria-label="Add contact">+</button>
         </div>
         <div class="totp-side-foot">
@@ -2867,6 +2870,46 @@
       <button type="button" class="btn primary" id="totp-add-save">Add</button>
     </footer>
   </div>
+  <div id="contacts-import-backdrop" class="scan-backdrop" hidden></div>
+  <div id="contacts-import-dialog" class="scan-dialog totp-add-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="contacts-import-title">
+    <div class="scan-dialog-handle" aria-hidden="true"></div>
+    <header class="scan-dialog-head">
+      <h2 id="contacts-import-title">Import contacts</h2>
+    </header>
+    <div class="scan-dialog-body">
+      <p class="scan-dialog-lead muted">Choose one or more vCard files (.vcf, version 2.1, 3.0 or 4.0), or drop them on this window. The files are read on this device and are not uploaded. The contacts are saved encrypted in your vault.</p>
+      <div class="scan-add-actions">
+        <button type="button" class="btn scan-add-btn" id="contacts-import-pick">Choose files</button>
+        <input type="file" id="contacts-import-file" class="sr-file" multiple accept=".vcf,.vcard,text/vcard,text/x-vcard" tabindex="-1" aria-label="Contact files">
+      </div>
+      <p id="contacts-import-status" class="scan-status" role="status" aria-live="polite"></p>
+      <p id="contacts-import-error" class="error totp-dialog-error" role="alert" hidden></p>
+      <div id="contacts-import-preview" hidden>
+        <p id="contacts-import-summary" class="scan-status" role="status" aria-live="polite"></p>
+        <ul id="contacts-import-files" class="totp-import-list"></ul>
+        <label id="contacts-import-encoding-row" class="scan-name-field">Wrong characters?
+          <select id="contacts-import-encoding"></select>
+        </label>
+        <label class="contacts-import-check"><input type="checkbox" id="contacts-import-skip-existing" checked> Leave out contacts I already have (same email, phone or UID)</label>
+        <h3 class="scan-dialog-lead">Problems</h3>
+        <ul id="contacts-import-problems" class="totp-import-list"></ul>
+        <h3 class="scan-dialog-lead">Contacts</h3>
+        <ul id="contacts-import-list" class="totp-import-list"></ul>
+        <p id="contacts-import-list-note" class="muted"></p>
+      </div>
+      <div id="contacts-import-result" hidden>
+        <p id="contacts-import-result-summary" class="scan-status" role="status" aria-live="polite"></p>
+        <ul id="contacts-import-result-problems" class="totp-import-list"></ul>
+        <p class="scan-dialog-lead muted">These files were read on this device. They were not uploaded.</p>
+        <p id="contacts-import-offline" class="scan-dialog-lead muted"></p>
+      </div>
+    </div>
+    <footer class="scan-dialog-foot">
+      <button type="button" class="btn ghost" id="contacts-import-undo" hidden>Undo import</button>
+      <button type="button" class="btn primary" id="contacts-import-run" hidden>Import</button>
+      <button type="button" class="btn ghost" id="contacts-import-close">Close</button>
+    </footer>
+  </div>
   <div id="totp-import-backdrop" class="scan-backdrop" hidden></div>
   <div id="totp-import-dialog" class="scan-dialog totp-add-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="totp-import-title">
     <div class="scan-dialog-handle" aria-hidden="true"></div>
@@ -3297,6 +3340,8 @@
   {{ asset_script('js/note-reminders.js') }}
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/contacts.js') }}
+  {{ asset_script('js/contacts-vcard.js') }}
+  {{ asset_script('js/contacts-import.js') }}
   {{ asset_script('js/totp.js') }}
   {{ asset_script('js/totp-icons.js') }}
   {{ asset_script('js/totp-import.js') }}

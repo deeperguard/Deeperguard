@@ -1,0 +1,20 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Pieter van Dam
+N:van Dam;Pieter;;;
+NICKNAME:Piet
+EMAIL;TYPE=INTERNET;TYPE=HOME:piet@example.net
+EMAIL;TYPE=INTERNET;TYPE=WORK:pieter@damtransport.example
+TEL;TYPE=CELL:+31 6 11112222
+item1.TEL:+31 20 5551234
+item1.X-ABLabel:Thuis kantoor
+ADR;TYPE=HOME:;;Prinsengracht 263;Amsterdam;;1016 GV;Netherlands
+ORG:Dam Transport;
+TITLE:Planner
+BDAY:1979-11-30
+URL:https://damtransport.example
+CATEGORIES:myContacts,Collega's
+NOTE:Eerste contact via beurs.\nVoorkeur: e-mail
+PHOTO;ENCODING=b;TYPE=JPEG:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChw
+ GA60e6kgAAAABJRU5ErkJggg==
+END:VCARD

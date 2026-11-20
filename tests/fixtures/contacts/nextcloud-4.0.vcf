@@ -1,0 +1,20 @@
+BEGIN:VCARD
+VERSION:4.0
+PRODID:-//Sabre//Sabre VObject 4.5.4//EN
+UID:b6d1e8a0-4e02-4e5e-9b8a-6a1c5c0b7f11
+FN:Lotte de Boer
+N:de Boer;Lotte;;;
+NICKNAME:Lot
+BDAY:--0214
+ANNIVERSARY:20100605
+TEL;VALUE=uri;TYPE="cell,voice";PREF=1:tel:+31-6-22334455
+EMAIL;TYPE=work;PREF=1:lotte@deboer.example
+ADR;TYPE=home:;;Oudegracht 12;Utrecht;;3511 AB;Nederland
+IMPP;X-SERVICE-TYPE=Matrix:matrix:u/lotte:matrix.example
+URL:https://deboer.example
+CATEGORIES:Familie,Vrienden
+PHOTO:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+GENDER:F
+KIND:individual
+REV:20261015T091500Z
+END:VCARD

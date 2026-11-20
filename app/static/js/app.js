@@ -4566,6 +4566,8 @@
     status: document.getElementById('contacts-status'),
     detail: document.getElementById('contacts-detail'),
     add: document.getElementById('btn-contacts-add'),
+    select: document.getElementById('btn-contacts-select'),
+    exportBtn: document.getElementById('btn-contacts-export'),
   };
   const CONTACTS_FAV = '\u0000fav';
   let contactsAll = [];
@@ -4573,6 +4575,8 @@
   let contactsSelectedId = '';
   let contactsFormState = null; // { id, baseline, current, opener } while the edit form is open
   let contactsUndo = null;
+  // Selection mode (spec 4.3): null when off, else the set of ticked contact uuids. Export uses it.
+  let contactsTicked = null;
   const CONTACT_TYPES = ['mobile', 'home', 'work', 'main', 'fax', 'pager', 'other', 'custom'];
   const CONTACT_TYPE_NAMES = { mobile: 'Mobile', home: 'Home', work: 'Work', main: 'Main', fax: 'Fax', pager: 'Pager', other: 'Other', custom: 'Custom…' };
 
@@ -4717,6 +4721,16 @@
       star.dataset.contactFav = c.uuid;
       star.setAttribute('aria-pressed', c.favorite ? 'true' : 'false');
       star.setAttribute('aria-label', `Favourite: ${name}`);
+      if (contactsTicked) {
+        const tick = cEl('label', 'contacts-row-check');
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.dataset.contactTick = c.uuid;
+        box.checked = contactsTicked.has(c.uuid);
+        box.setAttribute('aria-label', `Select ${name}`);
+        tick.append(box);
+        row.append(tick);
+      }
       row.append(open, star);
       frag.append(row);
     };
@@ -4734,9 +4748,29 @@
       addRow(c, i + 1, rest.length);
     });
     contactsUi.list.append(frag);
+    updateContactsSelectionUi();
     if (contactsSelectedId && !contactsFormState && !contactsAll.some((c) => c.uuid === contactsSelectedId)) {
       closeContactDetail();
     }
+  }
+
+  function updateContactsSelectionUi() {
+    if (contactsTicked) {
+      for (const id of [...contactsTicked]) if (!contactsAll.some((c) => c.uuid === id)) contactsTicked.delete(id);
+    }
+    const n = contactsTicked ? contactsTicked.size : 0;
+    if (contactsUi.select) {
+      contactsUi.select.setAttribute('aria-pressed', contactsTicked ? 'true' : 'false');
+      contactsUi.select.textContent = contactsTicked ? 'Done' : 'Select';
+    }
+    if (contactsUi.exportBtn) contactsUi.exportBtn.textContent = n ? `Export ${n} selected` : 'Export';
+  }
+
+  function toggleContactsSelection() {
+    if (!NotesStore.isUnlocked?.()) { toast('Unlock the vault first', true); return; }
+    contactsTicked = contactsTicked ? null : new Set();
+    renderContactsList();
+    contactsUi.status.textContent = contactsTicked ? 'Selection on. Tick contacts, then Export.' : 'Selection off.';
   }
 
   function closeContactDetail({ focusRow = false } = {}) {
@@ -4788,7 +4822,13 @@
     edit.type = 'button';
     edit.setAttribute('aria-label', `Edit ${name}`);
     edit.addEventListener('click', () => openContactForm(id, edit));
-    bar.append(back, edit);
+    const share = cEl('button', 'btn ghost', 'Share as vCard');
+    share.type = 'button';
+    share.setAttribute('aria-label', `Share ${name} as vCard`);
+    share.addEventListener('click', () => exportContacts(c));
+    const actions = cEl('div', 'contacts-detail-actions');
+    actions.append(share, edit);
+    bar.append(back, actions);
     const head = cEl('div', 'contacts-detail-head');
     const titles = cEl('div', 'contacts-detail-titles');
     const h = cEl('h2', 'contacts-detail-name', name);
@@ -5162,12 +5202,15 @@
   }
 
   function clearContactsUi() {
+    window.NotesContactsImport?.reset();
     contactsAll = [];
     contactsSelectedId = '';
     contactsFormState = null;
     contactsUndo = null;
     contactsActiveLabel = '';
+    contactsTicked = null;
     if (!contactsUi.pane) return;
+    updateContactsSelectionUi();
     contactsUi.search.value = '';
     contactsUi.list.replaceChildren();
     contactsUi.chips.replaceChildren();
@@ -5180,6 +5223,63 @@
     contactsUi.empty.hidden = true;
   }
 
+  // --- vCard import and export (docs/CONTACTS_SPEC.md sections 7 and 8) ---
+  function openContactsImport() {
+    if (!NotesStore.isUnlocked?.()) { toast('Unlock the vault first', true); return; }
+    window.NotesContactsImport.init();
+    window.NotesContactsImport.open({
+      isUnlocked: () => !!NotesStore.isUnlocked?.(),
+      listContacts: () => NotesStore.listContacts(),
+      importContacts: (list, options) => NotesStore.importContacts(list, options),
+      restoreContacts: (record) => NotesStore.restoreContacts(record),
+      done: (result, undoFn) => {
+        refreshContacts();
+        const message = `Imported ${result.created.length} contact${result.created.length === 1 ? '' : 's'}`;
+        if (undoFn) toastWithUndo(message, undoFn); else toast(message);
+      },
+      undone: (message) => { refreshContacts(); toast(message); },
+    });
+  }
+
+  // Exports `only` (one contact, from its detail's "Share as vCard"), else the ticked contacts when the
+  // selection mode has any, else the contacts shown in the list (all of them when no search or label is active).
+  async function exportContacts(only) {
+    if (!NotesStore.isUnlocked?.()) { toast('Unlock the vault first', true); return; }
+    const ticked = contactsTicked && contactsTicked.size ? contactsAll.filter((c) => contactsTicked.has(c.uuid)) : null;
+    const list = only ? [only] : (ticked || filteredContacts());
+    if (!list.length) { toast('No contacts to export', true); return; }
+    const v4 = {
+      label: 'Write vCard 4.0 (default is 3.0, which more programs read)',
+      warning: 'In vCard 3.0 a birthday without a year is written as --MMDD, which a few programs do not understand.',
+      confirmLabelChecked: 'Export vCard 4.0',
+      checked: false,
+    };
+    const confirmed = await confirmAction(
+      'This file is not encrypted. Anyone who gets it can read your contacts; your vault password does not protect it. '
+        + `${list.length} contact${list.length === 1 ? '' : 's'} will be exported. `
+        + 'Everything is built on this device; nothing is sent to the server. Type your vault password to continue.',
+      {
+        title: 'Export contacts without encryption?',
+        confirmLabel: 'Export unencrypted vCard',
+        danger: true,
+        checkbox: v4,
+        verifyPassword: (typed) => NotesStore.verifyVaultPassword(typed),
+        wrongPasswordMessage: 'Wrong password. Nothing was exported.',
+      },
+    );
+    if (confirmed !== true) return;
+    const text = window.NotesContactsVcard.write(list, { version: v4.checked ? '4.0' : '3.0' });
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/vcard;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = only
+      ? `${window.NotesReadableExport.safeName(contactName(only))}.vcf`
+      : `deeperguard-contacts-${new Date().toISOString().slice(0, 10)}.vcf`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Unencrypted export saved. Delete it when you are done.');
+  }
+
   function initContactsTab() {
     if (!contactsUi.pane) return;
     contactsUi.add.addEventListener('click', () => {
@@ -5187,6 +5287,17 @@
       openContactForm('', contactsUi.add);
     });
     contactsUi.emptyAdd.addEventListener('click', () => openContactForm('', contactsUi.emptyAdd));
+    document.getElementById('btn-contacts-import')?.addEventListener('click', openContactsImport);
+    document.getElementById('btn-contacts-export')?.addEventListener('click', () => exportContacts());
+    contactsUi.select?.addEventListener('click', toggleContactsSelection);
+    contactsUi.list.addEventListener('change', (event) => {
+      const box = event.target.closest('[data-contact-tick]');
+      if (!box || !contactsTicked) return;
+      if (box.checked) contactsTicked.add(box.dataset.contactTick);
+      else contactsTicked.delete(box.dataset.contactTick);
+      updateContactsSelectionUi();
+      contactsUi.status.textContent = `${contactsTicked.size} selected`;
+    });
     contactsUi.search.addEventListener('input', renderContactsList);
     contactsUi.search.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && contactsUi.search.value) {
