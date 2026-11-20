@@ -12116,17 +12116,36 @@
     return `<button type="button" class="note-row-more" data-id="${id}" aria-label="More actions for ${title}" title="More actions" aria-haspopup="menu">⋯</button>`;
   }
 
-  // Own order: move up / down buttons, only while the list is in own order and not searched.
+  // The shown list can be reordered: own order inside a label and no search text.
+  function ownOrderEditable() {
+    return manualOrderActive() && !ui.search?.value?.trim();
+  }
+
+  // Own order: drag grip (touch) and move up / down buttons, only while the list can be reordered.
   function noteRowOrderBtnsHtml(note) {
-    if (!manualOrderActive() || ui.search?.value?.trim()) return '';
+    if (!ownOrderEditable()) return '';
     const id = escapeAttr(note.uuid);
     const title = escapeAttr(noteRowActionTitle(note));
-    return `<span class="note-row-order"><button type="button" class="note-row-move" data-id="${id}" data-dir="-1" aria-label="Move ${title} up" title="Move up (Alt+Up)">▲</button><button type="button" class="note-row-move" data-id="${id}" data-dir="1" aria-label="Move ${title} down" title="Move down (Alt+Down)">▼</button></span>`;
+    return `<span class="note-row-grip" data-id="${id}" aria-hidden="true" title="Drag to reorder">⠿</span><span class="note-row-order"><button type="button" class="note-row-move" data-id="${id}" data-dir="-1" aria-label="Move ${title} up" title="Move up (Alt+Up)">▲</button><button type="button" class="note-row-move" data-id="${id}" data-dir="1" aria-label="Move ${title} down" title="Move down (Alt+Down)">▼</button></span>`;
+  }
+
+  // Drag and drop in own order: puts noteId just before or after targetId ('before' | 'after').
+  function dropNoteInOwnOrder(noteId, targetId, zone) {
+    if (!ownOrderEditable() || !noteId || !targetId || noteId === targetId) return false;
+    const ids = [...ui.noteList.querySelectorAll('.note-row')].map((row) => row.dataset.id);
+    if (!ids.includes(noteId) || !ids.includes(targetId)) return false;
+    const rest = ids.filter((id) => id !== noteId);
+    const to = rest.indexOf(targetId) + (zone === 'after' ? 1 : 0);
+    if (to === ids.indexOf(noteId)) return false;
+    if (!NotesStore.moveNoteInLabel(currentTag, ids, noteId, to)) return false;
+    renderNotesNow();
+    toast(`Moved to position ${to + 1} of ${ids.length}`);
+    return true;
   }
 
   // Moves a note one place in the shown own order and keeps focus on the moved row.
   function moveNoteInOwnOrder(noteId, dir) {
-    if (!manualOrderActive() || ui.search?.value?.trim()) return false;
+    if (!ownOrderEditable()) return false;
     const ids = [...ui.noteList.querySelectorAll('.note-row')].map((row) => row.dataset.id);
     const at = ids.indexOf(noteId);
     const to = at + dir;
@@ -12306,7 +12325,7 @@
       : `<span class="note-modified" data-edited="${editedMs || ''}" title="${escapeAttr(timeTitle)}">${escapeHtml(timeLabel)}</span>`;
     const trailing = `<span class="note-row-trailing">${glyphs}${where}</span>`;
     const secondary = compact ? '' : noteRowSecondaryLine(n, query);
-    return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(n.uuid)}"${noteRowDraggable(n) ? ' draggable="true"' : ''}>
+    return `<div class="note-row ${active} ${protectedClass}" data-id="${escapeAttr(n.uuid)}"${noteRowDraggable(n) || ownOrderEditable() ? ' draggable="true"' : ''}>
       ${noteRowSwipeDeleteHtml(n)}
       ${noteRowRestoreBtnHtml(n)}
       ${noteRowMoreBtnHtml(n)}
@@ -23719,14 +23738,20 @@
     noteRowMenuNoteId = id;
     const anchor = anchorEl
       || ui.noteList?.querySelector(`.note-row[data-id="${CSS.escape(id)}"] .note-row-more`);
+    const orderOn = ownOrderEditable();
+    for (const itemId of ['note-row-menu-up', 'note-row-menu-down']) {
+      const item = document.getElementById(itemId);
+      if (item) item.hidden = !orderOn;
+    }
+    menu.hidden = false;
     const rect = anchor?.getBoundingClientRect();
     if (rect) {
-      const top = Math.min(rect.bottom + 4, window.innerHeight - 72);
+      // Keep the whole menu on screen; it is taller while the own-order items show.
+      const top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - Math.max(72, menu.offsetHeight + 8)));
       const left = Math.max(8, Math.min(rect.right - 176, window.innerWidth - 184));
       menu.style.top = `${top}px`;
       menu.style.left = `${left}px`;
     }
-    menu.hidden = false;
     backdrop.hidden = false;
     backdrop.setAttribute('aria-hidden', 'false');
     document.body.classList.add('note-row-menu-open');
@@ -23775,7 +23800,7 @@
 
     list.addEventListener('pointerdown', (event) => {
       if (event.button && event.button !== 0) return;
-      if (event.target.closest('.note-swipe-delete, .note-row-delete, .note-row-restore, .note-row-more, .note-row-move')) return;
+      if (event.target.closest('.note-swipe-delete, .note-row-delete, .note-row-restore, .note-row-more, .note-row-move, .note-row-grip')) return;
       if (opened && !opened.isConnected) opened = null;
       const next = event.target.closest('.note-row');
       if (!next) return;
@@ -23859,25 +23884,107 @@
       axis = null;
     }
 
+    // Own order drop marker: upper half of a row = before it, lower half = after it.
+    const clearOrderDrop = () => list.querySelectorAll('.note-row.drop-before, .note-row.drop-after')
+      .forEach((el) => el.classList.remove('drop-before', 'drop-after'));
+    const orderDropAt = (x, y, draggedId) => {
+      const over = document.elementFromPoint(x, y);
+      const target = over?.closest?.('.note-row');
+      if (!target || !list.contains(target) || target.dataset.id === draggedId) return null;
+      const r = target.getBoundingClientRect();
+      return { target, zone: y < r.top + r.height / 2 ? 'before' : 'after' };
+    };
+    const markOrderDrop = (spot) => {
+      clearOrderDrop();
+      if (spot) spot.target.classList.add(`drop-${spot.zone}`);
+    };
+    let reorderDragId = '';
+
     list.addEventListener('dragstart', (event) => {
       const rowEl = event.target.closest?.('.note-row[draggable="true"]');
       if (!rowEl || !event.dataTransfer) return;
       event.dataTransfer.setData(NOTE_DRAG_TYPE, rowEl.dataset.id);
       event.dataTransfer.effectAllowed = 'move';
-      draggedNoteId = rowEl.dataset.id;
+      // Folders take plain notes only; own order takes every listed row.
+      draggedNoteId = noteRowDraggable(NotesStore.get(rowEl.dataset.id)) ? rowEl.dataset.id : '';
+      reorderDragId = ownOrderEditable() ? rowEl.dataset.id : '';
       rowEl.classList.add('is-dragging');
+    });
+    list.addEventListener('dragover', (event) => {
+      if (!reorderDragId) return;
+      const spot = orderDropAt(event.clientX, event.clientY, reorderDragId);
+      markOrderDrop(spot);
+      if (!spot) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+    });
+    list.addEventListener('drop', (event) => {
+      if (!reorderDragId) return;
+      const spot = orderDropAt(event.clientX, event.clientY, reorderDragId);
+      const id = reorderDragId;
+      // The drop re-renders the list, so dragend may never reach it.
+      reorderDragId = '';
+      draggedNoteId = '';
+      clearOrderDrop();
+      if (!spot) return;
+      event.preventDefault();
+      dropNoteInOwnOrder(id, spot.target.dataset.id, spot.zone);
     });
     list.addEventListener('dragend', () => {
       draggedNoteId = '';
+      reorderDragId = '';
+      clearOrderDrop();
       list.querySelectorAll('.is-dragging').forEach((el) => el.classList.remove('is-dragging'));
       document.querySelectorAll('#folder-list .is-drop-target').forEach((el) => el.classList.remove('is-drop-target'));
     });
+
+    // Touch and pen: drag the grip (the row itself keeps scrolling and swiping).
+    // The mouse uses the native drag of the row above.
+    let gripDrag = null;
+    const endGripDrag = (drop) => {
+      if (!gripDrag) return;
+      const d = gripDrag;
+      gripDrag = null;
+      document.removeEventListener('pointermove', onGripMove, true);
+      document.removeEventListener('pointerup', onGripUp, true);
+      document.removeEventListener('pointercancel', onGripCancel, true);
+      d.row.classList.remove('is-dragging');
+      clearOrderDrop();
+      if (drop && d.spot) dropNoteInOwnOrder(d.id, d.spot.target.dataset.id, d.spot.zone);
+    };
+    function onGripMove(event) {
+      if (!gripDrag || event.pointerId !== gripDrag.pointerId) return;
+      event.preventDefault();
+      gripDrag.row.classList.add('is-dragging');
+      gripDrag.spot = orderDropAt(event.clientX, event.clientY, gripDrag.id);
+      markOrderDrop(gripDrag.spot);
+    }
+    function onGripUp(event) { if (gripDrag && event.pointerId === gripDrag.pointerId) endGripDrag(true); }
+    function onGripCancel(event) { if (gripDrag && event.pointerId === gripDrag.pointerId) endGripDrag(false); }
+    list.addEventListener('pointerdown', (event) => {
+      const grip = event.target.closest('.note-row-grip');
+      if (!grip || gripDrag || event.pointerType === 'mouse' || !ownOrderEditable()) return;
+      const row = grip.closest('.note-row');
+      if (!row) return;
+      event.preventDefault();
+      gripDrag = { id: row.dataset.id, row, pointerId: event.pointerId, spot: null };
+      document.addEventListener('pointermove', onGripMove, { capture: true, passive: false });
+      document.addEventListener('pointerup', onGripUp, true);
+      document.addEventListener('pointercancel', onGripCancel, true);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && gripDrag) { event.stopPropagation(); endGripDrag(false); }
+    }, true);
     list.addEventListener('pointerup', finish);
     list.addEventListener('pointercancel', finish);
     list.addEventListener('click', (event) => {
       if (longPressFired) {
         event.preventDefault();
         longPressFired = false;
+        return;
+      }
+      if (event.target.closest('.note-row-grip')) {
+        event.preventDefault();
         return;
       }
       const moveBtn = event.target.closest('.note-row-move');
@@ -23945,6 +24052,13 @@
     closeNoteRowMenu();
     if (id) openFolderMove(id, back);
   });
+  for (const [itemId, dir] of [['note-row-menu-up', -1], ['note-row-menu-down', 1]]) {
+    document.getElementById(itemId)?.addEventListener('click', () => {
+      const id = noteRowMenuNoteId;
+      closeNoteRowMenu();
+      if (id) moveNoteInOwnOrder(id, dir);
+    });
+  }
   document.getElementById('btn-move-note')?.addEventListener('click', (event) => {
     if (currentId) openFolderMove(currentId, event.currentTarget);
   });
