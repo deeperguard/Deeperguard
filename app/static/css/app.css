@@ -13327,6 +13327,35 @@ a.note-link-dead { text-decoration: line-through dotted; opacity: .85; color: va
   gap: 2px;
 }
 .note-row:has(.note-row-order) .note-item-body { padding-right: 66px; }
+/* Drag grip on the left edge, over the row's empty left padding. */
+.note-row-grip {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 32px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Own order drop marker: an accent line on the edge where the note will land. */
+.note-row.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+.note-row.drop-after { box-shadow: inset 0 -3px 0 var(--accent); }
+/* Wide screens show the "⋯" button at the right: stack the arrows just left of it. */
+@media (min-width: 1000px) {
+  .note-row:has(.note-row-more) .note-row-order { right: 72px; flex-direction: column; gap: 0; }
+  .note-row:has(.note-row-more) .note-row-move { height: 20px; }
+  .note-row:has(.note-row-order):has(.note-row-more) .note-item-body { padding-right: 104px; }
+}
 .note-row-move {
   width: 28px;
   height: 28px;
