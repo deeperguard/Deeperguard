@@ -1724,7 +1724,7 @@
         </div>
         <div class="totp-head-actions">
           <button type="button" id="btn-contacts-duplicates" class="btn ghost" title="Find contacts that are probably the same person, then merge or remove them">Find duplicates</button>
-          <button type="button" id="btn-contacts-import" class="btn ghost" title="Import contacts from vCard files">Import</button>
+          <button type="button" id="btn-contacts-import" class="btn ghost" title="Import contacts from vCard, CSV, LDIF or jCard files">Import</button>
           <button type="button" id="btn-contacts-select" class="btn ghost" title="Tick contacts to export only those" aria-pressed="false">Select</button>
           <button type="button" id="btn-contacts-export" class="btn ghost" title="Export contacts as a vCard file">Export</button>
           <button type="button" id="btn-contacts-add" class="btn icon" title="Add contact" aria-label="Add contact">+</button>
@@ -2878,13 +2878,25 @@
       <h2 id="contacts-import-title">Import contacts</h2>
     </header>
     <div class="scan-dialog-body">
-      <p class="scan-dialog-lead muted">Choose one or more vCard files (.vcf, version 2.1, 3.0 or 4.0), or drop them on this window. The files are read on this device and are not uploaded. The contacts are saved encrypted in your vault.</p>
+      <p class="scan-dialog-lead muted">Choose one or more contact files (vCard 2.1, 3.0 or 4.0, CSV, LDIF or jCard), or drop them on this window. The format is recognised from what is inside the file, not from its name. The files are read on this device and are not uploaded. The contacts are saved encrypted in your vault.</p>
       <div class="scan-add-actions">
         <button type="button" class="btn scan-add-btn" id="contacts-import-pick">Choose files</button>
-        <input type="file" id="contacts-import-file" class="sr-file" multiple accept=".vcf,.vcard,text/vcard,text/x-vcard" tabindex="-1" aria-label="Contact files">
+        <input type="file" id="contacts-import-file" class="sr-file" multiple accept=".vcf,.vcard,.csv,.tsv,.txt,.ldif,.json,.jcf,text/vcard,text/x-vcard,text/csv,application/json" tabindex="-1" aria-label="Contact files">
       </div>
       <p id="contacts-import-status" class="scan-status" role="status" aria-live="polite"></p>
       <p id="contacts-import-error" class="error totp-dialog-error" role="alert" hidden></p>
+      <div id="contacts-import-mapping" hidden>
+        <p id="contacts-import-map-intro" class="scan-dialog-lead muted"></p>
+        <table class="contacts-map-table">
+          <thead><tr><th scope="col">Column</th><th scope="col">Examples</th><th scope="col">Field</th></tr></thead>
+          <tbody id="contacts-import-map-body"></tbody>
+        </table>
+        <p id="contacts-import-map-error" class="error totp-dialog-error" role="alert" hidden></p>
+        <div class="scan-add-actions">
+          <button type="button" class="btn primary" id="contacts-import-map-confirm">Continue to preview</button>
+          <button type="button" class="btn ghost" id="contacts-import-map-cancel">Cancel</button>
+        </div>
+      </div>
       <div id="contacts-import-preview" hidden>
         <p id="contacts-import-summary" class="scan-status" role="status" aria-live="polite"></p>
         <ul id="contacts-import-files" class="totp-import-list"></ul>
@@ -3370,6 +3382,9 @@
   {{ asset_script('js/agenda.js') }}
   {{ asset_script('js/contacts.js') }}
   {{ asset_script('js/contacts-vcard.js') }}
+  {{ asset_script('js/contacts-csv.js') }}
+  {{ asset_script('js/contacts-ldif.js') }}
+  {{ asset_script('js/contacts-jcard.js') }}
   {{ asset_script('js/contacts-import.js') }}
   {{ asset_script('js/contacts-duplicates.js') }}
   {{ asset_script('js/totp.js') }}

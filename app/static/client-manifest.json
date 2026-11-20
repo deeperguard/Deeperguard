@@ -2,10 +2,10 @@
   "asset_count": 113,
   "assets": {
     "css/app.css": {
-      "bytes": 382170,
-      "sha256": "e7929972f4a8e0f0f22daba53a4c3ae149b71723c3ac6ef7221d5ef08d7a238c",
-      "sri": "sha384-K4yaKfpIQRNQejMIEXWceAWNX4sK3zgjRuaUjyd21B/dzop2T+XsqfBvYstx5UkD",
-      "url": "/static/css/app.e7929972f4a8e0f0.css"
+      "bytes": 383537,
+      "sha256": "8ff092a69b808be23234f2057fbdba6f863d966a49d187811b682a07e4e76719",
+      "sri": "sha384-JJRq//QTrFAPC079X/of6J77XZTBvF3ImZ8I+1k3PHfhYeJfdsuxrQhUYh99HL6U",
+      "url": "/static/css/app.8ff092a69b808be2.css"
     },
     "css/marketing.css": {
       "bytes": 55848,
@@ -152,10 +152,10 @@
       "url": "/static/js/conflict-copy.b8dc7a91c94051a9.js"
     },
     "js/contacts-csv.js": {
-      "bytes": 27897,
-      "sha256": "59920a8a45b10ebf5d41d19a1e3965ef30375ce95335b0e9a5690d67c95d5a86",
-      "sri": "sha384-pi35cZLw/4XwA5E71UOKe7o5iTq1neXufghG0iNFPcW/ZRb5wu9t0GHN9wZLqjTj",
-      "url": "/static/js/contacts-csv.59920a8a45b10ebf.js"
+      "bytes": 36611,
+      "sha256": "a12589fc0b233169039e780a0db3770dc24e8f1b331b7544016f1e09d01a2b35",
+      "sri": "sha384-EbFkoCkBr2cYlHdJgot7QNBbwJJdZarepMHl6oFt05FCgefV6Z1RYKq1SQ/ktbox",
+      "url": "/static/js/contacts-csv.a12589fc0b233169.js"
     },
     "js/contacts-duplicates.js": {
       "bytes": 18265,
@@ -164,10 +164,10 @@
       "url": "/static/js/contacts-duplicates.3d21f444c95ac84f.js"
     },
     "js/contacts-import.js": {
-      "bytes": 18061,
-      "sha256": "7658414e6dfaa4867104ace6846fa14f3ddf6b69542383aedbd0c0060a6ecec2",
-      "sri": "sha384-oPibxw/tD9/6r2C5wDg+cNo/dvgxKlUBzN3Vn5eZvJjxVUwaIBQ/sIBz/bZXOKMQ",
-      "url": "/static/js/contacts-import.7658414e6dfaa486.js"
+      "bytes": 25835,
+      "sha256": "156895309077691bd49c8f96ed6a5183b6e79b2db2b7ba494abe220096110b31",
+      "sri": "sha384-Rsnm/Krd0tW3WdzZCa6eD0LJfE6V7ToYswZ7PbcE5ULzbd2xQPrqbRMP5WZLO+OC",
+      "url": "/static/js/contacts-import.156895309077691b.js"
     },
     "js/contacts-jcard.js": {
       "bytes": 16536,
@@ -681,6 +681,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "26ab3b9409643d3f379b2050dde7f0e619f0ee4ea4f041e13e7c8befe90e4808",
+  "manifest_sha256": "4f72595c1ce71504156af9f9b66adb3cacfd66602c94eb6d84d4c3abe31f7a71",
   "version": 1
 }

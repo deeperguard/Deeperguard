@@ -1,14 +1,24 @@
 // Contacts import flow (docs/CONTACTS_SPEC.md section 7): choose files, parse in the browser, preview with
 // counts, import, result summary, undo. Other formats plug into the same preview and summary through
-// registerFormat(). Files are read with File.arrayBuffer() and parsed here; nothing is uploaded and nothing
+// registerFormat(). vCard, LDIF, jCard and CSV are told apart by their content, never by the file name; a CSV
+// that is not a named dialect goes through the mapping step (spec 6.3.2) first. Files are read with File.arrayBuffer() and parsed here; nothing is uploaded and nothing
 // decrypted is stored outside the vault.
 const NotesContactsImport = (() => {
   const LIMITS = { fileBytes: 64 * 1024 * 1024, totalBytes: 128 * 1024 * 1024, contacts: 10000, listed: 50 };
   const NOT_CONTACTS = 'This is not a contact file. Export your contacts as vCard (.vcf) and choose that file.';
+  const UNSUPPORTED = 'This is not a contact file in a supported format. Supported formats: vCard (.vcf), CSV, LDIF and jCard (JSON). Export your contacts in one of these and choose that file.';
+  const SAMPLE_ROWS = 3;
   const formats = [];
+  // The CSV, LDIF and jCard readers are separate scripts; under node (tests) they are required on first use.
+  const lib = {
+    get csv() { return typeof NotesContactsCsv !== 'undefined' ? NotesContactsCsv : require('./contacts-csv.js'); },
+    get ldif() { return typeof NotesContactsLdif !== 'undefined' ? NotesContactsLdif : require('./contacts-ldif.js'); },
+    get jcard() { return typeof NotesContactsJcard !== 'undefined' ? NotesContactsJcard : require('./contacts-jcard.js'); },
+  };
 
   // A format is { id, label, sniff(text) -> bool, parse(text, { encoding }) -> { contacts, skipped, warnings, stats },
-  // describe(stats) -> string }. Contacts are plain objects in the shape NotesContacts.buildContact takes; an
+  // describe(stats) -> string }. parse() may return `needsMapping: { rows }` instead of contacts: the dialog then asks
+  // the user how the columns map before the contacts exist. Contacts are plain objects in the shape NotesContacts.buildContact takes; an
   // optional `photoSource: { mime, bytes }` is re-encoded to the stored JPEG when the import runs.
   function registerFormat(format) {
     if (!format || !format.id || typeof format.sniff !== 'function' || typeof format.parse !== 'function') throw new Error('Invalid import format');
@@ -21,7 +31,7 @@ const NotesContactsImport = (() => {
   // files: File-like objects { name, size, arrayBuffer() }. Never throws for a single bad file.
   async function readFiles(files, { encoding = '', decode } = {}) {
     const dec = decode || NotesContactsVcard.decodeBytes;
-    const out = { files: [], contacts: [], problems: [], overLimit: 0 };
+    const out = { files: [], contacts: [], problems: [], overLimit: 0, pending: [] };
     let total = 0;
     for (const file of files) {
       const name = String(file.name || 'file');
@@ -37,9 +47,17 @@ const NotesContactsImport = (() => {
       const { text, encoding: used } = dec(bytes, encoding);
       if (text.slice(0, 4096).includes('\u0000') || !text.trim()) { entry.reason = text.trim() ? NOT_CONTACTS : 'this file is empty.'; continue; }
       const format = formats.find((f) => f.sniff(text));
-      if (!format) { entry.reason = NOT_CONTACTS; continue; }
+      if (!format) { entry.reason = UNSUPPORTED; continue; }
       let parsed;
       try { parsed = format.parse(text, { encoding: used }); } catch (err) { entry.reason = 'this file could not be read as ' + format.label + '.'; continue; }
+      if (parsed.needsMapping) {
+        entry.encoding = used;
+        entry.label = format.describe ? format.describe(parsed.stats || {}, used) : format.label;
+        entry.warnings = parsed.warnings || [];
+        entry.ok = true;
+        out.pending.push({ entry, name, format, rows: parsed.needsMapping.rows, stats: parsed.stats || {} });
+        continue;
+      }
       entry.encoding = used;
       entry.label = format.describe ? format.describe(parsed.stats || {}, used) : format.label;
       entry.skipped = parsed.skipped || [];
@@ -54,13 +72,33 @@ const NotesContactsImport = (() => {
         out.contacts.push({ ...c, sourceFile: name, sourceFormat: format.id, sourceStats: parsed.stats || {} });
       }
     }
+    collectProblems(out);
+    return out;
+  }
+
+  function collectProblems(out) {
+    out.problems = [];
     for (const f of out.files) {
       if (f.reason) out.problems.push(`${f.name}: ${f.reason}`);
       for (const s of f.skipped) out.problems.push(`${f.name}: ${s.reason}`);
       for (const w of f.warnings) out.problems.push(`${f.name}: ${w}`);
     }
     if (out.overLimit) out.problems.push(`Too many contacts: ${LIMITS.contacts.toLocaleString('en')} is the most per import, ${out.overLimit} were left out. Import the rest in a second run.`);
-    return out;
+  }
+
+  // The user confirmed the column mapping of a pending CSV: its contacts join the others (same limits as above).
+  function finishMapping(out, pending, targets) {
+    const mapped = lib.csv.mapGeneric(pending.rows, targets);
+    const entry = pending.entry;
+    entry.warnings = [...entry.warnings, ...mapped.warnings];
+    entry.found = mapped.contacts.length;
+    if (!mapped.contacts.length) entry.reason = 'no contact in this file could be imported.';
+    for (const c of mapped.contacts) {
+      if (out.contacts.length >= LIMITS.contacts) { out.overLimit += 1; continue; }
+      out.contacts.push({ ...c, sourceFile: entry.name, sourceFormat: pending.format.id, sourceStats: pending.stats });
+    }
+    out.pending = out.pending.filter((p) => p !== pending);
+    collectProblems(out);
   }
 
   const digits = (v) => String(v || '').replace(/\D/g, '');
@@ -141,6 +179,7 @@ const NotesContactsImport = (() => {
   let undoRecord = null;
   let hooks = null;
   let currentFiles = [];
+  let mapping = null; // { pending, targets }: the CSV whose columns the user is mapping (held in memory only)
 
   function setText(id, value) { const e = el(id); if (e) e.textContent = value; }
   function show(id, on) { const e = el(id); if (e) e.hidden = !on; }
@@ -164,6 +203,15 @@ const NotesContactsImport = (() => {
     show('contacts-import-undo', false);
     el('contacts-import-file').value = '';
     el('contacts-import-run').disabled = false;
+    clearMapping();
+  }
+
+  function clearMapping() {
+    mapping = null;
+    show('contacts-import-mapping', false);
+    el('contacts-import-map-body').replaceChildren();
+    setText('contacts-import-map-error', '');
+    show('contacts-import-map-error', false);
   }
 
   function dropUndo() { undoRecord = null; }
@@ -215,11 +263,90 @@ const NotesContactsImport = (() => {
     return importable;
   }
 
+  function truncate(v) { return v.length > 80 ? `${v.slice(0, 80)}…` : v; }
+
+  // Spec 6.3.2: each column with its header, the first sample values and a select of target fields. Everything
+  // from the file goes in through textContent.
+  function showMapping() {
+    const pending = state.pending[0];
+    const headers = pending.rows[0];
+    const targets = headers.map((h) => lib.csv.suggestTarget(h));
+    mapping = { pending, targets };
+    show('contacts-import-preview', false);
+    show('contacts-import-run', false);
+    setText('contacts-import-map-intro', `${pending.entry.name}: this CSV is not from a program we know. Choose what each column holds. Columns set to "Keep as other field" are saved on the contact as they are.`);
+    const body = el('contacts-import-map-body');
+    body.replaceChildren();
+    headers.forEach((h, i) => {
+      const tr = document.createElement('tr');
+      const head = document.createElement('th');
+      head.scope = 'row';
+      head.dataset.label = 'Column';
+      head.textContent = h || `(column ${i + 1})`;
+      const samples = document.createElement('td');
+      samples.dataset.label = 'Examples';
+      pending.rows.slice(1).map((row) => String(row[i] === undefined ? '' : row[i])).filter((v) => v.trim()).slice(0, SAMPLE_ROWS).forEach((v) => {
+        const d = document.createElement('div');
+        d.className = 'contacts-map-sample';
+        d.textContent = truncate(v);
+        samples.append(d);
+      });
+      const pick = document.createElement('td');
+      pick.dataset.label = 'Field';
+      const label = document.createElement('label');
+      label.className = 'sr-only';
+      label.htmlFor = `contacts-import-map-${i}`;
+      label.textContent = `Field for column ${h || i + 1}`;
+      const select = document.createElement('select');
+      select.id = `contacts-import-map-${i}`;
+      for (const [value, text] of lib.csv.TARGETS) {
+        const o = document.createElement('option');
+        o.value = value;
+        o.textContent = text;
+        select.append(o);
+      }
+      select.value = targets[i];
+      select.addEventListener('change', () => { targets[i] = select.value; checkMapping(); });
+      pick.append(label, select);
+      tr.append(head, samples, pick);
+      body.append(tr);
+    });
+    checkMapping();
+    show('contacts-import-mapping', true);
+    const first = el('contacts-import-map-0');
+    if (first) first.focus();
+  }
+
+  function checkMapping() {
+    const problem = lib.csv.checkMapping(mapping.targets);
+    setText('contacts-import-map-error', problem);
+    show('contacts-import-map-error', !!problem);
+    el('contacts-import-map-confirm').disabled = !!problem;
+  }
+
+  function confirmMapping() {
+    if (!mapping || lib.csv.checkMapping(mapping.targets)) return;
+    finishMapping(state, mapping.pending, mapping.targets);
+    mapping = null;
+    show('contacts-import-mapping', false);
+    el('contacts-import-map-body').replaceChildren();
+    if (state.pending.length) showMapping(); else enterPreview();
+  }
+
+  function enterPreview() {
+    const existing = hooks.listContacts();
+    existingHits = findExisting(state.contacts, existing);
+    selected = new Set(state.contacts.map((c, i) => i));
+    renderPreview();
+    if (!state.contacts.length) showError(state.problems[0] || 'No contacts were found.');
+  }
+
   async function load(files) {
     if (busy || !files.length) return;
     currentFiles = files;
     showError('');
     show('contacts-import-result', false);
+    clearMapping();
     busy = true;
     setText('contacts-import-status', 'Reading files…');
     try {
@@ -228,11 +355,7 @@ const NotesContactsImport = (() => {
       busy = false;
       setText('contacts-import-status', '');
     }
-    const existing = hooks.listContacts();
-    existingHits = findExisting(state.contacts, existing);
-    selected = new Set(state.contacts.map((c, i) => i));
-    renderPreview();
-    if (!state.contacts.length) showError(state.problems[0] || 'No contacts were found.');
+    if (state.pending.length) showMapping(); else enterPreview();
   }
 
   async function run() {
@@ -320,6 +443,8 @@ const NotesContactsImport = (() => {
     el('contacts-import-close').addEventListener('click', close);
     el('contacts-import-backdrop').addEventListener('click', close);
     el('contacts-import-run').addEventListener('click', run);
+    el('contacts-import-map-confirm').addEventListener('click', confirmMapping);
+    el('contacts-import-map-cancel').addEventListener('click', resetView);
     el('contacts-import-undo').addEventListener('click', undo);
     el('contacts-import-skip-existing').addEventListener('change', () => { if (state) renderPreview(); });
     el('contacts-import-dialog').addEventListener('keydown', (event) => { if (event.key === 'Escape') { event.preventDefault(); close(); } });
@@ -353,7 +478,54 @@ const NotesContactsImport = (() => {
     },
   });
 
-  return { LIMITS, registerFormat, readFiles, findExisting, previewSummary, attachPhotos, init, open, close, reset, dropUndo };
+  // --- content sniffing: the first bytes decide, never the file name -----------------------------------
+  function firstLine(text) {
+    for (const line of text.slice(0, 4096).replace(/^﻿/, '').split(/\r\n?|\n/)) {
+      if (line.trim() && line[0] !== '#') return line;
+    }
+    return '';
+  }
+
+  registerFormat({
+    id: 'ldif',
+    label: 'LDIF',
+    sniff: (text) => /^(dn:|version: *1 *$)/i.test(firstLine(text)),
+    parse: (text) => lib.ldif.parse(text),
+    describe: (stats, enc) => `LDIF, ${enc}`,
+  });
+
+  registerFormat({
+    id: 'jcard',
+    label: 'jCard',
+    sniff: (text) => /^\s*\[\s*(\[\s*)?"vcard"/.test(text.slice(0, 4096).replace(/^﻿/, '')),
+    parse: (text) => lib.jcard.parse(text),
+    describe: (stats, enc) => `jCard, ${enc}`,
+  });
+
+  // Last: anything with a header of two or more columns and a record under it. JSON and markup never is.
+  registerFormat({
+    id: 'csv',
+    label: 'CSV',
+    sniff: (text) => {
+      if (/^\s*[[{<]/.test(text.slice(0, 64))) return false;
+      const { rows } = lib.csv.readCsv(text.slice(0, 64 * 1024));
+      return rows.length >= 2 && rows[0].length >= 2;
+    },
+    parse: (text) => {
+      const { rows, warnings } = lib.csv.readCsv(lib.csv.cleanText(text));
+      const dialect = rows.length > 1 ? lib.csv.detectDialect(rows[0]) : null;
+      const result = { contacts: [], skipped: [], warnings: [...warnings], stats: { dialect } };
+      if (rows.length < 2) return result;
+      if (!dialect) return { ...result, needsMapping: { rows } };
+      const mapped = lib.csv.mapRows(rows, dialect);
+      result.contacts = mapped.contacts;
+      result.warnings.push(...mapped.warnings);
+      return result;
+    },
+    describe: (stats, enc) => `CSV, ${stats.dialect || 'columns mapped by you'}, ${enc}`,
+  });
+
+  return { LIMITS, registerFormat, readFiles, finishMapping, findExisting, previewSummary, attachPhotos, init, open, close, reset, dropUndo };
 })();
 
 if (typeof window !== 'undefined') window.NotesContactsImport = NotesContactsImport;
