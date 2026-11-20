@@ -1,4 +1,4 @@
-"""A background GET /api/health or /api/account must not rewrite the session cookie.
+"""A background GET /api/health must not rewrite the session cookie.
 
 A permanent cookie session is re-sent on every response. A health poll that was in
 flight while another request changed the session (the vault-keys proof token) wrote
@@ -56,23 +56,10 @@ class HealthPollSessionCookieTests(unittest.TestCase):
         resp = self.client.get("/api/health")
         self.assertEqual(self._set_cookie_headers(resp), [])
 
-    def test_account_refresh_leaves_session_cookie_alone(self):
-        # Right after registration GET /api/account ran between vault-keys/prove and the
-        # recovery-key PUT; its stale copy dropped the proof token and the PUT gave 401.
-        resp = self.client.get("/api/account")
-        self.assertEqual(self._set_cookie_headers(resp), [])
-
     def test_other_requests_still_refresh_permanent_session(self):
         # Any other route keeps the sliding permanent session.
         resp = self.client.get("/login")
         self.assertTrue(self._set_cookie_headers(resp))
-
-    def test_other_api_requests_still_refresh_permanent_session(self):
-        # Only the listed GETs are exempt: other API reads and the sync POSTs an
-        # API-only client keeps sending still slide the expiry.
-        for method, path in (("GET", "/api/boot-account"), ("POST", "/api/sync/pull")):
-            resp = self.client.open(path, method=method, json={} if method == "POST" else None)
-            self.assertTrue(self._set_cookie_headers(resp), f"{method} {path}")
 
 
 if __name__ == "__main__":

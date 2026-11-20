@@ -2,10 +2,10 @@
   "asset_count": 113,
   "assets": {
     "css/app.css": {
-      "bytes": 391659,
-      "sha256": "bf119ed0022b11642525181ba7911d3e5b367adefe1c8c12b868b7894b8225e7",
-      "sri": "sha384-yyMP8iMoJDfMmr2874khMz1HBhy8+ajM9nB2Vdkgi0vWMz+Xeza/sgY7n1L2XA/k",
-      "url": "/static/css/app.bf119ed0022b1164.css"
+      "bytes": 392456,
+      "sha256": "0ecd971ae6c55d5e390d1aa9b83abe85aca6a38c66cbd9c537658687f61528de",
+      "sri": "sha384-AvwoATa/cjXHyC2nY8a+lBYw6rPWAzm4EQL42yBklQilE+OG610kRTR/IQU/gP4N",
+      "url": "/static/css/app.0ecd971ae6c55d5e.css"
     },
     "css/marketing.css": {
       "bytes": 55848,
@@ -86,10 +86,10 @@
       "url": "/static/js/agenda-tz.57449e80ad590b0f.js"
     },
     "js/agenda.js": {
-      "bytes": 158698,
-      "sha256": "c1403f49e70c3eff03345ebe52849d4c4c45b5e1e3e3ffa2705545da63d059fe",
-      "sri": "sha384-tXCfJKNgph56Cpx0vINWhZogg8/WkXe6f3+LbgBgzlsvZYr439DAMLu6m59z3uPn",
-      "url": "/static/js/agenda.c1403f49e70c3eff.js"
+      "bytes": 160878,
+      "sha256": "0c835816705825b08da02d600453fc1e8894eacf90904966ffd6e4b54548c725",
+      "sri": "sha384-EW0QJ90I+45tnhXQQmv8KkTO8yur2yREijI2YyALa1XNByESWPjYmXS8jLdJOZqV",
+      "url": "/static/js/agenda.0c835816705825b0.js"
     },
     "js/ai-chat.js": {
       "bytes": 33550,
@@ -681,6 +681,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "0fdd3e701f959e2371ec94d57adae53ae0d074aca6e8400608dd0db937882a5b",
+  "manifest_sha256": "9e4b9d9a884dc2b3e5a0c91e5448a073edf8049dcd5cefafeaf42049517769c7",
   "version": 1
 }

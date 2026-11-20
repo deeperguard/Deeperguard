@@ -1816,24 +1816,72 @@
     });
   }
 
+  /** Whole calendar days between two local midnights (DST-safe). */
+  function calendarDaysBetween(a, b) {
+    return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate())
+      - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000);
+  }
+
+  /**
+   * Full span of an occurrence for the "day x/y" counter. A single event is read from the event
+   * itself, because the occurrence is clipped to the visible range (a month boundary would cut it).
+   * End dates are exclusive for all-day events (the day after the last day, see the editor save)
+   * and for timed events that end exactly at midnight, so the last day is the one before `end`.
+   */
+  function occCalendarSpan(o) {
+    let start = o.start;
+    let end = o.end;
+    if (!o.recurring) {
+      const span = eventSpan(o.ev);
+      if (span) ({ start, end } = span);
+    }
+    const first = startOfDay(start);
+    const last = startOfDay(new Date(Math.max(end.getTime() - 1, start.getTime())));
+    return { first, days: calendarDaysBetween(first, last) + 1 };
+  }
+
+  /** "x/y" position of `dayMs` inside a multi-day occurrence; null for a single day. */
+  function multiDayCounter(o, dayMs) {
+    const { first, days } = occCalendarSpan(o);
+    if (days < 2) return null;
+    const n = calendarDaysBetween(first, new Date(dayMs)) + 1;
+    return n >= 1 && n <= days ? `${n}/${days}` : null;
+  }
+
   function renderMonthDayList(occ, placed) {
     const pickMs = state.monthPickDay || startOfDay(new Date()).getTime();
     const pick = new Date(pickMs);
     const ds = startOfDay(pick);
     const de = addDays(ds, 1);
     const dayOcc = sortOccForMonthDay(occ.filter((o) => o.end > ds && o.start < de));
+    const isBar = (o) => !!(o.displayAllDay ?? o.ev.all_day) || !!multiDayCounter(o, ds.getTime());
+    const bars = dayOcc.filter(isBar);
+    const rows = dayOcc.filter((o) => !isBar(o));
     let html = `<div class="agenda-month-daylist" data-agenda-month-pick="${ds.getTime()}">`;
-    html += `<h2 class="agenda-month-daylist-title">${esc(pick.toLocaleDateString(agendaUiLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))}</h2>`;
+    html += `<h2 class="agenda-month-daylist-title">${esc(formatLongDate(pick))}</h2>`;
+    if (bars.length) {
+      html += '<ul class="agenda-month-bars">';
+      bars.forEach((o) => {
+        const counter = multiDayCounter(o, ds.getTime());
+        html += (
+          `<li><button type="button" class="agenda-month-bar" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)} style="--agenda-bar:${eventAccentColor(o.ev)}">`
+          + `<span class="agenda-month-bar-title">${esc(occDisplayTitle(o))}</span>`
+          + (counter ? `<span class="agenda-month-bar-count" aria-label="${esc(`day ${counter.replace('/', ' of ')}`)}">${counter}</span>` : '')
+          + '</button></li>'
+        );
+      });
+      html += '</ul>';
+    }
     const dayTasks = tasksOnDay(placed || [], ds.getTime());
     html += renderDayTasks(dayTasks, 'row');
     if (!dayOcc.length && dayTasks.length) {
       // Tasks only: no "No events" line under them.
     } else if (!dayOcc.length) {
       html += '<p class="muted agenda-month-daylist-empty">No events this day.</p>';
-    } else {
+    } else if (rows.length) {
       html += '<ul class="agenda-list">';
-      dayOcc.forEach((o) => {
-        const tlabel = o.ev.all_day ? 'All day' : `${formatTime(o.start)} – ${formatTime(o.end)}`;
+      rows.forEach((o) => {
+        const tlabel = `${formatTime(o.start)} – ${formatTime(o.end)}`;
         html += (
           `<li><button type="button" class="agenda-list-row" data-agenda-id="${esc(o.ev.id)}"${occurrenceChipAttrs(o)}>`
           + `<span class="agenda-list-date">${esc(tlabel)}</span>`
@@ -3837,6 +3885,7 @@
     _placedTasksForRange: (range) => placedTasksForRange(range),
     _renderAgendaList: renderAgendaList,
     _renderMonthGrid: renderMonthGrid,
+    _renderMonthDayList: renderMonthDayList,
     _renderTaskStrip: renderTaskStrip,
     expandEventOccurrences,
     _syncEndToStart: syncEndToStart,
