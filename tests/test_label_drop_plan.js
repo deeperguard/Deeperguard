@@ -61,6 +61,22 @@ const legacy = L.indexOf([
 plan = T.dropPlan(legacy, 'r', 'p', 'before');
 assert.deepStrictEqual(top(apply(legacy, 'r', plan)), ['r', 'p', 'q']);
 
+// repeated drops into the same gap: the orders must not pick up long fractions
+let cur = L.indexOf([
+  rec('a', { name: 'A', parent_id: '', order: 1024 }),
+  rec('b', { name: 'B', parent_id: '', order: 2048 }),
+  rec('m', { name: 'M', parent_id: '', order: 3072 }),
+  rec('n', { name: 'N', parent_id: '', order: 4096 }),
+]);
+let most = 0;
+for (let i = 0; i < 60; i++) {
+  const id = i % 2 ? 'n' : 'm';
+  cur = apply(cur, id, T.dropPlan(cur, id, 'b', 'before'));
+  for (const id2 of top(cur)) most = Math.max(most, (String(cur.get(id2).order).split('.')[1] || '').length);
+}
+assert.ok(most <= 1, `orders kept ${most} decimal places`);
+assert.deepStrictEqual(top(cur), ['a', 'm', 'n', 'b']);
+
 // Alt+Arrow step
 assert.deepStrictEqual(T.siblingStep(tree(), 'b', -1), { target: 'a', zone: 'before' });
 assert.deepStrictEqual(T.siblingStep(tree(), 'b', 1), { target: 'c', zone: 'after' });
