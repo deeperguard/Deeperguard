@@ -29146,7 +29146,11 @@ async function showSettings() {
         }
       }
       if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-        const item = e.target.closest?.('.note-item');
+        // After a click the list re-renders and focus lands on <body>: then the open note is the one to move.
+        let item = e.target.closest?.('.note-item');
+        if (!item && currentId && !typing(e.target)) {
+          item = ui.noteList.querySelector(`.note-row[data-id="${CSS.escape(currentId)}"] .note-item`);
+        }
         if (item && ui.noteList.contains(item) && manualOrderActive()) {
           e.preventDefault();
           moveNoteInOwnOrder(item.dataset.id, e.key === 'ArrowUp' ? -1 : 1);
