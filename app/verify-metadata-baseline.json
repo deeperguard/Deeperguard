@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "baseline_version": 3,
-  "release_tag": "v0.65.287",
-  "generated_at": "2026-11-21T10:47:47Z",
+  "release_tag": "v0.65.288",
+  "generated_at": "2026-11-21T11:54:23Z",
   "generation": "scripts/regenerate-verify-metadata-baseline.py (static code anchors)",
   "evidence_legend": {
     "static_source_analysis": "Static source analysis — required strings found in shipped client JS; not a live Network capture.",
