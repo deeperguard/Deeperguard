@@ -254,4 +254,12 @@ function protoSnapshot() {
   assert.ok(Date.now() - t0 < 20000);
 })();
 
+(() => {
+  const big = 'x'.repeat(64 * 1024 * 1024 + 1);
+  const r = L.parse(big);
+  assert.strictEqual(r.contacts.length, 0);
+  assert.strictEqual(r.skipped.length, 1);
+  assert.match(r.skipped[0].reason, /64 MiB/);
+})();
+
 console.log('contacts ldif and jcard: ok');
