@@ -219,12 +219,12 @@ const NotesContactsLdif = (() => {
     let text;
     let encoding = 'utf-8';
     const result = { contacts: [], skipped: [], warnings: [], stats: { records: 0, encoding, photos: 0, droppedExtra: 0 } };
+    if ((input.byteLength || input.length || 0) > LIMITS.fileBytes) {
+      result.skipped.push({ index: 0, reason: 'This file is larger than 64 MiB.' });
+      return result;
+    }
     if (typeof input === 'string') text = input;
     else {
-      if ((input.byteLength || 0) > LIMITS.fileBytes) {
-        result.skipped.push({ index: 0, reason: 'This file is larger than 64 MiB.' });
-        return result;
-      }
       ({ text, encoding } = decodeBytes(input));
       result.stats.encoding = encoding;
     }
