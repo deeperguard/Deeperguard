@@ -758,7 +758,7 @@ behaviour (DB rows, ciphertext bytes, HTTP status, visible UI), not on source te
 
 ### 9.8 Old client
 - [ ] P13 (partly: sign-in, `GET /api/account` and `GET /api/sessions` with a recovery key are tested in `test_vault_recovery_interrupted.py`; sync not) Old-client request shapes (no header, no `vault_keys`): unlock proof, sync push/pull, `GET /api/account` all behave as before the feature (golden responses minus the added fields).
-- [ ] P14 (not built: the server does not read `X-DG-Vault-Schema` yet, so `prove` is not refused; the late fallback of P15 applies instead) Old client with a recovery key: `password/prove` -> 409 `vault_keys_need_update`, no rotation token issued, nothing else changed.
+- [x] P14 (`tests/test_vault_kdf_wraps.py`) Old client with a recovery key: `password/prove` -> 409 `vault_keys_need_update`, no rotation token issued, nothing else changed.
 - [x] P15 (partly, `tests/test_vault_recovery_interrupted.py`) An old client (no header, no `vault_keys`) changes the password with a recovery key present: change accepted, all wraps deleted in the same transaction, `vault_key_rev` bumped, `vault_key_id` freed, settings report no active recovery key, `recover/start` answers 404, a stale device cannot enrol the old key (409), a new key can be enrolled. `vault_keys_invalidated_at`, the mail and the settings explanation: `tests/test_vault_kdf_wraps.py`, `tests/test_e2e_recovery_key_settings.py`.
 - [ ] E15 (not covered by a test yet) An old client build (previous release's static files) unlocks an account that has a recovery key and passkey wraps and reads/writes notes normally.
 

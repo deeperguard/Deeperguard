@@ -148,6 +148,64 @@ def parse_recovery_put(body: dict) -> tuple[dict | None, str]:
     }, ""
 
 
+_PW_KEYS_FIELDS = frozenset({"key_id", "recovery", "prf"})
+_PW_RECOVERY_FIELDS = frozenset({"key_id", "wrap_version", "recovery_salt", "wrap", "proof_hash"})
+_PW_PRF_FIELDS = frozenset({"credential_id", "key_id", "wrap_version", "prf_salt", "wrap"})
+MAX_PASSWORD_PRF_WRAPS = 50
+
+
+def parse_password_vault_keys(value: Any) -> tuple[dict | None, str]:
+    """Validate `vault_keys` of POST /api/account/password (docs/VAULT_RECOVERY.md 3.5).
+
+    Returns ({"key_id", "recovery": fields|None, "prf": [fields + credential_id]}, "")
+    or (None, error). Every wrap must carry the new key_id of the object itself.
+    """
+    if not isinstance(value, dict):
+        return None, "invalid vault_keys"
+    extra = unexpected_fields(value, _PW_KEYS_FIELDS)
+    if extra:
+        return None, "unexpected field: " + ", ".join(extra)
+    key_id = value.get("key_id")
+    if not valid_key_id(key_id):
+        return None, "invalid key_id"
+    recovery = None
+    if value.get("recovery") is not None:
+        raw = value["recovery"]
+        if not isinstance(raw, dict):
+            return None, "invalid recovery"
+        extra = unexpected_fields(raw, _PW_RECOVERY_FIELDS)
+        if extra:
+            return None, "unexpected field: " + ", ".join(extra)
+        recovery, problem = parse_recovery_put({**raw, "expected_key_rev": 0})
+        if recovery is None:
+            return None, problem
+        if recovery["key_id"] != key_id:
+            return None, "wrap key_id does not match vault_keys.key_id"
+    prf = []
+    raw_list = value.get("prf")
+    if raw_list is not None:
+        if not isinstance(raw_list, list) or len(raw_list) > MAX_PASSWORD_PRF_WRAPS:
+            return None, "invalid prf"
+        seen = set()
+        for raw in raw_list:
+            if not isinstance(raw, dict):
+                return None, "invalid prf"
+            extra = unexpected_fields(raw, _PW_PRF_FIELDS)
+            if extra:
+                return None, "unexpected field: " + ", ".join(extra)
+            cred = raw.get("credential_id")
+            if not isinstance(cred, str) or not cred or cred in seen:
+                return None, "invalid credential_id"
+            seen.add(cred)
+            fields, problem = parse_prf_put({k: v for k, v in raw.items() if k != "credential_id"} | {"expected_key_rev": 0})
+            if fields is None:
+                return None, problem
+            if fields["key_id"] != key_id:
+                return None, "wrap key_id does not match vault_keys.key_id"
+            prf.append({"credential_id": cred, **fields})
+    return {"key_id": key_id, "recovery": recovery, "prf": prf}, ""
+
+
 def lock_seconds(level: int) -> int:
     """Lock length after the 5th failure at the given lock level (3.3): 900 * 2^level, capped."""
     return min(RECOVERY_LOCK_MAX_SECONDS, RECOVERY_LOCK_BASE_SECONDS * (2 ** max(0, min(int(level), 16))))

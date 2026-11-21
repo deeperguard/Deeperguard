@@ -161,6 +161,131 @@ class VaultKdfWrapTests(unittest.TestCase):
         self.assertEqual(self._user(uid)["vault_keys_invalidated_at"], 0)
         mail.assert_not_called()
 
+    # POST /api/account/password with vault_keys, and the schema-header refusal (3.5, 6.2) -----
+
+    def _prove(self, email, password, csrf, header):
+        h = {"X-CSRF-Token": csrf}
+        chal = self.client.post("/api/account/password/challenge", json={}, headers=h).get_json()
+        a_hex, m1 = r63.srp_client_proof(email, password, chal["srp_salt"], chal["B"], chal.get("srp_kdf_version"))
+        if header:
+            h["X-DG-Vault-Schema"] = "1"
+        return self.client.post("/api/account/password/prove", json={"A": a_hex, "M1": m1}, headers=h)
+
+    @staticmethod
+    def _wrap_bodies(kid, cid=None):
+        rb = rec._body(0, kid)
+        recovery = {k: rb[k] for k in ("key_id", "wrap_version", "recovery_salt", "wrap", "proof_hash")}
+        keys = {"key_id": kid, "recovery": recovery}
+        if cid:
+            pb = prf._prf_body(0, kid)
+            keys["prf"] = [{"credential_id": cid, **{k: pb[k] for k in ("key_id", "wrap_version", "prf_salt", "wrap")}}]
+        return keys
+
+    def test_prove_refuses_without_schema_header_when_wraps_exist(self):
+        uid, email, password, csrf = self._signed_in()
+        self._enrol_both(email, password, csrf, uid)
+        resp = self._prove(email, password, csrf, header=False)
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.get_json()["code"], "vault_keys_need_update")
+        self.assertNotIn("rotation_token", resp.get_json())
+        ok = self._prove(email, password, csrf, header=True)
+        self.assertEqual(ok.status_code, 200, ok.get_json())
+        self.assertTrue(ok.get_json()["rotation_token"])
+
+    def test_prove_with_only_a_passkey_wrap_is_also_refused_without_header(self):
+        uid, email, password, csrf = self._signed_in()
+        cid = self._passkey(uid)
+        self.assertEqual(
+            self._put_prf(email, password, csrf, cid, prf._prf_body(0, secrets.token_hex(16))).status_code, 200,
+        )
+        self.assertEqual(self._prove(email, password, csrf, header=False).status_code, 409)
+
+    def test_prove_without_wraps_needs_no_header(self):
+        uid, email, password, csrf = self._signed_in()
+        resp = self._prove(email, password, csrf, header=False)
+        self.assertEqual(resp.status_code, 200, resp.get_json())
+
+    def test_password_change_with_vault_keys_stores_new_wraps_atomically(self):
+        mail = self._with_mail()
+        uid, email, password, csrf = self._signed_in()
+        self._enrol_both(email, password, csrf, uid)
+        other = self._passkey(uid)
+        before = self._user(uid)
+        new_kid = secrets.token_hex(16)
+        keys = self._wrap_bodies(new_kid, cid=other)
+        resp = self._change_password(email, password, "another-vault-password-1", csrf, vault_keys=keys)
+        self.assertEqual(resp.status_code, 200, resp.get_json())
+        user = self._user(uid)
+        self.assertEqual(user["vault_key_id"], new_kid)
+        self.assertEqual(user["vault_key_rev"], before["vault_key_rev"] + 1)
+        self.assertEqual(user["vault_keys_invalidated_at"], 0)
+        self.assertEqual(self._wrap_counts(uid), (1, 1))
+        status = self._status()
+        self.assertTrue(status["recovery"]["active"])
+        self.assertEqual([p["credential_id"] for p in status["prf"]], [other])
+        self.assertTrue(status["prf"][0]["current"])
+        import db as notes_db
+
+        conn = notes_db.connection()
+        self.assertEqual(
+            {r[0] for r in conn.execute("SELECT key_id FROM vault_recovery_wraps WHERE user_id = ?", (uid,))}
+            | {r[0] for r in conn.execute("SELECT key_id FROM vault_prf_wraps WHERE user_id = ?", (uid,))},
+            {new_kid},
+        )
+        mail.assert_not_called()
+
+    def test_password_change_without_new_recovery_copy_sets_marker(self):
+        mail = self._with_mail()
+        uid, email, password, csrf = self._signed_in()
+        self._enrol_both(email, password, csrf, uid)
+        new_kid = secrets.token_hex(16)
+        keys = self._wrap_bodies(new_kid)
+        del keys["recovery"]
+        keys["prf"] = self._wrap_bodies(new_kid, cid=self._passkey(uid))["prf"]
+        resp = self._change_password(email, password, "another-vault-password-1", csrf, vault_keys=keys)
+        self.assertEqual(resp.status_code, 200, resp.get_json())
+        user = self._user(uid)
+        self.assertEqual(self._wrap_counts(uid), (0, 1))
+        self.assertEqual(user["vault_key_id"], new_kid)
+        self.assertEqual(user["vault_keys_invalidated_at"], resp.get_json()["password_changed_at"])
+        self.assertEqual(mail.call_count, 1)
+
+    def test_password_change_with_empty_vault_keys_clears_key_id(self):
+        uid, email, password, csrf = self._signed_in()
+        self._enrol_both(email, password, csrf, uid)
+        resp = self._change_password(
+            email, password, "another-vault-password-1", csrf, vault_keys={"key_id": secrets.token_hex(16)},
+        )
+        self.assertEqual(resp.status_code, 200, resp.get_json())
+        user = self._user(uid)
+        self.assertEqual(self._wrap_counts(uid), (0, 0))
+        self.assertEqual(user["vault_key_id"], "")
+        self.assertGreater(user["vault_keys_invalidated_at"], 0)
+
+    def test_wrong_key_id_in_a_wrap_is_rejected_and_nothing_changes(self):
+        uid, email, password, csrf = self._signed_in()
+        old_kid = self._enrol_both(email, password, csrf, uid)
+        before = self._user(uid)
+        keys = self._wrap_bodies(secrets.token_hex(16))
+        keys["recovery"]["key_id"] = old_kid
+        resp = self._change_password(email, password, "another-vault-password-1", csrf, vault_keys=keys)
+        self.assertEqual(resp.status_code, 400, resp.get_json())
+        after = self._user(uid)
+        self.assertEqual(after, before)
+        self.assertEqual(self._wrap_counts(uid), (1, 1))
+        # The old password still works: no verifier was written.
+        self.assertEqual(self._prove(email, password, csrf, header=True).status_code, 200)
+
+    def test_foreign_credential_rolls_back_the_whole_change(self):
+        uid, email, password, csrf = self._signed_in()
+        self._enrol_both(email, password, csrf, uid)
+        before = self._user(uid)
+        keys = self._wrap_bodies(secrets.token_hex(16), cid="not-my-credential")
+        resp = self._change_password(email, password, "another-vault-password-1", csrf, vault_keys=keys)
+        self.assertEqual(resp.status_code, 400, resp.get_json())
+        self.assertEqual(self._user(uid), before)
+        self.assertEqual(self._wrap_counts(uid), (1, 1))
+
 
 if __name__ == "__main__":
     unittest.main()
