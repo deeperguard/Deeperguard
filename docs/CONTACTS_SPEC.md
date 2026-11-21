@@ -1710,8 +1710,9 @@ native radios in a `radiogroup`; each button's accessible name includes the grou
 
 ## 8. Export
 
-Entry point: **Export** in the Contacts pane (all contacts, or the selected
-contacts, or one contact from its detail "Share as vCard"). Exports are made in
+Entry point: **Export** in the Contacts pane (the contacts shown in the list,
+which are all of them unless a search or filter is active; or the selected
+contacts; or one contact from its detail "Share as vCard"). Exports are made in
 the browser from decrypted in-memory contacts and saved as a download
 (`URL.createObjectURL`, `a.download`, the same as the readable export,
 `app.js:25350-25356`); no request is made.
@@ -1726,7 +1727,11 @@ wrongPasswordMessage})`, `app.js:25318-25333`):
 1. Warning text: "This file is not encrypted. Anyone who gets it can read
    your contacts. Your vault password does not protect it. Everything is built
    on this device; nothing is sent to the server. Type your vault password to
-   continue." with the count ("248 contacts will be exported").
+   continue." with the count ("248 contacts will be exported"). When no
+   selection is ticked and a search or filter is active, the text also says:
+   "Only the contacts shown in the list are exported, because a search or
+   filter is active."
+
 2. The password is typed again and checked in the browser by
    `NotesStore.verifyVaultPassword` (`store.js:6285`); a wrong password shows
    "Wrong password. Nothing was exported." and nothing is built; after three

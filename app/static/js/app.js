@@ -5483,6 +5483,8 @@
     const ticked = contactsTicked && contactsTicked.size ? contactsAll.filter((c) => contactsTicked.has(c.uuid)) : null;
     const list = only ? [only] : (ticked || filteredContacts());
     if (!list.length) { toast('No contacts to export', true); return; }
+    // With no selection, Export takes the contacts shown in the list; say so when a search or filter narrows them.
+    const narrowed = !only && !ticked && (contactsUi.search.value.trim() !== '' || contactsActiveLabel !== '');
     const format = {
       label: 'Format',
       value: 'vcard3',
@@ -5495,6 +5497,7 @@
     const confirmed = await confirmAction(
       'This file is not encrypted. Anyone who gets it can read your contacts; your vault password does not protect it. '
         + `${list.length} contact${list.length === 1 ? '' : 's'} will be exported. `
+        + (narrowed ? 'Only the contacts shown in the list are exported, because a search or filter is active. ' : '')
         + 'Everything is built on this device; nothing is sent to the server. Type your vault password to continue.',
       {
         title: 'Export contacts without encryption?',
