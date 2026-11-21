@@ -176,10 +176,10 @@
       "url": "/static/js/contacts-jcard.f7545b2ea6ce956d.js"
     },
     "js/contacts-ldif.js": {
-      "bytes": 15699,
-      "sha256": "e453848e201e968e9b253295de948b7b78955e9359be2e64f544463ae38bb760",
-      "sri": "sha384-VHUpakAEEQpWUvJQbeaYMHst2Ldcz3nisP3q5zyZu3uYNWaETQ9KzSbQWyhioPzS",
-      "url": "/static/js/contacts-ldif.e453848e201e968e.js"
+      "bytes": 15707,
+      "sha256": "6e1d70b85b7d7f6ded39e09f1c2ec5e6af6d19d1c889e1536b247038b713a672",
+      "sri": "sha384-FwCp+bVqUkanPcpDXnJrETnVeg2sjIMpLtgdnUoV7gYC0ES10mNte6nTB6G85Arc",
+      "url": "/static/js/contacts-ldif.6e1d70b85b7d7f6d.js"
     },
     "js/contacts-vcard.js": {
       "bytes": 32126,
@@ -681,6 +681,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "84a38e31e4e6d7d3700eb038bcaf3af6d96e0d19127aa11cc818ab6a51ce17cf",
+  "manifest_sha256": "67f92cd33788e459e362e54b13e01296df593cd5e539fc33999aac5ccd8ce483",
   "version": 1
 }
