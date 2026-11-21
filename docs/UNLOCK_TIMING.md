@@ -93,3 +93,48 @@ De app mist geen foutafhandeling meer; de enige zichtbare winst zit in snelheid 
 
 De bestaande watchdog-test `tests/test_unlock_worker_watchdog.js` dekt de hang-paden al; er is
 daarom in deze taak geen extra reproductietest toegevoegd.
+
+## Wijziging (taak 516)
+
+**Oorzaak.** De diagnose hierboven blijft staan: geen belofte die niet afrondt, geen worker die na
+herladen niet start, en geen trage terugval terwijl WASM beschikbaar is (er is geen WASM). De
+traagheid is de pure-JS Argon2id zelf. Die sneller maken (punt 1 hierboven) betekent nieuwe
+crypto-code en een nieuwe vendored bibliotheek; deze taak eist dat Argon2id-parameters en
+crypto-code ongewijzigd blijven, dus dat is hier **niet** gedaan en blijft een aparte beslissing.
+`crypto.js`, `crypto-worker.js` en `vendor/` zijn niet aangeraakt; SRP ook niet.
+
+Wat wel veranderd is:
+
+- **Verstreken tijd, geen percentage.** Tijdens `Deriving key…` toont de status `Deriving key… N s`
+  (`renderLoginProgressFrame`, `app/static/js/app.js:7771`). Een timer van 1 s start in
+  `beginLoginProgress` (`app.js:7901`) en stopt in `dismissLoginProgress` (`app.js:7934`). Het
+  getal staat in een `aria-hidden` span, zodat de `aria-live`-status niet elke seconde voorleest.
+- **Ruime grens: `UNLOCK_DERIVE_TIMEOUT_MS = 300000` (5 min, `app.js:7681`).** Eén
+  `NotesStore.unlock` kan meerdere Argon2id-runs doen (beide KDF-versies scoren, alt-sleutel bij een
+  gemengde kluis). De grens ligt daarom ruim boven de worker-watchdog van 90 s
+  (`crypto.js:363`), zodat watchdog plus hoofdthread-terugval eerst hun kans krijgen; gemeten is
+  4,5–5,9 s per ontgrendeling op deze machine. Een apparaat dat meer dan 5 min nodig heeft, krijgt
+  de melding; dat is niet gemeten op echte trage hardware.
+- **Afbreken in plaats van doorlaten.** `unlockWithDeadline` (`app.js:7703`) begrenst de vier
+  `NotesStore.unlock`-aanroepen in de ontgrendelflow. Bij de grens roept het
+  `NotesStore.cancelUnlock()` (`store.js:521`) aan: de poging wordt als geannuleerd gemarkeerd en
+  de crypto-worker wordt beëindigd (`NotesCrypto.terminateWorker`), zodat een nieuwe poging niet
+  achter de oude Argon2-run wacht. De knop komt terug op `Unlock` met "Unlocking took too long.
+  Your vault is still locked. Try again." in `#unlock-error`.
+- **Een late poging raakt de kluis niet.** Elke `unlock()` krijgt een eigen poging-object
+  (`store.js:789`). Na elke `await` op het ontgrendelpad wordt gecontroleerd of de poging
+  geannuleerd is; een geannuleerde poging start geen hoofdthread-terugval (`store.js:542`) en
+  schrijft nooit `cryptoKey`, `altCryptoKey`, `kdfVersion` of `kdfProbeMixed`. De sleutelstatus
+  wordt pas op één commit-punt na alle afleidingen gezet (`store.js:829`). Er is dus geen late
+  `lock()` meer nodig. Een nieuwe `unlock()` annuleert een oudere die nog afleidt, en `lock()`
+  (`store.js:899`) annuleert een lopende afleiding. Een poging die al gecommit heeft, kan niet meer
+  geannuleerd worden; dan wacht `unlockWithDeadline` gewoon op het einde.
+- **Beperking.** Als de worker al faalde en de hoofdthread-terugval loopt, kan die run niet
+  onderbroken worden; het resultaat wordt alleen weggegooid.
+
+Tests: `tests/test_unlock_cancel.js` (node: annuleren, worker beëindigd zonder terugval, late
+uitkomst laat een nieuwere ontgrendeling en `lockEpoch` ongemoeid, `lock()` tijdens afleiding) en
+`tests/e2e_unlock_derive_progress.py` (Playwright, echte worker: oplopende seconden na herladen,
+gesimuleerde fout geeft de knop vrij met kluis vergrendeld, en een te late afleiding met verkeerd
+wachtwoord die in dezelfde pagina wordt overgedaan: worker beëindigd, kluis blijft daarna open met
+dezelfde sleutel, en een nieuwe notitie wordt opgeslagen en gesynchroniseerd).

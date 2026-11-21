@@ -7674,6 +7674,11 @@
     unlockGateOpen = false;
     endVaultPull();
   }
+  // Upper bound for one NotesStore.unlock call (it can run several Argon2id
+  // derivations). It must stay well above crypto.js WORKER_TIMEOUT_MS (90 s),
+  // so a slow device still gets the worker watchdog and the main-thread
+  // fallback before the attempt is given up.
+  const UNLOCK_DERIVE_TIMEOUT_MS = 300000;
   const loginProgress = {
     displayed: 0,
     target: 0,
@@ -7681,7 +7686,33 @@
     raf: 0,
     timer: 0,
     creep: 0,
+    startedAt: 0,
+    elapsedTimer: 0,
   };
+
+  function unlockDeriveTimeoutMs() {
+    const override = Number(window.__notesUnlockDeriveTimeoutMs);
+    return override > 0 ? override : UNLOCK_DERIVE_TIMEOUT_MS;
+  }
+
+  // NotesStore.unlock bounded by unlockDeriveTimeoutMs(). At the deadline the
+  // attempt is cancelled in the store (its result is discarded and the crypto
+  // worker is terminated), so a retry starts fresh and a late result can never
+  // touch the key of a newer attempt. An attempt that already committed its
+  // key cannot be cancelled; then the wrapper waits for it to finish.
+  function unlockWithDeadline(...args) {
+    const work = Promise.resolve(NotesStore.unlock(...args));
+    let timer = 0;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        if (!NotesStore.cancelUnlock()) return;
+        const err = new Error('Unlocking took too long. Your vault is still locked. Try again.');
+        err.code = 'UNLOCK_DERIVE_TIMEOUT';
+        reject(err);
+      }, unlockDeriveTimeoutMs());
+    });
+    return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
+  }
 
   const UNLOCK_PHASE_WEIGHT = {
     kdf: { start: 0, size: 18, label: 'Deriving vault key' },
@@ -7743,12 +7774,27 @@
     const text = indeterminate
       ? 'Deriving key…'
       : `${unlockProgressLabel(loginProgress.phase)}… ${pct}%`;
+    // Elapsed seconds, not a percentage: the derivation reports no real
+    // progress. aria-hidden keeps the polite live region from announcing
+    // every tick.
+    const elapsed = indeterminate && loginProgress.startedAt
+      ? ` ${Math.max(0, Math.floor((Date.now() - loginProgress.startedAt) / 1000))} s`
+      : '';
+    const setStatus = (el) => {
+      el.textContent = text;
+      if (!elapsed) return;
+      const span = document.createElement('span');
+      span.className = 'unlock-elapsed';
+      span.setAttribute('aria-hidden', 'true');
+      span.textContent = elapsed;
+      el.appendChild(span);
+    };
     const overlay = document.getElementById('login-progress-overlay');
     const overlayStatus = document.getElementById('login-progress-status');
     const overlayBar = document.getElementById('login-progress-bar');
     const overlayTrack = overlay?.querySelector('.login-progress-track');
     if (overlay) overlay.hidden = false;
-    if (overlayStatus) overlayStatus.textContent = text;
+    if (overlayStatus) setStatus(overlayStatus);
     if (overlayBar) overlayBar.style.width = indeterminate ? '' : `${Math.max(2, pct)}%`;
     if (overlayTrack) {
       if (indeterminate) overlayTrack.removeAttribute('aria-valuenow');
@@ -7768,7 +7814,7 @@
       const barEl = document.getElementById(barId);
       const wrapEl = document.getElementById(wrapId);
       if (statusEl) {
-        statusEl.textContent = text;
+        setStatus(statusEl);
         statusEl.hidden = false;
       }
       if (barEl) barEl.style.width = indeterminate ? '' : `${Math.max(2, pct)}%`;
@@ -7857,6 +7903,11 @@
     loginProgress.displayed = 0;
     loginProgress.target = 0;
     loginProgress.phase = 'kdf';
+    loginProgress.startedAt = Date.now();
+    if (loginProgress.elapsedTimer) clearInterval(loginProgress.elapsedTimer);
+    loginProgress.elapsedTimer = window.setInterval(() => {
+      if (loginProgressActive && loginProgress.phase === 'kdf') renderLoginProgressFrame();
+    }, 1000);
     const overlay = document.getElementById('login-progress-overlay');
     if (overlay) overlay.setAttribute('aria-busy', 'true');
     renderLoginProgressFrame();
@@ -7882,6 +7933,11 @@
 
   function dismissLoginProgress() {
     stopLoginCreep();
+    if (loginProgress.elapsedTimer) {
+      clearInterval(loginProgress.elapsedTimer);
+      loginProgress.elapsedTimer = 0;
+    }
+    loginProgress.startedAt = 0;
     if (loginProgress.raf) {
       cancelAnimationFrame(loginProgress.raf);
       loginProgress.raf = 0;
@@ -9335,7 +9391,7 @@
       const cached = NotesStore.cachedAccount();
       const salt = cached.kdf_salt;
         if (salt) {
-        await NotesStore.unlock(clean, salt);
+        await unlockWithDeadline(clean, salt);
         if (NotesStore.state.kdfFastReject) {
           clearSavedUnlockSecrets();
           NotesStore.lock();
@@ -9395,7 +9451,7 @@
           unlockPrimaryRevealed = false;
           const altVersion = NotesStore.state.kdfVersion >= 2 ? 1 : 2;
           try {
-            await NotesStore.unlock(clean, salt, { kdfVersion: altVersion });
+            await unlockWithDeadline(clean, salt, { kdfVersion: altVersion });
             loadResult = await loadVaultLocal();
             opened = loadResult;
             localAllFailed = loadResult.localAllFailed;
@@ -9446,7 +9502,7 @@
               sessionValid = true;
               serverResult = { ok: true };
               const nextSalt = NotesStore.cachedAccount().kdf_salt || salt;
-              await NotesStore.unlock(clean, nextSalt);
+              await unlockWithDeadline(clean, nextSalt);
             }
             // Local ciphertext failed. Continue only when a server row decrypts.
             // An empty server vault must not wipe the local rows or open the shell.
@@ -9658,7 +9714,7 @@
       const data = await bootstrapServerSession(cached, {
         retryOnLoginRequired: !!(silent && isPostLoginBootUnlock()),
       });
-      await NotesStore.unlock(clean, data.kdf_salt);
+      await unlockWithDeadline(clean, data.kdf_salt);
       if (NotesStore.state.kdfFastReject) {
         if (silent) deferAutoUnlock();
         rejectWrongUnlockPassword();
