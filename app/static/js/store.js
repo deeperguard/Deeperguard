@@ -773,10 +773,11 @@ const NotesStore = (() => {
     if (now - lastVaultKdfRetryAt < 60000) return false;
     lastVaultKdfRetryAt = now;
     try {
-      await api('/api/account/vault-kdf', {
+      const kdfRes = await api('/api/account/vault-kdf', {
         method: 'POST',
         body: JSON.stringify({ vault_kdf_version: 2 }),
       });
+      ackAuthSecurity(kdfRes?.auth_security_at);
       persistVaultKdfServerVersion(2);
       markVaultKdfMigrationComplete();
       return true;
@@ -7083,10 +7084,11 @@ const NotesStore = (() => {
       }
       await flush();
       try {
-        await api('/api/account/vault-kdf', {
+        const kdfRes = await api('/api/account/vault-kdf', {
           method: 'POST',
           body: JSON.stringify({ vault_kdf_version: 2 }),
         });
+        ackAuthSecurity(kdfRes?.auth_security_at);
         persistVaultKdfServerVersion(2);
         markVaultKdfMigrationComplete();
       } catch (err) {
