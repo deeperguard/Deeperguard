@@ -138,6 +138,36 @@ one.stage.children.splice(1);
 const oneCtl = attach({ card: one.card, stage: one.stage, scroller: one.scroller, doc: document });
 assert.strictEqual(oneCtl.bar.querySelector('.doc-inline-pagenav').hidden, true);
 
+// Document-wide arrow keys page the viewer only while the pointer or focus is inside it,
+// and never while typing in a field, the full preview overlay or the confirm dialog is open.
+const dialogs = { 'doc-viewer': new Element('div'), 'confirm-dialog': new Element('div') };
+dialogs['doc-viewer'].hidden = true;
+dialogs['confirm-dialog'].hidden = true;
+document.getElementById = (id) => dialogs[id] || null;
+const pressKey = (key, target) => (document.listeners.keydown || []).forEach((fn) => fn({
+  key, target, preventDefault() {},
+}));
+const textField = new Element('input');
+const inViewer = new Element('div');
+ctl.goToPage(1);
+fire(f.card, 'mouseenter');
+pressKey('ArrowRight', inViewer);
+assert.strictEqual(ctl.getPage(), 2, 'arrow key pages while the pointer is over the viewer');
+pressKey('ArrowRight', textField);
+assert.strictEqual(ctl.getPage(), 2, 'typing in a text field does not page');
+dialogs['doc-viewer'].hidden = false;
+pressKey('ArrowRight', inViewer);
+assert.strictEqual(ctl.getPage(), 2, 'the open full preview overlay takes the keys');
+dialogs['doc-viewer'].hidden = true;
+pressKey('ArrowRight', inViewer);
+assert.strictEqual(ctl.getPage(), 3, 'the same key pages again once the overlay is closed');
+dialogs['confirm-dialog'].hidden = false;
+pressKey('ArrowLeft', inViewer);
+assert.strictEqual(ctl.getPage(), 3, 'an open confirm dialog takes the keys');
+dialogs['confirm-dialog'].hidden = true;
+pressKey('ArrowLeft', inViewer);
+assert.strictEqual(ctl.getPage(), 2);
+
 (async () => {
   // Full screen opens and closes.
   const fs = ctl.bar.querySelector('.doc-ctl-fullscreen');
