@@ -9,6 +9,7 @@ from __future__ import annotations
 import shutil
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -157,7 +158,9 @@ def test_phone_month_is_compact(session, width, height):
         assert m["gridBottom"] - m["gridTop"] <= 0.45 * height, m
     if (width, height) == (390, 844):
         assert m["visible"] >= 4, m
-        assert m["listTop"] <= 677 - 250, m  # list started at y=677 before the compact rows
+        # 677 is the list's top at 390x844 before the compact rows, as recorded when this test
+        # was added (commit c361c1c; not re-measured). The compact grid must gain at least 250px.
+        assert m["listTop"] <= 677 - 250, m
 
 
 def test_list_scrolls_and_fab_does_not_cover_last_event(session):
@@ -187,3 +190,23 @@ def test_desktop_month_unchanged(session):
     assert m["weekNums"] == 0
     assert m["rowH"] >= 88, "desktop cells keep their height"
     assert m["listTop"] is None
+
+
+def test_five_week_month_marks_today_and_pick(session):
+    page = session
+    _month(page, 390, 844)
+    # October 2026 spans five week rows; the clock moves to 15 October so today is in that month.
+    page.clock.set_fixed_time(datetime(2026, 10, 15, 12, 0))
+    try:
+        page.click("#agenda-prev")
+        page.click('#agenda-root .agenda-month-cell:not(.is-out) .agenda-month-date >> text="14"')
+        m = page.evaluate(MEASURE)
+        assert m["rows"] == 5, m
+        today = page.locator("#agenda-root .agenda-month-cell.is-today .agenda-month-date")
+        pick = page.locator("#agenda-root .agenda-month-cell.is-pick .agenda-month-date")
+        assert today.count() == 1 and today.inner_text() == "15", "today is marked in a five-row month"
+        assert pick.count() == 1 and pick.inner_text() == "14", "the picked day is marked in a five-row month"
+    finally:
+        page.clock.set_fixed_time(datetime(2026, 11, 20, 12, 0))
+        page.click("#agenda-next")
+        page.click('#agenda-root .agenda-month-cell:not(.is-out) .agenda-month-date >> text="20"')
