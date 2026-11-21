@@ -15,14 +15,46 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_JS = (ROOT / "app/static/js/app.js").read_text(encoding="utf-8")
 LABELS_JS = ROOT / "app/static/js/labels.js"
 
-def _source_between(source: str, start: str, end: str) -> str:
-    """Return the text from `start` up to (not including) `end`, failing clearly if either anchor is gone."""
-    assert start in source, f"app.js no longer defines '{start}'; update this test's anchors"
-    assert end in source, f"app.js no longer defines '{end}'; update this test's anchors"
-    return source.split(start, 1)[1].split(end, 1)[0]
+def _function_source(source: str, name: str) -> str:
+    """Return `function <name>(...) {...}` from `source`, cut at the brace that closes its body.
+
+    Only the function's own name is needed, so the text after it may change freely.
+    Braces inside string, template and comment text are skipped.
+    """
+    head = f"function {name}("
+    assert source.count(head) == 1, f"app.js must define '{head}' exactly once; update this test"
+    start = source.index(head)
+    body_open = source.index("{", source.index(")", start))
+    depth = 0
+    quote = None
+    i = body_open
+    while i < len(source):
+        c = source[i]
+        if quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+        elif source.startswith("//", i):
+            i = source.index("\n", i)
+            continue
+        elif source.startswith("/*", i):
+            i = source.index("*/", i) + 2
+            continue
+        elif c in "'\"`":
+            quote = c
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:i + 1]
+        i += 1
+    raise AssertionError(f"body of '{head}' in app.js is not closed")
 
 
-MOVE_SRC = "function moveLabel(" + _source_between(APP_JS, "function moveLabel(", "function openLabelMenu(")
+MOVE_SRC = _function_source(APP_JS, "moveLabel")
 
 STORE_JS = """
 window.toasts = [];
