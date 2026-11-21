@@ -24328,10 +24328,37 @@
     // Touch and pen: drag the grip (the row itself keeps scrolling and swiping).
     // The mouse uses the native drag of the row above.
     let gripDrag = null;
+    // A grip held near the top or bottom edge of the list scrolls it, so rows out of view can be reached.
+    const GRIP_EDGE_PX = 56;
+    const GRIP_MAX_STEP_PX = 16;
+    let gripPointer = null;
+    let gripScrollFrame = 0;
+    const gripEdgeStep = (y) => {
+      const r = list.getBoundingClientRect();
+      const up = Math.min(1, (r.top + GRIP_EDGE_PX - y) / GRIP_EDGE_PX);
+      const down = Math.min(1, (y - (r.bottom - GRIP_EDGE_PX)) / GRIP_EDGE_PX);
+      if (up > 0) return -Math.ceil(up * GRIP_MAX_STEP_PX);
+      if (down > 0) return Math.ceil(down * GRIP_MAX_STEP_PX);
+      return 0;
+    };
+    const gripEdgeScroll = () => {
+      gripScrollFrame = 0;
+      const step = gripDrag && gripPointer ? gripEdgeStep(gripPointer.y) : 0;
+      const before = list.scrollTop;
+      if (!step) return;
+      list.scrollTop += step;
+      if (list.scrollTop === before) return;
+      gripDrag.spot = orderDropAt(gripPointer.x, gripPointer.y, gripDrag.id);
+      markOrderDrop(gripDrag.spot);
+      gripScrollFrame = requestAnimationFrame(gripEdgeScroll);
+    };
     const endGripDrag = (drop) => {
       if (!gripDrag) return;
       const d = gripDrag;
       gripDrag = null;
+      gripPointer = null;
+      cancelAnimationFrame(gripScrollFrame);
+      gripScrollFrame = 0;
       document.removeEventListener('pointermove', onGripMove, true);
       document.removeEventListener('pointerup', onGripUp, true);
       document.removeEventListener('pointercancel', onGripCancel, true);
@@ -24343,8 +24370,10 @@
       if (!gripDrag || event.pointerId !== gripDrag.pointerId) return;
       event.preventDefault();
       gripDrag.row.classList.add('is-dragging');
+      gripPointer = { x: event.clientX, y: event.clientY };
       gripDrag.spot = orderDropAt(event.clientX, event.clientY, gripDrag.id);
       markOrderDrop(gripDrag.spot);
+      if (!gripScrollFrame && gripEdgeStep(event.clientY)) gripScrollFrame = requestAnimationFrame(gripEdgeScroll);
     }
     function onGripUp(event) { if (gripDrag && event.pointerId === gripDrag.pointerId) endGripDrag(true); }
     function onGripCancel(event) { if (gripDrag && event.pointerId === gripDrag.pointerId) endGripDrag(false); }
