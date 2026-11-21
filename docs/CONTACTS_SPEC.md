@@ -1790,10 +1790,14 @@ is still plaintext leaving the vault.)
 - **Dialect: Google Contacts CSV (current)** (6.2): the most widely accepted
   column set (Google, Outlook import wizards and Thunderbird map it, Proton
   imports it). The header carries the maximum number of `E-mail n`, `Phone n`,
-  `Address n`, `Website n` groups present among the exported contacts (at least 1).
+  `Address n`, `Website n`, `Event n` groups present among the exported contacts (at least 1).
   Labels in the cell joined by ` ::: `. UTF-8 **with BOM** (so Excel opens it
   as UTF-8), CRLF line ends, every field quoted when it contains `,`, `"`, CR
   or LF.
+- **`Event n - Label` / `Event n - Value`** hold every date of a contact that
+  is not its birthday (the birthday goes to `Birthday`): label `Anniversary`
+  for an anniversary, otherwise the stored label or `Other`; value as stored.
+  The import reads these columns back (6.2).
 - **Lossy by design**: `extra` (unknown fields) and IM handles beyond the
   Google columns are not in the CSV; the export dialog says "CSV loses some
   fields; use vCard for a complete export". The vCard export is the lossless
