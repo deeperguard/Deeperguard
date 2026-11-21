@@ -4988,6 +4988,11 @@
     return input;
   }
 
+  // Section heading for a list of rows; "Address" is not pluralised by adding "s".
+  function contactSectionHeading(noun) {
+    return noun === 'Address' ? 'Addresses' : `${noun}s`;
+  }
+
   // One repeatable row: type select (+ custom label), value input(s), Remove.
   function contactListRow(kind, noun, entry, index, addressParts) {
     const row = cEl('div', 'contacts-edit-row');
@@ -5303,7 +5308,7 @@
         renumberContactRows(group, noun);
         group.lastElementChild.querySelector('input:not([hidden])').focus();
       });
-      sec.append(cEl('h3', 'section-label', `${noun}s`), group, add);
+      sec.append(cEl('h3', 'section-label', contactSectionHeading(noun)), group, add);
       return { sec, group };
     };
     const phones = makeGroup('phones', 'Phone', 'Add phone');
