@@ -247,6 +247,20 @@ def run_flow(page, width: int) -> None:
     if width < 900:  # the phone layout shows the detail instead of the list
         page.click('[aria-label="Back to contacts"]')
 
+    # Export with a search filter and no selection: only the contacts shown are written, and the dialog says so.
+    page.fill("#contacts-search", "Lotte")
+    contacts_action(page, "#btn-contacts-export")
+    page.wait_for_selector("#confirm-password-wrap:not([hidden])")
+    assert "1 contact will be exported" in page.inner_text("#confirm-dialog")
+    assert "Only the contacts shown in the list are exported" in page.inner_text("#confirm-dialog")
+    page.fill("#confirm-password", PASSWORD)
+    with page.expect_download() as dl:
+        page.click("#confirm-ok")
+    shown = Path(dl.value.path()).read_text("utf-8")
+    assert shown.count("BEGIN:VCARD") == 1 and "FN:Lotte de Boer" in shown, shown
+    page.wait_for_selector("#confirm-dialog", state="hidden")
+    page.fill("#contacts-search", "")
+
     # Selection mode: tick one contact and Export writes only that one; Done removes the ticks.
     assert page.locator("[data-contact-tick]").count() == 0
     contacts_action(page, "#btn-contacts-select")
