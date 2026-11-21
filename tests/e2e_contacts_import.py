@@ -9,6 +9,8 @@ import, that HTML in a card is shown as text, keyboard use, phone width, and the
 """
 from __future__ import annotations
 
+import csv
+import io
 import tempfile
 import time
 from pathlib import Path
@@ -164,7 +166,7 @@ def run_flow(page, width: int) -> None:
     )
 
     def merge_import() -> None:
-        page.click("#btn-contacts-import")
+        contacts_action(page, "#btn-contacts-import")
         page.set_input_files("#contacts-import-file", files=[{"name": "again.vcf", "mimeType": "text/vcard", "buffer": merge_card.encode()}])
         page.wait_for_selector("#contacts-import-preview:not([hidden])")
         assert "1 look like contacts you already have" in page.inner_text("#contacts-import-summary")
@@ -228,6 +230,10 @@ def run_flow(page, width: int) -> None:
     assert csv_raw.startswith(b"\xef\xbb\xbfName,First Name,"), csv_raw[:60]
     csv_text = csv_raw.decode("utf-8")
     assert b"BEGIN:VCARD" not in csv_raw and "Lotte" in csv_text and "\r\n" in csv_text, csv_text
+    # 8.4: the phone number starting with "+" is written as text with a leading apostrophe, checked per cell.
+    header, *rows = csv.reader(io.StringIO(csv_text.removeprefix("﻿"), newline=""))
+    lotte = dict(zip(header, next(r for r in rows if r[0] == "Lotte de Boer")))
+    assert lotte["Phone 1 - Value"] == "'+31-6-22334455", lotte
     page.wait_for_selector("#confirm-dialog", state="hidden")
 
     # Share as vCard from the detail exports only that contact, after the same password step.
