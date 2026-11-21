@@ -116,7 +116,6 @@ def exercise(page, tag) -> int:
     page.keyboard.press("Home")
     bad += not agrees(f"{tag}: Home", state(page), 1)
     page.keyboard.press("End")
-    s = state(page)
     bad += not agrees(f"{tag}: End", state(page), PAGES)
     bad += not check(f"{tag}: last page drawn", wait_canvas(page, PAGES))
     page.keyboard.press("Home")
