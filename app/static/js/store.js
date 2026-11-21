@@ -500,7 +500,35 @@ const NotesStore = (() => {
     return null;
   }
 
-  async function deriveVaultKey(password, salt, kdfVersion) {
+  // One unlock() call. cancelUnlock() marks it cancelled; every await on the
+  // unlock path checks it, so a cancelled attempt never writes key state.
+  let currentUnlockAttempt = null;
+
+  function unlockCancelledError() {
+    const err = new Error('Unlock was cancelled.');
+    err.code = 'UNLOCK_CANCELLED';
+    return err;
+  }
+
+  function checkUnlockAttempt(attempt) {
+    if (attempt && attempt.cancelled) throw unlockCancelledError();
+  }
+
+  // Stops the unlock that is still deriving: its result is discarded and the
+  // crypto worker is terminated so a retry does not queue behind the old
+  // Argon2 run. Returns false when no attempt is deriving (none running, or it
+  // already committed its key).
+  function cancelUnlock() {
+    const attempt = currentUnlockAttempt;
+    if (!attempt || attempt.committed || attempt.cancelled) return false;
+    attempt.cancelled = true;
+    currentUnlockAttempt = null;
+    if (typeof NotesCrypto.terminateWorker === 'function') NotesCrypto.terminateWorker();
+    return true;
+  }
+
+  async function deriveVaultKey(password, salt, kdfVersion, attempt) {
+    checkUnlockAttempt(attempt);
     const cached = reuseDerivedKdf(password, salt, kdfVersion);
     if (cached) {
       return { key: cached.key, encoding: cached.encoding, version: cached.version };
@@ -511,19 +539,22 @@ const NotesStore = (() => {
       try {
         derived = await NotesCrypto.deriveKeyInWorker(password, salt, { kdfVersion: version });
       } catch (err) {
+        // A cancelled attempt must not start a main-thread derivation.
+        checkUnlockAttempt(attempt);
         derived = await NotesCrypto.deriveKey(password, salt, { kdfVersion: version });
       }
     } else {
       derived = await NotesCrypto.deriveKey(password, salt, { kdfVersion: version });
     }
+    checkUnlockAttempt(attempt);
     rememberDerivedKdf(password, salt, derived.version || kdfVersion, derived);
     return derived;
   }
 
-  async function scoreVaultKdfVersion(password, salt, kdfVersion, ciphers) {
+  async function scoreVaultKdfVersion(password, salt, kdfVersion, ciphers, attempt) {
     let ok = 0;
     try {
-      const derived = await deriveVaultKey(password, salt, kdfVersion);
+      const derived = await deriveVaultKey(password, salt, kdfVersion, attempt);
       const key = derived.key || derived;
       for (const row of ciphers) {
         const payload = parseCipherPayload(row.ciphertext);
@@ -536,24 +567,27 @@ const NotesStore = (() => {
         }
       }
     } catch (err) {
+      if (err && err.code === 'UNLOCK_CANCELLED') throw err;
       return 0;
     }
+    checkUnlockAttempt(attempt);
     return ok;
   }
 
-  async function probeVaultKdfVersion(password, salt) {
+  async function probeVaultKdfVersion(password, salt, attempt) {
     const ciphers = await sampleCipherRows(16);
+    checkUnlockAttempt(attempt);
     if (!ciphers.length) return null;
     const hint = vaultKdfVersionFromAccount(state.account);
     const first = hint >= 2 ? 2 : 1;
     const second = first === 1 ? 2 : 1;
-    const firstScore = await scoreVaultKdfVersion(password, salt, first, ciphers);
+    const firstScore = await scoreVaultKdfVersion(password, salt, first, ciphers, attempt);
     // Skip the other derive only when every sampled item opens with the hint
     // (Argon2 is slow). A leftover other-KDF blob must still be scored.
     if (firstScore === ciphers.length && firstScore > 0) {
       return { version: first, mixed: false };
     }
-    const secondScore = await scoreVaultKdfVersion(password, salt, second, ciphers);
+    const secondScore = await scoreVaultKdfVersion(password, salt, second, ciphers, attempt);
     const mixed = firstScore > 0 && secondScore > 0;
     if (secondScore > firstScore) return { version: second, mixed };
     if (firstScore > 0) return { version: first, mixed };
@@ -610,7 +644,9 @@ const NotesStore = (() => {
     state.kdfVersionsMissed = false;
     state.kdfFastReject = false;
     const hint = vaultKdfVersionFromAccount(state.account);
+    const attempt = options.attempt;
     const ciphers = await sampleCipherRows(4);
+    checkUnlockAttempt(attempt);
     if (!ciphers.length) {
       state.kdfProbeMixed = false;
       if (vaultKdfUpgradePending()) return 1;
@@ -618,10 +654,10 @@ const NotesStore = (() => {
     }
     const sessionTrusted = sessionTrustedKdfVersion(password, salt);
     if (sessionTrusted) {
-      const trustedScore = await scoreVaultKdfVersion(password, salt, sessionTrusted, ciphers);
+      const trustedScore = await scoreVaultKdfVersion(password, salt, sessionTrusted, ciphers, attempt);
       if (trustedScore > 0) {
         if (trustedScore < ciphers.length) {
-          const probed = await probeVaultKdfVersion(password, salt);
+          const probed = await probeVaultKdfVersion(password, salt, attempt);
           if (probed?.version) {
             state.kdfProbeMixed = !!probed.mixed;
             return probed.version;
@@ -634,25 +670,25 @@ const NotesStore = (() => {
     }
     const first = hint >= 2 ? 2 : 1;
     const second = first === 1 ? 2 : 1;
-    const firstScore = await scoreVaultKdfVersion(password, salt, first, ciphers);
+    const firstScore = await scoreVaultKdfVersion(password, salt, first, ciphers, attempt);
     if (firstScore === ciphers.length && firstScore > 0) {
       state.kdfProbeMixed = false;
       return first;
     }
     if (firstScore > 0) {
       if (firstScore < ciphers.length) {
-        const probed = await probeVaultKdfVersion(password, salt);
+        const probed = await probeVaultKdfVersion(password, salt, attempt);
         if (probed?.version) {
           state.kdfProbeMixed = !!probed.mixed;
           return probed.version;
         }
       }
-      const secondScore = await scoreVaultKdfVersion(password, salt, second, ciphers);
+      const secondScore = await scoreVaultKdfVersion(password, salt, second, ciphers, attempt);
       state.kdfProbeMixed = secondScore > 0;
       if (secondScore > firstScore) return second;
       return first;
     }
-    const secondScore = await scoreVaultKdfVersion(password, salt, second, ciphers);
+    const secondScore = await scoreVaultKdfVersion(password, salt, second, ciphers, attempt);
     if (secondScore > 0) {
       state.kdfProbeMixed = false;
       state.kdfVersionsMissed = false;
@@ -751,11 +787,25 @@ const NotesStore = (() => {
   }
 
   async function unlock(password, salt, options = {}) {
+    // Only one unlock may write key state: a newer call supersedes an older
+    // one that is still deriving.
+    cancelUnlock();
+    const attempt = { cancelled: false, committed: false };
+    currentUnlockAttempt = attempt;
+    try {
+      await unlockAttempt(password, salt, options, attempt);
+    } finally {
+      if (currentUnlockAttempt === attempt) currentUnlockAttempt = null;
+    }
+  }
+
+  async function unlockAttempt(password, salt, options, attempt) {
     emitUnlockProgress('kdf', 0, 3);
-    const kdfVersion = await resolveUnlockKdfVersion(password, salt, options);
+    const kdfVersion = await resolveUnlockKdfVersion(password, salt, { ...options, attempt });
     // Both sampled KDF versions already failed. Do not derive a third time —
     // that extra Argon2 run was most of a slow "Wrong password."
     if (state.kdfFastReject) {
+      attempt.committed = true;
       state.cryptoKey = null;
       state.altCryptoKey = null;
       state.keyVerified = false;
@@ -763,21 +813,25 @@ const NotesStore = (() => {
       return;
     }
     emitUnlockProgress('kdf', 1, 3);
-    const derived = await deriveVaultKey(password, salt, kdfVersion);
+    const derived = await deriveVaultKey(password, salt, kdfVersion, attempt);
     emitUnlockProgress('kdf', 2, 3);
-    state.cryptoKey = derived.key || derived;
-    state.saltEncoding = derived.encoding || 'hex';
-    state.kdfVersion = derived.version || kdfVersion;
-    state.altCryptoKey = null;
+    let altKey = null;
     if (state.kdfProbeMixed) {
       const altVersion = kdfVersion >= 2 ? 1 : 2;
       try {
-        const other = await deriveVaultKey(password, salt, altVersion);
-        state.altCryptoKey = other.key || other;
+        const other = await deriveVaultKey(password, salt, altVersion, attempt);
+        altKey = other.key || other;
       } catch (err) {
-        state.altCryptoKey = null;
+        if (err && err.code === 'UNLOCK_CANCELLED') throw err;
+        altKey = null;
       }
     }
+    // Commit point: from here on the attempt can no longer be cancelled.
+    attempt.committed = true;
+    state.cryptoKey = derived.key || derived;
+    state.saltEncoding = derived.encoding || 'hex';
+    state.kdfVersion = derived.version || kdfVersion;
+    state.altCryptoKey = altKey;
     emitUnlockProgress('kdf', 3, 3);
     state.keyVerified = false;
     // Node unit tests unlock a harness vault with no server probe. Browsers
@@ -843,6 +897,8 @@ const NotesStore = (() => {
   }
 
   function lock() {
+    // An unlock still deriving must not open the vault after this lock.
+    cancelUnlock();
     state.lockEpoch += 1;
     // Keep the persisted unsynced queue — it is restored by loadLocal after the
     // next unlock and pushed then. Only the in-memory copy is dropped here.
@@ -8018,6 +8074,7 @@ const NotesStore = (() => {
     api,
     setSessionRevokedHandler,
     unlock,
+    cancelUnlock,
     isUnlocked,
     isKeyVerified,
     markKeyVerified,
