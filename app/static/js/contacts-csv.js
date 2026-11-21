@@ -209,8 +209,8 @@ const NotesContactsCsv = (() => {
   }
 
   // --- 6.2 named dialects --------------------------------------------------------------------------
-  // Outlook writes localised headers. Only the translations the spec names are known (nl); a header in another
-  // language is not recognised and goes to the mapping step.
+  // Outlook writes localised headers. Only the nl names are in this table so far (the other languages the spec
+  // lists are a follow-up, docs/CONTACTS_SPEC.md 6.2); a header in another language goes to the mapping step.
   const OUTLOOK_ALIASES = { voornaam: 'first name', achternaam: 'last name', 'e-mailadres': 'e-mail address' };
   const DIALECTS = ['google', 'google-old', 'outlook', 'outlook-com', 'thunderbird', 'yahoo'];
   const MULTI = ' ::: ';
@@ -225,8 +225,8 @@ const NotesContactsCsv = (() => {
   const outlookKey = (h) => OUTLOOK_ALIASES[lower(h)] || lower(h);
 
   // headers -> dialect name or null. Case-insensitive, trimmed (and a stray BOM ignored).
-  // outlook and outlook-com share one column set in the spec; the sample of outlook.com has no Business Phone,
-  // so a file with Business Phone is called outlook and one without it outlook-com. Both map the same way.
+  // outlook and outlook-com map the same way (the Outlook column map in the spec). The outlook.com sample has no
+  // Business Phone, so a file with Business Phone is called outlook and one without it outlook-com.
   function detectDialect(headers) {
     if (!Array.isArray(headers)) return null;
     const plain = new Set(headers.map(lower));

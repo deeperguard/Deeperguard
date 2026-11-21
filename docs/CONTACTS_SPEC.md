@@ -1024,8 +1024,8 @@ time. A recognised file skips the mapping step (and can still be sent to it by
 | --- | --- | --- | --- | --- |
 | Google Contacts, current | `First Name` and `Organization Name` and `E-mail 1 - Value` | `YYYY-MM-DD` | separator ` ::: ` inside one cell (labels, emails, phones) | UTF-8 |
 | Google Contacts, older ("Google CSV") | `Given Name` and `Family Name` and `Group Membership` | `YYYY-MM-DD` | ` ::: ` in `Group Membership` (`* myContacts ::: Friends`) | UTF-8 |
-| Outlook desktop | `First Name` and `E-mail Address` and `Business Phone` (or its translation) | locale, often `d/m/yyyy`; empty is `0/0/00` | `Categories` separated by `;` | Windows-1252, or UTF-8 with BOM from newer builds |
-| outlook.com / Microsoft 365 people | the same column set as Outlook desktop | as above | as above | UTF-8, with or without BOM |
+| Outlook desktop | `First Name` and `E-mail Address` and `Business Phone` (`Business Phone` in another language is not recognised yet, see the Outlook column map) | locale, often `d/m/yyyy`; empty is `0/0/00` | `Categories` separated by `;` | Windows-1252, or UTF-8 with BOM from newer builds |
+| outlook.com / Microsoft 365 people | `First Name` and `E-mail Address`, without `Business Phone` (the outlook.com sample has no such column); mapped exactly like Outlook desktop, only the dialect name differs | as above | as above | UTF-8, with or without BOM |
 | Thunderbird | `Primary Email` and `Display Name` | three columns `Birth Year`, `Birth Month`, `Birth Day` | none | UTF-8 (older: system code page) |
 | Yahoo | `First`, `Last`, `Email`, `Messenger ID` | `Birthday` text | `Category` | UTF-8 |
 | Proton | **no recognised CSV**: Proton Contacts exports vCard 4.0 (6.1.9). A CSV made for Proton's import uses Outlook or Google column names and is read as one of those. Unverified. | | | |
@@ -1064,7 +1064,13 @@ Column maps (header text to model). Anything not listed goes to `extra.csv`
   `extra.csv`. **Outlook writes translated headers** in other languages (for
   example `Voornaam`, `Achternaam`, `E-mailadres`); a translation table for
   nl, de, fr, es, it, pt, sv, da, nb, pl is part of the build task and an
-  unrecognised language falls through to the mapping step.
+  unrecognised language falls through to the mapping step. **Status:** the
+  table holds only the three nl names (`voornaam`, `achternaam`,
+  `e-mailadres`); the other nine languages and the translations of `Business
+  Phone` are not in it yet. They are a follow-up task, to be built from real
+  localised Outlook exports, not guessed. Until then a Dutch file with a
+  translated `Business Phone` is read as `outlook-com`, and its translated
+  phone column is not mapped (it goes to `extra.csv`).
 - **Thunderbird**: `First Name`, `Last Name`, `Display Name` (to `formatted`),
   `Nickname`, `Primary Email`, `Secondary Email`, `Screen Name` (IM, service
   `aim`), `Work Phone`, `Home Phone`, `Fax Number`, `Pager Number`, `Mobile
