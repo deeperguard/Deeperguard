@@ -7,6 +7,7 @@ checks that no name or number appears in it.
 """
 from __future__ import annotations
 
+import json
 import socket
 import sqlite3
 import tempfile
@@ -125,6 +126,21 @@ def main() -> int:
             assert len(rows) == 1, rows
             for needle in ("Wilhelmina", "Zonnebloem", "98765432", "Geheimlaan", "Zwolle", "contact"):
                 assert needle not in rows[0][0], needle
+
+            # The encrypted vault backup carries the contact too: its row decrypts to the contact,
+            # and the file itself holds no readable name or number.
+            with first.expect_download(timeout=60000) as download:
+                first.evaluate("document.getElementById('btn-download-backup').click()")
+            backup_text = Path(download.value.path()).read_text(encoding="utf-8")
+            for needle in ("Wilhelmina", "Zonnebloem", "98765432", "Geheimlaan"):
+                assert needle not in backup_text, needle
+            exported = [r for r in json.loads(backup_text)["items"] if r["item_uuid"] == made["uuid"]]
+            assert len(exported) == 1, made
+            plain = first.evaluate(
+                """(ciphertext) => NotesCrypto.decryptObject(NotesStore.state.cryptoKey, JSON.parse(ciphertext))""",
+                exported[0]["ciphertext"],
+            )
+            assert plain["type"] == "contact" and plain["name"]["family"] == "Zonnebloem", plain
 
             # Second session of the same account.
             second = browser.new_context().new_page()
