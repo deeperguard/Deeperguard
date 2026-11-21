@@ -27,6 +27,8 @@ const NotesContactsCsv = (() => {
     else if (bytes[0] === 0xff && bytes[1] === 0xfe) { start = 2; label = 'utf-16le'; }
     else if (bytes[0] === 0xfe && bytes[1] === 0xff) { start = 2; label = 'utf-16be'; }
     const body = bytes.subarray(start);
+    // Without a BOM, UTF-16 is recognised only by NUL bytes in every second position (6.0), so text with no ASCII
+    // characters (e.g. all Cyrillic) is not seen as UTF-16 and comes out wrong.
     if (label) return { text: cleanText(decoderFor(label).decode(body)), encoding: label };
     if (body.length >= 4) {
       let odd = 0;
