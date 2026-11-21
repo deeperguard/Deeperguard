@@ -73,10 +73,25 @@ def open_contacts(page) -> None:
     page.wait_for_function("() => document.getElementById('contacts-count').textContent === '36 contacts'")
 
 
+def check_sidebar_toggles(page, where: str) -> None:
+    # Visible sidebar toggles per tab on phones: Notes hides its pin (desktop-only), Agenda has none,
+    # Contacts keeps its toggle in the "more" menu only. (2FA is Pro-only and not opened here.)
+    seen = {}
+    panes = {"notes": "notes-shell", "agenda": "agenda-pane", "contacts": "contacts-pane"}
+    for tab, pane in panes.items():
+        page.click(f"#app-tab-{tab}")
+        page.wait_for_selector(f"#{pane}", state="visible")
+        seen[tab] = page.locator("[data-nav-toggle]:visible").count()
+    assert seen == {"notes": 0, "agenda": 0, "contacts": 0}, f"{where}: visible sidebar toggles {seen}"
+
+
 def check_phone(page, width: int, height: int, min_rows: int) -> None:
     where = f"{width}x{height}"
     before_top, before_rows = BEFORE[width]
     open_contacts(page)
+    check_sidebar_toggles(page, where)
+    page.click("#app-tab-contacts")
+    page.wait_for_selector("#contacts-list .contacts-row")
     m = page.evaluate(LIST_METRICS)
     print(f"{where}: first row at y={m['firstTop']:.0f}, {m['fullRows']} rows fully visible "
           f"(before: y={before_top}, {before_rows} rows)")
