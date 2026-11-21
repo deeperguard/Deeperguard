@@ -8,7 +8,8 @@ context with a redirect to the real callback. The test checks:
 * the exact notice text, including the sentence that scheduled backups do not use it yet
 * connecting through the callback: the settings open on their own, a confirmation shows,
   and ?pcloud= is removed from the URL
-* a denied and a failed callback show a readable message in the app, not JSON
+* a denied and a failed callback show a readable message in the app, not JSON; an unknown
+  outcome value shows the failed message
 * a stored token that cannot be used shows "reconnect needed" and a Reconnect button
 * disconnecting
 * a Free account sees that this is a Pro feature before clicking, with the button disabled
@@ -220,6 +221,15 @@ def main() -> int:
             # The settings were opened by the return itself.
             assert page.locator("body.settings-open").count() == 1
 
+            # An unknown outcome value shows the generic failure message and is removed from the URL.
+            page.goto(f"{base}/app?pcloud=unknown-value", wait_until="domcontentloaded")
+            unlock(page)
+            page.wait_for_selector("#pcloud-connect-result", state="visible", timeout=30000)
+            assert page.locator("#pcloud-connect-result").inner_text().strip() == (
+                "Connecting pCloud did not work. Nothing was saved. You can try again."
+            )
+            assert "pcloud=" not in page.url, page.url
+
             # A token that cannot be used any more: reconnect needed.
             con = sqlite3.connect(str(root / "data" / "notes.db"))
             con.execute("UPDATE pcloud_oauth_tokens SET token_enc = 'unreadable'")
@@ -237,9 +247,11 @@ def main() -> int:
                 timeout=30000,
             )
 
-            # Disconnect (confirm dialog accepted); doing it again is not possible: button is gone.
-            page.once("dialog", lambda d: d.accept())
+            # Disconnect (shared confirm dialog accepted); doing it again is not possible: button is gone.
             page.locator("#btn-pcloud-disconnect").click()
+            page.wait_for_selector("#confirm-dialog", state="visible", timeout=30000)
+            assert page.inner_text("#confirm-title").strip() == "Disconnect pCloud?"
+            page.click("#confirm-ok")
             page.wait_for_function(
                 "() => document.getElementById('pcloud-connect-state').textContent === 'Status: not connected.'",
                 timeout=30000,

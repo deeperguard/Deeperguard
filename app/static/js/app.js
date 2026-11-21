@@ -26513,7 +26513,12 @@ async function showSettings() {
   });
   document.getElementById('btn-pcloud-disconnect')?.addEventListener('click', async (event) => {
     const btn = event.currentTarget;
-    if (!window.confirm('Disconnect pCloud? The token is deleted from the server and pCloud is asked to revoke it.')) return;
+    const ok = await confirmAction('The token is deleted from the server and pCloud is asked to revoke it.', {
+      title: 'Disconnect pCloud?',
+      confirmLabel: 'Disconnect',
+      danger: true,
+    });
+    if (!ok) return;
     btn.disabled = true;
     try {
       const res = await NotesStore.api('/api/backup/pcloud/oauth/disconnect', { method: 'POST', body: JSON.stringify({}) });
