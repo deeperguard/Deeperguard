@@ -133,7 +133,9 @@ Production origin is the Vienna VPS (set `NOTES_HOST` / SSH host via env — do 
 NOTES_HOST="$NOTES_HOST" NOTES_RELEASE_TAG=vX.Y.Z bash deploy/deploy-deeperguard.sh
 ```
 
-Defaults: `NOTES_HOST` (required), `NOTES_RELEASE_TAG` (or exact-match git tag), `NOTES_ENABLE_LAN_TLS=0`. Gunicorn stays on `127.0.0.1:80` behind Cloudflare Tunnel. The www tunnel is `homelab-notes`. `pool.deeperguard.com` uses the separate `deeperguard-pool` tunnel. The served `notes-release-tag` meta comes from `RELEASE_TAG` on the host — deploy rewrites it every time.
+Defaults: `NOTES_HOST` (required), `NOTES_RELEASE_TAG` (or exact-match git tag), `NOTES_ENABLE_LAN_TLS=0`.
+
+**WAN secrets (`NOTES_DISABLE_CIDR_GATE=1`):** gunicorn refuses to start when `NOTES_INDEXNOW_KEY`, Flask signing material, or other listed settings are still empty, built-in defaults, or unchanged `deploy/deeperguard.env.example` placeholders. Logs name the setting only. Local/dev/CI: set `NOTES_ALLOW_DEFAULT_SECRETS=1`, `NOTES_CI=1`, or keep the CIDR gate enabled. GitHub Actions is exempt (`GITHUB_ACTIONS=true`) so CI can import the app with WAN flags. Gunicorn stays on `127.0.0.1:80` behind Cloudflare Tunnel. The www tunnel is `homelab-notes`. `pool.deeperguard.com` uses the separate `deeperguard-pool` tunnel. The served `notes-release-tag` meta comes from `RELEASE_TAG` on the host — deploy rewrites it every time.
 
 Never `git pull` on Vienna. Never commit `config/deeperguard.env`, `keys/`, or `data/`.
 

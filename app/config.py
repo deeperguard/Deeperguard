@@ -366,7 +366,14 @@ def ensure_flask_secret() -> str:
         pass
     import logging
 
+    import logging
     logging.getLogger("deeperguard").warning("Generated new flask signing key at %s", path)
+    try:
+        from secret_guard import log_secret_rotation
+
+        log_secret_rotation("NOTES_FLASK_SECRET", reason="generated")
+    except Exception:
+        pass
     return secret
 
 
