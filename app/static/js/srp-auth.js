@@ -215,7 +215,7 @@
   }
 
   async function postJson(path, body, { timeoutMs = 30000 } = {}) {
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = { 'Content-Type': 'application/json', 'X-DG-Vault-Schema': '1' };
     try {
       const csrf = sessionStorage.getItem('notes_csrf') || '';
       if (csrf) headers['X-CSRF-Token'] = csrf;

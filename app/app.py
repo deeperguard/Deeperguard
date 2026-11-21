@@ -2237,6 +2237,14 @@ def api_account_password_prove():
         if not login_ok:
             return jsonify({"error": "invalid password"}), 401
 
+    # An older app cannot re-wrap the recovery/passkey copies (VAULT_RECOVERY 6.2): refuse
+    # before it re-encrypts anything, so nothing is lost.
+    if not request.headers.get("X-DG-Vault-Schema") and db.user_has_vault_wraps(uid):
+        return jsonify({
+            "error": "Update Deeperguard to change the vault password. This account has a recovery key.",
+            "code": "vault_keys_need_update",
+        }), 409
+
     token = auth.issue_password_rotation_token(uid)
     return jsonify({
         "ok": True,
@@ -2267,6 +2275,12 @@ def api_account_password():
     if _auth_rate_limited("account-password", email):
         return jsonify({"error": "too many attempts"}), 429
 
+    new_wraps = None
+    if body.get("vault_keys") is not None:
+        new_wraps, problem = vault_keys.parse_password_vault_keys(body["vault_keys"])
+        if new_wraps is None:
+            return jsonify({"error": problem}), 400
+
     if not rotation_token or not auth.consume_password_rotation_token(uid, rotation_token):
         if a_hex and m1 and db.user_auth_method(user) == "srp":
             return jsonify({
@@ -2282,10 +2296,13 @@ def api_account_password():
             return jsonify({"error": "password must not be sent to the server"}), 400
         if not srp_salt or not srp_verifier:
             return jsonify({"error": "missing srp verifier"}), 400
-        changed_at = db.update_user_srp_verifier(
-            uid, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
-            drop_vault_wraps=True,
-        )
+        try:
+            changed_at = db.update_user_srp_verifier(
+                uid, srp_salt, srp_verifier, srp_kdf_version=SRP_KDF_V2,
+                drop_vault_wraps=True, vault_keys=new_wraps,
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         db.clear_user_legacy_password(uid)
         _notify_wraps_dropped(uid, user, changed_at)
         _revoke_other_sessions(uid, reason="password")

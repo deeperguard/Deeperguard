@@ -77,20 +77,23 @@ class InterruptedMigrationTests(unittest.TestCase):
         if not rec and not prf:
             self.assertEqual(key_id, "")
 
-    def _change_password(self, email, password, new_password, csrf):
-        """What an old client sends: SRP prove, then the verifier, with no vault_keys and no schema header."""
+    def _change_password(self, email, password, new_password, csrf, vault_keys=None):
+        """SRP prove, then the verifier. Without `vault_keys` this is the late fallback of 6.2
+        (an old client whose prove came before a wrap existed); the prove carries the schema header."""
         h = {"X-CSRF-Token": csrf}
         chal = self.client.post("/api/account/password/challenge", json={}, headers=h).get_json()
         a_hex, m1 = srp_client_proof(email, password, chal["srp_salt"], chal["B"], chal.get("srp_kdf_version"))
-        prove = self.client.post("/api/account/password/prove", json={"A": a_hex, "M1": m1}, headers=h)
+        prove = self.client.post(
+            "/api/account/password/prove", json={"A": a_hex, "M1": m1},
+            headers={**h, "X-DG-Vault-Schema": "1"},
+        )
         self.assertEqual(prove.status_code, 200, prove.get_json())
         salt, verifier = self._srp_pair(email, new_password)
-        return self.client.post(
-            "/api/account/password",
-            json={"rotation_token": prove.get_json()["rotation_token"], "srp_salt": salt,
-                  "srp_verifier": verifier, "srp_kdf_version": 2},
-            headers=h,
-        )
+        body = {"rotation_token": prove.get_json()["rotation_token"], "srp_salt": salt,
+                "srp_verifier": verifier, "srp_kdf_version": 2}
+        if vault_keys is not None:
+            body["vault_keys"] = vault_keys
+        return self.client.post("/api/account/password", json=body, headers=h)
 
     # (a) interrupted migration -------------------------------------------------
 

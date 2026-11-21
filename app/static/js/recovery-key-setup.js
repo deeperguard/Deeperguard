@@ -54,7 +54,7 @@
   }
 
   function csrfHeaders() {
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = { 'Content-Type': 'application/json', 'X-DG-Vault-Schema': '1' };
     try {
       const csrf = global.sessionStorage.getItem('notes_csrf') || '';
       if (csrf) headers['X-CSRF-Token'] = csrf;

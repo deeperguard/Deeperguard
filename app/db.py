@@ -749,12 +749,16 @@ def update_user_srp_verifier(
     srp_kdf_version: int | None = None,
     touch_password_changed: bool = True,
     drop_vault_wraps: bool = False,
+    vault_keys: dict | None = None,
 ) -> float:
     """Update the stored SRP verifier.
 
     drop_vault_wraps=True also deletes every recovery/passkey wrap in the same
     transaction (a password change makes the vault key new, so the wraps of the old
-    key could only mislead; docs/VAULT_RECOVERY.md 6.2).
+    key could only mislead; docs/VAULT_RECOVERY.md 6.2). With `vault_keys` (parsed by
+    vault_keys.parse_password_vault_keys) the supplied wraps are stored instead, in
+    that same transaction (3.5); a wrap of a credential that is not the user's raises
+    ValueError and nothing is changed.
 
     touch_password_changed=False is for silent verifier-format upgrades (e.g. SRP
     KDF v1→v2). Those must not bump password_changed_at — the client treats that
@@ -785,7 +789,9 @@ def update_user_srp_verifier(
                     user_id,
                 ),
             )
-            if drop_vault_wraps:
+            if drop_vault_wraps and vault_keys is not None:
+                _replace_vault_wraps(conn, user_id, ts, vault_keys)
+            elif drop_vault_wraps:
                 _drop_vault_wraps(conn, user_id, ts)
         else:
             conn.execute(
@@ -1688,6 +1694,79 @@ def _drop_vault_wraps(conn: sqlite3.Connection, user_id: int, ts: float) -> bool
         (ts, int(n_prf), user_id),
     )
     return True
+
+
+def user_has_vault_wraps(user_id: int) -> bool:
+    """Whether the account has a recovery wrap or any passkey (PRF) wrap."""
+    return bool(connection().execute(
+        """
+        SELECT 1 FROM vault_recovery_wraps WHERE user_id = ?
+        UNION ALL SELECT 1 FROM vault_prf_wraps WHERE user_id = ?
+        """,
+        (int(user_id), int(user_id)),
+    ).fetchone())
+
+
+def _replace_vault_wraps(conn: sqlite3.Connection, user_id: int, ts: float, new: dict) -> None:
+    """Swap all wraps for the ones sent with a password change (VAULT_RECOVERY 3.5).
+
+    Runs inside the caller's transaction. Every stored wrap has the new key_id.
+    """
+    key_id = str(new["key_id"])
+    recovery = new.get("recovery")
+    prf = new.get("prf") or []
+    if any(str(w["key_id"]) != key_id for w in prf) or (recovery and str(recovery["key_id"]) != key_id):
+        raise ValueError("wrap key_id does not match the new key_id")
+    for w in prf:
+        owned = conn.execute(
+            "SELECT 1 FROM webauthn_credentials WHERE user_id = ? AND credential_id = ?",
+            (user_id, w["credential_id"]),
+        ).fetchone()
+        if not owned:
+            raise ValueError("unknown credential")
+    had_recovery = bool(conn.execute(
+        "SELECT 1 FROM vault_recovery_wraps WHERE user_id = ?", (user_id,),
+    ).fetchone())
+    old_prf = {r["credential_id"] for r in conn.execute(
+        "SELECT credential_id FROM vault_prf_wraps WHERE user_id = ?", (user_id,),
+    ).fetchall()}
+    conn.execute("DELETE FROM vault_recovery_wraps WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM vault_prf_wraps WHERE user_id = ?", (user_id,))
+    if recovery:
+        conn.execute(
+            """
+            INSERT INTO vault_recovery_wraps
+                (user_id, key_id, wrap_version, recovery_salt, wrap, proof_hash, created_at, last_used_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            """,
+            (user_id, key_id, recovery["wrap_version"], recovery["recovery_salt"],
+             recovery["wrap_json"], recovery["proof_hash"], ts),
+        )
+    for w in prf:
+        conn.execute(
+            """
+            INSERT INTO vault_prf_wraps
+                (credential_id, user_id, key_id, wrap_version, prf_salt, wrap, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (w["credential_id"], user_id, key_id, w["wrap_version"], w["prf_salt"], w["wrap_json"], ts),
+        )
+    conn.execute(
+        "UPDATE users SET vault_key_rev = vault_key_rev + 1, vault_key_id = ? WHERE id = ?",
+        (key_id if (recovery or prf) else "", user_id),
+    )
+    if recovery:
+        conn.execute(
+            "UPDATE users SET vault_keys_invalidated_at = 0, vault_keys_invalidated_prf = 0,"
+            " recovery_failed_count = 0, recovery_locked_until = 0, recovery_lock_level = 0 WHERE id = ?",
+            (user_id,),
+        )
+    elif had_recovery:
+        dropped_prf = len(old_prf - {w["credential_id"] for w in prf})
+        conn.execute(
+            "UPDATE users SET vault_keys_invalidated_at = ?, vault_keys_invalidated_prf = ? WHERE id = ?",
+            (ts, dropped_prf, user_id),
+        )
 
 
 def user_vault_keys_invalidated_at(user) -> float:

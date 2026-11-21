@@ -347,7 +347,7 @@ const NotesStore = (() => {
   }
 
   async function api(path, options = {}) {
-    const headers = { ...(options.headers || {}) };
+    const headers = { 'X-DG-Vault-Schema': '1', ...(options.headers || {}) };
     if (options.body && !headers['Content-Type']) {
       headers['Content-Type'] = 'application/json';
     }
