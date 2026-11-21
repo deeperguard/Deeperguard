@@ -11,6 +11,7 @@ const NotesContactsCsv = (() => {
   }
 
   // Removes NUL, other C0 controls except tab/CR/LF, and lone surrogates.
+  // The patterns have no nested quantifiers and match at most two characters per position, so one pass over the whole text is linear.
   function cleanText(s) {
     // eslint-disable-next-line no-control-regex
     return s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
@@ -136,6 +137,7 @@ const NotesContactsCsv = (() => {
     }
     if (inQuotes && !skipping) warnings.push('unterminated quote in record ' + (recNo + 1));
     if (n > recStart && recNo < maxRecords) { inQuotes = false; segStart = n; endRecord(); }
+    // overColumns is read only by detectDelimiter: a first record over the column limit still shows the split.
     return { records, warnings, overColumns };
   }
 
