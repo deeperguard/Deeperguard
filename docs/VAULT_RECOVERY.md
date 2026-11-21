@@ -270,7 +270,8 @@ claims would be false.
 | `vault_key_id` | TEXT NOT NULL DEFAULT `''` | `key_id` of the current `VK` while at least one wrap exists; `''` = no wraps. Freely overwritable whenever no wrap exists (2.2), whatever `vault_key_rev` is |
 | `vault_key_rev` | INTEGER NOT NULL DEFAULT 0 | compare-and-set counter for all wrap changes |
 | `prf_salt` | TEXT NOT NULL DEFAULT `''` | per-account PRF salt (1.4) |
-| `vault_keys_invalidated_at` | REAL NOT NULL DEFAULT 0 | set when wraps were dropped because of a legacy password change (6.2); cleared on next enrollment |
+| `vault_keys_invalidated_at` | REAL NOT NULL DEFAULT 0 | set when wraps were dropped because the vault key changed (password change 6.2, KDF upgrade 6.4); cleared when a new recovery key is stored |
+| `vault_keys_invalidated_prf` | INTEGER NOT NULL DEFAULT 0 | how many passkey copies that drop removed; cleared together with the marker. Only lets settings say whether passkey unlock was removed |
 | `recovery_failed_count`, `recovery_locked_until`, `recovery_lock_level` | INTEGER / REAL / INTEGER, default 0 | persistent attempt limit (3.3) |
 
 `vault_recovery_wraps` (zero or one row per user):
@@ -622,6 +623,26 @@ After a recovery the other sessions are ended and the password changed. An old
 client signs in with the new password and gets the new `VK` by derivation, as
 after any password change. No special handling.
 
+### 6.4 KDF upgrade and wraps
+
+`POST /api/account/vault-kdf` (v1 to v2) makes the client derive a **new** vault key
+from the same password, so every recovery and passkey copy still holds the old one.
+When the version really changes and the account has any wrap, the server in the
+**same transaction** as the version update: deletes all recovery and PRF wraps,
+bumps `vault_key_rev`, sets `vault_key_id=''` (free for re-enrollment), sets
+`vault_keys_invalidated_at` (and `vault_keys_invalidated_prf`) and bumps
+`auth_security_at` so other devices show the security notice. After the commit it
+sends the invalidation mail (3.6). The writing device gets `auth_security_at` back
+and acknowledges it. The password-change path of 6.2 sets the same marker and sends
+the same mail. An account without wraps, or a repeated request, changes only the
+version: no marker, no mail.
+
+`GET /api/account/vault-keys` returns `invalidated_at` and `invalidated_prf`. While
+`invalidated_at` is set and no recovery key exists, settings shows "Your recovery key
+was removed because your vault key changed. Create a new one."; if passkey copies were
+removed and none exists now, it adds a line about passkey vault unlock. Storing a new
+recovery key clears the marker.
+
 ## 7. Threat model
 
 Attacker capabilities are stated as what they obtain and what they can do with it.
@@ -738,7 +759,7 @@ behaviour (DB rows, ciphertext bytes, HTTP status, visible UI), not on source te
 ### 9.8 Old client
 - [ ] P13 (partly: sign-in, `GET /api/account` and `GET /api/sessions` with a recovery key are tested in `test_vault_recovery_interrupted.py`; sync not) Old-client request shapes (no header, no `vault_keys`): unlock proof, sync push/pull, `GET /api/account` all behave as before the feature (golden responses minus the added fields).
 - [ ] P14 (not built: the server does not read `X-DG-Vault-Schema` yet, so `prove` is not refused; the late fallback of P15 applies instead) Old client with a recovery key: `password/prove` -> 409 `vault_keys_need_update`, no rotation token issued, nothing else changed.
-- [x] P15 (partly, `tests/test_vault_recovery_interrupted.py`) An old client (no header, no `vault_keys`) changes the password with a recovery key present: change accepted, all wraps deleted in the same transaction, `vault_key_rev` bumped, `vault_key_id` freed, settings report no active recovery key, `recover/start` answers 404, a stale device cannot enrol the old key (409), a new key can be enrolled. Not built: `vault_keys_invalidated_at`, the mail and the settings explanation.
+- [x] P15 (partly, `tests/test_vault_recovery_interrupted.py`) An old client (no header, no `vault_keys`) changes the password with a recovery key present: change accepted, all wraps deleted in the same transaction, `vault_key_rev` bumped, `vault_key_id` freed, settings report no active recovery key, `recover/start` answers 404, a stale device cannot enrol the old key (409), a new key can be enrolled. `vault_keys_invalidated_at`, the mail and the settings explanation: `tests/test_vault_kdf_wraps.py`, `tests/test_e2e_recovery_key_settings.py`.
 - [ ] E15 (not covered by a test yet) An old client build (previous release's static files) unlocks an account that has a recovery key and passkey wraps and reads/writes notes normally.
 
 ### 9.9 Cross-cutting

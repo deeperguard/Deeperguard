@@ -653,6 +653,19 @@
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   }
 
+  // Wraps of the old vault key were dropped (VAULT_RECOVERY 3.4/6.2) and no new key exists yet.
+  function removalNotice(status) {
+    if (!status || !(Number(status.invalidated_at) > 0)) return '';
+    const lines = [];
+    if (!(status.recovery && status.recovery.active)) {
+      lines.push('Your recovery key was removed because your vault key changed. Create a new one.');
+    }
+    if (Number(status.invalidated_prf) > 0 && !(Array.isArray(status.prf) && status.prf.length)) {
+      lines.push('Passkey vault unlock was removed because your vault key changed. Turn it on again for each passkey.');
+    }
+    return lines.join(' ');
+  }
+
   function renderSettings(view) {
     const statusEl = el('recovery-key-settings-status');
     const create = el('btn-recovery-key-create');
@@ -662,6 +675,12 @@
     if (!statusEl || !create || !regen || !why) return;
     const reason = view.status && settingsDeps ? unavailableReason(settingsDeps) : null;
     statusEl.textContent = view.text;
+    const removed = el('recovery-key-settings-removed');
+    if (removed) {
+      const text = removalNotice(view.status);
+      removed.textContent = text;
+      removed.hidden = !text;
+    }
     const active = !!(view.status && view.status.recovery && view.status.recovery.active);
     const known = !!view.status;
     create.hidden = !known || active;
@@ -753,7 +772,7 @@
 
   const api = {
     markPending, isPending, clearPending, maybeShow, maybeOffer, isPostponed, close, isOpen, normalizeGroup,
-    refreshSettings, begin, unavailableReason,
+    refreshSettings, begin, unavailableReason, removalNotice,
   };
   global.NotesRecoveryKeySetup = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
