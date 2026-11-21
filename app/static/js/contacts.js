@@ -32,11 +32,7 @@ const NotesContacts = (() => {
 
   function randomBytes(n) {
     const bytes = new Uint8Array(n);
-    if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
-      globalThis.crypto.getRandomValues(bytes);
-    } else {
-      for (let i = 0; i < n; i += 1) bytes[i] = Math.floor(Math.random() * 256);
-    }
+    globalThis.crypto.getRandomValues(bytes);
     return bytes;
   }
 

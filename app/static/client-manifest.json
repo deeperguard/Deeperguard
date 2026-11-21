@@ -188,10 +188,10 @@
       "url": "/static/js/contacts-vcard.e1fd711e897caba7.js"
     },
     "js/contacts.js": {
-      "bytes": 41669,
-      "sha256": "2d662693955ec0141e3c5382d14e61dbd372212df538ec7dccb362bbcb1fc5fb",
-      "sri": "sha384-CmgtZIZBrelcqBASFtlND74ZhVAcapxv13mBTWpQdj1qB4AhWpk1LA0CWmsJpiB+",
-      "url": "/static/js/contacts.2d662693955ec014.js"
+      "bytes": 41479,
+      "sha256": "92a7b7b18bf4d9cd600d49c92a6548dfd92845d737d208ac4cd1583aab7ac9cd",
+      "sri": "sha384-Tv8FBQVRTlwHGiCO/Y5sIKk91OEPsxPFQul6TG9S2s21NF01iBPWJuX5jC0stVno",
+      "url": "/static/js/contacts.92a7b7b18bf4d9cd.js"
     },
     "js/crypto-worker.js": {
       "bytes": 3723,
@@ -681,6 +681,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "fe68af40c93a3f655153a3a2dbb9bb1353a82e5d58837e30c77e79087edd9475",
+  "manifest_sha256": "5d20b61439804dace452c4a4b1fef0d40cc3b798aac3476f65d5c44211a726c9",
   "version": 1
 }
