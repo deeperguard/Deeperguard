@@ -31,11 +31,11 @@ A photo, picked by you or taken from an imported card, is redrawn in your browse
 
 ## Bringing your contacts in
 
-Most address books can export a vCard file (`.vcf`). Deeperguard reads vCard 2.1, 3.0 and 4.0.
+Most address books can export a vCard file (`.vcf`) or a CSV file. Deeperguard reads vCard 2.1, 3.0 and 4.0, CSV, LDIF and jCard.
 
 1. Open Contacts and choose **Import**, then **Choose files**, or drop the files onto the dialog. You can choose several files at once.
 2. The files are read on your device and are not uploaded. You get a preview: how many contacts were found, how many have a photo, which cards were skipped and why, and the first 50 names, each with a checkbox. If the accents look wrong, the **Wrong characters?** list lets you read the file with another encoding.
-3. Contacts that match one already in your vault by email address, phone number or vCard UID are marked "already in your vault". The option **Leave out contacts I already have** is on by default, so importing the same file twice does not double your address book.
+3. A CSV file that is not in a format Deeperguard recognises first asks you how its columns map to contact fields. Contacts that match one already in your vault by email address, phone number or vCard UID are marked "already in your vault". For each duplicate you choose **Skip**, **Merge** or **Keep both**, or set one choice for all of them. Without a choice a duplicate is skipped, so importing the same file twice does not double your address book.
 4. Choose **Import**. The result tells you how many were imported, left out or not imported, with the reasons.
 
 Changed your mind? **Undo import**, in the dialog and in the message afterwards, removes the contacts that import created, until the vault locks. A contact you edited since is kept.
@@ -44,9 +44,11 @@ Fields Deeperguard has no place for, such as a related name from Apple Contacts,
 
 ## Taking them out again
 
-**Export** writes a `.vcf` file in vCard 3.0, or 4.0 if you tick that option. It exports the contacts currently shown, or only the ones you ticked after pressing **Select**. In a contact's detail, **Share as vCard** writes just that one.
+**Export** writes a vCard file (`.vcf`, version 3.0, or 4.0 if you tick that option) or a CSV file with Google Contacts columns. CSV is lossy: extra fields and instant-messaging handles are not included. It exports the contacts currently shown, or only the ones you ticked after pressing **Select**. In a contact's detail, **Share as vCard** writes just that one.
 
 The file is not encrypted, so the app warns you and asks for your vault password first. The file is built on your device and nothing is sent to the server. Delete it when you are done.
+
+Contacts are also part of the readable ZIP export, as a `contacts.vcf` file in vCard 3.0.
 
 ## Two devices, one address book
 
@@ -57,8 +59,8 @@ Your encrypted backup includes contacts, because it takes every item in the vaul
 ## What it does not do
 
 - It does not hide that you have items or how many. The server sees each item's size, when it changed and that it was deleted, as it does for notes. A large import shows up as many small items arriving together, and a contact with a photo is larger than one without.
-- It reads only vCard. CSV and LDIF files cannot be imported yet; export from your old app as vCard.
-- It does not merge an incoming duplicate into the contact you already have. You can leave it out or import it as an extra contact.
+- It imports vCard, CSV, LDIF and jCard files only. Other formats are refused; export from your old app in one of these.
 - It does not sync with your phone's own address book or with CardDAV. Contacts live in Deeperguard only.
-- Contacts are not in the readable ZIP export. Use the vCard export for a plain copy.
 - It does not call or send email itself. A link hands the number or address to your device's own app, and from there that app's privacy rules apply.
+
+Updated 2026-11-21: Import now also reads CSV, LDIF and jCard files, and for a duplicate you can choose Skip, Merge or Keep both. Contacts are included in the readable ZIP export as a vCard 3.0 file, and Export can also write CSV (Google Contacts columns), which loses some fields.
