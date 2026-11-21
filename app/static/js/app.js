@@ -7674,7 +7674,12 @@
     unlockGateOpen = false;
     endVaultPull();
   }
+  // Upper bound for one key derivation. Past it the attempt is abandoned,
+  // the vault stays locked and the button comes back with a retry message.
+  const UNLOCK_DERIVE_TIMEOUT_MS = 60000;
   const loginProgress = {
+    startedAt: 0,
+    elapsedTimer: 0,
     displayed: 0,
     target: 0,
     phase: 'kdf',
@@ -7690,6 +7695,36 @@
     sync: { start: 84, size: 16, label: 'Syncing' },
     done: { start: 100, size: 0, label: 'Ready' },
   };
+
+  function unlockDeriveTimeoutMs() {
+    const override = Number(window.__notesUnlockDeriveTimeoutMs);
+    return override > 0 ? override : UNLOCK_DERIVE_TIMEOUT_MS;
+  }
+
+  // NotesStore.unlock bounded by unlockDeriveTimeoutMs(). A derivation that
+  // finishes after the deadline must not leave the vault open behind a
+  // visible error, so a late result is locked again.
+  function unlockWithDeadline(...args) {
+    const work = NotesStore.unlock(...args);
+    let timer = 0;
+    let timedOut = false;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        const err = new Error('Unlocking took too long. Your vault is still locked. Try again.');
+        err.code = 'UNLOCK_DERIVE_TIMEOUT';
+        reject(err);
+      }, unlockDeriveTimeoutMs());
+    });
+    const settled = Promise.resolve(work).finally(() => clearTimeout(timer));
+    settled.then(() => {
+      if (timedOut) { try { NotesStore.lock(); } catch (e) { /* ignore */ } }
+    }, () => {});
+    return Promise.race([settled, deadline]).catch((err) => {
+      if (timedOut) { try { NotesStore.lock(); } catch (e) { /* ignore */ } }
+      throw err;
+    });
+  }
 
   function unlockProgressPct(phase, done, total) {
     const spec = UNLOCK_PHASE_WEIGHT[phase] || UNLOCK_PHASE_WEIGHT.decrypt;
@@ -7740,8 +7775,11 @@
   function renderLoginProgressFrame() {
     const indeterminate = loginProgress.phase === 'kdf';
     const pct = loginProgress.displayed;
+    const elapsedSec = loginProgress.startedAt
+      ? Math.max(0, Math.floor((Date.now() - loginProgress.startedAt) / 1000))
+      : 0;
     const text = indeterminate
-      ? 'Deriving key…'
+      ? `${'Deriving key…'} ${elapsedSec} s`
       : `${unlockProgressLabel(loginProgress.phase)}… ${pct}%`;
     const overlay = document.getElementById('login-progress-overlay');
     const overlayStatus = document.getElementById('login-progress-status');
@@ -7857,6 +7895,11 @@
     loginProgress.displayed = 0;
     loginProgress.target = 0;
     loginProgress.phase = 'kdf';
+    loginProgress.startedAt = Date.now();
+    if (loginProgress.elapsedTimer) clearInterval(loginProgress.elapsedTimer);
+    loginProgress.elapsedTimer = window.setInterval(() => {
+      if (loginProgressActive) renderLoginProgressFrame();
+    }, 1000);
     const overlay = document.getElementById('login-progress-overlay');
     if (overlay) overlay.setAttribute('aria-busy', 'true');
     renderLoginProgressFrame();
@@ -7882,6 +7925,11 @@
 
   function dismissLoginProgress() {
     stopLoginCreep();
+    if (loginProgress.elapsedTimer) {
+      clearInterval(loginProgress.elapsedTimer);
+      loginProgress.elapsedTimer = 0;
+    }
+    loginProgress.startedAt = 0;
     if (loginProgress.raf) {
       cancelAnimationFrame(loginProgress.raf);
       loginProgress.raf = 0;
@@ -9335,7 +9383,7 @@
       const cached = NotesStore.cachedAccount();
       const salt = cached.kdf_salt;
         if (salt) {
-        await NotesStore.unlock(clean, salt);
+        await unlockWithDeadline(clean, salt);
         if (NotesStore.state.kdfFastReject) {
           clearSavedUnlockSecrets();
           NotesStore.lock();
@@ -9395,7 +9443,7 @@
           unlockPrimaryRevealed = false;
           const altVersion = NotesStore.state.kdfVersion >= 2 ? 1 : 2;
           try {
-            await NotesStore.unlock(clean, salt, { kdfVersion: altVersion });
+            await unlockWithDeadline(clean, salt, { kdfVersion: altVersion });
             loadResult = await loadVaultLocal();
             opened = loadResult;
             localAllFailed = loadResult.localAllFailed;
@@ -9446,7 +9494,7 @@
               sessionValid = true;
               serverResult = { ok: true };
               const nextSalt = NotesStore.cachedAccount().kdf_salt || salt;
-              await NotesStore.unlock(clean, nextSalt);
+              await unlockWithDeadline(clean, nextSalt);
             }
             // Local ciphertext failed. Continue only when a server row decrypts.
             // An empty server vault must not wipe the local rows or open the shell.
@@ -9658,7 +9706,7 @@
       const data = await bootstrapServerSession(cached, {
         retryOnLoginRequired: !!(silent && isPostLoginBootUnlock()),
       });
-      await NotesStore.unlock(clean, data.kdf_salt);
+      await unlockWithDeadline(clean, data.kdf_salt);
       if (NotesStore.state.kdfFastReject) {
         if (silent) deferAutoUnlock();
         rejectWrongUnlockPassword();

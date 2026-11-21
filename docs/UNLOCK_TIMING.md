@@ -93,3 +93,24 @@ De app mist geen foutafhandeling meer; de enige zichtbare winst zit in snelheid 
 
 De bestaande watchdog-test `tests/test_unlock_worker_watchdog.js` dekt de hang-paden al; er is
 daarom in deze taak geen extra reproductietest toegevoegd.
+
+## Wijziging (taak 516)
+
+De diagnose hierboven bleef staan: er was **geen echte fout** (de afleiding rondt af; de worker
+start ook na herladen). Daarom is de oorzaak niet "gerepareerd", maar zijn de zichtbare gaten
+gedicht. Argon2id-parameters, sleutelafleiding, SRP en AES-GCM zijn niet aangeraakt.
+
+- **Verstreken tijd:** tijdens de afleiding toont `#unlock-status` `Deriving key… N s`
+  (`renderLoginProgressFrame` in `app/static/js/app.js`), elke seconde ververst door een timer die
+  in `beginLoginProgress` start en in `dismissLoginProgress` stopt. Geen percentage.
+- **Harde grens:** `UNLOCK_DERIVE_TIMEOUT_MS = 60000`. `unlockWithDeadline` begrenst elke
+  `NotesStore.unlock`-aanroep in `verifyAndUnlock`. Bij overschrijding wordt de kluis vergrendeld,
+  komt de knop terug op `Unlock` en toont `#unlock-error` "Unlocking took too long. Your vault is
+  still locked. Try again."; opnieuw proberen kan direct. Een afleiding die daarna alsnog klaar
+  komt, vergrendelt de kluis opnieuw. De grens is 60 s, de worker-watchdog in `crypto.js` blijft
+  90 s: de UI geeft dus eerder op dan de hoofdthread-terugval.
+- **Test:** `tests/e2e_unlock_derive_progress.py` (Playwright) controleert het oplopende
+  tijdlabel, een falende afleiding (knop vrij, foutmelding, kluis vergrendeld), een nooit
+  antwoordende afleiding (grens, ook na late afronding vergrendeld) en een geslaagde nieuwe poging.
+- **Niet gedaan:** WASM-Argon2id en eerdere rate-limit-melding (punten 1 en 3 hierboven) vragen
+  een aparte beslissing en blijven open.
