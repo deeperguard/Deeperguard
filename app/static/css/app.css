@@ -13796,12 +13796,12 @@ a.contacts-value-main { color: var(--accent); }
 .contacts-merge-with { margin-bottom: 8px; }
 .contacts-pane .totp-head-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 /* Contacts header on phones and tablets: one row (title with the count under it, lock,
-   settings, + and a "more" menu for the other actions). From 1000px the actions are plain
-   buttons again and the "more" button and the menu-only sidebar toggle are hidden. */
+   settings, sidebar toggle, + and a "more" menu for the other actions), the same icon row as
+   the 2FA pane (docs/CONTACTS_SPEC.md section 4). From 1000px the actions are plain buttons
+   again and the "more" button is hidden. */
 @media (min-width: 1000px) {
   .contacts-pane .contacts-more-menu { display: contents; }
-  .contacts-pane .contacts-more-btn,
-  .contacts-pane .contacts-menu-nav-toggle { display: none; }
+  .contacts-pane .contacts-more-btn { display: none; }
 }
 @media (max-width: 999px) {
   .contacts-pane .contacts-head {
@@ -13822,7 +13822,6 @@ a.contacts-value-main { color: var(--accent); }
     text-overflow: ellipsis;
   }
   .contacts-pane .totp-side-foot { order: 1; flex: 0 0 auto; gap: var(--space-1); }
-  .contacts-pane #btn-contacts-nav-toggle { display: none; }
   .contacts-pane .totp-head-actions { order: 2; flex: 0 0 auto; flex-wrap: nowrap; gap: var(--space-1); }
   .contacts-pane .contacts-more-menu {
     display: none;
@@ -13855,6 +13854,9 @@ a.contacts-value-main { color: var(--accent); }
   .contacts-pane .contacts-section { padding: 3px var(--space-4); font-size: 12px; }
   .contacts-pane .contacts-row-open { min-height: 52px; }
 }
+/* 900-999px (tablet, two columns from 900px): the pane does not scroll. Header, toolbar and
+   search bar stay in place and only the list column scrolls. Checked by check_tablet in
+   tests/e2e_contacts_phone_layout.py. */
 /* Single column (phone): the pane scrolls, so the header, the label chips and the list
    move up together while the search bar stays pinned at the top. */
 @media (max-width: 899px) {

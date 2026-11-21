@@ -75,14 +75,15 @@ def open_contacts(page) -> None:
 
 def check_sidebar_toggles(page, where: str) -> None:
     # Visible sidebar toggles per tab on phones: Notes hides its pin (desktop-only), Agenda has none,
-    # Contacts keeps its toggle in the "more" menu only. (2FA is Pro-only and not opened here.)
+    # Contacts shows its toggle in the header next to lock and settings, as 2FA does.
+    # (2FA is Pro-only and not opened here.)
     seen = {}
     panes = {"notes": "notes-shell", "agenda": "agenda-pane", "contacts": "contacts-pane"}
     for tab, pane in panes.items():
         page.click(f"#app-tab-{tab}")
         page.wait_for_selector(f"#{pane}", state="visible")
         seen[tab] = page.locator("[data-nav-toggle]:visible").count()
-    assert seen == {"notes": 0, "agenda": 0, "contacts": 0}, f"{where}: visible sidebar toggles {seen}"
+    assert seen == {"notes": 0, "agenda": 0, "contacts": 1}, f"{where}: visible sidebar toggles {seen}"
 
 
 def check_phone(page, width: int, height: int, min_rows: int) -> None:
@@ -102,7 +103,7 @@ def check_phone(page, width: int, height: int, min_rows: int) -> None:
 
     # Touch targets: rows, stars, header buttons, label chips.
     for sel in ("#contacts-list .contacts-row-open, #contacts-list .contacts-star",
-                "#btn-contacts-add, #btn-contacts-more, #btn-contacts-lock, #btn-contacts-settings",
+                "#btn-contacts-add, #btn-contacts-more, #btn-contacts-lock, #btn-contacts-settings, #btn-contacts-nav-toggle",
                 "#contacts-chips .tag-chip"):
         low = min(heights(page, sel))
         assert low >= 44, f"{where}: {sel} is only {low}px high"
@@ -157,12 +158,12 @@ def check_menu(page, width: int) -> None:
         "els => els.map(e => [e.getAttribute('role'), e.textContent.trim()])",
     )
     assert items == [["menuitem", "Find duplicates"], ["menuitem", "Import"], ["menuitemcheckbox", "Select"],
-                     ["menuitem", "Export"], ["menuitem", "Expand sidebar"]], items
+                     ["menuitem", "Export"]], items
     assert page.evaluate("document.activeElement.id") == "btn-contacts-duplicates"
     page.keyboard.press("ArrowDown")
     assert page.evaluate("document.activeElement.id") == "btn-contacts-import"
     page.keyboard.press("End")
-    assert page.evaluate("document.activeElement.textContent.trim()") == "Expand sidebar"
+    assert page.evaluate("document.activeElement.id") == "btn-contacts-export"
     page.keyboard.press("ArrowDown")
     assert page.evaluate("document.activeElement.id") == "btn-contacts-duplicates"
     page.keyboard.press("Escape")
@@ -208,16 +209,14 @@ def check_menu(page, width: int) -> None:
     assert page.get_attribute("#btn-contacts-select", "aria-checked") == "false"
     assert page.locator("[data-contact-tick]").count() == 0
 
-    # Outside click closes the menu; the sidebar toggle in the menu still works.
+    # Outside click closes the menu; the sidebar toggle is in the header and works from there.
     page.click(more)
     page.click(".contacts-title")
     assert not page.evaluate("document.getElementById('contacts-more-menu').classList.contains('is-open')")
     pinned = page.evaluate("document.body.classList.contains('nav-pinned')")
-    page.click(more)
-    page.click(".contacts-menu-nav-toggle")
+    page.click("#btn-contacts-nav-toggle")
     assert page.evaluate("document.body.classList.contains('nav-pinned')") != pinned
-    page.click(more)
-    page.click(".contacts-menu-nav-toggle")
+    page.click("#btn-contacts-nav-toggle")
     assert page.evaluate("document.body.classList.contains('nav-pinned')") == pinned
     no_hscroll(page, where)
 
@@ -236,7 +235,6 @@ def check_desktop(page) -> None:
                 "#btn-contacts-add", "#btn-contacts-lock", "#btn-contacts-settings", "#btn-contacts-nav-toggle"):
         assert page.is_visible(sel), f"desktop: {sel} is not visible"
     assert not page.is_visible("#btn-contacts-more")
-    assert not page.is_visible(".contacts-menu-nav-toggle")
     assert page.get_attribute("#contacts-more-menu", "role") is None
     assert page.get_attribute("#btn-contacts-select", "aria-pressed") == "false"
     assert page.get_attribute("#btn-contacts-import", "role") is None
@@ -245,6 +243,23 @@ def check_desktop(page) -> None:
     page.wait_for_selector("#contacts-import-dialog:not([hidden])")
     page.click("#contacts-import-close")
     assert page.evaluate("document.activeElement.id") == "btn-contacts-import"
+
+
+def check_tablet(page) -> None:
+    # 900-999px: list and detail sit side by side. The pane does not scroll; only the list column does,
+    # and the search bar stays where it is.
+    where = "950px tablet"
+    page.wait_for_selector("#contacts-list .contacts-row")
+    bar_top = page.evaluate("() => document.querySelector('#contacts-pane .search-wrap').getBoundingClientRect().top")
+    assert page.evaluate("() => { const l = document.getElementById('contacts-list'); return l.scrollHeight > l.clientHeight; }"), \
+        f"{where}: the list does not scroll"
+    page.evaluate("() => { document.getElementById('contacts-list').scrollTop = 400; }")
+    assert page.evaluate("() => document.getElementById('contacts-list').scrollTop") > 0, f"{where}: the list did not scroll"
+    page.evaluate("() => { document.getElementById('contacts-pane').scrollTop = 400; }")
+    assert page.evaluate("() => document.getElementById('contacts-pane').scrollTop") == 0, f"{where}: the pane scrolls"
+    moved = page.evaluate("() => document.querySelector('#contacts-pane .search-wrap').getBoundingClientRect().top")
+    assert moved == bar_top, f"{where}: the search bar moved from {bar_top} to {moved}"
+    no_hscroll(page, where)
 
 
 def main() -> int:
@@ -268,6 +283,10 @@ def main() -> int:
                 if width < 900:
                     check_phone(page, width, height, rows)
                     if width == 390:
+                        # Same session at 950px: the two-column tablet layout. No second signup, the auth limiter counts them.
+                        page.set_viewport_size({"width": 950, "height": 800})
+                        check_tablet(page)
+                        page.set_viewport_size({"width": width, "height": height})
                         check_menu(page, width)
                 else:
                     check_desktop(page)
