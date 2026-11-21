@@ -66,7 +66,7 @@ STATE_JS = """() => {
 
 SCROLL_TO_PAGE_5_JS = """() => {
   const card = document.querySelector('.doc-inline-card');
-  const sc = document.fullscreenElement === card ? card :document.getElementById('doc-inline');
+  const sc = document.fullscreenElement === card ? card : document.getElementById('doc-inline');
   const bar = card.querySelector('.doc-inline-toolbar').getBoundingClientRect().height;
   const w = card.querySelectorAll('.doc-page-wrap')[4].getBoundingClientRect();
   sc.scrollTop += w.top - sc.getBoundingClientRect().top - bar + 20;
