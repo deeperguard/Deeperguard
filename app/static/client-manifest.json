@@ -284,10 +284,10 @@
       "url": "/static/js/labels.fcfff63e870c16d8.js"
     },
     "js/labeltree.js": {
-      "bytes": 10355,
-      "sha256": "bf1392bc24cf5c41288602f09555520b67e43074a5ce347cb561181a47c8e7cb",
-      "sri": "sha384-NJaHF67XhNUzK9r/pBSV/y0LB600j+UmRDoVUi3xHCmVQNO8LY5Zna47MutIHFqw",
-      "url": "/static/js/labeltree.bf1392bc24cf5c41.js"
+      "bytes": 10397,
+      "sha256": "8ea45f9e06fd3a5ee5b1f68eb038fb84aed26d59887554889b0bf290b770905c",
+      "sri": "sha384-nOZMXixUS/rTzQDvypxzYDLpT5ZdiqGByxGGIEgwpsWH9a9PNI6hRj+aW7oW/bwP",
+      "url": "/static/js/labeltree.8ea45f9e06fd3a5e.js"
     },
     "js/link-overlay.js": {
       "bytes": 2723,
@@ -681,6 +681,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "d36f4831eafd2e4cb9d91db4b4e4afb30f814c252939abf5e2e6c12a32456792",
+  "manifest_sha256": "b2b06a559aa275a35739c89df2b55a9ac5cdba2e56aaaa6c7c41c751b162aeec",
   "version": 1
 }
