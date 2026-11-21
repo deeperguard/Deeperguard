@@ -2,7 +2,11 @@
 
 With 36 contacts of which 8 are favourites it measures the first contact row and the rows that are fully
 visible at 390x844 and 360x740, scrolls the list, and drives the "more" menu with the keyboard.
-Before this layout the first row started at y=405 and 7 (390x844) / 5 (360x740) rows were fully visible.
+Measured on this layout and on the commit before it (4abd9bb):
+
+    viewport   first row top (before -> after)   fully visible rows (before -> after)
+    390x844    405 -> 220                        7 -> 10
+    360x740    405 -> 220                        5 -> 9
 
     python tests/e2e_contacts_phone_layout.py
 """
@@ -15,7 +19,8 @@ from pathlib import Path
 from e2e_contacts_sync import free_port, register
 from e2e_signup_autounlock import start_server
 
-BEFORE_FIRST_ROW_TOP = 405  # measured at 390x844 and 360x740 before the compact header
+# (first row top, fully visible rows) measured before the compact header, per viewport
+BEFORE = {390: (405, 7), 360: (405, 5)}
 
 SEED = """() => {
   const names = ['Anna','Bram','Chris','Daan','Eva','Fleur','Guus','Hanna','Ivo','Jelle','Karin','Lars','Mila','Noor',
@@ -68,13 +73,30 @@ def open_contacts(page) -> None:
     page.wait_for_function("() => document.getElementById('contacts-count').textContent === '36 contacts'")
 
 
+def check_sidebar_toggles(page, where: str) -> None:
+    # Visible sidebar toggles per tab on phones: Notes hides its pin (desktop-only), Agenda has none,
+    # Contacts keeps its toggle in the "more" menu only. (2FA is Pro-only and not opened here.)
+    seen = {}
+    panes = {"notes": "notes-shell", "agenda": "agenda-pane", "contacts": "contacts-pane"}
+    for tab, pane in panes.items():
+        page.click(f"#app-tab-{tab}")
+        page.wait_for_selector(f"#{pane}", state="visible")
+        seen[tab] = page.locator("[data-nav-toggle]:visible").count()
+    assert seen == {"notes": 0, "agenda": 0, "contacts": 0}, f"{where}: visible sidebar toggles {seen}"
+
+
 def check_phone(page, width: int, height: int, min_rows: int) -> None:
     where = f"{width}x{height}"
+    before_top, before_rows = BEFORE[width]
     open_contacts(page)
+    check_sidebar_toggles(page, where)
+    page.click("#app-tab-contacts")
+    page.wait_for_selector("#contacts-list .contacts-row")
     m = page.evaluate(LIST_METRICS)
-    print(f"{where}: first row at y={m['firstTop']:.0f}, {m['fullRows']} rows fully visible (before: y={BEFORE_FIRST_ROW_TOP})")
-    assert m["firstTop"] <= BEFORE_FIRST_ROW_TOP - 180, f"{where}: first row at {m['firstTop']}"
-    assert m["fullRows"] >= min_rows, f"{where}: only {m['fullRows']} rows fully visible"
+    print(f"{where}: first row at y={m['firstTop']:.0f}, {m['fullRows']} rows fully visible "
+          f"(before: y={before_top}, {before_rows} rows)")
+    assert m["firstTop"] <= before_top - 180, f"{where}: first row at {m['firstTop']}"
+    assert m["fullRows"] > before_rows and m["fullRows"] >= min_rows, f"{where}: only {m['fullRows']} rows fully visible"
     assert page.inner_text("#contacts-list .contacts-section >> nth=0") == "Favourites"
     no_hscroll(page, where)
 
@@ -147,6 +169,18 @@ def check_menu(page, width: int) -> None:
     page.wait_for_selector("#contacts-more-menu:not(.is-open)", state="attached")
     assert page.evaluate("document.activeElement.id") == "btn-contacts-more"
     assert page.get_attribute(more, "aria-expanded") == "false"
+
+    # Tab from an open menu closes it and moves focus to the next control in the header (the + button),
+    # then Tab goes on to the more button. The menu items are not left behind as the focus.
+    page.focus(more)
+    page.keyboard.press("Enter")
+    page.wait_for_selector("#contacts-more-menu.is-open")
+    page.keyboard.press("Tab")
+    page.wait_for_selector("#contacts-more-menu:not(.is-open)", state="attached")
+    assert page.evaluate("document.activeElement.id") == "btn-contacts-add", page.evaluate("document.activeElement.outerHTML")
+    assert page.get_attribute(more, "aria-expanded") == "false"
+    page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement.id") == "btn-contacts-more"
 
     # Import opens its dialog; closing it returns focus to a visible button (the menu button).
     page.click(more)
