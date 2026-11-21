@@ -2287,6 +2287,7 @@ def api_account_password():
             drop_vault_wraps=True,
         )
         db.clear_user_legacy_password(uid)
+        _notify_wraps_dropped(uid, user, changed_at)
         _revoke_other_sessions(uid, reason="password")
         return jsonify({
             "ok": True,
@@ -2302,8 +2303,16 @@ def api_account_password():
         db.upgrade_user_to_srp(uid, srp_salt, srp_verifier, srp_kdf_version=srp_kdf_version)
         if strict_zk():
             db.clear_user_legacy_password(uid)
+    _notify_wraps_dropped(uid, user, changed_at)
     _revoke_other_sessions(uid, reason="password")
     return jsonify({"ok": True, "password_changed_at": changed_at, "auth_security_at": changed_at})
+
+
+def _notify_wraps_dropped(uid: int, user, changed_at: float) -> None:
+    """Mail when this password change removed wraps (the marker carries the change time)."""
+    fresh = db.get_user_by_id(uid)
+    if fresh and db.user_vault_keys_invalidated_at(fresh) == changed_at:
+        _vault_keys_invalidated_mail(user, "the vault password was changed")
 
 
 def _vault_keys_user():
@@ -2575,6 +2584,20 @@ def _vault_recovery_mail(user, subject: str, text: str) -> None:
         log.exception("vault recovery notice mail failed")
 
 
+def _vault_keys_invalidated_mail(user, cause: str) -> None:
+    """Notice that the recovery key and passkey vault unlock were removed (VAULT_RECOVERY 3.6)."""
+    _vault_recovery_mail(
+        user, "Deeperguard: your recovery key was removed",
+        f"Your recovery key and passkey vault unlock were removed because {cause}. "
+        "They only opened the previous vault key, so they could no longer work. "
+        "Your notes and your password did not change.\n"
+        "\n"
+        "Open Settings > Security in Deeperguard to create a new recovery key and turn passkey unlock on again.\n"
+        "Wasn't you? Open deeperguard.com yourself (type it in your browser), sign out devices you do not "
+        "recognise under Settings > Devices and change your password.\n",
+    )
+
+
 @app.post("/api/account/vault-keys/recover/start")
 def api_account_vault_keys_recover_start():
     user, err = _vault_keys_user()
@@ -2759,8 +2782,12 @@ def api_account_vault_kdf():
     current = db.user_vault_kdf_version(user)
     if current >= version:
         return jsonify({"ok": True, "vault_kdf_version": current})
-    db.update_user_vault_kdf_version(uid, version)
-    return jsonify({"ok": True, "vault_kdf_version": version})
+    invalidated_at = db.update_user_vault_kdf_version(uid, version)
+    out = {"ok": True, "vault_kdf_version": version}
+    if invalidated_at:
+        _vault_keys_invalidated_mail(user, "the vault key was upgraded to a stronger key derivation")
+        out["auth_security_at"] = invalidated_at
+    return jsonify(out)
 
 
 def _pcloud_path_for_client(user) -> str:

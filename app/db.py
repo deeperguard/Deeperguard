@@ -306,6 +306,9 @@ def init_schema(conn: sqlite3.Connection | None = None) -> None:
         ("recovery_failed_count", "INTEGER NOT NULL DEFAULT 0"),
         ("recovery_locked_until", "REAL NOT NULL DEFAULT 0"),
         ("recovery_lock_level", "INTEGER NOT NULL DEFAULT 0"),
+        # Set when a vault key change (KDF upgrade, old-client password change) removed wraps.
+        ("vault_keys_invalidated_at", "REAL NOT NULL DEFAULT 0"),
+        ("vault_keys_invalidated_prf", "INTEGER NOT NULL DEFAULT 0"),
     ):
         if col not in cols:
             conn.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
@@ -783,7 +786,7 @@ def update_user_srp_verifier(
                 ),
             )
             if drop_vault_wraps:
-                _drop_vault_wraps(conn, user_id)
+                _drop_vault_wraps(conn, user_id, ts)
         else:
             conn.execute(
                 """
@@ -1094,15 +1097,26 @@ def user_vault_kdf_version(user) -> int:
     return 2 if value >= 2 else 1
 
 
-def update_user_vault_kdf_version(user_id: int, version: int) -> None:
+def update_user_vault_kdf_version(user_id: int, version: int) -> float | None:
+    """Store the vault KDF version. A real change makes the vault key new, so in the same
+    transaction every recovery/passkey wrap (copies of the old key) is dropped.
+
+    Returns the invalidation time when wraps were dropped, else None.
+    """
     if version not in (1, 2):
         raise ValueError("invalid vault_kdf_version")
     ts = now()
     with tx() as conn:
+        row = conn.execute("SELECT vault_kdf_version FROM users WHERE id = ?", (user_id,)).fetchone()
+        changed = row is not None and (2 if int(row["vault_kdf_version"] or 1) >= 2 else 1) != int(version)
         conn.execute(
             "UPDATE users SET vault_kdf_version = ?, updated_at = ? WHERE id = ?",
             (int(version), ts, user_id),
         )
+        if changed and _drop_vault_wraps(conn, user_id, ts):
+            conn.execute("UPDATE users SET auth_security_at = ? WHERE id = ?", (ts, user_id))
+            return ts
+    return None
 
 
 def user_kdf_iterations(user) -> int:
@@ -1583,7 +1597,8 @@ def get_vault_keys_status(user_id: int) -> dict | None:
     """Public wrap metadata for one account. Never includes a wrap or proof."""
     conn = connection()
     user = conn.execute(
-        "SELECT vault_key_id, vault_key_rev, recovery_locked_until FROM users WHERE id = ?",
+        "SELECT vault_key_id, vault_key_rev, recovery_locked_until, vault_keys_invalidated_at,"
+        " vault_keys_invalidated_prf FROM users WHERE id = ?",
         (int(user_id),),
     ).fetchone()
     if not user:
@@ -1617,6 +1632,8 @@ def get_vault_keys_status(user_id: int) -> dict | None:
             for r in prf
         ],
         "recovery_locked_until": float(user["recovery_locked_until"] or 0),
+        "invalidated_at": float(user["vault_keys_invalidated_at"] or 0),
+        "invalidated_prf": int(user["vault_keys_invalidated_prf"] or 0),
         "pending_rekey": pending is not None,
         "recovery": {
             "active": row is not None,
@@ -1650,13 +1667,34 @@ def _free_key_id_without_wraps(conn: sqlite3.Connection, user_id: int) -> None:
         conn.execute("UPDATE users SET vault_key_id = '' WHERE id = ?", (user_id,))
 
 
-def _drop_vault_wraps(conn: sqlite3.Connection, user_id: int) -> None:
-    """Delete all wraps of the account; bump the revision only when something was removed."""
-    n = conn.execute("DELETE FROM vault_recovery_wraps WHERE user_id = ?", (user_id,)).rowcount
-    n += conn.execute("DELETE FROM vault_prf_wraps WHERE user_id = ?", (user_id,)).rowcount
-    if n:
-        conn.execute("UPDATE users SET vault_key_rev = vault_key_rev + 1 WHERE id = ?", (user_id,))
-        _free_key_id_without_wraps(conn, user_id)
+def _drop_vault_wraps(conn: sqlite3.Connection, user_id: int, ts: float) -> bool:
+    """Delete all wraps of the account because its vault key changed.
+
+    When something was removed: bump the revision, free the key id and set the
+    invalidation marker to `ts` (settings shows the notice, docs/VAULT_RECOVERY.md 3.6).
+    Returns whether anything was removed.
+    """
+    n_recovery = conn.execute("DELETE FROM vault_recovery_wraps WHERE user_id = ?", (user_id,)).rowcount
+    n_prf = conn.execute("DELETE FROM vault_prf_wraps WHERE user_id = ?", (user_id,)).rowcount
+    if not (n_recovery or n_prf):
+        return False
+    conn.execute(
+        """
+        UPDATE users
+        SET vault_key_rev = vault_key_rev + 1, vault_key_id = '',
+            vault_keys_invalidated_at = ?, vault_keys_invalidated_prf = ?
+        WHERE id = ?
+        """,
+        (ts, int(n_prf), user_id),
+    )
+    return True
+
+
+def user_vault_keys_invalidated_at(user) -> float:
+    try:
+        return float(user["vault_keys_invalidated_at"] or 0)
+    except (KeyError, TypeError, ValueError):
+        return 0.0
 
 
 def put_prf_wrap(
@@ -1820,7 +1858,8 @@ def put_recovery_wrap(
             """
             UPDATE users
             SET vault_key_rev = vault_key_rev + 1, vault_key_id = ?,
-                recovery_failed_count = 0, recovery_locked_until = 0, recovery_lock_level = 0
+                recovery_failed_count = 0, recovery_locked_until = 0, recovery_lock_level = 0,
+                vault_keys_invalidated_at = 0, vault_keys_invalidated_prf = 0
             WHERE id = ? AND vault_key_rev = ?
               AND (vault_key_id = ?
                    OR (NOT EXISTS (SELECT 1 FROM vault_recovery_wraps WHERE user_id = ?)
@@ -2177,7 +2216,7 @@ def update_user_password(user_id: int, password_hash: str, *, drop_vault_wraps: 
             (password_hash, ts, ts, ts, user_id),
         )
         if drop_vault_wraps:
-            _drop_vault_wraps(conn, user_id)
+            _drop_vault_wraps(conn, user_id, ts)
     return ts
 
 

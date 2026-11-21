@@ -241,6 +241,31 @@ class RecoveryKeySettingsE2E(unittest.TestCase):
         page.wait_for_function("() => /active since/.test(document.getElementById('recovery-key-settings-status').textContent)")
         self.assertIsNotNone(self.wrap_row())
 
+    def test_removal_notice_shows_until_a_new_recovery_key_is_created(self):
+        page = self.page
+        removed = "#recovery-key-settings-removed"
+        self.assertFalse(page.is_visible(removed))
+        # What a KDF upgrade does to an account with a recovery key and one passkey copy.
+        self.sql("DELETE FROM vault_recovery_wraps")
+        self.sql(
+            "UPDATE users SET vault_key_id = '', vault_keys_invalidated_at = 1760000000, vault_keys_invalidated_prf = 1"
+        )
+        self.refresh()
+        page.wait_for_function("() => !document.getElementById('recovery-key-settings-removed').hidden")
+        text = page.text_content(removed)
+        self.assertIn("Your recovery key was removed because your vault key changed. Create a new one.", text)
+        self.assertIn("Passkey vault unlock was removed", text)
+        self.assertTrue(page.is_visible("#btn-recovery-key-create"))
+        page.click("#btn-recovery-key-create")
+        key, group = read_shown_key(page)
+        self.confirm_and_save(key, group)
+        page.wait_for_selector("#recovery-key-dialog", state="hidden", timeout=60000)
+        page.wait_for_function("() => /active since/.test(document.getElementById('recovery-key-settings-status').textContent)")
+        page.wait_for_function("() => document.getElementById('recovery-key-settings-removed').hidden")
+        self.assertEqual(
+            self.sql("SELECT vault_keys_invalidated_at, vault_keys_invalidated_prf FROM users"), [(0.0, 0)]
+        )
+
     def test_unverified_key_is_refused_during_save_and_nothing_is_sent(self):
         page = self.page
         puts = []
