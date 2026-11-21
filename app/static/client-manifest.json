@@ -152,10 +152,10 @@
       "url": "/static/js/conflict-copy.b8dc7a91c94051a9.js"
     },
     "js/contacts-csv.js": {
-      "bytes": 40717,
-      "sha256": "033814b7ff5fb4a5c7a6b56edfb8c613343fef7421a2b4e97eeb273246d64af4",
-      "sri": "sha384-7Qz0iBXO0bq2v714yKcJvzkfESQ7cUbpDo/YlchDO6xnRWtYbVtrLb11Vuaxa8rn",
-      "url": "/static/js/contacts-csv.033814b7ff5fb4a5.js"
+      "bytes": 40964,
+      "sha256": "7361f048fc342a73908fdcb44edb4d0bd9c163c71a267f6835d1a3cca6a0a05a",
+      "sri": "sha384-znnX/ihzaysp4d84NQE6FdKZjIMpcJyU6XjE3bJvegQyyMiMfviInvIK07aifJQF",
+      "url": "/static/js/contacts-csv.7361f048fc342a73.js"
     },
     "js/contacts-duplicates.js": {
       "bytes": 18397,
@@ -681,6 +681,6 @@
     }
   },
   "created": 0,
-  "manifest_sha256": "3c66fec6782514da09c2317b40ace07dc6b489dd36d64cf5a000aaa848d603e9",
+  "manifest_sha256": "490ede2708da31672425e17f72b45e6aa1d690f3aa9063065d0a13e9b29ee0be",
   "version": 1
 }
