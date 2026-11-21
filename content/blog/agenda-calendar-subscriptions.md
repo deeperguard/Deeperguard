@@ -68,4 +68,4 @@ Be clear-eyed about this mode: it is an exception to "the server only sees ciphe
 
 One honest note on the design: to allow direct fetching, the worker may connect to any `https` host, while the main page stays limited to our own server. Our security documentation lists this as a known trade-off. If you never add a subscription, the worker never starts.
 
-Updated: 2026-11-18: Subscriptions now have a colour, a name you can edit together with the link, an on/off switch, and duplicate feed events are folded into one. Reminders (VALARM) in a feed are not imported.
+Updated: 2026-11-18. Subscriptions now have a colour, a name you can edit together with the link, an on/off switch, and duplicate feed events are folded into one. Reminders (VALARM) in a feed are not imported.

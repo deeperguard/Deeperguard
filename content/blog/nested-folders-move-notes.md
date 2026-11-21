@@ -70,4 +70,4 @@ Folders are included in the encrypted backup and its import, and a test (`tests/
 
 Keep the tree shallow: two or three levels are usually enough. Create the top-level folders first, drag in the notes you open most, and use the **Move to folder…** dialog for the rest.
 
-Updated 2026-11-20: Notes can now be put in your own order inside a label (sort **Own order**), so the line saying there is no drag-to-reorder for notes was corrected. Folders and the notes in a folder still have no manual order.
+Updated: 2026-11-20. Notes can now be put in your own order inside a label (sort **Own order**), so the line saying there is no drag-to-reorder for notes was corrected. Folders and the notes in a folder still have no manual order.

@@ -52,9 +52,9 @@ That matches the rest of Deeperguard: ciphertext on the server, readable text on
 
 Agenda uses the same on-device AES-GCM and SRP design as notes — details on our [security page](/security) and [verify page](/verify).
 
-Updated 2026-11-14: Remote calendar subscriptions (feed links) are now available in Agenda, so they were removed from the out-of-scope list; see [calendar subscriptions in Agenda](/blog/agenda-calendar-subscriptions). Multi-user sharing and two-way cloud calendar sync are still not offered.
+Updated: 2026-11-14. Remote calendar subscriptions (feed links) are now available in Agenda, so they were removed from the out-of-scope list; see [calendar subscriptions in Agenda](/blog/agenda-calendar-subscriptions). Multi-user sharing and two-way cloud calendar sync are still not offered.
 
-Updated: 2026-11-18: Events can now carry reminders.
+Updated: 2026-11-18. Events can now carry reminders.
 
 - **Setting them:** in the event editor you tick offsets (at start, 5, 10, 15, 30 minutes, 1 hour, 1 day before, or your own number of minutes). A calendar can have default reminders for new events.
 - **Where they live:** the offsets are stored inside the encrypted event. A scheduler in your browser shows each reminder once, as a banner in the app and, if you allowed it, as a browser notification. Nothing about them goes to the server.
