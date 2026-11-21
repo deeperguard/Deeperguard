@@ -12,7 +12,7 @@ Sorting by date or title works until the order matters. A checklist for a trip, 
 
 ## Turning it on
 
-In the notes list, the sort control offers Recent, Date created, Title and **Own order**. Own order only means something inside one label, so it applies when you have selected a label in the sidebar. In "No label", in the Files view, or while the search box has text in it, the list falls back to your other sort setting and the reorder controls are hidden.
+In the notes list, the sort control offers Recent, Date created, Title and **Own order**. Own order only means something inside one label, so it applies when you have selected a label in the sidebar. In "No label" or in the Files view, the list falls back to your other sort setting. Inside a label, search results keep your own order, but the reorder controls are hidden while the search box has text in it.
 
 The choice is saved as a setting. Settings that follow your account are stored as one encrypted vault item and synced like notes, and this one is on that list, so the choice should follow you to your other devices.
 
@@ -46,7 +46,7 @@ Pinned and starred notes are not forced to the top in this view. They sit wherev
 
 ## What it does not do
 
-- **Only inside a label.** There is no manual order for "All notes", for "No label", or for search results.
+- **Only inside a label.** There is no manual order for "All notes" or for "No label". Inside a label, search results follow your order too, but you can only move notes while the search box is empty.
 - **Not for folders.** Notes in a folder are still sorted by title, and folders and sibling labels have no drag-to-reorder.
 - **A limit of 1000.** A label remembers positions for at most 1000 notes. Past that, the entries placed longest ago are dropped, and those notes fall back to the "newest first" group after the positioned ones.
 - **Not invisible to the server.** The server cannot read the order, but it can still see that the label item changed, when, and roughly how large it is. That is true of every synced item.
