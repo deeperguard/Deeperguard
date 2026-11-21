@@ -111,7 +111,18 @@ def main() -> int:
             page.locator("#tag-section").evaluate("(el) => { el.open = true; }")
             page.locator("#tag-list [role=treeitem][aria-label^='Trip']").first.click()
             page.wait_for_function("() => document.querySelectorAll('#note-list .note-row').length === 3")
-            assert page.evaluate(TITLES_JS) == expected, page.evaluate(TITLES_JS)
+            # After the reload the label may first come from the local copy and be
+            # replaced by the server copy a moment later (slow under load), so wait for
+            # the stored order instead of reading the list once. If the order was not
+            # stored, it never shows up and the wait times out with the list we got.
+            try:
+                page.wait_for_function(
+                    "(t) => JSON.stringify([...document.querySelectorAll('#note-list .note-row h3')].map((e) => e.textContent.trim())) === JSON.stringify(t)",
+                    arg=expected,
+                    timeout=30000,
+                )
+            except Exception:
+                raise AssertionError(f"order after reload {page.evaluate(TITLES_JS)}, expected {expected}")
 
             browser.close()
         for line in errors:
