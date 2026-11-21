@@ -283,16 +283,19 @@ const NotesContactsDuplicates = (() => {
     if (!rec || busy || !hooks.isUnlocked()) return;
     undoRecord = null;
     let restored = 0;
+    let failed = 0;
     for (const op of [...rec.ops].reverse()) {
       if (op.keptPatch) hooks.updateContact(op.keptId, op.keptPatch);
       for (const snap of op.removed) {
-        try { hooks.addContact(snap); restored += 1; } catch (err) { setStatus('Some contacts could not be restored.'); }
+        try { hooks.addContact(snap); restored += 1; } catch (err) { failed += 1; }
       }
     }
     hooks.changed();
     loadContacts();
     states = new Map();
-    setStatus(`Undone: ${plural(restored, 'contact', 'contacts')} restored.`);
+    setStatus(failed
+      ? `Undone: ${plural(restored, 'contact', 'contacts')} restored, ${plural(failed, 'contact', 'contacts')} could not be restored.`
+      : `Undone: ${plural(restored, 'contact', 'contacts')} restored.`);
     render(0);
   }
 

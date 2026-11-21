@@ -1695,7 +1695,10 @@ in a list, more than 20 labels, `extra` or the contact over its size, the photo)
 and nothing is saved or deleted.
 
 **Undo.** One level: the last merge, remove or merge-all. It restores the kept contact's fields and recreates the
-deleted contacts with the same content (they get new vault ids, as with Undo of a delete). It is kept in memory only,
+deleted contacts with the same content. They get a new vault id and a new `created_at` (`NotesStore.addContact`
+does not take the old uuid), so on other devices the old contact stays deleted and a new contact appears in its
+place, as with Undo of a delete. A restore that fails is counted in the status line ("Undone: 3 contacts restored,
+1 contact could not be restored."). It is kept in memory only,
 and dropped when the dialog is closed, on lock and on sign-out; the Undo button is in the dialog footer. Edit clocks
 (`fc`) of restored fields are new, so on other devices the restored state wins over the merge.
 

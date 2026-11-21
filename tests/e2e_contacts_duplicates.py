@@ -189,6 +189,27 @@ def run_flow(page, width: int) -> None:
     close_dialog(page)
 
 
+def undo_failure(page) -> None:
+    """A restore that is refused is counted in the status line, not replaced by the success message."""
+    page.evaluate(
+        """() => { for (let i = 0; i < 2; i += 1) NotesStore.addContact({ name: { given: 'Ruben', family: 'Undo' },
+          emails: [{ value: 'ruben.undo@example.nl' }] }); }"""
+    )
+    before = page.evaluate("() => NotesStore.listContacts().length")
+    open_dialog(page)
+    group_for(page, "Undo").get_by_role("button", name="Remove duplicates").click()
+    page.wait_for_function(f"() => NotesStore.listContacts().length === {before - 1}")
+    page.evaluate(
+        """() => { const add = NotesStore.addContact;
+          NotesStore.addContact = (input) => { NotesStore.addContact = add; throw new Error('restore refused'); }; }"""
+    )
+    page.click("#contacts-dup-undo")
+    status = page.inner_text("#contacts-dup-status")
+    assert status == "Undone: 0 contacts restored, 1 contact could not be restored.", status
+    assert page.evaluate("() => NotesStore.listContacts().length") == before - 1, "the refused contact is not back"
+    close_dialog(page)
+
+
 def check_second_session(browser, base: str, email: str) -> None:
     second = browser.new_context().new_page()
     login(second, base, email)
@@ -228,6 +249,7 @@ def main() -> int:
                 if width == 1280:
                     page.evaluate("async () => { await NotesStore.pushDirty({ quiet: true }); }")
                     check_second_session(browser, base, email)
+                    undo_failure(page)
                     timing(page)
                 context.close()
             browser.close()
