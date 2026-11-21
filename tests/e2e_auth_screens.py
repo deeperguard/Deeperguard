@@ -259,17 +259,21 @@ def smoke(browser, base, failures, width, theme):
     # Visible loading state while the key is derived: disabled + spinner. A
     # MutationObserver records the spinner the moment the button turns disabled,
     # so a fast derivation cannot slip between the click and the check.
+    # The observation is kept in Python, not on window: a fast redirect to /app
+    # replaces window and would otherwise drop it before the check runs.
+    busy_spinners = []
+    page.expose_function("reportBusySpinner", lambda spinner: busy_spinners.append(spinner))
     page.evaluate("""() => { const b = document.getElementById('register-submit');
-      window.__busy = null;
-      const snap = () => { if (b.disabled && !window.__busy)
-        window.__busy = { spinner: getComputedStyle(b, '::before').content }; };
+      const snap = () => { if (b.disabled)
+        window.reportBusySpinner(getComputedStyle(b, '::before').content); };
       new MutationObserver(snap).observe(b, { attributes: true });
       snap(); }""")
     page.click("#register-submit")
-    page.wait_for_function("window.__busy !== null || location.pathname === '/app'",
-                           timeout=120000)
-    busy = page.evaluate("window.__busy")
-    if busy and busy["spinner"] in ("none", "normal"):
+    page.wait_for_function("""() => location.pathname === '/app'
+        || !!document.getElementById('register-submit')?.disabled""", timeout=120000)
+    if not busy_spinners:
+        failures.append(f"{tag} register busy state never observed")
+    elif busy_spinners[0] in ("none", "normal"):
         failures.append(f"{tag} register busy button has no spinner")
     _wait_unlocked(page)
     complete_recovery_key_step(page)
