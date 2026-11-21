@@ -30,6 +30,21 @@ class NoteDragOrderTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[-4000:])
         self.assertIn("e2e_note_drag_order ok", proc.stdout)
 
+    def test_grip_drag_scrolls_list_at_edges_e2e(self):
+        if os.environ.get("E2E_NOTE_DRAG_ORDER", "1") not in {"1", "true", "yes"}:
+            self.skipTest("E2E_NOTE_DRAG_ORDER disabled")
+        try:
+            from playwright.sync_api import sync_playwright  # noqa: F401
+        except ImportError:
+            self.skipTest("playwright is not installed")
+
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "tests" / "e2e_note_grip_autoscroll.py")],
+            capture_output=True, text=True, timeout=600, cwd=ROOT,
+        )
+        self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[-4000:])
+        self.assertIn("e2e_note_grip_autoscroll ok", proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
