@@ -57,8 +57,8 @@ Your encrypted backup includes contacts, because it takes every item in the vaul
 ## What it does not do
 
 - It does not hide that you have items or how many. The server sees each item's size, when it changed and that it was deleted, as it does for notes. A large import shows up as many small items arriving together, and a contact with a photo is larger than one without.
-- It reads only vCard. CSV and LDIF files cannot be imported yet; export from your old app as vCard.
-- It does not merge an incoming duplicate into the contact you already have. You can leave it out or import it as an extra contact.
+- It imports vCard, CSV, LDIF and jCard files only. Other formats are refused; export from your old app in one of these.
 - It does not sync with your phone's own address book or with CardDAV. Contacts live in Deeperguard only.
-- Contacts are not in the readable ZIP export. Use the vCard export for a plain copy.
 - It does not call or send email itself. A link hands the number or address to your device's own app, and from there that app's privacy rules apply.
+
+Updated 2026-11-21: Import now also reads CSV, LDIF and jCard files, and for a duplicate you can choose Skip, Merge or Keep both. Contacts are included in the readable ZIP export as a vCard 3.0 file, and Export can also write CSV (Google Contacts columns), which loses some fields.
