@@ -90,7 +90,7 @@
         + `<span class="label-twisty" data-label-toggle="${esc(id)}" aria-hidden="true">${sub.length ? (expanded ? '▾' : '▸') : ''}</span>`
         + `<span class="tag-dot" aria-hidden="true"></span><span class="tag-name label-name">${esc(name)}</span>`
         + `<span class="tag-count" aria-hidden="true">${count}</span>`
-        + `<span class="label-grip" data-label-grip title="Drag to reorder or nest" aria-hidden="true">⠿</span>`
+        + `<span class="label-grip" data-label-grip title="Drag to reorder or nest, or Alt+Up / Alt+Down to move among siblings" aria-hidden="true">⠿</span>`
         + `<button type="button" class="label-menu-btn" data-label-menu="${esc(id)}" tabindex="-1" aria-haspopup="menu" aria-label="Actions for ${esc(name)}">⋯</button></div>`
         + (sub.length ? `<ul role="group" class="label-group"${expanded ? '' : ' hidden'}>${expanded ? sub.map((s, i) => item(s, level + 1, i + 1, sub.length)).join('') : ''}</ul>` : '')
         + '</li>';
@@ -162,7 +162,7 @@
       if (prev === null && next === null) value = ORDER_GAP;
       else if (prev === null) value = next - ORDER_GAP;
       else if (next === null) value = prev + ORDER_GAP;
-      else if (next - prev > 1e-6) value = (prev + next) / 2;
+      else if (next - prev > 1) value = (prev + next) / 2;
     }
     const orders = {};
     if (value !== null) {
