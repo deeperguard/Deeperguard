@@ -19,7 +19,7 @@ Like a note, a contact is encrypted in your browser before it is saved or synced
 ## Using the tab
 
 - **Add** with the **+** button. The form covers names, numbers, addresses, labels and a photo.
-- **Search** with the box at the top, or press `/` to jump to it. Every word must match, in names, company, title, note, numbers, emails, addresses or labels. Part of a phone number is found even when the stored number has spaces or brackets. `label:work` and `is:favorite` narrow the list.
+- **Search** with the box at the top, or press `/` to jump to it when focus is on a contact or a button in the tab. Every word must match, in names, company, title, note, numbers, emails, addresses or labels. Part of a phone number is found even when the stored number has spaces or brackets. `label:work` and `is:favorite` narrow the list.
 - **Favourites** appear in their own section at the top of the list when no search or label filter is active.
 - **Tap to call or write.** A phone number becomes a `tel:` link and a valid email address a `mailto:` link, so your device opens its own phone or mail app. Phone numbers, email addresses and postal addresses also have a **Copy** button.
 
