@@ -43,13 +43,13 @@ def sign_out_from_settings(logout_mode: str) -> dict:
     try:
         with sync_playwright() as p:
             b = Browser(p, f"http://127.0.0.1:{port}")
-            held = []
             try:
                 register_first_account(b, f"signout-{int(time.time() * 1000)}@home.local")
                 page = b.page
                 page.wait_for_function("() => document.body.classList.contains('unlocked')")
                 page.click("#btn-settings-nav")
                 page.wait_for_selector("#settings-panel:not([hidden])")
+                held = []
                 if logout_mode == "hang":
                     page.route("**/api/auth/logout", lambda route, *_: held.append(route))
                 else:
