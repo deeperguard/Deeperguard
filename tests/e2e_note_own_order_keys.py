@@ -2,9 +2,11 @@
 
 Three notes carry one label. The top note is clicked, then Alt+Down, Alt+Down, Alt+Up,
 Alt+Down, Alt+Down are pressed: after every press the DOM order changed by exactly one
-place (or stayed at the bottom) and the moved row still has focus. After a second click
-five more Alt+Down presses push the note to the bottom. After a reload and a new unlock
-the saved order is the same. Any pageerror / console.error fails the test.
+place (or stayed at the bottom) and the moved row still has focus. Every press also sets the
+polite status region #toast to its announcement ("Moved to position N of 3", or "Already
+first" / "Already last" at the edges). After a second click five more Alt+Down presses push
+the note to the bottom. After a reload and a new unlock the saved order is the same. Any
+pageerror / console.error fails the test.
 
     python tests/e2e_note_own_order_keys.py
 """
@@ -28,6 +30,11 @@ SEED_JS = """() => {
   }
 }"""
 FOCUSED_TITLE_JS = "() => document.activeElement.closest?.('.note-row')?.querySelector('h3')?.textContent.trim() || ''"
+ANNOUNCED_JS = """(text) => {
+  const el = document.getElementById('toast');
+  return el.getAttribute('role') === 'status' && el.getAttribute('aria-live') === 'polite'
+    && !el.hidden && el.textContent.trim() === text;
+}"""
 
 
 def open_label(page) -> None:
@@ -36,10 +43,11 @@ def open_label(page) -> None:
     page.wait_for_function("() => document.querySelectorAll('#note-list .note-row').length === 3")
 
 
-def press_and_expect(page, key: str, moved: str, expected: list[str]) -> None:
+def press_and_expect(page, key: str, moved: str, expected: list[str], announce: str) -> None:
     page.keyboard.press(key)
     page.wait_for_function(SAME_ORDER_JS, arg=expected, timeout=10000)
     assert page.evaluate(FOCUSED_TITLE_JS) == moved, (key, page.evaluate(FOCUSED_TITLE_JS))
+    page.wait_for_function(ANNOUNCED_JS, arg=announce, timeout=10000)
 
 
 def main() -> int:
@@ -75,19 +83,27 @@ def main() -> int:
 
             # Focus the top row by clicking it, then press Alt+Down / Alt+Up in turn.
             page.locator(".note-row", has_text=a).locator(".note-item").click()
-            press_and_expect(page, "Alt+ArrowDown", a, [b, a, c])
-            press_and_expect(page, "Alt+ArrowDown", a, [b, c, a])
-            press_and_expect(page, "Alt+ArrowUp", a, [b, a, c])
-            press_and_expect(page, "Alt+ArrowDown", a, [b, c, a])
+            press_and_expect(page, "Alt+ArrowDown", a, [b, a, c], "Moved to position 2 of 3")
+            press_and_expect(page, "Alt+ArrowDown", a, [b, c, a], "Moved to position 3 of 3")
+            press_and_expect(page, "Alt+ArrowUp", a, [b, a, c], "Moved to position 2 of 3")
+            press_and_expect(page, "Alt+ArrowDown", a, [b, c, a], "Moved to position 3 of 3")
             # Already last: nothing moves, the row keeps focus.
-            press_and_expect(page, "Alt+ArrowDown", a, [b, c, a])
+            press_and_expect(page, "Alt+ArrowDown", a, [b, c, a], "Already last")
 
-            # Click the row again; two presses up to the top, then five down.
+            # Click the row again; two presses up to the top, then one more at the top, then five down.
             page.locator(".note-row", has_text=a).locator(".note-item").click()
-            press_and_expect(page, "Alt+ArrowUp", a, [b, a, c])
-            press_and_expect(page, "Alt+ArrowUp", a, [a, b, c])
-            for expected in ([b, a, c], [b, c, a], [b, c, a], [b, c, a], [b, c, a]):
-                press_and_expect(page, "Alt+ArrowDown", a, expected)
+            press_and_expect(page, "Alt+ArrowUp", a, [b, a, c], "Moved to position 2 of 3")
+            press_and_expect(page, "Alt+ArrowUp", a, [a, b, c], "Moved to position 1 of 3")
+            # Already first: nothing moves, the row keeps focus.
+            press_and_expect(page, "Alt+ArrowUp", a, [a, b, c], "Already first")
+            for expected, announce in (
+                ([b, a, c], "Moved to position 2 of 3"),
+                ([b, c, a], "Moved to position 3 of 3"),
+                ([b, c, a], "Already last"),
+                ([b, c, a], "Already last"),
+                ([b, c, a], "Already last"),
+            ):
+                press_and_expect(page, "Alt+ArrowDown", a, expected, announce)
 
             page.wait_for_function(SYNCED_JS, timeout=30000)
             page.reload(wait_until="domcontentloaded")
